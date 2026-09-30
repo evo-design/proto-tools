@@ -21,7 +21,7 @@ This representation lets protein tokens condition on neighboring DNA and protein
 
 ### gLM2 Embeddings (`glm2-embedding`)
 
-Returns one mean-pooled embedding per prepared locus, with optional logits over the 24 canonical protein/DNA tokens and explicit token labels.
+Returns one mean-pooled embedding per prepared locus, with optional logits over the 24 canonical protein/DNA tokens.
 
 #### Applications
 
@@ -31,7 +31,7 @@ Use the pooled vector as a feature for clustering, retrieval, or a downstream su
 
 - **`repr_layer=-1` selects the last transformer output.** Layer 0 selects the input embedding table; positive indices select transformer outputs. Pooling includes every unpadded token, including strand markers.
 - **`return_logits=True` adds an `(L, 24)` matrix.** Columns follow `ACDEFGHIKLMNPQRSTVWYacgt`; these are raw logits, not normalized probabilities. Both the matrix and `tokens` include strand-marker rows.
-- **CSV, NPY, and PT exports contain pooled vectors.** JSON also preserves `tokens`, `vocab`, and optional `logits` for position-level analysis.
+- **CSV, NPY, and PT exports contain pooled vectors.** JSON also preserves `vocab` and optional `logits` for position-level analysis; logits rows follow the input sequence.
 
 ### gLM2 Scoring (`glm2-score`)
 
@@ -45,7 +45,7 @@ Rank related sequence variants with a contextual sequence prior. Scores reflect 
 
 - **`scored_positions` uses 1-indexed model-token positions.** Strand markers and accepted ambiguous protein symbols provide context but are excluded from score targets and the mean's denominator.
 - **`batch_size` controls masked variants per forward pass.** Scoring requires work proportional to the number of target positions; start with the default 1 when memory is limited.
-- **Optional scoring logits come from masked passes.** Their `(L, 24)` rows align with `tokens`; unscored marker and ambiguous-context rows are zero. These differ from the unmasked logits returned by embeddings.
+- **Optional scoring logits come from masked passes.** Their `(L, 24)` rows align with the input sequence; unscored marker and ambiguous-context rows are zero. These differ from the unmasked logits returned by embeddings.
 - **PLL uses the full upstream vocabulary of 37 tokens.** Exported logits contain only the 24 biological tokens, so applying softmax to those columns does not reproduce PLL.
 - **Compare similar contexts.** Higher mean log-likelihood and lower perplexity mean the model predicts the sequence more readily. Summed log-likelihood also depends on the number of scored positions.
 

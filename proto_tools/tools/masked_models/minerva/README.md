@@ -43,12 +43,12 @@ Screen intergenic regions for structured ncRNAs and repeat arrays, inspect their
 
 - **`heads` selects the returned channels.** All three are returned by default. Select fewer to reduce output size; this does not change the meaning of an individual channel.
 - **`interaction_layers=2` is the fast screening default.** It uses the final two transformer layers, as in the paper's genome scans. The released six-layer variant (`interaction_layers=6`) offers slightly higher accuracy at greater memory and compute cost.
-- **The axes include strand markers and ambiguous context.** Padding is removed. Use `tokens` to select biological subregions; matrix indices are not genome coordinates. The tool returns the upstream probabilities without symmetrizing, thresholding, removing the diagonal, or combining strands.
-- **Dense output grows quadratically with token count.** Doubling the locus length quadruples each matrix's element count. The default export is compressed NPZ, with keys such as `0_protein` and `0_protein_tokens`; arrays load with `numpy.load(..., allow_pickle=False)`. JSON is also supported, and the public Python values remain nested lists.
+- **The axes include strand markers and ambiguous context.** Padding is removed. Use `axis_labels` (one per input character) to select biological subregions; matrix indices are not genome coordinates. The tool returns the upstream probabilities without symmetrizing, thresholding, removing the diagonal, or combining strands.
+- **Dense output grows quadratically with token count.** Doubling the locus length quadruples each matrix's element count. The default export is compressed NPZ, with keys such as `0_protein` and `0_protein_axis_labels`; arrays load with `numpy.load(..., allow_pickle=False)`. JSON is also supported, and the public Python values remain nested lists.
 
 ### Minerva Embeddings (`minerva-embedding`)
 
-Returns one mean-pooled embedding per prepared locus, with optional logits over the 24 canonical protein/DNA tokens and explicit token labels.
+Returns one mean-pooled embedding per prepared locus, with optional logits over the 24 canonical protein/DNA tokens.
 
 #### Applications
 
@@ -58,7 +58,7 @@ Cluster or retrieve candidate loci after an interaction-map screen, or use the p
 
 - **`repr_layer=-1` selects the last transformer output.** Layer 0 selects the input embedding table; positive indices select transformer outputs. Pooling includes every unpadded token, including strand markers.
 - **`return_logits=True` adds an `(L, 24)` matrix.** Columns follow `ACDEFGHIKLMNPQRSTVWYacgt`; these are raw logits, not normalized probabilities. Both the matrix and `tokens` include strand-marker rows.
-- **CSV, NPY, and PT exports contain pooled vectors.** JSON also preserves `tokens`, `vocab`, and optional `logits` for position-level analysis.
+- **CSV, NPY, and PT exports contain pooled vectors.** JSON also preserves `vocab` and optional `logits` for position-level analysis; logits rows follow the input sequence.
 
 ### Minerva Scoring (`minerva-score`)
 
@@ -72,7 +72,7 @@ Rank related sequence variants with a contextual sequence prior. Scores reflect 
 
 - **`scored_positions` uses 1-indexed model-token positions.** Strand markers and accepted ambiguous protein symbols provide context but are excluded from score targets and the mean's denominator.
 - **`batch_size` controls masked variants per forward pass.** Scoring requires work proportional to the number of target positions; start with the default 1 when memory is limited.
-- **Optional scoring logits come from masked passes.** Their `(L, 24)` rows align with `tokens`; unscored marker and ambiguous-context rows are zero. These differ from the unmasked logits returned by embeddings.
+- **Optional scoring logits come from masked passes.** Their `(L, 24)` rows align with the input sequence; unscored marker and ambiguous-context rows are zero. These differ from the unmasked logits returned by embeddings.
 - **PLL uses the full upstream vocabulary of 37 tokens.** Exported logits contain only the 24 biological tokens, so applying softmax to those columns does not reproduce PLL.
 - **Compare similar contexts.** Higher mean log-likelihood and lower perplexity mean the model predicts the sequence more readily. Summed log-likelihood also depends on the number of scored positions.
 

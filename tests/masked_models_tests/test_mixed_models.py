@@ -232,9 +232,7 @@ def test_automatic_masking_uses_own_toolkit_and_preserves_modalities(monkeypatch
     def embed(inputs, embedding_config):
         calls.append((inputs, embedding_config))
         return MixedEmbeddingsOutput(
-            results=[
-                {"tokens": _TOKENS, "mean_embedding": [0.1], "attention_mask": [1] * 8, "logits": [[0.0] * 24] * 8}
-            ]
+            results=[{"mean_embedding": [0.1], "attention_mask": [1] * 8, "logits": [[0.0] * 24] * 8}]
         )
 
     monkeypatch.setattr(embedding, "function", embed)
@@ -271,7 +269,6 @@ def test_automatic_masking_is_identical_for_long_and_short_markers(monkeypatch, 
         return MixedEmbeddingsOutput(
             results=[
                 {
-                    "tokens": list(sequence),
                     "mean_embedding": [0.1],
                     "attention_mask": [1] * len(sequence),
                     "logits": rng.normal(size=(len(sequence), 24)).tolist(),
@@ -297,7 +294,7 @@ def test_automatic_masking_is_identical_for_long_and_short_markers(monkeypatch, 
 
 
 @pytest.mark.parametrize(
-    ("tokens", "values", "error"),
+    ("axis_labels", "values", "error"),
     [
         (["A", "a"], [[0.1]], "square"),
         (["A"], [[0.1, 0.2]], "square"),
@@ -307,22 +304,19 @@ def test_automatic_masking_is_identical_for_long_and_short_markers(monkeypatch, 
         (["A"], [[math.inf]], "finite values"),
     ],
 )
-def test_interaction_map_rejects_invalid_axes_or_probabilities(tokens, values, error):
+def test_interaction_map_rejects_invalid_axes_or_probabilities(axis_labels, values, error):
     with pytest.raises(ValidationError, match=error):
-        SequenceInteractionMap(tokens=tokens, values=values)
+        SequenceInteractionMap(axis_labels=axis_labels, values=values)
 
 
-def test_mixed_output_json_roundtrips_preserve_token_metadata():
+def test_mixed_output_json_roundtrips_preserve_axis_metadata():
     logits = [[float(i)] * 24 for i in range(len(_TOKENS))]
     outputs = [
-        MixedEmbeddingsOutput(
-            results=[{"tokens": _TOKENS, "mean_embedding": [0.1, 0.2], "attention_mask": [1] * 8, "logits": logits}]
-        ),
-        MixedSampleOutput(results=[{"sequence": _LOCUS, "tokens": _TOKENS, "logits": logits}]),
+        MixedEmbeddingsOutput(results=[{"mean_embedding": [0.1, 0.2], "attention_mask": [1] * 8, "logits": logits}]),
+        MixedSampleOutput(results=[{"sequence": _LOCUS, "logits": logits}]),
         MixedScoringOutput(
             scores=[
                 {
-                    "tokens": _TOKENS,
                     "scored_positions": [2, 3, 5, 6],
                     "log_likelihood": -4.0,
                     "avg_log_likelihood": -1.0,
@@ -332,9 +326,9 @@ def test_mixed_output_json_roundtrips_preserve_token_metadata():
                 }
             ]
         ),
-        MixedGradientOutput(tokens=_TOKENS, gradient=logits, loss=1.0, vocab=MIXED_VOCAB),
+        MixedGradientOutput(gradient=logits, loss=1.0, vocab=MIXED_VOCAB),
         SequenceInteractionsOutput(
-            results=[{"maps": {"protein": {"tokens": _TOKENS, "values": np.eye(len(_TOKENS)).tolist()}}}]
+            results=[{"maps": {"protein": {"axis_labels": _TOKENS, "values": np.eye(len(_TOKENS)).tolist()}}}]
         ),
     ]
     for output in outputs:
@@ -344,11 +338,11 @@ def test_mixed_output_json_roundtrips_preserve_token_metadata():
 
 def test_mixed_interactions_export_npz_and_json_preserve_axes(tmp_path):
     output = SequenceInteractionsOutput(
-        results=[{"maps": {"base_pairing": {"tokens": ["+", "a"], "values": [[0.1, 0.2], [0.2, 0.8]]}}}]
+        results=[{"maps": {"base_pairing": {"axis_labels": ["+", "a"], "values": [[0.1, 0.2], [0.2, 0.8]]}}}]
     )
     output._export_output(tmp_path / "contacts.v1", "npz")
     with np.load(tmp_path / "contacts.v1.npz", allow_pickle=False) as archive:
-        assert archive["0_base_pairing_tokens"].tolist() == ["+", "a"]
+        assert archive["0_base_pairing_axis_labels"].tolist() == ["+", "a"]
         np.testing.assert_allclose(archive["0_base_pairing"], [[0.1, 0.2], [0.2, 0.8]])
         assert archive["0_base_pairing"].dtype == np.float32
     output._export_output(tmp_path / "contacts.v1", "json")
@@ -362,7 +356,7 @@ def test_mixed_dispatch_decompresses_nested_matrices(monkeypatch):
 
     def dispatch(toolkit, payload, *, instance=None, config=None):
         captured.update(toolkit=toolkit, payload=payload)
-        return {"results": [{"maps": {"protein": {"tokens": ["+", "A"], "values": compress_array(matrix)}}}]}
+        return {"results": [{"maps": {"protein": {"axis_labels": ["+", "A"], "values": compress_array(matrix)}}}]}
 
     monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(dispatch))
     config = MinervaInteractionsConfig(device="cpu", heads=["protein"])
@@ -396,11 +390,11 @@ def test_mixed_public_exports_and_registry_keys():
     assert "minerva-interactions" in keys
 
 
-def test_mixed_gradient_export_preserves_tokens_and_values(tmp_path):
-    output = MixedGradientOutput(tokens=_TOKENS, gradient=[[0.0] * 24] * len(_TOKENS), loss=1.0, vocab=MIXED_VOCAB)
+def test_mixed_gradient_export_preserves_values(tmp_path):
+    output = MixedGradientOutput(gradient=[[0.0] * 24] * len(_TOKENS), loss=1.0, vocab=MIXED_VOCAB)
     output._export_output(tmp_path / "gradient.v1", "json")
     restored = MixedGradientOutput.model_validate_json((tmp_path / "gradient.v1.json").read_text())
-    for field in ("tokens", "gradient", "loss", "metrics", "vocab"):
+    for field in ("gradient", "loss", "metrics", "vocab"):
         assert getattr(restored, field) == getattr(output, field)
 
 
@@ -610,7 +604,9 @@ def test_mixed_runtime_batches_exact_lengths_and_restores_order(tiny_mixed_runti
     batched = _tiny_dispatch(runtime, "embeddings", sequences=sequences, batch_size=4, return_logits=True)["results"]
     assert observed == [(2, 4), (1, 2), (1, 3)]
     singles = _tiny_dispatch(runtime, "embeddings", sequences=sequences, batch_size=1, return_logits=True)["results"]
-    assert [row["tokens"] for row in batched] == [tokenize_mixed_sequence(sequence) for sequence in sequences]
+    assert all("tokens" not in row for row in batched)
+    # Logit rows follow the canonical one-character-per-token sequence.
+    assert [len(row["logits"]) for row in batched] == [len(tokenize_mixed_sequence(sequence)) for sequence in sequences]
     for batch, single in zip(batched, singles, strict=True):
         np.testing.assert_allclose(batch["mean_embedding"], single["mean_embedding"], atol=1e-6)
         np.testing.assert_allclose(batch["logits"], single["logits"], atol=1e-6)
@@ -633,10 +629,11 @@ def test_mixed_runtime_sample_preserves_alphabets_and_fixed_context(tiny_mixed_r
     assert [row["sequence"] for row in output] == [row["sequence"] for row in repeated]
     assert len({row["sequence"] for row in output}) > 1
     for row in output:
-        assert [row["tokens"][i] for i in [0, 5, 10, 11]] == ["+", "+", "-", "X"]
-        assert row["sequence"] == "".join(row["tokens"])
-        assert all(token in MIXED_VOCAB[:20] for token in row["tokens"][1:5])
-        assert all(token in MIXED_VOCAB[20:] for token in row["tokens"][6:10])
+        assert "tokens" not in row
+        assert tokenize_mixed_sequence(row["sequence"]) == list(row["sequence"])
+        assert [row["sequence"][i] for i in [0, 5, 10, 11]] == ["+", "+", "-", "X"]
+        assert all(token in MIXED_VOCAB[:20] for token in row["sequence"][1:5])
+        assert all(token in MIXED_VOCAB[20:] for token in row["sequence"][6:10])
         assert np.asarray(row["logits"]).shape == (12, 24)
 
 

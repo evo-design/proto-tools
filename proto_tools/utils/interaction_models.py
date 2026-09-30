@@ -10,27 +10,29 @@ from proto_tools.utils.tool_io import BaseToolOutput
 
 
 class SequenceInteractionMap(BaseModel):
-    """A dense probability matrix with explicitly labeled token axes.
+    """A dense square probability matrix with labeled axes.
 
     Labels may represent residues, bases, model tokens, or numbered positions.
     Values need not be symmetric or have a zero diagonal.
 
     Attributes:
-        tokens (list[str]): Ordered labels for both matrix axes.
+        axis_labels (list[str]): Ordered labels shared by both matrix axes.
         values (list[list[float]]): Square matrix of finite interaction probabilities.
     """
 
-    tokens: list[str] = Field(title="Tokens", description="Ordered labels for both matrix axes", min_length=1)
+    axis_labels: list[str] = Field(
+        title="Axis Labels", description="Ordered labels shared by both matrix axes", min_length=1
+    )
     values: list[list[float]] = Field(
-        title="Values", description="Square token-by-token interaction probability matrix"
+        title="Values", description="Square interaction probability matrix over the labeled axes"
     )
 
     @model_validator(mode="after")
     def validate_matrix(self) -> "SequenceInteractionMap":
         """Validate square shape, axis alignment, and finite probability values."""
-        length = len(self.tokens)
+        length = len(self.axis_labels)
         if len(self.values) != length or any(len(row) != length for row in self.values):
-            raise ValueError("Interaction matrix must be square and match its token axis")
+            raise ValueError("Interaction matrix must be square and match its axis labels")
         if any(not 0.0 <= value <= 1.0 for row in self.values for value in row):
             raise ValueError("Interaction probabilities must be finite values in [0, 1]")
         return self
@@ -66,7 +68,7 @@ class SequenceInteractionsOutput(BaseToolOutput):
         return "npz"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Export matrices and token labels without pickle-dependent object arrays.
+        """Export matrices and axis labels without pickle-dependent object arrays.
 
         Raises:
             ValueError: If channel names produce duplicate NPZ keys or the format is unsupported.
@@ -80,12 +82,12 @@ class SequenceInteractionsOutput(BaseToolOutput):
             for index, result in enumerate(self.results):
                 for channel, interaction_map in result.maps.items():
                     values_key = f"{index}_{channel}"
-                    tokens_key = f"{index}_{channel}_tokens"
-                    for key in (values_key, tokens_key):
+                    labels_key = f"{index}_{channel}_axis_labels"
+                    for key in (values_key, labels_key):
                         if key in arrays:
                             raise ValueError(f"Interaction channel names produce duplicate NPZ key: {key}")
                     arrays[values_key] = np.asarray(interaction_map.values, dtype=np.float32)
-                    arrays[tokens_key] = np.asarray(interaction_map.tokens, dtype=str)
+                    arrays[labels_key] = np.asarray(interaction_map.axis_labels, dtype=str)
             np.savez_compressed(str(export_path) + ".npz", **arrays)
         else:
             raise ValueError(f"Unsupported format: {file_format}")

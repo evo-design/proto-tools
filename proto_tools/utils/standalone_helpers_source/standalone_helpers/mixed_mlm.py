@@ -192,7 +192,6 @@ class MixedMLMRuntime:
                 results[index] = {
                     "mean_embedding": _array(pooled[row]),
                     "attention_mask": [1] * len(tokens[index]),
-                    "tokens": tokens[index],
                     "vocab": MIXED_VOCAB,
                     "logits": _array(output.logits[row, :, self._vocab_ids()]) if return_logits else None,
                 }
@@ -227,7 +226,6 @@ class MixedMLMRuntime:
             scores.append(
                 {
                     **log_likelihood_metrics(-total_nll / len(positions), len(positions)),
-                    "tokens": row,
                     "scored_positions": [position + 1 for position in positions],
                     "vocab": MIXED_VOCAB,
                     "logits": _array(returned_logits) if return_logits else None,
@@ -299,7 +297,6 @@ class MixedMLMRuntime:
                 completed = [reverse_vocab[symbol] for symbol in ids[row].tolist()]
                 results[index] = {
                     "sequence": "".join(completed),
-                    "tokens": completed,
                     "vocab": MIXED_VOCAB,
                     "logits": _array(final_logits[row]) if final_logits is not None else None,
                 }
@@ -388,7 +385,6 @@ class MixedMLMRuntime:
             "gradient": gradient,
             "loss": mean_nll,
             "vocab": MIXED_VOCAB,
-            "tokens": tokens,
             "metrics": {
                 **log_likelihood_metrics(-mean_nll, len(positions)),
                 "sequence_length": len(positions),
@@ -412,7 +408,7 @@ class MixedMLMRuntime:
             for row, index in enumerate(indices):
                 results[index] = {
                     "maps": {
-                        head: {"tokens": tokens[index], "values": _array(output.interactions[head][row])}
+                        head: {"axis_labels": tokens[index], "values": _array(output.interactions[head][row])}
                         for head in heads
                     }
                 }

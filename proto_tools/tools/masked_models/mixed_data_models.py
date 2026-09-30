@@ -196,10 +196,9 @@ class MixedSequenceGradientInput(BaseToolInput):
 
 
 class MixedSequenceEmbedding(SequenceEmbedding):
-    """A pooled embedding with labeled mixed-token axes.
+    """A pooled embedding with optional per-position logits.
 
     Attributes:
-        tokens (list[str]): Unpadded model tokens, including strand markers.
         vocab (list[str]): Column order of optional biological logits.
         logits (list[list[float]] | None): Optional per-token protein/DNA logits.
     """
@@ -207,7 +206,6 @@ class MixedSequenceEmbedding(SequenceEmbedding):
     logits: list[list[float]] | None = Field(
         default=None, title="Logits", description="Optional per-token biological logits in vocabulary order"
     )
-    tokens: list[str] = Field(title="Tokens", description="Unpadded token axis, including strand markers")
     vocab: list[str] = Field(
         default_factory=lambda: list(MIXED_VOCAB), title="Vocabulary", description="Biological-logit column order"
     )
@@ -223,7 +221,7 @@ class MixedEmbeddingsOutput(MaskedModelEmbeddingsOutput):
     results: list[MixedSequenceEmbedding] = Field(title="Results", description="Embedding bundles in input order")  # type: ignore[assignment]
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Preserve token labels and optional logits in JSON; reuse pooled-vector exports."""
+        """Preserve vocabulary and optional logits in JSON; reuse pooled-vector exports."""
         if file_format == "json":
             Path(str(export_path) + ".json").write_text(json.dumps([r.model_dump() for r in self.results]))
         else:
@@ -236,7 +234,6 @@ class MixedSequenceSample(MaskedModelSample):
     Attributes:
         sequence (str): Completed mixed protein/DNA locus with original strand markers.
         logits (list[list[float]] | None): Optional per-token protein/DNA logits.
-        tokens (list[str]): Completed token sequence, including fixed strand markers.
         vocab (list[str]): Column order of optional biological logits.
     """
 
@@ -244,7 +241,6 @@ class MixedSequenceSample(MaskedModelSample):
     logits: list[list[float]] | None = Field(
         default=None, title="Logits", description="Optional per-token biological logits with shape (L, 24)"
     )
-    tokens: list[str] = Field(title="Tokens", description="Completed model-token sequence, including strand markers")
     vocab: list[str] = Field(
         default_factory=lambda: list(MIXED_VOCAB), title="Vocabulary", description="Biological-logit column order"
     )
@@ -270,7 +266,7 @@ class MixedSampleOutput(MaskedModelSampleOutput):
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Preserve token labels and optional logits in JSON exports."""
+        """Preserve vocabulary and optional logits in JSON exports."""
         if file_format == "json":
             Path(str(export_path) + ".json").write_text(json.dumps([r.model_dump() for r in self.results]))
         else:
@@ -281,11 +277,9 @@ class MixedScoringMetrics(MaskedModelScoringMetrics):
     """Canonical masked-PLL metrics with explicit target-position metadata.
 
     Attributes:
-        tokens (list[str]): All unpadded model tokens, including unscored context.
         scored_positions (list[int]): 1-indexed canonical protein/DNA target token positions.
     """
 
-    tokens: list[str] = Field(title="Tokens", description="Unpadded model tokens, including unscored context")
     scored_positions: list[int] = Field(
         title="Scored Positions", description="1-indexed model-token positions contributing to the masked PLL metrics"
     )
@@ -316,18 +310,13 @@ class MixedGradientOutput(GradientOutput):
         loss (float): Mean masked negative log-likelihood.
         metrics (dict[str, Any]): Masked PLL metrics and checkpoint metadata.
         vocab (list[str]): Protein/DNA column order shared by input and gradient.
-        tokens (list[str]): Model-token axis shared by the input and gradient matrices.
     """
 
-    tokens: list[str] = Field(
-        title="Tokens", description="Model-token axis shared by input logits and returned gradient"
-    )
-
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Include token labels alongside the gradient, loss, metrics, and vocabulary."""
+        """Export the gradient, loss, metrics, and vocabulary as JSON."""
         if file_format != "json":
             raise ValueError(f"Unsupported format: {file_format}")
-        payload = self.model_dump(include={"gradient", "loss", "metrics", "vocab", "tokens"}, mode="json")
+        payload = self.model_dump(include={"gradient", "loss", "metrics", "vocab"}, mode="json")
         Path(str(export_path) + ".json").write_text(json.dumps(payload))
 
 

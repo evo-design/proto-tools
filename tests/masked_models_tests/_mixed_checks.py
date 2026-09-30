@@ -49,7 +49,7 @@ def check_embeddings_score_gradient(toolkit, checkpoint):
     singles = call_model(toolkit, "embeddings", checkpoint, {"sequences": sequences}, return_logits=True, batch_size=1)
     for sequence, result, single in zip(sequences, batch.results, singles.results, strict=True):
         tokens = tokenize_mixed_sequence(sequence)
-        assert result.tokens == tokens
+        assert "tokens" not in result.model_dump()
         assert result.vocab == MIXED_VOCAB
         assert result.attention_mask == [1] * len(tokens)
         assert np.asarray(result.logits).shape == (len(tokens), 24)
@@ -57,7 +57,7 @@ def check_embeddings_score_gradient(toolkit, checkpoint):
         np.testing.assert_allclose(result.mean_embedding, single.mean_embedding, rtol=1e-4, atol=1e-4)
         np.testing.assert_allclose(result.logits, single.logits, rtol=1e-4, atol=1e-4)
     score = call_model(toolkit, "score", checkpoint, {"sequences": LOCUS}, return_logits=True, batch_size=2).scores[0]
-    assert score.tokens == tokenize_mixed_sequence(LOCUS)
+    assert "tokens" not in score.model_dump()
     assert score.scored_positions == [2, 3, 5, 6]
     assert score.log_likelihood == pytest.approx(4 * score.avg_log_likelihood)
     assert score.perplexity == pytest.approx(math.exp(-score.avg_log_likelihood))
@@ -97,11 +97,11 @@ def check_sampling(toolkit, checkpoint, sampling_method):
     assert output.sequences == repeated.sequences
     assert len(set(output.sequences)) > 1
     for result in output.results:
-        assert result.tokens == tokenize_mixed_sequence(result.sequence)
-        assert [result.tokens[i] for i in [0, 5, 10, 11]] == ["+", "+", "-", "X"]
-        assert result.sequence == "".join(result.tokens)
-        assert all(token in MIXED_VOCAB[:20] for token in result.tokens[1:5])
-        assert all(token in MIXED_VOCAB[20:] for token in result.tokens[6:10])
+        assert "tokens" not in result.model_dump()
+        assert tokenize_mixed_sequence(result.sequence) == list(result.sequence)
+        assert [result.sequence[i] for i in [0, 5, 10, 11]] == ["+", "+", "-", "X"]
+        assert all(token in MIXED_VOCAB[:20] for token in result.sequence[1:5])
+        assert all(token in MIXED_VOCAB[20:] for token in result.sequence[6:10])
         assert np.asarray(result.logits).shape == (12, 24)
         assert result.vocab == MIXED_VOCAB
 

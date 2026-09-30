@@ -104,7 +104,7 @@ def test_minerva_interactions_matches_native_upstream(interaction_layers):
     tokens = tokenize_mixed_sequence(LOCUS)
     for head, contact_map in maps.items():
         values = np.asarray(contact_map.values)
-        assert contact_map.tokens == tokens
+        assert contact_map.axis_labels == tokens
         assert values.shape == (len(tokens), len(tokens))
         assert np.isfinite(values).all()
         assert ((values >= 0.0) & (values <= 1.0)).all()
