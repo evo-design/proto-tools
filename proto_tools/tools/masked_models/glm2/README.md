@@ -11,7 +11,7 @@
 
 ## Background
 
-gLM2 was introduced with the Open MetaGenomic (OMG) corpus ([Cornman et al., 2024](https://doi.org/10.1101/2024.08.14.607850)). Its bidirectional transformer predicts masked tokens from genomic context: coding regions are represented by amino acids and intergenic regions by individual nucleotides. Uppercase protein and lowercase DNA alphabets avoid token collisions; `<+>` and `<->` represent strand orientation. The public 150M and 650M checkpoints both support 4096 tokens.
+gLM2 was introduced with the [Open MetaGenomic (OMG) corpus](https://huggingface.co/datasets/tattabio/OMG) ([Cornman et al., 2024](https://doi.org/10.1101/2024.08.14.607850)). Its bidirectional transformer predicts masked tokens from genomic context: coding regions are represented by amino acids and intergenic regions by individual nucleotides. Uppercase protein and lowercase DNA alphabets avoid token collisions; `<+>` and `<->` represent strand orientation. The public 150M and 650M checkpoints both support 4096 tokens.
 
 This representation lets protein tokens condition on neighboring DNA and proteins without treating a DNA base and an identically named amino acid as the same symbol. The wrapper operates directly on that prepared representation.
 
