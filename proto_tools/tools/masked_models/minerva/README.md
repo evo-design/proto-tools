@@ -23,7 +23,7 @@ Many non-coding elements retain their structure or repeated organization despite
 | `protein` | Residue contacts within protein monomers | Examine protein structural signals alongside neighboring non-coding elements |
 | `repeat` | Relationships between repetitive sequence motifs | Identify repeat arrays, including CRISPR-like and repetitive extragenic palindromic (REP) patterns |
 
-**Speed makes genome-scale mining practical.** In the [Minerva study](https://www.biorxiv.org/content/10.64898/2026.09.22.753630v2.full), the authors scanned 150 bacterial genomes in 100 minutes on one NVIDIA H100 GPU, plus 31 minutes to write the maps. That upstream workflow used overlapping 4096-token windows and the last-two-layer interaction heads; this wrapper exposes the inference step on prepared loci.
+**Speed makes genome-scale mining practical.** In the [Minerva study](https://www.biorxiv.org/content/10.64898/2026.09.22.753630v2.full), the authors scanned 150 bacterial genomes in 100 minutes on one NVIDIA H100 GPU, plus 31 minutes to write the maps. That upstream workflow used overlapping 4096-token windows and the last-two-layer interaction heads; this tool exposes the inference step on prepared loci.
 
 The study used these maps to identify unannotated structured regions, extend the known TwoAYGGAY RNA architecture, and discover arrays of structurally conserved but sequence-diverse ncRNAs beside prophage UG27 reverse transcriptases. Experimental follow-up showed that the UG27 RNAs template short cDNA hairpins. These examples illustrate how interaction patterns can guide candidate selection, comparative analysis, and experimental discovery. See [Li et al. (2026)](https://doi.org/10.64898/2026.09.22.753630).
 
@@ -43,7 +43,7 @@ Screen intergenic regions for structured ncRNAs and repeat arrays, inspect their
 
 - **`heads` selects the returned channels.** All three are returned by default. Select fewer to reduce output size; this does not change the meaning of an individual channel.
 - **`interaction_layers=2` is the fast screening default.** It uses the final two transformer layers, as in the paper's genome scans. The released six-layer variant (`interaction_layers=6`) offers slightly higher accuracy at greater memory and compute cost.
-- **The axes include strand markers and ambiguous context.** Padding is removed. Use `tokens` to select biological subregions; matrix indices are not genome coordinates. The wrapper returns the upstream probabilities without symmetrizing, thresholding, removing the diagonal, or combining strands.
+- **The axes include strand markers and ambiguous context.** Padding is removed. Use `tokens` to select biological subregions; matrix indices are not genome coordinates. The tool returns the upstream probabilities without symmetrizing, thresholding, removing the diagonal, or combining strands.
 - **Dense output grows quadratically with token count.** Doubling the locus length quadruples each matrix's element count. The default export is compressed NPZ, with keys such as `0_protein` and `0_protein_tokens`; arrays load with `numpy.load(..., allow_pickle=False)`. JSON is also supported, and the public Python values remain nested lists.
 
 ### Minerva Embeddings (`minerva-embedding`)
@@ -114,9 +114,9 @@ These apply to every Minerva tool in this toolkit.
 
 - **Inputs are prepared, case-sensitive strings.** Uppercase letters denote protein; lowercase `acgt` denotes DNA. The uppercase protein symbols `X`, `B`, `U`, `Z`, and `O` are accepted as fixed context. Lowercase ambiguous nucleotides, whitespace, literal `<mask>`, and other control tokens are rejected. Sampling accepts `_` only with explicit modality metadata.
 - **Strand markers are atomic tokens.** `<+>` and `<->` each occupy one token. Token positions are 1-indexed and refer to the prepared string, not genomic nucleotide coordinates. No case conversion, strand insertion, reverse complementation, translation, or gene calling is performed.
-- **Prepare biologically appropriate orientation yourself.** Upstream examples use `<+>` for intergenic DNA and strand markers for translated coding regions. The wrapper preserves the submitted orientation and does not combine strands.
+- **Prepare biologically appropriate orientation yourself.** Upstream examples use `<+>` for intergenic DNA and strand markers for translated coding regions. The tool preserves the submitted orientation and does not combine strands.
 - **Model setup and weights are managed automatically.** The isolated environment is built on first use and public Hugging Face checkpoints are downloaded into the shared model cache. A Hugging Face token is not required for these public checkpoints.
 - **Execution defaults to CUDA.** Reduce `batch_size` when memory is limited. Repeated calls with one checkpoint can reuse a persistent worker through the standard `ToolInstance.persist()` API.
 - **The default checkpoint is `gbrixi/minerva-mlm`.** It accepts up to 4096 model tokens; `gbrixi/minerva-mlm-8k` accepts up to 8192. These counts include strand markers. Overlength inputs raise an error rather than truncating.
-- **RNA base-pairing input uses the DNA alphabet.** Submit lowercase `acgt` as in upstream examples; the wrapper does not convert `u` to `t` or call an RNA structure from the map.
+- **RNA base-pairing input uses the DNA alphabet.** Submit lowercase `acgt` as in upstream examples; the tool does not convert `u` to `t` or call an RNA structure from the map.
 - **Scope is prepared-string inference.** Upstream gene calling, GenBank ingestion, fine-tuning, categorical Jacobians, and strand-ensemble workflows are not exposed by these tools.

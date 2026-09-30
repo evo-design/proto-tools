@@ -159,7 +159,7 @@ print("MIXED_REFERENCE="+json.dumps(result))
 
 
 def upstream_reference(toolkit, checkpoint, sequence, interaction_layers=0):
-    """Run native upstream forwards in the managed environment, outside the wrapper algorithms."""
+    """Run native upstream forwards in the managed environment, outside the tool algorithms."""
     instance = ToolInstance.get(toolkit)
     instance.ensure_ready()
     inference = (

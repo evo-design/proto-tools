@@ -78,7 +78,7 @@ MaskingStrategy(mask_fraction=1.0, fixed_positions=[3]).mask_tokens(
 `fixed_positions` is 1-indexed over the complete token axis, including markers.
 Eligibility protects strand markers and ambiguous context tokens before resolving
 mask counts. A model-based callback receives the joined sequence strings and must
-return one logits row per atomic token. Mixed-model wrappers restrict the logits
+return one logits row per atomic token. Mixed-model tools restrict the logits
 to each position's original modality before computing selection scores.
 
 For gLM2 and Minerva, premasked `_` sites require explicit `mask_modalities` in the

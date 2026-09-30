@@ -15,7 +15,7 @@
 
 gLM2 was introduced with the [Open MetaGenomic (OMG) corpus](https://huggingface.co/datasets/tattabio/OMG) ([Cornman et al., 2024](https://doi.org/10.1101/2024.08.14.607850)). Its bidirectional transformer predicts masked tokens from genomic context: coding regions are represented by amino acids and intergenic regions by individual nucleotides. Uppercase protein and lowercase DNA alphabets avoid token collisions; `<+>` and `<->` represent strand orientation. The public 150M and 650M checkpoints both support 4096 tokens.
 
-This representation lets protein tokens condition on neighboring DNA and proteins without treating a DNA base and an identically named amino acid as the same symbol. The wrapper operates directly on that prepared representation.
+This representation lets protein tokens condition on neighboring DNA and proteins without treating a DNA base and an identically named amino acid as the same symbol. The tool operates directly on that prepared representation.
 
 ## Tools
 
@@ -87,8 +87,8 @@ These apply to every gLM2 tool in this toolkit.
 
 - **Inputs are prepared, case-sensitive strings.** Uppercase letters denote protein; lowercase `acgt` denotes DNA. The uppercase protein symbols `X`, `B`, `U`, `Z`, and `O` are accepted as fixed context. Lowercase ambiguous nucleotides, whitespace, literal `<mask>`, and other control tokens are rejected. Sampling accepts `_` only with explicit modality metadata.
 - **Strand markers are atomic tokens.** `<+>` and `<->` each occupy one token. Token positions are 1-indexed and refer to the prepared string, not genomic nucleotide coordinates. No case conversion, strand insertion, reverse complementation, translation, or gene calling is performed.
-- **Prepare biologically appropriate orientation yourself.** Upstream examples use `<+>` for intergenic DNA and strand markers for translated coding regions. The wrapper preserves the submitted orientation and does not combine strands.
+- **Prepare biologically appropriate orientation yourself.** Upstream examples use `<+>` for intergenic DNA and strand markers for translated coding regions. The tool preserves the submitted orientation and does not combine strands.
 - **Model setup and weights are managed automatically.** The isolated environment is built on first use and public Hugging Face checkpoints are downloaded into the shared model cache. A Hugging Face token is not required for these public checkpoints.
 - **Execution defaults to CUDA.** Reduce `batch_size` when memory is limited. Repeated calls with one checkpoint can reuse a persistent worker through the standard `ToolInstance.persist()` API.
 - **The default checkpoint is `tattabio/gLM2_650M`.** Select `tattabio/gLM2_150M` for the smaller model. Both accept at most 4096 model tokens, counting markers once; longer inputs raise an error rather than truncating.
-- **This toolkit exposes MLM operations.** Upstream categorical-Jacobian interaction analysis is not part of the wrapper.
+- **This toolkit exposes MLM operations.** Upstream categorical-Jacobian interaction analysis is not part of the tool.
