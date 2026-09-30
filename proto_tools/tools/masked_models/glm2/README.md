@@ -7,7 +7,7 @@
 
 ## Overview
 
-[gLM2](https://github.com/TattaBio/gLM2), developed by Tatta Bio, is a masked language model that reads protein-coding regions and intergenic DNA together. The toolkit exposes contextual embeddings, masked pseudo-log-likelihood, modality-preserving sampling, and relaxed-sequence gradients for prepared mixed protein/DNA loci.
+[gLM2](https://github.com/TattaBio/gLM2), developed by [Tatta Bio](https://www.tatta.bio/), is a masked language model that reads protein-coding regions and intergenic DNA together. The toolkit exposes contextual embeddings, masked pseudo-log-likelihood, modality-preserving sampling, and relaxed-sequence gradients for prepared mixed protein/DNA loci.
 
 ## Background
 
