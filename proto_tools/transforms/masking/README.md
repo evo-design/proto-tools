@@ -2,7 +2,7 @@
 
 ## Overview
 
-Shared position-selection utility used by masked protein language model tools (ESM2, ESM3) to decide *which* residues to hide before the model predicts replacements. It is not a standalone tool — it provides the `MaskingStrategy` config class and helper functions that the sampler tools consume internally.
+Shared position-selection utility used by protein, codon, and mixed protein/DNA masked language models to choose which biological tokens to hide before prediction. It is not a standalone tool — it provides the `MaskingStrategy` config class and helper functions that the sampler tools consume internally.
 
 ## Background
 
@@ -25,7 +25,7 @@ This utility centralises that logic in one place so ESM2 and ESM3 share the same
    - `"entropy"` — Shannon entropy of the model's per-position logit distribution (higher = more uncertain)
    - `"max-logit"` — negated max logit over the vocabulary (higher = model is least confident in its top prediction)
 4. Draws positions via weighted sampling (`weighted_sample`). A score temperature (`temperature`) controls how sharply the sampler concentrates on the top-scoring positions when `method` is `"entropy"` or `"max-logit"`.
-5. Applies the mask to the sequence with `apply_mask`, returning the masked string ready for the downstream model to fill in.
+5. Masks the selected atomic tokens and reconstructs the sequence for the downstream model.
 
 All randomness flows through an explicit `np.random.RandomState`, so a given `(method, mask_fraction, fixed_positions, seed)` tuple is fully reproducible.
 
@@ -41,9 +41,8 @@ MaskingStrategy().mask(["MKTLLIFLA"])
 # Entropy-guided, exact count, model-scored.
 MaskingStrategy(
     method="entropy",
-    model_name="esm2",
     num_mutations=3,
-).mask(["MKTLLIFLA"])
+).mask(["MKTLLIFLA"], position_score_fn=score_positions)  # your token-logit callback
 # → ["MK_LL_F_A"]  (three highest-entropy positions)
 
 # Mask a larger editable subset while preserving fixed positions.
@@ -57,9 +56,34 @@ The masked strings are handed directly to ESM2 / ESM3 sampling tools; see the [E
 
 - **Don't set both `num_mutations` and `mask_fraction`.** The config validates this at construction time and raises.
 - **`mask_fraction` is applied to the *designable* count**, not the full sequence length. With `fixed_positions=[1, 2, 3]` on a 100-residue sequence, `mask_fraction=0.3` masks ~29 positions, not 30.
-- **`entropy` and `max-logit` require a model to score with.** Set `model_name="esm2"` (or `"esm3"`) on the strategy. Without a model name or score function, these methods raise a `ValueError`.
+- **`entropy` and `max-logit` require a model to score with.** Sampling tools use their own checkpoint to supply logits. When calling a strategy directly, pass `position_score_fn`; otherwise these methods raise `ValueError`.
 - **Use explicit seeds for reproducibility.** The samplers use a `np.random.RandomState`; pass a seed through the tool's config to get byte-identical masked outputs across runs.
 - **Score temperature only affects the scored methods.** Adjusting `temperature` when `method="random"` has no effect.
+
+## Variable-width tokens
+
+Protein and codon callers continue to use `mask(..., token_size=1)` or `token_size=3`.
+Mixed genomic models call `mask_tokens` with atomic tokens so `<+>` and `<->` each
+occupy one position. Both paths share the same count, weighting, and random selection.
+
+```python
+MaskingStrategy(mask_fraction=1.0, fixed_positions=[3]).mask_tokens(
+    [["<+>", "M", "K", "<+>", "a", "c"]],
+    eligibility=[[False, True, True, False, True, True]],
+    seed=7,
+)
+# [["<+>", "_", "K", "<+>", "_", "_"]]
+```
+
+`fixed_positions` is 1-indexed over the complete token axis, including markers.
+Eligibility protects strand markers and ambiguous context tokens before resolving
+mask counts. A model-based callback receives the joined sequence strings and must
+return one logits row per atomic token. Mixed-model wrappers restrict the logits
+to each position's original modality before computing selection scores.
+
+For gLM2 and Minerva, premasked `_` sites require explicit `mask_modalities` in the
+input because the mask character alone cannot distinguish protein from DNA.
+Automatically selected masks retain their original modality.
 
 ## References
 

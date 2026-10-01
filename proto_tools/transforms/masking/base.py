@@ -370,7 +370,13 @@ class RandomMaskingStrategy(BaseModel):
             list[str]: List of masked sequences, each selected token replaced by ``_``
                 repeated to the token's width.
         """
-        # Lazy-init the masker (persists for the lifetime of this strategy)
+        tokens = [validate_whole_token_masks(seq, token_size) for seq in sequences]
+        masker = self._get_masker(position_score_fn)
+        all_scores = masker.score(sequences, position_score_fn=position_score_fn, token_size=token_size)
+        return ["".join(row) for row in self._mask_scored_tokens(tokens, all_scores, seed=seed)]
+
+    def _get_masker(self, position_score_fn: Callable[..., Any] | None) -> Masker:
+        """Resolve the position scorer and check its required input."""
         if self._masker is None:
             object.__setattr__(
                 self,
@@ -387,7 +393,46 @@ class RandomMaskingStrategy(BaseModel):
             )
 
         assert self._masker is not None
-        all_scores = self._masker.score(sequences, position_score_fn=position_score_fn, token_size=token_size)
+        return self._masker
+
+    def mask_tokens(
+        self,
+        sequences: list[list[str]],
+        *,
+        eligibility: list[list[bool]] | None = None,
+        position_score_fn: Callable[..., Any] | None = None,
+        seed: int | None = None,
+    ) -> list[list[str]]:
+        """Mask atomic tokens, including vocabularies with variable-width strand markers.
+
+        Args:
+            sequences (list[list[str]]): Already-tokenized sequences in input order.
+            eligibility (list[list[bool]] | None): Optional per-token eligibility; false
+                entries protect context such as strand markers regardless of the strategy.
+            position_score_fn (Callable[..., Any] | None): Model scorer receiving joined
+                sequence strings and returning one logits row per atomic token.
+            seed (int | None): Seed for position selection, advanced across input items.
+
+        Returns:
+            list[list[str]]: Copied token lists with selected tokens replaced by masks.
+                Masked tokens retain their character width. Fixed positions are 1-indexed
+                token positions, including any protected context tokens.
+        """
+        masker = self._get_masker(position_score_fn)
+        all_scores = masker.score_tokens(sequences, position_score_fn=position_score_fn)
+        return self._mask_scored_tokens(sequences, all_scores, seed=seed, eligibility=eligibility)
+
+    def _mask_scored_tokens(
+        self,
+        sequences: list[list[str]],
+        all_scores: list[list[float]],
+        *,
+        seed: int | None = None,
+        eligibility: list[list[bool]] | None = None,
+    ) -> list[list[str]]:
+        """Select positions with one shared eligibility, count, and RNG implementation."""
+        if len(all_scores) != len(sequences) or (eligibility is not None and len(eligibility) != len(sequences)):
+            raise ValueError("Scores and eligibility must have one entry per sequence")
 
         # Create seeded RNG if seed is provided
         rng = np.random.RandomState(seed) if seed is not None else None
@@ -396,19 +441,30 @@ class RandomMaskingStrategy(BaseModel):
         temperature = getattr(self, "temperature", 1.0)
 
         results = []
-        for i, seq in enumerate(sequences):
-            mutable = mutable_mask(seq, self.fixed_positions, token_size)
+        fixed = set(self.fixed_positions or [])
+        for i, tokens in enumerate(sequences):
+            if len(all_scores[i]) != len(tokens) or (eligibility is not None and len(eligibility[i]) != len(tokens)):
+                raise ValueError(f"Sequence {i}: scores and eligibility must match the token count")
+            if any(not token for token in tokens):
+                raise ValueError("Tokens cannot be empty")
+            mutable = [
+                MASK_TOKEN not in token and (j + 1) not in fixed and (eligibility is None or eligibility[i][j])
+                for j, token in enumerate(tokens)
+            ]
             eligible = [j for j, m in enumerate(mutable) if m]
             count = _resolve_count(
                 self.num_mutations,
                 self.mask_fraction,
                 len(eligible),
             )
-            validate_enough_mutable(seq, mutable, count, i)
+            validate_enough_mutable("".join(tokens), mutable, count, i)
 
             scores = [all_scores[i][j] / temperature for j in eligible]
             chosen = weighted_sample(eligible, scores, count, rng=rng)
-            results.append(apply_mask(seq, chosen, token_size))
+            masked = list(tokens)
+            for position in chosen:
+                masked[position] = MASK_TOKEN * len(tokens[position])
+            results.append(masked)
         return results
 
 

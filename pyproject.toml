@@ -212,6 +212,7 @@ module = [
     "standalone_helpers.*",
     "boltz.*",
     "ablang2.*",
+    "minerva.*",
     "colabdesign.*",
     "colabfold.*",
     "evo.*",

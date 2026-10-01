@@ -1,0 +1,7 @@
+github: https://github.com/TattaBio/gLM2
+paper: https://doi.org/10.1101/2024.08.14.607850
+huggingface:
+  - https://huggingface.co/tattabio/gLM2_150M
+  - https://huggingface.co/tattabio/gLM2_650M
+organizations:
+  - Tatta Bio

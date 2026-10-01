@@ -1,0 +1,13 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/garykbrixi/minerva/blob/main/LICENSE
+weights:
+  spdx: Apache-2.0
+  url: https://huggingface.co/gbrixi/minerva-mlm/blob/main/README.md
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: >-
+  The upstream code LICENSE and both released checkpoint model cards declare Apache-2.0.
+  Redistribution must preserve the applicable license and attribution notices.
+last_updated: '2026-09-28'
