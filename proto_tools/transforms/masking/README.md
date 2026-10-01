@@ -62,15 +62,14 @@ The masked strings are handed directly to ESM2 / ESM3 sampling tools; see the [E
 
 ## Protected tokens
 
-Pass `eligibility` to `mask` to protect specific tokens: one row of flags per sequence,
-aligned with its tokens. Ineligible tokens are never masked and do not count toward
-`mask_fraction`. The gLM2 and Minerva samplers use this to keep `+`/`-` strand markers
-and ambiguous protein symbols fixed.
+Pass `protected_tokens` to `mask` to name token strings that are never masked and do not
+count toward `mask_fraction`. The gLM2 and Minerva samplers use this to keep `+`/`-`
+strand markers and ambiguous protein symbols fixed.
 
 ```python
 MaskingStrategy(mask_fraction=1.0, fixed_positions=[3]).mask(
     ["+MK+ac"],
-    eligibility=[[False, True, True, False, True, True]],
+    protected_tokens=frozenset("+-"),
     seed=7,
 )
 # ["+_K+__"]

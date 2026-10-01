@@ -346,7 +346,7 @@ class RandomMaskingStrategy(BaseModel):
         position_score_fn: Callable[..., Any] | None = None,
         seed: int | None = None,
         token_size: int = 1,
-        eligibility: list[list[bool]] | None = None,
+        protected_tokens: frozenset[str] | None = None,
     ) -> list[str]:
         """Apply the masking strategy to a batch of sequences.
 
@@ -366,9 +366,9 @@ class RandomMaskingStrategy(BaseModel):
             token_size (int): Characters per token, supplied by the calling tool rather
                 than configured: it is a property of the model, not a choice. One for a
                 residue-level model, three for a codon-level one.
-            eligibility (list[list[bool]] | None): Optional per-token flags, one row per
-                sequence. False tokens (e.g. strand markers) are never masked and do not
-                count toward ``mask_fraction``.
+            protected_tokens (frozenset[str] | None): Token strings that are never masked and
+                do not count toward ``mask_fraction``, e.g. strand markers. Supplied by the
+                calling tool, like ``token_size``.
 
         Returns:
             list[str]: List of masked sequences, each selected token replaced by ``_``
@@ -399,16 +399,12 @@ class RandomMaskingStrategy(BaseModel):
         # temperature exists only on the model-informed tier (random scores are uniform).
         temperature = getattr(self, "temperature", 1.0)
 
-        if eligibility is not None and len(eligibility) != len(sequences):
-            raise ValueError("eligibility must have one row per sequence")
-
         results = []
         for i, seq in enumerate(sequences):
             mutable = mutable_mask(seq, self.fixed_positions, token_size)
-            if eligibility is not None:
-                if len(eligibility[i]) != len(mutable):
-                    raise ValueError(f"Sequence {i}: eligibility must have one entry per token")
-                mutable = [m and e for m, e in zip(mutable, eligibility[i], strict=True)]
+            if protected_tokens:
+                tokens = split_tokens(seq, token_size)
+                mutable = [m and token not in protected_tokens for m, token in zip(mutable, tokens, strict=True)]
             eligible = [j for j, m in enumerate(mutable) if m]
             count = _resolve_count(
                 self.num_mutations,

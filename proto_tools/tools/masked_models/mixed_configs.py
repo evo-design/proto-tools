@@ -6,8 +6,8 @@ from typing import Any, ClassVar, Literal, cast
 
 from pydantic import model_validator
 from standalone_helpers.mixed_sequence import (
+    AMBIGUOUS_PROTEIN_TOKENS,
     DNA_TOKENS,
-    MIXED_VOCAB,
     PROTEIN_TOKENS,
     STRAND_TOKENS,
     tokenize_mixed_sequence,
@@ -18,6 +18,9 @@ from proto_tools.utils import BaseConfig, ConfigField
 from proto_tools.utils.base_config import _marked_preprocessed
 
 logger = logging.getLogger(__name__)
+
+# Strand markers and ambiguous protein symbols are context, never sampled.
+PROTECTED_TOKENS = frozenset(STRAND_TOKENS + AMBIGUOUS_PROTEIN_TOKENS)
 
 
 class MixedModelConfig(BaseConfig):
@@ -179,7 +182,6 @@ class MixedSampleConfig(MixedModelConfig):
             return inputs
         # One-character tokens make string indices token positions; strand markers stay fixed.
         sequences = ["".join(tokenize_mixed_sequence(sequence)) for sequence in inputs.sequences]
-        eligibility = [[token in MIXED_VOCAB for token in sequence] for sequence in sequences]
         position_score_fn = None
         if self.masking_strategy.method != "random":
             # Resolve the matching operation through the registry, using this tool's toolkit.
@@ -219,7 +221,7 @@ class MixedSampleConfig(MixedModelConfig):
             sequences,
             position_score_fn=position_score_fn,
             seed=self.seed,
-            eligibility=eligibility,
+            protected_tokens=PROTECTED_TOKENS,
         )
         modalities = [
             {i + 1: ("protein" if before[i] in PROTEIN_TOKENS else "dna") for i, t in enumerate(after) if t == "_"}
