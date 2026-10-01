@@ -41,7 +41,7 @@ class MinervaSampleConfig(MinervaConfig, MixedSampleConfig):
 
 def example_input() -> MinervaSampleInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return MinervaSampleInput(sequences=["<+>MKTL<+>acgt<->ACDE"])
+    return MinervaSampleInput(sequences=["+MKTL+acgt-ACDE"])
 
 
 @tool(

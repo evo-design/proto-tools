@@ -34,7 +34,7 @@ class MinervaScoringConfig(MinervaConfig, MixedScoringConfig):
 
 def example_input() -> MinervaScoringInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return MinervaScoringInput(sequences=["<+>MKTL<+>acgt<->ACDE"])
+    return MinervaScoringInput(sequences=["+MKTL+acgt-ACDE"])
 
 
 @tool(

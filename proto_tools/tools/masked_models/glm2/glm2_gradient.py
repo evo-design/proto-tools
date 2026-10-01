@@ -35,7 +35,7 @@ class GLM2GradientConfig(GLM2Config, MixedGradientConfig):
 
 def example_input() -> GLM2GradientInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return GLM2GradientInput(sequence="<+>MKTL<+>acgt", logits=one_hot_mixed_logits("<+>MKTL<+>acgt", sharpness=2.0))
+    return GLM2GradientInput(sequence="+MKTL+acgt", logits=one_hot_mixed_logits("+MKTL+acgt", sharpness=2.0))
 
 
 @tool(

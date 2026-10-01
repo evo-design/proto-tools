@@ -34,7 +34,7 @@ class GLM2ScoringConfig(GLM2Config, MixedScoringConfig):
 
 def example_input() -> GLM2ScoringInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return GLM2ScoringInput(sequences=["<+>MKTL<+>acgt<->ACDE"])
+    return GLM2ScoringInput(sequences=["+MKTL+acgt-ACDE"])
 
 
 @tool(

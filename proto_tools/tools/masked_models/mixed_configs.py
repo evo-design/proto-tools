@@ -2,15 +2,25 @@
 
 import logging
 import math
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import model_validator
-from standalone_helpers.mixed_sequence import DNA_TOKENS, MIXED_VOCAB, PROTEIN_TOKENS, tokenize_mixed_sequence
+from standalone_helpers.mixed_sequence import (
+    AMBIGUOUS_PROTEIN_TOKENS,
+    DNA_TOKENS,
+    PROTEIN_TOKENS,
+    STRAND_TOKENS,
+    tokenize_mixed_sequence,
+)
 
 from proto_tools.transforms.masking import MaskingInput, MaskingStrategy
 from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils.base_config import _marked_preprocessed
 
 logger = logging.getLogger(__name__)
+
+# Strand markers and ambiguous protein symbols are context, never sampled.
+PROTECTED_TOKENS = frozenset(STRAND_TOKENS + AMBIGUOUS_PROTEIN_TOKENS)
 
 
 class MixedModelConfig(BaseConfig):
@@ -39,13 +49,21 @@ class MixedModelConfig(BaseConfig):
     )
 
     def preprocess(self, inputs: Any) -> Any:
-        """Check checkpoint-specific context limits before loading model weights."""
+        """Check context limits before loading weights and warn on a missing leading strand marker."""
         sequences = inputs.sequences if hasattr(inputs, "sequences") else [inputs.sequence]
         limit = self.context_limits[self.model_checkpoint]
         for index, sequence in enumerate(sequences):
-            length = len(tokenize_mixed_sequence(sequence, allow_masks=True))
-            if length > limit:
-                raise ValueError(f"{self.model_checkpoint}: sequence {index} has {length} tokens; limit is {limit}")
+            tokens = tokenize_mixed_sequence(sequence, allow_masks=True)
+            if len(tokens) > limit:
+                raise ValueError(
+                    f"{self.model_checkpoint}: sequence {index} has {len(tokens)} tokens; limit is {limit}"
+                )
+            if tokens[0] not in STRAND_TOKENS:
+                logger.warning(
+                    "Sequence %d does not start with a strand marker (+ or -). "
+                    "Generally this means the input was malformed.",
+                    index,
+                )
         return inputs
 
 
@@ -162,8 +180,8 @@ class MixedSampleConfig(MixedModelConfig):
                     "Remove '_' tokens to use the strategy, or omit masking_strategy to silence this warning."
                 )
             return inputs
-        tokens = [tokenize_mixed_sequence(sequence) for sequence in inputs.sequences]
-        eligibility = [[token in MIXED_VOCAB for token in row] for row in tokens]
+        # One-character tokens make string indices token positions; strand markers stay fixed.
+        sequences = ["".join(tokenize_mixed_sequence(sequence)) for sequence in inputs.sequences]
         position_score_fn = None
         if self.masking_strategy.method != "random":
             # Resolve the matching operation through the registry, using this tool's toolkit.
@@ -173,17 +191,23 @@ class MixedSampleConfig(MixedModelConfig):
                 raise ValueError("Automatic masking requires a registered sampling config")
             embedding_key = self.tool_key.removesuffix("-sample") + "-embedding"
             spec = ToolRegistry.get(embedding_key)
+            # This preprocess already checked these sequences, so the scoring call skips its own.
             result = spec.function(
-                spec.input_model.model_validate({"sequences": inputs.sequences}),
-                spec.config_model(
-                    model_checkpoint=self.model_checkpoint,
-                    batch_size=self.batch_size,
-                    device=self.device,
-                    return_logits=True,
+                spec.input_model.model_validate({"sequences": sequences}),
+                _marked_preprocessed(
+                    cast(
+                        BaseConfig,
+                        spec.config_model(
+                            model_checkpoint=self.model_checkpoint,
+                            batch_size=self.batch_size,
+                            device=self.device,
+                            return_logits=True,
+                        ),
+                    )
                 ),
             )
             restricted_logits = []
-            for row_tokens, item in zip(tokens, result.results, strict=True):
+            for row_tokens, item in zip(sequences, result.results, strict=True):
                 rows = []
                 for token, logits in zip(row_tokens, item.logits, strict=True):
                     permitted = range(20, 24) if token in DNA_TOKENS else range(20)
@@ -193,17 +217,17 @@ class MixedSampleConfig(MixedModelConfig):
             def position_score_fn(_sequences: list[str]) -> list[list[list[float]]]:
                 return restricted_logits
 
-        masked = self.masking_strategy.mask_tokens(
-            tokens,
-            eligibility=eligibility,
+        masked = self.masking_strategy.mask(
+            sequences,
             position_score_fn=position_score_fn,
             seed=self.seed,
+            protected_tokens=PROTECTED_TOKENS,
         )
         modalities = [
             {i + 1: ("protein" if before[i] in PROTEIN_TOKENS else "dna") for i, t in enumerate(after) if t == "_"}
-            for before, after in zip(tokens, masked, strict=True)
+            for before, after in zip(sequences, masked, strict=True)
         ]
-        return inputs.model_copy(update={"sequences": ["".join(row) for row in masked], "mask_modalities": modalities})
+        return inputs.model_copy(update={"sequences": masked, "mask_modalities": modalities})
 
 
 class MixedGradientConfig(MixedModelConfig):

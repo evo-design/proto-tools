@@ -7,6 +7,8 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
 from standalone_helpers.mixed_sequence import (
+    AMBIGUOUS_PROTEIN_TOKENS,
+    DNA_TOKENS,
     MIXED_VOCAB,
     PROTEIN_TOKENS,
     one_hot_mixed_logits,
@@ -29,6 +31,8 @@ from proto_tools.utils import (
 )
 
 MixedModality = Literal["protein", "dna"]
+# Biological tokens that fix a neighboring mask's modality, including ambiguous protein symbols.
+MIXED_VOCAB_SET = frozenset(PROTEIN_TOKENS + AMBIGUOUS_PROTEIN_TOKENS + DNA_TOKENS)
 
 
 class MixedSequenceInput(BaseToolInput):
@@ -36,15 +40,16 @@ class MixedSequenceInput(BaseToolInput):
 
     Attributes:
         sequences (list[str]): Uppercase proteins and lowercase DNA, optionally separated
-            by atomic strand markers. A single string is normalized to a list.
+            by ``+``/``-`` strand markers (``<+>``/``<->`` are stored as ``+``/``-``).
+            A single string is normalized to a list.
     """
 
     ALLOW_MASKS: ClassVar[bool] = False
     sequences: list[str] = InputField(
         title="Sequences",
-        description="Prepared loci: uppercase protein, lowercase acgt, and <+>/<-> strand markers",
+        description="Prepared loci: uppercase protein, lowercase acgt, +/- strand markers (<+>/<-> accepted)",
         min_length=1,
-        examples=["<+>MKTL<+>acgt<->ACDE"],
+        examples=["+MKTL+acgt-ACDE"],
     )
 
     @field_validator("sequences", mode="before")
@@ -56,14 +61,38 @@ class MixedSequenceInput(BaseToolInput):
     @field_validator("sequences")
     @classmethod
     def validate_sequences(cls, sequences: list[str]) -> list[str]:
-        """Validate atomic tokens without changing case or inserting markers."""
-        for sequence in sequences:
-            tokenize_mixed_sequence(sequence, allow_masks=cls.ALLOW_MASKS)
-        return sequences
+        """Validate tokens and store one-character strand markers, without changing case."""
+        return ["".join(tokenize_mixed_sequence(sequence, allow_masks=cls.ALLOW_MASKS)) for sequence in sequences]
 
     def __len__(self) -> int:
-        """Return the total number of model tokens, counting each marker once."""
-        return sum(len(tokenize_mixed_sequence(s, allow_masks=self.ALLOW_MASKS)) for s in self.sequences)
+        """Return the total number of model tokens."""
+        return sum(len(sequence) for sequence in self.sequences)
+
+
+def _implied_mask_modality(sequence: str, index: int) -> MixedModality | None:
+    """Return the modality a mask's context requires, or None when the context is ambiguous."""
+    start = index
+    while start > 0 and sequence[start - 1] == MASK_TOKEN:
+        start -= 1
+    end = index
+    while end < len(sequence) - 1 and sequence[end + 1] == MASK_TOKEN:
+        end += 1
+    left = sequence[start - 1] if start > 0 else None
+    right = sequence[end + 1] if end < len(sequence) - 1 else None
+    # A '-' marker only starts protein elements.
+    if left == "-":
+        return "protein"
+    # A mask run between two same-modality tokens within one element shares their modality.
+    if left is not None and right is not None and left in MIXED_VOCAB_SET and right in MIXED_VOCAB_SET:
+        left_modality = _token_modality(left)
+        if left_modality == _token_modality(right):
+            return left_modality
+    return None
+
+
+def _token_modality(token: str) -> MixedModality:
+    """Classify a biological token as protein (uppercase) or DNA (lowercase)."""
+    return "dna" if token in DNA_TOKENS else "protein"
 
 
 class MixedSequenceSampleInput(MixedSequenceInput):
@@ -72,8 +101,8 @@ class MixedSequenceSampleInput(MixedSequenceInput):
     Attributes:
         sequences (list[str]): Prepared loci, optionally carrying ``_`` masks.
         mask_modalities (list[dict[int, MixedModality]] | None): One mapping per locus,
-            assigning every mask's 1-indexed model-token position to protein or DNA.
-            Strand markers count as one token. Omit for fully specified sequences.
+            assigning every mask's 1-indexed token position to protein or DNA. Positions
+            index the ``+``/``-`` form. Omit for fully specified sequences.
     """
 
     ALLOW_MASKS: ClassVar[bool] = True
@@ -81,7 +110,7 @@ class MixedSequenceSampleInput(MixedSequenceInput):
         title="Sequences",
         description="Prepared mixed loci; '_' marks editable sites with explicit mask_modalities",
         min_length=1,
-        examples=["<+>MKTL<+>acgt"],
+        examples=["+MKTL+acgt"],
     )
     mask_modalities: list[dict[int, MixedModality]] | None = InputField(
         default=None,
@@ -98,12 +127,15 @@ class MixedSequenceSampleInput(MixedSequenceInput):
         if len(modalities) != len(self.sequences):
             raise ValueError("mask_modalities must have one mapping per sequence")
         for index, (sequence, mapping) in enumerate(zip(self.sequences, modalities, strict=True)):
-            tokens = tokenize_mixed_sequence(sequence, allow_masks=True)
-            masked = {i + 1 for i, token in enumerate(tokens) if token == MASK_TOKEN}
+            masked = {i + 1 for i, token in enumerate(sequence) if token == MASK_TOKEN}
             if set(mapping) != masked:
                 raise ValueError(
                     f"mask_modalities[{index}] must label exactly the masked token positions {sorted(masked)}"
                 )
+            for position, modality in mapping.items():
+                expected = _implied_mask_modality(sequence, position - 1)
+                if expected is not None and modality != expected:
+                    raise ValueError(f"mask_modalities[{index}][{position}] must be {expected!r} from its context")
         object.__setattr__(self, "mask_modalities", modalities)
         return self
 
@@ -112,7 +144,7 @@ class MixedSequenceGradientInput(BaseToolInput):
     """Relaxed biological tokens aligned to a fixed mixed-sequence template.
 
     Attributes:
-        sequence (str): Fully specified template fixing modality and strand markers.
+        sequence (str): Fully specified template fixing modality and ``+``/``-`` strand markers.
         logits (list[list[float]]): One 24-column row per model token in
             ``ACDEFGHIKLMNPQRSTVWYacgt`` order. Fixed context rows must be zero.
         temperature (float | None): Softmax temperature; ``None`` requires probability
@@ -134,10 +166,16 @@ class MixedSequenceGradientInput(BaseToolInput):
         description="Apply softmax(input / T); None requires modality-restricted probabilities",
     )
 
+    @field_validator("sequence")
+    @classmethod
+    def normalize_sequence(cls, sequence: str) -> str:
+        """Validate tokens and store one-character strand markers."""
+        return "".join(tokenize_mixed_sequence(sequence))
+
     @model_validator(mode="after")
     def validate_relaxed_sequence(self) -> "MixedSequenceGradientInput":
         """Check token alignment, finite state, fixed context, and probability domains."""
-        tokens = tokenize_mixed_sequence(self.sequence)
+        tokens = list(self.sequence)
         if len(tokens) != len(self.logits):
             raise ValueError("logits must have one row per model token, including strand markers")
         if not any(t in MIXED_VOCAB for t in tokens):
@@ -158,10 +196,9 @@ class MixedSequenceGradientInput(BaseToolInput):
 
 
 class MixedSequenceEmbedding(SequenceEmbedding):
-    """A pooled embedding with labeled mixed-token axes.
+    """A pooled embedding with optional per-position logits.
 
     Attributes:
-        tokens (list[str]): Unpadded model tokens, including strand markers.
         vocab (list[str]): Column order of optional biological logits.
         logits (list[list[float]] | None): Optional per-token protein/DNA logits.
     """
@@ -169,7 +206,6 @@ class MixedSequenceEmbedding(SequenceEmbedding):
     logits: list[list[float]] | None = Field(
         default=None, title="Logits", description="Optional per-token biological logits in vocabulary order"
     )
-    tokens: list[str] = Field(title="Tokens", description="Unpadded token axis, including strand markers")
     vocab: list[str] = Field(
         default_factory=lambda: list(MIXED_VOCAB), title="Vocabulary", description="Biological-logit column order"
     )
@@ -185,7 +221,7 @@ class MixedEmbeddingsOutput(MaskedModelEmbeddingsOutput):
     results: list[MixedSequenceEmbedding] = Field(title="Results", description="Embedding bundles in input order")  # type: ignore[assignment]
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Preserve token labels and optional logits in JSON; reuse pooled-vector exports."""
+        """Preserve vocabulary and optional logits in JSON; reuse pooled-vector exports."""
         if file_format == "json":
             Path(str(export_path) + ".json").write_text(json.dumps([r.model_dump() for r in self.results]))
         else:
@@ -198,7 +234,6 @@ class MixedSequenceSample(MaskedModelSample):
     Attributes:
         sequence (str): Completed mixed protein/DNA locus with original strand markers.
         logits (list[list[float]] | None): Optional per-token protein/DNA logits.
-        tokens (list[str]): Completed token sequence, including fixed strand markers.
         vocab (list[str]): Column order of optional biological logits.
     """
 
@@ -206,7 +241,6 @@ class MixedSequenceSample(MaskedModelSample):
     logits: list[list[float]] | None = Field(
         default=None, title="Logits", description="Optional per-token biological logits with shape (L, 24)"
     )
-    tokens: list[str] = Field(title="Tokens", description="Completed model-token sequence, including strand markers")
     vocab: list[str] = Field(
         default_factory=lambda: list(MIXED_VOCAB), title="Vocabulary", description="Biological-logit column order"
     )
@@ -232,7 +266,7 @@ class MixedSampleOutput(MaskedModelSampleOutput):
         return "json"
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Preserve token labels and optional logits in JSON exports."""
+        """Preserve vocabulary and optional logits in JSON exports."""
         if file_format == "json":
             Path(str(export_path) + ".json").write_text(json.dumps([r.model_dump() for r in self.results]))
         else:
@@ -243,11 +277,9 @@ class MixedScoringMetrics(MaskedModelScoringMetrics):
     """Canonical masked-PLL metrics with explicit target-position metadata.
 
     Attributes:
-        tokens (list[str]): All unpadded model tokens, including unscored context.
         scored_positions (list[int]): 1-indexed canonical protein/DNA target token positions.
     """
 
-    tokens: list[str] = Field(title="Tokens", description="Unpadded model tokens, including unscored context")
     scored_positions: list[int] = Field(
         title="Scored Positions", description="1-indexed model-token positions contributing to the masked PLL metrics"
     )
@@ -278,18 +310,13 @@ class MixedGradientOutput(GradientOutput):
         loss (float): Mean masked negative log-likelihood.
         metrics (dict[str, Any]): Masked PLL metrics and checkpoint metadata.
         vocab (list[str]): Protein/DNA column order shared by input and gradient.
-        tokens (list[str]): Model-token axis shared by the input and gradient matrices.
     """
 
-    tokens: list[str] = Field(
-        title="Tokens", description="Model-token axis shared by input logits and returned gradient"
-    )
-
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Include token labels alongside the gradient, loss, metrics, and vocabulary."""
+        """Export the gradient, loss, metrics, and vocabulary as JSON."""
         if file_format != "json":
             raise ValueError(f"Unsupported format: {file_format}")
-        payload = self.model_dump(include={"gradient", "loss", "metrics", "vocab", "tokens"}, mode="json")
+        payload = self.model_dump(include={"gradient", "loss", "metrics", "vocab"}, mode="json")
         Path(str(export_path) + ".json").write_text(json.dumps(payload))
 
 

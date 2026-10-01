@@ -35,7 +35,7 @@ class MinervaEmbeddingsConfig(MinervaConfig, MixedEmbeddingsConfig):
 
 def example_input() -> MinervaEmbeddingsInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return MinervaEmbeddingsInput(sequences=["<+>MKTL<+>acgt<->ACDE"])
+    return MinervaEmbeddingsInput(sequences=["+MKTL+acgt-ACDE"])
 
 
 @tool(

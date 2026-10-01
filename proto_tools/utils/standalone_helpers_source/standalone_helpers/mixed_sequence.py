@@ -1,6 +1,7 @@
 """Case-sensitive protein/DNA tokenization shared by mixed genomic language models."""
 
 import math
+from itertools import pairwise
 
 from .proto_logging import get_logger
 
@@ -10,31 +11,40 @@ PROTEIN_TOKENS = "ACDEFGHIKLMNPQRSTVWY"
 DNA_TOKENS = "acgt"
 AMBIGUOUS_PROTEIN_TOKENS = "XBUZO"
 MIXED_VOCAB = list(PROTEIN_TOKENS + DNA_TOKENS)
-STRAND_TOKENS = ("<+>", "<->")
+STRAND_TOKENS = "+-"
+# Upstream tokenizers spell the one-character strand markers as special tokens.
+UPSTREAM_STRAND_TOKENS = {"+": "<+>", "-": "<->"}
+
+
+def normalize_mixed_sequence(sequence: str) -> str:
+    """Rewrite upstream ``<+>``/``<->`` strand markers as one-character ``+``/``-``."""
+    for short, upstream in UPSTREAM_STRAND_TOKENS.items():
+        sequence = sequence.replace(upstream, short)
+    return sequence
 
 
 def tokenize_mixed_sequence(sequence: str, *, allow_masks: bool = False) -> list[str]:
-    """Split a prepared locus into atomic tokens without altering its biological content.
+    """Split a prepared locus into one-character tokens without altering its biological content.
 
-    Strand markers occupy one position. No automatic strand insertion, case conversion,
-    translation, whitespace removal, or reverse complementation is performed.
+    Strand markers may be written ``+``/``-`` or ``<+>``/``<->``; both become one ``+``/``-``
+    token. Two markers may not be adjacent, and DNA may not directly follow ``-``. A missing
+    leading marker or a trailing marker is accepted, as in windows cut from a longer locus. No
+    automatic strand insertion, case conversion, translation, whitespace removal, or reverse
+    complementation is performed.
     """
-    tokens: list[str] = []
-    index = 0
-    alphabet = PROTEIN_TOKENS + DNA_TOKENS + AMBIGUOUS_PROTEIN_TOKENS
-    while index < len(sequence):
-        marker = sequence[index : index + 3]
-        if marker in STRAND_TOKENS:
-            tokens.append(marker)
-            index += 3
-            continue
-        char = sequence[index]
+    tokens = list(normalize_mixed_sequence(sequence))
+    alphabet = PROTEIN_TOKENS + DNA_TOKENS + AMBIGUOUS_PROTEIN_TOKENS + STRAND_TOKENS
+    for index, char in enumerate(tokens):
         if char not in alphabet and not (allow_masks and char == "_"):
-            raise ValueError(f"Invalid mixed-sequence character at position {index + 1}: {char!r}")
-        tokens.append(char)
-        index += 1
+            raise ValueError(f"Invalid mixed-sequence character at token position {index + 1}: {char!r}")
     if not any(token not in STRAND_TOKENS for token in tokens):
         raise ValueError("A mixed sequence must contain at least one biological position")
+    for index, (current, following) in enumerate(pairwise(tokens)):
+        # Each marker starts a non-empty element; intergenic DNA is always on the + strand.
+        if current in STRAND_TOKENS and following in STRAND_TOKENS:
+            raise ValueError(f"Consecutive strand markers at token positions {index + 1}-{index + 2}")
+        if current == "-" and following in DNA_TOKENS:
+            raise ValueError(f"DNA follows a '-' marker at token position {index + 2}; intergenic DNA uses '+'")
     return tokens
 
 

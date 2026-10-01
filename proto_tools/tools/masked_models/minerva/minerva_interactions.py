@@ -58,7 +58,7 @@ class MinervaInteractionsConfig(MinervaConfig):
 
 def example_input() -> MinervaInteractionsInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return MinervaInteractionsInput(sequences=["<+>MKTL<+>acgt<->ACDE"])
+    return MinervaInteractionsInput(sequences=["+MKTL+acgt-ACDE"])
 
 
 @tool(
