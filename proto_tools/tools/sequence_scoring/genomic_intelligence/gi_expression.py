@@ -1,9 +1,12 @@
 """Gene-expression prediction via the Genomic Intelligence hosted API.
 
-The model scores exactly one 9,198 bp window centred on a transcription start
-site. Either submit that window directly, or submit a longer locus together with
-``tss_index`` and let the service cut it; the window actually scored is echoed
-back. Under-length input is rejected rather than padded.
+The model reads the sequence around a transcription start site. Submit at least
+9,198 bp with the TSS at least 4,599 bp from each end, plus ``tss_index`` unless
+the sequence is exactly 9,198 bp. Longer input is welcome: each model's
+``bio_spec.recommended_flank_bp`` says how many bp to fetch on each side of the
+TSS, and how much it reads is its own. The part of the submission the model
+used is echoed back as ``scored_window``. A TSS too close to either end is
+rejected rather than padded.
 
 Two properties are easy to get wrong:
 
@@ -33,10 +36,14 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField
 
 EXPRESSION_WINDOW_BP = 9_198
-"""Width of the single window the model scores, and the endpoint's floor."""
+"""The endpoint's floor, and the one length at which ``tss_index`` may be omitted.
+
+Not the width of what is scored: that depends on the model, and the response
+reports it as ``scored_window``.
+"""
 
 EXPRESSION_TSS_RADIUS = EXPRESSION_WINDOW_BP // 2
-"""Half-width of the scored window: 4,599 bp either side of the TSS."""
+"""Minimum flank the endpoint requires: 4,599 bp either side of the TSS."""
 
 
 # ============================================================================
@@ -48,8 +55,8 @@ class ExpressionSequence(BaseToolInput):
     """One locus to score, with the TSS located inside it.
 
     Attributes:
-        sequence (str): Either exactly 9,198 bp centred on the TSS, or a longer
-            locus paired with ``tss_index``.
+        sequence (str): At least 9,198 bp with the TSS at least 4,599 bp from
+            each end. Exactly 9,198 bp may omit ``tss_index``.
         name (str): Label echoed back in the response.
         tss_index (int | None): 0-based TSS offset into the whitespace-stripped
             sequence. Required unless the sequence is exactly 9,198 bp, where it
@@ -57,7 +64,7 @@ class ExpressionSequence(BaseToolInput):
             ``4599 <= tss_index <= len(sequence) - 4599``.
     """
 
-    sequence: str = InputField(title="Sequence", description="TSS-centred 9,198 bp window, or a longer locus")
+    sequence: str = InputField(title="Sequence", description="At least 9,198 bp, TSS at least 4,599 bp from each end")
     name: str = InputField(default="sequence", title="Name", description="Label echoed back in the response")
     tss_index: int | None = InputField(
         default=None,
@@ -68,7 +75,7 @@ class ExpressionSequence(BaseToolInput):
 
     @model_validator(mode="after")
     def _tss_index_present_and_in_range(self) -> ExpressionSequence:
-        """Require a TSS offset for any locus that is not exactly one window.
+        """Require a TSS offset unless the sequence is exactly 9,198 bp.
 
         A wrongly-placed window still scores and returns a confident number, so
         the offset is checked here rather than left to the service.
@@ -101,7 +108,7 @@ class GIExpressionInput(BaseToolInput):
 
     sequences: list[ExpressionSequence] = InputField(
         title="Sequences",
-        description="Loci to score, each a 9,198 bp TSS window or a longer locus plus tss_index",
+        description="Loci to score, each at least 9,198 bp with tss_index unless exactly 9,198 bp",
         min_length=1,
     )
 
@@ -156,13 +163,14 @@ class ExpressionPrediction(BaseModel):
         name (str): Label supplied with the sequence.
         sequence_length (int): Length of the submitted sequence in base pairs,
             whitespace-stripped. Read from ``meta``, not from ``data.input``:
-            the echo carries a field of the same name holding the 9,198 bp
-            window instead, and only ``meta`` is in the published schema.
+            older responses carried a field of the same name in the echo
+            holding the scored window instead.
         expression_log_tpm (float | None): Predicted log(TPM+1).
         expression_tpm (float | None): Predicted TPM.
         tss_index (int | None): TSS offset the service applied.
-        scored_window (list[int] | None): Window the service actually scored,
-            as ``[start, end)`` in the submitted sequence.
+        scored_window (list[int] | None): Part of the submission the model
+            used, as ``[start, end)``. 9,198 bp wide for ``g0-expression``;
+            other models report their own width.
         meta (GIRequestMeta): Provenance for the call.
     """
 
@@ -266,7 +274,7 @@ def example_input() -> Any:
     input_class=GIExpressionInput,
     config_class=GIExpressionConfig,
     output_class=GIExpressionOutput,
-    description="Predict gene expression from a TSS-centred window via the hosted Genomic Intelligence API",
+    description="Predict gene expression around a TSS via the hosted Genomic Intelligence API",
     uses_gpu=False,
     example_input=example_input,
     iterable_input_fields=["sequences"],

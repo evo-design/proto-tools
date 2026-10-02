@@ -384,7 +384,32 @@ def test_parse_expression_takes_the_submitted_length_from_meta_not_the_echo() ->
     result = parse_expression_data(payload["data"], payload, "demo")
     assert result.sequence_length == 25000
     assert result.scored_window == [7901, 17099]
-    assert result.scored_window[1] - result.scored_window[0] == EXPRESSION_WINDOW_BP
+
+
+def test_parse_expression_accepts_a_scored_window_wider_than_9198() -> None:
+    """``scored_window`` is as wide as the model reads, not a fixed 9,198 bp.
+
+    The contract fixes the width only for ``g0-expression``. ``g0-expression-8192``
+    reports the span it actually read, which is wider and not centred on the TSS.
+    The values below are that model's pinned response for a 90,001 bp
+    gene-sense ALB locus posted with ``tss_index`` 45,000. What holds for every
+    model is that the window lies inside the submission and contains the TSS.
+    """
+    payload = {
+        "data": {**_EXPRESSION_PAYLOAD["data"], "model": "g0-expression-8192"},
+        "meta": {
+            **_EXPRESSION_PAYLOAD["meta"],
+            "model": "g0-expression-8192",
+            "sequence_length": 90001,
+            "task_specific_counts": {"tss_index": 45000, "scored_window": [18520, 71304]},
+        },
+    }
+    result = parse_expression_data(payload["data"], payload, "ALB")
+    assert result.sequence_length == 90001
+    assert result.tss_index == 45000
+    assert result.scored_window == [18520, 71304]
+    start, end = result.scored_window
+    assert 0 <= start <= result.tss_index < end <= result.sequence_length
 
 
 def test_parse_workflow_counts_scored_and_skipped_genes() -> None:
@@ -1125,9 +1150,9 @@ def test_gi_expression_benchmark() -> None:
     """Benchmark gi-expression: the 25,000 bp HBB locus cut to one window around its midpoint."""
     _require_live_key()
     locus = _hbb_locus()
-    # The model scores one 9,198 bp window, so a longer locus needs the TSS
-    # offset. The midpoint keeps the required flank on both sides without
-    # depending on an annotation call to place it.
+    # Anything other than exactly 9,198 bp needs the TSS offset. The midpoint
+    # keeps the required flank on both sides without depending on an
+    # annotation call to place it.
     output = run_gi_expression(
         GIExpressionInput(sequences=[{"sequence": locus, "name": "HBB", "tss_index": len(locus) // 2}]),
         GIExpressionConfig(),
@@ -1138,7 +1163,8 @@ def test_gi_expression_benchmark() -> None:
     result = output.results[0]
     # This locus is longer than one window, so it is the only place the two
     # quantities can be told apart: sequence_length must be what was submitted
-    # (meta), and the window must stay 9,198 wide. data.input used to carry a
+    # (meta), and the window must sit inside it around the TSS. Its width is
+    # the model's own, so it is not asserted. data.input used to carry a
     # sequence_length of its own holding the window, and reading that one
     # instead of meta is the mistake these two assertions exist to catch. The
     # service dropped that key at contract revision 13 on 2026-09-03, and at
@@ -1149,7 +1175,8 @@ def test_gi_expression_benchmark() -> None:
     # the service ever reopens the echo and a reader drifts back to it.
     assert result.sequence_length == len(locus)
     assert result.scored_window is not None
-    assert result.scored_window[1] - result.scored_window[0] == EXPRESSION_WINDOW_BP
+    start, end = result.scored_window
+    assert 0 <= start <= len(locus) // 2 < end <= len(locus)
     assert result.expression_log_tpm is not None
     assert result.meta.request_id
 
