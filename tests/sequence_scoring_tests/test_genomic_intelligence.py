@@ -384,7 +384,32 @@ def test_parse_expression_takes_the_submitted_length_from_meta_not_the_echo() ->
     result = parse_expression_data(payload["data"], payload, "demo")
     assert result.sequence_length == 25000
     assert result.scored_window == [7901, 17099]
-    assert result.scored_window[1] - result.scored_window[0] == EXPRESSION_WINDOW_BP
+
+
+def test_parse_expression_accepts_a_scored_window_wider_than_9198() -> None:
+    """``scored_window`` is as wide as the model reads, not a fixed 9,198 bp.
+
+    The contract fixes the width only for ``g0-expression``. ``g0-expression-8192``
+    reports the span it actually read, which is wider and not centred on the TSS.
+    The values below are that model's pinned response for a 90,001 bp
+    gene-sense ALB locus posted with ``tss_index`` 45,000. What holds for every
+    model is that the window lies inside the submission and contains the TSS.
+    """
+    payload = {
+        "data": {**_EXPRESSION_PAYLOAD["data"], "model": "g0-expression-8192"},
+        "meta": {
+            **_EXPRESSION_PAYLOAD["meta"],
+            "model": "g0-expression-8192",
+            "sequence_length": 90001,
+            "task_specific_counts": {"tss_index": 45000, "scored_window": [18520, 71304]},
+        },
+    }
+    result = parse_expression_data(payload["data"], payload, "ALB")
+    assert result.sequence_length == 90001
+    assert result.tss_index == 45000
+    assert result.scored_window == [18520, 71304]
+    start, end = result.scored_window
+    assert 0 <= start <= result.tss_index < end <= result.sequence_length
 
 
 def test_parse_workflow_counts_scored_and_skipped_genes() -> None:
@@ -943,6 +968,51 @@ class TestTheCallerSeesTheRefusal:
 
 
 # ============================================================================
+# Request bodies — only keys the endpoint accepts
+# ============================================================================
+
+# ``AnnotationOptions`` in the hosted API's published contract (revision 18).
+# The object is closed: any other key is ``422 extra_forbidden``.
+_ANNOTATION_OPTIONS_ACCEPTED = {"reverse_complement", "shift_coordinates"}
+
+
+class _CapturingSession(_FakeSession):
+    """A fake session that also records the JSON body of each POST."""
+
+    def __init__(self, post: _FakeResponse) -> None:
+        super().__init__(post)
+        self.bodies: list[dict[str, Any]] = []
+
+    def post(self, *args: Any, **kwargs: Any) -> _FakeResponse:
+        self.bodies.append(kwargs["json"])
+        return super().post(*args, **kwargs)
+
+
+def test_every_annotation_config_option_maps_to_a_key_the_api_accepts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set every annotation-specific config field and check what goes on the wire.
+
+    ``batch_size`` used to be published here and forwarded; the API dropped it
+    (it never did anything) and now answers a request carrying it with a 422.
+    Driving every field rather than naming one keeps a future option that
+    forwards an unpublished key from passing quietly.
+    """
+    session = _CapturingSession(_FakeResponse(200, _ANNOTATION_PAYLOAD))
+    monkeypatch.setattr(shared_data_models, "_build_session", lambda _config: session)
+
+    values: dict[str, Any] = {}
+    for name, field in GIAnnotationConfig.model_fields.items():
+        if name in GIConfig.model_fields:
+            continue
+        values[name] = True if "bool" in str(field.annotation) else 1
+
+    run_gi_annotation(GIAnnotationInput(sequences="ACGT" * 300), GIAnnotationConfig(gi_api_key="gi_test", **values))
+
+    (body,) = session.bodies
+    assert values, "no annotation-specific config fields found"
+    assert set(body["options"]) <= _ANNOTATION_OPTIONS_ACCEPTED
+
+
+# ============================================================================
 # Integration — live API, skipped unless pytest runs with --integration
 # ============================================================================
 #
@@ -1125,9 +1195,9 @@ def test_gi_expression_benchmark() -> None:
     """Benchmark gi-expression: the 25,000 bp HBB locus cut to one window around its midpoint."""
     _require_live_key()
     locus = _hbb_locus()
-    # The model scores one 9,198 bp window, so a longer locus needs the TSS
-    # offset. The midpoint keeps the required flank on both sides without
-    # depending on an annotation call to place it.
+    # Anything other than exactly 9,198 bp needs the TSS offset. The midpoint
+    # keeps the required flank on both sides without depending on an
+    # annotation call to place it.
     output = run_gi_expression(
         GIExpressionInput(sequences=[{"sequence": locus, "name": "HBB", "tss_index": len(locus) // 2}]),
         GIExpressionConfig(),
@@ -1138,7 +1208,8 @@ def test_gi_expression_benchmark() -> None:
     result = output.results[0]
     # This locus is longer than one window, so it is the only place the two
     # quantities can be told apart: sequence_length must be what was submitted
-    # (meta), and the window must stay 9,198 wide. data.input used to carry a
+    # (meta), and the window must sit inside it around the TSS. Its width is
+    # the model's own, so it is not asserted. data.input used to carry a
     # sequence_length of its own holding the window, and reading that one
     # instead of meta is the mistake these two assertions exist to catch. The
     # service dropped that key at contract revision 13 on 2026-09-03, and at
@@ -1149,7 +1220,8 @@ def test_gi_expression_benchmark() -> None:
     # the service ever reopens the echo and a reader drifts back to it.
     assert result.sequence_length == len(locus)
     assert result.scored_window is not None
-    assert result.scored_window[1] - result.scored_window[0] == EXPRESSION_WINDOW_BP
+    start, end = result.scored_window
+    assert 0 <= start <= len(locus) // 2 < end <= len(locus)
     assert result.expression_log_tpm is not None
     assert result.meta.request_id
 
