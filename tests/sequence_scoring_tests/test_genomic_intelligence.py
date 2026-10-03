@@ -968,6 +968,51 @@ class TestTheCallerSeesTheRefusal:
 
 
 # ============================================================================
+# Request bodies — only keys the endpoint accepts
+# ============================================================================
+
+# ``AnnotationOptions`` in the hosted API's published contract (revision 18).
+# The object is closed: any other key is ``422 extra_forbidden``.
+_ANNOTATION_OPTIONS_ACCEPTED = {"reverse_complement", "shift_coordinates"}
+
+
+class _CapturingSession(_FakeSession):
+    """A fake session that also records the JSON body of each POST."""
+
+    def __init__(self, post: _FakeResponse) -> None:
+        super().__init__(post)
+        self.bodies: list[dict[str, Any]] = []
+
+    def post(self, *args: Any, **kwargs: Any) -> _FakeResponse:
+        self.bodies.append(kwargs["json"])
+        return super().post(*args, **kwargs)
+
+
+def test_every_annotation_config_option_maps_to_a_key_the_api_accepts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set every annotation-specific config field and check what goes on the wire.
+
+    ``batch_size`` used to be published here and forwarded; the API dropped it
+    (it never did anything) and now answers a request carrying it with a 422.
+    Driving every field rather than naming one keeps a future option that
+    forwards an unpublished key from passing quietly.
+    """
+    session = _CapturingSession(_FakeResponse(200, _ANNOTATION_PAYLOAD))
+    monkeypatch.setattr(shared_data_models, "_build_session", lambda _config: session)
+
+    values: dict[str, Any] = {}
+    for name, field in GIAnnotationConfig.model_fields.items():
+        if name in GIConfig.model_fields:
+            continue
+        values[name] = True if "bool" in str(field.annotation) else 1
+
+    run_gi_annotation(GIAnnotationInput(sequences="ACGT" * 300), GIAnnotationConfig(gi_api_key="gi_test", **values))
+
+    (body,) = session.bodies
+    assert values, "no annotation-specific config fields found"
+    assert set(body["options"]) <= _ANNOTATION_OPTIONS_ACCEPTED
+
+
+# ============================================================================
 # Integration — live API, skipped unless pytest runs with --integration
 # ============================================================================
 #
