@@ -80,6 +80,7 @@ def ConfigField(
     description: str | None = None,
     reload_on_change: bool = False,
     include_in_key: bool = True,
+    secret: bool = False,
     **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper that automatically adds metadata flags to json_schema_extra.
@@ -93,6 +94,9 @@ def ConfigField(
         include_in_key (bool): If False, field is excluded from tool cache key
             generation. Fields that don't affect computation results (device,
             verbose, timeout) should set this to False.
+        secret (bool): If True, the field holds a credential (an API key, or a contact
+            email sent with requests). Hosted services that persist or display configs
+            drop these fields, and the value is left out of ``repr``.
         kwargs: All other standard Pydantic Field arguments.
 
     Usage:
@@ -104,7 +108,10 @@ def ConfigField(
 
     json_schema_extra["reload_on_change"] = reload_on_change
     json_schema_extra["include_in_key"] = include_in_key
+    json_schema_extra["secret"] = secret
     json_schema_extra["_field_type"] = "ConfigField"
+    if secret:
+        kwargs.setdefault("repr", False)
 
     kwargs["json_schema_extra"] = json_schema_extra
 
@@ -286,6 +293,11 @@ class BaseConfig(BaseModel):
     def cache_exclude_fields(cls) -> set[str]:
         """Return field names marked with ``include_in_key=False``."""
         return {name for name, info in cls.model_fields.items() if not _extra_dict(info).get("include_in_key", True)}
+
+    @classmethod
+    def secret_fields(cls) -> set[str]:
+        """Return field names marked with ``secret=True``."""
+        return {name for name, info in cls.model_fields.items() if _extra_dict(info).get("secret", False)}
 
     def cache_key(self) -> str:
         """Deterministic string for cache key generation, excluding non-key fields at every level.

@@ -977,6 +977,39 @@ def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
     )
 
 
+# ── BaseConfig.secret_fields() tests ──────────────────────────────────────
+
+
+def test_secret_field_is_flagged_in_schema_and_hidden_from_repr():
+    """Hosted services read the flag from the schema; repr must never print the value."""
+    from proto_tools.utils.base_config import BaseConfig, ConfigField
+
+    class MyConfig(BaseConfig):
+        api_key: str | None = ConfigField(default=None, title="API Key", description="k", secret=True)
+        model: str = ConfigField(default="m", title="Model", description="m")
+
+    assert MyConfig.secret_fields() == {"api_key"}
+    properties = MyConfig.model_json_schema()["properties"]
+    assert properties["api_key"]["secret"] is True
+    assert properties["model"]["secret"] is False
+    assert "sk-live" not in repr(MyConfig(api_key="sk-live"))
+
+
+@pytest.mark.parametrize(
+    ("tool_key", "expected"),
+    [
+        ("gi-promoter", {"gi_api_key"}),
+        ("gi-find-genes-and-predict-expression", {"gi_api_key"}),
+        ("ncbi-efetch", {"ncbi_api_key", "ncbi_email"}),
+        ("sequence-fetch", {"ncbi_api_key", "ncbi_email"}),
+    ],
+)
+def test_credential_fields_are_marked_secret(tool_key, expected):
+    from proto_tools.tools import ToolRegistry
+
+    assert ToolRegistry.get(tool_key).config_model.secret_fields() == expected
+
+
 # ── BaseConfig.reload_fields() tests ──────────────────────────────────────
 
 

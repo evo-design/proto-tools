@@ -97,12 +97,14 @@ class NCBIFetchConfig(BaseConfig):
         default_factory=lambda: os.environ.get("NCBI_API_KEY"),
         description="Optional NCBI API key (3 to 10 req/s). Defaults to the NCBI_API_KEY env var if not set.",
         include_in_key=False,
+        secret=True,
     )
     ncbi_email: str | None = ConfigField(
         title="NCBI Email",
         default_factory=lambda: os.environ.get("NCBI_EMAIL"),
         description="Optional contact email for NCBI. Defaults to the NCBI_EMAIL env var if not set.",
         include_in_key=False,
+        secret=True,
     )
 
 
