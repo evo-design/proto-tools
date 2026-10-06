@@ -190,9 +190,12 @@ Each specific tool also ships a minimal `examples/example.ipynb` under `proto_to
 
 ## Using with an AI assistant
 
-![An AI assistant exchanging messages with Proto over MCP](https://proto-bio.github.io/proto-assets/images/mcp/animation.gif)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://proto-bio.github.io/proto-assets/images/mcp/animation-dark.gif">
+  <img src="https://proto-bio.github.io/proto-assets/images/mcp/animation-light.gif" alt="An AI assistant exchanging messages with Proto over MCP">
+</picture>
 
-Our hosted MCP server lets Claude, ChatGPT, and other AI assistants find and run these tools for you. To connect yours, follow the [MCP installation guide](https://proto.evodesign.org/docs/mcp/installation).
+Our hosted MCP server lets Claude, ChatGPT, and other AI assistants find and run these tools for you. To set up, follow our [MCP installation guide here](https://proto.evodesign.org/docs/mcp/installation).
 
 ## Development & Contributing
 
