@@ -198,10 +198,10 @@ def parse_annotation_data(data: dict[str, Any], payload: dict[str, Any], name: s
     summary = as_object(data.get("summary"), "data.summary")
     transcripts = [
         Transcript(
-            name=str(record.get("name", "")),
+            name=str(record.get("name") or ""),
             start=int(record.get("start", 0)),
             end=int(record.get("end", 0)),
-            strand=str(record.get("strand", "")),
+            strand=str(record.get("strand") or ""),
             score=float(record.get("score", 0.0)),
             tss_position=record.get("tss_position"),
             polya_position=record.get("polya_position"),
