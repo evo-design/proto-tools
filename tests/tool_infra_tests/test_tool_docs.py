@@ -21,6 +21,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from proto_tools.tools.tool_registry import ToolRegistry
+from proto_tools.utils.base_config import BaseConfig, ConfigField
 from proto_tools.utils.tool_docs import (
     FieldDoc,
     MetricSpecDoc,
@@ -400,3 +401,15 @@ def test_env_var_defaults_render_as_the_variable_not_its_value(monkeypatch: pyte
     assert "s3cret-value-not-for-print" not in repr(defaults)
     # repr drops the quotes a plain str would add, so the table cell reads $NAME.
     assert repr(defaults["direct"]) == "$PROTO_TEST_SECRET"
+
+
+def test_credential_defaults_render_as_their_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A credential names its variable on the flag, so the table shows it without reading the value."""
+    monkeypatch.setenv("PROTO_TEST_SECRET", "s3cret-value-not-for-print")
+
+    class _Config(BaseConfig):
+        key: str | None = ConfigField(title="Key", description="Key.", credential="PROTO_TEST_SECRET")
+
+    (field,) = [f for f in get_model_doc(_Config).fields if f.name == "key"]
+
+    assert repr(field.default) == "$PROTO_TEST_SECRET"

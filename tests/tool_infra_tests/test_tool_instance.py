@@ -6,6 +6,7 @@ Tests for ToolInstance.
 import contextlib
 import hashlib
 import logging
+import re
 import signal
 import subprocess
 import sys
@@ -975,6 +976,110 @@ def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
         timeout=DEFAULT_TIMEOUT,
         reload_on={"model_checkpoint"},
     )
+
+
+# ── BaseConfig.credential_fields() tests ──────────────────────────────────────
+
+# Field names that hold a credential; every one must be marked so hosted services can find it.
+_CREDENTIAL_NAME = re.compile(r"(api_key|token|secret|password|email)$")
+
+
+def _credential_config():
+    from proto_tools.utils.base_config import BaseConfig, ConfigField
+
+    class MyConfig(BaseConfig):
+        api_key: str | None = ConfigField(title="API Key", description="Key.", credential="PROTO_TEST_KEY")
+        model: str = ConfigField(default="m", title="Model", description="m")
+
+    return MyConfig
+
+
+def test_credential_field_is_flagged_in_schema_and_hidden_from_repr(monkeypatch):
+    """Hosted services read the flag from the schema; repr must never print the value."""
+    monkeypatch.delenv("PROTO_TEST_KEY", raising=False)
+    MyConfig = _credential_config()
+
+    assert MyConfig.credential_fields() == {"api_key"}
+    assert MyConfig.cache_exclude_fields() >= {"api_key"}
+    properties = MyConfig.model_json_schema()["properties"]
+    assert properties["api_key"]["credential"] == "PROTO_TEST_KEY"
+    assert "credential" not in properties["model"]
+    assert "PROTO_TEST_KEY env var" in properties["api_key"]["description"]
+    assert "sk-live" not in repr(MyConfig(api_key="sk-live"))
+
+
+@pytest.mark.parametrize(
+    ("env", "given", "expected"),
+    [
+        ("from-env", "from-config", "from-config"),
+        ("from-env", None, "from-env"),
+        ("from-env", "", "from-env"),
+        ("from-env", "   ", "from-env"),
+        (None, "", None),
+        ("   ", None, None),
+        (None, "  padded  ", "padded"),
+    ],
+)
+def test_credential_config_value_wins_and_blank_means_unset(monkeypatch, env, given, expected):
+    MyConfig = _credential_config()
+    if env is None:
+        monkeypatch.delenv("PROTO_TEST_KEY", raising=False)
+    else:
+        monkeypatch.setenv("PROTO_TEST_KEY", env)
+
+    assert MyConfig(api_key=given).api_key == expected
+    if given is None:
+        assert MyConfig().api_key == expected
+
+
+def test_assigning_a_blank_credential_falls_back_to_the_env(monkeypatch):
+    monkeypatch.setenv("PROTO_TEST_KEY", "from-env")
+    config = _credential_config()(api_key="from-config")
+
+    config.api_key = ""
+
+    assert config.api_key == "from-env"
+
+
+def test_credential_rejects_a_hand_written_default():
+    from proto_tools.utils.base_config import ConfigField
+
+    with pytest.raises(TypeError, match="PROTO_TEST_KEY"):
+        ConfigField(default=None, title="Key", description="Key.", credential="PROTO_TEST_KEY")
+
+
+@pytest.mark.parametrize(
+    ("tool_key", "expected"),
+    [
+        ("gi-promoter", {"gi_api_key"}),
+        ("gi-find-genes-and-predict-expression", {"gi_api_key"}),
+        ("ncbi-efetch", {"ncbi_api_key", "ncbi_email"}),
+        ("sequence-fetch", {"ncbi_api_key", "ncbi_email"}),
+        ("interproscan-fetch", {"email"}),
+    ],
+)
+def test_credential_fields_are_marked(tool_key, expected):
+    from proto_tools.tools import ToolRegistry
+
+    assert ToolRegistry.get(tool_key).config_model.credential_fields() == expected
+
+
+def test_every_credential_shaped_field_is_a_credential():
+    """A key-shaped field left unmarked would be persisted, displayed, and never injected."""
+    from proto_tools.tools import ToolRegistry
+
+    unmarked, mistyped = [], []
+    for spec in ToolRegistry.list_all():
+        config_model = spec.config_model
+        credentials = config_model.credential_fields()
+        for name, info in config_model.model_fields.items():
+            if _CREDENTIAL_NAME.search(name) and name not in credentials:
+                unmarked.append(f"{spec.key}.{name}")
+            if name in credentials and info.annotation != (str | None):
+                mistyped.append(f"{spec.key}.{name}: {info.annotation}")
+
+    assert not unmarked, f"mark these with ConfigField(credential=<ENV_VAR>): {unmarked}"
+    assert not mistyped, f"credentials must be str | None: {mistyped}"
 
 
 # ── BaseConfig.reload_fields() tests ──────────────────────────────────────

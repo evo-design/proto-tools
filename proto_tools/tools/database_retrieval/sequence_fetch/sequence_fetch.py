@@ -7,7 +7,6 @@ pdb) with molecule-type routing and cross-fetcher ID resolution.
 import csv
 import hashlib
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any, Literal
@@ -422,15 +421,13 @@ class SequenceFetchConfig(BaseConfig):
     # env-var fallbacks in sync with ncbi/shared_data_models.py.
     ncbi_api_key: str | None = ConfigField(
         title="NCBI API Key",
-        default_factory=lambda: os.environ.get("NCBI_API_KEY"),
-        description="Optional NCBI API key (3 to 10 req/s). Defaults to the NCBI_API_KEY env var if not set.",
-        include_in_key=False,
+        description="Optional NCBI API key (3 to 10 req/s).",
+        credential="NCBI_API_KEY",
     )
     ncbi_email: str | None = ConfigField(
         title="NCBI Email",
-        default_factory=lambda: os.environ.get("NCBI_EMAIL"),
-        description="Optional contact email for NCBI. Defaults to the NCBI_EMAIL env var if not set.",
-        include_in_key=False,
+        description="Optional contact email for NCBI.",
+        credential="NCBI_EMAIL",
     )
 
 

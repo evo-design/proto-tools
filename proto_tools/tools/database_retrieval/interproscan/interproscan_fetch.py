@@ -10,7 +10,6 @@ CATH-Gene3D, Panther, and the rest of the InterPro member-DB catalog.
 import csv
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -238,9 +237,8 @@ class InterProScanFetchConfig(BaseConfig):
 
     email: str | None = ConfigField(
         title="Contact Email",
-        default_factory=lambda: os.environ.get("INTERPROSCAN_EMAIL"),
-        description="EBI contact email for the sequence-submit path. Defaults to the INTERPROSCAN_EMAIL env var.",
-        include_in_key=False,
+        description="EBI contact email for the sequence-submit path.",
+        credential="INTERPROSCAN_EMAIL",
     )
     applications: list[InterProApp] | None = ConfigField(
         title="Applications",
