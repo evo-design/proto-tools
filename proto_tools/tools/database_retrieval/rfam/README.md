@@ -5,59 +5,65 @@
 ![Rfam](https://proto-bio.github.io/proto-assets/images/tool/rfam/hero.png)
 
 > [!NOTE]
-> **License:** Rfam retrieves data from the Rfam database, distributed under CC0-1.0 (public domain; no attribution required). The client wrapper code is MIT-licensed. Please refer to [the data terms](https://rfam.org) for full terms.
+> **License:** Rfam retrieves data from the Rfam database, distributed under CC0-1.0 (public domain; no attribution required). The client wrapper code is MIT-licensed. Please refer to [the data terms](https://docs.rfam.org/en/latest/#license) for full terms.
 
 ## Overview
 
-[Rfam](https://rfam.org) is a curated database of non-coding RNA families. Each family is a seed alignment of representative sequences, a consensus secondary structure, and a covariance model that annotates the family across sequenced genomes. This toolkit wraps two Rfam endpoints: `rfam-family` (a family's curation record, cutoffs, and consensus structure) and `rfam-regions` (every genome region the family is annotated in, with coordinates and strand).
+[Rfam](https://rfam.org) is a database of non-coding RNA families represented by curated sequence alignments, consensus secondary structures, and covariance models. The toolkit provides two retrieval tools: `rfam-family` returns a family record and its consensus annotations, with an optional seed alignment; `rfam-regions` returns annotated sequence regions with coordinates, strand, and taxonomic information. Both tools access the Rfam website over HTTPS and run in process without a GPU or a separate tool environment.
 
 ## Background
 
-Rfam is described in the Rfam 15 database report ([Ontiveros-Palacios et al., 2025](https://doi.org/10.1093/nar/gkae1023)), published in *Nucleic Acids Research*. It is maintained at [EMBL-EBI](https://www.ebi.ac.uk/) and released in numbered versions; each family records its authors, the source of its seed alignment and structure, and the bit-score cutoffs that define membership. Families with related structures are grouped into clans. Full-region annotations come from searching each family's covariance model against a genome database with [Infernal](https://eddylab.org/infernal/).
+Rfam is developed at [EMBL-EBI](https://docs.rfam.org/en/latest/). An RNA family is a group of sequences believed to be evolutionarily related through similarity in sequence or secondary structure. Related families may be grouped into [clans](https://docs.rfam.org/en/latest/glossary.html#clan). The database and its release 15.0 updates are described in [*Rfam 15: RNA families database in 2025*](https://doi.org/10.1093/nar/gkae1023) by Ontiveros-Palacios et al., published in *Nucleic Acids Research*.
 
-Internally, both tools issue HTTP GET requests to the Rfam website under `https://rfam.org/family/<family>`. `rfam-family` reads the family record as JSON and the seed alignment as Stockholm, from which it extracts the consensus structure (`#=GC SS_cons`) and the reference consensus sequence (`#=GC RF`). `rfam-regions` reads the family's regions table as plain text and normalizes each hit so that `start <= end`, with the strand stated separately. Results reflect the current Rfam release, which the outputs report.
+Each family has a manually curated **seed alignment**, a representative set of sequences annotated with a consensus secondary structure. Rfam uses this alignment to build a **covariance model**, a statistical model that scores both sequence and secondary structure similarity. [Infernal](https://eddylab.org/infernal/) searches these models against the Rfamseq sequence database to identify additional candidate homologues. A curator-defined gathering cutoff specifies the bit-score threshold for inclusion in the family. The [family-building documentation](https://docs.rfam.org/en/latest/building-families.html) describes this process and the sources of structural annotations.
+
+The toolkit retrieves these existing records through the [Rfam API](https://docs.rfam.org/en/latest/api.html). `rfam-family` reads the family description as JSON and extracts the consensus structure (`#=GC SS_cons`) and reference annotation (`#=GC RF`) from the Stockholm seed alignment. `rfam-regions` parses the family's region table and separates strand orientation from the start and end coordinates. The family output includes the database release and release date; the regions output includes the release when it is present in the table header.
 
 ### Learning Resources
 
-- [Rfam documentation](https://docs.rfam.org/) (EMBL-EBI) - user guides covering families, clans, and how Rfam annotations are built.
-- [Rfam API](https://docs.rfam.org/en/latest/api.html) (EMBL-EBI) - the family, regions, and alignment endpoints these tools call.
-- [Infernal user guide](https://eddylab.org/infernal/) (Eddy lab) - the covariance-model software behind Rfam's alignments and annotations.
+- [How Rfam families are built](https://docs.rfam.org/en/latest/building-families.html) (Rfam) - seed alignments, structural annotations, and covariance-model searches.
+- [Rfam glossary](https://docs.rfam.org/en/latest/glossary.html) (Rfam) - definitions of families, clans, gathering cutoffs, and alignment formats.
+- [Rfam API](https://docs.rfam.org/en/latest/api.html) (Rfam) - reference for family records, sequence regions, and alignments.
+- [Infernal documentation](https://eddylab.org/infernal/) (Eddy lab) - the software used to build and search RNA covariance models.
 
 ## Tools
 
 ### Rfam Family (`rfam-family`)
 
-Fetches an Rfam family by accession or ID and returns its description, RNA type, authors, seed and structure sources, seed and full counts, clan, gathering, trusted, and noise cutoffs, release, and the consensus secondary structure with its reference sequence. The full Stockholm seed alignment is returned on request.
+Retrieves a family by accession or family ID and returns its description, RNA type, curation information, sequence and species counts, clan membership when available, and gathering, trusted, and noise cutoffs. The output also contains the consensus secondary structure, reference annotation, and database release information. The complete Stockholm seed alignment can be included through configuration.
 
 #### Applications
 
-Use this to understand an RNA family before designing or annotating against it: read the consensus structure to locate stems and loops, check the gathering cutoff before interpreting a bit score, or take the seed alignment as a starting point for structure-aware sequence design. Pair it with [`rfam-regions`](https://bio-pro.mintlify.app/tools/database-retrieval/rfam) to find real instances of the family in a genome.
+Family records provide context for interpreting RNA annotations. The consensus structure describes conserved pairing patterns across the alignment, while the curation fields identify the sources of the alignment and structure. These records support comparisons of representative family sequences and interpretation of model scores alongside the reported cutoffs. The seed alignment can also be used for further alignment or structural analysis.
 
 #### Usage Tips
 
-- **Accession or ID both work.** `RF01731` and `TwoAYGGAY` name the same family, and the ID is matched case-insensitively. The output always reports the accession.
-- **The consensus lines are column-aligned.** `consensus_structure` and `consensus_sequence` have one character per alignment column, in WUSS notation, where matching `<` `>` (or `(` `)`) brackets are base pairs and `_` marks hairpin loops.
-- **The seed alignment can be large.** Set `include_seed_alignment=True` only when the alignment itself is needed; export it with the `sto` format.
+- **Families can be identified by accession or ID.** For example, `RF01731` and `TwoAYGGAY` identify the same [Rfam family](https://rfam.org/family/RF01731). The output reports both identifiers.
+- **Consensus annotations use alignment coordinates.** `consensus_structure` contains the Stockholm `SS_cons` annotation in [WUSS notation](https://docs.rfam.org/en/latest/glossary.html#wuss-format); `consensus_sequence` contains the `RF` reference annotation. These strings include alignment columns and should not be interpreted as an unaligned nucleotide sequence or genomic coordinates.
+- **Structural annotations have different sources.** Rfam includes both experimentally supported and computationally predicted structures. The `structure_source` field records provenance when available; the [Rfam documentation](https://docs.rfam.org/en/latest/building-families.html) explains why an underlying publication may be needed to establish the type of evidence.
+- **The seed alignment is optional in the output.** Set `include_seed_alignment=True` to retain it and enable `sto` export. The tool downloads the alignment to extract the consensus annotations even when this option is disabled. Family records can also be exported as JSON.
 
 ### Rfam Regions (`rfam-regions`)
 
-Lists every sequence region an Rfam family is annotated in, with sequence accession, bit score, start, end, strand, species, and NCBI taxonomy ID, optionally narrowed by taxonomy ID, species, or sequence accession.
+Retrieves the annotated sequence regions for a family, with optional filters for NCBI taxonomy ID, species name, or sequence accession. Each region contains a versioned sequence accession, Infernal bit score, start and end coordinates, strand, sequence description, species name, and taxonomy ID. The output includes the family identifiers, total and filtered region counts, and a flag indicating whether the returned list was truncated.
 
 #### Applications
 
-Use this to find real copies of a structured RNA in an organism: list a family's hits in one genome, then pull each locus with flanking sequence through [`ncbi-efetch`](https://bio-pro.mintlify.app/tools/database-retrieval/ncbi) for scoring with an RNA or genomic language model, or for comparison against designed variants. It also gives the species distribution of a family for choosing natural homologs.
+Region records locate candidate family members in the sequences represented by Rfam. Filtering by species or sequence accession supports examination of annotated loci in a particular organism or genome record. The accession, coordinates, and strand can be passed to [`ncbi-efetch`](https://bio-pro.mintlify.app/tools/database-retrieval/ncbi) to retrieve the corresponding nucleotide subsequence for comparative analysis. Taxonomic fields also support examination of a family's distribution within the Rfam dataset.
 
 #### Usage Tips
 
-- **Coordinates are ready for `ncbi-efetch`.** `start` and `end` are 1-indexed and inclusive with `start <= end`, and `strand` is `+` or `-`, matching `ncbi-efetch`'s `seq_start`, `seq_stop`, and `strand`. Subtract and add a margin to include flanks.
-- **Filters apply after download.** `taxid`, `species` (case-insensitive substring), and `sequence_accession` (version optional) narrow the list; `total_regions` still reports the whole family.
-- **Very large families cannot be listed.** Rfam refuses to return regions for families with millions of hits, such as tRNA (`RF00005`), and the tool raises an error that relays Rfam's message.
-- **Results are capped.** At most `max_regions` hits are returned (500 by default); `matched_regions` and `truncated` say how many matched.
+- **Coordinates are 1-indexed and inclusive.** The tool normalizes each region to `start <= end` and reports orientation separately as `+` or `-`. These values correspond to `ncbi-efetch`'s `seq_start`, `seq_stop`, and `strand` inputs.
+- **Filters are applied after download.** `taxid` matches an exact taxonomy ID, `species` matches a case-insensitive substring, and `sequence_accession` accepts either a versioned or an unversioned accession. When several filters are provided, a region must satisfy all of them.
+- **The return limit applies after filtering.** `max_regions` defaults to 500. `total_regions` reports the family-wide count, `matched_regions` counts all regions satisfying the filters, and `truncated` indicates that some matching regions were omitted. The limit does not reduce the size of the download.
+- **Some families are too large for the endpoint.** The [Rfam API documentation](https://docs.rfam.org/en/latest/api.html#sequence-regions) states that the server can refuse region downloads for very large families. Local filters cannot bypass this restriction.
+- **Region tables can be exported.** JSON preserves the full output, including counts and release information; TSV and CSV contain the returned region rows.
 
 ## Toolkit Notes
 
-73-<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
 These apply to every Rfam tool in this toolkit (`rfam-family`, `rfam-regions`).
 
-- **Requires network access.** The tools call the live Rfam website.
+- **Requires network access.** Both tools retrieve data from the Rfam website using HTTPS requests and execute in the current Python process.
+- **Results depend on the Rfam release.** The tools query the live website rather than selecting a fixed database release. Retain the reported release information with exported results for provenance.

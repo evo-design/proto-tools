@@ -4,7 +4,7 @@ code:
 data:
   name: the Rfam database
   spdx: CC0-1.0
-  url: https://rfam.org
+  url: https://docs.rfam.org/en/latest/#license
   attribution_required: false
 commercial_use: 'yes'
 redistribution: true
