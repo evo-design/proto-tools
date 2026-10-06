@@ -496,11 +496,11 @@ def _parse_direct_entry(
     if not metadata or not proteins:
         return [], None
 
-    accession = str(metadata.get("accession", "")).upper()
-    name = str(metadata.get("name", ""))
-    type_raw = str(metadata.get("type", "")).strip().lower()
+    accession = str(metadata.get("accession") or "").upper()
+    name = str(metadata.get("name") or "")
+    type_raw = str(metadata.get("type") or "").strip().lower()
     domain_type: InterProDomainType = _TYPE_MAP.get(type_raw, "unknown")
-    member_database = str(metadata.get("source_database", ""))
+    member_database = str(metadata.get("source_database") or "")
     integrated_raw = metadata.get("integrated")
     integrated_ipr: str | None = None
     if isinstance(integrated_raw, str) and integrated_raw.strip():
@@ -662,15 +662,15 @@ def _parse_iprscan_payload(
         raw_matches.append(match)
         signature = match.get("signature") or {}
         signature_library = signature.get("signatureLibraryRelease") or {}
-        member_database = str(signature_library.get("library", "")).lower()
-        accession_match = str(signature.get("accession", "")).upper()
+        member_database = str(signature_library.get("library") or "").lower()
+        accession_match = str(signature.get("accession") or "").upper()
         name = str(signature.get("name") or signature.get("description") or "")
         entry = signature.get("entry") or {}
         integrated_ipr_raw = entry.get("accession") if isinstance(entry, dict) else None
         integrated_ipr: str | None = None
         if isinstance(integrated_ipr_raw, str) and integrated_ipr_raw.strip():
             integrated_ipr = integrated_ipr_raw.strip().upper()
-        type_raw = str(entry.get("type", "")).strip().lower() if isinstance(entry, dict) else ""
+        type_raw = str(entry.get("type") or "").strip().lower() if isinstance(entry, dict) else ""
         domain_type: InterProDomainType = _TYPE_MAP.get(type_raw, "unknown")
         model = match.get("model-ac")
         model_str = str(model) if isinstance(model, str) else None

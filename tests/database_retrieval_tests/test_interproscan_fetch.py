@@ -160,6 +160,29 @@ def test_parse_direct_entry_unknown_type_falls_back():
     assert rows[0].type == "unknown"
 
 
+def test_parse_direct_entry_null_metadata_is_empty_not_none():
+    """Unnamed CATH-Gene3D entries carry ``"name": null``; that must not become the string "None"."""
+    entry = {
+        "metadata": {
+            "accession": "G3DSA:2.60.40.720",
+            "name": None,
+            "source_database": None,
+            "type": None,
+        },
+        "proteins": [
+            {
+                "accession": "p04637",
+                "protein_length": 393,
+                "entry_protein_locations": [{"fragments": [{"start": 95, "end": 289}]}],
+            }
+        ],
+    }
+    rows, _ = _parse_direct_entry(entry, include_go_terms=False)
+    assert rows[0].name == ""
+    assert rows[0].member_database == ""
+    assert rows[0].type == "unknown"
+
+
 # ---------------------------------------------------------------------------
 # Direct-lookup pagination test
 # ---------------------------------------------------------------------------
@@ -406,6 +429,33 @@ def test_parse_iprscan_payload_flattens_match_locations():
     assert row.score == pytest.approx(1.5e-12)
     assert row.go_terms == ["GO:0003677"]
     assert row.pathways == ["R-HSA-9663199"]
+
+
+def test_parse_iprscan_payload_null_signature_fields_are_empty_not_none():
+    """A null library or accession must not become the string "None"."""
+    payload = {
+        "results": [
+            {
+                "sequence": "MKTILVAA",
+                "sequenceLength": 8,
+                "matches": [
+                    {
+                        "signature": {"accession": None, "signatureLibraryRelease": {"library": None}},
+                        "locations": [{"start": 1, "end": 8}],
+                    }
+                ],
+            }
+        ]
+    }
+    output = _parse_iprscan_payload(
+        payload,
+        job_id="iprscan5-test",
+        result_url="https://example/iprscan5/result/iprscan5-test/json",
+        config=InterProScanFetchConfig(email="dev@example.org"),
+    )
+    row = output.domains[0]
+    assert row.accession == ""
+    assert row.member_database == ""
 
 
 def test_parse_iprscan_payload_raises_on_empty_results():
