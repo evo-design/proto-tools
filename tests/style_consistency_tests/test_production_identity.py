@@ -44,8 +44,9 @@ def test_production_sources_exclude_development_wiring() -> None:
 def test_documented_installation_uses_official_repository() -> None:
     """Both base and MCP installation examples must work from official source."""
     readme = (_REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    mcp_readme = (_REPO_ROOT / "proto_tools" / "mcp" / "README.md").read_text(encoding="utf-8")
     assert f"pip install git+{_OFFICIAL_REPOSITORY}.git" in readme
-    assert f'pip install "proto-tools[mcp] @ git+{_OFFICIAL_REPOSITORY}.git"' in readme
+    assert f'pip install "proto-tools[mcp] @ git+{_OFFICIAL_REPOSITORY}.git"' in mcp_readme
 
 
 def test_package_and_runtime_links_use_official_repository() -> None:

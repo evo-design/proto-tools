@@ -6,6 +6,7 @@
 [![Unit Tests](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/evo-design/proto-tools/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-proto.evodesign.org-blue)](https://proto.evodesign.org/docs/tools/introduction)
+[![MCP](https://img.shields.io/badge/MCP-connect-046e7a?logo=modelcontextprotocol&logoColor=white)](https://proto.evodesign.org/docs/mcp/installation)
 [![bioRxiv](https://img.shields.io/badge/bioRxiv-2026.06.22.733870-b31b1b.svg)](https://www.biorxiv.org/content/10.64898/2026.06.22.733870)
 [![Modal](https://img.shields.io/badge/Modal-ready--to--deploy-brightgreen?logo=modal&logoColor=white)](proto_tools/modal/README.md)
 [![Arc Institute blog](https://img.shields.io/badge/Blog-0073E6?logo=data%3Aimage%2Fpng%3Bbase64%2CiVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAQAAAD9CzEMAAADrElEQVR42u2WX4jUVRTHv%2Bf%2BfjM7iqXWmFZGmWEFWiBR%2BxBBsSY9CFKQGT1ElKhsEuRrEVFPGVu2RpsplWGUCWbURpkSYZtDEj4oKmYvGxHUruui7czvz6eHuTPzm3HsaQSD%2BcIMzJl77znf7zn33CN10UUX%2F39YqwFvMS6xZ%2BySMCCnuGqztDMOXObwQFKfftUxHdVxHsYIOiwKxiz%2BoIrvJVyndQ8kdhJRJiZmSYddYBJFxoCUCBiQCNsyDaviYYTNQhIQ4jBcbU12YyixnjJfAxHwJzObqwkjvDgnrLXyWtbiJE7wObcACRHwZDsOXMdjfMprGDN4hRHeoafGg%2FsYosRJfmCQB5rCI5BYDKyUOAxUgIONKDCMhWzkSyYA2CYxDEDKHEliPnuBw6ynn1EANrcKNMQ40zDWAhEJCUt9%2BYoA40HOATBFxEs8BJSBCeZK3MRvwCf%2BtIVMkgArsgkuMMlmCeNqxjyHLQ2RMInZHCChDLzNUeAcE4xSxPEj8DfXSOQJJY4QU%2BHNevwYq4DbJfISW72Dv7iqoSR5iXeBCinjlFjFAuYwV%2BIJIGF3na9xEoD%2BbIJ%2F4oiEI8DorSd6TYZDiPEBMEXKPnIZgUdIgeex6lqM99jPFgqN4xcAT2PkCMlJHPQcSlg90aHE%2B8A%2FwCaJgg%2FnBqZIgNUXVp2rf69VRZ%2FJWWSxRTh9I8mU6i7dLdp0pQKm2FLJ0CL1KG5unbiq81DClBDoKX1hZySu1Uqt0B0KlShUrFDP2CHa3itq%2FXieJCRloq91Y%2Bc%2Fy1XUCyxmj47rOZ1Sv5Zqp9%2F2CEVL%2FvN9cH7lrW3vMoHEML8zxFk%2Bprf%2B5z31RD%2Fr9c%2Fm4C3%2FO5BY5vN1qFZF2eOdxHwmgRGW1KslIMAo%2BY2%2F4LCLOKjunwJi4H6JHq9%2FIHFbddFG4HV%2FdLZi1vgbDfdiBE0OBmsVg5P4jpQKKae4McPgUU6InMRpfq7dwKbGW2Tcc%2FhQIk%2BekO3ewRsEFDAvUh9QIQZG2cCd3EwfA8C6agdM2dW2AecZJaJMhTGu97YdREwSsb3loRoAUsr%2BPTwPwFeS%2BIgEgBKDLPKEHcZytnKaBs6wgWXsyFi%2BZRNF32cDiZeJyGIvs3ChAm1TLGmGisrXithSrtCVOqBhmZAp0XT1aJrO6tV64DM1XYGfoRKcvchuPa5ezdN5HdMe29W54acxlaj5BZGsqXckjXkOp9bHEXGBLclOgDg5pZZWnVlymc%2BEXXTRxeWDfwGkGF0Pfq%2BibAAAAABJRU5ErkJggg%3D%3D)](https://arcinstitute.org/news/proto)
@@ -17,7 +18,7 @@
 
 Welcome! This repository contains the open-source implementation of `proto-tools`, a Python package containing a large suite of computational biology and biological AI tools, all accessible through a single, consistent Python interface. Language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all available through a single `pip install` command.
 
-Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or as an MCP server that exposes the same tools to AI agents. Tools can run on local compute or on Modal.
+Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or from an AI assistant through our [hosted MCP server](https://proto.evodesign.org/docs/mcp/installation). Tools can run on local compute or on Modal.
 
 Proto-tools is open source under an MIT license. Contributions are welcome!
 
@@ -35,11 +36,7 @@ Proto-tools requires Pydantic 2.12 or newer. Registered calls revalidate input
 and configuration models while excluding computed fields, so environments pinned
 to an older Pydantic release must upgrade before installing this version.
 
-To also run the MCP server, which exposes these tools to coding agents, install the `mcp` extra:
-
-```bash
-pip install "proto-tools[mcp] @ git+https://github.com/evo-design/proto-tools.git"
-```
+To use these tools from Claude, ChatGPT, or another AI assistant, connect our MCP server. See the [MCP installation guide](https://proto.evodesign.org/docs/mcp/installation).
 
 > [!NOTE]
 > A direct PyPI install (`pip install proto-tools`) will be available soon.
@@ -191,11 +188,14 @@ Runnable walkthroughs of the core framework features live in [`guides/`](guides/
 
 Each specific tool also ships a minimal `examples/example.ipynb` under `proto_tools/tools/{category}/{tool}/examples/`.
 
-## Using with a coding agent
+## Using with an AI assistant
 
-Run tools through natural language with any coding agent (Claude Code, Gemini CLI, OpenAI Codex CLI, etc.). Point the agent at `proto-tools agent-context`: it prints a primer covering the `Input → Config → run_*() → Output` pattern, the CLI verbs for finding, inspecting and running tools (the same operations the MCP server exposes), persistence and parallel execution, and links to the long-form notes on GitHub. The command ships in the wheel, so it works on a plain `pip install` with no repo checkout.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://proto-bio.github.io/proto-assets/images/mcp/animation-dark.gif">
+  <img src="https://proto-bio.github.io/proto-assets/images/mcp/animation-light.gif" alt="An AI assistant exchanging messages with Proto over MCP">
+</picture>
 
-If you've cloned the repo for contributing, agents also pick up `CLAUDE.md` (symlinked as `AGENTS.md`/`GEMINI.md`) and the task-specific guides in [`.claude/skills/`](.claude/skills/) automatically.
+Our hosted MCP server lets Claude, ChatGPT, and other AI assistants find and run these tools for you. To set up, follow our [MCP installation guide here](https://proto.evodesign.org/docs/mcp/installation).
 
 ## Development & Contributing
 
