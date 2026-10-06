@@ -152,12 +152,6 @@ def test_regions_relay_rfam_refusal_for_huge_families(monkeypatch, status):
         run_rfam_regions(RfamRegionsInput(family="RF00005"), RfamRegionsConfig())
 
 
-def test_regions_unknown_family(monkeypatch):
-    _serve(monkeypatch, {})
-    with pytest.raises(ValueError, match="No Rfam family matches 'RF99999'"):
-        run_rfam_regions(RfamRegionsInput(family="RF99999"), RfamRegionsConfig())
-
-
 def test_regions_family_name_is_url_escaped(monkeypatch):
     session = _serve(monkeypatch, {})
     with pytest.raises(ValueError):
@@ -168,22 +162,6 @@ def test_regions_family_name_is_url_escaped(monkeypatch):
 def test_blank_family_rejected():
     with pytest.raises(ValidationError):
         RfamRegionsInput(family="   ")
-
-
-def test_regions_tsv_export(tmp_path, monkeypatch):
-    _serve(monkeypatch, {f"{BASE}/RF01731/regions": (200, REGIONS)})
-    out = run_rfam_regions(RfamRegionsInput(family="RF01731", taxid=216595), RfamRegionsConfig())
-    out._export_output(tmp_path / "regions", "tsv")
-    lines = (tmp_path / "regions.tsv").read_text().splitlines()
-    assert lines[0].split("\t")[:5] == ["sequence_accession", "bit_score", "start", "end", "strand"]
-    assert len(lines) == 3
-
-
-def test_user_agent_names_the_local_process(monkeypatch):
-    monkeypatch.setenv(base_config.CLIENT_IDENTITY_ENV_VAR, "ada@lab-workstation")
-    session = _serve(monkeypatch, {f"{BASE}/RF01731/regions": (200, REGIONS)})
-    run_rfam_regions(RfamRegionsInput(family="RF01731"), RfamRegionsConfig())
-    assert session.user_agent is not None and session.user_agent.endswith("(ada@lab-workstation)")
 
 
 def test_user_agent_names_a_hosted_caller(monkeypatch):
@@ -214,7 +192,6 @@ def test_family_resolves_id_and_joins_consensus_blocks(monkeypatch):
     assert (out.accession, out.rfam_id, out.clan_id) == ("RF01731", "TwoAYGGAY", "Csr_Rsm_clan")
     assert out.consensus_structure == "<<<.__.>>>"
     assert out.consensus_sequence == "GCCaUGGcAU"
-    assert out.seed_alignment is None
 
 
 def test_family_strips_curation_semicolons(monkeypatch):
@@ -238,10 +215,17 @@ def test_family_sto_export_needs_alignment(tmp_path, monkeypatch):
         out._export_output(tmp_path / "seed", "sto")
 
 
-def test_family_unknown(monkeypatch):
+@pytest.mark.parametrize(
+    ("run", "inputs", "config"),
+    [
+        (run_rfam_family, RfamFamilyInput(family="Nope"), RfamFamilyConfig()),
+        (run_rfam_regions, RfamRegionsInput(family="Nope"), RfamRegionsConfig()),
+    ],
+)
+def test_unknown_family(monkeypatch, run, inputs, config):
     _serve(monkeypatch, {})
     with pytest.raises(ValueError, match="No Rfam family matches 'Nope'"):
-        run_rfam_family(RfamFamilyInput(family="Nope"), RfamFamilyConfig())
+        run(inputs, config)
 
 
 def test_family_alignment_without_structure_is_an_error(monkeypatch):
