@@ -118,6 +118,20 @@ from proto_tools.tools.database_retrieval.pubchem import (
     run_pubchem_fetch,
 )
 
+# Rfam RNA families
+from proto_tools.tools.database_retrieval.rfam import (
+    RfamFamilyConfig,
+    RfamFamilyInput,
+    RfamFamilyOutput,
+    RfamFamilyQuery,
+    RfamRegion,
+    RfamRegionsConfig,
+    RfamRegionsInput,
+    RfamRegionsOutput,
+    run_rfam_family,
+    run_rfam_regions,
+)
+
 # Multi-source sequence fetch (orchestrator)
 from proto_tools.tools.database_retrieval.sequence_fetch import (
     FetchedSequence,
@@ -238,6 +252,17 @@ __all__ = [
     "PdbFetchFastaInput",
     "PdbFetchFastaOutput",
     "run_pdb_fetch_fasta",
+    # Rfam RNA families
+    "RfamFamilyConfig",
+    "RfamFamilyInput",
+    "RfamFamilyOutput",
+    "RfamFamilyQuery",
+    "RfamRegion",
+    "RfamRegionsConfig",
+    "RfamRegionsInput",
+    "RfamRegionsOutput",
+    "run_rfam_family",
+    "run_rfam_regions",
     # Sequence fetch (orchestrator)
     "FetchedSequence",
     "FetchedStructure",

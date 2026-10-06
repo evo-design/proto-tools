@@ -900,6 +900,8 @@ def test_local_cpu_tools_match_known_set():
         "pdb-fetch-entry",
         "pdb-fetch-fasta",
         "pubchem-fetch",
+        "rfam-family",
+        "rfam-regions",
         "sequence-fetch",
         "uniprot-fetch",
         # sequence_scoring — thin clients for the hosted Genomic Intelligence API
