@@ -17,7 +17,7 @@ Rfam is developed at [EMBL-EBI](https://docs.rfam.org/en/latest/). An RNA family
 
 Each family has a manually curated **seed alignment**, a representative set of sequences annotated with a consensus secondary structure. Rfam uses this alignment to build a **covariance model**, a statistical model that scores both sequence and secondary structure similarity. [Infernal](https://eddylab.org/infernal/) searches these models against the Rfamseq sequence database to identify additional candidate homologues. A curator-defined gathering cutoff specifies the bit-score threshold for inclusion in the family. The [family-building documentation](https://docs.rfam.org/en/latest/building-families.html) describes this process and the sources of structural annotations.
 
-The toolkit retrieves these existing records through the [Rfam API](https://docs.rfam.org/en/latest/api.html). `rfam-family` reads the family description as JSON and extracts the consensus structure (`#=GC SS_cons`) and reference annotation (`#=GC RF`) from the Stockholm seed alignment. `rfam-regions` parses the family's region table and separates strand orientation from the start and end coordinates. The family output includes the database release and release date; the regions output includes the release when it is present in the table header.
+The toolkit retrieves these existing records through the [Rfam API](https://docs.rfam.org/en/latest/api.html). `rfam-family` reads the family description as JSON and extracts the consensus structure (`#=GC SS_cons`) and reference annotation (`#=GC RF`) from the Stockholm seed alignment. `rfam-regions` parses the family's region table and separates strand orientation from the start and end coordinates. Both outputs report the Rfam release.
 
 ### Learning Resources
 
@@ -30,7 +30,7 @@ The toolkit retrieves these existing records through the [Rfam API](https://docs
 
 ### Rfam Family (`rfam-family`)
 
-Retrieves a family by accession or family ID and returns its description, RNA type, curation information, sequence and species counts, clan membership when available, and gathering, trusted, and noise cutoffs. The output also contains the consensus secondary structure, reference annotation, and database release information. The complete Stockholm seed alignment can be included through configuration.
+Retrieves a family by accession or family ID and returns its description, RNA type, curation information, sequence and species counts, clan membership when available, and the gathering cutoff for family membership. The output also contains the consensus secondary structure, reference annotation, and database release information. The complete Stockholm seed alignment can be included through configuration.
 
 #### Applications
 

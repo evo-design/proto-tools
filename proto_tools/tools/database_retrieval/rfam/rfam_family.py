@@ -66,10 +66,7 @@ class RfamFamilyOutput(BaseToolOutput):
         clan_accession (str | None): Accession of the clan the family belongs to.
         clan_id (str | None): ID of the clan the family belongs to.
         gathering_cutoff (float): Bit-score threshold for family membership.
-        trusted_cutoff (float): Lowest bit score of a true member.
-        noise_cutoff (float): Highest bit score of a non-member.
         rfam_release (str): Rfam release the record comes from.
-        rfam_release_date (str): Date of that release.
         consensus_structure (str): Consensus secondary structure (#=GC SS_cons), WUSS notation.
         consensus_sequence (str): Reference consensus sequence (#=GC RF), aligned with it.
         seed_alignment (str | None): Full Stockholm seed alignment, when requested.
@@ -91,10 +88,7 @@ class RfamFamilyOutput(BaseToolOutput):
     clan_accession: str | None = Field(default=None, title="Clan Accession", description="Accession of the clan")
     clan_id: str | None = Field(default=None, title="Clan ID", description="ID of the clan")
     gathering_cutoff: float = Field(title="Gathering Cutoff", description="Bit-score threshold for membership")
-    trusted_cutoff: float = Field(title="Trusted Cutoff", description="Lowest bit score of a true member")
-    noise_cutoff: float = Field(title="Noise Cutoff", description="Highest bit score of a non-member")
     rfam_release: str = Field(title="Rfam Release", description="Rfam release the record comes from")
-    rfam_release_date: str = Field(title="Rfam Release Date", description="Date of that release")
     consensus_structure: str = Field(
         title="Consensus Structure", description="Consensus secondary structure (#=GC SS_cons), WUSS notation"
     )
@@ -217,7 +211,6 @@ def run_rfam_family(
 
     structure, sequence = _consensus_lines(stockholm)
     curation = record["curation"]
-    cutoffs = record["cm"]["cutoffs"]
     clan = record.get("clan") or {}
     return RfamFamilyOutput(
         accession=accession,
@@ -233,11 +226,8 @@ def run_rfam_family(
         num_species=curation["num_species"],
         clan_accession=clan.get("acc"),
         clan_id=clan.get("id"),
-        gathering_cutoff=cutoffs["gathering"],
-        trusted_cutoff=cutoffs["trusted"],
-        noise_cutoff=cutoffs["noise"],
+        gathering_cutoff=record["cm"]["cutoffs"]["gathering"],
         rfam_release=record["release"]["number"],
-        rfam_release_date=record["release"]["date"],
         consensus_structure=structure,
         consensus_sequence=sequence,
         seed_alignment=stockholm if config.include_seed_alignment else None,
