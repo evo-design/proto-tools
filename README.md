@@ -17,7 +17,7 @@
 
 Welcome! This repository contains the open-source implementation of `proto-tools`, a Python package containing a large suite of computational biology and biological AI tools, all accessible through a single, consistent Python interface. Language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all available through a single `pip install` command.
 
-Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or as an MCP server that exposes the same tools to AI agents. Tools can run on local compute or on Modal.
+Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or from an AI assistant through our [hosted MCP server](https://proto.evodesign.org/docs/mcp/installation). Tools can run on local compute or on Modal.
 
 Proto-tools is open source under an MIT license. Contributions are welcome!
 
@@ -35,11 +35,7 @@ Proto-tools requires Pydantic 2.12 or newer. Registered calls revalidate input
 and configuration models while excluding computed fields, so environments pinned
 to an older Pydantic release must upgrade before installing this version.
 
-To also run the MCP server, which exposes these tools to coding agents, install the `mcp` extra:
-
-```bash
-pip install "proto-tools[mcp] @ git+https://github.com/evo-design/proto-tools.git"
-```
+To use these tools from Claude, ChatGPT, or another AI assistant, connect our MCP server. See the [MCP installation guide](https://proto.evodesign.org/docs/mcp/installation).
 
 > [!NOTE]
 > A direct PyPI install (`pip install proto-tools`) will be available soon.
@@ -193,7 +189,7 @@ Each specific tool also ships a minimal `examples/example.ipynb` under `proto_to
 
 ## Using with a coding agent
 
-Run tools through natural language with any coding agent (Claude Code, Gemini CLI, OpenAI Codex CLI, etc.). Point the agent at `proto-tools agent-context`: it prints a primer covering the `Input → Config → run_*() → Output` pattern, the CLI verbs for finding, inspecting and running tools (the same operations the MCP server exposes), persistence and parallel execution, and links to the long-form notes on GitHub. The command ships in the wheel, so it works on a plain `pip install` with no repo checkout.
+Run tools through natural language with any coding agent (Claude Code, Gemini CLI, OpenAI Codex CLI, etc.). Point the agent at `proto-tools agent-context`: it prints a primer covering the `Input → Config → run_*() → Output` pattern, the CLI verbs for finding, inspecting and running tools, persistence and parallel execution, and links to the long-form notes on GitHub. The command ships in the wheel, so it works on a plain `pip install` with no repo checkout.
 
 If you've cloned the repo for contributing, agents also pick up `CLAUDE.md` (symlinked as `AGENTS.md`/`GEMINI.md`) and the task-specific guides in [`.claude/skills/`](.claude/skills/) automatically.
 
