@@ -9,7 +9,7 @@
 
 ## Overview
 
-[Rfam](https://rfam.org) is a database of non-coding RNA families represented by curated sequence alignments, consensus secondary structures, and covariance models. The toolkit provides two retrieval tools: `rfam-family` returns a family record and its consensus annotations, with an optional seed alignment; `rfam-regions` returns annotated sequence regions with coordinates, strand, and taxonomic information. Both tools access the Rfam website over HTTPS and run in process without a GPU or a separate tool environment.
+[Rfam](https://rfam.org) is a database of non-coding RNA families represented by curated sequence alignments, consensus secondary structures, and covariance models. The toolkit provides two retrieval tools: `rfam-family` returns a family record and its consensus annotations, with an optional seed alignment; `rfam-regions` returns annotated sequence regions with coordinates, strand, and taxonomic information.
 
 ## Background
 
