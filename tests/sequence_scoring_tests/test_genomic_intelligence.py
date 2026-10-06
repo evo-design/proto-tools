@@ -7,6 +7,7 @@ reach the live API carry ``@pytest.mark.integration`` and are skipped by default
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -420,6 +421,28 @@ def test_parse_workflow_counts_scored_and_skipped_genes() -> None:
     assert result.predictions[1].skipped is True
     assert result.predictions[1].skip_reason is not None
     assert "g0-annotation" in result.meta.model
+
+
+def test_null_string_fields_are_empty_not_none() -> None:
+    """A field the API sends as null must not become the string "None"."""
+    promoter = copy.deepcopy(_PROMOTER_PAYLOAD)
+    promoter["data"]["regions"] = [{"start": 1, "end": 50, "score": 0.9, "name": None}]
+    splice = copy.deepcopy(_SPLICE_PAYLOAD)
+    splice["data"]["sites"][0].update(name=None, site_type=None)
+    annotation = copy.deepcopy(_ANNOTATION_PAYLOAD)
+    annotation["data"]["transcripts"][0].update(name=None, strand=None)
+    workflow = copy.deepcopy(_WORKFLOW_PAYLOAD)
+    workflow["data"]["expression_predictions"][0].update(gene_name=None, strand=None)
+
+    region = parse_promoter_data(promoter["data"], promoter, "demo").regions[0]
+    site = parse_splice_data(splice["data"], splice, "demo").sites[0]
+    transcript = parse_annotation_data(annotation["data"], annotation, "demo").transcripts[0]
+    prediction = parse_workflow_data(workflow["data"], workflow, "HBB").predictions[0]
+
+    assert region.name == ""
+    assert (site.name, site.site_type) == ("", "")
+    assert (transcript.name, transcript.strand) == ("", "")
+    assert (prediction.gene_name, prediction.strand) == ("", "")
 
 
 # ============================================================================
