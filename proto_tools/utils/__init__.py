@@ -17,7 +17,7 @@ from proto_tools.utils.device_manager import SUPPORTED_DEVICE_PREFIXES, Allocati
 from proto_tools.utils.env_runner import run_in_env
 from proto_tools.utils.export_names import build_export_name, sanitize_field
 from proto_tools.utils.gradient_models import GradientInput, GradientOutput, GradientValue
-from proto_tools.utils.http_session import build_http_session, request_with_retry
+from proto_tools.utils.http_session import build_http_session, request_with_retry, user_agent_for
 from proto_tools.utils.interaction_models import (
     SequenceInteractionMap,
     SequenceInteractions,
@@ -139,6 +139,7 @@ __all__ = [
     # HTTP
     "build_http_session",
     "request_with_retry",
+    "user_agent_for",
     "extract_text_status",
     "poll_until_complete",
     "StatusExtractor",

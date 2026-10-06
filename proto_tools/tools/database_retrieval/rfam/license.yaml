@@ -1,0 +1,14 @@
+code:
+  spdx: MIT
+  url: https://github.com/evo-design/proto-tools
+data:
+  name: the Rfam database
+  spdx: CC0-1.0
+  url: https://docs.rfam.org/en/latest/#license
+  attribution_required: false
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+proto_tools_original: true
+notes: proto-tools original client code (MIT) calling the Rfam website's family, regions, and alignment endpoints over plain HTTP; there is no Rfam client library dependency. All Rfam data is public-domain under CC0-1.0, as stated on rfam.org.
+last_updated: '2026-10-05'

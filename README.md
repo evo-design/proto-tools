@@ -96,6 +96,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/database_retrieval/ncbi/">ncbi/</a>
 ├── <a href="proto_tools/tools/database_retrieval/pdb/">pdb/</a>
 ├── <a href="proto_tools/tools/database_retrieval/pubchem/">pubchem/</a>
+├── <a href="proto_tools/tools/database_retrieval/rfam/">rfam/</a>
 ├── <a href="proto_tools/tools/database_retrieval/sequence_fetch/">sequence_fetch/</a>
 └── <a href="proto_tools/tools/database_retrieval/uniprot/">uniprot/</a>
 <a href="proto_tools/tools/gene_annotation/">gene_annotation/</a>                # Sequence annotation
