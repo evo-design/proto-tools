@@ -11,11 +11,14 @@ can't give it.
 import random
 import time
 from collections.abc import Callable
+from importlib.metadata import PackageNotFoundError, version
 from typing import TypeVar
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+from proto_tools.utils.base_config import client_identity
 
 _RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
 
@@ -23,6 +26,32 @@ _RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
 _JITTER_FRACTION = 0.1
 
 T = TypeVar("T")
+
+
+def _proto_tools_version() -> str:
+    """Return the installed proto-tools version, or ``unknown`` where there is no distribution.
+
+    A Modal container puts proto-tools on the path by mounting the source tree rather than
+    installing it, so it carries no dist-info and ``version()`` raises. The version only decorates
+    a ``User-Agent``, so a request that would otherwise succeed must not fail for the want of it.
+    """
+    try:
+        return version("proto-tools")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def user_agent_for(identity: str | None = None) -> str:
+    """Build a ``User-Agent`` naming proto-tools and the caller, so each caller is identifiable.
+
+    Args:
+        identity (str | None): Identifies the caller when the request originates elsewhere, such as
+            a hosted process calling on a user's behalf. Derived from this process when omitted.
+
+    Returns:
+        str: A user agent naming proto-tools and the caller.
+    """
+    return f"proto-tools/{_proto_tools_version()} ({identity or client_identity()})"
 
 
 def build_http_session(
