@@ -10,7 +10,14 @@ from urllib.parse import quote
 import requests
 from pydantic import field_validator
 
-from proto_tools.utils import BaseToolInput, InputField, request_with_retry
+from proto_tools.utils import (
+    BaseConfig,
+    BaseToolInput,
+    InputField,
+    build_http_session,
+    request_with_retry,
+    user_agent_for,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +25,6 @@ _RFAM_FAMILY_BASE = "https://rfam.org/family"
 _REQUEST_TIMEOUT_SECONDS = 30
 _HTTP_RETRIES = 2
 _BACKOFF_SECONDS = 1.0
-_USER_AGENT = "proto-tools/rfam-v1"
 
 
 # ============================================================================
@@ -58,8 +64,22 @@ def _family_url(family: str, *parts: str) -> str:
     return "/".join([_RFAM_FAMILY_BASE, quote(family, safe=""), *parts])
 
 
-def _rfam_get(session: requests.Session, url: str, params: dict[str, str] | None = None) -> requests.Response | None:
-    """GET an Rfam endpoint; return None on 404 and raise on any other HTTP error."""
+def _rfam_session(config: BaseConfig) -> requests.Session:
+    """Open a session whose User-Agent names the caller, set by a hosted process or derived here."""
+    return build_http_session(
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=user_agent_for(config._client_identity),
+    )
+
+
+def _rfam_get(
+    session: requests.Session,
+    url: str,
+    params: dict[str, str] | None = None,
+    refusals: tuple[int, ...] = (),
+) -> requests.Response | None:
+    """GET an Rfam endpoint; return None on 404, return a refusal status's response, raise on other errors."""
     response = request_with_retry(
         lambda: session.get(url, params=params, timeout=_REQUEST_TIMEOUT_SECONDS),
         retries=_HTTP_RETRIES,
@@ -67,6 +87,8 @@ def _rfam_get(session: requests.Session, url: str, params: dict[str, str] | None
     )
     if response.status_code == 404:
         return None
+    if response.status_code in refusals:
+        return response
     response.raise_for_status()
     return response
 

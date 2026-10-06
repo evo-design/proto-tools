@@ -11,16 +11,14 @@ from typing import Any
 from pydantic import Field
 
 from proto_tools.tools.database_retrieval.rfam.shared_data_models import (
-    _BACKOFF_SECONDS,
-    _HTTP_RETRIES,
-    _USER_AGENT,
     RfamFamilyQuery,
     _family_url,
     _not_found,
     _rfam_get,
+    _rfam_session,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseConfig, BaseToolOutput, ConfigField, build_http_session
+from proto_tools.utils import BaseConfig, BaseToolOutput, ConfigField
 
 # ============================================================================
 # Data Models
@@ -203,11 +201,7 @@ def run_rfam_family(
     """
     del instance
 
-    session = build_http_session(
-        http_retries=_HTTP_RETRIES,
-        backoff_seconds=_BACKOFF_SECONDS,
-        user_agent=_USER_AGENT,
-    )
+    session = _rfam_session(config)
     try:
         record_response = _rfam_get(session, _family_url(inputs.family), {"content-type": "application/json"})
         if record_response is None:

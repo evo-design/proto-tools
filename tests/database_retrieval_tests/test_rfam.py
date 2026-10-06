@@ -17,7 +17,8 @@ from proto_tools.tools.database_retrieval import (
     run_rfam_family,
     run_rfam_regions,
 )
-from proto_tools.tools.database_retrieval.rfam import rfam_family, rfam_regions, shared_data_models
+from proto_tools.tools.database_retrieval.rfam import shared_data_models
+from proto_tools.utils import base_config
 
 BASE = "https://rfam.org/family"
 
@@ -69,11 +70,12 @@ STOCKHOLM = (
 
 
 class _FakeSession:
-    """Serves canned responses by URL path, recording each request."""
+    """Serves canned responses by URL path, recording each request and the User-Agent it was built with."""
 
     def __init__(self, routes: dict[str, tuple[int, str]]):
         self.routes = routes
         self.urls: list[str] = []
+        self.user_agent: str | None = None
 
     def get(self, url, params=None, timeout=None):
         self.urls.append(url)
@@ -88,9 +90,14 @@ class _FakeSession:
         pass
 
 
-def _serve(monkeypatch, module, routes):
+def _serve(monkeypatch, routes):
     session = _FakeSession(routes)
-    monkeypatch.setattr(module, "build_http_session", lambda **_: session)
+
+    def build(**kwargs):
+        session.user_agent = kwargs["user_agent"]
+        return session
+
+    monkeypatch.setattr(shared_data_models, "build_http_session", build)
     monkeypatch.setattr(shared_data_models, "_BACKOFF_SECONDS", 0.0)
     return session
 
@@ -101,7 +108,7 @@ def _serve(monkeypatch, module, routes):
 
 
 def test_regions_normalize_minus_strand_and_read_header(monkeypatch):
-    _serve(monkeypatch, rfam_regions, {f"{BASE}/RF01731/regions": (200, REGIONS)})
+    _serve(monkeypatch, {f"{BASE}/RF01731/regions": (200, REGIONS)})
     out = run_rfam_regions(RfamRegionsInput(family="RF01731"), RfamRegionsConfig())
 
     assert (out.accession, out.rfam_id, out.rfam_release) == ("RF01731", "TwoAYGGAY", "15.1")
@@ -124,33 +131,35 @@ def test_regions_normalize_minus_strand_and_read_header(monkeypatch):
     ],
 )
 def test_regions_filters(monkeypatch, filters, expected):
-    _serve(monkeypatch, rfam_regions, {f"{BASE}/RF01731/regions": (200, REGIONS)})
+    _serve(monkeypatch, {f"{BASE}/RF01731/regions": (200, REGIONS)})
     out = run_rfam_regions(RfamRegionsInput(family="RF01731", **filters), RfamRegionsConfig())
     assert out.matched_regions == expected
     assert out.total_regions == 4
 
 
 def test_regions_truncate_after_filtering(monkeypatch):
-    _serve(monkeypatch, rfam_regions, {f"{BASE}/RF01731/regions": (200, REGIONS)})
+    _serve(monkeypatch, {f"{BASE}/RF01731/regions": (200, REGIONS)})
     out = run_rfam_regions(RfamRegionsInput(family="RF01731"), RfamRegionsConfig(max_regions=3))
     assert (out.matched_regions, len(out.regions), out.truncated) == (4, 3, True)
 
 
-def test_regions_relay_rfam_refusal_for_huge_families(monkeypatch):
+@pytest.mark.parametrize("status", [413, 403])
+def test_regions_relay_rfam_refusal_for_huge_families(monkeypatch, status):
+    # Rfam answers 413 in practice; its API docs say 403.
     refusal = "'RF00005' has 5336050 regions, too many to return in a single response."
-    _serve(monkeypatch, rfam_regions, {f"{BASE}/RF00005/regions": (200, refusal)})
+    _serve(monkeypatch, {f"{BASE}/RF00005/regions": (status, refusal)})
     with pytest.raises(ValueError, match="5336050 regions"):
         run_rfam_regions(RfamRegionsInput(family="RF00005"), RfamRegionsConfig())
 
 
 def test_regions_unknown_family(monkeypatch):
-    _serve(monkeypatch, rfam_regions, {})
+    _serve(monkeypatch, {})
     with pytest.raises(ValueError, match="No Rfam family matches 'RF99999'"):
         run_rfam_regions(RfamRegionsInput(family="RF99999"), RfamRegionsConfig())
 
 
 def test_regions_family_name_is_url_escaped(monkeypatch):
-    session = _serve(monkeypatch, rfam_regions, {})
+    session = _serve(monkeypatch, {})
     with pytest.raises(ValueError):
         run_rfam_regions(RfamRegionsInput(family="a/b"), RfamRegionsConfig())
     assert session.urls == [f"{BASE}/a%2Fb/regions"]
@@ -162,12 +171,27 @@ def test_blank_family_rejected():
 
 
 def test_regions_tsv_export(tmp_path, monkeypatch):
-    _serve(monkeypatch, rfam_regions, {f"{BASE}/RF01731/regions": (200, REGIONS)})
+    _serve(monkeypatch, {f"{BASE}/RF01731/regions": (200, REGIONS)})
     out = run_rfam_regions(RfamRegionsInput(family="RF01731", taxid=216595), RfamRegionsConfig())
     out._export_output(tmp_path / "regions", "tsv")
     lines = (tmp_path / "regions.tsv").read_text().splitlines()
     assert lines[0].split("\t")[:5] == ["sequence_accession", "bit_score", "start", "end", "strand"]
     assert len(lines) == 3
+
+
+def test_user_agent_names_the_local_process(monkeypatch):
+    monkeypatch.setenv(base_config.CLIENT_IDENTITY_ENV_VAR, "ada@lab-workstation")
+    session = _serve(monkeypatch, {f"{BASE}/RF01731/regions": (200, REGIONS)})
+    run_rfam_regions(RfamRegionsInput(family="RF01731"), RfamRegionsConfig())
+    assert session.user_agent is not None and session.user_agent.endswith("(ada@lab-workstation)")
+
+
+def test_user_agent_names_a_hosted_caller(monkeypatch):
+    monkeypatch.setenv(base_config.CLIENT_IDENTITY_ENV_VAR, "hosted-container")
+    session = _serve(monkeypatch, _family_routes())
+    config = RfamFamilyConfig.model_validate({"_proto_internal": {"client_identity": "user-123"}})
+    run_rfam_family(RfamFamilyInput(family="TwoAYGGAY"), config)
+    assert session.user_agent is not None and session.user_agent.endswith("(user-123)")
 
 
 # ============================================================================
@@ -183,7 +207,7 @@ def _family_routes() -> dict[str, tuple[int, str]]:
 
 
 def test_family_resolves_id_and_joins_consensus_blocks(monkeypatch):
-    session = _serve(monkeypatch, rfam_family, _family_routes())
+    session = _serve(monkeypatch, _family_routes())
     out = run_rfam_family(RfamFamilyInput(family="TwoAYGGAY"), RfamFamilyConfig())
 
     assert session.urls[-1] == f"{BASE}/RF01731/alignment/stockholm"
@@ -194,13 +218,13 @@ def test_family_resolves_id_and_joins_consensus_blocks(monkeypatch):
 
 
 def test_family_strips_curation_semicolons(monkeypatch):
-    _serve(monkeypatch, rfam_family, _family_routes())
+    _serve(monkeypatch, _family_routes())
     out = run_rfam_family(RfamFamilyInput(family="TwoAYGGAY"), RfamFamilyConfig())
     assert (out.rna_type, out.seed_source, out.comment) == ("Cis-reg", "Published; PMID:20230605", None)
 
 
 def test_family_seed_alignment_on_request_and_export(tmp_path, monkeypatch):
-    _serve(monkeypatch, rfam_family, _family_routes())
+    _serve(monkeypatch, _family_routes())
     out = run_rfam_family(RfamFamilyInput(family="TwoAYGGAY"), RfamFamilyConfig(include_seed_alignment=True))
     assert out.seed_alignment is not None and out.seed_alignment.rstrip() == STOCKHOLM.rstrip()
     out._export_output(tmp_path / "seed", "sto")
@@ -208,14 +232,14 @@ def test_family_seed_alignment_on_request_and_export(tmp_path, monkeypatch):
 
 
 def test_family_sto_export_needs_alignment(tmp_path, monkeypatch):
-    _serve(monkeypatch, rfam_family, _family_routes())
+    _serve(monkeypatch, _family_routes())
     out = run_rfam_family(RfamFamilyInput(family="TwoAYGGAY"), RfamFamilyConfig())
     with pytest.raises(ValueError, match="include_seed_alignment"):
         out._export_output(tmp_path / "seed", "sto")
 
 
 def test_family_unknown(monkeypatch):
-    _serve(monkeypatch, rfam_family, {})
+    _serve(monkeypatch, {})
     with pytest.raises(ValueError, match="No Rfam family matches 'Nope'"):
         run_rfam_family(RfamFamilyInput(family="Nope"), RfamFamilyConfig())
 
@@ -223,7 +247,7 @@ def test_family_unknown(monkeypatch):
 def test_family_alignment_without_structure_is_an_error(monkeypatch):
     routes = _family_routes()
     routes[f"{BASE}/RF01731/alignment/stockholm"] = (200, "# STOCKHOLM 1.0\nseq1 ACGU\n//\n")
-    _serve(monkeypatch, rfam_family, routes)
+    _serve(monkeypatch, routes)
     with pytest.raises(ValueError, match="SS_cons"):
         run_rfam_family(RfamFamilyInput(family="TwoAYGGAY"), RfamFamilyConfig())
 

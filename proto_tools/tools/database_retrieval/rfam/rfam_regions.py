@@ -13,21 +13,21 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.tools.database_retrieval.rfam.shared_data_models import (
-    _BACKOFF_SECONDS,
-    _HTTP_RETRIES,
-    _USER_AGENT,
     RfamFamilyQuery,
     _family_url,
     _not_found,
     _rfam_get,
+    _rfam_session,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseConfig, BaseToolOutput, ConfigField, InputField, build_http_session
+from proto_tools.utils import BaseConfig, BaseToolOutput, ConfigField, InputField
 
 _HEADER_FAMILY = re.compile(r"^# Rfam regions for family (\S+) \((RF\d+)\)")
 _HEADER_RELEASE = re.compile(r"^# file built using Rfam version (\S+)")
 _HEADER_COUNT = re.compile(r"^# found (\d+) regions")
 _REGION_COLUMNS = 7
+# Rfam refuses families with millions of hits: 413 in practice, 403 per its API docs.
+_TOO_MANY_REGIONS = (403, 413)
 
 # ============================================================================
 # Data Models
@@ -172,10 +172,9 @@ def _parse_regions(text: str, family: str) -> tuple[str, str, str | None, int, l
     """Parse the regions endpoint's text into (accession, id, release, total, regions)."""
     lines = text.splitlines()
     if not lines or not lines[0].startswith("#"):
-        # Families with millions of hits get a plain-text refusal instead of a table.
         raise ValueError(
             f"Rfam did not list regions for {family!r}: {text.strip()[:300]} "
-            "rfam-regions only lists families Rfam can return in a single response."
+            "(rfam-regions only lists families Rfam can return in a single response)"
         )
 
     accession = rfam_id = ""
@@ -272,13 +271,14 @@ def run_rfam_regions(
     """
     del instance
 
-    session = build_http_session(
-        http_retries=_HTTP_RETRIES,
-        backoff_seconds=_BACKOFF_SECONDS,
-        user_agent=_USER_AGENT,
-    )
+    session = _rfam_session(config)
     try:
-        response = _rfam_get(session, _family_url(inputs.family, "regions"), {"content-type": "text/plain"})
+        response = _rfam_get(
+            session,
+            _family_url(inputs.family, "regions"),
+            {"content-type": "text/plain"},
+            refusals=_TOO_MANY_REGIONS,
+        )
         if response is None:
             raise _not_found(inputs.family)
         accession, rfam_id, release, total, regions = _parse_regions(response.text, inputs.family)
