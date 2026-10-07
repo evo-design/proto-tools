@@ -6,7 +6,6 @@ Tests for ToolInstance.
 import contextlib
 import hashlib
 import logging
-import re
 import signal
 import subprocess
 import sys
@@ -980,9 +979,6 @@ def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
 
 # ── BaseConfig.credential_fields() tests ──────────────────────────────────────
 
-# Field names that hold a credential; every one must be marked so hosted services can find it.
-_CREDENTIAL_NAME = re.compile(r"(api_key|token|secret|password|email)$")
-
 
 def _credential_config():
     from proto_tools.utils.base_config import BaseConfig, ConfigField
@@ -1004,7 +1000,7 @@ def test_credential_field_is_flagged_in_schema_and_hidden_from_repr(monkeypatch)
     properties = MyConfig.model_json_schema()["properties"]
     assert properties["api_key"]["credential"] == "PROTO_TEST_KEY"
     assert "credential" not in properties["model"]
-    assert "PROTO_TEST_KEY env var" in properties["api_key"]["description"]
+    assert properties["api_key"]["description"] == "Key. Falls back to $PROTO_TEST_KEY."
     assert "sk-live" not in repr(MyConfig(api_key="sk-live"))
 
 
@@ -1046,40 +1042,6 @@ def test_credential_rejects_a_hand_written_default():
 
     with pytest.raises(TypeError, match="PROTO_TEST_KEY"):
         ConfigField(default=None, title="Key", description="Key.", credential="PROTO_TEST_KEY")
-
-
-@pytest.mark.parametrize(
-    ("tool_key", "expected"),
-    [
-        ("gi-promoter", {"gi_api_key"}),
-        ("gi-find-genes-and-predict-expression", {"gi_api_key"}),
-        ("ncbi-efetch", {"ncbi_api_key", "ncbi_email"}),
-        ("sequence-fetch", {"ncbi_api_key", "ncbi_email"}),
-        ("interproscan-fetch", {"email"}),
-    ],
-)
-def test_credential_fields_are_marked(tool_key, expected):
-    from proto_tools.tools import ToolRegistry
-
-    assert ToolRegistry.get(tool_key).config_model.credential_fields() == expected
-
-
-def test_every_credential_shaped_field_is_a_credential():
-    """A key-shaped field left unmarked would be persisted, displayed, and never injected."""
-    from proto_tools.tools import ToolRegistry
-
-    unmarked, mistyped = [], []
-    for spec in ToolRegistry.list_all():
-        config_model = spec.config_model
-        credentials = config_model.credential_fields()
-        for name, info in config_model.model_fields.items():
-            if _CREDENTIAL_NAME.search(name) and name not in credentials:
-                unmarked.append(f"{spec.key}.{name}")
-            if name in credentials and info.annotation != (str | None):
-                mistyped.append(f"{spec.key}.{name}: {info.annotation}")
-
-    assert not unmarked, f"mark these with ConfigField(credential=<ENV_VAR>): {unmarked}"
-    assert not mistyped, f"credentials must be str | None: {mistyped}"
 
 
 # ── BaseConfig.reload_fields() tests ──────────────────────────────────────

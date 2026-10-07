@@ -120,7 +120,7 @@ def ConfigField(
         json_schema_extra["include_in_key"] = False
         kwargs["default_factory"] = partial(_credential_from_env, credential)
         kwargs.setdefault("repr", False)
-        description = f"{description} Defaults to the {credential} env var; a value set here takes precedence."
+        description = f"{description} Falls back to ${credential}."
 
     kwargs["json_schema_extra"] = json_schema_extra
 
