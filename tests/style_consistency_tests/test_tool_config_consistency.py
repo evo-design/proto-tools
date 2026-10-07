@@ -3,6 +3,7 @@
 Tests for tool config consistency.
 """
 
+import re
 import types
 from typing import Union, get_args, get_origin
 
@@ -18,6 +19,9 @@ _MAX_FIELD_TITLE_LENGTH = 31
 _MAX_FIELD_DESCRIPTION_LENGTH = 100
 _BASE_CONFIG_FIELDS = frozenset(ToolsBaseConfig.model_fields.keys())
 _BANNED_UI_SCHEMA_KEYS = frozenset({"advanced", "hidden", "depends_on", "x-depends-on", "x-xor-group"})
+# Field names that hold a credential; every one must be marked so it is never persisted or displayed.
+_CREDENTIAL_NAME = re.compile(r"(api_key|token|secret|password|email)$")
+_ENV_VAR_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
 
 
 def _list_of_all_tool_config_models():
@@ -81,6 +85,24 @@ def test_tool_config_consistency(config_model):
         assert not banned_keys, (
             f"{config_model.__name__}.{field_name} sets unsupported schema key(s) {sorted(banned_keys)}."
         )
+
+        # CREDENTIAL: Key- or email-shaped fields must be ConfigField(credential=<ENV_VAR>), and
+        # every credential must keep the shape that flag gives it.
+        credential = json_schema_extra.get("credential")
+        if _CREDENTIAL_NAME.search(field_name):
+            assert credential is not None, (
+                f"{config_model.__name__}.{field_name} looks like a credential; mark it ConfigField(credential=<ENV_VAR>)."
+            )
+        if credential is not None:
+            assert isinstance(credential, str) and _ENV_VAR_NAME.fullmatch(credential), (
+                f"{config_model.__name__}.{field_name} credential must name an env var, got {credential!r}."
+            )
+            assert field_info.annotation == (str | None), (
+                f"{config_model.__name__}.{field_name} is a credential, so it must be str | None."
+            )
+            assert json_schema_extra.get("include_in_key") is False and field_info.repr is False, (
+                f"{config_model.__name__}.{field_name} is a credential; it must stay out of the cache key and repr."
+            )
 
     # Every field must appear in the config's own docstring (excluding
     # BaseConfig fields, which are documented once at the base level).

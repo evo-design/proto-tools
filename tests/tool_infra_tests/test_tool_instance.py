@@ -977,6 +977,73 @@ def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
     )
 
 
+# ── BaseConfig.credential_fields() tests ──────────────────────────────────────
+
+
+def _credential_config():
+    from proto_tools.utils.base_config import BaseConfig, ConfigField
+
+    class MyConfig(BaseConfig):
+        api_key: str | None = ConfigField(title="API Key", description="Key.", credential="PROTO_TEST_KEY")
+        model: str = ConfigField(default="m", title="Model", description="m")
+
+    return MyConfig
+
+
+def test_credential_field_is_flagged_in_schema_and_hidden_from_repr(monkeypatch):
+    """Hosted services read the flag from the schema; repr must never print the value."""
+    monkeypatch.delenv("PROTO_TEST_KEY", raising=False)
+    MyConfig = _credential_config()
+
+    assert MyConfig.credential_fields() == {"api_key"}
+    assert MyConfig.cache_exclude_fields() >= {"api_key"}
+    properties = MyConfig.model_json_schema()["properties"]
+    assert properties["api_key"]["credential"] == "PROTO_TEST_KEY"
+    assert "credential" not in properties["model"]
+    assert properties["api_key"]["description"] == "Key. Falls back to $PROTO_TEST_KEY."
+    assert "sk-live" not in repr(MyConfig(api_key="sk-live"))
+
+
+@pytest.mark.parametrize(
+    ("env", "given", "expected"),
+    [
+        ("from-env", "from-config", "from-config"),
+        ("from-env", None, "from-env"),
+        ("from-env", "", "from-env"),
+        ("from-env", "   ", "from-env"),
+        (None, "", None),
+        ("   ", None, None),
+        (None, "  padded  ", "padded"),
+    ],
+)
+def test_credential_config_value_wins_and_blank_means_unset(monkeypatch, env, given, expected):
+    MyConfig = _credential_config()
+    if env is None:
+        monkeypatch.delenv("PROTO_TEST_KEY", raising=False)
+    else:
+        monkeypatch.setenv("PROTO_TEST_KEY", env)
+
+    assert MyConfig(api_key=given).api_key == expected
+    if given is None:
+        assert MyConfig().api_key == expected
+
+
+def test_assigning_a_blank_credential_falls_back_to_the_env(monkeypatch):
+    monkeypatch.setenv("PROTO_TEST_KEY", "from-env")
+    config = _credential_config()(api_key="from-config")
+
+    config.api_key = ""
+
+    assert config.api_key == "from-env"
+
+
+def test_credential_rejects_a_hand_written_default():
+    from proto_tools.utils.base_config import ConfigField
+
+    with pytest.raises(TypeError, match="PROTO_TEST_KEY"):
+        ConfigField(default=None, title="Key", description="Key.", credential="PROTO_TEST_KEY")
+
+
 # ── BaseConfig.reload_fields() tests ──────────────────────────────────────
 
 
