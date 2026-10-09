@@ -40,6 +40,16 @@ def _encode(sequence: str, assembly: str, reverse_complement: bool = False) -> A
     return x.astype("float32")
 
 
+def _fasta_chrom(fasta: Any, chrom: str) -> str:
+    """Name ``chrom`` as the FASTA does, adding or dropping a ``chr`` prefix (``chr1`` and ``1`` both match)."""
+    if chrom in fasta:
+        return chrom
+    alternate = chrom[3:] if chrom.startswith("chr") else f"chr{chrom}"
+    if alternate in fasta:
+        return alternate
+    raise ValueError(f"spliceai2: chromosome {chrom!r} is not in the reference FASTA")
+
+
 class SpliceAI2Model:
     """Manages the SpliceAI2 two-model ensemble and its inference."""
 
@@ -96,9 +106,8 @@ class SpliceAI2Model:
     # ============================================================================
     def _variant_window(self, fasta: Any, variant: dict[str, Any]) -> tuple[str, str]:
         """Reference and alternate input windows centered on the variant, padded past chromosome ends."""
-        chrom, pos, ref, alt = variant["chromosome"], variant["position"], variant["ref"], variant["alt"]
-        if chrom not in fasta:
-            raise ValueError(f"spliceai2: chromosome {chrom!r} is not in the reference FASTA")
+        pos, ref, alt = variant["position"], variant["ref"], variant["alt"]
+        chrom = _fasta_chrom(fasta, variant["chromosome"])
         chrom_len = len(fasta[chrom])
         if pos + len(ref) - 1 > chrom_len:
             raise ValueError(f"spliceai2: {chrom}:{pos} lies beyond the end of chromosome {chrom} ({chrom_len} bp)")

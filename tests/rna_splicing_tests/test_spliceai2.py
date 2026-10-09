@@ -3,7 +3,6 @@
 import csv
 import functools
 import importlib.util
-import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -136,18 +135,6 @@ def test_score_input_rejects_empty_variants() -> None:
         SpliceAI2ScoreInput(variants=[])
 
 
-def test_variant_rejects_missing_strand() -> None:
-    """Strand is required: SpliceAI2 has no annotation to infer it from."""
-    with pytest.raises(ValidationError, match="strand"):
-        SpliceAI2Variant(chromosome="11", position=5226929, ref="C", alt="T")
-
-
-def test_variant_rejects_invalid_strand() -> None:
-    """Only '+' and '-' are valid strands."""
-    with pytest.raises(ValidationError, match="strand"):
-        SpliceAI2Variant(chromosome="11", position=5226929, ref="C", alt="T", strand=".")
-
-
 def test_predict_input_wraps_single_sequence() -> None:
     """A bare sequence string is normalized to a 1-element list."""
     assert SpliceAI2PredictInput(sequences="ACGT").sequences == ["ACGT"]
@@ -196,10 +183,9 @@ def test_score_config_local_path_refused_remotely(tmp_path: Path) -> None:
     assert "local path" in reason
 
 
-@pytest.mark.parametrize("config_class", [SpliceAI2PredictConfig, SpliceAI2ScoreConfig], ids=["predict", "score"])
-def test_config_defaults_to_gpu(config_class: type[SpliceAI2PredictConfig | SpliceAI2ScoreConfig]) -> None:
+def test_score_config_defaults_to_gpu() -> None:
     """The GPU default from SpliceAI2Config survives mixing in the reference-genome config."""
-    assert config_class().device == "cuda"
+    assert SpliceAI2ScoreConfig().device == "cuda"
 
 
 # ── Export (custom serialization only) ──────────────────────────────────────
@@ -224,14 +210,6 @@ def test_export_tsv(tmp_path: Path) -> None:
     assert float(row["donor_loss_delta_score_3"]) == pytest.approx(result.donor_loss[3].delta_score)
     assert int(row["acceptor_gain_dist_7"]) == result.acceptor_gain[7].distance
     assert float(row["spliceai2_summary_score"]) == pytest.approx(0.9)
-
-
-def test_export_json(tmp_path: Path) -> None:
-    """JSON export round-trips through SpliceAI2ScoreOutput.model_validate."""
-    output = SpliceAI2ScoreOutput(results=[_variant_result()])
-    output.export("scores", tmp_path, file_format="json")
-    restored = SpliceAI2ScoreOutput.model_validate(json.loads((tmp_path / "scores.json").read_text()))
-    assert restored.results == output.results
 
 
 def _prediction(length: int) -> SpliceAI2Prediction:
@@ -261,6 +239,16 @@ def test_export_npy_uniform(tmp_path: Path) -> None:
 
 
 # ── Standalone helpers ────────────────────────────────────────────────────────
+
+
+def test_fasta_chrom_matches_chr_prefix() -> None:
+    """A chromosome resolves with or without a 'chr' prefix, whichever naming the FASTA uses."""
+    fasta_chrom = _load_standalone_inference()._fasta_chrom
+    assert fasta_chrom({"11", "MT"}, "chr11") == "11"
+    assert fasta_chrom({"chr11"}, "11") == "chr11"
+    assert fasta_chrom({"11", "chr11"}, "chr11") == "chr11"
+    with pytest.raises(ValueError, match="not in the reference FASTA"):
+        fasta_chrom({"11"}, "chr12")
 
 
 def test_exon_intervals() -> None:

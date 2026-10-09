@@ -63,8 +63,8 @@ class SpliceAI2Variant(SpliceAIVariant):
     """A genetic variant and the strand of the gene it is scored against.
 
     Attributes:
-        chromosome (str): Chromosome identifier, matching the reference FASTA
-            (e.g. ``'chr1'`` or ``'1'``).
+        chromosome (str): Chromosome name, e.g. ``'1'`` or ``'chr1'``. A ``chr``
+            prefix is added or dropped to match the reference FASTA's naming.
         position (int): Variant position, 1-based (VCF convention).
         ref (str): Reference allele, e.g. ``'A'`` or ``'AC'`` (DNA bases A/C/G/T/N).
         alt (str): Alternate allele, e.g. ``'G'`` or ``'GTT'`` (DNA bases A/C/G/T/N).
@@ -72,6 +72,10 @@ class SpliceAI2Variant(SpliceAIVariant):
             against. Score both strands when it is unknown.
     """
 
+    chromosome: str = InputField(
+        title="Chromosome",
+        description="Chromosome name, e.g. '1' or 'chr1' (the 'chr' prefix is matched to the FASTA)",
+    )
     strand: Literal["+", "-"] = InputField(
         title="Strand",
         description="Gene strand ('+' or '-'); score both strands if unknown",

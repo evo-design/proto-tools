@@ -80,7 +80,7 @@ class ReferenceGenomeConfig(BaseConfig):
             return (
                 f"reference_fasta={self.reference_fasta!r} is a local path, which can't be staged to "
                 f"device='{device}'. Name a provisioned assembly ({', '.join(sorted(GENOME_FASTA))}) "
-                f"instead, or run locally with device='cpu'."
+                f"instead, or run it on this machine."
             )
         return super().remote_unsupported_reason(device)
 

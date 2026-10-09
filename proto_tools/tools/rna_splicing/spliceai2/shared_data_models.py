@@ -33,8 +33,7 @@ class SpliceAI2Config(BaseConfig):
         assembly (SpliceAI2Assembly): Species assembly whose channel conditions
             the model. ``GRCh38`` (human) for human sequence, including GRCh37
             coordinates.
-        device (str): Device to run the model on. Override of ``BaseConfig.device``
-            because SpliceAI2 requires a GPU (default ``cuda``).
+        device (str): Device to run the model on (default ``cuda``).
     """
 
     assembly: SpliceAI2Assembly = ConfigField(
