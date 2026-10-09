@@ -2,6 +2,8 @@
 
 # SpliceAI2
 
+![SpliceAI2](https://proto-bio.github.io/proto-assets/images/tool/spliceai2/hero.png)
+
 > [!NOTE]
 > **License:** SpliceAI2 is licensed under Custom (SpliceAI2 Model Terms of Use) and has restrictions around commercial use and may require explicit attribution when utilized. Model weights are gated and require accepting the provider's terms and authenticating with a HuggingFace token. Please refer to [the license](https://github.com/Illumina/SpliceAI2/blob/main/LICENSE) for full terms.
 >
