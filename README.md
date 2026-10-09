@@ -200,10 +200,21 @@ Each specific tool also ships a minimal `examples/example.ipynb` under `proto_to
 
 ## Using with an AI assistant
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://proto-bio.github.io/proto-assets/images/mcp/animation-dark.gif">
-  <img src="https://proto-bio.github.io/proto-assets/images/mcp/animation-light.gif" alt="An AI assistant exchanging messages with Proto over MCP">
-</picture>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://proto-bio.github.io/proto-assets/images/mcp/animation-dark.gif">
+    <img src="https://proto-bio.github.io/proto-assets/images/mcp/animation-light.gif" alt="An AI assistant exchanging messages with Proto over MCP" width="560">
+  </picture>
+</p>
+
+<p align="center">
+  <a href="https://proto.evodesign.org/docs/mcp/installation">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/evo-design/proto-tools/main/guides/assets/readme/set-up-mcp-dark.svg">
+      <img src="https://raw.githubusercontent.com/evo-design/proto-tools/main/guides/assets/readme/set-up-mcp-light.svg" alt="Set up MCP" height="44">
+    </picture>
+  </a>
+</p>
 
 Our hosted MCP server lets Claude, ChatGPT, and other AI assistants find and run these tools for you. To set up, follow our [MCP installation guide here](https://proto.evodesign.org/docs/mcp/installation).
 
