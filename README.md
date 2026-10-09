@@ -212,6 +212,10 @@ Our hosted MCP server lets Claude, ChatGPT, and other AI assistants find and run
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage
 configuration, PR format, code style, and testing conventions.
 
+## Use of AI assistance
+
+Since the beginning of 2026, most of the code in this repository has been written with the assistance of AI tools. The architecture of the code and the overall design of the system are the result of careful human decisions. All non-trivial code has been reviewed by a human developer, and we manually review all external PRs.
+
 ## Citation
 
 If you use Proto in your research, please cite our preprint:
