@@ -68,5 +68,5 @@ These apply to both SpliceAI2 tools in this toolkit (`spliceai2-score`, `splicea
 
 - **CUDA GPU required.** SpliceAI2 runs only on GPU (default `device="cuda"`), under 16-bit mixed precision as upstream does.
 - **Gated weights.** The two ensemble checkpoints are gated on HuggingFace. Accept the terms at [illumina-ai/SpliceAI2](https://huggingface.co/illumina-ai/SpliceAI2) and set `HF_TOKEN` (or run `hf auth login`); the standalone environment then downloads both checkpoints automatically.
-- **Not served on `device='proto'`.** The license prohibits hosting and third-party access, so run SpliceAI2 locally on your own GPU, or deploy it on your own Modal account and use `device='modal'`.
+- **Run it yourself.** The license prohibits hosting and third-party access, so run SpliceAI2 locally on your own GPU, or deploy it on your own Modal account and use `device='modal'`.
 - **Scope of the release.** This toolkit runs the released multispecies ensemble. Illumina's tissue-specific fine-tuned models are not publicly released, and the precomputed genome-wide scores (HuggingFace dataset [illumina-ai/SpliceAI2-data](https://huggingface.co/datasets/illumina-ai/SpliceAI2-data)) are not part of this toolkit.

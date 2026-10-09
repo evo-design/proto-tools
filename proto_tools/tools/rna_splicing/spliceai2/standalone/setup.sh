@@ -5,7 +5,7 @@ source standalone_helpers.sh
 echo "Setting up SpliceAI2 standalone environment..."
 
 # The checkpoints are gated on HuggingFace; fail fast before installing anything.
-proto_check_gated_hf_repo "illumina-ai/SpliceAI2" "https://huggingface.co/illumina-ai/SpliceAI2" "README.md"
+proto_check_gated_hf_repo "illumina-ai/SpliceAI2" "https://huggingface.co/illumina-ai/SpliceAI2"
 
 proto_install_pytorch
 

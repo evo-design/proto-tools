@@ -50,7 +50,7 @@ class SpliceAI2Config(BaseConfig):
     )
 
     def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """SpliceAI2 is not served on ``device='proto'``; a deployment the caller owns is unaffected."""
+        """SpliceAI2 runs only where the caller owns the deployment: locally or on their own Modal account."""
         if device == "proto":
             return (
                 "SpliceAI2 is not hosted on device='proto'. Run locally (device='cuda'), "
