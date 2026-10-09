@@ -2,6 +2,15 @@
 
 ![Proto Tools](https://proto-bio.github.io/proto-assets/covers/open-wings-code/carousel.png)
 
+<p align="center">
+  <a href="https://proto.evodesign.org/docs/mcp/installation">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/evo-design/proto-tools/main/guides/assets/readme/set-up-mcp-dark.svg">
+      <img src="https://raw.githubusercontent.com/evo-design/proto-tools/main/guides/assets/readme/set-up-mcp-light.svg" alt="Set up MCP" height="44">
+    </picture>
+  </a>
+</p>
+
 [![Checks](https://github.com/evo-design/proto-tools/actions/workflows/checks.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/checks.yml)
 [![Unit Tests](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/evo-design/proto-tools/actions/workflows/unit-tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/evo-design/proto-tools/blob/main/LICENSE)
@@ -127,7 +136,8 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 <a href="proto_tools/tools/rna_splicing/">rna_splicing/</a>                   # RNA splice site prediction
 ├── <a href="proto_tools/tools/rna_splicing/pangolin/">pangolin/</a>
 ├── <a href="proto_tools/tools/rna_splicing/splice_transformer/">splice_transformer/</a>
-└── <a href="proto_tools/tools/rna_splicing/spliceai/">spliceai/</a>
+├── <a href="proto_tools/tools/rna_splicing/spliceai/">spliceai/</a>
+└── <a href="proto_tools/tools/rna_splicing/spliceai2/">spliceai2/</a>
 <a href="proto_tools/tools/sequence_alignment/">sequence_alignment/</a>             # Sequence search and multiple sequence alignment
 ├── <a href="proto_tools/tools/sequence_alignment/blast/">blast/</a>
 ├── <a href="proto_tools/tools/sequence_alignment/mafft/">mafft/</a>

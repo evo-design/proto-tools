@@ -125,6 +125,8 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "splice-transformer-prediction": ToolEntry("proto-tools-splice-transformer", "SpliceTransformerService", "run", True),
     "spliceai-predict": ToolEntry("proto-tools-spliceai", "SpliceAIService", "predict", True),
     "spliceai-score": ToolEntry("proto-tools-spliceai", "SpliceAIService", "score", True),
+    "spliceai2-predict": ToolEntry("proto-tools-spliceai2", "SpliceAI2Service", "predict", True),
+    "spliceai2-score": ToolEntry("proto-tools-spliceai2", "SpliceAI2Service", "score", True),
     "structure-metrics": ToolEntry("proto-tools-structure-metrics", "StructureMetricsService", "compute", False),
     "tmalign-alignment": ToolEntry("proto-tools-tmalign", "TMalignService", "align", False),
     "usalign-alignment": ToolEntry("proto-tools-usalign", "USalignService", "align", False),

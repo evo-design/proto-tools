@@ -1,0 +1,7 @@
+# torch is installed separately via proto_install_pytorch in setup.sh (compute-matched build).
+spliceai2==2.0
+lightning>=2.1
+pyfaidx>=0.7
+pandas>=1.5
+numpy>=1.21
+huggingface_hub>=0.23

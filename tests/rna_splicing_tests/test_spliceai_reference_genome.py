@@ -8,12 +8,10 @@ from __future__ import annotations
 
 import pytest
 
-from proto_tools.tools.rna_splicing.spliceai.spliceai_score import (
-    _GENOME_FASTA,
-    SpliceAIScoreConfig,
-)
+from proto_tools.tools.rna_splicing.reference_genome import GENOME_FASTA
+from proto_tools.tools.rna_splicing.spliceai.spliceai_score import SpliceAIScoreConfig
 
-ASSEMBLIES = sorted(_GENOME_FASTA)
+ASSEMBLIES = sorted(GENOME_FASTA)
 
 
 @pytest.mark.parametrize("assembly", ASSEMBLIES)
