@@ -181,14 +181,12 @@ class SpliceAI2Model:
         padded = PAD * FLANK + sequence + PAD * (FLANK + tail)
         x = torch.from_numpy(_encode(padded, assembly))[None].to(self.device)
 
-        with (
-            oom_guard("spliceai2", hint=_PREDICT_OOM_HINT),
-            torch.no_grad(),
-            torch.autocast("cuda", dtype=torch.float16),
-        ):
+        # Full precision, as in upstream's transcript example:
+        # https://github.com/Illumina/SpliceAI2/blob/30304b102cd9006f76ee022be6f71487a802520a/README.md?plain=1#L100
+        with oom_guard("spliceai2", hint=_PREDICT_OOM_HINT), torch.no_grad():
             ftrs_list = [model.forward(x) for model in self.models]
             out_ss = torch.stack([model.forward_1d(ftrs) for model, ftrs in zip(self.models, ftrs_list, strict=True)])
-            out_ss = out_ss.mean(dim=0).float()[:, :, :n]
+            out_ss = out_ss.mean(dim=0)[:, :, :n]
 
             # Candidate sites: every position whose donor or acceptor usage clears the threshold.
             site_logits = out_ss.amax(dim=1)
@@ -207,7 +205,7 @@ class SpliceAI2Model:
             out_jxn = torch.stack(
                 [model.forward_2d(ftrs, idxs) for model, ftrs in zip(self.models, ftrs_list, strict=True)]
             )
-            out_jxn = out_jxn.mean(dim=0).float()
+            out_jxn = out_jxn.mean(dim=0)
             out_tx = out_ss[:, 0].gather(1, idxs).unsqueeze(2) + out_jxn + out_ss[:, 1].gather(1, idxs).unsqueeze(1)
 
         sites = idxs[0].cpu().numpy()
