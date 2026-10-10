@@ -1,8 +1,13 @@
 """AlphaGenome standalone inference implementation for venv execution."""
 
+import dataclasses
 import json
 import os
+import shutil
 import sys
+import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +18,7 @@ from alphagenome.models import interval_scorers as interval_scorers_lib
 from alphagenome.models import variant_scorers as variant_scorers_lib
 from alphagenome.protos import dna_model_pb2
 from alphagenome_research.model import dna_model
-from standalone_helpers import get_logger
+from standalone_helpers import get_logger, resolve_weights_dir
 
 logger = get_logger(__name__)
 
@@ -93,6 +98,84 @@ def _resolve_checkpoint_path(model_version: str) -> Path | None:
         logger.debug("alphagenome: cache probe failed: %s", e)
         return None
     return Path(checkpoint)
+
+
+# OrganismSettings fields that ``dna_model.create`` reads in full on every load. Upstream defaults point
+# them at storage.googleapis.com; the FASTA is left remote because it is read lazily, by byte range.
+_EAGER_REFERENCE_FIELDS = (
+    "gtf_feather_path",
+    "pas_feather_path",
+    "splice_site_starts_feather_path",
+    "splice_site_ends_feather_path",
+    "calibration_path",
+)
+_DOWNLOAD_ATTEMPTS = 3
+
+
+def _https_url(path: str) -> str:
+    """Map a public ``gs://`` path to its HTTPS URL; return other paths unchanged."""
+    if path.startswith("gs://"):
+        return "https://storage.googleapis.com/" + path.removeprefix("gs://").lstrip("/")
+    return path
+
+
+def _cache_reference_file(path: str, cache_dir: Path) -> Path:
+    """Download a remote reference file into ``cache_dir`` once and return its local path.
+
+    The file is stored under its bucket path, written to a per-process temp file, and renamed into
+    place, so concurrent workers never read a partial download. Transient network errors are retried.
+
+    Args:
+        path (str): ``https://`` or ``gs://`` location of the file.
+        cache_dir (Path): Directory that holds the cached reference files.
+
+    Returns:
+        Path: Local path of the cached file.
+    """
+    url = _https_url(path)
+    local = cache_dir / urllib.parse.urlparse(url).path.lstrip("/")
+    if local.exists():
+        return local
+    local.parent.mkdir(parents=True, exist_ok=True)
+    tmp = local.with_name(f"{local.name}.{os.getpid()}.tmp")
+    for attempt in range(1, _DOWNLOAD_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response, tmp.open("wb") as f:
+                shutil.copyfileobj(response, f)
+            break
+        except OSError as e:
+            tmp.unlink(missing_ok=True)
+            if attempt == _DOWNLOAD_ATTEMPTS:
+                raise
+            logger.warning("alphagenome: download of %s failed (attempt %d): %s", url, attempt, e)
+            time.sleep(2**attempt)
+    os.replace(tmp, local)
+    return local
+
+
+def _local_organism_settings() -> dict[Any, dna_model.OrganismSettings]:
+    """Return upstream's default organism settings with eagerly read reference files cached locally.
+
+    Files are cached under the alphagenome weights directory, so only the first load downloads them.
+    Without a weights directory (``PROTO_MODEL_CACHE=NONE`` outside a venv) the defaults are returned.
+
+    Returns:
+        dict[Any, dna_model.OrganismSettings]: Settings keyed by organism.
+    """
+    defaults = dna_model.default_organism_settings()
+    weights_dir = resolve_weights_dir("alphagenome")
+    if weights_dir is None:
+        return dict(defaults)
+    cache_dir = Path(weights_dir) / "reference"
+    settings = {}
+    for organism, organism_settings in defaults.items():
+        local_paths = {
+            field: str(_cache_reference_file(remote, cache_dir))
+            for field in _EAGER_REFERENCE_FIELDS
+            if (remote := getattr(organism_settings, field)) is not None
+        }
+        settings[organism] = dataclasses.replace(organism_settings, **local_paths)
+    return settings
 
 
 class AlphaGenomeModel:
@@ -308,17 +391,20 @@ class AlphaGenomeModel:
         jax_device = resolve_jax_device(device)
         checkpoint_path = _resolve_checkpoint_path(self.model_version)
         try:
+            organism_settings = _local_organism_settings()
             if checkpoint_path is not None:
                 if verbose:
                     logger.info("Loading AlphaGenome checkpoint from %s", checkpoint_path)
-                self.model = dna_model.create(checkpoint_path, device=jax_device)
+                self.model = dna_model.create(checkpoint_path, organism_settings=organism_settings, device=jax_device)
             else:
                 if verbose:
                     logger.info(
                         "No local checkpoint found for model '%s'; falling back to Hugging Face download.",
                         self.model_version,
                     )
-                self.model = dna_model.create_from_huggingface(self.model_version, device=jax_device)
+                self.model = dna_model.create_from_huggingface(
+                    self.model_version, organism_settings=organism_settings, device=jax_device
+                )
         except Exception as e:
             src = checkpoint_path or f"HF repo {self.model_version!r}"
             raise RuntimeError(f"alphagenome: model load from {src} failed: {e}") from e
