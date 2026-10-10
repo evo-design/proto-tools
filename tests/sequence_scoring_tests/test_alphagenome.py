@@ -26,6 +26,33 @@ _SCORE_MID = _SCORE // 2  # 262_144, centre of the scoring interval
 # Integration tests
 
 
+# ── Model Loading ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.uses_gpu
+def test_model_reload_does_not_download_reference_files():
+    """A second model load reads the cached reference tables instead of re-downloading them.
+
+    ``dna_model.create`` reads the GTF, splice-site, polyA, and calibration tables on every load. The
+    first load caches them; with ``urllib`` disabled, a second load must still succeed.
+    """
+    from proto_tools.utils import run_in_env
+
+    code = (
+        "import os, urllib.request\n"
+        "import inference\n"
+        "device = os.environ['RUN_IN_ENV_DEVICE']\n"
+        "inference.AlphaGenomeModel().load(device)\n"
+        "def _offline(*args, **kwargs):\n"
+        "    raise OSError('network disabled')\n"
+        "urllib.request.urlopen = _offline\n"
+        "inference.AlphaGenomeModel().load(device)\n"
+        "print('RELOADED')\n"
+    )
+    output = run_in_env("alphagenome", code=code, device="cuda", timeout=3600)
+    assert output.strip().splitlines()[-1] == "RELOADED"
+
+
 # ── Interval Prediction ──────────────────────────────────────────────────────
 
 
