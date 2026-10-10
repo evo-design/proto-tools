@@ -5,7 +5,7 @@ import os
 import sys
 from typing import Any
 
-from standalone_helpers import get_logger, move_model_to_device, resolve_weights_dir, serialize_output
+from standalone_helpers import get_logger, move_model_to_device, oom_guard, resolve_weights_dir, serialize_output
 
 logger = get_logger(__name__)
 
@@ -26,6 +26,10 @@ CANDIDATE_SITE_THRESHOLD = 0.01
 PAD = "."
 
 SITE_EFFECTS = ("donor_gain", "donor_loss", "acceptor_gain", "acceptor_loss")
+# Peak memory in predict grows about 4 GiB per 100 kb of input (measured on an H100).
+_PREDICT_OOM_HINT = (
+    "Peak GPU memory grows with input length (about 4 GiB per 100 kb); predict a shorter region or use a larger GPU."
+)
 
 
 def _encode(sequence: str, assembly: str, reverse_complement: bool = False) -> Any:
@@ -177,7 +181,11 @@ class SpliceAI2Model:
         padded = PAD * FLANK + sequence + PAD * (FLANK + tail)
         x = torch.from_numpy(_encode(padded, assembly))[None].to(self.device)
 
-        with torch.no_grad(), torch.autocast("cuda", dtype=torch.float16):
+        with (
+            oom_guard("spliceai2", hint=_PREDICT_OOM_HINT),
+            torch.no_grad(),
+            torch.autocast("cuda", dtype=torch.float16),
+        ):
             ftrs_list = [model.forward(x) for model in self.models]
             out_ss = torch.stack([model.forward_1d(ftrs) for model, ftrs in zip(self.models, ftrs_list, strict=True)])
             out_ss = out_ss.mean(dim=0).float()[:, :, :n]

@@ -65,6 +65,7 @@ Use this to map the splice-usage landscape of a gene or locus, to see which junc
 - **Junctions are reported at usage >= 0.01** between candidate sites (positions whose donor or acceptor usage exceeds 0.01), ordered by donor then acceptor.
 - **`N` bases are encoded as `A`, matching upstream.** Ambiguous bases are read as adenine rather than as missing sequence, so avoid `N` runs in regions you care about; only the padding outside the input is all-zero.
 - **Use `assembly='GRCh38'` for any human sequence.** It selects the species channel the model is conditioned on; choose another training assembly only for non-human sequence.
+- **GPU memory grows with input length.** Peak memory is about 5 GiB plus 4 GiB per 100 kb of input (measured on an H100: 13 GiB at 190 kb, 44 GiB at 1 Mb, 63 GiB at 1.5 Mb), so inputs longer than about 1.8 Mb do not fit on an 80 GB GPU, and smaller GPUs reach their limit proportionally sooner. For a long locus, predict overlapping windows that each keep genomic flanking sequence.
 
 ## Toolkit Notes
 
