@@ -72,6 +72,25 @@ def test_msa_to_pqt_without_unpaired_keeps_paired_only(tmp_path):
     assert df["pairing_key"].tolist() == ["", "1", "2"]
 
 
+@pytest.mark.integration
+def test_chai1_env_parses_msa_pqt(tmp_path):
+    """The chai1 env reads the MSA parquet proto-tools writes (needs a NumPy 1.x-compatible pyarrow)."""
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.chai1.chai1 import _msa_to_pqt_file
+    from proto_tools.utils import run_in_env
+
+    pqt_path = tmp_path / "chain.aligned.pqt"
+    _msa_to_pqt_file(msa=MSA(aligned_sequences=["MKTAYIAKQR", "MKTAYIAKQA", "MKTAYIAKQE"]), pqt_path=str(pqt_path))
+
+    code = (
+        "import sys\n"
+        "from chai_lab.data.parsing.msas.aligned_pqt import parse_aligned_pqt_to_msa_context\n"
+        "print(parse_aligned_pqt_to_msa_context(sys.argv[1]).depth)\n"
+    )
+    output = run_in_env("chai1", code=code, args=[str(pqt_path)], timeout=1800)
+    assert output.strip().splitlines()[-1] == "3"
+
+
 @pytest.mark.benchmark("chai1-prediction")
 @pytest.mark.slow
 @pytest.mark.uses_gpu
