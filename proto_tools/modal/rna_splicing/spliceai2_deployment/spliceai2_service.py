@@ -1,19 +1,19 @@
 """SpliceAI2 Modal service.
 
-Delegates to proto-tools ``run_spliceai2_predict`` / ``run_spliceai2_score`` for parameter
-validation, environment setup, and inference. The ``illumina-ai/SpliceAI2`` weights are gated on
-HuggingFace, so the build-time warmup pulls them with the deployer's own HF token (the
-``HF_TOKEN_SECRET`` Modal secret) into the deployer's own model-cache volume via
-``PROTO_MODEL_CACHE``. Every deployment therefore holds weights its own account was granted.
+Wraps ``run_spliceai2_predict`` and ``run_spliceai2_score``, which handle validation, environment
+setup, and inference.
 
-``spliceai2-score`` additionally needs a reference genome. The build stages every assembly the
-config offers by name onto the volume through a probe scoring call, which also builds the FASTA
-index the worker opens, so a call naming an assembly finds both already there. Staging at build
-rather than on first use keeps provisioning, which mutates process-global state, off the path of
-several request-handling containers racing on a shared volume.
+Weights: the ``illumina-ai/SpliceAI2`` checkpoints are gated on HuggingFace. At build time, the
+warmup downloads them with the deployer's HF token (the ``HF_TOKEN_SECRET`` Modal secret) into the
+deployer's model-cache volume (``PROTO_MODEL_CACHE``).
 
-A path in ``reference_fasta`` is refused for a remote device by the config's own
-``remote_unsupported_reason``: it would name a file on the caller's machine, not this container.
+Reference genomes: ``spliceai2-score`` also needs a reference genome. At build time, a probe scoring
+call downloads each assembly the config offers by name to the volume and builds its FASTA index.
+Doing this once at build keeps concurrent containers from racing to set up the same files on the
+shared volume.
+
+``reference_fasta`` paths are rejected for remote devices, since a path would point to a file on
+the caller's machine, not in this container.
 """
 
 from typing import Any
