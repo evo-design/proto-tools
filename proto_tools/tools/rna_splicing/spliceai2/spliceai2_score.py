@@ -115,13 +115,16 @@ class SpliceAI2SiteChange(BaseModel):
         delta_score (float): Absolute change in splice site usage (0-1).
         ref_score (float): Predicted usage with the reference allele (0-1).
         alt_score (float): Predicted usage with the alternate allele (0-1).
-        distance (int): Signed distance (bp, along the gene) from the variant to the site.
+        distance (int): Signed distance (bp) from the variant to the site in genomic coordinates; positive
+            is a higher coordinate on either strand, so on the minus strand it runs opposite to the gene.
     """
 
     delta_score: float = Field(title="Delta Score", description="Absolute change in splice site usage (0-1)")
     ref_score: float = Field(title="Reference Score", description="Splice site usage with the reference allele")
     alt_score: float = Field(title="Alternate Score", description="Splice site usage with the alternate allele")
-    distance: int = Field(title="Distance", description="Signed distance (bp) from the variant to the splice site")
+    distance: int = Field(
+        title="Distance", description="Signed genomic distance (bp) from variant to site; positive = higher coordinate"
+    )
 
 
 class SpliceAI2JunctionChange(BaseModel):
@@ -131,18 +134,22 @@ class SpliceAI2JunctionChange(BaseModel):
         delta_score (float): Absolute change in junction usage (0-1).
         ref_score (float): Predicted usage with the reference allele (0-1).
         alt_score (float): Predicted usage with the alternate allele (0-1).
-        donor_distance (int): Signed distance (bp) from the variant to the junction donor.
-        acceptor_distance (int): Signed distance (bp) from the variant to the junction acceptor.
+        donor_distance (int): Signed distance (bp) from the variant to the junction donor in genomic
+            coordinates; positive is a higher coordinate on either strand.
+        acceptor_distance (int): Signed distance (bp) from the variant to the junction acceptor in genomic
+            coordinates; positive is a higher coordinate on either strand.
     """
 
     delta_score: float = Field(title="Delta Score", description="Absolute change in junction usage (0-1)")
     ref_score: float = Field(title="Reference Score", description="Junction usage with the reference allele")
     alt_score: float = Field(title="Alternate Score", description="Junction usage with the alternate allele")
     donor_distance: int = Field(
-        title="Donor Distance", description="Signed distance (bp) from the variant to the donor"
+        title="Donor Distance",
+        description="Signed genomic distance (bp) from variant to donor; positive = higher coordinate",
     )
     acceptor_distance: int = Field(
-        title="Acceptor Distance", description="Signed distance (bp) from the variant to the acceptor"
+        title="Acceptor Distance",
+        description="Signed genomic distance (bp) from variant to acceptor; positive = higher coordinate",
     )
 
 
