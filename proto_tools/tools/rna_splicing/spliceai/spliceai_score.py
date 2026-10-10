@@ -4,44 +4,28 @@ import csv
 import json
 import logging
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
-from proto_tools.databases.assets import dataset_file, is_registered_dataset
+from proto_tools.tools.rna_splicing.reference_genome import DEFAULT_ASSEMBLY, GENOME_FASTA, ReferenceGenomeConfig
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    BaseConfig,
     BaseToolInput,
     BaseToolOutput,
     ConfigField,
     InputField,
     ToolInstance,
 )
-from proto_tools.utils.device import RemoteDevice
-from proto_tools.utils.tool_io import Metrics, MetricSpec, MissingAssetError
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
 # ============================================================================
 # Constants
 # ============================================================================
-DEFAULT_ANNOTATION = "grch38"
 # SpliceAI's -D flag accepts 0..4999; the model sees 5000 bp of context per side.
 MAX_SPLICEAI_DISTANCE = 4999
-
-# Assemblies with a registered dataset, so naming one is all a caller needs to do. The names double
-# as SpliceAI's bundled annotation keys, which is what lets `annotation` default to the assembly.
-ProvisionedGenome = Literal["grch37", "grch38"]
-
-# The FASTA within each registered genome dataset.
-_GENOME_FASTA: dict[str, str] = {
-    "grch37": "Homo_sapiens.GRCh37.dna.primary_assembly.fa",
-    "grch38": "Homo_sapiens.GRCh38.dna.primary_assembly.fa",
-}
-
-# UCSC spellings of the same assemblies. Callers think in these; the bundled annotations do not.
-_GENOME_ALIASES: dict[str, str] = {"hg19": "grch37", "hg38": "grch38"}
 
 
 # ============================================================================
@@ -294,7 +278,7 @@ class SpliceAIScoreOutput(BaseToolOutput):
         return "\n".join(lines) + "\n"
 
 
-class SpliceAIScoreConfig(BaseConfig):
+class SpliceAIScoreConfig(ReferenceGenomeConfig):
     """Configuration for SpliceAI variant scoring.
 
     Attributes:
@@ -317,15 +301,9 @@ class SpliceAIScoreConfig(BaseConfig):
             auto-falls-back to CPU when no GPU is visible.
     """
 
-    reference_fasta: ProvisionedGenome | str | None = ConfigField(
-        title="Reference FASTA",
-        default=None,
-        description="Assembly name ('grch38'/'grch37', provisioned on demand) or a local FASTA path",
-        reload_on_change=True,
-    )
     annotation: str = ConfigField(
         title="Annotation",
-        default=DEFAULT_ANNOTATION,
+        default=DEFAULT_ASSEMBLY,
         description="'grch37'/'grch38' (bundled GENCODE) or path to a custom gene annotation file",
         reload_on_change=True,
     )
@@ -348,35 +326,6 @@ class SpliceAIScoreConfig(BaseConfig):
         include_in_key=False,
     )
 
-    @field_validator("reference_fasta", mode="before")
-    @classmethod
-    def _normalize_assembly_alias(cls, value: Any) -> Any:
-        """Accept the UCSC spelling of a provisioned assembly, e.g. ``hg38`` for ``grch38``."""
-        if isinstance(value, str):
-            return _GENOME_ALIASES.get(value.strip().lower(), value)
-        return value
-
-    @field_validator("reference_fasta")
-    @classmethod
-    def _validate_genome_or_path(cls, value: str | None) -> str | None:
-        """Require a value that is not a provisioned assembly to be a FASTA on this machine.
-
-        Catches a typo where it is made rather than several minutes later, and keeps the two forms
-        of the field distinguishable: anything not registered is a path, so it is local-only.
-
-        Safe to check the filesystem here only because :meth:`remote_unsupported_reason` refuses a
-        path on a remote device. Were that guard dropped, a container rebuilding this config from
-        its transport dict would fail here on a path that never existed on its side.
-        """
-        if value is None or is_registered_dataset(value):
-            return value
-        if not Path(value).expanduser().exists():
-            raise ValueError(
-                f"reference_fasta: {value!r} is neither a provisioned assembly "
-                f"({', '.join(sorted(_GENOME_FASTA))}) nor an existing file on this machine"
-            )
-        return value
-
     @model_validator(mode="after")
     def _derive_annotation_from_assembly(self) -> "SpliceAIScoreConfig":
         """Default the annotation to the named assembly, so the two cannot silently disagree.
@@ -385,44 +334,9 @@ class SpliceAIScoreConfig(BaseConfig):
         build against a genome from another is wrong rather than merely inconsistent. Naming a
         provisioned assembly settles both; an explicitly set ``annotation`` still wins.
         """
-        if "annotation" not in self.model_fields_set and self.reference_fasta in _GENOME_FASTA:
+        if "annotation" not in self.model_fields_set and self.reference_fasta in GENOME_FASTA:
             self.annotation = self.reference_fasta
         return self
-
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """A genome given as a path lives on the caller's machine, so only a named assembly travels."""
-        if self.reference_fasta is not None and not is_registered_dataset(self.reference_fasta):
-            return (
-                f"reference_fasta={self.reference_fasta!r} is a local path, which can't be staged to "
-                f"device='{device}'. Name a provisioned assembly ({', '.join(sorted(_GENOME_FASTA))}) "
-                f"instead, or run locally with device='cpu'."
-            )
-        return None
-
-    @classmethod
-    def minimal(cls, **kwargs: Any) -> "SpliceAIScoreConfig":
-        """Cheap-mode defaults: name the default assembly, since the tool cannot run without one.
-
-        Naming it costs nothing where it is already staged, and provisions it where it is not —
-        which is what lets parametrized infrastructure run this tool at all rather than reporting
-        it as an unprovisioned asset it has no way to satisfy.
-        """
-        kwargs.setdefault("reference_fasta", DEFAULT_ANNOTATION)
-        return super().minimal(**kwargs)  # type: ignore[return-value]
-
-    def resolved_reference_fasta(self) -> Path | None:
-        """Return the FASTA to read, provisioning the assembly on first use.
-
-        Returns:
-            Path | None: The resolved FASTA, or ``None`` when nothing was configured. The path may
-                not exist when provisioning was unavailable; the caller reports that as a
-                ``MissingAssetError`` rather than treating it as a failure.
-        """
-        if self.reference_fasta is None:
-            return None
-        if is_registered_dataset(self.reference_fasta):
-            return dataset_file(self.reference_fasta, _GENOME_FASTA[self.reference_fasta])
-        return Path(self.reference_fasta).expanduser()
 
 
 # ============================================================================
@@ -471,15 +385,7 @@ def run_spliceai_score(
     """
     # Resolved once here, so a named assembly is provisioned before the worker starts and the
     # standalone only ever sees a concrete path.
-    resolved_fasta = config.resolved_reference_fasta()
-    if resolved_fasta is None or not resolved_fasta.exists():
-        raise MissingAssetError(
-            "spliceai",
-            "reference",
-            f"reference_fasta not provided or not found: {config.reference_fasta!r}. "
-            f"SpliceAI requires a reference genome FASTA — name a provisioned assembly "
-            f"({', '.join(sorted(_GENOME_FASTA))}) or set SpliceAIScoreConfig.reference_fasta to a local path.",
-        )
+    resolved_fasta = config.require_reference_fasta("spliceai")
 
     logger.debug("Using local venv for SpliceAI variant scoring")
 

@@ -1,0 +1,14 @@
+code:
+  spdx: Custom (SpliceAI2 Model Terms of Use)
+  url: https://github.com/Illumina/SpliceAI2/blob/main/LICENSE
+  text: 'Illumina SpliceAI2 Model Terms of Use: a revocable, non-transferable license to use the SpliceAI2 source code, model weights, and precomputed scores solely for non-commercial purposes by, or on behalf of, non-commercial organizations (universities, academic research institutions, government entities); for-profit companies and industry-sponsored research are excluded. Sublicensing, resale, hosting, managed services, redistribution, and third-party access are prohibited, as is using the materials or their output to train or improve other machine-learning models. External publications must cite Illumina and the SpliceAI2 manuscript. For research use only, not for diagnostic procedures. Full terms at the canonical URL above.'
+weights:
+  spdx: Custom (SpliceAI2 Model Terms of Use)
+  url: https://github.com/Illumina/SpliceAI2/blob/main/LICENSE
+  access: hf-gated
+  text: 'Illumina SpliceAI2 Model Terms of Use: the model weights (HuggingFace illumina-ai/SpliceAI2) are gated and may be used only for non-commercial purposes by, or on behalf of, non-commercial organizations. Redistribution, hosting, managed services, and third-party access are prohibited without Illumina''s prior written consent. External publications must cite Illumina and the SpliceAI2 manuscript. Full terms at the canonical URL above.'
+commercial_use: 'no'
+redistribution: false
+attribution_required: true
+notes: SpliceAI2 source code, model weights, and precomputed scores are all covered by Illumina's SpliceAI2 Model Terms of Use, which limit use to non-commercial organizations and prohibit hosting and redistribution. Weights are gated on HuggingFace (illumina-ai/SpliceAI2); commercial licensing is available from Illumina (AI_licensing@illumina.com).
+last_updated: '2026-10-08'

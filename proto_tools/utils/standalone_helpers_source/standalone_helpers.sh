@@ -183,22 +183,22 @@ proto_resolve_weights_dir() {
 # from env vars, token file, and git-credentials. Exits with a clear error
 # message if access is denied.
 #
+# The probe file must be gated: HuggingFace serves a gated repo's README.md
+# (and often its LICENSE) to anyone, so probing those passes without a token
+# or accepted terms. The default .gitattributes exists in every repo and is
+# gated along with the weights.
+#
 # Example:
 #   proto_check_gated_hf_repo \
-#       "EvolutionaryScale/esm3-sm-open-v1" \
-#       "https://huggingface.co/EvolutionaryScale/esm3-sm-open-v1"
-#
-#   proto_check_gated_hf_repo \
 #       "google/alphagenome-all-folds" \
-#       "https://huggingface.co/google/alphagenome-all-folds" \
-#       "README.md"
+#       "https://huggingface.co/google/alphagenome-all-folds"
 #
-# Reference: tools/masked_models/esm3/standalone/setup.sh
+# Reference: tools/sequence_scoring/alphagenome/standalone/setup.sh
 # ---------------------------------------------------------------------------
 proto_check_gated_hf_repo() {
     local repo_id="$1"
     local license_url="$2"
-    local probe_file="${3:-config.json}"
+    local probe_file="${3:-.gitattributes}"
 
     local hf_token="${HF_TOKEN:-${HUGGING_FACE_HUB_TOKEN:-}}"
     if [ -z "$hf_token" ] && [ -f "$HOME/.cache/huggingface/token" ]; then
@@ -232,9 +232,9 @@ proto_check_gated_hf_repo() {
         case "$http_code" in
             401)
                 if [ "$token_state" = "present" ]; then
-                    reason="unauthorized — token present but rejected (expired/revoked); regenerate at https://huggingface.co/settings/tokens"
+                    reason="unauthorized — token present but rejected (expired/revoked); regenerate at https://huggingface.co/settings/tokens, and accept the terms at ${license_url} if you have not already"
                 else
-                    reason="unauthorized — no HF_TOKEN found; set HF_TOKEN (or run 'hf auth login')"
+                    reason="unauthorized — no HF_TOKEN found; set HF_TOKEN (or run 'hf auth login'), and accept the terms at ${license_url} if you have not already"
                 fi
                 ;;
             403)
