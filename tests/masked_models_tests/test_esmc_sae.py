@@ -204,35 +204,28 @@ def test_esm_backbone_layer_offset():
 
     Pinning this guards the one assumption the esm backbone path rests on. If upstream
     reindexes ``hidden_states``, agreement collapses and this fails rather than silently
-    returning features from the wrong layer.
+    returning features from the wrong layer. A batch of unequal-length sequences also
+    pins that the esm backbone splits per-residue features like the transformers one.
     """
-    inputs = ESMCSAEFeaturesInput(sequences=["MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQ"])
-    config = ESMCSAEFeaturesConfig(layers=[23])
-
-    reference = run_esmc_sae_features(inputs=inputs, config=config)
-    candidate = run_esmc_sae_features(inputs=inputs, config=ESMCSAEFeaturesConfig(layers=[23], backbone="esm"))
-
-    overlap = _top_k_overlap(reference.results[0], candidate.results[0])
-    assert overlap > 0.95, (
-        f"esm backbone agrees on only {overlap:.3f} of active features; the "
-        f"hidden_states[N-1] offset may no longer hold"
-    )
-
-
-@pytest.mark.uses_gpu
-def test_esm_backbone_returns_same_shape_as_transformers():
-    """Both backbones produce identically shaped per-residue features."""
-    sequences = ["MKTAYIAKQRQISFVKSHFSRQ", "MVLSPADKTNVKAAW"]
+    sequences = ["MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQ", "MVLSPADKTNVKAAW"]
     inputs = ESMCSAEFeaturesInput(sequences=sequences)
 
-    for backbone in ("transformers", "esm"):
-        result = run_esmc_sae_features(
-            inputs=inputs, config=ESMCSAEFeaturesConfig(layers=[11, 23], batch_size=2, backbone=backbone)
+    reference = run_esmc_sae_features(inputs=inputs, config=ESMCSAEFeaturesConfig(layers=[11, 23], batch_size=2))
+    candidate = run_esmc_sae_features(
+        inputs=inputs, config=ESMCSAEFeaturesConfig(layers=[11, 23], batch_size=2, backbone="esm")
+    )
+
+    assert len(candidate.results) == len(sequences)
+    for sequence, per_sequence in zip(sequences, candidate.results, strict=True):
+        for layer in per_sequence.layers:
+            assert len(layer.feature_indices) == len(sequence), f"esm layer{layer.layer}"
+
+    for ref, cand in zip(reference.results, candidate.results, strict=True):
+        overlap = _top_k_overlap(ref, cand)
+        assert overlap > 0.95, (
+            f"esm backbone agrees on only {overlap:.3f} of active features; the "
+            f"hidden_states[N-1] offset may no longer hold"
         )
-        assert len(result.results) == len(sequences), backbone
-        for sequence, per_sequence in zip(sequences, result.results, strict=True):
-            for layer in per_sequence.layers:
-                assert len(layer.feature_indices) == len(sequence), f"{backbone} layer{layer.layer}"
 
 
 # ── MLP-output SAEs ───────────────────────────────────────────────────────────

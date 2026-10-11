@@ -12,6 +12,8 @@ from proto_tools import (
     AlphaGenomeISM,
     AlphaGenomePredictIntervalsConfig,
     AlphaGenomePredictIntervalsInput,
+    AlphaGenomePredictSequencesConfig,
+    AlphaGenomePredictSequencesInput,
     AlphaGenomePredictVariantsConfig,
     AlphaGenomePredictVariantsInput,
     AlphaGenomeScoreIntervalsConfig,
@@ -22,6 +24,7 @@ from proto_tools import (
     AlphaGenomeScoreVariantsInput,
     AlphaGenomeVariant,
     run_alphagenome_predict_intervals,
+    run_alphagenome_predict_sequences,
     run_alphagenome_predict_variants,
     run_alphagenome_score_intervals,
     run_alphagenome_score_ism_variants_batch,
@@ -92,6 +95,25 @@ def test_predict_intervals_dispatch(mock_dispatch_factory):
     assert result[0].interval_start == 0
     assert result[0].interval_end == _PREDICT_LENGTH
     assert result[1].chromosome == "chr2"
+
+
+def test_predict_sequences_dispatch(mock_dispatch_factory):
+    seq_a = "ACGT" * (_PREDICT_LENGTH // 4)
+    seq_b = "TGCA" * (_PREDICT_LENGTH // 4)
+    calls = mock_dispatch_factory({"predictions": [{"signal": "a"}, {"signal": "b"}]})
+
+    result = run_alphagenome_predict_sequences(
+        AlphaGenomePredictSequencesInput(sequences=[seq_a, seq_b]),
+        AlphaGenomePredictSequencesConfig(requested_outputs=["RNA_SEQ"], organism=_ORGANISM),
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["payload"]["operation"] == "predict_sequences"
+    assert calls[0]["payload"]["sequences"] == [seq_a, seq_b]
+    assert len(result) == 2
+    assert result[0].interval_end == len(seq_a)
+    assert result[0].result == {"predictions": {"signal": "a"}}
+    assert result[1].result == {"predictions": {"signal": "b"}}
 
 
 def test_predict_variants_dispatch(mock_dispatch_factory):

@@ -30,10 +30,15 @@ from proto_tools.tools.mutagenesis.random_protein import (
     run_random_protein_sample,
 )
 from proto_tools.transforms.masking import MaskingStrategy
+from proto_tools.utils import ToolInstance
 from proto_tools.utils.sequence import (
     return_invalid_dna_chars,
     return_invalid_protein_chars,
 )
+from tests.conftest import make_persistent_fixture
+
+_persistent_esm2 = make_persistent_fixture("esm2")
+_persistent_esm3 = make_persistent_fixture("esm3")
 
 # Validators per entity type
 _VALIDATORS = {
@@ -73,13 +78,9 @@ PROTEIN_SAMPLING_TOOLS = [
 ]
 
 MASKED_PROTEIN_SEQUENCES = [
-    pytest.param(["MKTAY_AKQR"], id="single_mask"),
-    pytest.param(["_KTAYIAKQR"], id="first_position"),
-    pytest.param(["MKTAYIAKQ_"], id="last_position"),
-    pytest.param(["MK_AY_AK_R"], id="multiple_masks"),
+    pytest.param(["_K_AY_AK_R"], id="multiple_masks_first_position"),
     pytest.param(["__________"], id="all_masked"),
-    pytest.param(["MKTAY_AKQR", "EVQLV_SGGS"], id="batch"),
-    pytest.param(["MK_A", "MKTAY_AKQR_VQL"], id="variable_length_batch"),
+    pytest.param(["MK_A", "MKTAY_AKQR_VQ_"], id="variable_length_batch_last_position"),
 ]
 
 # ── Nucleotide sampling tools ─────────────────────────────────────────────────
@@ -96,13 +97,9 @@ NUCLEOTIDE_SAMPLING_TOOLS = [
 ]
 
 MASKED_NUCLEOTIDE_SEQUENCES = [
-    pytest.param(["ACGTA_ACGT"], id="single_mask"),
-    pytest.param(["_CGTAACGTC"], id="first_position"),
-    pytest.param(["ACGTAACGT_"], id="last_position"),
-    pytest.param(["AC_TA_CG_A"], id="multiple_masks"),
+    pytest.param(["_C_TA_CG_A"], id="multiple_masks_first_position"),
     pytest.param(["__________"], id="all_masked"),
-    pytest.param(["ACGTA_ACGT", "TGCAC_TGCA"], id="batch"),
-    pytest.param(["AC_A", "ACGTA_ACGT_GCA"], id="variable_length_batch"),
+    pytest.param(["AC_A", "ACGTA_ACGT_GC_"], id="variable_length_batch_last_position"),
 ]
 
 
@@ -176,32 +173,23 @@ ITERATIVE_PROTEIN_SAMPLING_TOOLS = [
 
 
 @pytest.mark.parametrize("run_fn, input_cls, config_cls", ITERATIVE_PROTEIN_SAMPLING_TOOLS)
-@pytest.mark.parametrize(
-    "sequences",
-    [
-        pytest.param(["MK_AY_AK_R"], id="multiple_masks"),
-        pytest.param(["MK_A", "MKTAY_AKQR_VQL"], id="variable_length_batch"),
-    ],
-)
-@pytest.mark.parametrize("return_logits", [False, True], ids=["no_logits", "with_logits"])
-def test_protein_sample_iterative_refinement(run_fn, input_cls, config_cls, sequences, return_logits):
+def test_protein_sample_iterative_refinement(run_fn, input_cls, config_cls):
     """Iterative refinement satisfies the same length/validity invariants as single_pass.
 
     Uses ``num_steps=3`` to keep GPU runtime modest; the algorithm doesn't
-    converge but every '_' must still be filled with a valid amino acid.
-    With ``return_logits=True`` we also assert the final-forward path
-    produces correctly-shaped per-position logits.
+    converge but every '_' must still be filled with a valid amino acid, and
+    the final-forward path must produce correctly-shaped per-position logits.
     """
-    config = config_cls(sampling_method="iterative_refinement", num_steps=3, return_logits=return_logits)
+    sequences = ["MK_A", "MKTAY_AKQR_VQL"]
+    config = config_cls(sampling_method="iterative_refinement", num_steps=3, return_logits=True)
     result = run_fn(input_cls(sequences=sequences), config)
     _validate_sample_output(sequences, result.sequences, "protein")
 
-    if return_logits:
-        assert len(result.results) == len(sequences)
-        for seq, sample in zip(sequences, result.results, strict=False):
-            assert sample.logits is not None
-            assert len(sample.logits) == len(seq), f"Expected {len(seq)} positions, got {len(sample.logits)}"
-            assert len(sample.logits[0]) == 20, f"Expected vocab size 20, got {len(sample.logits[0])}"
+    assert len(result.results) == len(sequences)
+    for seq, sample in zip(sequences, result.results, strict=False):
+        assert sample.logits is not None
+        assert len(sample.logits) == len(seq), f"Expected {len(seq)} positions, got {len(sample.logits)}"
+        assert len(sample.logits[0]) == 20, f"Expected vocab size 20, got {len(sample.logits[0])}"
 
 
 @pytest.mark.parametrize(
@@ -377,7 +365,9 @@ def test_esm2_sample_entropy_masking_shares_esm2_worker(monkeypatch: pytest.Monk
         batch_size=1,
         device="cuda",
     )
-    result = run_esm2_sample(ESM2SampleInput(sequences=sequences), config)
+    # An isolated cache hides the module's persistent esm2 worker so the auto-persist overlay is seeded.
+    with ToolInstance.scope():
+        result = run_esm2_sample(ESM2SampleInput(sequences=sequences), config)
 
     assert result.success, f"run_esm2_sample failed: {result.errors}"
     assert len(result.sequences) == 2

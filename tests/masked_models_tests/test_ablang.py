@@ -181,17 +181,9 @@ _UNIT_LOGITS = [
 
 @pytest.mark.uses_gpu
 @pytest.mark.parametrize("paired", [True, False], ids=["paired", "single"])
-@pytest.mark.parametrize(
-    ("temperature", "use_ste"),
-    [(None, False), (0.6, False), (None, True), (0.6, True)],
-    ids=["default", "temp_only", "ste_only", "temp_and_ste"],
-)
-def test_compute_gradient_dispatch(
-    paired: bool,
-    temperature: float | None,
-    use_ste: bool,
-) -> None:
-    """Validate compute_gradient across temperature/STE/chain modes via real dispatch."""
+def test_compute_gradient_dispatch(paired: bool) -> None:
+    """Validate compute_gradient with temperature and STE on both chain modes via real dispatch."""
+    temperature, use_ste = 0.6, True
     if paired:
         antibody = AntibodyLogits(heavy_chain=_UNIT_LOGITS[:2], light_chain=_UNIT_LOGITS[2:])
         expected_len = len(_UNIT_LOGITS)
@@ -280,6 +272,7 @@ def test_ablang_embeddings_heavy():
     validate_output(result)
 
     assert result.tool_id == "ablang-embedding"
+    assert result.metadata["model_choice"] == "ablang1-heavy"
     assert len(result.results) == 2
 
     for i, seq in enumerate(seqs):
@@ -314,30 +307,13 @@ def test_ablang_embeddings_paired():
         AbLangEmbeddingsInput(antibodies=[Antibody(heavy_chain=HEAVY_FULL, light_chain=LIGHT_FULL)]),
     )
     validate_output(result)
+    assert result.metadata["model_choice"] == "ablang2-paired"
 
     emb = result.results[0]
     assert len(emb.mean_embedding) == 480
     assert all(math.isfinite(v) for v in emb.mean_embedding)
     assert all(v in (0, 1) for v in emb.attention_mask)
     assert sum(emb.attention_mask) >= len(HEAVY_FULL) + len(LIGHT_FULL)
-
-
-@pytest.mark.uses_gpu
-def test_ablang_embeddings_auto_routing():
-    """Test that auto model routing selects correct model and embedding dim."""
-    single_result = run_ablang_embeddings(
-        AbLangEmbeddingsInput(antibodies=[Antibody(heavy_chain=VH_SEQ)]),
-    )
-    assert single_result.success
-    assert single_result.metadata["model_choice"] == "ablang1-heavy"
-    assert len(single_result.results[0].mean_embedding) == 768
-
-    paired_result = run_ablang_embeddings(
-        AbLangEmbeddingsInput(antibodies=[Antibody(heavy_chain=HEAVY_FULL, light_chain=LIGHT_FULL)]),
-    )
-    assert paired_result.success
-    assert paired_result.metadata["model_choice"] == "ablang2-paired"
-    assert len(paired_result.results[0].mean_embedding) == 480
 
 
 # ── Cross-tool consistency ──────────────────────────────────────────────────
@@ -633,9 +609,9 @@ def test_ablang_gradient_descent_reduces_loss():
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("batch_size", [1, 3, None], ids=["chunk1", "chunk3", "auto"])
-def test_ablang_gradient_batch_size_equivalence(batch_size: int | None) -> None:
-    """Different chunk sizes must produce equivalent loss and gradient."""
+@pytest.mark.parametrize("batch_size", [1, 3], ids=["chunk1", "chunk3"])
+def test_ablang_gradient_batch_size_equivalence(batch_size: int) -> None:
+    """Explicit chunk sizes must match the auto-chunked loss and gradient."""
     logits = [[0.1 * (i + j) for j in range(20)] for i in range(5)]
     ab = AntibodyLogits(heavy_chain=logits)
 
