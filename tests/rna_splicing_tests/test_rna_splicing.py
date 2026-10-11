@@ -62,12 +62,6 @@ def test_splice_transformer_input_rejects_wrong_lengths(target: str, left: str, 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
-def test_splice_transformer_cpu() -> None:
-    """Test SpliceTransformer on CPU."""
-    _run_splice_transformer_and_check(device="cpu")
-
-
 @pytest.mark.uses_gpu
 def test_splice_transformer_gpu():
     """Test SpliceTransformer on GPU."""

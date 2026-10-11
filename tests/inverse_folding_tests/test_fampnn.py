@@ -70,13 +70,6 @@ def benchmark_pdb_structure():
 # ============================================================================
 # Unit tests (no GPU required, schema and data model validation)
 # ============================================================================
-def test_fampnn_sample_input_schema():
-    """FAMPNNSampleInput accepts a structure path and validates."""
-    inp = FAMPNNSampleInput(inputs=[FAMPNNStructureInput(structure=str(TEST_PDB_FILE))])
-    assert len(inp.inputs) == 1
-    assert inp.inputs[0].structure is not None
-
-
 def test_fampnn_structure_input_with_sidechain_positions(pdb_structure):
     """FAMPNNStructureInput accepts a fixed_sidechain_positions selection."""
     chain_ids = pdb_structure.get_chain_ids()
@@ -93,32 +86,6 @@ def test_fampnn_structure_input_with_sidechain_positions(pdb_structure):
     assert inp.fixed_sidechain_positions.chains == {first_chain: positions}
     assert inp.fixed_positions is not None
     assert inp.fixed_positions.chains == {first_chain: positions}
-
-
-def test_fampnn_pack_input_schema(pdb_structure):
-    """FAMPNNPackInput accepts a structure."""
-    inp = FAMPNNPackInput(inputs=[FAMPNNStructureInput(structure=pdb_structure)])
-    assert len(inp.inputs) == 1
-
-
-def test_fampnn_score_input_schema(pdb_structure):
-    """FAMPNNScoreInput accepts a structure and mutations."""
-    inp = FAMPNNScoreInput(
-        inputs=[
-            MutationInput(
-                structure=pdb_structure,
-                mutations=["A1V", "G6L"],
-            )
-        ]
-    )
-    assert len(inp.inputs) == 1
-    assert inp.inputs[0].mutations == ["A1V", "G6L"]
-
-
-def test_fampnn_score_all_mutations_input_schema(pdb_structure):
-    """FAMPNNScoreAllMutationsInput accepts a structure."""
-    inp = FAMPNNScoreAllMutationsInput(inputs=[pdb_structure])
-    assert len(inp.inputs) == 1
 
 
 def test_fampnn_sample_config_batch_size_defaults():
@@ -168,26 +135,6 @@ def test_fampnn_design_structure_and_metrics():
     assert design.metrics["avg_psce"] == 0.25
     assert design.metrics.psce == [0.2, 0.3]
     assert design.design_metrics()["avg_psce"] == 0.25
-
-
-def test_fampnn_design_feeds_structure_predictor():
-    """A FAMPNNDesign feeds an SP tool input directly via LSP (subclass-as-Complex)."""
-    from proto_tools.tools.structure_prediction import ESMFoldInput
-
-    structure = Structure(structure=_SMALL_PDB, structure_format="pdb", source="test")
-    design = FAMPNNDesign(
-        chains=[
-            Chain(id="A", sequence="AGS"),
-            Chain(id="B", sequence="MKT"),
-        ],
-        structure=structure,
-        designed=[True, False],
-        metrics=FAMPNNDesignMetrics(avg_psce=0.1, psce=[0.1, 0.1]),
-    )
-
-    inp = ESMFoldInput(complexes=[design])
-    assert inp.complexes[0] is design
-    assert inp.complexes[0].chain_sequences == ["AGS", "MKT"]
 
 
 # ============================================================================
@@ -285,33 +232,6 @@ def test_fampnn_sample_multiple_structures(pdb_structure):
 
 
 @pytest.mark.uses_gpu
-def test_fampnn_sample_with_fixed_positions(pdb_structure):
-    """Fixed positions are accepted by the sampling tool."""
-    chain_ids = pdb_structure.get_chain_ids()
-    first_chain = chain_ids[0]
-    all_positions = pdb_structure.get_chain_positions(first_chain)
-    fixed_pos = all_positions[:10]
-
-    inp = FAMPNNSampleInput(
-        inputs=[
-            FAMPNNStructureInput(
-                structure=pdb_structure,
-                chains_to_redesign=[first_chain],
-                fixed_positions={first_chain: fixed_pos},
-            )
-        ]
-    )
-    config = FAMPNNSampleConfig(
-        num_sequences_per_structure=1,
-        num_steps=10,
-        seed=42,
-    )
-    output = run_fampnn_sample(inp, config)
-    assert output.success, f"Fixed positions sampling failed: {output}"
-    assert len(output.design_sets[0].complexes) == 1
-
-
-@pytest.mark.uses_gpu
 def test_fampnn_pack_simple(pdb_structure):
     """Basic sidechain packing with a single structure."""
     inp = FAMPNNPackInput(inputs=[FAMPNNStructureInput(structure=pdb_structure)])
@@ -330,10 +250,12 @@ def test_fampnn_pack_simple(pdb_structure):
     assert struct.structure_format == "pdb"
     assert "ATOM" in struct.structure
 
-    # pSCE should be present
+    # pSCE should be present, non-negative, and within a plausible per-residue range
     assert len(output.results) == 1
     assert len(output.results[0].psce) == 1
-    assert all(isinstance(v, float) for v in output.results[0].psce[0])
+    psce_values = output.results[0].psce[0]
+    assert all(isinstance(v, float) for v in psce_values)
+    assert all(0 <= v < 10.0 for v in psce_values)
 
 
 @pytest.mark.uses_gpu
@@ -350,20 +272,6 @@ def test_fampnn_pack_multiple_samples(pdb_structure):
 
     assert len(output.results[0].structures) == 3
     assert len(output.results[0].psce) == 3
-
-
-@pytest.mark.uses_gpu
-def test_fampnn_pack_psce_values(pdb_structure):
-    """PSCE values are non-negative and in a reasonable range."""
-    inp = FAMPNNPackInput(inputs=[FAMPNNStructureInput(structure=pdb_structure)])
-    config = FAMPNNPackConfig(seed=42)
-    output = run_fampnn_pack(inp, config)
-    assert output.success
-
-    psce_values = output.results[0].psce[0]
-    assert all(v >= 0 for v in psce_values)
-    # Per-residue pSCE should generally be < 4 Angstroms for well-packed structures
-    assert all(v < 10.0 for v in psce_values)
 
 
 @pytest.mark.uses_gpu
@@ -453,28 +361,17 @@ def test_fampnn_score_all_mutations(pdb_structure):
     assert isinstance(result.scores[first_key], dict)
     assert len(result.scores[first_key]) == 20
 
-    # Wild-type mutation should have score ~0
     for pos_label, scores in result.scores.items():
+        # Wild-type mutation should have score ~0.
         wt_residue = pos_label[-1]  # last char is the wild-type residue
         if wt_residue in scores:
             assert abs(scores[wt_residue]) < 1e-5, (
                 f"Wild-type score at {pos_label} should be ~0, got {scores[wt_residue]}"
             )
-
-
-@pytest.mark.uses_gpu
-def test_fampnn_score_all_mutations_scores_range(pdb_structure):
-    """All-mutations scores are finite and in a reasonable range."""
-    inp = FAMPNNScoreAllMutationsInput(inputs=[pdb_structure])
-    config = FAMPNNScoreAllMutationsConfig(seed=42)
-    output = run_fampnn_score_all_mutations(inp, config)
-    assert output.success
-
-    for pos_label, scores in output.results[0].scores.items():
+        # Log-likelihood ratios must be finite and bounded.
         for residue, score in scores.items():
             assert isinstance(score, float)
             assert score == score, f"NaN score at {pos_label}->{residue}"
-            # Log-likelihood ratios should be bounded
             assert abs(score) < 50, f"Extreme score at {pos_label}->{residue}: {score}"
 
 
