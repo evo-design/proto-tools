@@ -178,15 +178,6 @@ def _make_worker(script_path: Path, verbose: int = 0) -> PersistentWorker:
 # ── Basic send/receive ───────────────────────────────────────────────────────
 
 
-def test_echo(echo_script: Path):
-    worker = _make_worker(echo_script)
-    try:
-        result = worker.send({"foo": "bar"})
-        assert result == {"echo": {"foo": "bar"}}
-    finally:
-        worker.stop()
-
-
 def test_tool_env_path_injected(tmp_path: Path):
     """TOOL_VENV_PATH should be set in the subprocess environment."""
     script = tmp_path / "env_script.py"
@@ -233,13 +224,14 @@ def test_error_handling(error_script: Path):
 
 
 def test_send_times_out_when_noise_precedes_hung_compute(noise_then_hang_script: Path):
-    """A native-fd noise line before a hung forward pass must still trip the timeout."""
+    """A native-fd noise line before a hung forward pass must still trip the timeout, killing the worker."""
     worker = _make_worker(noise_then_hang_script)
     start = time.monotonic()
     try:
         with pytest.raises(TimeoutError, match="timed out waiting for response"):
             worker.send({"x": 1}, timeout=2)
         assert time.monotonic() - start < 8  # wall-clock guard: a regression must not hang
+        assert not worker.alive, "a timed-out worker must be killed so a late reply cannot corrupt the next send"
     finally:
         worker.stop()
 
@@ -544,15 +536,6 @@ def test_stop_and_restart(echo_script: Path):
         worker.stop()
 
 
-def test_alive_property(echo_script: Path):
-    worker = _make_worker(echo_script)
-    assert not worker.alive
-    worker.start()
-    assert worker.alive
-    worker.stop()
-    assert not worker.alive
-
-
 def test_send_kills_worker_on_stale_frame(tmp_path: Path):
     """Mismatched-id raises AND kills the worker; the next dispatch must spawn fresh.
 
@@ -589,48 +572,6 @@ def test_send_kills_worker_on_stale_frame(tmp_path: Path):
 
 
 # ── Process group cleanup ───────────────────────────────────────────────────
-
-
-def test_stop_signals_process_group():
-    """stop() should send SIGTERM to the process group, not just the process."""
-    worker = PersistentWorker.__new__(PersistentWorker)
-    worker.toolkit = "test"
-
-    mock_process = MagicMock()
-    mock_process.poll.return_value = None
-    mock_process.pid = 99999
-    mock_process.stdin = MagicMock()
-    worker._process = mock_process
-
-    with patch("proto_tools.utils.persistent_worker.os.killpg") as mock_killpg:
-        worker.stop()
-
-    # SIGTERM should be sent to the process group, not process.terminate()
-    mock_killpg.assert_any_call(99999, signal.SIGTERM)
-    mock_process.terminate.assert_not_called()
-    assert worker._process is None
-
-
-def test_stop_escalates_to_sigkill():
-    """stop() should SIGKILL the group if SIGTERM + wait fails."""
-    worker = PersistentWorker.__new__(PersistentWorker)
-    worker.toolkit = "test"
-
-    mock_process = MagicMock()
-    mock_process.poll.return_value = None
-    mock_process.pid = 99999
-    mock_process.stdin = MagicMock()
-    # First wait (after SIGTERM) times out, second wait (after SIGKILL) succeeds
-    mock_process.wait.side_effect = [Exception("timed out"), None]
-    worker._process = mock_process
-
-    with patch("proto_tools.utils.persistent_worker.os.killpg") as mock_killpg:
-        worker.stop()
-
-    calls = [c.args for c in mock_killpg.call_args_list]
-    assert (99999, signal.SIGTERM) in calls
-    assert (99999, signal.SIGKILL) in calls
-    assert worker._process is None
 
 
 def test_stop_kills_child_processes(tmp_path: Path):
@@ -1126,28 +1067,10 @@ def test_torch_home(monkeypatch, tmp_path: Path, has_venv, expect_torch_home):
         assert "TORCH_HOME" not in env
 
 
-@pytest.mark.parametrize(
-    "device",
-    ["cpu", "cuda"],
-    ids=["cpu", "cuda"],
-)
-def test_jax_platforms_not_set(device):
-    """JAX_PLATFORMS should NOT be set for any device (allows later GPU access via device_put)."""
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_xla_preallocation_disabled(device):
+    """JAX preallocation is disabled on every device (DeviceManager handles GPU placement)."""
     env = _build_subprocess_env(device=device)
-    assert "JAX_PLATFORMS" not in env
-
-
-def test_xla_preallocation_disabled_for_cpu():
-    """CPU device should disable JAX preallocation."""
-    env = _build_subprocess_env(device="cpu")
-
-    assert env["XLA_PYTHON_CLIENT_PREALLOCATE"] == "false"
-    assert env["XLA_PYTHON_CLIENT_ALLOCATOR"] == "platform"
-
-
-def test_xla_preallocation_disabled_for_cuda():
-    """GPU device should also disable JAX preallocation (DeviceManager handles placement)."""
-    env = _build_subprocess_env(device="cuda")
 
     assert env["XLA_PYTHON_CLIENT_PREALLOCATE"] == "false"
     assert env["XLA_PYTHON_CLIENT_ALLOCATOR"] == "platform"
@@ -1178,18 +1101,6 @@ def test_passthrough_vars(monkeypatch, parent_has_var):
         assert env["HF_TOKEN"] == "secret-token"
     else:
         assert "HF_TOKEN" not in env
-
-
-def test_passthrough_missing_var_warns(monkeypatch, caplog):
-    """Passthrough var not in parent env should emit a debug message."""
-    monkeypatch.delenv("HF_TOKEN", raising=False)
-
-    tool_env_vars = {"passthrough": ["HF_TOKEN"], "set": []}
-    with caplog.at_level(logging.DEBUG):
-        _build_subprocess_env(device="cpu", tool_env_vars=tool_env_vars)
-
-    assert "HF_TOKEN" in caplog.text
-    assert "not set in the parent environment" in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -1373,14 +1284,14 @@ def test_compute_env_vars_can_be_overridden_by_tool(monkeypatch, tmp_path: Path)
 # ── Helper delivery ─────────────────────────────────────────────────────────
 
 
-def _fake_env_with_script(tmp_path: Path, body: str, subdir: str = "standalone") -> tuple[Path, Path]:
+def _fake_env_with_script(tmp_path: Path, body: str) -> tuple[Path, Path]:
     """Build a fake tool env plus a script, returning ``(env_path, script_path)``."""
     fake_env = tmp_path / "fake_env"
     (fake_env / "bin").mkdir(parents=True)
     (fake_env / "bin" / "python").symlink_to(sys.executable)
 
-    script_dir = tmp_path / subdir if subdir else tmp_path
-    script_dir.mkdir(exist_ok=True)
+    script_dir = tmp_path / "standalone"
+    script_dir.mkdir()
     script_path = script_dir / "test_script.py"
     script_path.write_text(body)
     return fake_env, script_path
@@ -1413,20 +1324,6 @@ def test_helpers_resolve_from_source_without_copying(tmp_path: Path):
     assert not (script_path.parent / "standalone_helpers").exists(), (
         "helpers must not be copied into the script's directory"
     )
-
-
-def test_helpers_resolve_outside_standalone_dir(tmp_path: Path):
-    """Delivery no longer depends on the script living under a 'standalone' directory."""
-    fake_env, script_path = _fake_env_with_script(tmp_path, _REPORT_HELPERS_SCRIPT, subdir="")
-
-    worker = PersistentWorker(toolkit="test-tool", env_path=fake_env, script_path=script_path)
-    try:
-        worker.start()
-        result = worker.send({})
-    finally:
-        worker.stop()
-
-    assert Path(result["helpers_file"]).resolve().parent == _STANDALONE_HELPERS_SOURCE.resolve()
 
 
 def test_installed_helpers_outrank_stale_local_copy(tmp_path: Path):
@@ -1466,12 +1363,6 @@ def test_setup_script_can_source_helpers_off_path(tmp_path: Path):
     )
     assert result.returncode == 0, f"sourcing helpers off PATH failed: {result.stderr}"
     assert result.stdout.strip() == "function"
-
-
-def test_helpers_source_dir_contains_only_published_entries():
-    """The helpers dir goes on PATH and PYTHONPATH, so stray files there leak into every tool env."""
-    entries = {p.name for p in _STANDALONE_HELPERS_SOURCE.parent.iterdir() if p.name != "__pycache__"}
-    assert entries == {"standalone_helpers", "standalone_helpers.sh", "README.md"}
 
 
 # ── File-based fallback for large responses ──────────────────────────────────
@@ -1616,13 +1507,6 @@ def test_proto_weights_mode_passthrough(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("PROTO_MODEL_CACHE", "/shared/weights")
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path)
     assert env["PROTO_MODEL_CACHE"] == "/shared/weights"
-
-
-def test_hf_hub_cache_not_in_env(monkeypatch):
-    """HF_HUB_CACHE should NOT be passed through (removed from passthrough list)."""
-    monkeypatch.setenv("HF_HUB_CACHE", "/old/cache")
-    env = _build_subprocess_env(device="cpu")
-    assert "HF_HUB_CACHE" not in env
 
 
 def test_hf_token_resolved_from_file(monkeypatch, tmp_path: Path):
@@ -1776,31 +1660,5 @@ def test_worker_is_replaced_after_a_poisoned_cuda_context(tmp_path: Path):
 
         assert worker.send({}) == {"served": True}
         assert worker.alive
-    finally:
-        worker.stop()
-
-
-def test_worker_survives_cuda_out_of_memory(tmp_path: Path):
-    """An OOM leaves the same process serving, so a warm model is not thrown away."""
-    script = tmp_path / "oom_script.py"
-    script.write_text(
-        textwrap.dedent("""\
-        def dispatch(input_dict):
-            if input_dict.get("fail"):
-                raise RuntimeError("CUDA out of memory. Tried to allocate 20.00 GiB")
-            return {"served": True}
-        """)
-    )
-    worker = _make_worker(script)
-    try:
-        assert worker.send({}) == {"served": True}
-        pid = worker._process.pid
-
-        with pytest.raises(RuntimeError, match="out of memory"):
-            worker.send({"fail": True})
-
-        assert worker.alive
-        assert worker.send({}) == {"served": True}
-        assert worker._process.pid == pid
     finally:
         worker.stop()

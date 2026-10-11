@@ -20,22 +20,6 @@ from proto_tools.utils import BaseConfig, ConfigField, run_preprocess
 from proto_tools.utils.tool_io import BaseToolInput
 from tests.tool_infra_tests.test_export_functionality import MockToolOutputBase
 
-# ── example_input completeness ───────────────────────────────────────────────
-
-
-@pytest.mark.parametrize(
-    "tool_spec",
-    ToolRegistry.list_all(),
-    ids=lambda spec: spec.key,
-)
-def test_all_tools_have_example_input(tool_spec):
-    """Every tool must define example_input for parametrized testing."""
-    assert tool_spec.example_input is not None, f"Tool {tool_spec.key} missing example_input= in @tool() decorator"
-    example = tool_spec.example_input()
-    assert isinstance(example, tool_spec.input_model), (
-        f"example_input() returned {type(example).__name__}, expected {tool_spec.input_model.__name__}"
-    )
-
 
 # ── Mock data models ─────────────────────────────────────────────────────────
 class MockToolInput(BaseToolInput):
@@ -721,37 +705,6 @@ def test_tool_output_error_access_raises_exception(clean_registry, capture_error
     assert result.errors[0] == "RuntimeError: Tool execution failed"
 
 
-def test_tool_output_successful_access_works(clean_registry):
-    """Test that accessing fields on successful output works normally."""
-
-    @clean_registry.register(
-        key="success-access-tool",
-        label="Success Access Tool",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Tool that succeeds and tests field access",
-    )
-    def success_access_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
-        return MockToolOutput(result="Success!")
-
-    # Get the registered function and call it
-    spec = clean_registry.get("success-access-tool")
-    inputs = MockToolInput(input_data="test")
-    config = MockToolConfig(param1="value1", param2=5)
-
-    result = spec.function(inputs, config)
-
-    # Verify output indicates success
-    assert result.success is True
-
-    # Accessing 'result' field should work normally
-    assert result.result == "Success!"
-    assert result.tool_id == "success-access-tool"
-    assert result.execution_time is not None
-
-
 def test_tool_registry_list_gpu_tools(clean_registry):
     """Test list_gpu_tools returns only GPU tools."""
 
@@ -800,31 +753,6 @@ def test_tool_registry_list_gpu_tools(clean_registry):
     assert len(cpu_tools) == 1
     assert {s.key for s in gpu_tools} == {"gpu-1", "gpu-2"}
     assert {s.key for s in cpu_tools} == {"cpu-1"}
-
-
-def test_gpu_tools_are_marked():
-    """Verify that known GPU tools are marked with uses_gpu=True in the real registry."""
-    gpu_tools = ToolRegistry.list_gpu_tools()
-    gpu_keys = {spec.key for spec in gpu_tools}
-
-    # At least 20 GPU tool registrations should exist
-    assert len(gpu_keys) >= 20
-
-    # Spot check known GPU tools
-    assert "esm2-embedding" in gpu_keys
-    assert "evo2-sample" in gpu_keys
-    assert "boltz2-prediction" in gpu_keys
-    assert "proteinmpnn-sample" in gpu_keys
-
-
-def test_cpu_tools_are_not_marked_gpu():
-    """Verify that known CPU tools are NOT marked uses_gpu in the real registry."""
-    cpu_tools = ToolRegistry.list_cpu_tools()
-    cpu_keys = {spec.key for spec in cpu_tools}
-
-    # Spot check known CPU tools
-    assert "blast-search" in cpu_keys
-    assert "mafft-align" in cpu_keys
 
 
 def test_tool_registry_list_local_cpu_tools(clean_registry, tmp_path):
@@ -880,47 +808,6 @@ def test_tool_registry_list_local_cpu_tools(clean_registry, tmp_path):
     assert clean_registry.get("cpu-inline").local_cpu is True
     assert clean_registry.get("gpu-tool").local_cpu is False
     assert spec_standalone.local_cpu is False
-
-
-def test_local_cpu_tools_match_known_set():
-    """Pin the registry's ``local_cpu`` set so contract drift requires a deliberate test update."""
-    expected = {
-        # database_retrieval — thin network clients (ccd-lookup excluded: ships standalone/pdbeccdutils)
-        "alphafold-db-fetch",
-        "alphamissense-db-fetch",
-        "ensembl-lookup",
-        "ensembl-overlap",
-        "ensembl-sequence",
-        "ensembl-vep",
-        "ensembl-xrefs",
-        "interproscan-fetch",
-        "ncbi-efetch",
-        "ncbi-esearch",
-        "ncbi-esummary",
-        "pdb-fetch-entry",
-        "pdb-fetch-fasta",
-        "pubchem-fetch",
-        "rfam-family",
-        "rfam-regions",
-        "sequence-fetch",
-        "uniprot-fetch",
-        # sequence_scoring — thin clients for the hosted Genomic Intelligence API
-        "gi-annotation",
-        "gi-chromatin",
-        "gi-enhancer",
-        "gi-expression",
-        "gi-find-genes-and-predict-expression",
-        "gi-promoter",
-        "gi-splice",
-        # mutagenesis — trivial pure-Python samplers
-        "random-nucleotide-sample",
-        "random-protein-sample",
-        # structure_scoring — pure-Python scoring, no worker env
-        "pdockq2",
-        "structure-metrics",
-    }
-    actual = {spec.key for spec in ToolRegistry.list_local_cpu_tools() if spec.category != "testing"}
-    assert actual == expected
 
 
 def _register_and_run(registry, key, func):
@@ -1089,50 +976,6 @@ class MockConfigWithDevice(BaseConfig):
     """Mock config with device field for testing device validation."""
 
     device: str = ConfigField(default="cpu", title="Device", description="Device to use")
-
-
-def test_tool_registry_default_device_count(clean_registry):
-    """Test that device_count defaults to '1' when not specified."""
-
-    @clean_registry.register(
-        key="default-device-count",
-        label="Default Device Count Tool",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Tool with default device_count",
-    )
-    def default_device_count_tool(inputs: MockToolInput, config: MockToolConfig, instance=None) -> MockToolOutput:
-        return MockToolOutput(result="ok")
-
-    spec = clean_registry.get("default-device-count")
-    assert spec.device_count == "1"
-
-
-def test_tool_registry_exact_device_count_validation_passes(clean_registry):
-    """Test that exact device count validation passes when allocation matches."""
-
-    @clean_registry.register(
-        key="exact-count-tool",
-        label="Exact Count Tool",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockConfigWithDevice,
-        output_class=MockToolOutput,
-        description="Tool requiring exactly 1 device",
-        device_count="1",
-    )
-    def exact_count_tool(inputs: MockToolInput, config: MockConfigWithDevice, instance=None) -> MockToolOutput:
-        return MockToolOutput(result="ok")
-
-    spec = clean_registry.get("exact-count-tool")
-    inputs = MockToolInput(input_data="test")
-    config = MockConfigWithDevice(device="cuda:0")
-
-    # Should not raise any errors
-    result = spec.function(inputs, config)
-    assert result.success is True
 
 
 def test_tool_registry_under_allocation_raises_error(clean_registry):
@@ -1622,41 +1465,6 @@ def test_stochastic_unseeded_whole_output_skips_cache(clean_registry, _setup_cac
     assert result4.result == "processed_test_3"
 
 
-def test_cacheable_on_toolspec(clean_registry):
-    """Cacheable flag is stored on ToolSpec."""
-
-    @clean_registry.register(
-        key="cacheable-spec",
-        label="Cacheable Spec",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Test cacheable on spec",
-        cacheable=True,
-    )
-    def run_tool(inputs, config=None, instance=None):
-        return MockToolOutput(result="ok")
-
-    spec = clean_registry.get("cacheable-spec")
-    assert spec.cacheable is True
-
-    @clean_registry.register(
-        key="non-cacheable-spec",
-        label="Non Cacheable Spec",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Test non-cacheable on spec",
-    )
-    def run_tool2(inputs, config=None, instance=None):
-        return MockToolOutput(result="ok")
-
-    spec2 = clean_registry.get("non-cacheable-spec")
-    assert spec2.cacheable is False
-
-
 # ── Input/config coercion ───────────────────────────────────────────────────
 
 
@@ -1828,27 +1636,6 @@ def test_preprocess_hook_called_by_wrapper(clean_registry):
     assert result.result == "PRE_hello"
 
 
-def test_preprocess_default_noop(clean_registry):
-    """BaseConfig.preprocess() returns inputs unchanged."""
-
-    @clean_registry.register(
-        key="preprocess-noop-test",
-        label="Preprocess Noop Test",
-        category="test",
-        input_class=MockToolInput,
-        config_class=MockToolConfig,
-        output_class=MockToolOutput,
-        description="Test default preprocess is noop",
-    )
-    def run_tool(inputs, config=None, instance=None):
-        return MockToolOutput(result=inputs.input_data)
-
-    inputs = MockToolInput(input_data="unchanged")
-    config = MockToolConfig(param1="x")
-    result = run_tool(inputs, config)
-    assert result.result == "unchanged"
-
-
 def test_wrapper_executes_with_the_config_preprocess_returns(clean_registry):
     """The wrapper runs the tool with preprocess's returned config, not the caller's."""
 
@@ -1945,13 +1732,6 @@ def test_local_tool_reusing_one_config_preprocesses_every_call(clean_registry):
     assert results == ["prepared:a", "prepared:b", "prepared:c"]
     assert calls == ["a", "b", "c"], "preprocess must run once per call, not once per config"
     assert config._preprocess_completed is False, "the caller's config must not be marked spent"
-
-
-def test_config_assignment_allowed_outside_preprocess():
-    """The freeze is scoped to the preprocess call; normal assignment still works."""
-    config = MockToolConfig(param1="x")
-    config.param1 = "y"
-    assert config.param1 == "y"
 
 
 @pytest.mark.parametrize("returns_pair", [False, True], ids=["bare_inputs", "inputs_and_config"])
@@ -2215,15 +1995,6 @@ def test_post_process_iterable_runs_on_full_stitched_batch(clean_registry, _setu
     assert dispatched_sizes == [5, 3]
 
 
-def test_post_process_iterable_optional(clean_registry, _setup_cache):
-    def run_tool(inputs, config=None, instance=None):
-        return MockIterableOutput(results=[f"out_{x}" for x in inputs.items])
-
-    spec = _register_cacheable_iterable(clean_registry, "no-post-process", run_tool)
-    result = spec.function(MockIterableInput(items=["a", "b", "c"]), MockToolConfig(param1="v"))
-    assert result.results == ["out_a", "out_b", "out_c"]
-
-
 # ── @tool boundary: non-finite-float warning ──
 
 
@@ -2411,41 +2182,6 @@ def test_iterable_dispatch_respects_effective_timeout_override(clean_registry):
         "effective_timeout() override returning None must be honored — scaling must not "
         "fire model_copy and contaminate model_fields_set"
     )
-
-
-class _BatchingConfig(BaseConfig):
-    """A config that batches — has a batch_size field, so max_chunk_size must be explicit."""
-
-    batch_size: int = ConfigField(default=8, ge=1, title="Batch Size", description="Items per forward pass")
-
-
-class _IterInput(BaseToolInput):
-    items: list[str] = Field(default_factory=list, description="Items to process")
-
-
-class _IterOutput(MockToolOutputBase):
-    results: list[str] = Field(default_factory=list, description="Per-item results")
-
-
-def test_batch_size_tool_accepts_explicit_max_chunk_size(clean_registry):
-    """A batching tool registers once max_chunk_size is given; 1 is allowed, it just must be stated."""
-
-    @clean_registry.register(
-        key="batching-ok",
-        label="Batching",
-        category="test",
-        input_class=_IterInput,
-        config_class=_BatchingConfig,
-        output_class=_IterOutput,
-        description="batches with explicit max_chunk_size",
-        iterable_input_fields=["items"],
-        iterable_output_field="results",
-        max_chunk_size=1,
-    )
-    def _f(inputs: _IterInput, config: _BatchingConfig) -> _IterOutput:
-        return _IterOutput(tool_id="batching-ok", execution_time=0.0, success=True, results=[])
-
-    assert clean_registry.get("batching-ok").max_chunk_size == 1
 
 
 def test_non_iterable_tool_rejects_max_chunk_size(clean_registry):

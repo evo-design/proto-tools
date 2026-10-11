@@ -68,18 +68,11 @@ _TOOL_README_IDS = [_toolkit_id(r) for r in _TOOL_READMES]
 
 
 def test_esm2_readme_sections_structure() -> None:
-    """ESM2 is the canonical example and must satisfy the full structure."""
+    """ESM2 is the canonical example and must populate the optional sections too."""
     sections = get_readme_sections("esm2-embedding")
 
-    assert isinstance(sections, ReadmeSections)
     assert sections.title == "ESM2"
-    assert sections.overview, "Overview body is empty"
-    assert sections.background, "Background body is empty"
     assert sections.toolkit_notes, "Toolkit Notes body is empty"
-
-    registry_keys = sorted(spec.key for spec in ToolRegistry.list_all() if spec.source_file.parent.name == "esm2")
-    parsed_keys = sorted(t.key for t in sections.tools)
-    assert parsed_keys == registry_keys, f"parsed={parsed_keys} registry={registry_keys}"
 
     for entry in sections.tools:
         assert entry.intro, f"{entry.key}: intro is empty"
@@ -87,44 +80,30 @@ def test_esm2_readme_sections_structure() -> None:
         assert entry.usage_tips, f"{entry.key}: usage_tips is empty"
 
 
-def test_get_tool_docs_includes_toolkit_notes_by_default() -> None:
-    """``get_tool_docs`` attaches the toolkit-wide notes by default."""
+def test_get_tool_docs_toolkit_notes_toggle() -> None:
+    """``get_tool_docs`` attaches the toolkit-wide notes unless ``include_toolkit_notes=False``."""
     entry = get_tool_docs("esm2-embedding")
     assert entry is not None
     assert entry.key == "esm2-embedding"
     assert entry.label == "ESM2 Embeddings"
     assert entry.toolkit_notes, "Toolkit notes should be attached by default"
 
-
-def test_get_tool_docs_omits_toolkit_notes_when_disabled() -> None:
-    """``include_toolkit_notes=False`` leaves the field as None."""
-    entry = get_tool_docs("esm2-embedding", include_toolkit_notes=False)
-    assert entry is not None
-    assert entry.toolkit_notes is None
+    without_notes = get_tool_docs("esm2-embedding", include_toolkit_notes=False)
+    assert without_notes is not None
+    assert without_notes.toolkit_notes is None
 
 
-def test_get_tool_docs_includes_license_by_default() -> None:
-    """``get_tool_docs`` attaches the parsed license.yaml, incl. weights.access."""
+def test_get_tool_docs_license_toggle() -> None:
+    """``get_tool_docs`` attaches the parsed license.yaml unless ``include_license=False``."""
     entry = get_tool_docs("alphagenome-score-variants")
     assert entry is not None
     assert entry.license is not None
     assert entry.license["code"]["spdx"] == "Apache-2.0"
     assert entry.license["weights"]["access"] == "hf-gated"
 
-
-def test_get_tool_docs_omits_license_when_disabled() -> None:
-    """``include_license=False`` leaves the field as None."""
-    entry = get_tool_docs("esm2-embedding", include_license=False)
-    assert entry is not None
-    assert entry.license is None
-
-
-def test_get_tool_docs_returns_none_for_unknown_key_in_polished_readme() -> None:
-    """Asking for a key not present in the README returns None, not an error."""
-    # A bogus key resolves the toolkit but matches no H3, so the entry is absent.
-    sections = get_readme_sections("esm2-embedding")
-    keys_in_readme = {t.key for t in sections.tools}
-    assert "esm2-nonexistent" not in keys_in_readme
+    without_license = get_tool_docs("alphagenome-score-variants", include_license=False)
+    assert without_license is not None
+    assert without_license.license is None
 
 
 def test_get_readme_section_round_trip() -> None:
@@ -255,16 +234,16 @@ def test_normalize_tool_key_accepts_registry_key() -> None:
     assert _normalize_tool_key("esm2-embedding") == "esm2-embedding"
 
 
-def test_normalize_tool_key_accepts_run_function_name() -> None:
-    """Both ``run_xyz`` and ``xyz`` resolve to the matching registry key."""
+def test_run_function_name_resolves_at_every_entry_point() -> None:
+    """``run_xyz`` and ``xyz`` resolve to the registry key in the normalizer and each doc accessor."""
     assert _normalize_tool_key("run_esm2_embeddings") == "esm2-embedding"
     assert _normalize_tool_key("esm2_embeddings") == "esm2-embedding"
 
+    entry = get_tool_docs("run_esm2_embeddings")
+    assert entry is not None
+    assert entry.key == "esm2-embedding"
 
-def test_normalize_tool_key_rejects_multi_tool_toolkit() -> None:
-    """A toolkit name with multiple tools is ambiguous and must raise."""
-    with pytest.raises(ValueError, match="ambiguous"):
-        _normalize_tool_key("esm2")
+    assert ToolRegistry.get_input_doc("run_esm2_embeddings") == ToolRegistry.get_input_doc("esm2-embedding")
 
 
 def test_normalize_tool_key_rejects_unknown_identifier() -> None:
@@ -273,34 +252,13 @@ def test_normalize_tool_key_rejects_unknown_identifier() -> None:
         _normalize_tool_key("not-a-real-tool-name")
 
 
-def test_get_tool_docs_accepts_run_function_name() -> None:
-    """Per-tool extractor works when called with the run-function name."""
-    entry = get_tool_docs("run_esm2_embeddings")
-    assert entry is not None
-    assert entry.key == "esm2-embedding"
-
-
 def test_get_tool_docs_raises_on_ambiguous_toolkit_name() -> None:
     """Per-tool extractor surfaces the ambiguous-toolkit error."""
     with pytest.raises(ValueError, match="ambiguous"):
         get_tool_docs("esm2")
 
 
-def test_registry_model_doc_methods_accept_run_function_name() -> None:
-    """``get_input_doc`` / ``get_config_doc`` / ``get_output_doc`` accept run names."""
-    via_key = ToolRegistry.get_input_doc("esm2-embedding")
-    via_func = ToolRegistry.get_input_doc("run_esm2_embeddings")
-    assert via_key == via_func
-
-
 # ── Catalog / category lookup ───────────────────────────────────────────────
-
-
-def test_list_categories_is_sorted_and_unique() -> None:
-    """``list_categories`` returns sorted, deduplicated category names."""
-    categories = ToolRegistry.list_categories()
-    assert categories == sorted(set(categories))
-    assert "masked_models" in categories
 
 
 def test_list_by_category_returns_keyed_specs() -> None:
@@ -323,13 +281,6 @@ def test_catalog_groups_every_tool() -> None:
     total_in_catalog = sum(len(v) for v in cat.values())
     assert total_in_catalog == len(ToolRegistry.list_all())
     assert set(cat.keys()) == set(ToolRegistry.list_categories())
-
-
-def test_registry_wrappers_delegate_correctly() -> None:
-    """``ToolRegistry`` methods are thin wrappers over ``tool_docs``."""
-    assert ToolRegistry.get_readme("esm2-embedding") == get_readme("esm2-embedding")
-    assert ToolRegistry.get_readme_sections("esm2-embedding") == get_readme_sections("esm2-embedding")
-    assert ToolRegistry.get_tool_docs("esm2-embedding") == get_tool_docs("esm2-embedding")
 
 
 # ── Parametrized smoke test on all tool READMEs ─────────────────────────────

@@ -17,13 +17,6 @@ def test_requires_exactly_one_of_code_or_script() -> None:
 
 
 @pytest.mark.integration
-def test_runs_code_string_in_env() -> None:
-    """A code string runs in the tool env and its stdout is returned."""
-    out = run_in_env("esm2", code="import torch, json; print(json.dumps({'torch': torch.__version__}))")
-    assert json.loads(out)["torch"]
-
-
-@pytest.mark.integration
 def test_nonzero_exit_raises() -> None:
     """A non-zero exit in the tool env surfaces as a RuntimeError with stderr."""
     with pytest.raises(RuntimeError, match="failed"):
@@ -47,18 +40,13 @@ def test_logs_demux_to_parent_and_stdout_stays_clean(caplog: pytest.LogCaptureFi
 
 @pytest.mark.integration
 def test_runs_script_file_in_env(tmp_path: Path) -> None:
-    """The script= path runs a file and forwards args as sys.argv[1:]."""
+    """The script= path runs a file, forwards args as sys.argv[1:], and exports RUN_IN_ENV_DEVICE."""
     script = tmp_path / "prog.py"
-    script.write_text("import sys, json; print(json.dumps(sys.argv[1:]))")
-    out = run_in_env("esm2", script=script, args=["a", "b"])
-    assert json.loads(out) == ["a", "b"]
-
-
-@pytest.mark.integration
-def test_exposes_resolved_device_to_program() -> None:
-    """The resolved device is exported to the program as RUN_IN_ENV_DEVICE."""
-    out = run_in_env("esm2", code="import os; print(os.environ['RUN_IN_ENV_DEVICE'])", device="cpu")
-    assert out.strip() == "cpu"
+    script.write_text(
+        "import json, os, sys; print(json.dumps({'argv': sys.argv[1:], 'device': os.environ['RUN_IN_ENV_DEVICE']}))"
+    )
+    out = run_in_env("esm2", script=script, args=["a", "b"], device="cpu")
+    assert json.loads(out) == {"argv": ["a", "b"], "device": "cpu"}
 
 
 @pytest.mark.integration

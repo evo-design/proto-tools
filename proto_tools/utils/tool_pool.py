@@ -21,7 +21,7 @@ from typing import Any, Literal
 from proto_tools.utils.base_config import RANDOM_SEED_UPPER_BOUND
 from proto_tools.utils.device import (
     determine_visible_devices,
-    number_of_available_gpus,
+    number_of_visible_gpus,
 )
 from proto_tools.utils.fanout import (
     DeviceCapability,
@@ -340,14 +340,14 @@ class ToolPool:
                 determine_visible_devices(devices)  # type: ignore[arg-type]
             return devices
         if gpus == "all":
-            n = number_of_available_gpus()
+            n = number_of_visible_gpus()
             return [f"cuda:{i}" for i in range(n)]
         if isinstance(gpus, int):
             if gpus < 0:
                 raise ValueError(f"gpus must be >= 0, got {gpus}")
             if gpus == 0:
                 return []
-            visible = number_of_available_gpus()
+            visible = number_of_visible_gpus()
             if gpus > visible:
                 cuda_visible = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
                 raise RuntimeError(

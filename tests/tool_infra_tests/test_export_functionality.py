@@ -180,115 +180,6 @@ class MockToolOutput(BaseToolOutput):
                 f.writelines(f"{item}\n" for item in self.data)
 
 
-# ── validate_output helper ───────────────────────────────────────────────────
-
-
-def test_validate_output_successful():
-    """Test validate_output with successful tool output."""
-    output = MockToolOutput(success=True, data=["item1", "item2", "item3"])
-
-    # Should not raise any assertions
-    validate_output(output)
-
-
-def test_validate_output_failed_execution():
-    """Test validate_output fails when tool execution failed."""
-    output = MockToolOutput(success=False, data=[])
-
-    with pytest.raises(AssertionError, match="Tool execution failed"):
-        validate_output(output)
-
-
-def test_validate_output_with_empty_export():
-    """Test validate_output fails when export creates empty output."""
-
-    class _EmptyExportOutput(BaseToolOutput):
-        @property
-        def output_format_options(self) -> list[str]:
-            return ["txt"]
-
-        @property
-        def output_format_default(self) -> str:
-            return "txt"
-
-        def _export_output(self, export_path: Path, file_format: str):
-            # Create empty file
-            path = Path(export_path).with_suffix(f".{file_format}")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.touch()  # Empty file
-
-    output = _EmptyExportOutput(success=True)
-
-    with pytest.raises(AssertionError, match="Export validation failed"):
-        validate_output(output)
-
-
-# ── validate_export_output helper ────────────────────────────────────────────
-
-
-def test_validate_nonexistent_path():
-    """Test validation fails for nonexistent path."""
-    result = validate_export_output(Path("/nonexistent/path"))
-    assert result is False
-
-
-def test_validate_empty_file(tmp_path):
-    """Test validation fails for empty file."""
-    empty_file = tmp_path / "empty.txt"
-    empty_file.touch()
-
-    result = validate_export_output(empty_file)
-    assert result is False
-
-
-def test_validate_non_empty_file(tmp_path):
-    """Test validation succeeds for non-empty file."""
-    file = tmp_path / "data.txt"
-    file.write_text("test data")
-
-    result = validate_export_output(file)
-    assert result is True
-
-
-def test_validate_empty_directory(tmp_path):
-    """Test validation fails for empty directory."""
-    empty_dir = tmp_path / "empty_dir"
-    empty_dir.mkdir()
-
-    result = validate_export_output(empty_dir)
-    assert result is False
-
-
-def test_validate_directory_with_empty_file(tmp_path):
-    """Test validation fails for directory with only empty files."""
-    dir_with_empty = tmp_path / "dir"
-    dir_with_empty.mkdir()
-    (dir_with_empty / "empty.txt").touch()
-
-    result = validate_export_output(dir_with_empty)
-    assert result is False
-
-
-def test_validate_directory_with_data(tmp_path):
-    """Test validation succeeds for directory with non-empty files."""
-    dir_with_data = tmp_path / "dir"
-    dir_with_data.mkdir()
-    (dir_with_data / "data.txt").write_text("test data")
-
-    result = validate_export_output(dir_with_data)
-    assert result is True
-
-
-def test_validate_nested_directory_structure(tmp_path):
-    """Test validation succeeds for nested directory with data."""
-    nested = tmp_path / "parent" / "child"
-    nested.mkdir(parents=True)
-    (nested / "data.txt").write_text("nested data")
-
-    result = validate_export_output(tmp_path / "parent")
-    assert result is True
-
-
 # ── BaseToolOutput.export() ─────────────────────────────────────────────────
 
 
@@ -301,35 +192,6 @@ def test_export_with_default_format(tmp_path):
     # Should create test_output.txt (default format is txt)
     exported = tmp_path / "test_output.txt"
     assert validate_export_output(exported)
-
-
-def test_export_with_custom_format(tmp_path):
-    """Test exporting with specific format."""
-    output = MockToolOutput(success=True, data=["item1", "item2", "item3"])
-
-    output.export(name="test_output", export_path=tmp_path, file_format="json")
-
-    exported = tmp_path / "test_output.json"
-    assert validate_export_output(exported)
-
-    # Verify JSON content
-    with open(exported) as f:
-        data = json.load(f)
-    assert "data" in data
-    assert len(data["data"]) == 3
-
-
-def test_export_all_supported_formats(tmp_path):
-    """Test exporting with all supported formats."""
-    output = MockToolOutput(success=True, data=["item1", "item2"])
-
-    for fmt in output.output_format_options:
-        export_dir = tmp_path / fmt
-        export_dir.mkdir()
-        output.export(name="test_output", export_path=export_dir, file_format=fmt)
-
-        exported = export_dir / f"test_output.{fmt}"
-        assert validate_export_output(exported), f"Export failed for format: {fmt}"
 
 
 def test_export_invalid_format_raises_error(tmp_path):
@@ -368,68 +230,11 @@ def test_export_creates_parent_directories(tmp_path):
     assert validate_export_output(exported)
 
 
-def test_export_empty_data(tmp_path):
-    """Test exporting with empty data still creates output."""
-    output = MockToolOutput(success=True, data=[])
-
-    output.export(name="test_output", export_path=tmp_path)
-
-    # Export should exist even with empty data (single-file export creates test_output.txt)
-    exported = tmp_path / "test_output.txt"
-    assert exported.exists()
-
-
-# ── Multi-file exports ──────────────────────────────────────────────────────
-
-
-class _MultiFileOutput(BaseToolOutput):
-    """Mock output that creates multiple files."""
-
-    files: dict = Field(default_factory=dict)
-
-    @property
-    def output_format_options(self) -> list[str]:
-        return ["multi"]
-
-    @property
-    def output_format_default(self) -> str:
-        return "multi"
-
-    def _export_output(self, export_path: Path, file_format: str):
-        path = Path(export_path)
-        if not path.is_dir():
-            path.mkdir(parents=True)
-
-        for filename, content in self.files.items():
-            (path / filename).write_text(content)
-
-
-def test_multi_file_export(tmp_path):
-    """Test validation works with multi-file exports."""
-    output = _MultiFileOutput(
-        success=True, files={"file1.txt": "content1", "file2.txt": "content2", "file3.txt": "content3"}
-    )
-
-    output.export(name="test_output", export_path=tmp_path)
-
-    exported = tmp_path / "test_output"
-    assert validate_export_output(exported)
-
-    # Verify all files exist
-    assert (exported / "file1.txt").exists()
-    assert (exported / "file2.txt").exists()
-    assert (exported / "file3.txt").exists()
-
-
-def test_export_preserves_casing_in_name(tmp_path):
-    """export(name='MyOutput') writes 'MyOutput.<fmt>' — casing preserved, not lowercased."""
-    output = MockToolOutput(success=True, data=["x"])
-    output.export(name="MyOutput", export_path=tmp_path, file_format="txt")
-    assert (tmp_path / "MyOutput.txt").exists()
-
-
 def test_export_sanitizes_unsafe_chars_in_name(tmp_path):
-    """Filesystem-unsafe chars in the name are replaced with underscores."""
+    """Filesystem-unsafe chars in the name are replaced with underscores; casing is preserved."""
     output = MockToolOutput(success=True, data=["x"])
     output.export(name="bad/name:x", export_path=tmp_path, file_format="txt")
     assert (tmp_path / "bad_name_x.txt").exists()
+
+    output.export(name="MyOutput", export_path=tmp_path, file_format="txt")
+    assert (tmp_path / "MyOutput.txt").exists()

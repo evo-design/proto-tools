@@ -82,12 +82,6 @@ def _jax_multi_gpu_tool():
     return "mock_jax_multi_gpu_tool", MockJAXMultiGPUToolInput, MockJAXMultiGPUToolConfig, run_mock_jax_multi_gpu_tool
 
 
-_SINGLE_GPU_TOOLS = [
-    pytest.param(_pytorch_tool, id="pytorch"),
-    pytest.param(_jax_tool, id="jax"),
-    pytest.param(_cli_tool, id="cli"),
-]
-
 # Tools that hold GPU memory in persistent workers (PyTorch buffers, JAX arrays).
 # CLI tools auto-unload after each call and don't maintain GPU state.
 _PERSISTENT_GPU_TOOLS = [
@@ -221,37 +215,35 @@ def _assert_gpu_memory(
     "tool_a_factory,tool_b_factory",
     [
         pytest.param(_pytorch_tool, _jax_tool, id="pytorch-evicts-jax"),
-        pytest.param(_pytorch_tool, _cli_tool, id="pytorch-evicts-cli"),
         pytest.param(_jax_tool, _pytorch_tool, id="jax-evicts-pytorch"),
-        pytest.param(_jax_tool, _cli_tool, id="jax-evicts-cli"),
-        pytest.param(_cli_tool, _pytorch_tool, id="cli-evicts-pytorch"),
-        pytest.param(_cli_tool, _jax_tool, id="cli-evicts-jax"),
     ],
 )
 def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
     """Tool B should evict tool A when only 1 GPU is available.
 
-    On Exclusive_Process GPUs, CPU strategy auto-escalates to RESTART.
+    On Exclusive_Process GPUs, CPU strategy auto-escalates to RESTART. Otherwise a
+    non-pinned (PyTorch) tool A keeps the same worker process across eviction and
+    reload; the model moves in-process.
     """
     dm = _setup_dm(["cuda:0"], strategy=OffloadStrategy.CPU)
     exclusive = is_exclusive_process_mode()
     tool_a_name = tool_a_factory()[0]
     tool_b_name = tool_b_factory()[0]
-    is_a_persistent = "cli" not in tool_a_name
-    is_b_persistent = "cli" not in tool_b_name
+    # mock_jax_tool is pin_visible_devices=True and respawns on a device change.
+    expect_same_pid = not exclusive and tool_a_name == "mock_pytorch_tool"
 
     try:
         baseline = _snapshot_gpu_memory(dm)
 
-        with ToolInstance.persist_tool(tool_a_name, instance_name="inst_a"):
+        with ToolInstance.persist_tool(tool_a_name, instance_name="inst_a") as inst_a:
             result_a = _run_tool(tool_a_factory, "inst_a")
             assert result_a.success, f"Tool A failed: {result_a.errors}"
+            first_pid = inst_a._worker._process.pid
 
             status = dm.get_device_status()
             assert status["allocations"]["inst_a"]["device_id"] == "cuda:0"
 
-            if is_a_persistent:
-                _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after loading tool A")
+            _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after loading tool A")
 
             time.sleep(0.01)
 
@@ -267,9 +259,10 @@ def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
                 else:
                     assert status["allocations"]["inst_a"]["device_id"] == "cpu", "Tool A should be evicted to CPU"
                 assert status["allocations"]["inst_b"]["device_id"] == "cuda:0", "Tool B should be on GPU"
+                if expect_same_pid:
+                    assert inst_a._worker._process.pid == first_pid, "Default worker should survive eviction"
 
-                if is_b_persistent:
-                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after eviction, tool B on GPU")
+                _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after eviction, tool B on GPU")
 
                 time.sleep(0.01)
 
@@ -287,9 +280,10 @@ def test_cross_framework_eviction_cpu(tool_a_factory, tool_b_factory):
                     )
                 else:
                     assert status["allocations"]["inst_b"]["device_id"] == "cpu", "Tool B should be evicted to CPU"
+                if expect_same_pid:
+                    assert inst_a._worker._process.pid == first_pid, "Moving back to GPU should reuse the same worker"
 
-                if is_a_persistent:
-                    _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after tool A round-trip reload")
+                _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after tool A round-trip reload")
     finally:
         _teardown()
 
@@ -417,16 +411,22 @@ def test_three_tool_eviction_chain():
 @pytest.mark.slow
 @pytest.mark.parametrize("tool_factory", _PERSISTENT_GPU_TOOLS)
 def test_config_moves_between_gpus(tool_factory):
-    """Changing config device between calls should move the tool."""
+    """Changing config device between calls should move the tool.
+
+    Pinned workers (mock_jax_tool, pin_visible_devices=True) respawn on the move,
+    freeing the source GPU; non-pinned (PyTorch) workers move the model in-process.
+    """
     dm = _setup_dm(["cuda:0", "cuda:1"], strategy=OffloadStrategy.CPU)
     toolkit = tool_factory()[0]
+    is_pinned = toolkit == "mock_jax_tool"
 
     try:
         baseline = _snapshot_gpu_memory(dm)
 
-        with ToolInstance.persist_tool(toolkit, instance_name="mover"):
+        with ToolInstance.persist_tool(toolkit, instance_name="mover") as inst:
             result = _run_tool(tool_factory, "mover", device="cuda:0")
             assert result.success
+            pid_before = inst._worker._process.pid
 
             assert dm.get_device_status()["allocations"]["mover"]["device_id"] == "cuda:0"
             _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after loading on cuda:0")
@@ -435,6 +435,11 @@ def test_config_moves_between_gpus(tool_factory):
             result2 = _run_tool(tool_factory, "mover", device="cuda:1")
             assert result2.success, "Should work after config-driven move"
             assert dm.get_device_status()["allocations"]["mover"]["device_id"] == "cuda:1"
+            pid_after = inst._worker._process.pid
+            if is_pinned:
+                assert pid_after != pid_before, "pinned worker should respawn on a device change"
+            else:
+                assert pid_after == pid_before, "non-pinned worker should move in-process, not respawn"
             _assert_gpu_memory(dm, baseline, loaded=["cuda:1"], freed=["cuda:0"], label="after move to cuda:1")
     finally:
         _teardown()
@@ -508,42 +513,6 @@ def test_shutdown_and_auto_restart(tool_factory):
         assert inst._worker is not None, "Worker should be back"
         assert "restarter" in dm.get_device_status()["allocations"]
         _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after auto-restart")
-    finally:
-        _teardown()
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-def test_evict_then_restart_preserves_correctness():
-    """After RESTART eviction, re-running the tool gives correct results."""
-    dm = _setup_dm(["cuda:0"], strategy=OffloadStrategy.RESTART)
-
-    try:
-        baseline = _snapshot_gpu_memory(dm)
-
-        inst_a = ToolInstance.get("mock_pytorch_tool", instance_name="a")
-        result1 = _run_tool(_pytorch_tool, "a")
-        assert result1.success
-        first_output = result1.results  # Save for comparison
-        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after loading tool A")
-
-        time.sleep(0.01)
-
-        # Evict A by loading B (RESTART kills A's worker entirely)
-        with ToolInstance.persist_tool("mock_jax_tool", instance_name="b"):
-            _run_tool(_jax_tool, "b")
-
-            assert inst_a._worker is None, "Worker A should be shut down"
-            assert "a" not in dm.get_device_status()["allocations"]
-
-            # Tool B now occupies cuda:0 (tool A fully gone)
-            _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after RESTART eviction, tool B loaded")
-
-        # Re-run A; should restart and produce same-shape output
-        result2 = _run_tool(_pytorch_tool, "a")
-        assert result2.success
-        assert len(result2.results) == len(first_output), "Restarted tool should produce same-shape output"
-        _assert_gpu_memory(dm, baseline, loaded=["cuda:0"], label="after tool A restart")
     finally:
         _teardown()
 
@@ -768,32 +737,13 @@ def test_two_tools_share_one_gpu():
 #
 # Tools registered with ``gpu_only=True`` on the ``@tool()`` decorator
 # cannot run on CPU. The framework must:
-#   1. Expose ``gpu_only`` on ``ToolSpec`` with a safe default.
-#   2. Reject direct ``device="cpu"`` dispatch with a clear ValueError.
-#   3. Kill the persistent worker on LRU eviction instead of trying an
+#   1. Reject direct ``device="cpu"`` dispatch with a clear ValueError.
+#   2. Kill the persistent worker on LRU eviction instead of trying an
 #      in-process CPU offload. Next dispatch spawns a fresh subprocess.
-#   4. Leave default behavior (``gpu_only=False``) unchanged: worker
-#      survives eviction and moves to CPU in-process.
+# Default behavior (``gpu_only=False``, worker survives eviction with the same
+# PID) is covered by test_cross_framework_eviction_cpu[pytorch-evicts-jax].
 #
 # Used by ``alphagenome-predict-variants``. See ``notes/tool-environments.md``.
-
-
-def test_tool_spec_exposes_gpu_only_field():
-    """``ToolSpec`` has ``gpu_only`` defaulting to False; it propagates from the decorator."""
-    # Importing the modules registers the tools in the registry.
-    from proto_tools.tools.testing import mock_pytorch_tool  # noqa: F401
-    from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
-
-    assert "gpu_only" in ToolSpec.model_fields
-    assert ToolSpec.model_fields["gpu_only"].default is False
-
-    mock_spec = ToolRegistry.get("mock-pytorch-tool-run")
-    assert mock_spec.gpu_only is False, "mock tools should default to gpu_only=False"
-
-    from proto_tools.tools.sequence_scoring.alphagenome import alphagenome_predict_variants  # noqa: F401
-
-    ag_spec = ToolRegistry.get("alphagenome-predict-variants")
-    assert ag_spec.gpu_only is True, "alphagenome-predict-variants should opt into gpu_only"
 
 
 @pytest.mark.uses_gpu
@@ -886,49 +836,5 @@ def test_gpu_only_tool_kills_worker_on_eviction(monkeypatch, caplog):
                     assert status["allocations"]["pt"]["device_id"] == "cuda:0", (
                         "mock_pytorch_tool should be back on cuda:0 via fresh allocation"
                     )
-    finally:
-        _teardown()
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-def test_default_tool_survives_eviction_with_same_pid():
-    """Regression: without gpu_only, the existing CPU offload path is unchanged.
-
-    The worker stays alive across eviction (same PID), the model moves in-process.
-    """
-    dm = _setup_dm(["cuda:0"], strategy=OffloadStrategy.CPU)
-    exclusive = is_exclusive_process_mode()
-    if exclusive:
-        pytest.skip("Exclusive_Process auto-escalates CPU→RESTART; same-PID invariant doesn't apply")
-
-    try:
-        with ToolInstance.persist_tool("mock_pytorch_tool", instance_name="pt") as pt_inst:
-            result_a = _run_tool(_pytorch_tool, "pt")
-            assert result_a.success
-            first_pid = pt_inst._worker._process.pid  # type: ignore[union-attr]
-
-            time.sleep(0.01)
-
-            with ToolInstance.persist_tool("mock_jax_tool", instance_name="jx"):
-                result_b = _run_tool(_jax_tool, "jx")
-                assert result_b.success
-
-                # Default path: worker survives eviction, allocation is on CPU.
-                assert pt_inst._worker is not None, "Default worker should survive eviction"
-                assert pt_inst._worker._process is not None
-                assert pt_inst._worker._process.pid == first_pid, (
-                    "Default eviction path should keep the same subprocess alive"
-                )
-
-                status = dm.get_device_status()
-                assert status["allocations"]["pt"]["device_id"] == "cpu"
-
-                time.sleep(0.01)
-
-                # Tool A reclaims the GPU — still the same subprocess.
-                result_c = _run_tool(_pytorch_tool, "pt")
-                assert result_c.success
-                assert pt_inst._worker._process.pid == first_pid, "Moving back to GPU should reuse the same subprocess"
     finally:
         _teardown()

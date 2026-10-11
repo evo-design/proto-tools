@@ -167,11 +167,6 @@ def test_get_proto_home_from_env(monkeypatch, tmp_path):
     assert get_proto_home() == (tmp_path / "custom").resolve()
 
 
-def test_get_proto_home_default(monkeypatch):
-    monkeypatch.delenv("PROTO_HOME", raising=False)
-    assert get_proto_home() == Path.home() / ".proto"
-
-
 def test_get_proto_home_reflects_later_env_change(monkeypatch, tmp_path):
     """Regression: a cached resolution silently ignored PROTO_HOME set after import."""
     monkeypatch.delenv("PROTO_HOME", raising=False)

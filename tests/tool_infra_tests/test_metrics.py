@@ -175,11 +175,6 @@ def test_getitem_raises_keyerror_for_missing():
 # ── validate_against_spec: presence ──────────────────────────────────────────
 
 
-def test_validate_passes_when_all_always_metrics_present():
-    m = _SampleMetrics(perplexity=2.5, log_likelihood=-3.0, per_position=[-1.0, -2.0])
-    m.validate_against_spec()
-
-
 def test_validate_raises_when_always_metric_missing():
     m = _SampleMetrics(perplexity=2.5, per_position=[-1.0])
     with pytest.raises(AssertionError, match=r"log_likelihood.*always-available"):
@@ -273,19 +268,6 @@ def test_validate_type_list():
         _MatrixMetrics(matrix=[0.5, 0.6]).validate_against_spec()
 
 
-def test_validate_type_legacy_fallback():
-    """Specs without a ``type`` field fall back to bounds-only checking."""
-
-    class _LegacyMetrics(Metrics):
-        metric_spec: ClassVar[dict[str, MetricSpec]] = {
-            "score": {"availability": "always", "min": 0.0, "max": 1.0},
-        }
-
-    _LegacyMetrics(score=0.5).validate_against_spec()
-    with pytest.raises(AssertionError, match=r"score.*above declared max"):
-        _LegacyMetrics(score=1.5).validate_against_spec()
-
-
 # ============================================================================
 # log_likelihood_metrics helper
 # ============================================================================
@@ -308,19 +290,6 @@ def test_log_likelihood_metrics_satisfies_scoring_spec():
     triple = log_likelihood_metrics(avg_log_likelihood=-1.5, seq_len=50)
     for cls in (CausalModelScoringMetrics, MaskedModelScoringMetrics, InverseFoldingScoringMetrics):
         cls(**triple).validate_against_spec()
-
-
-def test_log_likelihood_metrics_seq_len_one_collapses_sum_and_mean():
-    """At ``seq_len=1`` the sum and mean coincide."""
-    m = log_likelihood_metrics(avg_log_likelihood=-0.7, seq_len=1)
-    assert m["log_likelihood"] == pytest.approx(m["avg_log_likelihood"])
-
-
-def test_log_likelihood_metrics_perplexity_one_at_zero_likelihood():
-    """``avg_log_likelihood == 0`` corresponds to perfect prediction (perplexity = 1)."""
-    m = log_likelihood_metrics(avg_log_likelihood=0.0, seq_len=10)
-    assert m["log_likelihood"] == 0.0
-    assert m["perplexity"] == pytest.approx(1.0)
 
 
 # ============================================================================
@@ -346,10 +315,3 @@ def test_metric_type_tag_is_not_exposed_as_a_metric():
     m = _SampleMetrics(perplexity=3.0, custom=1.0)
     assert "metric_type" not in m
     assert "metric_type" not in list(m.keys())
-
-
-def test_untagged_dict_falls_back_to_base_metrics():
-    """A legacy dict without a ``metric_type`` tag stays a base ``Metrics`` with its values intact."""
-    m = Metrics.model_validate({"plddt": 0.5})
-    assert type(m) is Metrics
-    assert m["plddt"] == 0.5

@@ -1,48 +1,87 @@
 """tests/tool_infra_tests/test_device_manager/test_eviction_round_trip.py.
 
-Tests for GPU tool eviction round-trip across all registered GPU tools.
+Tests for GPU eviction round-trip and memory reporting, one case per GPU toolkit.
 """
 
+from __future__ import annotations
+
 import time
+from collections import defaultdict
 from unittest.mock import patch
 
 import pytest
 
-from proto_tools.tools.tool_registry import ToolRegistry
+from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
 from proto_tools.utils.device_manager import DeviceManager, OffloadStrategy
 from proto_tools.utils.tool_instance import ToolInstance
 from tests.tool_infra_tests.pytest_helpers import parse_min_gpu_count
-
-# Collect GPU tools (excluding mock/testing tools which are covered by stress tests)
-_GPU_TOOLS = [
-    pytest.param(_spec, id=_spec.key)
-    for _spec in ToolRegistry.list_all()
-    if _spec.uses_gpu and _spec.category != "testing"
-]
 
 # Tools that take a GPU only when explicitly asked, so their minimal() config runs on CPU and
 # never occupies a device to evict. Their to_device() is a passthrough — the CLI subprocess
 # releases the GPU when it exits — so there is no residency for this round-trip to exercise.
 _NO_EVICTION_TOOLS = frozenset({"mmseqs2-homology-search", "mmseqs2-search-proteins"})
 
+# Toolkits whose worker holds no framework-tracked GPU state, so get_memory_stats() reports
+# available=False: fresh CLI subprocess per call, or TensorFlow (whose stats are not tracked).
+_NO_MEMORY_STATS_TOOLKITS = frozenset({"alphafold3", "deeppbs_specificity", "opendde", "spliceai"})
+
+# Key tokens in order of preference when choosing a toolkit's representative key: the cheapest
+# call that still loads the toolkit's model.
+_KEY_TOKEN_PREFERENCE = ("score", "embedding", "prediction", "predict")
+
+
+def _representative_key_rank(spec: ToolSpec) -> tuple[int, str]:
+    """Rank a key by its best preferred token, breaking ties alphabetically."""
+    tokens = spec.key.split("-")
+    rank = min(
+        (i for i, token in enumerate(_KEY_TOKEN_PREFERENCE) if token in tokens), default=len(_KEY_TOKEN_PREFERENCE)
+    )
+    return rank, spec.key
+
+
+def _one_spec_per_toolkit() -> list[ToolSpec]:
+    """Return one representative non-mock GPU tool per toolkit.
+
+    Device movement lives in the toolkit's standalone worker, which every key in the toolkit
+    shares, so one key per toolkit exercises the same ``to_device()``/``get_memory_stats()``.
+    """
+    by_toolkit: dict[str, list[ToolSpec]] = defaultdict(list)
+    for spec in ToolRegistry.list_all():
+        if spec.uses_gpu and spec.category != "testing":
+            by_toolkit[spec.source_file.parent.name].append(spec)
+    return [min(specs, key=_representative_key_rank) for _, specs in sorted(by_toolkit.items())]
+
+
+_GPU_TOOLKITS = [pytest.param(spec, id=spec.key) for spec in _one_spec_per_toolkit()]
+
+
+def _assert_memory_stats(tool_key: str, toolkit: str, stats: dict) -> None:
+    """Assert a loaded worker reports framework memory stats, or opts out by a documented rule."""
+    if toolkit in _NO_MEMORY_STATS_TOOLKITS:
+        assert stats["available"] is False, (
+            f"{tool_key}: listed in _NO_MEMORY_STATS_TOOLKITS but reports memory stats; drop it from the set"
+        )
+        return
+    assert stats["available"] is True, f"{tool_key}: get_memory_stats() unavailable with the model loaded: {stats}"
+    assert stats["framework"] in ("pytorch", "jax"), f"{tool_key}: unexpected framework {stats['framework']!r}"
+    if stats["framework"] == "pytorch":
+        assert stats["allocated_bytes"] > 0, f"{tool_key}: model loaded on GPU but allocated_bytes is 0"
+
 
 @pytest.mark.extensive
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-@pytest.mark.parametrize("tool_spec", _GPU_TOOLS)
+@pytest.mark.parametrize("tool_spec", _GPU_TOOLKITS)
 def test_gpu_tool_eviction_round_trip(tool_spec):
-    """Run a GPU tool, evict it with a mock tool, then run it again.
+    """Run a GPU toolkit, check its memory stats, evict it with a mock tool, then run it again.
 
-    This exercises the full device lifecycle for every GPU tool:
-    1. Tool loads onto GPU via DeviceManager
+    This exercises the full device lifecycle for every GPU toolkit's standalone worker:
+    1. Tool loads onto GPU via DeviceManager and reports its memory via get_memory_stats()
     2. Mock tool evicts it to CPU (LRU eviction)
     3. Tool moves back to GPU on next run (device mismatch detection)
 
-    Verifies that every tool's standalone worker correctly handles
-    to_device() calls for both GPU->CPU and CPU->GPU transitions.
-
-    Each tool runs with ``config_model.minimal()``, so a broken ``minimal()`` for
-    any GPU tool surfaces here, not just a device-lifecycle regression.
+    Each case runs with ``config_model.minimal()``, so a broken ``minimal()`` for the
+    representative key surfaces here, not just a device-lifecycle regression.
     """
     if tool_spec.key in _NO_EVICTION_TOOLS:
         assert tool_spec.config_model.minimal().gpus_per_instance == 0, (
@@ -53,10 +92,7 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
 
     n_gpus = parse_min_gpu_count(tool_spec.device_count)
 
-    # Build managed device list: tool's GPUs + 1 extra for the evictor
-    # Actually, for eviction we want all GPUs occupied so the mock tool
-    # forces eviction. Use exactly n_gpus (tool fills them all, then
-    # mock tool evicts it).
+    # Manage exactly the tool's GPUs so the mock tool must evict it.
     managed_devices = [f"cuda:{i}" for i in range(n_gpus)]
 
     with patch(
@@ -74,19 +110,17 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
         active_strategy = dm._offload_strategy
 
         try:
-            # Extract the tool's registry key to derive a safe instance name
             tool_key = tool_spec.key
             instance_name = f"test_{tool_key.replace('-', '_')}"
-            # Derive the toolkit for ToolInstance (directory name, snake_case)
-            # The source_file path tells us: .../tools/{category}/{tool_dir}/{file}.py
-            tool_dir = tool_spec.source_file.parent.name
+            # ToolInstance toolkit name is the tool's directory: .../tools/{category}/{toolkit}/{file}.py
+            toolkit = tool_spec.source_file.parent.name
 
             # --- Step 1: Run the tool on GPU ---
             # Minimal config — this test only exercises the device round-trip, not a
             # production-scale run (germinal would otherwise launch a full campaign).
             example = tool_spec.example_input()
             config = tool_spec.config_model.minimal()
-            with ToolInstance.persist_tool(tool_dir, instance_name=instance_name):
+            with ToolInstance.persist_tool(toolkit, instance_name=instance_name):
                 result1 = tool_spec.function(example, config, instance=instance_name)
                 assert result1.success, f"{tool_key} failed on first run: {result1.errors}"
 
@@ -95,6 +129,9 @@ def test_gpu_tool_eviction_round_trip(tool_spec):
                 assert alloc is not None, f"{tool_key} not found in DeviceManager allocations"
                 initial_device = alloc["device_id"]
                 assert initial_device != "cpu", f"{tool_key} should be on GPU, got {initial_device}"
+
+                stats = ToolInstance.get(toolkit, instance_name=instance_name).get_memory_stats()
+                _assert_memory_stats(tool_key, toolkit, stats)
 
                 time.sleep(0.01)  # Ensure LRU ordering
 
