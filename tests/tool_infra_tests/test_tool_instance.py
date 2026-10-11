@@ -2138,6 +2138,20 @@ def test_env_path_too_long_fails_fast(tmp_path, monkeypatch):
         ToolInstance(_OVERRIDE_TOOLKIT)
 
 
+def _install_non_editable(venv_dir: Path) -> str:
+    """``pip install`` this checkout (non-editable) into a fresh venv and return its python."""
+    repo_root = Path(__file__).resolve().parents[2]
+    subprocess.run(
+        [sys.executable, "-m", "venv", "--system-site-packages", str(venv_dir)], check=True, capture_output=True
+    )
+    python = str(venv_dir / "bin" / "python")
+    install = subprocess.run(
+        [python, "-m", "pip", "install", "--no-deps", "-q", str(repo_root)], capture_output=True, text=True, check=False
+    )
+    assert install.returncode == 0, f"install failed:\n{install.stderr[-2000:]}"
+    return python
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("mode", ["non-editable", "cloned"])
 def test_eject_standalone_works_across_install_modes(tmp_path, mode):
@@ -2168,20 +2182,7 @@ def test_eject_standalone_works_across_install_modes(tmp_path, mode):
         python = sys.executable
         env = {**base_env, "PYTHONPATH": str(clone)}
     else:
-        venv_dir = tmp_path / "venv"
-        subprocess.run(
-            [sys.executable, "-m", "venv", "--system-site-packages", str(venv_dir)],
-            check=True,
-            capture_output=True,
-        )
-        python = str(venv_dir / "bin" / "python")
-        install = subprocess.run(
-            [python, "-m", "pip", "install", "--no-deps", "-q", str(repo_root)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert install.returncode == 0, f"install failed:\n{install.stderr[-2000:]}"
+        python = _install_non_editable(tmp_path / "venv")
         env = base_env
 
     result = subprocess.run(
@@ -2195,6 +2196,62 @@ def test_eject_standalone_works_across_install_modes(tmp_path, mode):
     assert result.returncode == 0, f"{mode}: eject failed:\n{result.stderr[-2000:]}"
     assert (eject_into / "mock_cpu_tool" / "setup.sh").is_file()
     assert (eject_into / "mock_cpu_tool" / "python_version.txt").is_file()
+
+
+_INSTALLED_PATHS_SCRIPT = """
+import json
+
+import proto_tools
+from proto_tools.utils.persistent_worker import _build_subprocess_env
+from proto_tools.utils.proto_home import get_proto_home
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
+from proto_tools.utils.tool_instance import ToolInstance
+
+print(json.dumps({
+    "package": proto_tools.__file__,
+    "proto_home": str(get_proto_home()),
+    "tool_envs": str(ToolInstance._get_tool_envs_root()),
+    "micromamba": str(ToolInstance._get_micromamba_root()),
+    "hf_home": _build_subprocess_env(device="cpu").get("HF_HOME"),
+    "weights": resolve_weights_dir("test_tool"),
+}))
+"""
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("has_model_cache", [False, True], ids=["default-cache", "custom-cache"])
+def test_non_editable_install_resolves_proto_home_paths(tmp_path, has_model_cache):
+    """A ``pip install``ed proto-tools resolves every storage path from PROTO_HOME and PROTO_MODEL_CACHE.
+
+    Runs from outside the repo so the package loads from site-packages, where anything derived
+    from ``__file__`` would point into the install rather than the source tree.
+    """
+    import json
+    import os
+
+    python = _install_non_editable(tmp_path / "venv")
+    proto_home = tmp_path / "home"
+    model_cache = tmp_path / "cache"
+    workdir = tmp_path / "cwd"
+    workdir.mkdir()
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH" and not k.startswith("PROTO_")}
+    env["PROTO_HOME"] = str(proto_home)
+    if has_model_cache:
+        env["PROTO_MODEL_CACHE"] = str(model_cache)
+
+    result = subprocess.run(
+        [python, "-c", _INSTALLED_PATHS_SCRIPT], cwd=workdir, env=env, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    paths = json.loads(result.stdout.strip().splitlines()[-1])
+
+    cache_root = model_cache if has_model_cache else proto_home / "proto_model_cache"
+    assert "site-packages" in paths["package"], paths["package"]
+    assert paths["proto_home"] == str(proto_home)
+    assert paths["tool_envs"] == str(proto_home / "proto_tool_envs")
+    assert paths["micromamba"] == str(proto_home / ".micromamba")
+    assert paths["hf_home"] == str(cache_root / "huggingface")
+    assert paths["weights"] == str(cache_root / "test_tool")
 
 
 # ── Concurrent env-build serialization ───────────────────────────────────────
