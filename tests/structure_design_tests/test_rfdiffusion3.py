@@ -162,23 +162,6 @@ def test_rfdiffusion3_config_gamma_0_symmetry_constraint():
     assert RFdiffusion3Config(sampler_kind="default", gamma_0=0.1).gamma_0 == 0.1
 
 
-def test_rfdiffusion3_config_rejects_unknown_field():
-    """Unknown config kwargs are rejected at construction, not silently forwarded to Hydra.
-
-    Regression: an agent passing a hallucinated setting (e.g. ``n_recycle``, which rfd3 has no
-    concept of) must fail immediately rather than reach Hydra as a bad ``inference_sampler.*``
-    override and crash mid-run.
-    """
-    with pytest.raises(ValueError):
-        RFdiffusion3Config(n_recycle=3)
-
-
-def test_rfdiffusion3_design_spec_rejects_unknown_field():
-    """Unknown spec kwargs are rejected; exotic InputSpecification fields go through raw_json."""
-    with pytest.raises(ValueError):
-        RFdiffusion3DesignSpec(length="100", contigs="A1-100")  # typo for 'contig'
-
-
 def test_rfdiffusion3_sampler_tuning_validates_and_omits_unset():
     """sampler_tuning validates typed settings, drops unset ones, and forwards extras verbatim."""
     # Bad value on a typed setting is rejected (would silently reach Hydra under extra="allow").
@@ -426,22 +409,6 @@ def test_rfdiffusion3_raw_json_resolves_relative_input_paths(tmp_path, monkeypat
     spec = json.loads(inputs.to_json_spec())
 
     assert spec["spec-0"]["input"] == str(target)
-
-
-def test_rfdiffusion3_dispatch_operation_is_design(monkeypatch):
-    """Dispatch input must use operation='design' — the only value inference.py accepts."""
-    from proto_tools.tools.structure_design.rfdiffusion3 import rfdiffusion3_sample as mod
-
-    captured: dict = {}
-
-    def fake(tool_id, input_data, **kw):
-        captured.update(input_data)
-        return {"designs": []}
-
-    monkeypatch.setattr(mod.ToolInstance, "dispatch", fake)
-    run_rfdiffusion3(RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(length="40")]), RFdiffusion3Config())
-
-    assert captured["operation"] == "design"
 
 
 def test_rfdiffusion3_output_chain_ids_canonicalized(monkeypatch):

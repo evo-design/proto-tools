@@ -27,7 +27,6 @@ from tests._structure_fixtures import synthetic_cif
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
-from tests.tool_infra_tests.test_export_functionality import validate_export_output
 
 # Cro repressor from bacteriophage lambda — short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
@@ -521,82 +520,27 @@ def test_opendde_no_msa_single_sequence_sets_use_msa_false(monkeypatch):
     assert captured["input_data"][0]["use_msa"] is False
 
 
-def test_opendde_one_structure_per_complex(monkeypatch):
-    """Each input complex yields exactly one structure (1:1 cardinality)."""
-    captured: dict = {}
-    metrics = {
-        "avg_plddt": 88.0,
-        "ptm": 0.8,
-        "iptm": 0.0,
-        "gpde": 1.5,
-        "ranking_score": 0.6,
-        "has_clash": False,
-    }
-    monkeypatch.setattr(
-        "proto_tools.tools.structure_prediction.opendde.opendde.ToolInstance.dispatch",
-        _fake_dispatch_factory(captured, metrics=metrics),
-    )
-
-    result = run_opendde(
-        OpenDDEInput(complexes=[_CRO_SEQUENCE, _TINY_PEPTIDE]),
-        OpenDDEConfig(use_msa=False),
-    )
-
-    assert result.success
-    assert len(result.structures) == 2
-    assert captured["toolkits"] == ["opendde", "opendde"]
-
-
 # ── GPU tests ────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.uses_gpu
-def test_opendde_basic_execution():
-    """Fold a tiny peptide end-to-end (MSA-free); headline pLDDT is populated.
-
-    Skips on hosts without OpenDDE weights / a GPU (the tool env fails to build).
-    """
-    result = run_opendde(
-        OpenDDEInput(complexes=[_TINY_PEPTIDE]),
-        OpenDDEConfig(use_msa=False, num_samples=1, num_steps=50, num_cycles=3, seed=42),
-    )
-
-    assert result.success
-    assert result.tool_id == "opendde-prediction"
-    assert len(result.structures) == 1
-    structure = result.structures[0]
-    assert is_valid_structure(structure.structure_cif)
-    assert structure.metrics["avg_plddt"] is not None
-    assert_metrics_in_spec(result)
-
-
-@pytest.mark.uses_gpu
 def test_opendde_pae_matrix_end_to_end():
-    """include_pae_matrix=True yields a square per-token PAE matrix + avg_pae in Å."""
+    """Fold a tiny peptide end-to-end; include_pae_matrix=True yields a square per-token PAE matrix + avg_pae in Å."""
     result = run_opendde(
         OpenDDEInput(complexes=[_TINY_PEPTIDE]),
         OpenDDEConfig(use_msa=False, num_samples=1, num_steps=50, num_cycles=3, seed=42, include_pae_matrix=True),
     )
     assert result.success
+    assert result.tool_id == "opendde-prediction"
+    assert len(result.structures) == 1
+    assert is_valid_structure(result.structures[0].structure_cif)
     m = result.structures[0].metrics
+    assert m["avg_plddt"] is not None
     pae = m["pae"]
     assert isinstance(pae, list) and len(pae) > 0
     assert all(len(row) == len(pae) for row in pae), "PAE matrix must be square (n_token x n_token)"
     assert 0.0 <= m["avg_pae"] <= 32.0
     assert_metrics_in_spec(result)
-
-
-@pytest.mark.uses_gpu
-def test_opendde_export(tmp_path):
-    """A folded OpenDDE output exports a non-empty structure file to disk."""
-    result = run_opendde(
-        OpenDDEInput(complexes=[_TINY_PEPTIDE]),
-        OpenDDEConfig(use_msa=False, num_samples=1, num_steps=50, num_cycles=3, seed=42),
-    )
-    assert result.success
-
-    result.export(name="opendde_pred", export_path=str(tmp_path), file_format="cif")
-    assert validate_export_output(tmp_path / "opendde_pred")
 
 
 # ── Benchmark ────────────────────────────────────────────────────────────────

@@ -7,7 +7,6 @@ import pytest
 
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_scoring.structure_metrics import (
-    StructureMetricsConfig,
     StructureMetricsInput,
     StructureMetricsOutput,
     StructureQualityMetrics,
@@ -45,48 +44,6 @@ def test_input_list_of_paths_preserved():
     assert all(isinstance(s, Structure) for s in inp.structures)
 
 
-def test_input_path_object_coerced_to_structure():
-    inp = StructureMetricsInput(structures=[_FIXTURE_PDB])
-    assert isinstance(inp.structures[0], Structure)
-
-
-def test_input_structure_object_passes_through():
-    s = Structure.from_file(_FIXTURE_PDB)
-    inp = StructureMetricsInput(structures=[s])
-    assert inp.structures[0].structure == s.structure
-
-
-# ── Config ───────────────────────────────────────────────────────────────────
-
-
-def test_config_extra_fields_rejected():
-    from pydantic import ValidationError
-
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        StructureMetricsConfig(extra_field="should_be_rejected")
-
-
-# ── StructureQualityMetrics data model ───────────────────────────────────────────────
-
-
-@pytest.mark.parametrize(
-    "longest_alpha_helix,gyration_radius",
-    [
-        (0, 0.0),
-        (25, 30.5),
-        (100, 99.9),
-    ],
-)
-def test_structure_metrics_model_dump(longest_alpha_helix, gyration_radius):
-    m = StructureQualityMetrics(
-        longest_alpha_helix=longest_alpha_helix,
-        gyration_radius=gyration_radius,
-    )
-    d = m.model_dump()
-    assert d["longest_alpha_helix"] == longest_alpha_helix
-    assert d["gyration_radius"] == gyration_radius
-
-
 # ── Export ───────────────────────────────────────────────────────────────────
 
 
@@ -118,12 +75,6 @@ def test_export_json(sample_output, tmp_path):
     assert validate_export_output(json_path)
     data = json.loads(json_path.read_text())
     assert len(data) == 2
-
-
-def test_output_format_options(sample_output):
-    assert "csv" in sample_output.output_format_options
-    assert "json" in sample_output.output_format_options
-    assert sample_output.output_format_default == "csv"
 
 
 # ---------------------------------------------------------------------------

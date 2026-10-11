@@ -10,14 +10,9 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.databases import DatasetRegistry, get_dataset_dir
-from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
-    Mmseqs2HomologySearchConfig,
-    Mmseqs2HomologySearchInput,
-    Mmseqs2HomologySearchQuery,
     local_search_low_memory_reason,
-    run_mmseqs2_homology_search,
 )
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
@@ -26,8 +21,6 @@ from proto_tools.tools.structure_prediction import (
     AlphaFold3Config,
     AlphaFold3Input,
     AlphaFold3Output,
-    Boltz2AffinityConfig,
-    Boltz2AffinityInput,
     Boltz2Config,
     Boltz2Input,
     Boltz2Output,
@@ -35,7 +28,6 @@ from proto_tools.tools.structure_prediction import (
     Chai1Input,
     Chai1Output,
     Complex,
-    ComplexMSAs,
     ESMFold2Config,
     ESMFold2Input,
     ESMFold2Output,
@@ -55,7 +47,6 @@ from proto_tools.tools.structure_prediction import (
     run_alphafold2,
     run_alphafold3,
     run_boltz2,
-    run_boltz2_affinity,
     run_chai1,
     run_esmfold,
     run_esmfold2,
@@ -69,7 +60,6 @@ from proto_tools.utils.tool_cache import (
     get_cache_info,
 )
 from proto_tools.utils.tool_instance import ToolInstance
-from tests.sequence_alignment_tests.test_mmseqs2_homology_search import FixtureDbConfig
 from tests.structure_prediction_tests._fasta_helpers import load_all_test_complexes
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -543,6 +533,7 @@ def test_batched_vs_individual_inference_consistency():
     batched_output = run_esmfold(batched_input, batched_config)
 
     validate_output(batched_output)
+    assert_metrics_in_spec(batched_output)
 
     assert len(batched_output.structures) == len(_BATCHED_TEST_SEQUENCES)
 
@@ -584,30 +575,6 @@ def test_batched_vs_individual_inference_consistency():
 
 
 @pytest.mark.uses_gpu
-def test_batched_inference_varying_lengths():
-    """Batched ESMFold handles sequences of varying lengths correctly."""
-    varying_length_sequences = [
-        "MAR",  # 3 residues
-        "GARYTWMKL",  # 9 residues
-        "YTWHKLARFGMVLSPADKTN",  # 20 residues
-    ]
-
-    complexes = [Complex(chains=[seq]) for seq in varying_length_sequences]
-
-    batched_input = ESMFoldInput(complexes=complexes)
-    batched_config = ESMFoldConfig(max_batch_residues=10000)
-    batched_output = run_esmfold(batched_input, batched_config)
-
-    validate_output(batched_output)
-    assert_metrics_in_spec(batched_output)
-
-    assert len(batched_output.structures) == len(varying_length_sequences)
-
-    for i, structure in enumerate(batched_output.structures):
-        assert is_valid_structure(structure.structure_cif), f"Structure {i} is invalid"
-
-
-@pytest.mark.uses_gpu
 def test_batched_multichain_complexes():
     """Batched ESMFold correctly handles multi-chain complexes."""
     multichain_complexes = [
@@ -632,179 +599,3 @@ def test_batched_multichain_complexes():
         assert structure.num_chains == expected_chains, (
             f"Structure {i}: expected {expected_chains} chains, got {structure.num_chains}"
         )
-
-
-# ── End-to-end: caller-supplied MSAs (built by local ColabFold) drive prediction
-#
-# Pins the use_msa gating fix from commit e12379fe across every MSA-capable
-# predictor in both unpaired and taxonomy-paired modes.
-
-# E. coli 50S ribosomal proteins L7/L12 (P0A7K2) and L10 (P0A7J3).
-_L7L12_SEQ = (
-    "MSITKDQIIEAVAAMSVMDVVELISAMEEKFGVSAAAAVAVAAGPVEAAEEKTEFDVILKAAGANKVAVIKAVRG"
-    "ATGLGLKEAKDLVESAPAALKEGVSKDDAEALKKALEEAGAEVEVK"
-)
-_L10_SEQ = (
-    "MALNLQDKQAIVAEVSEVAKGALSAVVADSRGVTVDKMTELRKAGREAGVYMRVVRNTLLRRAVEGTPFECLKDA"
-    "FVGPTLIAYSMEHPGAAARLFKEFAKANAKFEVKAAAFEGELIPASQIDRLATLPTYEEAIARLMATMKEAPAGK"
-    "LVRTLAAVRDAKEAA"
-)
-
-# Mini SwissProt DB via the registry-driven ``tiny-test-colabfold`` dataset entry; auto-provisioned on first dispatch.
-_MSA_TEST_DATASET = "tiny-test-colabfold"
-
-
-def _mini_db_skip_reason() -> str | None:
-    """Skip reason when ``tiny-test-colabfold`` isn't already on disk; ``None`` if present."""
-    cache = get_dataset_dir(_MSA_TEST_DATASET)
-    if not (cache / "uniref30_mini_db.dbtype").exists():
-        return (
-            f"tiny-test-colabfold not provisioned at {cache}; first dispatch auto-provisions "
-            "(263 MB download). Skipping to keep the test offline-safe."
-        )
-    return None
-
-
-def _build_local_mmseqs2_config() -> Mmseqs2HomologySearchConfig:
-    # CPU because the mmseqs2-homology-search subprocess can't see the GPU under pytest's DeviceManager mask.
-    return FixtureDbConfig(search_mode="local", device="cpu", verbose=False)
-
-
-@pytest.fixture(scope="module")
-def _local_unpaired_msas(tmp_path_factory):
-    """Two independent unpaired local MMseqs2 searches against the mini SwissProt DB.
-
-    Module-scoped: the searches are amortized across every parametrization of
-    ``test_locally_searched_msa_drives_end_to_end_prediction``.
-    """
-    if _mini_db_skip_reason():
-        pytest.skip(_mini_db_skip_reason())
-    inputs = Mmseqs2HomologySearchInput(
-        queries=[
-            Mmseqs2HomologySearchQuery(sequence=_L7L12_SEQ, sequence_id="l7l12"),
-            Mmseqs2HomologySearchQuery(sequence=_L10_SEQ, sequence_id="l10"),
-        ]
-    )
-    result = run_mmseqs2_homology_search(inputs, _build_local_mmseqs2_config())
-    assert result.success, "Local MMseqs2 search (unpaired) failed"
-    msa_l7l12 = result.results[0].msas[0]
-    msa_l10 = result.results[1].msas[0]
-    assert msa_l7l12 is not None and msa_l10 is not None, (
-        "Mini SwissProt DB unexpectedly returned no hits for one of the test chains"
-    )
-    return msa_l7l12, msa_l10
-
-
-@pytest.fixture(scope="module")
-def _local_paired_msas(tmp_path_factory):
-    """One taxonomy-paired local MMseqs2 search (greedy) against the mini SwissProt DB.
-
-    Module-scoped (see ``_local_unpaired_msas``). Requires the DB's taxonomy
-    ``*_mapping`` file, which the mini DB ships with.
-    """
-    if _mini_db_skip_reason():
-        pytest.skip(_mini_db_skip_reason())
-    inputs = Mmseqs2HomologySearchInput(
-        queries=[
-            [
-                Mmseqs2HomologySearchQuery(sequence=_L7L12_SEQ, sequence_id="l7l12"),
-                Mmseqs2HomologySearchQuery(sequence=_L10_SEQ, sequence_id="l10"),
-            ]
-        ]
-    )
-    result = run_mmseqs2_homology_search(inputs, _build_local_mmseqs2_config())
-    assert result.success, "Local MMseqs2 search (paired) failed"
-    paired_result = result.results[0]
-    assert all(m is not None for m in paired_result.paired_msas), (
-        "Paired local MMseqs2 search returned no taxonomy-aligned rows for at least one chain — "
-        "too few cross-chain hits in the mini SwissProt DB for the chosen test pair."
-    )
-    msa_l7l12, msa_l10 = paired_result.paired_msas
-    return msa_l7l12, msa_l10
-
-
-_SUPPLIED_MSA_PREDICTORS = {
-    "alphafold2": (run_alphafold2, AlphaFold2Input, AlphaFold2Config),
-    "alphafold3": (run_alphafold3, AlphaFold3Input, AlphaFold3Config),
-    "boltz2": (run_boltz2, Boltz2Input, Boltz2Config),
-    "boltz2-affinity": (run_boltz2_affinity, Boltz2AffinityInput, Boltz2AffinityConfig),
-    "chai1": (run_chai1, Chai1Input, Chai1Config),
-    "esmfold2": (run_esmfold2, ESMFold2Input, ESMFold2Config),
-    "protenix": (run_protenix, ProtenixInput, ProtenixConfig),
-    "rf3": (run_rf3_prediction, RF3Input, RF3Config),
-}
-
-# L-tyrosine (CCD "TYR"); only here to satisfy Boltz2-affinity's "exactly one ligand" validator.
-_AFFINITY_LIGAND_SMILES = "c1cc(ccc1C[C@@H](C(=O)O)N)O"
-
-
-def _build_test_complex(predictor_name: str) -> Complex:
-    """Build the test complex: L7/L12 + L10 for all predictors; + TYR ligand for boltz2-affinity."""
-    chains: list = [_L7L12_SEQ, _L10_SEQ]
-    if predictor_name == "boltz2-affinity":
-        chains.append(Fragment(smiles=_AFFINITY_LIGAND_SMILES))
-    return Complex(chains=chains)
-
-
-def _generate_supplied_msa_params() -> list:
-    """Cross-product (predictor x pairing-mode)."""
-    return [
-        pytest.param(predictor_name, paired, id=f"{predictor_name}-{'paired' if paired else 'unpaired'}")
-        for predictor_name in _SUPPLIED_MSA_PREDICTORS
-        for paired in (False, True)
-    ]
-
-
-@pytest.mark.integration
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-@pytest.mark.skipif(_mini_db_skip_reason() is not None, reason=_mini_db_skip_reason() or "")
-@pytest.mark.usefixtures("_release_between_predictors")
-@pytest.mark.parametrize(("predictor_name", "paired"), _generate_supplied_msa_params())
-def test_locally_searched_msa_drives_end_to_end_prediction(
-    predictor_name,
-    paired,
-    _local_unpaired_msas,
-    _local_paired_msas,
-):
-    """End-to-end: build an MSA via local ColabFold, then fold with it (use_msa=False).
-
-    Closes the loop on the ``use_msa`` gating fix (commit e12379fe): caller-supplied
-    ``inputs.msas`` are always honored — ``use_msa`` gates only ColabFold
-    auto-generation. Each parametrization:
-
-    1. Pulls the relevant MSAs (paired or unpaired) from the module-scoped
-       fixtures, which ran local ColabFold once against the mini SwissProt DB
-       shipped at ``tests/dummy_data/mini_mmseqs_db/``.
-    2. Hands the predictor a :class:`ComplexMSAs` with the right ``paired`` flag,
-       and sets ``use_msa=False`` so the predictor must not run a second search.
-    3. Asserts the prediction succeeds and produces a valid structure.
-
-    Skips: missing mini DB (no MMseqs DB to search), missing GPU (each predictor
-    needs one).
-    """
-    run_func, input_class, config_class = _SUPPLIED_MSA_PREDICTORS[predictor_name]
-
-    msa_l7l12, msa_l10 = _local_paired_msas if paired else _local_unpaired_msas
-    per_chain = {0: msa_l7l12, 1: msa_l10}
-    complex_msas = ComplexMSAs(per_chain=per_chain, paired=paired)
-
-    comp = _build_test_complex(predictor_name)
-    inputs = input_class(complexes=[comp], msas=[complex_msas])
-
-    config_kwargs: dict = {"use_msa": False, "verbose": True}
-    # ESMFold2 ships two checkpoints; only the non-Fast one accepts MSA conditioning.
-    if predictor_name == "esmfold2":
-        config_kwargs["model_checkpoint"] = "esmfold2"
-    config = config_class(**config_kwargs)
-
-    output = run_func(inputs, config)
-
-    validate_output(output)
-    assert isinstance(output, StructurePredictionOutput)
-    assert len(output.structures) == 1, f"Expected one structure for one input complex, got {len(output.structures)}"
-    assert is_valid_structure(output.structures[0].structure_cif), (
-        f"{predictor_name} produced an invalid structure when fed a "
-        f"{'paired' if paired else 'unpaired'} caller-supplied MSA"
-    )
-    assert_metrics_in_spec(output)

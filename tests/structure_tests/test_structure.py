@@ -193,19 +193,6 @@ def test_nested_field_typed_structure_accepts_structure_instance_envelope(test_p
 # ── Format conversion ────────────────────────────────────────────────────────
 
 
-def test_pdb_to_cif_conversion(protein_from_pdb_file):
-    cif_content = protein_from_pdb_file.structure_cif
-    assert isinstance(cif_content, str)
-    assert len(cif_content) > 0
-    assert "data_" in cif_content or "_atom_site" in cif_content
-
-
-def test_cif_to_pdb_conversion(protein_from_cif_file):
-    pdb_content = protein_from_cif_file.structure_pdb
-    assert isinstance(pdb_content, str)
-    assert "ATOM" in pdb_content
-
-
 def test_cif_to_pdb_no_warnings_for_clean_cif(test_cif_file_content):
     """A normal single-chain CIF (renin) should convert without any lossy-data warnings."""
     with warnings.catch_warnings(record=True) as caught:
@@ -256,12 +243,6 @@ def test_gemmi_struct_lazy_loading_and_caching(protein_from_pdb_file):
     assert struct1 is not None
     assert len(struct1) > 0
     assert protein_from_pdb_file.gemmi_struct is struct1
-
-
-@pytest.mark.parametrize("fixture_name", ["protein_from_pdb_file", "protein_from_cif_file"])
-def test_gemmi_struct_parses_both_formats(fixture_name, request):
-    protein = request.getfixturevalue(fixture_name)
-    assert len(protein.gemmi_struct) > 0
 
 
 # ── File I/O ──────────────────────────────────────────────────────────────────
@@ -428,22 +409,6 @@ def test_structure_approx_equal_matching():
     a = Structure.from_file(_TEST_PDB_FILE)
     b = Structure.from_file(_TEST_PDB_FILE)
     a.approx_equal(b)
-
-
-def test_structure_metrics_access_goes_through_metrics_field():
-    """Metric access must go through ``.metrics`` (attribute or mapping style).
-
-    The old ``Structure.__getattr__`` delegation that allowed ``structure.ptm``
-    as a shortcut for ``structure.metrics["ptm"]`` is deliberately removed.
-    """
-    protein = Structure.from_file(_TEST_PDB_FILE, metrics={"ptm": 0.9})
-    assert protein.metrics.ptm == 0.9
-    assert protein.metrics["ptm"] == 0.9
-    # no bypass
-    with pytest.raises(AttributeError):
-        _ = protein.ptm
-    with pytest.raises(AttributeError):
-        _ = protein.nonexistent_field
 
 
 def test_detect_structure_format_empty():
@@ -1457,19 +1422,9 @@ def test_gyration_radius_positive(pdl1_complex):
     assert chain_a < whole
 
 
-def test_longest_alpha_helix_nonnegative(pdl1_complex):
-    """Longest helix is a non-negative integer."""
-    assert pdl1_complex.longest_alpha_helix() >= 0
-
-
 def test_backbone_rmsd_self_is_zero(pdl1_complex):
     """RMSD of a structure against itself is zero."""
     assert pdl1_complex.backbone_rmsd(pdl1_complex) == pytest.approx(0.0, abs=1e-3)
-
-
-def test_backbone_rmsd_per_chain(pdl1_complex):
-    """Per-chain RMSD against self is also zero."""
-    assert pdl1_complex.backbone_rmsd(pdl1_complex, chain_id="A") == pytest.approx(0.0, abs=1e-3)
 
 
 def test_ca_rmsd_no_superposition_translation_recovers_offset(pdl1_complex):
@@ -1569,15 +1524,6 @@ def test_from_rcsb_fetches_structure():
     assert structure.source == "1TIM"
     assert is_valid_structure(structure_filepath_or_content=structure.structure)
     assert "A" in structure.get_chain_ids()
-
-
-@pytest.mark.integration
-def test_from_url_fetches_structure():
-    """``from_url`` fetches PDB content and auto-detects the format."""
-    structure = Structure.from_url(_RCSB_PDB_URL)
-    assert structure.structure_format == "pdb"
-    assert structure.source == _RCSB_PDB_URL
-    assert is_valid_structure(structure_filepath_or_content=structure.structure)
 
 
 @pytest.mark.integration

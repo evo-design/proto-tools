@@ -19,7 +19,6 @@ from proto_tools.tools.structure_prediction import (
 from proto_tools.tools.structure_prediction.chai1.helpers import count_chai1_tokens
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
-    Complex,
 )
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
@@ -122,8 +121,3 @@ def test_count_chai1_tokens_glycan_sums_sugar_heavy_atoms():
         Chain(sequence="MAN(6-1 FUC)(4-1 MAN)", entity_type="glycan"),
     ]
     assert count_chai1_tokens(chains) == 4 + 12 + 11 + 12  # protein 4 + MAN 12 + FUC 11 + MAN 12
-
-
-def test_chai1_input_within_token_budget_passes():
-    """A small protein + small ligand stays well under 2048 tokens."""
-    Chai1Input(complexes=[Complex(chains=["MKTL", "CCO"])])

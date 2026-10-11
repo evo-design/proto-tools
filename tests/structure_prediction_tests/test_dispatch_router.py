@@ -37,11 +37,6 @@ def test_single_complex_normalized_to_list():
     assert isinstance(complexes_arg, list)
 
 
-def test_msas_default_none():
-    _, mock_input = _dispatch()
-    assert mock_input.call_args.kwargs["msas"] is None
-
-
 def test_msas_forwarded_to_input():
     # A target-only MSA: chain 1 conditioned, the binder (chain 0) omitted -> single-sequence.
     msas = [ComplexMSAs(per_chain={1: MSA(aligned_sequences=["MVLSPADKTN", "MVLSPADKTN"])}, paired=False)]

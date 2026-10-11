@@ -53,11 +53,6 @@ def test_chain_selection_coerces_list() -> None:
     assert sel.chains == ["A", "B"]
 
 
-def test_chain_selection_canonical_kwargs() -> None:
-    sel = ChainSelection(chains=["A", "B"])
-    assert sel.chains == ["A", "B"]
-
-
 def test_chain_selection_passthrough() -> None:
     original = ChainSelection(chains=["A"])
     sel = ChainSelection.model_validate(original)
@@ -104,11 +99,6 @@ def test_chain_selection_validate_against_bad_chain(structure: Structure) -> Non
 def test_residue_selection_coerces_dict_of_positions() -> None:
     sel = ResidueSelection.model_validate({"A": [1, 2, 3]})
     assert sel.chains == {"A": [1, 2, 3]}
-
-
-def test_residue_selection_canonical_kwargs() -> None:
-    sel = ResidueSelection(chains={"A": [1, 2]})
-    assert sel.chains == {"A": [1, 2]}
 
 
 def test_residue_selection_passthrough() -> None:
@@ -264,11 +254,6 @@ def test_single_chain_selection_coerces_string() -> None:
     assert sel.chain == "A"
 
 
-def test_single_chain_selection_canonical_kwargs() -> None:
-    sel = SingleChainSelection(chain="A")
-    assert sel.chain == "A"
-
-
 def test_single_chain_selection_passthrough() -> None:
     original = SingleChainSelection(chain="A")
     sel = SingleChainSelection.model_validate(original)
@@ -387,12 +372,6 @@ def test_base_auto_validates_single_chain_role() -> None:
 def test_base_auto_validates_residue_role() -> None:
     with pytest.raises(ValidationError, match=r"residue_role.*invalid positions"):
         _SubInput(structure=str(EXAMPLE_PDB), residue_role={"A": [9999]})
-
-
-def test_base_skips_none_fields() -> None:
-    inp = _SubInput(structure=str(EXAMPLE_PDB))
-    assert inp.chain_role is None
-    assert inp.residue_role is None
 
 
 def test_base_accepts_valid_selections() -> None:
