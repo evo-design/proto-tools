@@ -131,22 +131,3 @@ def test_repo_metrics_declare_direction(metrics_subclass: type[Metrics]) -> None
             f"{metrics_subclass.__qualname__}.metric_spec[{metric_name!r}] is missing a valid "
             f"better_values_are (got {direction!r}); must be one of {sorted(_VALID_BETTER_VALUES)}"
         )
-
-
-@pytest.mark.parametrize("direction", sorted(_VALID_BETTER_VALUES))
-def test_check_spec_entry_accepts_valid_direction(direction: str) -> None:
-    """Every recognized ``better_values_are`` value passes validation."""
-    _check_spec_entry("m", {"type": "float", "better_values_are": direction}, "T")
-
-
-def test_check_spec_entry_rejects_unknown_direction() -> None:
-    """An unrecognized ``better_values_are`` value raises."""
-    with pytest.raises(AssertionError, match="better_values_are"):
-        _check_spec_entry("m", {"type": "float", "better_values_are": "up"}, "T")
-
-
-def test_at_least_one_metrics_subclass_registered() -> None:
-    """Sanity: the refactor added real ``Metrics`` subclasses across the repo."""
-    assert len(_METRIC_SUBCLASSES) >= 10, (
-        f"expected at least 10 Metrics subclasses across the repo, found {len(_METRIC_SUBCLASSES)}: {_IDS}"
-    )

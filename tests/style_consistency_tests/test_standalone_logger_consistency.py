@@ -128,41 +128,6 @@ def _imports_get_logger_from_helpers(tree: ast.Module) -> bool:
 
 
 @pytest.mark.parametrize("script_path", _ALL_SCRIPTS, ids=[_ID(p) for p in _ALL_SCRIPTS])
-def test_standalone_does_not_use_logging_getLogger(script_path: Path) -> None:
-    """``logger = logging.getLogger(__name__)`` and ``getLogger(__name__)`` are forbidden.
-
-    Both produce loggers outside the ``worker.*`` namespace, so their records
-    fall outside the structured-logging bridge in the parent's drain thread.
-    """
-    if script_path in _EXEMPT:
-        pytest.skip(f"exempt: {script_path.relative_to(_TOOLS_DIR)}")
-    src = script_path.read_text()
-    # Parse so we don't trip on these strings appearing inside docstrings/comments.
-    tree = ast.parse(src, filename=str(script_path))
-    assignment = _module_level_logger_assignment(tree)
-    if assignment is None:
-        return  # No module-level logger — vacuously fine.
-    call = assignment.value
-    assert isinstance(call, ast.Call)
-    func = call.func
-    # Forbidden: ``logging.getLogger(__name__)`` (Attribute) and ``getLogger(__name__)`` (Name).
-    if isinstance(func, ast.Attribute):
-        is_logging_getLogger = (
-            isinstance(func.value, ast.Name) and func.value.id == "logging" and func.attr == "getLogger"
-        )
-        assert not is_logging_getLogger, (
-            f"{script_path.relative_to(_TOOLS_DIR)}: uses logging.getLogger(__name__); "
-            "switch to ``from standalone_helpers import get_logger; logger = get_logger(__name__)``"
-        )
-    if isinstance(func, ast.Name):
-        assert func.id != "getLogger", (
-            f"{script_path.relative_to(_TOOLS_DIR)}: uses getLogger(__name__) "
-            "(imported via ``from logging import getLogger``); switch to "
-            "``from standalone_helpers import get_logger; logger = get_logger(__name__)``"
-        )
-
-
-@pytest.mark.parametrize("script_path", _ALL_SCRIPTS, ids=[_ID(p) for p in _ALL_SCRIPTS])
 def test_standalone_declares_module_level_logger(script_path: Path) -> None:
     """Every standalone must have a module-level ``logger = get_logger(__name__)``.
 
@@ -246,29 +211,3 @@ def test_helper_declares_module_level_logger(helper_path: Path) -> None:
         f"{helper_path.name}: logger must be initialized as ``get_logger(__name__)``."
     )
     assert _imports_get_logger_relative(tree), f"{helper_path.name}: missing ``from .proto_logging import get_logger``."
-
-
-@pytest.mark.parametrize("helper_path", _ALL_HELPERS, ids=[p.name for p in _ALL_HELPERS])
-def test_helper_does_not_use_logging_getLogger(helper_path: Path) -> None:
-    """Helpers must not call ``logging.getLogger`` or ``getLogger`` at module level either."""
-    src = helper_path.read_text()
-    tree = ast.parse(src, filename=str(helper_path))
-    assignment = _module_level_logger_assignment(tree)
-    if assignment is None:
-        return
-    call = assignment.value
-    assert isinstance(call, ast.Call)
-    func = call.func
-    if isinstance(func, ast.Attribute):
-        is_logging_getLogger = (
-            isinstance(func.value, ast.Name) and func.value.id == "logging" and func.attr == "getLogger"
-        )
-        assert not is_logging_getLogger, (
-            f"{helper_path.name}: uses logging.getLogger; "
-            "switch to ``from .proto_logging import get_logger; logger = get_logger(__name__)``"
-        )
-    if isinstance(func, ast.Name):
-        assert func.id != "getLogger", (
-            f"{helper_path.name}: uses getLogger (from `from logging import getLogger`); "
-            "switch to ``from .proto_logging import get_logger``"
-        )

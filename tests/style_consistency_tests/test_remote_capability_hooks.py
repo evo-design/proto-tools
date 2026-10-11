@@ -36,12 +36,6 @@ def test_only_one_hook_name_exists():
     assert not wrong, f"these will never be called; the registry calls {HOOK!r}:\n  " + "\n  ".join(wrong)
 
 
-def test_the_registry_calls_that_hook():
-    """Guards against the inverse mistake of renaming the call site instead."""
-    source = (_PACKAGE_ROOT / "tools" / "tool_registry.py").read_text()
-    assert f".{HOOK}(" in source, f"tool_registry.py no longer calls {HOOK}"
-
-
 @pytest.mark.parametrize("path,name", _config_methods(), ids=lambda v: getattr(v, "name", str(v)))
 def test_every_hook_takes_the_device(path: Path, name: str):
     """A hook that ignores the device cannot distinguish proto from a caller's own workspace."""

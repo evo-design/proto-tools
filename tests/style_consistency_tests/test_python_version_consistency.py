@@ -82,27 +82,3 @@ def test_python_version_file_is_well_formed(version_file: Path) -> None:
         ToolInstance._parse_python_version(content, "test-platform-no-match", str(version_file))
     except (ValueError, RuntimeError) as e:
         pytest.fail(f"{version_file}:\n  {e}")
-
-
-@pytest.mark.parametrize("version_file", _ALL_FILES, ids=_ALL_IDS)
-def test_python_version_file_declares_default(version_file: Path) -> None:
-    """Every shipped python_version.txt must explicitly declare a 'default' key.
-
-    Redundant with the parser check above, but kept as a separate test so the
-    failure message is precise: a tool author who forgets `default:` sees one
-    test fail with "missing 'default' key" rather than a generic parse error.
-    """
-    content = version_file.read_text()
-    has_default = False
-    for raw in content.splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if not line:
-            continue
-        key, sep, _ = line.partition(":")
-        if sep and key.strip().lower() == "default":
-            has_default = True
-            break
-    assert has_default, (
-        f"{version_file} is missing required 'default' key. "
-        f"Every python_version.txt must declare a default version like 'default: 3.11'."
-    )
