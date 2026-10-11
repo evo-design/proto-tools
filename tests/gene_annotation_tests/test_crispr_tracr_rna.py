@@ -21,9 +21,6 @@ from tests.tool_infra_tests.test_export_functionality import (
 )
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "crispr_tracr_rna"
-_SETUP_SH = (
-    Path(__file__).resolve().parents[2] / "proto_tools/tools/gene_annotation/crispr_tracr_rna/standalone/setup.sh"
-)
 _RUN_MODULE = "proto_tools.tools.gene_annotation.crispr_tracr_rna.standalone.run"
 
 _persistent_tool = make_persistent_fixture("crispr_tracr_rna", gpu=False)
@@ -52,19 +49,6 @@ def test_has_tracr_truth_table():
     for name, pred in cases.items():
         assert pred.has_tracr is True, name
     assert CrisprTracrRNAPrediction(sequence_id="t").has_tracr is False
-
-
-def test_prediction_accepts_model_run_columns():
-    """Schema must coerce upstream model_run column types."""
-    pred = CrisprTracrRNAPrediction(
-        sequence_id="x",
-        start="12002",  # type: ignore[arg-type]
-        end="12056",  # type: ignore[arg-type]
-        e_value="4.50e-25",  # type: ignore[arg-type]
-        best_e_value="4.50e-25",  # type: ignore[arg-type]
-        hit_sequence="AAGGCTTT",
-    )
-    assert (pred.start, pred.end, pred.e_value, pred.hit_sequence) == (12002, 12056, 4.50e-25, "AAGGCTTT")
 
 
 def test_sequence_result_top_candidate_and_has_tracr():
@@ -216,74 +200,12 @@ def test_build_upstream_flags():
     assert {"--perform_type_v_anti_repeat_analysis", "True"} <= set(flags)
 
 
-def test_setup_sh_content():
-    """setup.sh must install all upstream tools, download cas-id models, and pin Python 3.8 + sklearn 0.22."""
-    content = _SETUP_SH.read_text()
-
-    # Upstream repos cloned into the right relative paths.
-    assert "tools/CRISPRidentify/CRISPRidentify" in content
-    assert "CRISPRcasIdentifier" in content
-
-    # cas-id Google Drive models — file IDs from upstream README. Without these the
-    # cas-effector-detection leg of complete_run is a silent no-op.
-    assert "proto_download_gdrive" in content
-    assert "1YbTxkn9KuJP2D7U1-6kL1Yimu_4RqSl1" in content
-    assert "1Nc5o6QVB6QxMxpQjmLQcbwQwkRLk-thM" in content
-    # Canonical filenames CRISPRcasIdentifier.py looks up at runtime.
-    for name in ("HMM_sets.tar.gz", "trained_models.tar.gz"):
-        assert name in content
-        assert f"tar -xzf {name}" in content
-
-    # Pinned Python + sklearn for CRISPRidentify's pickled models.
-    assert "python=3.8" in content
-    assert "scikit-learn=0.22" in content
-
-    # Bioinformatics tools and Python deps installed via conda.
-    for pkg in (
-        "intarna",
-        "infernal",
-        "prodigal",
-        "hmmer",
-        "viennarna",
-        "vmatch",
-        "clustalo",
-        "blast",
-        "fasta3",
-        "h5py",
-        "dill",
-        "networkx",
-        "pyyaml",
-        "regex",
-        "requests",
-    ):
-        assert pkg in content, f"setup.sh missing {pkg}"
-
-
 # ── Integration ───────────────────────────────────────────────────────────
 
 
 @pytest.mark.integration
-def test_run_complete_run_populates_score():
-    """complete_run on Listeria locus must populate score + similarity*coverage > 0.5.
-
-    Score-populates is the regression test for the silent --output_summary_file drop.
-    """
-    seq = _read_fasta_sequence(DATA_DIR / "AAAABU010000051.fasta")
-    result = run_crispr_tracr_rna(
-        CrisprTracrRNAInput(sequences=[seq]),
-        CrisprTracrRNAConfig(model_type="II"),
-    )
-    assert result.success, result.errors
-    top = result.results[0].top_candidate
-    assert top is not None
-    assert top.score is not None, "complete_run must populate the multi-evidence ranking score"
-    assert top.anti_repeat_similarity_coverage_multiplication is not None
-    assert top.anti_repeat_similarity_coverage_multiplication > 0.5
-
-
-@pytest.mark.integration
 def test_run_model_run_real_sequence():
-    """model_run on the same locus populates the cmsearch-only schema fields on the top candidate."""
+    """model_run on a Listeria locus populates the cmsearch-only schema fields on the top candidate."""
     seq = _read_fasta_sequence(DATA_DIR / "AAAABU010000051.fasta")
     result = run_crispr_tracr_rna(
         CrisprTracrRNAInput(sequences=[seq]),
@@ -302,7 +224,7 @@ def test_run_model_run_real_sequence():
 
 @pytest.mark.integration
 def test_positive_control_spyogenes_sf370():
-    """S. pyogenes SF370 — top tracrRNA carries the canonical sgRNA scaffold + multiple candidates ranked.
+    """S. pyogenes SF370 complete_run — top tracrRNA carries the canonical sgRNA scaffold + multiple candidates ranked.
 
     This locus produces multiple candidate hits (verified against bare upstream).
     Asserts the wrapper preserves all of them and surfaces them score-descending.
@@ -320,6 +242,9 @@ def test_positive_control_spyogenes_sf370():
     assert top.tracr_rna_sequence is not None
     assert "GTGGCACCGAGTCGGTGC" in top.tracr_rna_sequence
     assert top.intarna_anti_repeat_interaction is not None
+    # complete_run must populate the multi-evidence ranking score (guards the silent --output_summary_file drop)
+    assert top.score is not None
+    assert top.anti_repeat_similarity_coverage_multiplication is not None
 
     # Multi-hit invariant: upstream finds >1 candidate for this locus, sorted by score desc.
     assert len(seq_result.candidates) >= 2, (

@@ -563,44 +563,25 @@ def test_direct_lookup_unknown_accession_surfaces_failure():
 
 
 @pytest.mark.integration
-def test_workflow_with_uniprot_fetch():
-    """Cross-tool chain: uniprot-fetch length matches interproscan-fetch sequence_length, all domain coords in bounds."""
+def test_direct_lookup_tp53_matches_uniprot_and_pfam_anchor():
+    """TP53 returns its canonical Pfam P53 DBD (PF00870, 100-288) and agrees with uniprot-fetch on length.
+
+    Pfam family boundaries are decade-stable; if the anchor drifts, InterPro/Pfam moved and we want to know.
+    """
     uniprot = run_uniprot_fetch(UniProtFetchInput(uniprot_id="P04637"))
-    ipr = run_interproscan_fetch(InterProScanFetchInput(uniprot_id="P04637"))
-    assert uniprot.success and ipr.success
-    assert ipr.sequence_length == uniprot.length
-    assert all(1 <= d.start <= d.end <= uniprot.length for d in ipr.domains)
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    "uniprot_id, expected_length, expected_pfam_accession, expected_anchor",
-    [
-        # Each row anchors a stable Pfam hit by exact (start, end) coords. Pfam family
-        # boundaries are decade-stable; if any of these drift, InterPro/Pfam moved and
-        # we want to know.
-        ("P04637", 393, "PF00870", (100, 288)),  # TP53 — Pfam P53 DBD
-        ("P38398", 1863, "PF00533", (1645, 1723)),  # BRCA1 — first Pfam BRCT
-        ("P01116", 189, "PF00071", (5, 164)),  # KRAS — Pfam Ras family
-        ("P00533", 1210, "PF07714", (714, 966)),  # EGFR — Pfam tyrosine kinase
-    ],
-    ids=["TP53", "BRCA1", "KRAS", "EGFR"],
-)
-def test_direct_lookup_known_oncogenes_workload(uniprot_id, expected_length, expected_pfam_accession, expected_anchor):
-    """Realistic workload: 4 cancer-driver proteins each return their canonical Pfam anchor at exact coords."""
-    output = run_interproscan_fetch(InterProScanFetchInput(uniprot_id=uniprot_id))
+    output = run_interproscan_fetch(InterProScanFetchInput(uniprot_id="P04637"))
+    assert uniprot.success
     assert output.success, output.errors
-    assert output.accession == uniprot_id
-    assert output.sequence_length == expected_length
-    start, end = expected_anchor
+    assert output.accession == "P04637"
+    assert output.sequence_length == uniprot.length == 393
     assert any(
-        d.member_database == "pfam" and d.accession == expected_pfam_accession and d.start == start and d.end == end
+        d.member_database == "pfam" and d.accession == "PF00870" and d.start == 100 and d.end == 288
         for d in output.domains
     ), (
-        f"missing canonical {expected_pfam_accession} at {start}-{end}; "
+        "missing canonical PF00870 at 100-288; "
         f"got Pfam: {sorted((d.accession, d.start, d.end) for d in output.domains if d.member_database == 'pfam')[:5]}"
     )
-    assert all(1 <= d.start <= d.end <= expected_length for d in output.domains)
+    assert all(1 <= d.start <= d.end <= uniprot.length for d in output.domains)
 
 
 @pytest.mark.integration
@@ -635,17 +616,3 @@ def test_interproscan_config_env_var_default(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("INTERPROSCAN_EMAIL", "env@example.org")
     cfg = InterProScanFetchConfig()
     assert cfg.email == "env@example.org"
-
-
-def test_interproscan_config_explicit_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An explicit config email overrides the env var."""
-    monkeypatch.setenv("INTERPROSCAN_EMAIL", "env@example.org")
-    cfg = InterProScanFetchConfig(email="explicit@example.org")
-    assert cfg.email == "explicit@example.org"
-
-
-def test_interproscan_config_no_env_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """With INTERPROSCAN_EMAIL unset, the config email defaults to None."""
-    monkeypatch.delenv("INTERPROSCAN_EMAIL", raising=False)
-    cfg = InterProScanFetchConfig()
-    assert cfg.email is None

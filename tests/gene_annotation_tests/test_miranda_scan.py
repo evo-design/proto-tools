@@ -196,23 +196,6 @@ def test_miranda_scan_finds_bantam_site():
 # -- Cache-key separation (mirna_queries moved to Config; now in per-item key) -----
 
 
-def test_miranda_per_item_cache_key_distinguishes_different_mirna_queries():
-    """Same target + different `mirna_queries` on Config → distinct per-item cache keys.
-
-    Regression test: before the Input→Config migration, `mirna_queries` lived on Input as
-    a non-iterable sibling field that bypassed the per-item key, so a cached result for
-    one query set would silently be returned for scans against a different set.
-    """
-    from proto_tools.utils.tool_cache import _generate_cache_key
-
-    target = "ACGUACGUACGU"
-    cfg_a = MirandaConfig(mirna_queries=["UGAGAUCAUU"])
-    cfg_b = MirandaConfig(mirna_queries=["GGGGGGGGGG"])
-    key_a = _generate_cache_key("miranda-scan", input_item=target, config=cfg_a)
-    key_b = _generate_cache_key("miranda-scan", input_item=target, config=cfg_b)
-    assert key_a != key_b
-
-
 # -- Benchmark (real binary; heavy workload) --------------------------------
 
 

@@ -5,6 +5,7 @@ Tests for the AlphaFold DB fetch tool.
 
 import csv
 import json
+import logging
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -266,7 +267,7 @@ def test_json_export_unchanged_after_sidecar_addition():
 
 @pytest.mark.integration
 def test_alphafold_db_fetch_csv_export_against_live_api_yields_usable_sidecars():
-    """Live AFDB fetch + CSV export: each sidecar re-parses to match the manifest row."""
+    """Live AFDB fetch with include_msa=True + CSV export: each sidecar re-parses to match the manifest row."""
     output = run_alphafold_db_fetch(
         AlphaFoldDBFetchInput(uniprot_id="P04637"),
         AlphaFoldDBFetchConfig(include_msa=True),
@@ -294,14 +295,22 @@ def test_alphafold_db_fetch_csv_export_against_live_api_yields_usable_sidecars()
         assert chain_seqs[next(iter(chain_seqs))] == row["sequence"]
 
         a3m_lines = (d / "tp53.a3m").read_text(encoding="utf-8").splitlines()
+        assert a3m_lines[0].startswith(">")
         a3m_query = "".join(c for c in a3m_lines[1] if c.isalpha() and c.isupper())
         assert a3m_query == row["sequence"]
 
 
 @pytest.mark.integration
-def test_alphafold_db_fetch_full_p04637_record():
-    """Default fetch returns a complete record with a parsed PDB Structure and length-matched pLDDT."""
-    output = run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="P04637"), AlphaFoldDBFetchConfig())
+def test_alphafold_db_fetch_full_p04637_record(caplog):
+    """Default fetch picks the canonical isoform and returns a parsed PDB Structure with length-matched pLDDT.
+
+    TP53 has multiple annotated isoforms in AFDB: the canonical record (AF-P04637-F1, 393 aa) comes first,
+    followed by shorter alternatives. The wrapper must select the canonical one and warn naming it.
+    """
+    with caplog.at_level(
+        logging.WARNING, logger="proto_tools.tools.database_retrieval.alphafold_db.alphafold_db_fetch"
+    ):
+        output = run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="P04637"), AlphaFoldDBFetchConfig())
     assert output.success
     assert output.tool_id == "alphafold-db-fetch"
     assert output.uniprot_accession == "P04637"
@@ -343,6 +352,23 @@ def test_alphafold_db_fetch_full_p04637_record():
     # Spec contract: every always-available metric is present, typed, and in-range
     assert_metrics_in_spec(output)
 
+    # Multi-record warning must name the canonical record so callers know which one was selected
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any("AF-P04637-F1" in w and "Other isoforms available" in w for w in warnings), (
+        f"expected multi-record warning naming the canonical record; got: {warnings}"
+    )
+
+    # The Structure is drop-in for structure-consuming tools: lazy gemmi parse exposes the chain sequence
+    assert isinstance(output.structure, Structure)
+    sequences = output.structure.get_chain_sequences()
+    assert sequences, "expected at least one chain"
+    assert sequences[next(iter(sequences))] == output.sequence
+    # Per-residue pLDDT can also be derived from the B-factor column (normalized to 0-1)
+    derived = output.structure.per_residue_plddt
+    assert derived is not None
+    assert len(derived) == output.sequence_length
+    assert all(0.0 <= v <= 1.0 for v in derived)
+
 
 @pytest.mark.integration
 def test_alphafold_db_fetch_with_pae_returns_square_matrix():
@@ -362,23 +388,6 @@ def test_alphafold_db_fetch_with_pae_returns_square_matrix():
 
     # With include_pae=True, pae is now also a spec-validated metric
     assert_metrics_in_spec(output)
-
-
-@pytest.mark.integration
-def test_alphafold_db_fetch_with_msa_returns_a3m_text():
-    """include_msa=True returns parseable A3M-format MSA contents."""
-    output = run_alphafold_db_fetch(
-        AlphaFoldDBFetchInput(uniprot_id="P04637"),
-        AlphaFoldDBFetchConfig(include_msa=True),
-    )
-    assert output.success
-    assert output.msa_a3m is not None
-    # A3M begins with a header line ('>...') and the first sequence record corresponds
-    # to the query — its ungapped/uppercase residues must equal the entry's sequence.
-    lines = output.msa_a3m.splitlines()
-    assert lines[0].startswith(">")
-    query_seq = "".join(c for c in lines[1] if c.isalpha() and c.isupper())
-    assert query_seq == output.sequence
 
 
 @pytest.mark.integration
@@ -453,35 +462,6 @@ def test_workflow_uniprot_then_afdb_yields_consistent_template():
 
 
 @pytest.mark.integration
-def test_alphafold_db_fetch_multi_isoform_picks_canonical(caplog):
-    """TP53 (P04637) has multiple annotated isoforms in AFDB; the wrapper must pick the canonical first record.
-
-    The AFDB API response is a list of records: the canonical isoform first
-    (entry_id 'AF-P04637-F1', full 393 aa), followed by 8 alternative isoforms
-    (entry_id 'AF-P04637-2-F1' through '-9-F1', shorter). This test pins that
-    behavior so a future API change that re-orders the response would be caught,
-    and asserts that the multi-record warning is emitted naming the canonical
-    record so downstream callers can disambiguate.
-    """
-    import logging
-
-    with caplog.at_level(
-        logging.WARNING, logger="proto_tools.tools.database_retrieval.alphafold_db.alphafold_db_fetch"
-    ):
-        output = run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="P04637"), AlphaFoldDBFetchConfig())
-
-    assert output.success
-    assert output.entry_id == "AF-P04637-F1"  # canonical: no isoform number, fragment 1
-    assert output.sequence_length == 393  # full canonical TP53 length, not a shorter isoform
-
-    # Multi-record warning must name the canonical record so callers know which one was selected
-    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
-    assert any("AF-P04637-F1" in w and "Other isoforms available" in w for w in warnings), (
-        f"expected multi-record warning naming the canonical record; got: {warnings}"
-    )
-
-
-@pytest.mark.integration
 def test_alphafold_db_fetch_metadata_only_skips_payload_downloads():
     """include_structure=False returns metadata only.
 
@@ -525,29 +505,3 @@ def test_alphafold_db_fetch_invalid_isoform_fails_loudly():
             AlphaFoldDBFetchInput(uniprot_id="P04637", isoform=99),
             AlphaFoldDBFetchConfig(),
         )
-
-
-@pytest.mark.integration
-def test_alphafold_db_fetch_structure_composes_with_structure_pipeline():
-    """The fetched Structure is drop-in compatible with structure-consuming tools.
-
-    This pins the original motivation of the refactor: anything typed
-    ``Structure`` (TM-align, US-align, inverse folding, structure-scoring,
-    PyRosetta wrappers) accepts ``output.structure`` directly without an
-    intermediate ``Structure(structure=text, structure_format=...)`` wrap.
-    """
-    output = run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="P04637"), AlphaFoldDBFetchConfig())
-    assert output.success
-    assert isinstance(output.structure, Structure)
-
-    # Lazy gemmi parse must succeed and expose chain content
-    sequences = output.structure.get_chain_sequences()
-    assert sequences, "expected at least one chain"
-    chain_id = next(iter(sequences))
-    assert sequences[chain_id] == output.sequence
-
-    # Per-residue pLDDT can also be derived from the B-factor column (normalized to 0-1)
-    derived = output.structure.per_residue_plddt
-    assert derived is not None
-    assert len(derived) == output.sequence_length
-    assert all(0.0 <= v <= 1.0 for v in derived)

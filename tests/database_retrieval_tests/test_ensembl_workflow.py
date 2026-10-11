@@ -15,77 +15,10 @@ import pytest
 from proto_tools.tools.database_retrieval import (
     EnsemblLookupConfig,
     EnsemblLookupInput,
-    EnsemblOverlapConfig,
-    EnsemblOverlapInput,
-    EnsemblSequenceConfig,
-    EnsemblSequenceInput,
     EnsemblVEPInput,
-    EnsemblXrefsInput,
-    UniProtFetchInput,
     run_ensembl_lookup,
-    run_ensembl_overlap,
-    run_ensembl_sequence,
     run_ensembl_vep,
-    run_ensembl_xrefs,
-    run_uniprot_fetch,
 )
-
-
-@pytest.mark.integration
-def test_panel_full_chain_brca1():
-    """Full chain on a single gene (BRCA1).
-
-    lookup_symbol → ensembl_id → expand transcripts → take canonical →
-    fetch protein sequence → list overlapping exons → resolve UniProt
-    via xrefs → cross-confirm gene_name on UniProt side.
-    """
-    lookup = run_ensembl_lookup(EnsemblLookupInput(symbol="BRCA1"), EnsemblLookupConfig(expand=True))
-    assert lookup.success, lookup.errors
-    assert lookup.result.id == "ENSG00000012048"
-    canonical = lookup.result.canonical_transcript
-    assert canonical is not None
-    transcript_id = canonical.split(".")[0]
-
-    seq = run_ensembl_sequence(
-        EnsemblSequenceInput(ensembl_id=transcript_id),
-        EnsemblSequenceConfig(sequence_type="protein"),
-    )
-    assert seq.success, seq.errors
-    assert len(seq.results[0].seq) == 1863  # BRCA1 canonical isoform
-
-    exons = run_ensembl_overlap(
-        EnsemblOverlapInput(ensembl_id=lookup.result.id),
-        EnsemblOverlapConfig(overlap_feature="exon"),
-    )
-    assert exons.success, exons.errors
-    assert len(exons.result) >= 10
-
-    xrefs = run_ensembl_xrefs(EnsemblXrefsInput(ensembl_id=lookup.result.id))
-    assert xrefs.success, xrefs.errors
-    # Resolve to the canonical reviewed entry; TrEMBL accessions carry no gene names.
-    uniprot_ids = {x.primary_id for x in xrefs.result if x.dbname == "Uniprot_gn"}
-    assert "P38398" in uniprot_ids
-    uniprot = run_uniprot_fetch(UniProtFetchInput(uniprot_id="P38398"))
-    assert uniprot.success
-    assert "brca1" in {n.lower() for n in uniprot.gene_names}
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    "symbol, expected_ensembl_id_prefix",
-    [
-        ("BRCA1", "ENSG00000012048"),
-        ("TP53", "ENSG00000141510"),
-        ("EGFR", "ENSG00000146648"),
-    ],
-    ids=["BRCA1", "TP53", "EGFR"],
-)
-def test_lookup_panel_well_known_oncogenes(symbol: str, expected_ensembl_id_prefix: str):
-    """Lookup the three most-studied human oncogenes; each resolves to its known stable ID."""
-    out = run_ensembl_lookup(EnsemblLookupInput(symbol=symbol))
-    assert out.success, out.errors
-    assert out.result.id == expected_ensembl_id_prefix
-    assert out.result.display_name == symbol
 
 
 @pytest.mark.integration

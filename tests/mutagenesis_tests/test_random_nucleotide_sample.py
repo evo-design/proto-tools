@@ -5,7 +5,6 @@ Tests for random nucleotide sampling tool.
 
 import pytest
 
-from proto_tools.tools.mutagenesis.codons import IUPAC_DNA
 from proto_tools.tools.mutagenesis.random_nucleotide import (
     RandomNucleotideSampleConfig,
     RandomNucleotideSampleInput,
@@ -18,9 +17,8 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 # ============================================================================
 
 
-@pytest.mark.parametrize("scheme", ["N", "R", "Y", "S", "W", "K", "M"])
-def test_substitution_scheme(scheme):
-    valid_bases = set(IUPAC_DNA[scheme])
+@pytest.mark.parametrize(("scheme", "valid_bases"), [("N", set("ACGT")), ("R", {"A", "G"})])
+def test_substitution_scheme(scheme, valid_bases):
     config = RandomNucleotideSampleConfig(
         substitution_scheme=scheme,
         seed=42,

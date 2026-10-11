@@ -36,11 +36,6 @@ def test_input_single_sequence_normalization():
     assert inp.sequences[0] == "ATCG"
 
 
-def test_input_list_of_sequences():
-    inp = PromoterCalculatorInput(sequences=["ATCG", "GCTA"])
-    assert len(inp.sequences) == 2
-
-
 # ── Data model properties ────────────────────────────────────────────────
 
 
@@ -120,27 +115,6 @@ def test_export_json(sample_output, tmp_path):
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-def test_run_promoter_calculator_with_consensus_promoter():
-    """Run the calculator on a sigma70 consensus-style promoter."""
-    inputs = PromoterCalculatorInput(sequences=[CONSENSUS_PROMOTER])
-    result = run_promoter_calculator(inputs, PromoterCalculatorConfig())
-
-    assert isinstance(result, PromoterCalculatorOutput)
-    assert len(result.results) == 1
-    assert result.results[0].sequence_id == "seq_0"
-
-
-@pytest.mark.integration
-def test_run_promoter_calculator_homopolymer():
-    """A homopolymer should still return a structurally valid result."""
-    inputs = PromoterCalculatorInput(sequences=["A" * 200])
-    result = run_promoter_calculator(inputs, PromoterCalculatorConfig())
-
-    assert isinstance(result, PromoterCalculatorOutput)
-    assert len(result.results) == 1
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────

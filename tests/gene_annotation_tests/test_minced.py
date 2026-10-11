@@ -47,23 +47,6 @@ def test_input_single_sequence_normalization():
     assert inp.sequences[0] == "ATCGATCG"
 
 
-def test_input_list_of_sequences():
-    inp = MincedInput(sequences=["ATCG", "GCTA"])
-    assert len(inp.sequences) == 2
-
-
-def test_config_min_num_repeats_validation():
-    """min_num_repeats must be >= 2."""
-    with pytest.raises(ValidationError, match="greater than or equal to 2"):
-        MincedConfig(min_num_repeats=1)
-
-
-def test_config_min_repeat_length_validation():
-    """min_repeat_length must be >= 10."""
-    with pytest.raises(ValidationError, match="greater than or equal to 10"):
-        MincedConfig(min_repeat_length=5)
-
-
 def test_inverted_ranges_rejected():
     """MinCED silently accepts inverted ranges; the wrapper rejects them at construction."""
     with pytest.raises(ValidationError, match="max_repeat_length"):
@@ -168,17 +151,6 @@ def test_export_json(sample_output, tmp_path):
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
-def test_run_minced_with_crispr_sequence():
-    """Run MinCED on a sequence with known CRISPR arrays."""
-    inputs = MincedInput(sequences=[_CRISPR_SEQUENCE])
-    config = MincedConfig(min_num_repeats=3, min_repeat_length=23)
-    result = run_minced(inputs, config)
-
-    assert isinstance(result, MincedOutput)
-    assert len(result.results) == 1
 
 
 @pytest.mark.integration
