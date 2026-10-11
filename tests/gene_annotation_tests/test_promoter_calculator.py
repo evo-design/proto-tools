@@ -85,6 +85,22 @@ def test_num_sequences_with_promoter_empty():
     assert output.num_sequences_with_promoter == 0
 
 
+# ── Integration ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.integration
+def test_promoter_calculator_detects_consensus_promoter():
+    """The sigma70 consensus promoter is predicted on the forward strand."""
+    result = run_promoter_calculator(
+        PromoterCalculatorInput(sequences=[CONSENSUS_PROMOTER]), PromoterCalculatorConfig()
+    )
+    validate_output(result)
+    sequence_result = result.results[0]
+    assert sequence_result.has_promoter
+    core = "TTGACAATGATACTTAGATTCACTTATAAT"
+    assert any(p.strand == "+" and core in p.promoter_sequence for p in sequence_result.predictions)
+
+
 # ── Export ────────────────────────────────────────────────────────────────
 
 

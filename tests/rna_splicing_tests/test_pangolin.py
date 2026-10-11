@@ -181,6 +181,18 @@ def test_pangolin_variant_normalizes_single_variant() -> None:
 # ── Integration tests ──────────────────────────────────────────────────────────
 
 
+@pytest.mark.integration
+def test_pangolin_predict_cpu() -> None:
+    """Test Pangolin prediction on CPU."""
+    _run_predict_and_check(device="cpu")
+
+
+@pytest.mark.integration
+def test_pangolin_score_variants_cpu() -> None:
+    """Test Pangolin variant scoring on CPU."""
+    _run_score_variants_and_check(device="cpu")
+
+
 @pytest.mark.uses_gpu
 def test_pangolin_predict_gpu() -> None:
     """Test Pangolin prediction on GPU."""

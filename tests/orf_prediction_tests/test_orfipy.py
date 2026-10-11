@@ -145,6 +145,19 @@ def test_translation_table_map_matches_literal():
 # ── Benchmark ─────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.integration
+def test_orfipy_finds_known_orf():
+    """A hemoglobin alpha N-terminal fragment yields exactly one forward ORF spanning the input."""
+    result = run_orfipy_prediction(
+        OrfipyInput(sequences="ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAGTGA"), OrfipyConfig(min_len=30)
+    )
+    validate_output(result)
+    assert result.num_orfs == 1
+    orf = result.predicted_orfs[0][0]
+    assert (orf.nucleotide_start, orf.nucleotide_end, orf.strand) == (1, 54, "+")
+    assert orf.amino_acid_sequence == "MVLSPADKTNVKAAWGK"
+
+
 @pytest.mark.benchmark("orfipy-prediction")
 @pytest.mark.slow
 def test_orfipy_prediction_benchmark(request: pytest.FixtureRequest) -> None:

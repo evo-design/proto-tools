@@ -117,6 +117,30 @@ def test_pyhmmer_hmmsearch_no_hits():
 
 
 @pytest.mark.integration
+def test_pyhmmer_hmmsearch_skip_filters_admits_more_hits():
+    """Disabling the MSV/Viterbi/Forward and bias filters surfaces hits the filters prune at the same E-value."""
+    inputs = PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=SAMPLE_SEQUENCES)
+    thresholds = {"evalue_threshold": 1000.0, "domain_evalue_threshold": 1000.0}
+    filtered = run_pyhmmer_hmmsearch(inputs, PyHmmsearchConfig(skip_filters=False, **thresholds))
+    unfiltered = run_pyhmmer_hmmsearch(inputs, PyHmmsearchConfig(skip_filters=True, **thresholds))
+    assert filtered.success and unfiltered.success
+    assert unfiltered.num_sequence_hits > filtered.num_sequence_hits
+
+
+@pytest.mark.integration
+def test_pyhmmer_hmmsearch_gathering_cutoffs_drop_hits():
+    """``bit_cutoffs='gathering'`` applies the HMM's GA thresholds, dropping hits a permissive E-value keeps."""
+    inputs = PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=SAMPLE_SEQUENCES)
+    permissive = run_pyhmmer_hmmsearch(
+        inputs, PyHmmsearchConfig(evalue_threshold=1000.0, domain_evalue_threshold=1000.0)
+    )
+    gathering = run_pyhmmer_hmmsearch(inputs, PyHmmsearchConfig(bit_cutoffs="gathering"))
+    assert gathering.success
+    assert gathering.metadata["bit_cutoffs"] == "gathering"
+    assert 0 < gathering.num_sequence_hits < permissive.num_sequence_hits
+
+
+@pytest.mark.integration
 def test_pyhmmer_hmmscan_success():
     inputs = PyHmmscanInput(
         hmm_db=str(TEST_HMM_FILE),
