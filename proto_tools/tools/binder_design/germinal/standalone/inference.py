@@ -494,11 +494,8 @@ def to_device(device: str) -> dict[str, Any]:
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """Report PyTorch memory; Germinal uses both PyTorch + JAX inside the subprocess."""
-    from standalone_helpers import get_pytorch_memory_stats
-
-    stats: dict[str, Any] = get_pytorch_memory_stats(device=0)
-    return stats
+    """CLI tool, no persistent GPU state to report."""
+    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
 
 
 if __name__ == "__main__":
