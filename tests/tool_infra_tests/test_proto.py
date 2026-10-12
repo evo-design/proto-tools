@@ -637,7 +637,8 @@ def test_proto_streams_remote_logs_through_local_logger(
     def _seed(c):
         c.tools.output_to_return = {"result": "ok"}
         c.tools.log_records = [
-            _StubLogRecord(msg="Starting ESMFold", level="info", stream="system", seq=1),
+            # Worker lines carry a logger-name prefix that replay must strip.
+            _StubLogRecord(msg="proto_tools.utils.progress: Starting ESMFold", level="info", stream="system", seq=1),
             _StubLogRecord(msg="Folded 1/3", level="info", stream="stdout", seq=2),
             _StubLogRecord(msg="GPU OOM averted", level="warning", stream="system", seq=3),
             _StubLogsEnd(final_seq=3),
