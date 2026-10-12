@@ -1076,6 +1076,20 @@ def test_xla_preallocation_disabled(device):
     assert env["XLA_PYTHON_CLIENT_ALLOCATOR"] == "platform"
 
 
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_jax_platforms_not_set_for_unpinned_workers(device):
+    """Unpinned workers leave JAX_PLATFORMS unset so JAX can still reach a GPU later via device_put."""
+    env = _build_subprocess_env(device=device)
+    assert "JAX_PLATFORMS" not in env
+
+
+def test_pinned_cpu_worker_sets_jax_platforms_cpu():
+    """A pinned CPU worker hides every GPU and sets JAX_PLATFORMS=cpu so JAX initializes on CPU only."""
+    env = _build_subprocess_env(device="cpu", pin_visible_devices=True)
+    assert env["CUDA_VISIBLE_DEVICES"] == ""
+    assert env["JAX_PLATFORMS"] == "cpu"
+
+
 @pytest.mark.parametrize(
     "parent_has_var",
     [True, False],

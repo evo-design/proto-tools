@@ -1091,6 +1091,33 @@ def test_concurrent_get_returns_same_instance(mock_init: MagicMock):
     assert mock_init.call_count <= 2
 
 
+@patch.object(ToolInstance, "__init__", return_value=None)
+def test_concurrent_dispatch_with_cached_instance(mock_init: MagicMock):
+    """Many threads dispatching to the same cached instance should succeed."""
+    inst = ToolInstance.get("esm2")
+    inst.run = MagicMock(return_value={"result": "ok"})
+
+    num_threads = 10
+    barrier = threading.Barrier(num_threads)
+    errors: list[Exception] = []
+
+    def worker():
+        barrier.wait()
+        try:
+            result = ToolInstance.dispatch("esm2", {"op": "score"})
+            assert result == {"result": "ok"}
+        except Exception as e:
+            errors.append(e)
+
+    with ThreadPoolExecutor(max_workers=num_threads) as pool:
+        futures = [pool.submit(worker) for _ in range(num_threads)]
+        for f in futures:
+            f.result()
+
+    assert errors == [], f"Dispatch errors: {errors}"
+    assert inst.run.call_count == num_threads
+
+
 # ── _create_env() edge case tests ─────────────────────────────────────────
 
 
