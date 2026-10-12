@@ -56,6 +56,32 @@ def test_esm3_forward_pass():
     assert len(result.results[0].logits[0]) == 20, "Logit vocab size should be 20"
 
 
+def test_esm3_scoring_input_normalizes_single_string():
+    inp = ESM3ScoringInput(sequences="MKTAYIAKQR")
+    assert isinstance(inp.sequences, list)
+    assert inp.sequences == ["MKTAYIAKQR"]
+
+
+def test_esm3_embeddings_input_normalizes_single_string():
+    inp = ESM3EmbeddingsInput(sequences="MKTAYIAKQR")
+    assert isinstance(inp.sequences, list)
+    assert inp.sequences == ["MKTAYIAKQR"]
+
+
+@pytest.mark.uses_gpu
+def test_esm3_score_single_sequence():
+    """Test esm3 scoring with a single sequence (string input)."""
+    inputs = ESM3ScoringInput(sequences="MKTAYIAKQRQISFVKSHFS")
+    config = ESM3ScoringConfig(verbose=False, return_logits=True)
+
+    result = run_esm3_score(inputs=inputs, config=config)
+    validate_output(result)
+
+    assert len(result.scores) == 1
+    assert result.scores[0].perplexity >= 1.0
+    assert result.scores[0].logits is not None
+
+
 @pytest.mark.benchmark("esm3-embedding")
 @pytest.mark.slow
 @pytest.mark.uses_gpu

@@ -181,6 +181,32 @@ def test_esm2_score_and_gradient_agree_on_pll():
     assert -grad_result.loss == pytest.approx(score_result.scores[0].avg_log_likelihood, rel=1e-5)
 
 
+def test_esm2_scoring_input_normalizes_single_string():
+    inp = ESM2ScoringInput(sequences="MKTAYIAKQR")
+    assert isinstance(inp.sequences, list)
+    assert inp.sequences == ["MKTAYIAKQR"]
+
+
+def test_esm2_embeddings_input_normalizes_single_string():
+    inp = ESM2EmbeddingsInput(sequences="MKTAYIAKQR")
+    assert isinstance(inp.sequences, list)
+    assert inp.sequences == ["MKTAYIAKQR"]
+
+
+@pytest.mark.uses_gpu
+def test_esm2_score_single_sequence():
+    """Test esm2 scoring with a single sequence (string input)."""
+    inputs = ESM2ScoringInput(sequences="MKTAYIAKQRQISFVKSHFS")
+    config = ESM2ScoringConfig(model_checkpoint="esm2_t33_650M_UR50D", verbose=False, return_logits=True)
+
+    result = run_esm2_score(inputs=inputs, config=config)
+    validate_output(result)
+    assert_metrics_in_spec(result)
+
+    assert len(result.scores) == 1
+    assert result.scores[0].logits is not None
+
+
 @pytest.mark.benchmark("esm2-gradient")
 @pytest.mark.slow
 @pytest.mark.uses_gpu

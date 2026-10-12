@@ -238,6 +238,19 @@ def test_progen3_score_per_position_consistency():
 # ── Benchmarks ──────────────────────────────────────────────────────────────
 
 
+def test_sample_input_accepts_single_string():
+    """Single string is coerced to a list."""
+    inp = ProGen3SampleInput(prompts="MKTL")
+    assert isinstance(inp.prompts, list)
+    assert inp.prompts == ["MKTL"]
+
+
+def test_sample_input_accepts_list():
+    """List of strings is accepted as-is."""
+    inp = ProGen3SampleInput(prompts=["MKTL", "RYTE"])
+    assert inp.prompts == ["MKTL", "RYTE"]
+
+
 @pytest.mark.benchmark("progen3-sample")
 @pytest.mark.slow
 @pytest.mark.uses_gpu

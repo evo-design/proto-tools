@@ -249,6 +249,22 @@ def test_evo2_20b_score_smoke():
 # ── Benchmarks ────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.uses_gpu
+def test_evo2_score_single_sequence():
+    """Test evo2 scoring with a single sequence (string input)."""
+    inputs = Evo2ScoringInput(sequences="ATCGATCGATCGATCGATCG")
+    config = Evo2ScoringConfig(
+        model_checkpoint="evo2_7b",
+        verbose=False,
+    )
+
+    result = run_evo2_score(inputs=inputs, config=config)
+    validate_output(result)
+    assert_metrics_in_spec(result)
+
+    assert len(result.scores) == 1
+
+
 @pytest.mark.benchmark("evo2-sample")
 @pytest.mark.slow
 @pytest.mark.uses_gpu

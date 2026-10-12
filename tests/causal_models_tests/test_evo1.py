@@ -255,6 +255,13 @@ def test_evo1_score_batched():
 # ── Benchmarks ────────────────────────────────────────────────────────────────
 
 
+def test_evo1_sample_input_normalizes_single_string():
+    inp = Evo1SampleInput(prompts="ATCGATCG")
+    assert isinstance(inp.prompts, list)
+    assert len(inp.prompts) == 1
+    assert inp.prompts[0] == "ATCGATCG"
+
+
 @pytest.mark.benchmark("evo1-sample")
 @pytest.mark.slow
 @pytest.mark.uses_gpu

@@ -270,3 +270,18 @@ def test_ism_rejects_partial_variant_fields():
 def test_score_ism_rejects_empty_list():
     with pytest.raises(ValidationError, match="requests cannot be empty"):
         AlphaGenomeScoreISMInput(requests=[])
+
+
+def test_predict_sequences_accepts_single_supported_min_length():
+    inputs = AlphaGenomePredictSequencesInput(sequences=["ACGT" * (16_384 // 4)])
+    assert len(inputs.sequences) == 1
+
+
+def test_predict_intervals_accepts_list():
+    inputs = AlphaGenomePredictIntervalsInput(
+        intervals=[
+            AlphaGenomeInterval(chromosome="chr1", interval_start=0, interval_end=16_384),
+            AlphaGenomeInterval(chromosome="chr2", interval_start=0, interval_end=16_384),
+        ],
+    )
+    assert len(inputs.intervals) == 2

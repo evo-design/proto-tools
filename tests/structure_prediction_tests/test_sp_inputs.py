@@ -787,3 +787,9 @@ def test_complex_round_trip_with_fragment():
     assert isinstance(reconstructed.chains[0], Chain)
     assert isinstance(reconstructed.chains[1], Fragment)
     assert reconstructed.chains[1].ccd_code == "ATP"
+
+
+def test_no_modifications_input_accepts_list_of_lists():
+    input_obj = _NoModificationsInput(complexes=[[_PROTEIN_SEQ, _DNA_SEQ]])
+    assert len(input_obj.complexes) == 1
+    assert len(input_obj.complexes[0].chains) == 2

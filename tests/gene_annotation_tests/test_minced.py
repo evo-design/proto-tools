@@ -209,6 +209,11 @@ def test_run_minced_default_finds_short_repeat_after_default_change():
 # ── Benchmark ─────────────────────────────────────────────────────────────────
 
 
+def test_input_list_of_sequences():
+    inp = MincedInput(sequences=["ATCG", "GCTA"])
+    assert len(inp.sequences) == 2
+
+
 @pytest.mark.benchmark("minced-crispr")
 @pytest.mark.slow
 def test_minced_crispr_benchmark(request: pytest.FixtureRequest) -> None:

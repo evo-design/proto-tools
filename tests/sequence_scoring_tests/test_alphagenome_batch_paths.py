@@ -37,6 +37,7 @@ from proto_tools.utils.tool_instance import ToolInstance
 _PREDICT_LENGTH = 16_384
 _SCORE_LENGTH = 524_288
 _ORGANISM = "human"
+_SEQ_16K_A = "ACGT" * (_PREDICT_LENGTH // 4)
 
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────
@@ -269,3 +270,44 @@ def test_score_ism_batch_dispatch(mock_dispatch_factory):
     assert len(result) == 2
     assert result[0].scores == [{"track": "DNASE", "score": 0.4}]
     assert result[1].scores == [{"track": "DNASE", "score": 0.6}]
+
+
+def test_single_sequence_dispatch(monkeypatch):
+    calls: list[dict[str, Any]] = []
+
+    def mock_dispatch(_toolkit, payload, **kwargs):
+        calls.append({"payload": payload, "kwargs": kwargs})
+        return {"predictions": [{"signal": 1.23}]}
+
+    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(mock_dispatch))
+
+    result = run_alphagenome_predict_sequences(
+        AlphaGenomePredictSequencesInput(sequences=[_SEQ_16K_A]),
+        AlphaGenomePredictSequencesConfig(requested_outputs=["RNA_SEQ"], organism="human"),
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["payload"]["operation"] == "predict_sequences"
+    assert calls[0]["payload"]["sequences"] == [_SEQ_16K_A]
+    assert len(result) == 1
+    assert result[0].interval_end == len(_SEQ_16K_A)
+    assert result[0].result == {"predictions": {"signal": 1.23}}
+
+
+def test_single_string_auto_wraps(monkeypatch):
+    """A single sequence string should auto-wrap into a list."""
+    calls: list[dict[str, Any]] = []
+
+    def mock_dispatch(_toolkit, payload, **kwargs):
+        calls.append({"payload": payload, "kwargs": kwargs})
+        return {"predictions": [{"signal": 0.5}]}
+
+    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(mock_dispatch))
+
+    result = run_alphagenome_predict_sequences(
+        AlphaGenomePredictSequencesInput(sequences=_SEQ_16K_A),
+        AlphaGenomePredictSequencesConfig(requested_outputs=["RNA_SEQ"], organism="human"),
+    )
+
+    assert calls[0]["payload"]["sequences"] == [_SEQ_16K_A]
+    assert len(result) == 1

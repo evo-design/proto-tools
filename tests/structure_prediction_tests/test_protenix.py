@@ -282,6 +282,13 @@ def test_protenix_pae_surface():
 # ── Benchmark ─────────────────────────────────────────────────────────────────
 
 
+def test_protenix_input_accepts_string_shorthand():
+    """Single-chain string input is normalised to a Complex."""
+    inputs = ProtenixInput(complexes=["MKTL"])
+    assert len(inputs.complexes) == 1
+    assert inputs.complexes[0].chains[0].sequence == "MKTL"
+
+
 @pytest.mark.benchmark("protenix-prediction")
 @pytest.mark.slow
 @pytest.mark.uses_gpu

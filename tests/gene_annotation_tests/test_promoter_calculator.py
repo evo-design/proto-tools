@@ -136,6 +136,11 @@ def test_export_json(sample_output, tmp_path):
 # ── Benchmark ─────────────────────────────────────────────────────────────────
 
 
+def test_input_list_of_sequences():
+    inp = PromoterCalculatorInput(sequences=["ATCG", "GCTA"])
+    assert len(inp.sequences) == 2
+
+
 @pytest.mark.benchmark("promoter-calculator")
 @pytest.mark.slow
 def test_promoter_calculator_benchmark(request: pytest.FixtureRequest) -> None:

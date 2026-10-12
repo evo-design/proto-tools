@@ -399,6 +399,12 @@ def test_progen2_sample_logits_not_returned_by_default():
 # ── Benchmarks ──────────────────────────────────────────────────────────────
 
 
+def test_progen2_sample_input_normalizes_single_string():
+    inp = ProGen2SampleInput(prompts="MKTLV")
+    assert isinstance(inp.prompts, list)
+    assert inp.prompts == ["MKTLV"]
+
+
 @pytest.mark.benchmark("progen2-sample")
 @pytest.mark.slow
 @pytest.mark.uses_gpu
