@@ -16,7 +16,11 @@ from proto_tools.utils.tool_cache import (
     cache_stitch_items,
     cache_store_items,
     cache_strip_items,
+    clear_cache,
+    clear_tool_cache,
     deduplicate_items,
+    get_cache_info,
+    has_cached_entries,
 )
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
@@ -240,6 +244,30 @@ def test_prune_evicts_lru_until_under_limit(empty_cache):
     assert empty_cache.current_size <= new_data_size
     assert empty_cache.get("tool", "old_key") is None
     assert empty_cache.get("tool", "new_key") == new_data
+
+    size_before = empty_cache.current_size
+    empty_cache.prune(size_before + 1)  # already under the target: nothing is evicted
+    assert empty_cache.current_size == size_before
+    assert empty_cache.get("tool", "new_key") == new_data
+
+
+def test_public_cache_helpers_clear_and_report(_setup_cache):
+    """The exported helpers act on the program's active cache: report, clear one tool, clear everything."""
+    _setup_cache.set("tool_a", "k1", "v1")
+    _setup_cache.set("tool_a", "k2", "v2")
+    _setup_cache.set("tool_b", "k1", "v1")
+
+    assert has_cached_entries("tool_a") and has_cached_entries("tool_b")
+    assert not has_cached_entries("tool_c")
+    assert get_cache_info()["total_entries"] == 3
+
+    assert clear_tool_cache("tool_a") == 2
+    assert not has_cached_entries("tool_a")
+    assert has_cached_entries("tool_b")
+
+    clear_cache()
+    assert not has_cached_entries("tool_b")
+    assert get_cache_info()["total_entries"] == 0
 
 
 def test_overwrite_updates_size_correctly(empty_cache):
