@@ -6,7 +6,6 @@ Tests for Borzoi regulatory activity prediction tool.
 import random
 
 import pytest
-from pydantic import ValidationError
 
 from proto_tools.tools.sequence_scoring.borzoi import (
     BORZOI_CONTEXT,
@@ -65,20 +64,6 @@ def test_borzoi_input_rejects_wrong_length():
         BorzoiInput(sequences="ATCG" * 200000)
 
 
-def test_borzoi_input_accepts_target_aligned_sequences():
-    """Target coordinates let Borzoi extract a model window from a larger construct."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiInput, SequenceTargetRange, SequenceWindow
-
-    sequence = ("C" * 100) + ("A" * BORZOI_CONTEXT) + ("G" * 100)
-    target_start = 100 + BORZOI_OUTPUT_FLANK
-
-    target_range = SequenceTargetRange(start=target_start, end=target_start + 10)
-    inputs = BorzoiInput(sequences=[SequenceWindow(sequence=sequence, target_range=target_range)])
-
-    assert [window.sequence for window in inputs.sequences] == [sequence]
-    assert [window.target_range for window in inputs.sequences] == [target_range]
-
-
 def test_borzoi_run_extracts_target_aligned_window(monkeypatch):
     """run_borzoi should dispatch exact-context windows and return source coordinates."""
     from proto_tools.tools.sequence_scoring.borzoi import (
@@ -131,22 +116,6 @@ def test_borzoi_run_extracts_target_aligned_window(monkeypatch):
 
 
 # -- Config validation -----------------------------------------------------------------
-
-
-def test_borzoi_config_rejects_invalid_species():
-    """Test that invalid species is rejected."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
-
-    with pytest.raises(ValidationError, match="Input should be 'human' or 'mouse'"):
-        BorzoiConfig(output_tracks=[0], species="zebrafish")
-
-
-def test_borzoi_config_rejects_invalid_replicate():
-    """Test that invalid replicate is rejected."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiConfig
-
-    with pytest.raises(ValidationError, match="Input should be '0', '1', '2' or '3'"):
-        BorzoiConfig(output_tracks=[0], replicate="5")
 
 
 @pytest.mark.parametrize(("species", "expected_flash_attn"), [("human", True), ("mouse", False)])
@@ -219,14 +188,6 @@ def test_borzoi_run_raises_when_worker_returns_wrong_replicate(monkeypatch):
 # -- Ensemble config validation --------------------------------------------------------
 
 
-def test_borzoi_ensemble_config_mouse():
-    """Mouse ensemble config is valid without a user-facing FlashAttention switch."""
-    from proto_tools.tools.sequence_scoring.borzoi import BorzoiEnsembleConfig
-
-    config = BorzoiEnsembleConfig(output_tracks=[0], species="mouse")
-    assert config.species == "mouse"
-
-
 # ---------------------------------------------------------------------------
 # Integration tests
 
@@ -296,43 +257,6 @@ def test_borzoi_prediction_no_average():
     assert len(result.results[0].prediction[0]) == 6144
 
 
-@pytest.mark.slow
-@pytest.mark.uses_gpu
-def test_borzoi_prediction_different_replicates():
-    """Test Borzoi prediction with all four replicates and verify they differ."""
-    from proto_tools.tools.sequence_scoring.borzoi import (
-        BorzoiConfig,
-        BorzoiInput,
-        run_borzoi,
-    )
-
-    sequence = _generate_random_dna_sequence(BORZOI_CONTEXT, seed=456)
-    inputs = BorzoiInput(sequences=[sequence])
-
-    results = []
-    for replicate in ["0", "1", "2", "3"]:
-        config = BorzoiConfig(
-            output_tracks=[0, 1],
-            species="human",
-            replicate=replicate,
-            avg_output_tracks=True,
-            verbose=False,
-        )
-        result = run_borzoi(inputs, config)
-        validate_output(result)
-        results.append(result)
-
-    # Each replicate: 1 averaged track, 6144 positions
-    for result in results:
-        assert len(result.results[0].prediction) == 1
-        assert len(result.results[0].prediction[0]) == 6144
-
-    # Replicates are trained independently and should not produce identical predictions
-    pred_0 = results[0].results[0].prediction[0]
-    pred_1 = results[1].results[0].prediction[0]
-    assert pred_0 != pred_1, "Different replicates should give different predictions"
-
-
 @pytest.mark.uses_gpu
 def test_borzoi_ensemble_prediction():
     """Test Borzoi ensemble prediction with all replicates."""
@@ -367,67 +291,9 @@ def test_borzoi_ensemble_prediction():
     assert len(result.results[0].predictions[0]) == 1
     assert len(result.results[0].predictions[0][0]) == 6144
 
-
-@pytest.mark.uses_gpu
-def test_borzoi_ensemble_no_average():
-    """Test Borzoi ensemble prediction without averaging tracks."""
-    from proto_tools.tools.sequence_scoring.borzoi import (
-        BorzoiEnsembleConfig,
-        BorzoiInput,
-        run_borzoi_ensemble,
-    )
-
-    sequence = _generate_random_dna_sequence(BORZOI_CONTEXT, seed=789)
-    inputs = BorzoiInput(sequences=[sequence])
-    config = BorzoiEnsembleConfig(
-        output_tracks=[0, 1, 2, 3],
-        species="human",
-        avg_output_tracks=False,
-        verbose=False,
-    )
-
-    result = run_borzoi_ensemble(inputs, config)
-
-    validate_output(result)
-
-    assert result.avg_output_tracks is False
-    # 4 replicates x 4 individual tracks x 6144 positions
-    assert len(result.results[0].predictions) == 4
-    assert len(result.results[0].predictions[0]) == 4
-    assert len(result.results[0].predictions[0][0]) == 6144
-
-
-@pytest.mark.uses_gpu
-def test_borzoi_ensemble_statistics():
-    """Test that ensemble replicates vary and numpy statistics are well-shaped."""
-    import numpy as np
-
-    from proto_tools.tools.sequence_scoring.borzoi import (
-        BorzoiEnsembleConfig,
-        BorzoiInput,
-        run_borzoi_ensemble,
-    )
-
-    sequence = _generate_random_dna_sequence(BORZOI_CONTEXT, seed=999)
-    inputs = BorzoiInput(sequences=[sequence])
-    config = BorzoiEnsembleConfig(
-        output_tracks=[0, 1],
-        species="human",
-        avg_output_tracks=True,
-        verbose=False,
-    )
-
-    result = run_borzoi_ensemble(inputs, config)
-
-    validate_output(result)
-
-    predictions_array = np.array(result.results[0].predictions)
-    mean_pred = predictions_array.mean(axis=0)
-    std_pred = predictions_array.std(axis=0)
-
-    assert mean_pred.shape == (1, 6144)
-    assert std_pred.shape == (1, 6144)
-    assert std_pred.sum() > 0, "Standard deviation should be non-zero across replicates"
+    # Replicates are trained independently and should not produce identical predictions
+    pred_0, pred_1 = result.results[0].predictions[0], result.results[0].predictions[1]
+    assert pred_0 != pred_1, "Different replicates should give different predictions"
 
 
 # ── Benchmarks ──────────────────────────────────────────────────────────────

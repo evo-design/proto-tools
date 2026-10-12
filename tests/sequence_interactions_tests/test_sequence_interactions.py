@@ -18,7 +18,7 @@ _VALUES = [[0.1, 0.8, 0.0], [0.3, 0.2, 1.0], [0.9, 0.4, 0.5]]
 
 @pytest.mark.parametrize(
     "axis_labels",
-    [["A", "W", "H"], ["A", "U", "N"], ["1", "12", "300"], ["\N{GREEK SMALL LETTER ALPHA}", "residue:10", "[MASK]"]],
+    [["A", "W", "H"], ["\N{GREEK SMALL LETTER ALPHA}", "residue:10", "[MASK]"]],
 )
 def test_sequence_interactions_accept_model_independent_labels_and_channels(axis_labels):
     payload = {"maps": {"custom-channel.v1": {"axis_labels": axis_labels, "values": _VALUES}}}

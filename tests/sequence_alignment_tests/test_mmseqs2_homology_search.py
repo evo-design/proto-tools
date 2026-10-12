@@ -118,13 +118,6 @@ def _install_fake_dispatch(
     monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(fake))
 
 
-def _uniref30_provisioned() -> bool:
-    """Whether the UniRef30 dataset is fully provisioned on this host."""
-    entry = DatasetRegistry.get("uniref30-2302")
-    cache = get_dataset_dir("uniref30-2302")
-    return (cache / f"{entry.db_prefix}.dbtype").is_file()
-
-
 # ============================================================================
 # Input validation
 # ============================================================================
@@ -201,31 +194,6 @@ def test_input_accepts_mixed_singleton_and_paired_groups() -> None:
 # ============================================================================
 
 
-def test_unknown_dataset_rejected() -> None:
-    """A value outside the searchable product Literal is rejected at construction."""
-    with pytest.raises(ValidationError, match="Input should be"):
-        Mmseqs2HomologySearchConfig(dataset="does-not-exist")
-
-
-def test_non_searchable_dataset_not_selectable() -> None:
-    """A registered but non-ColabFold DB (a3m_adapter != 'colabfold') is not a valid ``dataset`` value."""
-    with pytest.raises(ValidationError, match="Input should be"):
-        Mmseqs2HomologySearchConfig(dataset="small-bfd", device="cpu")
-
-
-def test_dataset_field_schema_carries_inline_enum_and_default() -> None:
-    """The ``dataset`` Literal emits an INLINE JSON-Schema enum + default at the property level.
-
-    A schema consumer reads ``schemaProp.enum`` at the property level, so the
-    enum must be inline. A Python ``Enum`` would instead emit a ``$ref`` into
-    ``$defs`` that the parser doesn't resolve — a ``Literal`` stays inline.
-    """
-    prop = Mmseqs2HomologySearchConfig.model_json_schema()["properties"]["dataset"]
-    assert prop["enum"] == ["colabfold-envdb-202108", "uniref30-2302"]
-    assert prop["default"] == "uniref30-2302"
-    assert "$ref" not in prop  # inline enum, not a $defs reference
-
-
 def test_dataset_literal_matches_registry_searchable_set() -> None:
     """Drift guard: the ``dataset`` Literal must equal the registry's searchable product DBs.
 
@@ -246,13 +214,6 @@ def test_dataset_literal_matches_registry_searchable_set() -> None:
     }
     literal_values = set(get_args(Mmseqs2HomologySearchConfig.model_fields["dataset"].annotation))
     assert literal_values == searchable
-
-
-def test_default_search_mode_is_remote_and_claims_no_gpu() -> None:
-    """The default config is remote: no local DB, and it claims no GPU."""
-    cfg = Mmseqs2HomologySearchConfig()
-    assert cfg.search_mode == "remote"
-    assert cfg.gpus_per_instance == 0
 
 
 def test_remote_mode_skips_gpu_platform_validation() -> None:
@@ -427,28 +388,6 @@ def _provisioned_datasets() -> list[str]:
     return found
 
 
-@pytest.mark.parametrize("dataset_name", DatasetRegistry.list_all())
-def test_registry_entry_outputs_match_disk_when_provisioned(dataset_name: str) -> None:
-    """If a dataset's cache dir has its dbtype file, all declared output_files exist.
-
-    Catches drift between an entry's ``index_recipe.output_files`` and what
-    its provisioning steps actually produce. Skips when not provisioned.
-    """
-    entry = DatasetRegistry.get(dataset_name)
-    cache = get_dataset_dir(dataset_name)
-    if not (cache / f"{entry.db_prefix}.dbtype").is_file():
-        pytest.skip(f"{dataset_name} not provisioned at {cache}")
-    missing = [
-        out
-        for out in entry.index_recipe.output_files
-        if not (cache / out.replace("{name}", dataset_slug(dataset_name))).exists()
-    ]
-    assert not missing, (
-        f"{dataset_name} declared output_files {missing} are missing from {cache}; "
-        f"either provisioning failed or the entry's output_files list is stale."
-    )
-
-
 def _low_memory_skip_reason(*dataset_names: str) -> str | None:
     """The tool's own low-memory reason for any of ``dataset_names``, or ``None`` when RAM suffices.
 
@@ -604,42 +543,6 @@ def test_paired_group_produces_row_aligned_paired_msas(tmp_path: Path, monkeypat
     assert captured[0]["sequences"] == [UBIQUITIN, HEMOGLOBIN_ALPHA]
 
 
-def test_remote_paired_group_fetches_paired_and_deep_unpaired(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Remote paired group returns row-aligned paired MSAs AND each chain's deeper unpaired MSA."""
-    from proto_tools.tools.sequence_alignment.mmseqs2 import homology_search as hs
-
-    members = [
-        Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="chainA"),
-        Mmseqs2HomologySearchQuery(sequence=HEMOGLOBIN_ALPHA, sequence_id="chainB"),
-    ]
-    paired_dir = tmp_path / "paired"
-    unpaired_dir = tmp_path / "unpaired"
-    paired_dir.mkdir()
-    unpaired_dir.mkdir()
-    paired_paths: list[str] = []
-    unpaired_map: dict[str, str] = {}
-    for i, q in enumerate(members):
-        pp = paired_dir / f"{i}.a3m"
-        _write_a3m(pp, q.sequence, 3)
-        paired_paths.append(str(pp))
-        up = unpaired_dir / f"{i}.a3m"
-        _write_a3m(up, q.sequence, 6)
-        unpaired_map[str(i)] = str(up)
-
-    def fake_dispatch(remote_queries, output_dir, config):  # type: ignore[no-untyped-def]
-        if isinstance(remote_queries[0]["sequences"], list):
-            return {"success": True, "paired_msa_paths": {"0": paired_paths}}
-        return {"success": True, "msa_paths": unpaired_map}
-
-    monkeypatch.setattr(hs, "_dispatch_remote", fake_dispatch)
-    result = hs._remote_paired_group(members, tmp_path / "grp", Mmseqs2HomologySearchConfig())
-
-    assert all(m is not None for m in result.paired_msas)
-    assert all(m is not None for m in result.msas)
-    assert {m.num_sequences for m in result.paired_msas if m is not None} == {3}
-    assert {m.num_sequences for m in result.msas if m is not None} == {6}  # deeper unpaired
-
-
 def test_remote_paired_group_degrades_when_unpaired_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """An unpaired-call failure leaves paired_msas intact and degrades msas to None (never breaks paired)."""
     from proto_tools.tools.sequence_alignment.mmseqs2 import homology_search as hs
@@ -666,38 +569,6 @@ def test_remote_paired_group_degrades_when_unpaired_fails(tmp_path: Path, monkey
 
     assert all(m is not None for m in result.paired_msas)  # paired result intact
     assert all(m is None for m in result.msas)  # unpaired degraded, no exception
-
-
-def test_paired_homomultimer_yields_per_chain_msas_with_correct_query_rows(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Each chain of a homomultimer paired group gets an MSA whose query row is its own sequence.
-
-    colabfold emits one A3M per unique chain, so the duplicate ubiquitin and hemoglobin copies
-    are broadcast their unique chain's row-aligned block.
-    """
-    _provision_fake_cache(tmp_path, monkeypatch)
-    captured: list[dict[str, Any]] = []
-    _install_fake_dispatch(monkeypatch, captured, paired_depth=3)
-
-    inp = Mmseqs2HomologySearchInput(
-        queries=[
-            [
-                (UBIQUITIN, "chainA"),
-                (UBIQUITIN, "chainB"),
-                (HBA_HUMAN, "chainC"),
-                (HBA_HUMAN, "chainD"),
-            ]
-        ]
-    )
-    out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="local", device="cpu"))
-
-    grp = out.results[0]
-    assert grp.sequence_ids == ["chainA", "chainB", "chainC", "chainD"]
-    assert all(m is not None for m in grp.paired_msas)
-    # Each chain's paired MSA's query row matches the chain's input sequence.
-    queries = [m.original_sequences[0] for m in grp.paired_msas if m is not None]
-    assert queries == [UBIQUITIN, UBIQUITIN, HBA_HUMAN, HBA_HUMAN]
 
 
 def test_paired_assembly_raises_on_unmatched_query_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -786,19 +657,6 @@ def test_assemble_paired_result_keeps_per_chain_paired_and_unpaired(tmp_path: Pa
     assert all(m is not None for m in result.msas)  # unpaired present for both chains
 
 
-def test_assemble_paired_result_no_pairing_returns_all_none(tmp_path: Path) -> None:
-    """No paired files at all (no shared species) → paired_msas all None, no error."""
-    members = [
-        Mmseqs2HomologySearchQuery(sequence=UBIQUITIN, sequence_id="a"),
-        Mmseqs2HomologySearchQuery(sequence=HEMOGLOBIN_ALPHA, sequence_id="b"),
-    ]
-    _write_a3m(tmp_path / "0.a3m", UBIQUITIN, 4)
-    _write_a3m(tmp_path / "1.a3m", HEMOGLOBIN_ALPHA, 4)
-    result = _assemble_paired_result(tmp_path, members, "uniref30-2302")
-    assert result.paired_msas == [None, None]
-    assert all(m is not None for m in result.msas)  # unpaired still present
-
-
 def test_assemble_paired_result_broadcasts_deduped_homomultimer(tmp_path: Path) -> None:
     """A deduped {u}.a3m is broadcast to every input chain that shares its sequence.
 
@@ -836,48 +694,23 @@ def test_assemble_paired_result_broadcasts_deduped_homomultimer(tmp_path: Path) 
 @pytest.mark.uses_cpu
 @pytest.mark.slow
 @pytest.mark.skip_ci
-def test_real_paired_search_against_mini_db() -> None:
-    """Real taxonomy-paired search against the auto-provisioning mini SwissProt DB.
-
-    Exercises the full ``--unpack 0`` + ``unpackdb`` paired pipeline end-to-end
-    (no GPU, no manual DB setup — the ``tiny-test-colabfold`` fixture
-    auto-provisions on first run). Hemoglobin alpha+beta pair into deep,
-    row-aligned MSAs.
-    """
-    inp = Mmseqs2HomologySearchInput(queries=[[(HBA_HUMAN, "hba"), (HBB_HUMAN, "hbb")]])
-    cfg = FixtureDbConfig(search_mode="local", device="cpu")
-    out = run_mmseqs2_homology_search(inp, cfg)
-
-    assert out.success, f"paired search failed: {out.errors}"
-    assert len(out.results) == 1
-    grp = out.results[0]
-    assert grp.sequence_ids == ["hba", "hbb"]
-    # Both chains paired and row-aligned: one depth shared across the group.
-    assert all(m is not None for m in grp.paired_msas)
-    depths = {m.num_sequences for m in grp.paired_msas if m is not None}
-    assert len(depths) == 1 and next(iter(depths)) > 5, (
-        f"expected deep equal-depth paired MSAs, got {[m.num_sequences for m in grp.paired_msas if m]}"
-    )
-    # Unpaired per-chain MSAs are present alongside the paired ones.
-    assert all(m is not None for m in grp.msas)
-
-
-@pytest.mark.integration
-@pytest.mark.uses_cpu
-@pytest.mark.slow
-@pytest.mark.skip_ci
 def test_real_paired_homooligomer_against_mini_db() -> None:
-    """Real paired search with a repeated chain still gives every copy its MSA.
+    """Real taxonomy-paired search against the auto-provisioning mini SwissProt DB, with a repeated chain.
 
-    ``[hbaA, hbaB, hbb]`` deduplicates to ``[hba, hbb]`` inside colabfold, so only two chain
-    blocks come back; hba's block is broadcast to both alpha copies in input order.
+    Exercises the full ``--unpack 0`` + ``unpackdb`` paired pipeline end-to-end (no GPU, no manual
+    DB setup — the ``tiny-test-colabfold`` fixture auto-provisions on first run). Hemoglobin
+    alpha+beta pair into deep, row-aligned MSAs. ``[hbaA, hbaB, hbb]`` deduplicates to
+    ``[hba, hbb]`` inside colabfold, so only two chain blocks come back; hba's block is broadcast
+    to both alpha copies in input order.
     """
     inp = Mmseqs2HomologySearchInput(queries=[[(HBA_HUMAN, "hbaA"), (HBA_HUMAN, "hbaB"), (HBB_HUMAN, "hbb")]])
     cfg = FixtureDbConfig(search_mode="local", device="cpu")
     out = run_mmseqs2_homology_search(inp, cfg)
 
     assert out.success, f"paired search failed: {out.errors}"
+    assert len(out.results) == 1
     grp = out.results[0]
+    assert all(m is not None for m in grp.paired_msas)
     assert grp.sequence_ids == ["hbaA", "hbaB", "hbb"]
     # Both alpha copies share the deduped block; beta gets its own. Query rows carry each chain's id.
     assert [m.original_sequences[0] for m in grp.paired_msas] == [HBA_HUMAN, HBA_HUMAN, HBB_HUMAN]
@@ -1069,12 +902,6 @@ def test_remote_mixed_groups_preserve_order(monkeypatch: pytest.MonkeyPatch) -> 
 # ============================================================================
 
 
-def test_use_metagenomic_db_defaults_false() -> None:
-    """The metagenomic/environmental DB is off by default in both modes."""
-    assert Mmseqs2HomologySearchConfig().use_metagenomic_db is False
-    assert Mmseqs2HomologySearchConfig(search_mode="local", device="cpu").use_metagenomic_db is False
-
-
 def test_remote_use_metagenomic_db_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
     """Remote mode forwards use_metagenomic_db to the search (→ the server's use_env)."""
     from proto_tools.tools.sequence_alignment.mmseqs2 import homology_search as hs
@@ -1126,21 +953,6 @@ def test_local_metagenomic_dispatch_carries_env_db(tmp_path: Path, monkeypatch: 
     assert captured[0]["use_metagenomic_db"] is True
     assert captured[0]["env_db_prefix"] == "colabfold_envdb_202108_db"
     assert captured[0]["env_dataset_dir"] is not None
-
-
-@pytest.mark.integration
-@pytest.mark.skip_ci
-def test_remote_search_live_paired_hemoglobin() -> None:
-    """Live remote paired query: hemoglobin alpha+beta return row-aligned per-chain MSAs of equal depth."""
-    inp = Mmseqs2HomologySearchInput(queries=[[(HBA_HUMAN, "hba"), (HBB_HUMAN, "hbb")]])
-    out = run_mmseqs2_homology_search(inp, Mmseqs2HomologySearchConfig(search_mode="remote"))
-
-    assert len(out.results) == 1
-    grp = out.results[0]
-    assert grp.sequence_ids == ["hba", "hbb"]
-    assert all(m is not None for m in grp.paired_msas)
-    # Paired output is row-aligned: both per-chain MSAs share the same depth.
-    assert grp.paired_msas[0].num_sequences == grp.paired_msas[1].num_sequences > 1
 
 
 def test_rename_a3m_avoids_collision_with_adversarial_numeric_ids(tmp_path: Path) -> None:

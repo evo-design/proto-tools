@@ -202,16 +202,16 @@ def test_spliceai_score_cpu(tmp_path: Path) -> None:
     _run_score(tmp_path, "cpu")
 
 
-@pytest.mark.uses_gpu
-def test_spliceai_score_gpu(tmp_path: Path) -> None:
-    """SpliceAI variant scoring on GPU."""
-    _run_score(tmp_path, "cuda")
-
-
 @pytest.mark.integration
 def test_spliceai_predict_cpu() -> None:
     """SpliceAI raw prediction on CPU."""
     _run_predict("cpu")
+
+
+@pytest.mark.uses_gpu
+def test_spliceai_score_gpu(tmp_path: Path) -> None:
+    """SpliceAI variant scoring on GPU."""
+    _run_score(tmp_path, "cuda")
 
 
 @pytest.mark.uses_gpu

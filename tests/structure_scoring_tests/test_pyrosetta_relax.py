@@ -86,15 +86,20 @@ def test_relax_forwards_bindcraft_fastrelax_options(monkeypatch):
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
-def test_relax_returns_relaxed_structure():
-    """End-to-end FastRelax: dispatch, return, parse, verify atoms moved."""
-    structure = Structure(structure=TEST_PDB)
-
-    result = run_pyrosetta_relax(
-        PyRosettaRelaxInput(inputs=[structure]),
+@pytest.fixture(scope="module")
+def relaxed_renin():
+    """One FastRelax run on renin, shared by the integration tests that consume its output."""
+    return run_pyrosetta_relax(
+        PyRosettaRelaxInput(inputs=[Structure(structure=TEST_PDB)]),
         PyRosettaRelaxConfig(relax_cycles=1, seed=42),
     )
+
+
+@pytest.mark.integration
+def test_relax_returns_relaxed_structure(relaxed_renin):
+    """End-to-end FastRelax: dispatch, return, parse, verify atoms moved."""
+    structure = Structure(structure=TEST_PDB)
+    result = relaxed_renin
     assert_metrics_in_spec(result)
     assert result.success
     assert result.tool_id == "pyrosetta-relax"
@@ -132,7 +137,7 @@ def test_relax_returns_relaxed_structure():
 
 
 @pytest.mark.integration
-def test_relax_chains_into_energy():
+def test_relax_chains_into_energy(relaxed_renin):
     """The relaxed Structure should feed cleanly into pyrosetta-energy with relax=False."""
     from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
         PyRosettaEnergyConfig,
@@ -140,10 +145,7 @@ def test_relax_chains_into_energy():
         run_pyrosetta_energy,
     )
 
-    relaxed_out = run_pyrosetta_relax(
-        PyRosettaRelaxInput(inputs=[Structure(structure=TEST_PDB)]),
-        PyRosettaRelaxConfig(relax_cycles=1, seed=42),
-    )
+    relaxed_out = relaxed_renin
     assert relaxed_out.success
     relaxed_structure = relaxed_out.results[0].relax.relaxed_structure
 

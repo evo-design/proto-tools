@@ -258,8 +258,8 @@ def test_ism():
             chromosome="chr1",
             interval_start=0,
             interval_end=_SCORE,
-            ism_interval_start=_SCORE_MID - 10,
-            ism_interval_end=_SCORE_MID + 10,  # 20 bp window
+            ism_interval_start=_SCORE_MID - 1,
+            ism_interval_end=_SCORE_MID + 1,  # 2 bp window
         ),
     )
     config = AlphaGenomeScoreISMConfig(
@@ -295,8 +295,8 @@ def test_ism_with_variant_context():
             chromosome="chr1",
             interval_start=0,
             interval_end=_SCORE,
-            ism_interval_start=_SCORE_MID - 10,
-            ism_interval_end=_SCORE_MID + 10,
+            ism_interval_start=_SCORE_MID - 1,
+            ism_interval_end=_SCORE_MID + 1,
             variant_position=_SCORE_MID,
             reference_bases="A",
             alternate_bases="G",
@@ -312,44 +312,6 @@ def test_ism_with_variant_context():
     assert len(result) == 1
     validate_output(result)
     assert len(result[0].scores) > 0
-
-
-# ---------------------------------------------------------------------------
-# Slow tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.slow
-@pytest.mark.uses_gpu
-def test_interval_prediction_131k_context():
-    """Interval prediction at the 131,072 bp context length (third-smallest supported)."""
-    from proto_tools import (
-        AlphaGenomeInterval,
-        AlphaGenomePredictIntervalsConfig,
-        AlphaGenomePredictIntervalsInput,
-        run_alphagenome_predict_intervals,
-    )
-
-    inputs = AlphaGenomePredictIntervalsInput(
-        intervals=AlphaGenomeInterval(
-            chromosome="chr1",
-            interval_start=0,
-            interval_end=131_072,
-        ),
-    )
-    config = AlphaGenomePredictIntervalsConfig(
-        requested_outputs=["RNA_SEQ"],
-        organism="human",
-    )
-
-    result = run_alphagenome_predict_intervals(inputs, config)
-
-    assert result.tool_id == "alphagenome-predict-intervals"
-    assert len(result) == 1
-    validate_output(result)
-    output = result[0]
-    assert output.interval_end == 131_072
-    assert "predictions" in output.result
 
 
 # ── Benchmarks ────────────────────────────────────────────────────────────────

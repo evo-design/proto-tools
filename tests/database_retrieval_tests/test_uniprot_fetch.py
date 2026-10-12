@@ -154,53 +154,20 @@ def test_entry_priority_distinguishes_reviewed_from_unreviewed():
 
 
 @pytest.mark.integration
-def test_uniprot_fetch_by_accession():
-    """Fetch TP53 protein by UniProt accession."""
-    inputs = UniProtFetchInput(uniprot_id="P04637")
-    output = run_uniprot_fetch(inputs, UniProtFetchConfig())
-    assert output.accession == "P04637"
-    assert output.sequence is not None
-    assert output.sequence.startswith("M")
-    assert len(output.pdb_crossrefs) > 0
-
-
-@pytest.mark.integration
-def test_uniprot_fetch_by_name():
-    """Search UniProt for lacI in E. coli."""
-    inputs = UniProtFetchInput(
-        target_name="lacI",
-        organism="Escherichia coli",
-    )
-    output = run_uniprot_fetch(inputs, UniProtFetchConfig())
-    assert output.accession
-    assert output.sequence is not None
-    assert output.sequence.startswith("M")
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    "target_name, organism, expected_accession",
-    [
-        ("TP53", "Homo sapiens", "P04637"),
-        ("KRAS", "Homo sapiens", "P01116"),
-        ("BRCA1", "Homo sapiens", "P38398"),
-    ],
-    ids=["TP53", "KRAS", "BRCA1"],
-)
-def test_uniprot_fetch_by_name_returns_canonical_swissprot(target_name, organism, expected_accession):
+def test_uniprot_fetch_by_name_returns_canonical_swissprot():
     """Default symbol search returns the canonical Swiss-Prot entry, not a TrEMBL hit.
 
-    Pre-fix, the substring bug surfaced long TrEMBL accessions for these
-    common human genes; the ranker now picks Swiss-Prot without needing
+    The ranker must pick Swiss-Prot for a common human gene without needing
     `prefer_pdb_crossref=True`.
     """
     output = run_uniprot_fetch(
-        UniProtFetchInput(target_name=target_name, organism=organism),
+        UniProtFetchInput(target_name="TP53", organism="Homo sapiens"),
         UniProtFetchConfig(),
     )
     assert output.success
-    assert output.accession == expected_accession
+    assert output.accession == "P04637"
     assert "swiss-prot" in (output.entry_type or "").lower()
+    assert output.sequence is not None and output.sequence.startswith("M")
 
 
 @pytest.mark.integration

@@ -1,6 +1,11 @@
 """Tests for BindCraft binder-design tool."""
 
+import importlib.util
 import json
+import logging
+import os
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -118,6 +123,59 @@ def test_dispatch_payload_carries_user_config_plus_hardcoded_internals(monkeypat
         assert advanced[k] == v, f"hardcoded {k!r} not merged into advanced_settings"
 
 
+# ── Standalone filter building (runs in the tool subprocess, not via dispatch) ──
+
+
+@pytest.fixture(scope="module")
+def standalone():
+    """Import the bindcraft standalone inference module with ``standalone_helpers`` stubbed.
+
+    The module's helpers are only needed for live dispatch; ``_build_filters``
+    exercised here never touches them.
+    """
+    stub = types.ModuleType("standalone_helpers")
+    stub.get_jax_memory_stats = lambda **_: {}  # type: ignore[attr-defined]
+    stub.get_logger = logging.getLogger  # type: ignore[attr-defined]
+    stub.get_subprocess_device_env = lambda _device: dict(os.environ)  # type: ignore[attr-defined]
+    stub.resolve_weights_dir = lambda _toolkit: "weights"  # type: ignore[attr-defined]
+    saved = sys.modules.get("standalone_helpers")
+    sys.modules["standalone_helpers"] = stub
+    # Module-level guard only needs a truthy value; _build_filters never reads it.
+    os.environ.setdefault("VENV_PATH", str(Path(__file__).parent / "_fake_venv"))
+    inference_path = (
+        Path(__file__).parent.parent.parent / "proto_tools/tools/binder_design/bindcraft/standalone/inference.py"
+    )
+    spec = importlib.util.spec_from_file_location("bindcraft_inference", inference_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    yield module
+    if saved is not None:
+        sys.modules["standalone_helpers"] = saved
+    else:
+        sys.modules.pop("standalone_helpers", None)
+
+
+def test_filter_overrides_replace_whole_entries_and_keep_other_defaults(standalone) -> None:  # type: ignore[no-untyped-def]
+    """An override replaces its metric's entry outright; every other default filter survives.
+
+    Upstream's filter check reads ``higher`` unconditionally, so a caller overriding one
+    metric must pass both keys — a ``threshold``-only override drops ``higher``.
+    """
+    defaults = standalone._build_filters({})
+    assert defaults["Average_pLDDT"] == {"threshold": 0.8, "higher": True}
+
+    filters = standalone._build_filters({"filter_overrides": {"Average_pLDDT": {"threshold": 0.5, "higher": True}}})
+    assert filters["Average_pLDDT"] == {"threshold": 0.5, "higher": True}
+    # Untouched metrics keep their defaults rather than being dropped by the merge.
+    assert {k: v for k, v in filters.items() if k != "Average_pLDDT"} == {
+        k: v for k, v in defaults.items() if k != "Average_pLDDT"
+    }
+
+    partial = standalone._build_filters({"filter_overrides": {"Average_pLDDT": {"threshold": 0.5}}})
+    assert partial["Average_pLDDT"] == {"threshold": 0.5}, "override replaces the entry; it does not merge into it"
+
+
 # ── Tool registration ────────────────────────────────────────────────────────
 
 
@@ -174,34 +232,3 @@ def test_bindcraft_one_off_sample_full_pipeline() -> None:
         assert design.structure is not None
         assert design.metrics.primary_value is not None
     assert_metrics_in_spec(result)
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-def test_bindcraft_filter_override_rejects_with_impossible_threshold() -> None:
-    """``filter_overrides`` flows into the dispatch payload and reaches upstream's filter check."""
-    inputs = BindCraftInput(
-        target_pdb=str(_FIXTURE_PDB),
-        target_chain="A",
-        target_hotspot_residues="56",
-        binder_lengths=(60, 70),
-        binder_name="strict",
-        number_of_final_designs=1,
-    )
-    config = BindCraftConfig(
-        max_trajectories=1,
-        soft_iterations=10,
-        temporary_iterations=5,
-        hard_iterations=2,
-        greedy_iterations=2,
-        num_seqs=2,
-        max_mpnn_sequences=1,
-        seed=42,
-        filter_overrides={"Average_pLDDT": {"threshold": 0.999, "higher": True}},
-    )
-    result = run_bindcraft_design(inputs, config)
-    validate_output(result)
-
-    assert result.n_trajectories_run >= 1
-    assert result.n_designs_accepted == 0, "Impossible pLDDT threshold should reject every design"
-    assert result.designs == []

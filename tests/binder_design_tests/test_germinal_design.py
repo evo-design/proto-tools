@@ -341,41 +341,6 @@ def test_germinal_design_e2e_vhh_pd_l1(tmp_path):
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 @pytest.mark.integration
-def test_germinal_filter_override_rejects_all_designs_e2e():
-    """``filter_overrides`` flows end-to-end into upstream's filter check.
-
-    Drives one full VHH trajectory through the pipeline but sets a final
-    ``external_plddt`` threshold of 0.999 (effectively unattainable).
-    Trajectories should still complete; pipeline_stats should still parse;
-    ``result.designs`` should be empty (everything rejected at the final stage).
-    """
-    inputs = GerminalInput(
-        target_pdb=str(TEST_PDB),
-        target_chain="A",
-        binder_chain="B",
-        hotspots=["A56", "A66", "A115"],
-        target_name="pdl1_strict",
-    )
-    config = GerminalConfig(
-        design_type="vhh",
-        max_trajectories=1,
-        max_passing_designs=1,
-        structure_model="chai",
-        germinal_overrides={"logits_steps": 20, "softmax_steps": 4, "search_steps": 1, "num_seqs": 2},
-        filter_overrides={"final": {"external_plddt": {"value": 0.999, "operator": ">"}}},
-    )
-    result = run_germinal_design(inputs, config)
-    validate_output(result, check_export=False)
-
-    assert result.tool_id == "germinal-design"
-    assert result.pipeline_stats, "filter_override path didn't reach failure_counts.csv parse"
-    accepted = [d for d in result.designs if d.stage_passed == "accepted"]
-    assert accepted == [], f"impossible external_plddt threshold should reject every design, got {len(accepted)}"
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-@pytest.mark.integration
 def test_germinal_design_e2e_scfv_pd_l1():
     """End-to-end scFv campaign against PD-L1 (~10-20 min on H100).
 

@@ -8,7 +8,6 @@ import importlib.util
 import math
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -137,22 +136,6 @@ def test_codonfm_gradient_input_validation() -> None:
     assert CodonFMGradientInput(logits=[[1.0 / 64] * 64], temperature=None).temperature is None
 
 
-def test_codonfm_vendored_import_closure_is_present() -> None:
-    """All documented vendored Python modules, including src/data, ship in the source tree."""
-    root = Path(__file__).parents[2] / "proto_tools/tools/masked_models/codonfm/standalone/src"
-    assert len(list(root.rglob("*.py"))) == 27
-    for relative in (
-        "data/__init__.py",
-        "data/datamodule.py",
-        "data/metadata.py",
-        "data/preprocess/__init__.py",
-        "data/preprocess/codon_sequence.py",
-        "data/preprocess/mutation_pred.py",
-        "data/stateful_dataset.py",
-    ):
-        assert (root / relative).is_file()
-
-
 def _load_codonfm_worker():
     """Load the lightweight worker module without constructing its standalone environment."""
     root = Path(__file__).parents[2]
@@ -190,60 +173,18 @@ def test_codonfm_worker_padding_and_early_validation(monkeypatch) -> None:
     assert loaded is False
 
 
-def test_codonfm_worker_gradient_is_padded_finite_and_does_not_touch_parameter_grads(monkeypatch) -> None:
-    """The relaxed worker path uses /8 padding and returns only input gradients."""
-    torch = pytest.importorskip("torch")
-    worker = _load_codonfm_worker()
+@pytest.mark.integration
+def test_codonfm_worker_gradient_is_padded_finite_and_does_not_touch_parameter_grads() -> None:
+    """The relaxed worker path uses /8 padding and returns only input gradients.
 
-    class FakeEmbedding(torch.nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.word_embeddings = torch.nn.Embedding(69, 8, padding_idx=67)
-            self.post_ln = torch.nn.LayerNorm(8)
-            self.dropout = torch.nn.Dropout(0.0)
+    The gradient path needs torch, so ``_codonfm_env_gradient_check.py`` runs it against a fake
+    Encodon inside the codonfm env; a failed assertion surfaces here as ``RuntimeError``.
+    """
+    from proto_tools.utils import run_in_env
 
-        def forward(self, input_ids):
-            return self.dropout(self.post_ln(self.word_embeddings(input_ids)))
-
-    class FakeModel(torch.nn.Module):
-        def __init__(self, embedding):
-            super().__init__()
-            self.embedding = embedding
-            self.head = torch.nn.Linear(8, 69)
-
-        def forward(self, batch):
-            input_ids = next(value for key, value in batch.items() if "input" in str(key).lower())
-            assert input_ids.shape[-1] % 8 == 0
-            return SimpleNamespace(logits=self.head(self.embedding(input_ids)))
-
-    embedding = FakeEmbedding()
-    fake_model = FakeModel(embedding)
-    fake_model.requires_grad_(False)
-    tokenizer = SimpleNamespace(
-        codons=CODONFM_CODON_VOCAB,
-        encoder={
-            **{codon: idx for idx, codon in enumerate(CODONFM_CODON_VOCAB)},
-            "<CLS>": 64,
-            "<SEP>": 65,
-            "<MASK>": 66,
-            "<PAD>": 67,
-            "<UNK>": 68,
-        },
-        cls_token_id=64,
-        sep_token_id=65,
-        mask_token_id=66,
-        pad_token_id=67,
-    )
-    model = worker.CodonFMModel()
-    model.inference = SimpleNamespace(model=fake_model)
-    model.tokenizer = tokenizer
-    model.device = "cpu"
-    monkeypatch.setattr(model, "_embedding_layer", lambda: embedding)
-
-    result = model.compute_gradient([[0.0] * 64 for _ in range(3)], temperature=1.0, batch_size=2, device="cpu")
-    assert len(result["gradient"]) == 3
-    assert all(math.isfinite(value) for row in result["gradient"] for value in row)
-    assert all(parameter.grad is None for parameter in fake_model.parameters())
+    check = Path(__file__).resolve().parent / "_codonfm_env_gradient_check.py"
+    output = run_in_env("codonfm", script=str(check), timeout=1800)
+    assert "CODONFM_GRADIENT_OK" in output, output
 
 
 def test_codonfm_resolve_checkpoint_source_covers_all_aliases() -> None:

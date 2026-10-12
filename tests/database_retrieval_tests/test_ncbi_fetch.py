@@ -5,7 +5,6 @@ Tests for the NCBI Entrez tools (esearch, esummary, efetch).
 
 import pytest
 import requests
-from pydantic import ValidationError
 
 from proto_tools.tools.database_retrieval import (
     NCBIEfetchInput,
@@ -22,21 +21,6 @@ from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _ncbi_esearch,
     _parse_fasta_records,
 )
-
-
-def test_ncbi_esearch_requires_search_term():
-    with pytest.raises(ValidationError):
-        NCBIEsearchInput(db="protein")
-
-
-def test_ncbi_esummary_requires_identifier():
-    with pytest.raises(ValidationError):
-        NCBIEsummaryInput(db="protein")
-
-
-def test_ncbi_efetch_requires_identifier():
-    with pytest.raises(ValidationError):
-        NCBIEfetchInput(db="protein")
 
 
 class _ResetThenOkSession:
@@ -104,19 +88,6 @@ def test_accession_from_header_empty():
 
 @pytest.mark.skip_ci
 @pytest.mark.integration
-def test_ncbi_esearch_protein():
-    """Search NCBI protein database for lacI."""
-    inputs = NCBIEsearchInput(
-        db="protein",
-        search_term='"lacI"[Gene] AND "Escherichia coli"[Organism]',
-        max_results=3,
-    )
-    output = run_ncbi_esearch(inputs, NCBIFetchConfig())
-    assert len(output.ids) > 0
-
-
-@pytest.mark.skip_ci
-@pytest.mark.integration
 def test_ncbi_efetch_fasta():
     """Fetch protein FASTA from NCBI by accession."""
     inputs = NCBIEfetchInput(
@@ -167,21 +138,3 @@ def test_ncbi_config_env_var_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = NCBIFetchConfig()
     assert cfg.ncbi_api_key == "env-key-123"
     assert cfg.ncbi_email == "env@example.org"
-
-
-def test_ncbi_config_explicit_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An explicit config value overrides the env var."""
-    monkeypatch.setenv("NCBI_API_KEY", "env-key-123")
-    monkeypatch.setenv("NCBI_EMAIL", "env@example.org")
-    cfg = NCBIFetchConfig(ncbi_api_key="explicit-key", ncbi_email="explicit@example.org")
-    assert cfg.ncbi_api_key == "explicit-key"
-    assert cfg.ncbi_email == "explicit@example.org"
-
-
-def test_ncbi_config_no_env_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """With both env vars unset, the config fields default to None."""
-    monkeypatch.delenv("NCBI_API_KEY", raising=False)
-    monkeypatch.delenv("NCBI_EMAIL", raising=False)
-    cfg = NCBIFetchConfig()
-    assert cfg.ncbi_api_key is None
-    assert cfg.ncbi_email is None

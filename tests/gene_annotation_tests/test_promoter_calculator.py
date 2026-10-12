@@ -36,11 +36,6 @@ def test_input_single_sequence_normalization():
     assert inp.sequences[0] == "ATCG"
 
 
-def test_input_list_of_sequences():
-    inp = PromoterCalculatorInput(sequences=["ATCG", "GCTA"])
-    assert len(inp.sequences) == 2
-
-
 # ── Data model properties ────────────────────────────────────────────────
 
 
@@ -90,6 +85,22 @@ def test_num_sequences_with_promoter_empty():
     assert output.num_sequences_with_promoter == 0
 
 
+# ── Integration ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.integration
+def test_promoter_calculator_detects_consensus_promoter():
+    """The sigma70 consensus promoter is predicted on the forward strand."""
+    result = run_promoter_calculator(
+        PromoterCalculatorInput(sequences=[CONSENSUS_PROMOTER]), PromoterCalculatorConfig()
+    )
+    validate_output(result)
+    sequence_result = result.results[0]
+    assert sequence_result.has_promoter
+    core = "TTGACAATGATACTTAGATTCACTTATAAT"
+    assert any(p.strand == "+" and core in p.promoter_sequence for p in sequence_result.predictions)
+
+
 # ── Export ────────────────────────────────────────────────────────────────
 
 
@@ -122,28 +133,12 @@ def test_export_json(sample_output, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
-def test_run_promoter_calculator_with_consensus_promoter():
-    """Run the calculator on a sigma70 consensus-style promoter."""
-    inputs = PromoterCalculatorInput(sequences=[CONSENSUS_PROMOTER])
-    result = run_promoter_calculator(inputs, PromoterCalculatorConfig())
-
-    assert isinstance(result, PromoterCalculatorOutput)
-    assert len(result.results) == 1
-    assert result.results[0].sequence_id == "seq_0"
-
-
-@pytest.mark.integration
-def test_run_promoter_calculator_homopolymer():
-    """A homopolymer should still return a structurally valid result."""
-    inputs = PromoterCalculatorInput(sequences=["A" * 200])
-    result = run_promoter_calculator(inputs, PromoterCalculatorConfig())
-
-    assert isinstance(result, PromoterCalculatorOutput)
-    assert len(result.results) == 1
-
-
 # ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+def test_input_list_of_sequences():
+    inp = PromoterCalculatorInput(sequences=["ATCG", "GCTA"])
+    assert len(inp.sequences) == 2
 
 
 @pytest.mark.benchmark("promoter-calculator")

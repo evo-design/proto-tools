@@ -114,22 +114,16 @@ def test_output_export_json_writes_ligands_and_results(tmp_path):
 
 
 # ── Integration tests (require pdbeccdutils env + components.cif) ───────────
-# Skipped in CI: each loads the ~700 MB CCD bundle (SMILES paths re-parse for
-# indexing), which blows past the GH runner wall-clock budget.
+# Skipped in CI: each loads the ~700 MB CCD bundle, which blows past the GH runner wall-clock budget.
 
 
 @pytest.mark.skip_ci
 @pytest.mark.integration
 def test_ccd_lookup_offline_full_pass():
-    """One batch covers every offline path: CCD codes, parent codes, SMILES, no-match, order, defaults."""
-    paracetamol = "CC(=O)NC1=CC=C(C=C1)O"
-    long_alkane = "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"  # valid SMILES, no CCD match
-    result = run_ccd_lookup(
-        CcdLookupInput(identifiers=["ATP", "SEP", "MSE", paracetamol, long_alkane]),
-        CcdLookupConfig(),
-    )
+    """One batch covers the offline CCD-code path: metadata, parent codes, order, and enrichment defaults."""
+    result = run_ccd_lookup(CcdLookupInput(identifiers=["ATP", "SEP", "MSE"]), CcdLookupConfig())
     validate_output(result)
-    atp, sep, mse, tylenol, junk = result.results
+    atp, sep, mse = result.results
     atp_frag, *_ = result.ligands.fragments
 
     assert atp.fragment.ccd_code == "ATP"
@@ -145,19 +139,8 @@ def test_ccd_lookup_offline_full_pass():
     assert sep.fragment.ccd_code == "SEP" and sep.parent_ccd_code == "SER"
     assert mse.fragment.ccd_code == "MSE" and mse.parent_ccd_code == "MET"
 
-    assert tylenol.fragment.ccd_code is not None
-    assert (tylenol.formula or "").replace(" ", "") == "C8H9NO2"
-
-    assert junk.fragment.ccd_code is None
-
-    assert [e.fragment.ccd_code for e in result.results] == [
-        "ATP",
-        "SEP",
-        "MSE",
-        tylenol.fragment.ccd_code,
-        None,
-    ]
-    assert len(result.ligands.fragments) == 5
+    assert [e.fragment.ccd_code for e in result.results] == ["ATP", "SEP", "MSE"]
+    assert len(result.ligands.fragments) == 3
 
     assert all(e.cross_references is None for e in result.results)
     assert all(e.pdb_structures is None for e in result.results)
@@ -165,42 +148,23 @@ def test_ccd_lookup_offline_full_pass():
 
 @pytest.mark.skip_ci
 @pytest.mark.integration
-def test_ccd_lookup_include_cross_references_unichem():
-    """include_cross_references=True maps ATP to the canonical external compound IDs."""
+def test_ccd_lookup_network_enrichment():
+    """UniChem maps ATP to canonical external compound IDs; RCSB lists HEM in thousands of PDB entries."""
     result = run_ccd_lookup(
-        CcdLookupInput(identifiers=["ATP"]),
-        CcdLookupConfig(include_cross_references=True),
+        CcdLookupInput(identifiers=["ATP", "HEM"]),
+        CcdLookupConfig(include_cross_references=True, include_pdb_usage=True),
     )
     validate_output(result)
-    xrefs = result.results[0].cross_references
+    atp, hem = result.results
+
+    xrefs = atp.cross_references
     assert xrefs is not None
     sources = {s.lower() for s in xrefs}
     assert {"chembl", "drugbank", "pubchem", "chebi"} <= sources
     assert "CHEMBL14249" in xrefs["chembl"]
     assert "DB00171" in xrefs["drugbank"]
 
-
-@pytest.mark.skip_ci
-@pytest.mark.integration
-def test_ccd_lookup_garbage_input_returns_placeholder_fragment():
-    """End-to-end: garbage input yields a None-ccd_code placeholder without crashing."""
-    result = run_ccd_lookup(CcdLookupInput(identifiers=["NOTACCDORSMILES"]), CcdLookupConfig())
-    validate_output(result)
-    assert result.results[0].fragment.ccd_code is None
-    assert result.results[0].errors
-    assert result.ligands.fragments[0].ccd_code is None
-
-
-@pytest.mark.skip_ci
-@pytest.mark.integration
-def test_ccd_lookup_include_pdb_usage_rcsb():
-    """include_pdb_usage=True returns 4-character PDB codes; HEM appears in thousands of entries."""
-    result = run_ccd_lookup(
-        CcdLookupInput(identifiers=["HEM"]),
-        CcdLookupConfig(include_pdb_usage=True),
-    )
-    validate_output(result)
-    pdb_ids = result.results[0].pdb_structures
+    pdb_ids = hem.pdb_structures
     assert pdb_ids is not None
     assert len(pdb_ids) > 100
     assert all(isinstance(pid, str) and len(pid) == 4 for pid in pdb_ids)

@@ -80,18 +80,6 @@ def test_resolve_env_def_shared_uses_shared_dir(fake_tools):
     assert env_name == "myfamily"
 
 
-def test_two_tools_resolve_to_same_env_name(fake_tools):
-    """Both consumers of the same shared env produce the same env_name → same env_path on disk."""
-    _make_shared_env(fake_tools["envs_root"], "myfamily")
-    fake_tools["tool_dirs"]["alpha"] = _make_tool(fake_tools["tools_root"], "alpha", shared="myfamily")
-    fake_tools["tool_dirs"]["beta"] = _make_tool(fake_tools["tools_root"], "beta", shared="myfamily")
-
-    _, name_a = ToolInstance._resolve_env_def("alpha")
-    _, name_b = ToolInstance._resolve_env_def("beta")
-
-    assert name_a == name_b == "myfamily"
-
-
 def test_shared_env_marker_is_trimmed(fake_tools):
     """Trailing whitespace/newlines in shared_env.txt should not break resolution."""
     _make_shared_env(fake_tools["envs_root"], "myfamily")

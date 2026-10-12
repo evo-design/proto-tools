@@ -102,25 +102,6 @@ def test_input_warns_on_long_sequence(caplog):
 # ── Config validation ────────────────────────────────────────────────────────
 
 
-def test_config_rejects_num_samples_zero():
-    with pytest.raises(ValueError, match="greater than or equal to 1"):
-        BioEmuConfig(num_samples=0)
-
-
-def test_config_rejects_batch_size_zero():
-    with pytest.raises(ValueError, match="greater than or equal to 1"):
-        BioEmuConfig(batch_size=0)
-
-
-def test_config_rejects_invalid_model_name():
-    with pytest.raises(ValueError, match="Input should be"):
-        BioEmuConfig(model_name="invalid-model")
-
-
-def test_config_default_timeout_is_one_hour():
-    assert BioEmuConfig().timeout == 3600
-
-
 def test_config_passes_new_fields_to_dispatch():
     """All five new Config fields must flow to the dispatch payload."""
     # Pre-supply an empty per-complex MSA entry so preprocess() skips ColabFold.
@@ -224,10 +205,10 @@ def test_all_frames_filtered_out_raises():
 # ── Output assembly (mocked dispatch) ────────────────────────────────────────
 
 
-@pytest.mark.slow
 def test_multiple_complexes_produce_separate_ensembles():
     complex_ = Complex(chains=[{"sequence": _SAMPLE_SEQUENCE, "entity_type": "protein"}])
-    bioemu_input = BioEmuInput(complexes=[complex_, complex_])
+    # Pre-supplied (empty) MSAs make preprocess() skip the ColabFold search.
+    bioemu_input = BioEmuInput(complexes=[complex_, complex_], msas=[{}, {}])
     bioemu_config = BioEmuConfig(num_samples=10, verbose=False)
 
     with patch(

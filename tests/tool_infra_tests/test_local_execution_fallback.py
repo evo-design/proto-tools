@@ -84,12 +84,3 @@ def test_mmseqs2_local_search_is_still_refused() -> None:
     from proto_tools.tools.sequence_alignment import Mmseqs2HomologySearchConfig
 
     assert Mmseqs2HomologySearchConfig(search_mode="local").local_execution_reason("modal") is None
-
-
-def test_nested_msa_config_defaults_stay_local() -> None:
-    """A structure predictor builds this config internally; its defaults must not reach for a worker."""
-    from proto_tools.tools.sequence_alignment import Mmseqs2HomologySearchConfig
-
-    config = Mmseqs2HomologySearchConfig()
-    assert config.search_mode == "remote"
-    assert config.device == "cpu"

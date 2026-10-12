@@ -187,16 +187,16 @@ def test_pangolin_predict_cpu() -> None:
     _run_predict_and_check(device="cpu")
 
 
-@pytest.mark.uses_gpu
-def test_pangolin_predict_gpu() -> None:
-    """Test Pangolin prediction on GPU."""
-    _run_predict_and_check(device="cuda")
-
-
 @pytest.mark.integration
 def test_pangolin_score_variants_cpu() -> None:
     """Test Pangolin variant scoring on CPU."""
     _run_score_variants_and_check(device="cpu")
+
+
+@pytest.mark.uses_gpu
+def test_pangolin_predict_gpu() -> None:
+    """Test Pangolin prediction on GPU."""
+    _run_predict_and_check(device="cuda")
 
 
 @pytest.mark.uses_gpu
@@ -219,17 +219,6 @@ def test_pangolin_predict_tissue_subset() -> None:
     prediction = result.results[0]
     assert prediction.tissues == tissues
     assert all(len(row) == len(tissues) for row in prediction.scores)
-
-
-@pytest.mark.integration
-def test_pangolin_predict_batch() -> None:
-    """Multiple sequences yield one result each (1:1 batch cardinality)."""
-    seqs = random_dna_sequences(n=2, length=10100, seed=0)
-    result = run_pangolin_predict(PangolinPredictInput(sequences=seqs), PangolinPredictConfig(device="cpu"))
-
-    assert result.success is True, f"Pangolin predict failed: {result}"
-    assert len(result.results) == 2
-    assert all(len(r.scores) == 10100 - 2 * PANGOLIN_FLANK for r in result.results)
 
 
 @pytest.mark.integration

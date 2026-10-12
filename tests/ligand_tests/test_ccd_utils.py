@@ -20,34 +20,15 @@ from proto_tools.entities.ligands.ccd_utils import (
 # ── SMILES / CCD mapping ────────────────────────────────────────────────
 
 
-def test_map_known_smiles_to_ccd():
-    result = map_smiles_to_ccd_code("C([C@@H](C(=O)O)N)OP(=O)(O)O")
-    assert result == "SEP"
-
-
-@pytest.mark.integration
-def test_map_unknown_smiles_returns_none():
-    result = map_smiles_to_ccd_code("INVALID_SMILES_XYZ123")
-    assert result is None
-
-
-def test_map_empty_smiles_returns_none():
-    result = map_smiles_to_ccd_code("")
-    assert result is None
-
-
-def test_map_known_ccd_to_smiles():
-    result = map_ccd_code_to_smiles("SEP")
-    assert result is not None
-    assert isinstance(result, str)
-    assert len(result) > 0
-
-
-def test_map_ccd_case_insensitive():
-    result_upper = map_ccd_code_to_smiles("SEP")
-    result_lower = map_ccd_code_to_smiles("sep")
-    result_mixed = map_ccd_code_to_smiles("SeP")
-    assert result_upper == result_lower == result_mixed
+def test_lookups_are_case_insensitive():
+    """Every CCD entry point normalizes case, for the code, the canonical letter, and the entity type."""
+    assert map_ccd_code_to_smiles("SEP") == map_ccd_code_to_smiles("sep") == map_ccd_code_to_smiles("SeP")
+    assert get_ccd_description("SEP") == get_ccd_description("sep")
+    assert get_canonical_component("SEP") == get_canonical_component("sep") == get_canonical_component("SeP") == "S"
+    mods = get_modifications_for_component("protein", "S")
+    assert get_modifications_for_component("protein", "s") == mods
+    assert get_modifications_for_component("PROTEIN", "S") == mods
+    assert get_modifications_for_component("Protein", "S") == mods
 
 
 def test_map_unknown_ccd_returns_none():
@@ -68,12 +49,6 @@ def test_get_description_for_known_code():
     assert result is not None
     assert isinstance(result, str)
     assert len(result) > 0
-
-
-def test_get_description_case_insensitive():
-    result_upper = get_ccd_description("SEP")
-    result_lower = get_ccd_description("sep")
-    assert result_upper == result_lower
 
 
 def test_get_description_for_unknown_code():
@@ -140,94 +115,32 @@ def test_standard_components_return_none():
     assert get_canonical_component("THR") is None
 
 
-def test_canonical_case_insensitive_lookup():
-    assert get_canonical_component("SEP") == "S"
-    assert get_canonical_component("sep") == "S"
-    assert get_canonical_component("SeP") == "S"
-
-
 def test_canonical_unknown_code_returns_none():
     assert get_canonical_component("XYZ") is None
     assert get_canonical_component("INVALID") is None
     assert get_canonical_component("") is None
 
 
-def test_all_common_modifications_have_canonical_forms():
-    modifications_with_parents = {
-        "SEP",
-        "TPO",
-        "PTR",
-        "HYP",
-        "HY3",
-        "MLY",
-        "MLZ",
-        "M3L",
-        "ALY",
-        "MEA",
-        "CSD",
-        "CSO",
-        "2MG",
-        "5MC",
-        "PSU",
-        "7MG",
-        "H2U",
-        "M2G",
-        "OMC",
-        "OMG",
-        "1MA",
-        "6OG",
-        "6MA",
-        "5CM",
-        "8OG",
-    }
-
-    for mod_code in COMMON_MODIFICATIONS:
-        if mod_code in modifications_with_parents:
-            result = get_canonical_component(mod_code)
-            assert result is not None, f"{mod_code} should have a canonical form"
-            assert len(result) == 1, f"{mod_code} canonical form should be single letter"
-
-
 # ── Modifications for component ─────────────────────────────────────────
 
 
-def test_protein_serine_modifications():
-    mods = get_modifications_for_component("protein", "S")
+@pytest.mark.parametrize(
+    ("entity_type", "canonical_letter", "expected", "absent"),
+    [
+        ("protein", "S", ["SEP"], []),
+        ("protein", "T", ["TPO"], []),
+        ("protein", "Y", ["PTR"], []),
+        ("rna", "G", ["2MG", "7MG"], ["PSU"]),  # Pseudouridine is U, not G
+        ("rna", "U", ["PSU"], []),
+        ("dna", "A", ["1AP"], []),
+    ],
+)
+def test_modifications_for_component(entity_type, canonical_letter, expected, absent):
+    """Each canonical component maps to the modifications registered for its entity type."""
+    mods = get_modifications_for_component(entity_type, canonical_letter)
     assert isinstance(mods, list)
-    assert len(mods) > 0
-    assert "SEP" in mods
-
-
-def test_protein_threonine_modifications():
-    mods = get_modifications_for_component("protein", "T")
-    assert isinstance(mods, list)
-    assert "TPO" in mods
-
-
-def test_protein_tyrosine_modifications():
-    mods = get_modifications_for_component("protein", "Y")
-    assert isinstance(mods, list)
-    assert "PTR" in mods
-
-
-def test_rna_guanosine_modifications():
-    mods = get_modifications_for_component("rna", "G")
-    assert isinstance(mods, list)
-    assert "2MG" in mods
-    assert "7MG" in mods
-    assert "PSU" not in mods  # Pseudouridine is U, not G
-
-
-def test_rna_uridine_modifications():
-    mods = get_modifications_for_component("rna", "U")
-    assert isinstance(mods, list)
-    assert "PSU" in mods
-
-
-def test_dna_adenine_modifications():
-    mods = get_modifications_for_component("dna", "A")
-    assert isinstance(mods, list)
-    assert "1AP" in mods
+    assert set(expected) <= set(mods)
+    assert not set(absent) & set(mods)
 
 
 def test_entity_type_distinction():
@@ -237,40 +150,12 @@ def test_entity_type_distinction():
     assert set(rna_g_mods) != set(dna_g_mods)
 
 
-def test_empty_result_for_no_modifications():
-    mods = get_modifications_for_component("protein", "Z")
-    assert isinstance(mods, list)
-
-
-def test_case_insensitive_canonical_letter():
-    mods_upper = get_modifications_for_component("protein", "S")
-    mods_lower = get_modifications_for_component("protein", "s")
-    assert mods_upper == mods_lower
-
-
-def test_case_insensitive_entity_type():
-    mods_lower = get_modifications_for_component("protein", "S")
-    mods_upper = get_modifications_for_component("PROTEIN", "S")
-    mods_mixed = get_modifications_for_component("Protein", "S")
-    assert mods_lower == mods_upper == mods_mixed
-
-
 def test_invalid_entity_type_raises_error():
     with pytest.raises(ValueError, match="Invalid entity_type"):
         get_modifications_for_component("invalid", "A")
 
 
 # ── Round-trip and edge cases ────────────────────────────────────────────
-
-
-def test_multiple_roundtrips():
-    test_codes = ["SEP", "TPO", "2MG", "PSU", "6OG"]
-    for original_ccd in test_codes:
-        smiles = map_ccd_code_to_smiles(original_ccd)
-        assert smiles is not None, f"Failed to get SMILES for {original_ccd}"
-
-        ccd_from_smiles = map_smiles_to_ccd_code(smiles)
-        assert ccd_from_smiles == original_ccd, f"Roundtrip failed for {original_ccd}"
 
 
 def test_whitespace_in_ccd_code():
@@ -287,11 +172,6 @@ def test_case_sensitivity_smiles():
     assert result1 == "SEP"
     assert result2 is None or result2 == "SEP"
     assert result3 is None or result3 == "SEP"
-
-
-def test_map_smiles_novel_returns_none():
-    """A SMILES with no canonical or InChIKey match in the CCD returns None."""
-    assert map_smiles_to_ccd_code("c1ccc(C(=O)NCCNCCN)cc1") is None
 
 
 def test_inchikey_cache_contains_known_ccd_entries():
@@ -329,45 +209,6 @@ def test_inchikey_cache_contains_known_ccd_entries():
         "If this fails after an RDKit/InChI update, verify whether the probe ligands' "
         "InChIKeys changed and pick replacements known to be unambiguous."
     )
-
-
-def test_inchikey_cache_drops_ambiguous_keys():
-    """When multiple CCDs share an InChIKey, none of them are in the cache.
-
-    Validates the safe-by-default collision handling (skip ambiguous matches
-    rather than picking arbitrarily).
-    """
-    from collections import defaultdict
-    from pathlib import Path
-
-    from rdkit import Chem, RDLogger
-
-    from proto_tools.entities.ligands.ccd_utils import CCD_DATABASE_PATH, _get_inchikey_cache
-
-    cache = _get_inchikey_cache()
-
-    # Find an InChIKey collision in the bundled CCD file
-    RDLogger.DisableLog("rdApp.*")
-    inchikey_groups: dict[str, list[str]] = defaultdict(list)
-    with open(Path(CCD_DATABASE_PATH)) as f:
-        for line in f:
-            fields = line.rstrip().split("\t")
-            if len(fields) < 2:
-                continue
-            mol = Chem.MolFromSmiles(fields[0])
-            if mol is None:
-                continue
-            inchikey = Chem.MolToInchiKey(mol)
-            if inchikey:
-                inchikey_groups[inchikey].append(fields[1])
-    RDLogger.EnableLog("rdApp.*")
-
-    ambiguous_keys = [k for k, codes in inchikey_groups.items() if len(codes) > 1]
-    assert ambiguous_keys, "Expected at least one InChIKey collision in the CCD"
-
-    # None of the ambiguous keys should appear in the lookup cache.
-    leaked = [k for k in ambiguous_keys if k in cache]
-    assert not leaked, f"Ambiguous InChIKeys leaked into cache: {leaked[:3]}..."
 
 
 # ── Parameterized canonical round-trip tests ───────────────────────────

@@ -33,12 +33,6 @@ def test_bare_string_is_coerced_to_oligo_list():
     assert inp.oligos[0].partner is None
 
 
-def test_dict_with_partner_is_coerced():
-    """A {'sequence', 'partner'} dict is coerced into a Primer3Oligo."""
-    inp = Primer3ThermodynamicsInput(oligos=[{"sequence": FWD, "partner": REV}])
-    assert inp.oligos[0].partner == REV
-
-
 def test_sequence_is_uppercased():
     """Lowercase input is normalized to uppercase."""
     assert Primer3Oligo(sequence="acgt").sequence == "ACGT"

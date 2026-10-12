@@ -15,42 +15,15 @@ from tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
 
 
 @pytest.mark.integration
-def test_ligands_from_single_fragment_smi():
-    smi_path = LIGAND_TEST_FILES["single_fragment"]["smi"]
-    ligands = Ligands.from_file(smi_path)
-    assert len(ligands) == 1
-    frag = ligands[0]
-    assert isinstance(frag, Fragment)
-    assert frag.mol is not None
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize("sdf_key", ["2d_sdf", "3d_sdf"])
-def test_ligands_from_single_fragment_sdf(sdf_key):
-    sdf_path = LIGAND_TEST_FILES["single_fragment"][sdf_key]
-    ligands = Ligands.from_file(sdf_path)
-    assert len(ligands) == 1
-    frag = ligands[0]
-    assert isinstance(frag, Fragment)
-    assert frag.mol is not None
-
-
-@pytest.mark.integration
-def test_ligands_from_multiple_fragment_smi():
-    smi_path = LIGAND_TEST_FILES["multiple_fragment"]["smi"]
-    ligands = Ligands.from_file(smi_path)
-    assert len(ligands) > 1
-    for frag in ligands:
-        assert isinstance(frag, Fragment)
-        assert frag.mol is not None
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize("sdf_key", ["2d_sdf", "3d_sdf"])
-def test_ligands_from_multiple_fragment_sdf(sdf_key):
-    sdf_path = LIGAND_TEST_FILES["multiple_fragment"][sdf_key]
-    ligands = Ligands.from_file(sdf_path)
-    assert len(ligands) > 1
+@pytest.mark.parametrize("file_key", ["smi", "2d_sdf", "3d_sdf"])
+@pytest.mark.parametrize("fixture_key", ["single_fragment", "multiple_fragment"], ids=["single", "multiple"])
+def test_ligands_from_file(fixture_key, file_key):
+    """Every supported ligand file format parses into one Fragment per molecular graph."""
+    ligands = Ligands.from_file(LIGAND_TEST_FILES[fixture_key][file_key])
+    if fixture_key == "single_fragment":
+        assert len(ligands) == 1
+    else:
+        assert len(ligands) > 1
     for frag in ligands:
         assert isinstance(frag, Fragment)
         assert frag.mol is not None
@@ -86,6 +59,7 @@ def test_to_pdb_single_fragment():
     assert len(pdb_string) > 0
     assert is_valid_structure(pdb_string)
     assert "HETATM" in pdb_string or "ATOM" in pdb_string
+    assert "TER" in pdb_string
     assert "END" in pdb_string
 
     lines = pdb_string.split("\n")
@@ -169,12 +143,6 @@ def test_ligands_round_trip():
     assert len(reconstructed) == 2
     assert reconstructed[0].smiles == "CCO"
     assert reconstructed[1].smiles == "CO"
-
-
-def test_fragment_smiles_canonicalization():
-    frag = Fragment(smiles="c1ccccc1")
-    assert frag.smiles == "c1ccccc1"
-    assert frag.mol is not None
 
 
 def test_to_smi_round_trip(tmp_path):
@@ -284,35 +252,6 @@ def test_ligands_get_names_list():
     ligands = Ligands(fragments=[Fragment(smiles="CCO", name="ethanol"), Fragment(smiles="CO")])
     assert ligands.get_names_list() == ["ethanol", None]
     assert ligands.smiles == "CCO.CO"
-
-
-def test_fragment_conformers_property():
-    frag = Fragment(smiles="CCO")
-    assert frag.conformers == []
-    frag.generate_conformers(num_conformers=1)
-    assert len(frag.conformers) == 1
-
-
-def test_to_pdb_basic():
-    ligands = Ligands.from_smiles("CCO")
-    pdb_str = ligands.to_pdb()
-    assert "END" in pdb_str
-    assert "TER" in pdb_str
-    atom_lines = [line for line in pdb_str.split("\n") if line.startswith(("HETATM", "ATOM"))]
-    assert len(atom_lines) > 0
-
-
-def test_to_pdb_two_fragments():
-    ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
-    pdb_str = ligands.to_pdb()
-    lines = pdb_str.split("\n")
-    chain_ids = {line[21] for line in lines if line.startswith(("HETATM", "ATOM"))}
-    assert chain_ids == {"A", "B"}
-
-
-def test_to_pdb_empty_raises():
-    with pytest.raises(ValueError, match="no fragments"):
-        Ligands(fragments=[]).to_pdb()
 
 
 # ── Constructor shorthands ──────────────────────────────────────────────

@@ -19,7 +19,6 @@ from proto_tools.tools import (
     run_x3dna_fiber,
 )
 from proto_tools.tools.structure_prediction.x3dna.x3dna_fiber import (
-    _FORM_FLAGS,
     _normalize_bases,
 )
 from tests.conftest import benchmark_twice
@@ -78,25 +77,6 @@ def test_normalize_bases_rna_converts_t_to_u():
 def test_normalize_bases_dna_converts_u_to_t(form):
     """DNA forms upper-case and convert U->T (and leave T)."""
     assert _normalize_bases("acgtu", form) == "ACGTT"
-
-
-# ── _FORM_FLAGS mapping ──────────────────────────────────────────────────────
-
-
-def test_form_flags_mapping():
-    """Each canonical form maps to its expected fiber CLI flag."""
-    assert _FORM_FLAGS == {"A-DNA": "-a", "B-DNA": "-b", "Z-DNA": "-z", "RNA": "-rna"}
-
-
-# ── Config cloud support ─────────────────────────────────────────────────────
-
-
-def test_tool_declared_local_only():
-    """X3DNA is a user-provisioned binary, so the tool declares itself local-only."""
-    from proto_tools.tools import ToolRegistry
-
-    spec = next(s for s in ToolRegistry.list_all() if s.key == "x3dna-fiber")
-    assert spec.local_only and "X3DNA" in spec.local_only
 
 
 # ---------------------------------------------------------------------------

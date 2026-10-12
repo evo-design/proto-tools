@@ -183,11 +183,6 @@ def test_score_config_local_path_refused_remotely(tmp_path: Path) -> None:
     assert "local path" in reason
 
 
-def test_score_config_defaults_to_gpu() -> None:
-    """The GPU default from SpliceAI2Config survives mixing in the reference-genome config."""
-    assert SpliceAI2ScoreConfig().device == "cuda"
-
-
 # ── Export (custom serialization only) ──────────────────────────────────────
 
 

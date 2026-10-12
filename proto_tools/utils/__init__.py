@@ -11,7 +11,7 @@ from proto_tools.utils.device import (
     display_gpu_memory_usage,
     get_gpu_memory_info,
     get_gpu_process_memory,
-    number_of_available_gpus,
+    number_of_visible_gpus,
 )
 from proto_tools.utils.device_manager import SUPPORTED_DEVICE_PREFIXES, AllocationType, DeviceManager, OffloadStrategy
 from proto_tools.utils.env_runner import run_in_env
@@ -127,7 +127,7 @@ __all__ = [
     "ToolPool",
     # Device
     "determine_visible_devices",
-    "number_of_available_gpus",
+    "number_of_visible_gpus",
     "get_gpu_memory_info",
     "get_gpu_process_memory",
     "display_gpu_memory_usage",

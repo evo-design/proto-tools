@@ -42,20 +42,6 @@ def test_an_unprepared_config_says_so(models):
     assert config_model().to_transport_dict()[INTERNAL_STATE_KEY]["preprocess_completed"] is False
 
 
-def test_model_dump_would_lose_the_state(models):
-    """``model_dump`` drops it, which is why the client must not use it for dispatch.
-
-    Pins the reason for the call in ``client.py``: switching back would silently reintroduce a
-    second preprocess on the worker rather than fail.
-    """
-    config_model, input_model = models
-
-    _, prepared = run_preprocess(config_model(), input_model(complexes=[]))
-
-    assert INTERNAL_STATE_KEY not in prepared.model_dump(mode="json")
-    assert INTERNAL_STATE_KEY in prepared.to_transport_dict()
-
-
 def test_the_client_dispatches_with_the_transport_encoding():
     """Both dispatch forms send what ``to_transport_dict`` produces, not a plain dump.
 

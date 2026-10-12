@@ -17,14 +17,6 @@ def _spec(key: str):
     return ToolRegistry.get(key)
 
 
-def test_an_empty_primary_field_is_refused():
-    """Otherwise it reaches the tool and fails there, after a container start on a remote device."""
-    spec = _spec("esm2-embedding")
-    with pytest.raises(ValueError) as caught:
-        _reject_empty_batch("esm2-embedding", spec, spec.input_model(sequences=[]))
-    assert "'sequences' is empty" in str(caught.value)
-
-
 def test_an_empty_parallel_sibling_is_allowed():
     """A structure prediction with no supplied alignments is a normal call, not an error."""
     spec = _spec("protenix-prediction")
@@ -50,8 +42,8 @@ def test_an_unregistered_tool_is_untouched():
 
 
 def test_the_guard_runs_through_the_wrapper():
-    """The check has to fire on the real call path, not only when invoked directly."""
+    """An empty primary field is refused on the real call path, before reaching the tool and its container."""
     from proto_tools import ESM2EmbeddingsConfig, ESM2EmbeddingsInput, run_esm2_embeddings
 
-    with pytest.raises(ValueError, match="is empty"):
+    with pytest.raises(ValueError, match="'sequences' is empty"):
         run_esm2_embeddings(ESM2EmbeddingsInput(sequences=[]), ESM2EmbeddingsConfig(device="cpu"))

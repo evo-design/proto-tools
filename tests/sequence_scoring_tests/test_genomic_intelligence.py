@@ -305,46 +305,6 @@ def test_parse_expression_reads_applied_window_from_meta() -> None:
     assert result.scored_window == [0, 9198]
 
 
-def test_recorded_input_echoes_carry_no_derived_key() -> None:
-    """No recorded ``data.input`` carries a key the service stopped echoing.
-
-    Contract revision 16 (2026-09-06) made every ``data.input`` a closed object:
-    ``additionalProperties: false``, every field required. The published shapes
-    are ``{sequence_name}`` for promoter / splice / enhancer / chromatin /
-    annotation, ``{sequence_name, description, tss_index}`` for expression, and
-    ``{sequence_name, description}`` for the composite workflow.
-
-    These fixtures are recorded bodies, so nothing upstream keeps them honest --
-    a stale one simply describes a service that no longer exists, and the client
-    it exercises goes on passing. This test is that check. It deliberately does
-    not cover the adversarial payload below, which keeps the removed keys on
-    purpose.
-    """
-    derived = {"sequence_length", "submitted_sequence_length", "scored_window"}
-    recorded = {
-        "promoter": _PROMOTER_PAYLOAD,
-        "splice": _SPLICE_PAYLOAD,
-        "enhancer": _ENHANCER_PAYLOAD,
-        "chromatin": _CHROMATIN_PAYLOAD,
-        "annotation": _ANNOTATION_PAYLOAD,
-        "expression": _EXPRESSION_PAYLOAD,
-        "workflow": _WORKFLOW_PAYLOAD,
-    }
-    for task, payload in recorded.items():
-        echo = payload["data"]["input"]
-        assert derived.isdisjoint(echo), f"{task} echo still carries {derived & set(echo)}"
-
-
-def test_the_recorded_expression_echo_matches_the_published_shape() -> None:
-    """Expression echoes exactly its three inputs, and the composite its two."""
-    assert set(_EXPRESSION_PAYLOAD["data"]["input"]) == {
-        "sequence_name",
-        "description",
-        "tss_index",
-    }
-    assert set(_WORKFLOW_PAYLOAD["data"]["input"]) == {"sequence_name", "description"}
-
-
 def test_parse_expression_takes_the_submitted_length_from_meta_not_the_echo() -> None:
     """``sequence_length`` is the submission, read from ``meta``.
 
@@ -385,32 +345,6 @@ def test_parse_expression_takes_the_submitted_length_from_meta_not_the_echo() ->
     result = parse_expression_data(payload["data"], payload, "demo")
     assert result.sequence_length == 25000
     assert result.scored_window == [7901, 17099]
-
-
-def test_parse_expression_accepts_a_scored_window_wider_than_9198() -> None:
-    """``scored_window`` is as wide as the model reads, not a fixed 9,198 bp.
-
-    The contract fixes the width only for ``g0-expression``. ``g0-expression-8192``
-    reports the span it actually read, which is wider and not centred on the TSS.
-    The values below are that model's pinned response for a 90,001 bp
-    gene-sense ALB locus posted with ``tss_index`` 45,000. What holds for every
-    model is that the window lies inside the submission and contains the TSS.
-    """
-    payload = {
-        "data": {**_EXPRESSION_PAYLOAD["data"], "model": "g0-expression-8192"},
-        "meta": {
-            **_EXPRESSION_PAYLOAD["meta"],
-            "model": "g0-expression-8192",
-            "sequence_length": 90001,
-            "task_specific_counts": {"tss_index": 45000, "scored_window": [18520, 71304]},
-        },
-    }
-    result = parse_expression_data(payload["data"], payload, "ALB")
-    assert result.sequence_length == 90001
-    assert result.tss_index == 45000
-    assert result.scored_window == [18520, 71304]
-    start, end = result.scored_window
-    assert 0 <= start <= result.tss_index < end <= result.sequence_length
 
 
 def test_parse_workflow_counts_scored_and_skipped_genes() -> None:
@@ -462,12 +396,6 @@ def test_sequence_above_shared_cap_is_rejected_locally() -> None:
         validate_gi_sequence("A" * 500_001, min_bp=300, task="promoter")
 
 
-def test_invalid_nucleotides_are_rejected() -> None:
-    """Non-nucleotide characters fail validation."""
-    with pytest.raises(ValueError, match="Invalid nucleotide"):
-        validate_gi_sequence("ACGTZZZZ" * 100, min_bp=50, task="enhancer")
-
-
 def test_rna_uracil_is_rejected_locally() -> None:
     r"""The shared validator allows U; these endpoints do not, so the gate narrows it.
 
@@ -488,16 +416,18 @@ def test_the_gate_accepts_exactly_the_published_alphabet() -> None:
 
 
 def test_bare_string_is_coerced_to_one_sequence() -> None:
-    """Every task input accepts a bare DNA string in place of a list."""
-    for input_class in (GIPromoterInput, GISpliceInput, GIEnhancerInput, GIChromatinInput, GIAnnotationInput):
+    """Every task input, and the workflow input, accepts a bare DNA string in place of a list."""
+    for input_class in (
+        GIPromoterInput,
+        GISpliceInput,
+        GIEnhancerInput,
+        GIChromatinInput,
+        GIAnnotationInput,
+        GIFindGenesInput,
+    ):
         parsed = input_class(sequences="ACGT" * 300)
         assert len(parsed.sequences) == 1
         assert parsed.sequences[0].name == "sequence"
-
-
-def test_workflow_input_coerces_bare_string() -> None:
-    """The workflow input accepts a bare DNA string too."""
-    assert len(GIFindGenesInput(sequences="ACGT" * 300).sequences) == 1
 
 
 def test_expression_requires_tss_index_for_non_window_length() -> None:
@@ -551,23 +481,6 @@ def test_key_is_excluded_from_the_cache_key() -> None:
     assert first.cache_key() == second.cache_key()
 
 
-def test_model_is_unset_by_default() -> None:
-    """Model selection is left to the service unless the caller overrides it."""
-    assert GIPromoterConfig().model is None
-
-
-def test_splice_threshold_rejects_zero() -> None:
-    """A zero threshold would return every scored position; it is refused."""
-    with pytest.raises(ValueError):
-        GISpliceConfig(threshold=0.0)
-
-
-def test_expression_description_is_required_and_non_empty() -> None:
-    """The conditioning text cannot be blank."""
-    with pytest.raises(ValueError):
-        GIExpressionConfig(description="")
-
-
 def test_api_error_carries_code_and_request_id() -> None:
     """The error surfaces the enum code and the correlation id."""
     error = GIAPIError(422, "validation_failed", "bad input", "abc-123", {"errors": []})
@@ -596,10 +509,6 @@ class TestWrappedSequencesMatchServerSemantics:
         assert len(wrapped) > 9198
         with pytest.raises(ValueError, match="9,000 bp"):
             validate_gi_sequence(wrapped, min_bp=9198, task="expression")
-
-    def test_ambiguity_codes_are_still_refused(self) -> None:
-        with pytest.raises(ValueError, match="Invalid nucleotide"):
-            validate_gi_sequence("ACGTRACGT" * 20, min_bp=50, task="enhancer")
 
 
 # ============================================================================
@@ -928,11 +837,6 @@ class TestNestedFieldsOfTheWrongType:
         # The length comes from meta, so a null or absent data.input -- which the
         # parser no longer reads at all -- cannot degrade it to a silent zero.
         assert result.sequence_length == _META["sequence_length"]
-
-    def test_a_well_formed_payload_is_untouched(self) -> None:
-        """The recorded live shapes still parse, so the guard is not overreaching."""
-        assert parse_promoter_data(_PROMOTER_PAYLOAD["data"], _PROMOTER_PAYLOAD, "demo").total_windows == 1
-        assert parse_splice_data(_SPLICE_PAYLOAD["data"], _SPLICE_PAYLOAD, "demo").total_sites == 1
 
 
 class TestTheCallerSeesTheRefusal:

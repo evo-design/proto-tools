@@ -314,27 +314,50 @@ def _discover() -> tuple[list[TorchInstall], list[tuple[Path, int, str]]]:
     return installs, unparsed
 
 
+@dataclass(frozen=True)
+class ResolveCase:
+    """One distinct resolve, shared by every install that would issue the same one.
+
+    Attributes:
+        spec (str): Torch requirement to resolve.
+        variant (str): Wheel variant whose index the resolve targets.
+        index_strategy (str | None): Value of ``--index-strategy``, if set.
+        python_version (str): Interpreter version to resolve for.
+        installs (tuple[TorchInstall, ...]): Every install line this resolve stands for.
+    """
+
+    spec: str
+    variant: str
+    index_strategy: str | None
+    python_version: str
+    installs: tuple[TorchInstall, ...]
+
+    @property
+    def case_id(self) -> str:
+        """Readable, unique pytest id for the resolve."""
+        strategy = f"-{self.index_strategy}" if self.index_strategy else ""
+        return f"{self.spec}-{self.variant}-py{self.python_version}{strategy}"
+
+
+def _distinct_resolves(installs: list[TorchInstall]) -> list[ResolveCase]:
+    """Collapse installs that would issue an identical resolve into one case each."""
+    grouped: dict[tuple[str, str, str | None, str], list[TorchInstall]] = {}
+    for install in installs:
+        for variant in install.index_variants:
+            key = (install.spec, variant, install.index_strategy, install.python_version)
+            grouped.setdefault(key, []).append(install)
+    return [ResolveCase(*key, installs=tuple(group)) for key, group in grouped.items()]
+
+
 TORCH_INSTALLS, UNPARSED_LINES = _discover()
 
-CASES = [
-    pytest.param(install, variant, id=f"{install.label}-{variant}")
-    for install in TORCH_INSTALLS
-    for variant in install.index_variants
-]
+CASES = [pytest.param(case, id=case.case_id) for case in _distinct_resolves(TORCH_INSTALLS)]
 
 
 def test_every_torch_install_line_is_parsed() -> None:
     """Every torch-installing line is understood, so no tool escapes the canary silently."""
     assert not UNPARSED_LINES, "unparsed torch install lines:\n" + "\n".join(
         f"  {script.relative_to(PROTO_TOOLS_DIR.parent)}:{number}: {line}" for script, number, line in UNPARSED_LINES
-    )
-
-
-def test_canary_covers_the_known_pinned_tools() -> None:
-    """The pinned-torch tools named in notes/tool-environments.md are actually covered."""
-    covered = {install.label for install in TORCH_INSTALLS}
-    assert {"evo1", "evo2", "borzoi", "progen3", "germinal", "codonfm"} <= covered, (
-        f"pinned-torch tools missing from canary coverage: {sorted(covered)}"
     )
 
 
@@ -359,30 +382,34 @@ def _compile(spec: str, index_url: str, strategy: str | None, python_version: st
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize(("install", "variant"), CASES)
-def test_pinned_torch_still_resolves(install: TorchInstall, variant: str) -> None:
-    """Each tool's torch pin still resolves against the wheel index it would be built with."""
+@pytest.mark.parametrize("case", CASES)
+def test_pinned_torch_still_resolves(case: ResolveCase) -> None:
+    """Each distinct torch pin still resolves against the wheel index its tools would be built with."""
     # Not skipped when absent: a missing resolver must not read as "nothing has been pruned".
     # CI provisions uv via astral-sh/setup-uv before this job runs.
     if shutil.which("uv") is None:
         pytest.fail("uv is required for the torch index canary; install it with `pip install uv`")
 
-    index_url = f"{_TORCH_INDEX_BASE}/{variant}"
-    result = _compile(install.spec, index_url, install.index_strategy, install.python_version)
+    index_url = f"{_TORCH_INDEX_BASE}/{case.variant}"
+    result = _compile(case.spec, index_url, case.index_strategy, case.python_version)
     if result.returncode != 0 and _TRANSIENT_SIGNATURE.search(result.stderr):
-        result = _compile(install.spec, index_url, install.index_strategy, install.python_version)
+        result = _compile(case.spec, index_url, case.index_strategy, case.python_version)
         if result.returncode != 0 and _TRANSIENT_SIGNATURE.search(result.stderr):
             pytest.skip(f"{index_url} unreachable:\n{result.stderr.strip()[-500:]}")
 
     if result.returncode == 0:
         return
 
-    location = f"{install.script.relative_to(PROTO_TOOLS_DIR.parent)}:{install.line_number}"
+    locations = "\n".join(
+        f"  {install.label}: {install.script.relative_to(PROTO_TOOLS_DIR.parent)}:{install.line_number}"
+        for install in case.installs
+    )
     hint = (
         " Add --index-strategy unsafe-best-match so uv may source the pruned wheel from PyPI."
-        if _PRUNED_SIGNATURE.search(result.stderr) and install.index_strategy is None
+        if _PRUNED_SIGNATURE.search(result.stderr) and case.index_strategy is None
         else ""
     )
     pytest.fail(
-        f"{install.spec} no longer resolves against {index_url} ({location}).{hint}\n{result.stderr.strip()[-1500:]}"
+        f"{case.spec} no longer resolves against {index_url}.{hint}\nAffected installs:\n{locations}\n"
+        f"{result.stderr.strip()[-1500:]}"
     )

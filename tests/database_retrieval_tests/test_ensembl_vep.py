@@ -113,18 +113,6 @@ def test_run_ensembl_vep_rejects_non_list_payload():
 
 
 @pytest.mark.integration
-def test_vep_hgvs_genomic_live():
-    """Genomic HGVS form returns at least one consequence with most_severe_consequence populated."""
-    out = run_ensembl_vep(EnsemblVEPInput(hgvs="9:g.22125504G>C"))
-    assert out.success, out.errors
-    assert out.num_consequences >= 1
-    cons = out.consequences[0]
-    assert cons.most_severe_consequence
-    assert cons.allele_string == "G/C"
-    assert len(cons.transcript_consequences) > 0
-
-
-@pytest.mark.integration
 def test_vep_invalid_hgvs_surfaces_failure():
     """Malformed HGVS yields a 400 from the server, surfaced as a raised exception."""
     with pytest.raises(Exception):

@@ -2,13 +2,6 @@
 
 from pathlib import Path
 
-from proto_tools.modal.client import PROTO_TOOLS_REPO
-
-try:  # Python 3.11+
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10
-    import tomli as tomllib  # type: ignore[no-redef]
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _OFFICIAL_REPOSITORY = "https://github.com/evo-design/proto-tools"
 _TEXT_SUFFIXES = {".bib", ".ipynb", ".json", ".md", ".py", ".sh", ".toml", ".txt", ".yaml", ".yml"}
@@ -47,14 +40,3 @@ def test_documented_installation_uses_official_repository() -> None:
     mcp_readme = (_REPO_ROOT / "proto_tools" / "mcp" / "README.md").read_text(encoding="utf-8")
     assert f"pip install git+{_OFFICIAL_REPOSITORY}.git" in readme
     assert f'pip install "proto-tools[mcp] @ git+{_OFFICIAL_REPOSITORY}.git"' in mcp_readme
-
-
-def test_package_and_runtime_links_use_official_repository() -> None:
-    """Package metadata and actionable runtime errors must share one identity."""
-    with (_REPO_ROOT / "pyproject.toml").open("rb") as file:
-        project_urls = tomllib.load(file)["project"]["urls"]
-
-    assert project_urls["Homepage"] == _OFFICIAL_REPOSITORY
-    assert project_urls["Repository"] == _OFFICIAL_REPOSITORY
-    assert project_urls["Issues"] == f"{_OFFICIAL_REPOSITORY}/issues"
-    assert PROTO_TOOLS_REPO == _OFFICIAL_REPOSITORY

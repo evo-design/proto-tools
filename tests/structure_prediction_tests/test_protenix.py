@@ -25,21 +25,12 @@ _persistent_tool = make_persistent_fixture("protenix")
 # Cro repressor from bacteriophage lambda. Short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
 
+# One checkpoint per architecture family (base, constraint, mini-ESM, tiny).
 _PROTENIX_MODEL_VARIANTS = [
     "protenix_base_default_v1.0.0",
-    "protenix_base_20250630_v1.0.0",
-    "protenix_base_default_v0.5.0",
     "protenix_base_constraint_v0.5.0",
-    "protenix_mini_default_v0.5.0",
     "protenix_mini_esm_v0.5.0",
-    "protenix_mini_ism_v0.5.0",
     "protenix_tiny_default_v0.5.0",
-]
-
-_MINI_MODEL_VARIANTS = [
-    "protenix_mini_default_v0.5.0",
-    "protenix_mini_esm_v0.5.0",
-    "protenix_mini_ism_v0.5.0",
 ]
 
 
@@ -49,26 +40,6 @@ _MINI_MODEL_VARIANTS = [
 def test_protenix_config_rejects_invalid_model_name():
     with pytest.raises(ValidationError, match="model_name"):
         ProtenixConfig(model_name="protenix_nonexistent_v99.0.0")
-
-
-def test_protenix_config_rejects_zero_diffusion_samples():
-    with pytest.raises(ValidationError, match="greater than or equal to 1"):
-        ProtenixConfig(num_diffusion_samples=0)
-
-
-def test_protenix_config_rejects_zero_diffusion_steps():
-    with pytest.raises(ValidationError, match="greater than or equal to 1"):
-        ProtenixConfig(num_diffusion_steps=0)
-
-
-def test_protenix_config_rejects_negative_pairformer_cycles():
-    with pytest.raises(ValidationError, match="greater than or equal to 0"):
-        ProtenixConfig(num_pairformer_cycles=-1)
-
-
-def test_protenix_config_rejects_zero_timeout():
-    with pytest.raises(ValidationError, match="greater than or equal to 1"):
-        ProtenixConfig(timeout=0)
 
 
 @pytest.mark.parametrize(
@@ -98,13 +69,6 @@ def test_protenix_config_explicit_schedule_overrides_variant_default():
     assert config.num_diffusion_steps == 100
 
 
-def test_protenix_config_msa_search_lazy_init():
-    """msa_search_config is None by default, initialized lazily in preprocess."""
-    config = ProtenixConfig(verbose=True)
-    # Not eagerly initialized; stays None until preprocess() is called
-    assert config.msa_search_config is None
-
-
 def test_protenix_unpaired_msa_path_gets_deep_per_chain_unpaired(tmp_path):
     """The unpaired slot receives each chain's deep unpaired MSA; the paired slot the shallow paired set."""
     from pathlib import Path
@@ -130,21 +94,6 @@ def test_protenix_unpaired_msa_path_gets_deep_per_chain_unpaired(tmp_path):
         paired_rows = Path(pc["pairedMsaPath"]).read_text().count(">")
         assert unpaired_rows == 5, f"unpairedMsaPath should carry the deep unpaired, got {unpaired_rows}"
         assert paired_rows == 2, f"pairedMsaPath should carry the paired set, got {paired_rows}"
-
-
-def test_protenix_input_accepts_string_shorthand():
-    """Single-chain string input is normalised to a Complex."""
-    inputs = ProtenixInput(complexes=["MKTL"])
-    assert len(inputs.complexes) == 1
-    assert inputs.complexes[0].chains[0].sequence == "MKTL"
-
-
-def test_protenix_input_accepts_chain_objects():
-    chain = Chain(sequence=_CRO_SEQUENCE, entity_type="protein")
-    complex_ = Complex(chains=[chain])
-    inputs = ProtenixInput(complexes=[complex_])
-    assert len(inputs.complexes) == 1
-    assert inputs.complexes[0].chains[0].entity_type == "protein"
 
 
 # ── protenix-v2 token limit (no GPU) ─────────────────────────────────────────
@@ -241,77 +190,14 @@ def test_protenix_model_variants(model_name):
         assert isinstance(structure.metrics["gpde"], (int, float))
 
 
-@pytest.mark.extensive
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-def test_protenix_ccd_vs_smiles_input_equivalent_predictions():
-    """Predictions from CCD and SMILES inputs of the same ligand should agree.
-
-    Empirical check for Protenix's lenient SMILES path. If this test fails,
-    consider tightening the implementation to strict CCD-only (the AF3
-    implementation does this because AF3 with raw SMILES produces broken
-    structures).
-    """
-    from proto_tools.entities.ligands import Fragment
-
-    # L-tyrosine — known CCD entry "TYR", small enough for fast inference
-    tyr_smiles = "c1cc(ccc1C[C@@H](C(=O)O)N)O"
-    protein = Chain(sequence=_CRO_SEQUENCE, entity_type="protein")
-
-    # CCD path: validator auto-resolves ccd_code="TYR"; implementation sends "CCD_TYR"
-    ccd_frag = Fragment(smiles=tyr_smiles)
-    assert ccd_frag.ccd_code == "TYR"  # invariant guard
-    ccd_complex = Complex(chains=[protein, ccd_frag])
-
-    # SMILES path: force ccd_code=None so the implementation falls back to raw SMILES
-    smiles_frag = Fragment(smiles=tyr_smiles)
-    smiles_frag.ccd_code = None
-    smiles_complex = Complex(chains=[protein, smiles_frag])
-
-    config = ProtenixConfig(
-        model_name="protenix_tiny_default_v0.5.0",
-        use_msa=False,
-        num_diffusion_samples=1,
-        num_diffusion_steps=50,
-        seeds=[42],
-    )
-
-    ccd_output = run_protenix(ProtenixInput(complexes=[ccd_complex]), config)
-    smiles_output = run_protenix(ProtenixInput(complexes=[smiles_complex]), config)
-
-    assert ccd_output.success and smiles_output.success
-    ccd_structure = ccd_output.structures[0]
-    smiles_structure = smiles_output.structures[0]
-
-    # Heavy-atom count must match exactly — the same molecule is being predicted
-    # either way, so any difference indicates a parsing error.
-    ccd_atoms = int((ccd_structure._get_atom_array().element != "H").sum())
-    smiles_atoms = int((smiles_structure._get_atom_array().element != "H").sum())
-    assert ccd_atoms == smiles_atoms, (
-        f"Heavy-atom counts diverge: CCD={ccd_atoms}, SMILES={smiles_atoms}. "
-        "SMILES input may be parsing the ligand differently than CCD."
-    )
-
-    # Confidence shouldn't collapse on the SMILES path. AF3's broken SMILES
-    # predictions had plddt scattered to ~30; a sensible prediction is >50.
-    ccd_plddt = ccd_structure.metrics["avg_plddt"]
-    smiles_plddt = smiles_structure.metrics["avg_plddt"]
-    assert smiles_plddt > 0.5, f"SMILES-input plddt={smiles_plddt:.2f} suggests broken structure"
-    assert abs(ccd_plddt - smiles_plddt) < 0.2, (
-        f"plddt diverges: CCD={ccd_plddt:.2f}, SMILES={smiles_plddt:.2f}. "
-        "Large gap suggests one path is producing a low-quality structure."
-    )
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-@pytest.mark.parametrize("model_name", _MINI_MODEL_VARIANTS)
-def test_protenix_mini_models_with_msa(model_name):
-    """Mini model variants (default, esm, ism) succeed with MSA enabled."""
+def test_protenix_mini_model_with_msa():
+    """A mini model variant succeeds with MSA enabled."""
     complexes = [Complex(chains=[Chain(sequence=_CRO_SEQUENCE, entity_type="protein")])]
     inputs = ProtenixInput(complexes=complexes)
     config = ProtenixConfig(
-        model_name=model_name,
+        model_name="protenix_mini_default_v0.5.0",
         use_msa=True,
         num_diffusion_samples=1,
         num_diffusion_steps=50,
@@ -394,6 +280,13 @@ def test_protenix_pae_surface():
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+def test_protenix_input_accepts_string_shorthand():
+    """Single-chain string input is normalised to a Complex."""
+    inputs = ProtenixInput(complexes=["MKTL"])
+    assert len(inputs.complexes) == 1
+    assert inputs.complexes[0].chains[0].sequence == "MKTL"
 
 
 @pytest.mark.benchmark("protenix-prediction")

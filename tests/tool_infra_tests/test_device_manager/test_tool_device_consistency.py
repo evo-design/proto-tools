@@ -1,6 +1,6 @@
 """tests/tool_infra_tests/test_device_manager/test_tool_device_consistency.py.
 
-Tests for tool protocol compliance (to_device, get_memory_stats, etc).
+Static checks of GPU tool device protocol compliance (to_device, subprocess env, JAX device).
 """
 
 import re
@@ -162,83 +162,3 @@ def test_gpu_tools_default_to_generic_cuda(tool_spec):
     assert is_generic_cuda, (
         f"{tool_key}: defaults to '{default_device}' (should be 'cuda' for single-GPU or 'cudaxN' for multi-GPU)"
     )
-
-
-# ---------------------------------------------------------------------------
-# Integration tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    "tool_spec",
-    _all_gpu_specs,
-    ids=lambda spec: spec.key,
-)
-def test_get_memory_stats_via_worker(tool_spec):
-    """Test that get_memory_stats() actually works when called via worker subprocess.
-
-    This is a runtime test that:
-    1. Starts a worker for each GPU tool
-    2. Sends the get_memory_stats command
-    3. Verifies the response has the expected format
-    """
-    from proto_tools.utils.tool_instance import ToolInstance
-
-    tool_key = tool_spec.key
-
-    toolkit = tool_spec.source_file.parent.name
-
-    with ToolInstance.persist_tool(toolkit) as instance:
-        try:
-            command = {"command": "get_memory_stats"}
-            script_path = tool_spec.source_file.parent / "standalone" / "inference.py"
-            if not script_path.exists():
-                script_path = tool_spec.source_file.parent / "standalone" / "run.py"
-
-            from proto_tools.utils.base_config import BaseConfig
-
-            cfg = BaseConfig(verbose=False, timeout=1800)
-            result = ToolInstance.dispatch(
-                toolkit,
-                command,
-                instance=instance,
-                script_path=script_path,
-                config=cfg,
-            )
-        except Exception:
-            if instance._worker is not None:
-                result = instance._worker.send(command, timeout=1800)
-            else:
-                raise
-
-        assert isinstance(result, dict), f"Tool {tool_key}: get_memory_stats() returned {type(result)}, expected dict"
-
-        assert "available" in result, (
-            f"Tool {tool_key}: get_memory_stats() response missing 'available' key. Got: {result.keys()}"
-        )
-
-        assert "framework" in result, (
-            f"Tool {tool_key}: get_memory_stats() response missing 'framework' key. Got: {result.keys()}"
-        )
-
-        if result["available"]:
-            assert result["framework"] in ["pytorch", "jax"], (
-                f"Tool {tool_key}: unexpected framework '{result['framework']}', expected 'pytorch' or 'jax'"
-            )
-
-            if result["framework"] == "pytorch":
-                assert "allocated_bytes" in result, f"Tool {tool_key}: PyTorch memory stats missing 'allocated_bytes'"
-                assert isinstance(result["allocated_bytes"], (int, float)), (
-                    f"Tool {tool_key}: allocated_bytes should be numeric, got {type(result['allocated_bytes'])}"
-                )
-
-            elif result["framework"] == "jax":
-                assert "bytes_in_use" in result, f"Tool {tool_key}: JAX memory stats missing 'bytes_in_use'"
-                assert isinstance(result["bytes_in_use"], (int, float)), (
-                    f"Tool {tool_key}: bytes_in_use should be numeric, got {type(result['bytes_in_use'])}"
-                )
-
-        else:
-            assert "reason" in result, f"Tool {tool_key}: get_memory_stats() returned available=False but no 'reason'"

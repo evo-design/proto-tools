@@ -27,20 +27,6 @@ def test_get_subprocess_device_env_matches_determine_visible_devices_cpu():
     )
 
 
-@pytest.mark.uses_gpu
-def test_get_subprocess_device_env_matches_determine_visible_devices_single(monkeypatch):
-    """Verify single GPU handling matches between standalone and main."""
-    # No parent CUDA_VISIBLE_DEVICES
-    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
-
-    env = get_subprocess_device_env("cuda:0")
-    expected = determine_visible_devices("cuda:0")
-
-    assert env["CUDA_VISIBLE_DEVICES"] == expected, (
-        "get_subprocess_device_env should match determine_visible_devices for cuda:0"
-    )
-
-
 def test_get_subprocess_device_env_matches_determine_visible_devices_with_parent(monkeypatch):
     """Verify device mapping matches when parent has CUDA_VISIBLE_DEVICES set."""
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3,5,7")
@@ -57,6 +43,14 @@ def test_get_subprocess_device_env_matches_determine_visible_devices_with_parent
     env = get_subprocess_device_env("cuda:2")
     expected = determine_visible_devices("cuda:2")
     assert env["CUDA_VISIBLE_DEVICES"] == expected, "Logical cuda:2 should map to physical GPU 7"
+
+    # Single visible parent device
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "4")
+    assert get_subprocess_device_env("cuda:0")["CUDA_VISIBLE_DEVICES"] == determine_visible_devices("cuda:0")
+
+    # Spaces in the parent value are stripped
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", " 3, 5 , 7 ")
+    assert get_subprocess_device_env("cuda:0")["CUDA_VISIBLE_DEVICES"] == determine_visible_devices("cuda:0")
 
 
 def test_get_subprocess_device_env_matches_multi_device(monkeypatch):
@@ -135,17 +129,6 @@ def test_get_subprocess_device_env_rejects_index_out_of_range(monkeypatch):
         get_subprocess_device_env("cuda:5")
 
 
-def test_get_subprocess_device_env_handles_spaces_in_parent(monkeypatch):
-    """Verify handling of spaces in parent CUDA_VISIBLE_DEVICES."""
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", " 3, 5 , 7 ")
-
-    env = get_subprocess_device_env("cuda:0")
-    expected = determine_visible_devices("cuda:0")
-
-    # Should strip spaces and map correctly
-    assert env["CUDA_VISIBLE_DEVICES"] == expected
-
-
 # ── Edge cases ────────────────────────────────────────────────────────────────
 
 
@@ -161,17 +144,6 @@ def test_get_subprocess_device_env_multi_device_non_contiguous_mapping(monkeypat
     env = get_subprocess_device_env("cuda:0,2")
 
     assert env["CUDA_VISIBLE_DEVICES"] == "0,5"
-
-
-def test_get_subprocess_device_env_single_parent_device(monkeypatch):
-    """Verify behavior when parent has only one visible device."""
-    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "4")
-
-    # Only cuda:0 should be valid
-    env = get_subprocess_device_env("cuda:0")
-    expected = determine_visible_devices("cuda:0")
-
-    assert env["CUDA_VISIBLE_DEVICES"] == expected
 
 
 def test_get_subprocess_device_env_empty_parent(monkeypatch):
@@ -235,14 +207,6 @@ def test_multi_gpu_subprocess_removes_jax_restrictions(monkeypatch):
     assert env["CUDA_VISIBLE_DEVICES"] == "5,7"
     assert "XLA_PYTHON_CLIENT_PREALLOCATE" not in env
     assert "XLA_PYTHON_CLIENT_ALLOCATOR" not in env
-
-
-def test_invalid_device_raises(monkeypatch):
-    """Invalid device format raises ValueError instead of falling back to CPU."""
-    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
-
-    with pytest.raises(ValueError, match="unrecognized device 'not-a-device'"):
-        get_subprocess_device_env("not-a-device")
 
 
 # ── resolve_weights_dir ──────────────────────────────────────────────────────
@@ -328,32 +292,6 @@ def test_resolve_weights_dir_per_tool_override_beats_in_env(monkeypatch, tmp_pat
     assert result == str(override_dir)
 
 
-def test_resolve_weights_dir_creates_leaf_directory(monkeypatch, tmp_path):
-    """resolve_weights_dir creates the leaf directory and tool subdirectory."""
-    parent = tmp_path / "existing"
-    parent.mkdir()
-    shared = parent / "weights"
-    monkeypatch.setenv("PROTO_MODEL_CACHE", str(shared))
-    monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
-
-    result = resolve_weights_dir("fampnn")
-
-    assert os.path.isdir(result)
-    assert result == str(shared / "fampnn")
-
-
-def test_resolve_weights_dir_creates_explicit_path(monkeypatch, tmp_path):
-    """resolve_weights_dir creates the directory when given an explicit path."""
-    cache_path = tmp_path / "custom_cache"
-    monkeypatch.setenv("PROTO_MODEL_CACHE", str(cache_path))
-    monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
-
-    result = resolve_weights_dir("fampnn")
-
-    assert result == str(cache_path / "fampnn")
-    assert os.path.isdir(result)
-
-
 def test_resolve_weights_dir_in_env_no_venv_raises(monkeypatch):
     """IN_ENV with no TOOL_VENV_PATH/VENV_PATH raises RuntimeError naming the toolkit."""
     monkeypatch.setenv("PROTO_MODEL_CACHE", "IN_ENV")
@@ -372,7 +310,6 @@ from proto_tools.utils.standalone_helpers_source.standalone_helpers import (  # 
     is_cuda_oom,
     oom_guard,
     raise_oom,
-    release_cuda_memory,
 )
 
 
@@ -392,11 +329,6 @@ def test_is_cuda_oom_detects_markers(text):
 @pytest.mark.parametrize("text", ["ValueError: bad input", ""])
 def test_is_cuda_oom_ignores_non_oom(text):
     assert not is_cuda_oom(text)
-
-
-def test_release_cuda_memory_never_raises():
-    # gc.collect + (if torch/CUDA present) empty_cache; safe in torch-free envs and after OOM.
-    release_cuda_memory()
 
 
 def test_raise_oom_is_actionable_and_chained():

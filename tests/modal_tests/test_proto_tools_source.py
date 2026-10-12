@@ -25,33 +25,6 @@ def test_explicit_path_override_rejects_non_checkout(tmp_path, monkeypatch):
         resolve_proto_tools()
 
 
-def test_failed_deploys_are_not_smoke_tested():
-    """The previous deployment stays live, so testing it would pass for code that never shipped."""
-    from proto_tools.modal.deploy import apps_to_smoke_test
-
-    testable, skipped = apps_to_smoke_test(["a", "b"], {"a": True, "b": False})
-    assert testable == ["a"]
-    assert skipped == ["b"]
-
-
-def test_skip_deploy_still_tests_every_target():
-    """With --skip-deploy the intent is to test whatever is already deployed."""
-    from proto_tools.modal.deploy import apps_to_smoke_test
-
-    assert apps_to_smoke_test(["a", "b"], None) == (["a", "b"], [])
-
-
-def test_deploy_invokes_modal_through_this_interpreter():
-    """A bare `modal` on PATH may be another environment, which cannot import proto_tools."""
-    from pathlib import Path
-
-    from proto_tools.modal.deploy import modal_command
-
-    cmd = modal_command(Path("/tmp/scratch/tmalign.py"), "some-env")  # noqa: S108 — never opened
-    assert cmd[:3] == [sys.executable, "-m", "modal"], "deploy must not rely on PATH resolution"
-    assert cmd[-2:] == ["--env", "some-env"]
-
-
 @pytest.fixture(scope="module")
 def wheel_contents(tmp_path_factory):
     """Build the wheel once and return the names it contains.

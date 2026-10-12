@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures import SingleChainSelection
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.esm_if1 import (
@@ -18,10 +17,6 @@ from proto_tools.tools.inverse_folding.esm_if1 import (
     ESMIF1ScoringPair,
     run_esm_if1_sample,
     run_esm_if1_score,
-)
-from proto_tools.tools.inverse_folding.esm_if1.esm_if1_sample import (
-    ESMIF1Design,
-    ESMIF1DesignMetrics,
 )
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
@@ -49,32 +44,6 @@ def pdb_structure():
 # Sampling Tests
 # ============================================================================
 @pytest.mark.uses_gpu
-def test_esm_if1_sample_simple(pdb_structure: Structure):
-    """Basic sampling with default ProteinDPO config."""
-    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
-    config = ESMIF1SampleConfig(
-        num_sequences_per_structure=1,
-        temperature=0.1,
-        seed=42,
-    )
-    output = run_esm_if1_sample(inp, config)
-    assert output.success, f"Failed to sample: {output}"
-
-    validate_output(output)
-    assert output.tool_id == "esm-if1-sample"
-
-    design_set = output.design_sets[0]
-    assert len(design_set.complexes) == 1
-    design = design_set.complexes[0]
-    seq = design.designed_chains[0].sequence
-    assert isinstance(seq, str)
-    assert len(seq) > 0
-    ll = design.metrics["log_likelihood"]
-    assert isinstance(ll, float)
-    assert np.isfinite(ll)
-
-
-@pytest.mark.uses_gpu
 def test_esm_if1_sample_multiple(pdb_structure: Structure):
     """Sampling multiple sequences per structure."""
     inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
@@ -85,6 +54,9 @@ def test_esm_if1_sample_multiple(pdb_structure: Structure):
     )
     output = run_esm_if1_sample(inp, config)
     assert output.success, f"Failed to sample: {output}"
+
+    validate_output(output)
+    assert output.tool_id == "esm-if1-sample"
 
     design_set = output.design_sets[0]
     assert len(design_set.complexes) == 3
@@ -151,101 +123,12 @@ def test_esm_if1_sample_fixed_positions(pdb_structure: Structure):
             )
 
 
-@pytest.mark.uses_gpu
-def test_esm_if1_sample_dpo_weights(pdb_structure: Structure):
-    """Sampling with explicit ProteinDPO weights."""
-    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=pdb_structure)])
-    config = ESMIF1SampleConfig(
-        num_sequences_per_structure=1,
-        temperature=0.1,
-        weights_variant="protein_dpo",
-        seed=42,
-    )
-    output = run_esm_if1_sample(inp, config)
-    assert output.success, f"Failed to sample with DPO weights: {output}"
-
-    design_set = output.design_sets[0]
-    assert len(design_set.complexes) == 1
-    seq = design_set.complexes[0].designed_chains[0].sequence
-    assert isinstance(seq, str)
-    assert len(seq) > 0
-
-
 # ============================================================================
 # Design structure tests (no dispatch)
 # ============================================================================
-def test_esm_if1_design_single_target_chain_structure():
-    """An ESMIF1Design holds one redesigned target chain plus fixed context chains."""
-    # Chain B is the redesigned target; A and C are carried-over context chains.
-    chains = [
-        Chain(id="A", sequence="MKTAYIAK"),
-        Chain(id="B", sequence="GGGSSSGG"),
-        Chain(id="C", sequence="LLLVVVLL"),
-    ]
-    design = ESMIF1Design(
-        chains=chains,
-        designed=[False, True, False],
-        metrics=ESMIF1DesignMetrics(log_likelihood=-9.6, avg_log_likelihood=-1.2, perplexity=3.32),
-    )
-
-    designed = design.designed_chains
-    assert len(designed) == 1
-    assert designed[0].id == "B"
-    assert designed[0].sequence == "GGGSSSGG"
-
-    # Chain ids and order are preserved from the input structure.
-    assert [c.id for c in design.chains] == ["A", "B", "C"]
-    assert design.chain_sequences == ["MKTAYIAK", "GGGSSSGG", "LLLVVVLL"]
-    assert design.chain_sequence_map() == {"A": "MKTAYIAK", "B": "GGGSSSGG", "C": "LLLVVVLL"}
-
-    # Metrics expose the standard triple; perplexity is the primary value.
-    assert design.metrics["log_likelihood"] == -9.6
-    assert design.metrics["avg_log_likelihood"] == -1.2
-    assert design.metrics.primary_value == 3.32
-    assert design.design_metrics()["perplexity"] == 3.32
-
-
-def test_esm_if1_design_feeds_structure_predictor():
-    """An ESMIF1Design feeds an SP tool input directly via LSP (subclass-as-Complex)."""
-    from proto_tools.tools.structure_prediction import ESMFoldInput
-
-    design = ESMIF1Design(
-        chains=[
-            Chain(id="A", sequence="MKTAYIAK"),
-            Chain(id="B", sequence="GGGSSSGG"),
-        ],
-        designed=[False, True],
-        metrics=ESMIF1DesignMetrics(log_likelihood=-5.6, avg_log_likelihood=-0.7, perplexity=2.01),
-    )
-
-    inp = ESMFoldInput(complexes=[design])
-    assert inp.complexes[0] is design
-    assert inp.complexes[0].chain_sequences == ["MKTAYIAK", "GGGSSSGG"]
-
-
 # ============================================================================
 # Scoring Tests
 # ============================================================================
-@pytest.mark.uses_gpu
-def test_esm_if1_score(pdb_structure: Structure):
-    """Score a sequence against a structure."""
-    original_sequence = pdb_structure.get_chain_sequence("A")
-
-    inp = ESMIF1ScoringInput(
-        sequence_structure_pairs=[
-            ESMIF1ScoringPair(sequence=original_sequence, structure=pdb_structure),
-        ]
-    )
-    config = ESMIF1ScoringConfig()
-    output = run_esm_if1_score(inp, config)
-    assert output.success, f"Failed to score: {output}"
-
-    validate_output(output)
-    assert output.tool_id == "esm-if1-score"
-    assert len(output.scores) == 1
-    assert isinstance(output.scores[0], InverseFoldingScoringMetrics)
-
-
 @pytest.mark.uses_gpu
 def test_esm_if1_score_fields(pdb_structure: Structure):
     """Scoring fields and mathematical relationships are correct."""
@@ -259,7 +142,12 @@ def test_esm_if1_score_fields(pdb_structure: Structure):
     config = ESMIF1ScoringConfig()
     output = run_esm_if1_score(inp, config)
     assert output.success
+
+    validate_output(output)
     assert_metrics_in_spec(output)
+    assert output.tool_id == "esm-if1-score"
+    assert len(output.scores) == 1
+    assert isinstance(output.scores[0], InverseFoldingScoringMetrics)
 
     score = output.scores[0]
 
