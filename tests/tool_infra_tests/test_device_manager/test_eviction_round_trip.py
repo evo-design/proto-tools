@@ -23,7 +23,7 @@ _NO_EVICTION_TOOLS = frozenset({"mmseqs2-homology-search", "mmseqs2-search-prote
 
 # Toolkits whose worker holds no framework-tracked GPU state, so get_memory_stats() reports
 # available=False: fresh CLI subprocess per call, or TensorFlow (whose stats are not tracked).
-_NO_MEMORY_STATS_TOOLKITS = frozenset({"alphafold3", "deeppbs_specificity", "opendde", "spliceai"})
+_NO_MEMORY_STATS_TOOLKITS = frozenset({"alphafold3", "deeppbs_specificity", "germinal", "opendde", "spliceai"})
 
 # Key tokens in order of preference when choosing a toolkit's representative key: the cheapest
 # call that still loads the toolkit's model.

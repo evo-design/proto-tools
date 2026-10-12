@@ -283,6 +283,22 @@ def _assert_design_invariants(design: GerminalDesign) -> None:
     assert "ATOM" in design.structure.structure
 
 
+@pytest.mark.integration
+def test_germinal_env_dssp_binary_runs():
+    """Germinal shells out to ``params/dssp``; an ABI-broken mkdssp only fails (exit 127) mid-design."""
+    from proto_tools.utils import run_in_env
+
+    code = (
+        "import subprocess, sys\n"
+        "from pathlib import Path\n"
+        "dssp = Path(sys.prefix) / 'data' / 'germinal' / 'params' / 'dssp'\n"
+        "result = subprocess.run([str(dssp), '--version'], capture_output=True, text=True)\n"
+        "print('RC', result.returncode, result.stderr.strip()[-300:])\n"
+    )
+    output = run_in_env("germinal", code=code, timeout=3600)
+    assert output.strip().splitlines()[-1].startswith("RC 0"), output
+
+
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 @pytest.mark.integration
