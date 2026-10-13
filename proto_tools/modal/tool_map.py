@@ -58,7 +58,6 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "esmfold2-prediction": ToolEntry("proto-tools-esmfold2", "ESMFold2Service", "predict", True),
     "evo1-sample": ToolEntry("proto-tools-evo1", "Evo1Service", "sample", True),
     "evo1-score": ToolEntry("proto-tools-evo1", "Evo1Service", "score", True),
-    "evo2-icl": ToolEntry("proto-tools-evo2", "Evo2Service", "icl", True),
     "evo2-sample": ToolEntry("proto-tools-evo2", "Evo2Service", "sample", True),
     "evo2-score": ToolEntry("proto-tools-evo2", "Evo2Service", "score", True),
     "fampnn-pack": ToolEntry("proto-tools-fampnn", "FAMPNNService", "pack", True),

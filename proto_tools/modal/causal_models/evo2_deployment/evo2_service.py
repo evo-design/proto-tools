@@ -66,7 +66,7 @@ app = get_app_for_service("Evo2Service")
     retries=SERVICE_RETRIES,
     secrets=[HF_TOKEN_SECRET],
 )
-@register_tools({"evo2-icl": "icl", "evo2-sample": "sample", "evo2-score": "score"})
+@register_tools({"evo2-sample": "sample", "evo2-score": "score"})
 class Evo2Service:
     """Modal service for Evo2 causal language model inference."""
 
@@ -83,25 +83,6 @@ class Evo2Service:
     def teardown(self) -> None:
         """Close the persistent worker context manager on container shutdown."""
         self._persist_ctx.__exit__(None, None, None)
-
-    @modal.method()
-    def icl(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
-        """Generate one set of DNA designs from shared in-context examples.
-
-        Args:
-            input_dict (dict[str, Any]): Mapping of ordered example sequences.
-            config_dict (dict[str, Any]): Design count, length, and sampling controls.
-
-        Returns:
-            dict[str, Any]: Generated DNA designs and sampling provenance.
-        """
-        from proto_tools.tools.causal_models.evo2.evo2_icl import (
-            Evo2ICLConfig,
-            Evo2ICLInput,
-            run_evo2_icl,
-        )
-
-        return run_tool_call(run_evo2_icl, Evo2ICLInput, Evo2ICLConfig, input_dict, config_dict, instance=self.instance)
 
     @modal.method()
     def sample(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:

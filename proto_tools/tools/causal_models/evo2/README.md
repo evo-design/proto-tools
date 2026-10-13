@@ -9,7 +9,7 @@
 
 ## Overview
 
-Evo2 is an autoregressive DNA language model from Arc Institute and Stanford, trained at single-nucleotide resolution across all domains of life. This toolkit wraps it to generate new DNA sequences from a prompt, design DNA from a shared set of in-context examples, and score how likely supplied DNA sequences are under the model.
+Evo2 is an autoregressive DNA language model from Arc Institute and Stanford, trained at single-nucleotide resolution across all domains of life. This toolkit wraps it to generate new DNA sequences from a prompt and to score how likely supplied DNA sequences are under the model.
 
 ## Background
 
@@ -23,36 +23,6 @@ The autoregressive objective yields two capabilities directly. Sampling from the
 - [Evo 2 Mechanistic Interpretability](https://arcinstitute.org/tools/evo/evo-mech-interp) (Arc Institute) - an interactive look at the internal features Evo 2 learns, built with sparse autoencoders to surface interpretable genomic patterns.
 
 ## Tools
-
-### Evo 2 In-context Design (`evo2-icl`)
-
-In-context learning (ICL) lets pretrained Evo 2 7B generate candidate DNA from examples without retraining. All FASTA records guide one design task; downloaded FASTA contains the new designs.
-
-#### Applications
-
-Use examples of a sequence family, such as regulatory DNA with a shared experimental activity, to condition candidate generation. The ICL study is **Few-shot regulatory sequence design with a genomic language model** (manuscript; paper URL coming soon). A curated K562 example FASTA is also a placeholder pending release.
-
-#### Usage Tips
-
-- **Start with the defaults:** 10 designs of 200 bp, temperature `1.0`, top K `4`, and top P `0.9`. Temperature controls randomness; top K keeps the most likely tokens, and top P retains a cumulative probability mass. These are sampling controls, not activity scores.
-- **Prompt assembly preserves order and repeated examples.** FASTA headers are removed, DNA is uppercased, and the prompt is `Nexample_1Nexample_2N...N`, with a single `N` at each boundary. Examples must contain only `A`, `C`, `G`, and `T`; the tool adds separators itself.
-- **Hosted workload limits allow up to 1,000 designs per run.** Prompt length, including separators, is limited to 32,768 bases. Design length is at most 4,096 bp, and design count times length must not exceed 1,000,000 newly generated bases per run. Long example sets may require fewer designs because the service also bounds sequential prompt work. These are service workload limits, not the model's context window. Proto provides the standard shared allowance of 10 free runs; one run may generate many designs.
-- **The requested count is a target.** Short generations and generations containing non-ACGT tokens are omitted, with a warning describing the yield. A run that produces no full-length ACGT designs raises an error.
-- **Sequences are candidates for downstream evaluation.** This operation does not score regulatory function or establish experimental activity, specificity, or biological validity.
-- **A seed supports repeatable sampling.** Set `seed` to reproduce a run with matching settings; leave it unset to draw fresh samples. GPU batch size trades memory for throughput and can affect seeded output.
-- **Use the existing Evo2 runtime.** Local execution shares the Evo2 standalone environment and persistent worker; `device="proto"` uses Proto's hosted Modal service. Batch size defaults to `1` to conserve GPU memory. Parallel prompt prefill is bounded; remaining context is processed sequentially without truncation.
-
-```python
-from Bio import SeqIO
-from proto_tools import Evo2ICLInput, Evo2ICLConfig, run_evo2_icl
-
-examples = [str(record.seq) for record in SeqIO.parse("prompt.fasta", "fasta")]
-result = run_evo2_icl(
-    Evo2ICLInput(examples=examples),
-    Evo2ICLConfig(num_sequences=10, sequence_length=200, device="proto"),
-)
-result.export("evo2_icl_designs", file_format="fasta")
-```
 
 ### Evo2 Sampling (`evo2-sample`)
 
@@ -90,8 +60,8 @@ This tool measures how well a DNA sequence matches the patterns the model learne
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every Evo2 tool in this toolkit (`evo2-icl`, `evo2-sample`, `evo2-score`).
+These apply to every Evo2 tool in this toolkit (`evo2-sample`, `evo2-score`).
 
 - **Requires a high-memory GPU; memory scales with model size and context length.** The 7B checkpoint needs a high-memory NVIDIA GPU; the 20B and 40B models and the 1M-context checkpoints need substantially more. CPU execution is not practical.
-- **`batch_size` trades memory for throughput.** It sets how many designs (`evo2-icl`), prompts (`evo2-sample`), or sequences (`evo2-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it if generation or scoring runs out of GPU memory.
+- **`batch_size` trades memory for throughput across both tools.** It sets how many prompts (`evo2-sample`) or sequences (`evo2-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it (default `1`) if generation or scoring runs out of GPU memory.
 - **Trained across all domains of life.** Evo2 covers prokaryotic, eukaryotic, archaeal, and phage genomes. For prokaryote-and-phage-only generation with a smaller model, [Evo1](https://bio-pro.mintlify.app/tools/causal-models/evo1) is an alternative.
