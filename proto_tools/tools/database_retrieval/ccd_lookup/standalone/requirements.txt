@@ -1,4 +1,4 @@
-pdbeccdutils>=0.8.5
+pdbeccdutils==2.0.0
 gemmi>=0.6.5
 rdkit>=2023.9.6
 Pillow>=10.0.0

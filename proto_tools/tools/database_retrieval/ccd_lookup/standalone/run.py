@@ -35,18 +35,10 @@ logger = get_logger(__name__)
 _SMILES_INDEX: dict[str, str] | None = None
 # Maps InChIKey -> CCD code (built once on first SMILES lookup).
 _INCHIKEY_INDEX: dict[str, str] | None = None
-# The wwPDB CCD bundle is ~115 MB compressed and ~500 MB uncompressed (the
-# decompressed components.cif on disk). Parsing or re-reading it per identifier
-# is the dominant cost (~10-60s); cache aggressively at module level.
-
-# Per-CCD-code parsed component cache, to avoid re-parsing the same code.
-_COMPONENT_CACHE: dict[str, Any] = {}
-# pdbeccdutils-parsed components dict, keyed by (path, sanitize) since the
-# parser's behavior on edge-case entries depends on sanitize.
-_PARSED_BUNDLES: dict[tuple[str, bool], dict[str, Any]] = {}
-# gemmi cif.Document for parent-CCD-code extraction (pdbeccdutils' Component
-# does not expose mon_nstd_parent_comp_id, so we read it directly from the CIF).
+# gemmi cif.Document per components.cif path; reading the ~500 MB bundle is the dominant per-subprocess cost.
 _GEMMI_DOCS: dict[str, Any] = {}
+# Parsed (component, warnings) per "CODE|sanitize" key; component is None when the code is absent.
+_COMPONENT_CACHE: dict[str, tuple[Any | None, list[str]]] = {}
 
 # Characters that disqualify a string from being a CCD code.
 _SMILES_FORBIDDEN_CHARS = set("=()[]#/\\+.@*:;%")
@@ -83,6 +75,25 @@ def _silence_rdkit_logger() -> Any:
     finally:
         os.close(devnull_fd)
         os.close(saved_stderr_fd)
+
+
+def _read_bundle(components_path: str) -> Any:
+    """Return the gemmi ``cif.Document`` for the CCD bundle, read once per path.
+
+    Args:
+        components_path (str): Path to the uncompressed components.cif.
+
+    Returns:
+        Any: Cached gemmi ``cif.Document``.
+    """
+    doc = _GEMMI_DOCS.get(components_path)
+    if doc is None:
+        import gemmi
+
+        logger.info("Reading CCD bundle %s ...", components_path)
+        doc = gemmi.cif.read(components_path)
+        _GEMMI_DOCS[components_path] = doc
+    return doc
 
 
 # ============================================================================
@@ -133,9 +144,10 @@ def _build_ccd_indices(components_path: str) -> None:
     """Build canonical SMILES and InChIKey -> CCD code maps from the CCD bundle.
 
     Populates module-level `_SMILES_INDEX` and `_INCHIKEY_INDEX`. This is
-    expensive (parses the entire CCD), so it is invoked lazily on the first
-    SMILES lookup. Ambiguous InChIKeys (multiple codes mapping to one key)
-    are dropped to keep lookups deterministic.
+    expensive (parses every block of the CCD), so it is invoked lazily on the
+    first SMILES lookup. Blocks that fail to parse are skipped, and parsed
+    components are cached for later sanitize=False lookups. Ambiguous InChIKeys
+    (multiple codes mapping to one key) are dropped to keep lookups deterministic.
 
     Args:
         components_path (str): Path to the uncompressed components.cif.
@@ -147,24 +159,19 @@ def _build_ccd_indices(components_path: str) -> None:
     from pdbeccdutils.core import ccd_reader
     from rdkit import Chem
 
+    doc = _read_bundle(components_path)
     logger.info("Building CCD SMILES/InChIKey indices from %s ...", components_path)
     smiles_index: dict[str, str] = {}
     inchikey_counts: dict[str, int] = {}
     inchikey_index: dict[str, str] = {}
 
     with _silence_rdkit_logger():
-        # sanitize=False here is independent of the user-facing CcdLookupConfig.sanitize
-        # (which controls only the output component). For indexing we want maximum
-        # coverage — sanitize=True would drop entries where RDKit's standard valence
-        # rules reject the CCD's recorded structure (organometallics, hypervalent atoms).
-        parsed = ccd_reader.read_pdb_components_file(components_path, sanitize=False)
-        # Cache the parsed bundle so a later sanitize=False _load_component call
-        # avoids a second 10-60s parse.
-        _PARSED_BUNDLES[(components_path, False)] = parsed
-
-        for ccd_id, result in parsed.items():
+        for block in doc:
+            ccd_id = block.name
             try:
-                component = result.component
+                # sanitize=False maximizes coverage; sanitization rejects many organometallic/hypervalent entries.
+                component = ccd_reader._parse_pdb_mmcif(block, False).component
+                _COMPONENT_CACHE.setdefault(f"{ccd_id}|0", (component, []))
                 mol = component.mol
                 if mol is None:
                     continue
@@ -237,8 +244,11 @@ def _smiles_to_ccd_code(smiles: str, components_path: str) -> str | None:
 # ============================================================================
 
 
-def _load_component(code: str, components_path: str, sanitize: bool) -> Any | None:
+def _load_component(code: str, components_path: str, sanitize: bool) -> tuple[Any | None, list[str]]:
     """Load a single CCD entry by code, with per-code caching.
+
+    Only the requested block is parsed. When sanitization raises, the block is
+    re-parsed unsanitized and a warning describing the failure is returned.
 
     Args:
         code (str): Uppercased CCD code.
@@ -246,50 +256,44 @@ def _load_component(code: str, components_path: str, sanitize: bool) -> Any | No
         sanitize (bool): Whether to sanitize the parsed RDKit molecule.
 
     Returns:
-        Any | None: pdbeccdutils Component, or None if not found / parse failed.
+        tuple[Any | None, list[str]]: pdbeccdutils Component (None if the code is
+            absent from the bundle) and warnings specific to this component.
     """
     cache_key = f"{code}|{int(sanitize)}"
     if cache_key in _COMPONENT_CACHE:
-        return _COMPONENT_CACHE[cache_key]
+        component, warnings = _COMPONENT_CACHE[cache_key]
+        return component, list(warnings)
 
-    bundle_key = (components_path, sanitize)
-    parsed = _PARSED_BUNDLES.get(bundle_key)
-    if parsed is None:
-        from pdbeccdutils.core import ccd_reader
+    # _parse_pdb_mmcif is private pdbeccdutils API; requirements.txt pins the version.
+    from pdbeccdutils.core import ccd_reader
 
-        # Silence the C++ logger across the bundle parse — the noise (organometallics, hypervalent
-        # atoms) isn't tied to the user's code. Per-code warnings during _extract_record still surface.
-        with _silence_rdkit_logger():
-            parsed = ccd_reader.read_pdb_components_file(
-                components_path,
-                sanitize=sanitize,
-            )
-        _PARSED_BUNDLES[bundle_key] = parsed
+    block = _read_bundle(components_path).find_block(code)
+    if block is None:
+        _COMPONENT_CACHE[cache_key] = (None, [])
+        return None, []
 
-    result = parsed.get(code) or parsed.get(code.upper())
-    if result is None:
-        _COMPONENT_CACHE[cache_key] = None
-        return None
-    component = result.component
-    _COMPONENT_CACHE[cache_key] = component
-    return component
+    warnings: list[str] = []
+    try:
+        component = ccd_reader._parse_pdb_mmcif(block, sanitize).component
+    except Exception as exc:
+        if not sanitize:
+            raise
+        logger.warning("Sanitization of CCD entry %s failed (%s); re-parsing unsanitized", code, exc)
+        component = ccd_reader._parse_pdb_mmcif(block, False).component
+        warnings.append(f"RDKit sanitization failed ({exc}); returning the unsanitized structure")
+
+    _COMPONENT_CACHE[cache_key] = (component, warnings)
+    return component, list(warnings)
 
 
 def _parse_parent_ccd_code(code: str, components_path: str) -> str | None:
     """Best-effort lookup of ``_chem_comp.mon_nstd_parent_comp_id`` via gemmi.
 
-    pdbeccdutils' ``Component`` does not expose the parent component, so we read
-    it directly from the CIF block. The parsed gemmi document is cached per
-    path so a batch shares a single read of the ~500 MB uncompressed bundle.
+    pdbeccdutils' ``Component`` does not expose the parent component, so it is
+    read directly from the CIF block of the shared cached bundle document.
     """
     try:
-        import gemmi
-
-        doc = _GEMMI_DOCS.get(components_path)
-        if doc is None:
-            doc = gemmi.cif.read(components_path)
-            _GEMMI_DOCS[components_path] = doc
-        block = doc.find_block(code) or doc.find_block(code.upper())
+        block = _read_bundle(components_path).find_block(code)
         if block is None:
             return None
         val = block.find_value("_chem_comp.mon_nstd_parent_comp_id")
@@ -634,7 +638,8 @@ def _process_identifiers(
                     records.append(_empty_record(None, ["No CCD match for SMILES"]))
                     continue
 
-            component = _load_component(resolved_code, components_path, sanitize=sanitize)
+            component, component_warnings = _load_component(resolved_code, components_path, sanitize=sanitize)
+            warnings.extend(component_warnings)
             if component is None:
                 records.append(
                     _empty_record(
