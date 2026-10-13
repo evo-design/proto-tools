@@ -134,7 +134,7 @@ SERVICE_TIERS: dict[str, str] = {
     "ESMIF1Service": "long",
     "EnformerService": "medium",
     "Evo1Service": "long",
-    "Evo2Service": "long",
+    "Evo2Service": "extended",
     "FAMPNNService": "long",
     "FoldmasonService": "medium",
     "FoldseekService": "medium",
