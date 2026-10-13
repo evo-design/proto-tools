@@ -148,6 +148,19 @@ def test_ccd_lookup_offline_full_pass():
 
 @pytest.mark.skip_ci
 @pytest.mark.integration
+def test_ccd_lookup_returns_metadata_for_entries_rdkit_cannot_sanitize():
+    """CZL (CIP labeler digraph overflow) and HB1 (kekulization failure) still return their CCD metadata."""
+    result = run_ccd_lookup(CcdLookupInput(identifiers=["CZL", "HB1"]), CcdLookupConfig())
+    validate_output(result)
+    czl, hb1 = result.results
+
+    assert czl.formula == "Fe8 H6 S9"
+    assert hb1.formula == "C23 H13 N3 O3 Ru"
+    assert not czl.errors and not hb1.errors
+
+
+@pytest.mark.skip_ci
+@pytest.mark.integration
 def test_ccd_lookup_network_enrichment():
     """UniChem maps ATP to canonical external compound IDs; RCSB lists HEM in thousands of PDB entries."""
     result = run_ccd_lookup(
