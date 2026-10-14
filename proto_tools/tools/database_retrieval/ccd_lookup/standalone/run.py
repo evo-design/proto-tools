@@ -374,6 +374,8 @@ def _extract_record(component: Any, components_path: str) -> dict[str, Any]:
     formula_weight: float | None = None
     physchem: dict[str, float] = {}
     if mol is not None:
+        # Unsanitized mols lack the implicit-valence cache that RDKit descriptors require.
+        mol.UpdatePropertyCache(strict=False)
         try:
             smiles = Chem.MolToSmiles(mol)
         except Exception as exc:
