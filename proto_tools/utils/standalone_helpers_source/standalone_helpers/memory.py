@@ -11,6 +11,9 @@ from .proto_logging import get_logger
 
 logger = get_logger(__name__)
 
+# Reported when the active XLA allocator (e.g. XLA_PYTHON_CLIENT_ALLOCATOR=platform) keeps no memory stats.
+JAX_UNTRACKED_MEMORY_REASON = "Active XLA allocator does not track memory stats"
+
 
 def get_pytorch_memory_stats(device: int | str = 0) -> dict[str, Any]:
     """Helper for PyTorch tools to report GPU memory stats.
@@ -56,7 +59,9 @@ def get_jax_memory_stats(device_index: int = 0) -> dict[str, Any]:
         device_index (int): JAX device index (default 0)
 
     Returns:
-        dict[str, Any]: Dict with memory statistics or {"available": False} if not available.
+        dict[str, Any]: Dict with memory statistics, or {"available": False} with a ``reason`` if not
+            available. The reason is ``JAX_UNTRACKED_MEMORY_REASON`` when the active XLA allocator
+            keeps no stats, as with the platform allocator persistent workers use.
             Keys when available (standardized across frameworks):
             - available (bool): Whether memory stats are available
             - framework (str): "jax"
@@ -86,6 +91,8 @@ def get_jax_memory_stats(device_index: int = 0) -> dict[str, Any]:
 
         device = devices[device_index]
         stats = device.memory_stats()
+        if stats is None:
+            return {"available": False, "framework": "jax", "reason": JAX_UNTRACKED_MEMORY_REASON}
 
         bytes_in_use = stats.get("bytes_in_use", 0)
         peak_bytes = stats.get("peak_bytes_in_use", 0)

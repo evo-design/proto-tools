@@ -13,6 +13,7 @@ import pytest
 
 from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
 from proto_tools.utils.device_manager import DeviceManager, OffloadStrategy
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.memory import JAX_UNTRACKED_MEMORY_REASON
 from proto_tools.utils.tool_instance import ToolInstance
 from tests.tool_infra_tests.pytest_helpers import parse_min_gpu_count
 
@@ -56,16 +57,24 @@ _GPU_TOOLKITS = [pytest.param(spec, id=spec.key) for spec in _one_spec_per_toolk
 
 
 def _assert_memory_stats(tool_key: str, toolkit: str, stats: dict) -> None:
-    """Assert a loaded worker reports framework memory stats, or opts out by a documented rule."""
+    """Assert a loaded worker reports well-formed memory stats, or opts out by a documented rule.
+
+    Byte counts may be 0: workers that load per call or free GPU memory after each call hold
+    nothing between calls. JAX workers run XLA's platform allocator, which tracks no stats, so
+    they may report unavailable, but only with ``JAX_UNTRACKED_MEMORY_REASON``.
+    """
     if toolkit in _NO_MEMORY_STATS_TOOLKITS:
         assert stats["available"] is False, (
             f"{tool_key}: listed in _NO_MEMORY_STATS_TOOLKITS but reports memory stats; drop it from the set"
         )
         return
+    assert stats["framework"] in ("pytorch", "jax"), f"{tool_key}: unexpected framework in {stats}"
+    if stats["framework"] == "jax" and stats["available"] is False:
+        assert stats["reason"] == JAX_UNTRACKED_MEMORY_REASON, f"{tool_key}: JAX memory stats failed: {stats}"
+        return
     assert stats["available"] is True, f"{tool_key}: get_memory_stats() unavailable with the model loaded: {stats}"
-    assert stats["framework"] in ("pytorch", "jax"), f"{tool_key}: unexpected framework {stats['framework']!r}"
-    if stats["framework"] == "pytorch":
-        assert stats["allocated_bytes"] > 0, f"{tool_key}: model loaded on GPU but allocated_bytes is 0"
+    for key in ("allocated_bytes", "max_allocated_bytes"):
+        assert isinstance(stats[key], int) and stats[key] >= 0, f"{tool_key}: malformed {key} in {stats}"
 
 
 @pytest.mark.extensive
