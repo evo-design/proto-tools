@@ -398,3 +398,20 @@ def test_run_teed_tees_to_terminal_when_verbose(capsys):
     returncode, _out, _err = run_teed([sys.executable, "-c", "import sys; sys.stderr.write('teed-line')"], verbose=True)
     assert returncode == 0
     assert "teed-line" in capsys.readouterr().err
+
+
+# ── get_jax_memory_stats ──────────────────────────────────────────────────────
+
+from types import SimpleNamespace  # noqa: E402
+
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.memory import (  # noqa: E402
+    JAX_UNTRACKED_MEMORY_REASON,
+    get_jax_memory_stats,
+)
+
+
+def test_get_jax_memory_stats_reports_untracked_allocator(monkeypatch):
+    """A device whose allocator tracks no stats (memory_stats() is None) reports a clear reason."""
+    device = SimpleNamespace(memory_stats=lambda: None, device_kind="gpu")
+    monkeypatch.setitem(sys.modules, "jax", SimpleNamespace(devices=lambda: [device]))
+    assert get_jax_memory_stats(0) == {"available": False, "framework": "jax", "reason": JAX_UNTRACKED_MEMORY_REASON}
