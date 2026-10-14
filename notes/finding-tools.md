@@ -71,7 +71,7 @@ ToolRegistry.list_local_cpu_tools()
 
 `ToolRegistry.list_all()` and related list methods return `ToolSpec` objects, not string keys. To test membership or build a set of tool names, use `{spec.key for spec in ToolRegistry.list_all()}`, and do not call `set(ToolRegistry.list_all())`, because `ToolSpec` objects are Pydantic models and are not hashable.
 
-Each `ToolSpec` carries structured metadata: registry key, label, category, description, device requirements, Pydantic input/config/output model classes, run function, iterable fields, cache behavior, and source path.
+Each `ToolSpec` carries structured metadata: registry key, label, category, description, device requirements, Pydantic input/config/output model classes, run function, iterable fields, cache behavior, and source path. `spec.toolkit_dir` is the directory of the defining file, and `spec.is_external` is true for a tool defined outside `proto_tools/tools/`, such as one from a downstream package (see `external-toolkits.md`); the registry lists those once their package is imported.
 
 ## Documentation Extraction
 

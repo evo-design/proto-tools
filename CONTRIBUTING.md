@@ -144,6 +144,8 @@ Key requirements for new tools:
 - `examples/example.ipynb` notebook
 - Follow the `__init__.py` export chain: tool -> category -> `tools/__init__.py`
 
+To keep a toolkit in your own package instead, see [notes/external-toolkits.md](notes/external-toolkits.md).
+
 See [CLAUDE.md](CLAUDE.md) for the full architecture reference.
 
 ## Commit Messages

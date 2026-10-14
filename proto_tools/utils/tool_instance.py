@@ -2019,6 +2019,8 @@ class ToolInstance:
         When a tool moves between categories, git removes tracked files but
         gitignored runtime copies (standalone_helpers/, standalone_helpers.sh)
         persist at the old path. This detects and removes those phantom dirs.
+        Only ever run on proto_tools' own tools dir, never on an out-of-tree
+        toolkit's repository.
         """
         if tools_dir is None:
             tools_dir = Path(__file__).parent.parent / "tools"
@@ -2047,6 +2049,32 @@ class ToolInstance:
     @classmethod
     def _get_tool_dirs(cls) -> dict[str, Path]:
         """Return a ``{toolkit: dir_path}`` mapping for all standalone tools.
+
+        Combines the packaged toolkits under ``proto_tools/tools/`` with the
+        out-of-tree toolkits currently in the registry. A packaged toolkit wins
+        a name clash, which registration already refuses.
+        """
+        return {**cls._external_tool_dirs(), **cls._packaged_tool_dirs()}
+
+    @classmethod
+    def _external_tool_dirs(cls) -> dict[str, Path]:
+        """Return ``{toolkit: dir_path}`` for registered out-of-tree toolkits with a ``standalone/`` dir.
+
+        Derived from the registry on every call, so a toolkit is visible as
+        soon as its package is imported and nothing needs invalidating.
+        """
+        # Lazy import to avoid circular dep: tool_registry imports tool_instance
+        from proto_tools.tools.tool_registry import ToolRegistry
+
+        return {
+            spec.toolkit_dir.name: spec.toolkit_dir
+            for spec in list(ToolRegistry._registry.values())
+            if spec.is_external and spec.has_standalone_env
+        }
+
+    @classmethod
+    def _packaged_tool_dirs(cls) -> dict[str, Path]:
+        """Return a ``{toolkit: dir_path}`` mapping for the standalone tools under ``proto_tools/tools/``.
 
         The mapping is computed once (single ``rglob``) and cached for the
         lifetime of the process. Phantom directories (stale helper copies
@@ -2274,7 +2302,8 @@ class ToolInstance:
         comes from ``shared_envs/<name>/`` and the env name is ``<name>``;
         multiple tools opting into the same shared env will share one physical
         env on disk. Otherwise the env def is the tool's own ``standalone/``
-        directory and the env name is the tool's directory name.
+        directory and the env name is the tool's directory name, namespaced by
+        ``_external_env_name`` for an out-of-tree toolkit.
 
         Args:
             toolkit (str): The tool's directory name (e.g. ``"esm3"``).
@@ -2326,7 +2355,36 @@ class ToolInstance:
 
         if not local_setup.is_file():
             raise ValueError(f"No setup.sh found for tool {toolkit!r} (looked in {standalone_dir})")
-        return standalone_dir, toolkit
+        return standalone_dir, cls._external_env_name(toolkit, tool_dir) or toolkit
+
+    @classmethod
+    def _external_env_name(cls, toolkit: str, tool_dir: Path) -> str | None:
+        """Return the namespaced env name of an out-of-tree toolkit, or None for a packaged one.
+
+        Out-of-tree envs live alongside packaged ones under ``proto_tool_envs/``, so they are named
+        ``{toolkit}__ext_{digest}``, where the digest is of the package defining the toolkit
+        (e.g. ``mypkg.tools.scoring.mytool``). Two downstream packages with a same-named toolkit
+        never build over each other's env, while every install of one package shares a single env.
+
+        Args:
+            toolkit (str): The toolkit's directory name.
+            tool_dir (Path): The toolkit directory.
+
+        Returns:
+            str | None: The env name, or None if ``tool_dir`` is not a registered out-of-tree toolkit.
+        """
+        if cls._external_tool_dirs().get(toolkit) != tool_dir:
+            return None
+
+        # Lazy import to avoid circular dep: tool_registry imports tool_instance
+        from proto_tools.tools.tool_registry import ToolRegistry
+
+        module = next(
+            spec.function.__module__ for spec in list(ToolRegistry._registry.values()) if spec.toolkit_dir == tool_dir
+        )
+        # A module loaded on its own (no package) falls back to the toolkit's location.
+        package = module.rpartition(".")[0] or str(tool_dir.resolve())
+        return f"{toolkit}__ext_{hashlib.sha256(package.encode()).hexdigest()[:8]}"
 
     @classmethod
     def _find_script(cls, toolkit: str) -> Path:

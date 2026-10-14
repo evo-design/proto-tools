@@ -32,3 +32,4 @@ signatures and behavior.
 ## Contributing
 
 - `testing.md`: test structure, assertions, markers, and naming conventions.
+- `external-toolkits.md`: defining toolkits in a package outside proto-tools, covering layout, naming rules, environment naming, local-only dispatch, and packaging.

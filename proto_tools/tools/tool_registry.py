@@ -118,6 +118,33 @@ _REMOTE_ROADMAP_NOTE = "We are looking into supporting remote options for these 
 # real choice meaning the whole batch goes to one execution.
 _UNSET_CHUNK_SIZE = -1
 
+# Default local_only reason for an out-of-tree toolkit with its own environment; remote workers only ship proto_tools.
+_EXTERNAL_LOCAL_ONLY_REASON = (
+    "{key} is defined outside proto_tools, so no remote worker has its environment. Run locally with "
+    "device='cpu' or device='cuda'."
+)
+
+
+def _is_packaged_toolkit_dir(toolkit_dir: Path) -> bool:
+    """Whether a toolkit directory ships with proto_tools, i.e. sits under ``proto_tools/tools/``.
+
+    Compares unresolved paths, which is exact for imported modules since ``TOOLS_DIR`` and every tool's
+    ``co_filename`` derive from the same ``sys.path`` entry.
+    """
+    return toolkit_dir.is_relative_to(TOOLS_DIR)
+
+
+@functools.cache
+def _packaged_toolkit_names() -> dict[str, Path]:
+    """Map each packaged toolkit directory name (``proto_tools/tools/{category}/{toolkit}/``) to its path."""
+    return {
+        toolkit_dir.name: toolkit_dir
+        for category_dir in TOOLS_DIR.iterdir()
+        if category_dir.is_dir() and not category_dir.name.startswith(("_", "."))
+        for toolkit_dir in category_dir.iterdir()
+        if toolkit_dir.is_dir() and not toolkit_dir.name.startswith(("_", "."))
+    }
+
 
 def _has_deployment(key: str) -> bool:
     """Whether a deployment is written for ``key``.
@@ -777,6 +804,21 @@ class ToolSpec(BaseModel):
     }
 
     @property
+    def toolkit_dir(self) -> Path:
+        """The toolkit directory: the one holding the file that defines this tool."""
+        return self.source_file.parent
+
+    @property
+    def is_external(self) -> bool:
+        """Whether this tool is defined outside ``proto_tools/tools/``.
+
+        True for a toolkit in a downstream package, and also for tools defined in test files or
+        notebooks. Only external toolkits with a ``standalone/`` directory get the out-of-tree
+        rules: a namespaced environment, a unique toolkit name, and local-only dispatch.
+        """
+        return not _is_packaged_toolkit_dir(self.toolkit_dir)
+
+    @property
     def has_standalone_env(self) -> bool:
         """Whether this tool ships a ``standalone/`` directory with an isolated env.
 
@@ -785,7 +827,7 @@ class ToolSpec(BaseModel):
         (e.g. ``random_nucleotide``, ``random_protein``, simple sequence
         utilities) — these cannot be used with ``ToolInstance.persist_tool``.
         """
-        return (self.source_file.parent / "standalone").is_dir()
+        return (self.toolkit_dir / "standalone").is_dir()
 
     @property
     def local_cpu(self) -> bool:
@@ -974,6 +1016,14 @@ class ToolRegistry:
         ) -> Callable[..., BaseToolOutput]:
             cls._check_duplicate(key, func.__name__)
             source_file = Path(func.__code__.co_filename)
+
+            # An out-of-tree toolkit with its own environment needs a unique name and runs only locally.
+            resolved_local_only = local_only
+            toolkit_dir = source_file.parent
+            if not _is_packaged_toolkit_dir(toolkit_dir) and (toolkit_dir / "standalone").is_dir():
+                cls._check_toolkit_namespace(key, toolkit_dir)
+                if resolved_local_only is None:
+                    resolved_local_only = _EXTERNAL_LOCAL_ONLY_REASON.format(key=key)
 
             if (iterable_input_fields is None) != (iterable_output_field is None):
                 raise ValueError(
@@ -1516,7 +1566,7 @@ class ToolRegistry:
                 iterable_input_fields=iterable_input_fields,
                 iterable_output_field=iterable_output_field,
                 max_chunk_size=resolved_max_chunk_size,
-                local_only=local_only,
+                local_only=resolved_local_only,
                 cacheable=cacheable,
                 stochastic=stochastic,
                 post_process_iterable=post_process_iterable,
@@ -2030,6 +2080,41 @@ class ToolRegistry:
             else:
                 error_msg += f"\nExisting tool: {existing_label}"
             raise ValueError(error_msg)
+
+    @classmethod
+    def _check_toolkit_namespace(cls, key: str, toolkit_dir: Path) -> None:
+        """Check that an out-of-tree toolkit with an environment has a name no other toolkit uses.
+
+        Workers, environments, build failures and ``PROTO_<TOOLKIT>_STANDALONE_DIR`` are all keyed by
+        the toolkit directory name, so a shared name would let two toolkits run in or rebuild each
+        other's environment.
+
+        Args:
+            key (str): Tool registry key being registered.
+            toolkit_dir (Path): Directory of the file defining the tool.
+
+        Raises:
+            ValueError: If the name matches a packaged toolkit, or a different out-of-tree toolkit
+                directory that is already registered.
+        """
+        name = toolkit_dir.name
+        packaged = _packaged_toolkit_names().get(name)
+        if packaged is not None:
+            raise ValueError(
+                f"@tool({key!r}): toolkit directory {toolkit_dir} has the same name as the packaged toolkit "
+                f"{packaged}. Toolkit directory names are shared with proto_tools, so rename the directory."
+            )
+        for spec in list(cls._registry.values()):
+            if (
+                spec.is_external
+                and spec.has_standalone_env
+                and spec.toolkit_dir.name == name
+                and spec.toolkit_dir.resolve() != toolkit_dir.resolve()
+            ):
+                raise ValueError(
+                    f"@tool({key!r}): toolkit directory {toolkit_dir} has the same name as {spec.toolkit_dir}, "
+                    f"which defines {spec.key!r}. Toolkit directory names must be unique, so rename one of them."
+                )
 
 
 def _coerce_model(instance: BaseModel, expected_class: type[BaseModel], tool_key: str, role: str) -> BaseModel:
