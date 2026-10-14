@@ -8,7 +8,7 @@ letting AF3 re-predict it from scratch.
 The make-or-break unknown was whether AF3 consumes a populated ``templates`` array under
 ``--norun_data_pipeline`` (the flag the wrapper always passes).
 ``test_template_is_honored_under_norun_data_pipeline`` is that gate — folding a chain with its own
-structure as template and confirming, via SUPERPOSED Cα RMSD against a run-to-run baseline, that
+structure as template and confirming, via SUPERPOSED CA RMSD against a run-to-run baseline, that
 the template steers the fold. **Verified on hardware: 1.48 Å templated vs 16.60 Å baseline** — AF3
 honors the template. (Getting here also required the mmCIF the template ships to be single-chain,
 have integer label_seq_id/entity_poly_seq, and carry a release date; ``make_af3_template`` handles
@@ -87,6 +87,7 @@ def test_template_is_honored_under_norun_data_pipeline(tmp_path):
     baseline does. Verified on hardware: 1.48 A templated vs 16.60 A baseline.
     """
     import gemmi
+
     from proto_tools.tools.structure_prediction.alphafold3.alphafold3 import make_af3_template
 
     seq = (
@@ -104,11 +105,13 @@ def test_template_is_honored_under_norun_data_pipeline(tmp_path):
         return [r.sole_atom("CA").pos for ch in m for r in ch if r.find_atom("CA", "*")]
 
     def surmsd(a, b):
-        pa, pb = ca(a), ca(b); n = min(len(pa), len(pb))
+        pa, pb = ca(a), ca(b)
+        n = min(len(pa), len(pb))
         return gemmi.superpose_positions(pa[:n], pb[:n]).rmsd
 
     ref = fold(1)
-    ref_pdb = tmp_path / "ref.pdb"; ref.write_pdb(ref_pdb)
+    ref_pdb = tmp_path / "ref.pdb"
+    ref.write_pdb(ref_pdb)
     tmpl = {0: [make_af3_template(str(ref_pdb), "A", list(range(len(seq))), list(range(len(seq))))]}
     templated = fold(2, templates=[tmpl])
     baseline = fold(2)

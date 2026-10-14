@@ -57,6 +57,11 @@ class AlphaFold3Input(StructurePredictionInput):
             entry per complex. Each entry is a ``ComplexMSAs`` (per-chain MSAs keyed by
             chain index); ``paired=True`` marks rows taxonomy-aligned across chains. Populated by preprocess() or supplied directly.
             Default: None.
+        templates (list[dict[int, list[dict]] | None] | None): Structural templates, one
+            entry per complex (parallel to ``complexes``), each a ``{chain_index: [template]}``
+            mapping. Each template is AlphaFold3's native ``{"mmcif": ..., "queryIndices": ...,
+            "templateIndices": ...}`` object. Only protein chains are templated.
+            Default: None.
     """
 
     # AlphaFold3 supports all standard entity types except glycan
@@ -72,11 +77,7 @@ class AlphaFold3Input(StructurePredictionInput):
     templates: list[dict[int, list[dict]] | None] | None = InputField(
         default=None,
         title="Structural Templates",
-        description=(
-            "Per-complex structural templates: list parallel to complexes, each entry a "
-            "{chain_index: [AF3 template dict]} mapping or None. Template dict is AF3's native "
-            "{mmcif, queryIndices, templateIndices}. Default None = no templates."
-        ),
+        description="Structural templates per complex, keyed by chain index. None applies no templates.",
     )
 
 
