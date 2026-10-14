@@ -1954,29 +1954,12 @@ def test_metadata_lookups_ignore_key_prefix_lookalikes(clean_registry):
     assert clean_registry.get_docs_url("evo2-lookalike") is None
 
 
-_GI_TOOL_KEYS = [
-    "gi-annotation",
-    "gi-chromatin",
-    "gi-enhancer",
-    "gi-expression",
-    "gi-find-genes-and-predict-expression",
-    "gi-promoter",
-    "gi-splice",
-]
-
-
-@pytest.mark.parametrize("key", _GI_TOOL_KEYS)
-def test_gi_tools_resolve_their_toolkit_metadata(key):
-    """Keys that don't share a prefix with their toolkit dir (gi-* in genomic_intelligence/) still find its files."""
-    assert ToolRegistry.get_citation(key) is not None
-    assert ToolRegistry.get_license(key)["service"]["name"] == "Genomic Intelligence"
-    assert ToolRegistry.get_links(key) is not None
-    assert ToolRegistry.get_example_notebook_path(key).is_file()
-    assert ToolRegistry.get_docs_url(key) == "https://bio-pro.mintlify.app/tools/sequence-scoring/genomic-intelligence"
-
-
 def test_metadata_lookups_read_an_out_of_tree_toolkit_dir(clean_registry, tmp_path):
-    """A tool defined outside proto_tools reads metadata from its own directory and has no docs page."""
+    """A tool defined outside proto_tools reads metadata from its own directory and has no docs page.
+
+    The key (``ext-meta-run``) does not start with the toolkit dir name (``ext_meta_tk``), so the lookup must
+    follow the defining file rather than the key.
+    """
     toolkit_dir = tmp_path / "extpkg" / "tools" / "testing" / "ext_meta_tk"
     (toolkit_dir / "examples").mkdir(parents=True)
     (toolkit_dir / "cite.bib").write_text("@article{ext, title={Ext}, doi={10.1234/ext.5678}}\n")
