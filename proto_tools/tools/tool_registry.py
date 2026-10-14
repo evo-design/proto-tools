@@ -1961,38 +1961,34 @@ class ToolRegistry:
     def get_docs_url(cls, key: str) -> str | None:
         """Get the documentation URL for a tool.
 
-        Computes the URL from the tool's directory location: every tool under
-        ``proto_tools/tools/{category}/{toolkit}/`` maps deterministically
-        to ``https://bio-pro.mintlify.app/tools/{category-kebab}/{tool-kebab}``,
-        because proto-docs auto-generates one page per tool dir on each sync.
+        Computes the URL from the directory of the file that defines the tool:
+        every tool under ``proto_tools/tools/{category}/{toolkit}/`` maps
+        deterministically to
+        ``https://bio-pro.mintlify.app/tools/{category-kebab}/{toolkit-kebab}``,
+        because proto-docs auto-generates one page per toolkit dir on each sync.
 
-        Returns ``None`` only when the tool's directory can't be located on
-        disk (e.g. a registry entry with no corresponding source tree — not a
-        case that should occur for shipped tools).
+        Returns ``None`` for a tool defined anywhere else (a test file, a
+        notebook, or a package outside proto_tools), since no docs page exists
+        for it.
 
         Args:
             key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search').
 
         Returns:
-            str | None: Documentation URL, or None if the tool directory
-                cannot be resolved.
+            str | None: Documentation URL, or None if the tool is not defined
+                under ``proto_tools/tools/{category}/{toolkit}/``.
 
         Raises:
             ValueError: If tool key is not found in registry.
         """
-        spec = cls.get(key)
-        normalized = key.replace("-", "_")
-        category_dir = TOOLS_DIR / spec.category
-        if not category_dir.is_dir():
+        toolkit_dir = cls.get(key).source_file.parent
+        if not toolkit_dir.is_relative_to(TOOLS_DIR):
             return None
-        for tool_dir in sorted(category_dir.iterdir()):
-            if not tool_dir.is_dir() or tool_dir.name.startswith("_"):
-                continue
-            if normalized == tool_dir.name or normalized.startswith(tool_dir.name + "_"):
-                category_kebab = spec.category.replace("_", "-")
-                tool_kebab = tool_dir.name.replace("_", "-")
-                return f"https://bio-pro.mintlify.app/tools/{category_kebab}/{tool_kebab}"
-        return None
+        parts = toolkit_dir.relative_to(TOOLS_DIR).parts
+        if len(parts) != 2:
+            return None
+        category, toolkit = parts
+        return f"https://bio-pro.mintlify.app/tools/{category.replace('_', '-')}/{toolkit.replace('_', '-')}"
 
     @classmethod
     def get_example_notebook_path(cls, key: str) -> Path | None:
@@ -2362,50 +2358,39 @@ def _re_emit_warnings(warning_list: list[warnings.WarningMessage]) -> None:
 
 
 def _find_tool_metadata_file(tool_key: str, filename: str) -> Path | None:
-    """Find a metadata file (cite.bib, links.yaml, etc.) in tool directories.
+    """Find a metadata file (cite.bib, links.yaml, etc.) in a tool's toolkit directory.
 
-    Maps tool key (e.g., 'evo2-sample') to tool directory (e.g., evo2/)
-    and checks for the given filename.
+    The toolkit directory is the one holding the file that defines the tool,
+    so the lookup is the same for every tool wherever it lives on disk.
 
     Args:
         tool_key (str): Tool registry key (e.g., 'evo2-sample', 'blast-search')
-        filename (str): Name of file to find (e.g., 'cite.bib', 'links.yaml')
+        filename (str): Path relative to the toolkit directory (e.g., 'cite.bib',
+            'examples/example.ipynb')
 
     Returns:
-        Path | None: Path to the file, or None if not found
+        Path | None: Path to the file, or None if the tool is unregistered or the
+            file does not exist
     """
-    # Tool keys are kebab-case but directories are snake_case
-    normalized_key = tool_key.replace("-", "_")
-
-    for category_dir in TOOLS_DIR.iterdir():
-        if not category_dir.is_dir() or category_dir.name.startswith("_"):
-            continue
-
-        for tool_dir in category_dir.iterdir():
-            if not tool_dir.is_dir() or tool_dir.name.startswith("_"):
-                continue
-
-            # e.g., 'evo2_sample' matches 'evo2', 'blast_search' matches 'blast'
-            if normalized_key == tool_dir.name or normalized_key.startswith(tool_dir.name + "_"):
-                file_path = tool_dir / filename
-                if file_path.exists():
-                    return file_path
-
-    return None
+    spec = ToolRegistry._registry.get(tool_key)
+    if spec is None:
+        return None
+    path = spec.source_file.parent / filename
+    return path if path.exists() else None
 
 
 def _find_citation_file(tool_key: str) -> Path | None:
-    """Find cite.bib for a tool by searching tool directories."""
+    """Find cite.bib in a tool's toolkit directory."""
     return _find_tool_metadata_file(tool_key, "cite.bib")
 
 
 def _find_links_file(tool_key: str) -> Path | None:
-    """Find links.yaml for a tool by searching tool directories."""
+    """Find links.yaml in a tool's toolkit directory."""
     return _find_tool_metadata_file(tool_key, "links.yaml")
 
 
 def _find_license_file(tool_key: str) -> Path | None:
-    """Find license.yaml for a tool by searching tool directories."""
+    """Find license.yaml in a tool's toolkit directory."""
     return _find_tool_metadata_file(tool_key, "license.yaml")
 
 

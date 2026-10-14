@@ -3,6 +3,7 @@
 Tests for ToolRegistry.
 """
 
+import importlib.util
 import logging
 import math
 import time
@@ -1912,8 +1913,8 @@ def test_get_example_notebook_path():
 def test_get_example_notebook_path_returns_none_when_absent(clean_registry):
     """Registered tool with no examples/example.ipynb on disk returns None.
 
-    Every shipped tool has an example notebook, so register a fake-keyed tool
-    to exercise the negative branch (the directory walk finds no match).
+    Every shipped tool has an example notebook, so register a tool from this
+    test file, whose directory has no examples/example.ipynb.
     """
 
     @clean_registry.register(
@@ -1929,6 +1930,81 @@ def test_get_example_notebook_path_returns_none_when_absent(clean_registry):
         return MockToolOutput(result="ok")
 
     assert clean_registry.get_example_notebook_path("no-notebook-tool") is None
+
+
+def test_metadata_lookups_ignore_key_prefix_lookalikes(clean_registry):
+    """A key that starts like a packaged toolkit's name does not inherit that toolkit's files or docs page."""
+
+    @clean_registry.register(
+        key="evo2-lookalike",
+        label="Evo2 Lookalike",
+        category="causal_models",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool whose key prefix matches the evo2 toolkit directory",
+    )
+    def evo2_lookalike(inputs: MockToolInput, config: MockToolConfig) -> MockToolOutput:
+        return MockToolOutput(result="ok")
+
+    assert clean_registry.get_citation("evo2-lookalike") is None
+    assert clean_registry.get_links("evo2-lookalike") is None
+    assert clean_registry.get_license("evo2-lookalike") is None
+    assert clean_registry.get_example_notebook_path("evo2-lookalike") is None
+    assert clean_registry.get_docs_url("evo2-lookalike") is None
+
+
+_GI_TOOL_KEYS = [
+    "gi-annotation",
+    "gi-chromatin",
+    "gi-enhancer",
+    "gi-expression",
+    "gi-find-genes-and-predict-expression",
+    "gi-promoter",
+    "gi-splice",
+]
+
+
+@pytest.mark.parametrize("key", _GI_TOOL_KEYS)
+def test_gi_tools_resolve_their_toolkit_metadata(key):
+    """Keys that don't share a prefix with their toolkit dir (gi-* in genomic_intelligence/) still find its files."""
+    assert ToolRegistry.get_citation(key) is not None
+    assert ToolRegistry.get_license(key)["service"]["name"] == "Genomic Intelligence"
+    assert ToolRegistry.get_links(key) is not None
+    assert ToolRegistry.get_example_notebook_path(key).is_file()
+    assert ToolRegistry.get_docs_url(key) == "https://bio-pro.mintlify.app/tools/sequence-scoring/genomic-intelligence"
+
+
+def test_metadata_lookups_read_an_out_of_tree_toolkit_dir(clean_registry, tmp_path):
+    """A tool defined outside proto_tools reads metadata from its own directory and has no docs page."""
+    toolkit_dir = tmp_path / "extpkg" / "tools" / "testing" / "ext_meta_tk"
+    (toolkit_dir / "examples").mkdir(parents=True)
+    (toolkit_dir / "cite.bib").write_text("@article{ext, title={Ext}, doi={10.1234/ext.5678}}\n")
+    (toolkit_dir / "license.yaml").write_text("weights:\n  access: hf-gated\n")
+    (toolkit_dir / "links.yaml").write_text("github: https://github.com/example/ext\n")
+    (toolkit_dir / "examples" / "example.ipynb").write_text("{}")
+
+    # Loading the run function from a file in the toolkit dir makes that file the tool's source_file.
+    module_path = toolkit_dir / "ext_meta_tk.py"
+    module_path.write_text("def run_ext_meta(inputs, config):\n    return None\n")
+    spec = importlib.util.spec_from_file_location("ext_meta_tk", module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    clean_registry.register(
+        key="ext-meta-run",
+        label="External Metadata Tool",
+        category="testing",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="Tool defined in an out-of-tree toolkit directory",
+    )(module.run_ext_meta)
+
+    assert clean_registry.get_doi("ext-meta-run") == "10.1234/ext.5678"
+    assert clean_registry.get_weights_access("ext-meta-run") == "hf-gated"
+    assert clean_registry.get_links("ext-meta-run") == {"github": "https://github.com/example/ext"}
+    assert clean_registry.get_example_notebook_path("ext-meta-run") == toolkit_dir / "examples" / "example.ipynb"
+    assert clean_registry.get_docs_url("ext-meta-run") is None
 
 
 # ── post_process_iterable hook ──────────────────────────────────────────────
