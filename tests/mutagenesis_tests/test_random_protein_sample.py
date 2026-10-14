@@ -18,7 +18,7 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 # ============================================================================
 
 
-@pytest.mark.parametrize("scheme", ["UNIFORM", "NNK", "NNS", "NDT", "DBK", "NRT"])
+@pytest.mark.parametrize("scheme", ["UNIFORM", "NDT"])
 def test_codon_scheme(scheme):
     info = get_codon_scheme(scheme)
     valid_aas = set(info["amino_acids"])

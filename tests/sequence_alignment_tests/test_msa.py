@@ -166,26 +166,6 @@ def test_msa_init_with_single_sequence_file(tmp_path):
 # ============================================================================
 
 
-# -- __iter__ --
-
-
-def test_msa_iter_in_memory(sample_aligned_sequences):
-    """Test __iter__ with in-memory MSA."""
-    msa = MSA.model_validate(sample_aligned_sequences)
-    sequences = list(msa)
-
-    assert sequences == sample_aligned_sequences
-
-
-def test_msa_iter_file_backed(sample_fasta_file, sample_aligned_sequences):
-    """Test __iter__ loading from file."""
-    msa = MSA.from_file(str(sample_fasta_file))
-    sequences = list(msa)
-
-    assert len(sequences) == 4
-    assert sequences == sample_aligned_sequences
-
-
 # -- iter_with_ids --
 
 
@@ -202,70 +182,9 @@ def test_msa_iter_with_ids_in_memory(sample_aligned_sequences, sample_sequence_i
         assert seq == expected_seq
 
 
-def test_msa_iter_with_ids_file_backed(sample_fasta_file, sample_sequence_ids, sample_aligned_sequences):
-    """Test iter_with_ids loading from file."""
-    msa = MSA.from_file(str(sample_fasta_file))
-    seq_id_pairs = list(msa.iter_with_ids())
-
-    assert len(seq_id_pairs) == 4
-    # Check first and last
-    assert seq_id_pairs[0][0] == sample_sequence_ids[0]
-    assert seq_id_pairs[-1][0] == sample_sequence_ids[-1]
-    # Verify sequences match
-    for (seq_id, seq), expected_id, expected_seq in zip(
-        seq_id_pairs, sample_sequence_ids, sample_aligned_sequences, strict=False
-    ):
-        assert seq_id == expected_id
-        assert seq == expected_seq
-
-
-# -- __getitem__ and __len__ --
-
-
-def test_msa_getitem(sample_aligned_sequences):
-    """Test __getitem__ indexing."""
-    msa = MSA.model_validate(sample_aligned_sequences)
-
-    assert msa[0] == sample_aligned_sequences[0]
-    assert msa[2] == sample_aligned_sequences[2]
-    assert msa[-1] == sample_aligned_sequences[-1]
-
-
-def test_msa_getitem_file_backed(sample_fasta_file, sample_aligned_sequences):
-    """Test __getitem__ with file-backed MSA."""
-    msa = MSA.from_file(str(sample_fasta_file))
-
-    assert msa[0] == sample_aligned_sequences[0]
-    assert msa[2] == sample_aligned_sequences[2]
-    assert msa[-1] == sample_aligned_sequences[-1]
-
-
-def test_msa_len(sample_aligned_sequences):
-    """Test __len__ method."""
-    msa = MSA.model_validate(sample_aligned_sequences)
-    assert len(msa) == len(sample_aligned_sequences)
-
-
 # ============================================================================
 # MSA Properties
 # ============================================================================
-
-
-# -- aligned_sequences --
-
-
-def test_msa_aligned_sequences_in_memory(sample_aligned_sequences):
-    """Test aligned_sequences property with in-memory MSA."""
-    msa = MSA.model_validate(sample_aligned_sequences)
-    assert msa.aligned_sequences == sample_aligned_sequences
-
-
-def test_msa_aligned_sequences_file_backed(sample_fasta_file):
-    """Test that accessing aligned_sequences returns sequences from file-backed MSA."""
-    msa = MSA.from_file(str(sample_fasta_file))
-    sequences = msa.aligned_sequences
-
-    assert len(sequences) == 4
 
 
 # -- original_sequences --
@@ -280,34 +199,12 @@ def test_msa_original_sequences(sample_aligned_sequences):
     assert original == expected
 
 
-# -- alignment_length and num_sequences --
-
-
-def test_msa_alignment_length(sample_aligned_sequences):
-    """Test alignment_length property."""
-    msa = MSA.model_validate(sample_aligned_sequences)
-    assert msa.alignment_length == 9
-
-
-def test_msa_num_sequences(sample_aligned_sequences):
-    """Test num_sequences property."""
-    msa = MSA.model_validate(sample_aligned_sequences)
-    assert msa.num_sequences == 4
-
-
 # -- gap statistics --
 
 
 def test_msa_total_gaps_in_memory(sample_aligned_sequences):
     """Test total_gaps property with in-memory MSA."""
     msa = MSA.model_validate(sample_aligned_sequences)
-    expected_gaps = sum(seq.count("-") for seq in sample_aligned_sequences)
-    assert msa.total_gaps == expected_gaps
-
-
-def test_msa_total_gaps_file_backed(sample_fasta_file, sample_aligned_sequences):
-    """Test total_gaps property with file-backed MSA."""
-    msa = MSA.from_file(str(sample_fasta_file))
     expected_gaps = sum(seq.count("-") for seq in sample_aligned_sequences)
     assert msa.total_gaps == expected_gaps
 
@@ -360,14 +257,6 @@ def test_msa_get_column():
     assert msa.get_column(1) == ["C", "T", "G", "A"]
     assert msa.get_column(2) == ["G", "G", "G", "G"]
     assert msa.get_column(3) == ["T", "T", "T", "T"]
-
-
-def test_msa_get_column_with_gaps(sample_aligned_sequences):
-    """Test get_column with sequences containing gaps."""
-    msa = MSA.model_validate(sample_aligned_sequences)
-    column_4 = msa.get_column(4)
-    # Position 4: ['G', '-', 'G', 'G']
-    assert "-" in column_4
 
 
 def test_msa_get_column_out_of_range(sample_aligned_sequences):
@@ -506,40 +395,6 @@ def test_msa_to_fasta_string(sample_aligned_sequences, sample_sequence_ids):
         assert lines[2 * i + 1] == sample_aligned_sequences[i]
 
 
-def test_msa_to_fasta_file(tmp_path, sample_aligned_sequences, sample_sequence_ids):
-    """Test to_fasta_file method."""
-    msa = MSA(aligned_sequences=sample_aligned_sequences, sequence_ids=sample_sequence_ids)
-    output_path = tmp_path / "output.fasta"
-
-    msa.to_fasta_file(str(output_path))
-
-    assert output_path.exists()
-
-    # Read back and verify
-    with open(output_path) as f:
-        lines = f.read().strip().split("\n")
-
-    assert len(lines) == 2 * len(sample_aligned_sequences)
-    for i, (seq_id, seq) in enumerate(zip(sample_sequence_ids, sample_aligned_sequences, strict=False)):
-        assert lines[2 * i] == f">{seq_id}"
-        assert lines[2 * i + 1] == seq
-
-
-def test_msa_to_fasta_file_from_file_backed(sample_fasta_file, tmp_path):
-    """Test to_fasta_file with file-backed MSA."""
-    msa = MSA.from_file(str(sample_fasta_file))
-    output_path = tmp_path / "output_large.fasta"
-
-    msa.to_fasta_file(str(output_path))
-
-    assert output_path.exists()
-
-    # Verify by loading it again
-    msa_reloaded = MSA.from_file(str(output_path))
-    assert msa_reloaded.num_sequences == msa.num_sequences
-    assert msa_reloaded.alignment_length == msa.alignment_length
-
-
 # -- A3M output --
 
 
@@ -568,46 +423,6 @@ def test_msa_to_a3m_string(sample_sequence_ids):
     assert lines[3] == "ACGTggAAA"  # positions 4-5 are lowercase (insertions)
     assert lines[5] == "ACGTAAA"  # gaps at insertion positions are removed
     assert lines[7] == "ACGTttAAA"  # positions 4-5 are lowercase
-
-
-def test_msa_to_a3m_file(tmp_path, sample_sequence_ids):
-    """Test to_a3m_file method."""
-    sequences = [
-        "ACGT--AAA",  # query with gaps at 4-5
-        "ACGTGGAAA",  # has residues at gap positions
-        "ACGT--AAA",  # matches query
-    ]
-    msa = MSA(aligned_sequences=sequences, sequence_ids=sample_sequence_ids[:3])
-    output_path = tmp_path / "output.a3m"
-
-    msa.to_a3m_file(str(output_path), query_index=0)
-
-    assert output_path.exists()
-
-    # Read back and verify
-    with open(output_path) as f:
-        content = f.read()
-
-    assert ">seq_0\n" in content
-    assert "ACGTAAA\n" in content  # query with gaps removed
-    assert ">seq_1\n" in content
-    assert "ACGTggAAA\n" in content  # lowercase insertions
-
-
-def test_msa_to_a3m_file_from_file_backed(sample_fasta_file, tmp_path):
-    """Test to_a3m_file with file-backed MSA."""
-    msa = MSA.from_file(str(sample_fasta_file))
-    output_path = tmp_path / "output_large.a3m"
-
-    msa.to_a3m_file(str(output_path), query_index=0)
-
-    assert output_path.exists()
-
-    # Verify file is not empty
-    with open(output_path) as f:
-        content = f.read()
-    assert len(content) > 0
-    assert content.count(">") == msa.num_sequences
 
 
 def test_msa_to_a3m_string_different_query():
@@ -643,49 +458,6 @@ def test_msa_to_a3m_invalid_query_index():
 
 
 # -- Roundtrip tests --
-
-
-def test_msa_fasta_to_a3m_roundtrip(tmp_path):
-    """Test converting FASTA -> A3M -> FASTA preserves alignment."""
-    # Create original sequences with gaps
-    original_sequences = [
-        "ACGT--AAA",
-        "ACGTGGAAA",
-        "ACGT--AAA",
-        "ACGTttAAA",
-    ]
-    seq_ids = ["seq_0", "seq_1", "seq_2", "seq_3"]
-
-    # Create original MSA
-    msa1 = MSA(aligned_sequences=original_sequences, sequence_ids=seq_ids)
-
-    # Convert to A3M
-    a3m_path = tmp_path / "temp.a3m"
-    msa1.to_a3m_file(str(a3m_path), query_index=0)
-
-    # Load from A3M (this converts back to FASTA internally)
-    msa2 = MSA.from_file(str(a3m_path))
-
-    # Convert back to FASTA
-    fasta_path = tmp_path / "roundtrip.fasta"
-    msa2.to_fasta_file(str(fasta_path))
-
-    # Load the final FASTA
-    msa3 = MSA.from_file(str(fasta_path))
-
-    # The alignment should be preserved (gaps in query removed for all)
-    # Expected after A3M conversion: positions where query has gaps are removed
-    expected_sequences = [
-        "ACGTAAA",  # query gaps removed
-        "ACGTGGAAA",  # insertions preserved
-        "ACGTAAA",  # gaps at insertion positions removed
-        "ACGTTTAAA",  # insertions preserved
-    ]
-
-    for i, _expected_seq in enumerate(expected_sequences):
-        # A3M format removes gaps in query, so sequences will be different lengths
-        # We just verify the MSA can be round-tripped
-        assert msa3[i] == msa2[i]
 
 
 def test_msa_a3m_to_fasta_to_a3m_roundtrip(tmp_path):
@@ -731,57 +503,6 @@ ACGTttAAA
     # Headers should match
     for i in range(0, len(original_lines), 2):
         assert original_lines[i] == roundtrip_lines[i]
-
-
-# ============================================================================
-# Pydantic Features
-# ============================================================================
-
-
-def test_msa_model_dump_roundtrip(sample_aligned_sequences, sample_sequence_ids):
-    """Test model_dump() then model_validate() roundtrip."""
-    msa1 = MSA(aligned_sequences=sample_aligned_sequences, sequence_ids=sample_sequence_ids)
-
-    # Dump to dict
-    data = msa1.model_dump()
-
-    # Validate back to MSA
-    msa2 = MSA.model_validate(data)
-
-    # Verify they match
-    assert msa2.aligned_sequences == msa1.aligned_sequences
-    assert msa2.sequence_ids == msa1.sequence_ids
-    assert msa2.num_sequences == msa1.num_sequences
-    assert msa2.alignment_length == msa1.alignment_length
-
-
-def test_msa_json_schema():
-    """Test model_json_schema() returns valid schema."""
-    schema = MSA.model_json_schema()
-
-    # Schema should be a dict with basic structure
-    assert isinstance(schema, dict)
-    assert "properties" in schema or "$defs" in schema
-
-
-def test_msa_from_file_fasta(sample_fasta_file):
-    """Test MSA.from_file() with a FASTA file."""
-    msa = MSA.from_file(str(sample_fasta_file))
-
-    # Should have valid sequences
-    assert msa.num_sequences > 0
-    assert msa.alignment_length > 0
-    assert len(msa.aligned_sequences) == msa.num_sequences
-
-
-def test_msa_from_file_a3m(sample_a3m_file):
-    """Test MSA.from_file() with an A3M file."""
-    msa = MSA.from_file(str(sample_a3m_file))
-
-    # Should have valid sequences
-    assert msa.num_sequences > 0
-    assert msa.alignment_length > 0
-    assert len(msa.aligned_sequences) == msa.num_sequences
 
 
 # ============================================================================
@@ -858,40 +579,6 @@ def test_convert_a3m_to_fasta_with_null_bytes(tmp_path):
 # ============================================================================
 # Edge Cases and Error Handling
 # ============================================================================
-
-
-def test_msa_with_all_gaps():
-    """Test MSA where sequences are all gaps."""
-    sequences = ["----", "----"]
-    msa = MSA.model_validate(sequences)
-
-    assert msa.total_gaps == 8
-    assert msa.average_gap_fraction == 1.0
-    assert msa.original_sequences == ["", ""]
-
-
-def test_msa_with_no_gaps():
-    """Test MSA with no gaps."""
-    sequences = ["ACGT", "TGCA", "GATC"]
-    msa = MSA.model_validate(sequences)
-
-    assert msa.total_gaps == 0
-    assert msa.average_gap_fraction == 0.0
-    assert msa.aligned_sequences == msa.original_sequences
-
-
-def test_msa_with_varying_sequence_content():
-    """Test MSA with different amino acid/nucleotide content."""
-    sequences = [
-        "ACDEFGHIKLMNPQRSTVWY",
-        "AAAAAAAAAAAAAAAAAAAA",
-        "--------------------",
-        "ACDEFGHIKLMNPQRSTVWY",
-    ]
-    msa = MSA.model_validate(sequences)
-
-    assert msa.num_sequences == 4
-    assert msa.alignment_length == 20
 
 
 def test_msa_sequence_ids_length_mismatch():

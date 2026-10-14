@@ -243,15 +243,6 @@ def number_of_visible_gpus() -> int:
     return len(device_indices_str)
 
 
-# Backward compatibility alias - prefer number_of_visible_gpus() in new code
-def number_of_available_gpus() -> int:
-    """Deprecated: Use number_of_visible_gpus() instead.
-
-    This function is kept for backward compatibility and calls number_of_visible_gpus().
-    """
-    return number_of_visible_gpus()
-
-
 def _is_local_gpu_available() -> bool:
     """Check if a local NVIDIA GPU is available via nvidia-smi."""
     return shutil.which("nvidia-smi") is not None and number_of_visible_gpus() > 0
@@ -495,7 +486,7 @@ def _validate_and_map_cuda_indices(
     if min(cuda_indices) < 0:
         raise ValueError(f"CUDA indices must be non-negative; got {cuda_indices}")
 
-    num_gpus = len(parent_device_list) if parent_device_list else number_of_available_gpus()
+    num_gpus = len(parent_device_list) if parent_device_list else number_of_visible_gpus()
     max_idx = max(cuda_indices)
 
     cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
@@ -591,7 +582,7 @@ def determine_visible_devices(device: int | str | list[int | str]) -> str:
     # Handle integer device index (legacy support)
     if isinstance(device, int):
         device_int = device
-        num_gpus = number_of_available_gpus()
+        num_gpus = number_of_visible_gpus()
         cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
         if device_int >= num_gpus:
             raise ValueError(f"Device index {device_int} >= visible GPU count ({num_gpus}); CUDA_VISIBLE_DEVICES={cvd}")

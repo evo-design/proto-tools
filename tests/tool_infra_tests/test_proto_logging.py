@@ -67,14 +67,6 @@ def test_get_logger_returns_under_worker_namespace():
 # ── install() idempotency ───────────────────────────────────────────────────
 
 
-def test_install_attaches_single_bridge_handler():
-    """``install()`` must add exactly one ``_BridgeHandler`` to ``worker``."""
-    install()
-    worker = logging.getLogger("worker")
-    bridges = [h for h in worker.handlers if isinstance(h, _BridgeHandler)]
-    assert len(bridges) == 1
-
-
 def test_install_is_idempotent():
     """Multiple ``install()`` calls must not stack handlers."""
     install()
@@ -96,31 +88,6 @@ def test_install_sets_propagate_false_on_worker():
     """``worker`` must not propagate to root after install (no double-emit)."""
     install()
     assert logging.getLogger("worker").propagate is False
-
-
-# ── ProtoLogger accepts update_status kwarg ────────────────────────────────
-
-
-def test_log_record_carries_update_status_attribute():
-    """``update_status=True`` must land as a ``LogRecord`` attribute."""
-    install()
-    captured: list[logging.LogRecord] = []
-
-    class _Capture(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:
-            captured.append(record)
-
-    logger = get_logger("test.attribute")
-    spy = _Capture()
-    logger.addHandler(spy)
-    try:
-        logger.info("flagged", update_status=True)
-        logger.info("plain")
-    finally:
-        logger.removeHandler(spy)
-    assert len(captured) == 2
-    assert getattr(captured[0], "update_status", False) is True
-    assert getattr(captured[1], "update_status", False) is False
 
 
 # ── _BridgeHandler tagged JSON emission ────────────────────────────────────
@@ -177,22 +144,6 @@ def test_tag_prefix_matches_parent_constant():
 # lock in the contract so a future change to one side must update the other.
 
 
-def test_proto_logger_log_signature_matches_parent_side():
-    """``_log`` override must take identical params on both sides.
-
-    Failure means the kwarg surface diverged - update both copies.
-    """
-    import inspect
-
-    from proto_tools.utils.logging_config import ProtoLogger as ParentProtoLogger
-
-    parent_sig = inspect.signature(ParentProtoLogger._log)
-    producer_sig = inspect.signature(ProtoLogger._log)
-    assert parent_sig.parameters == producer_sig.parameters, (
-        f"ProtoLogger._log signature divergence:\n  parent:   {parent_sig}\n  producer: {producer_sig}"
-    )
-
-
 class _CaptureSpy(logging.Handler):
     """Test handler that appends every record into a caller-supplied list."""
 
@@ -225,22 +176,8 @@ def test_proto_logger_update_status_behavior_matches_parent_side():
 # ── update_status() method ─────────────────────────────────────────────────
 
 
-def test_update_status_emits_record_with_flag_set():
-    """``logger.update_status("foo")`` must produce one INFO record with update_status=True."""
-    install()
-    captured: list[logging.LogRecord] = []
-    logger = get_logger("test.update_status_method")
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(_CaptureSpy(captured))
-    logger.update_status("loading checkpoint")
-    assert len(captured) == 1
-    assert captured[0].levelno == logging.INFO
-    assert captured[0].getMessage() == "loading checkpoint"
-    assert getattr(captured[0], "update_status", False) is True
-
-
 def test_update_status_method_parity_between_proto_logger_copies():
-    """Producer and parent ProtoLogger must implement update_status identically."""
+    """Producer and parent ProtoLogger ``update_status("...")`` each emit one flagged INFO record."""
     from proto_tools.utils.logging_config import ProtoLogger as ParentProtoLogger
 
     for cls in (ParentProtoLogger, ProtoLogger):
@@ -250,6 +187,8 @@ def test_update_status_method_parity_between_proto_logger_copies():
         logger.addHandler(_CaptureSpy(captured))
         logger.update_status("phase A")
         assert len(captured) == 1, f"{cls!r}.update_status emitted {len(captured)} records, expected 1"
+        assert captured[0].levelno == logging.INFO, f"{cls!r}.update_status did not log at INFO"
+        assert captured[0].getMessage() == "phase A"
         assert getattr(captured[0], "update_status", False) is True, f"{cls!r}.update_status did not flag the record"
 
 

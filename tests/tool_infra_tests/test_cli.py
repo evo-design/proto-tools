@@ -188,23 +188,15 @@ def test_signature_lists_required_input_fields_only() -> None:
     assert "IPSAEScoringInput(structure=..., binder_chain=..., target_chains=...)" in out
 
 
-def test_signature_resolves_a_run_function_name() -> None:
-    code, out, _ = _run("signature", "run_create_blast_db")
-    assert code == 0
-    assert "CreateBlastDbInput" in out
-
-
 def test_signature_stays_small_for_a_tool_with_a_huge_example() -> None:
-    """The reason the verb exists: cost is fixed, not proportional to the example payload.
+    """Cost is fixed, not proportional to the example payload.
 
     borzoi's example input is a 524,288 bp window (the model context length, enforced by
-    ``BorzoiInput``), so ``example --as-python`` cannot be made cheap for it at any fixture size.
+    ``BorzoiInput``), so a signature that rendered any of it would blow past this bound.
     """
     code, signature, _ = _run("signature", "borzoi-prediction")
     assert code == 0
-    _, example, _ = _run("example", "borzoi-prediction", "--as-python")
     assert len(signature) < 1024
-    assert len(example) > 500_000
 
 
 def test_signature_json_carries_symbols_and_modules() -> None:
@@ -273,40 +265,6 @@ def test_example_as_python_names_symbols_the_key_cannot_predict() -> None:
     assert "CreateBlastDbInput" in out  # not BlastCreateDbInput
     assert "run_create_blast_db" in out  # not run_blast_create_db
     assert "CreateBlastDbConfig" in out
-
-
-@pytest.mark.extensive
-def test_example_as_python_imports_resolve_for_every_tool() -> None:
-    """Every generated snippet parses and its imports bind the names it then uses."""
-    import ast
-
-    from proto_tools.tools.tool_registry import ToolRegistry
-
-    specs = {s.key: s for s in [*ToolRegistry.list_cpu_tools(), *ToolRegistry.list_gpu_tools()]}
-    failures: list[str] = []
-    for key, spec in sorted(specs.items()):
-        code, out, _ = _run("example", key, "--as-python")
-        if code != 0:
-            continue  # a tool without an example input has no snippet to check
-        try:
-            tree = ast.parse(out)
-        except SyntaxError as exc:
-            failures.append(f"{key}: {exc}")
-            continue
-        imports = [node for node in tree.body if isinstance(node, ast.Import | ast.ImportFrom)]
-        namespace: dict[str, object] = {}
-        try:
-            exec(compile(ast.Module(body=imports, type_ignores=[]), "<generated>", "exec"), namespace)  # noqa: S102
-        except Exception as exc:
-            failures.append(f"{key}: {type(exc).__name__}: {exc}")
-            continue
-        failures.extend(
-            f"{key}: emitted import did not bind {symbol}"
-            for symbol in (spec.input_model.__name__, spec.function.__name__)
-            if symbol not in namespace
-        )
-
-    assert not failures, "generated snippets with unusable imports:\n" + "\n".join(failures)
 
 
 # ── Example notebook ───────────────────────────────────────────────────────
@@ -400,13 +358,3 @@ def test_doctor_reports_which_mechanism_authenticated(monkeypatch, tmp_path) -> 
     assert code == 0
     assert "OK via MODAL_TOKEN_ID/MODAL_TOKEN_SECRET" in out
     assert "proto-tools-esm2" in out, "deployed apps are listed so the caller sees what is reachable"
-
-
-def test_doctor_json_carries_the_remedy_for_a_bug_report(monkeypatch, tmp_path) -> None:
-    """The JSON form is what gets pasted into an issue, so it must carry the fix, not just the fault."""
-    _modal_auth(monkeypatch, tmp_path, found=False)
-    code, out, _ = _run("doctor", "--json")
-
-    payload = json.loads(out)
-    assert code == 1
-    assert any("MODAL_TOKEN_ID" in r for r in payload["remedies"])

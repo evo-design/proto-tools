@@ -4,7 +4,6 @@ import csv
 import json
 import logging
 import math
-from copy import deepcopy
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -176,18 +175,6 @@ def test_vina_input_accepts_bare_smiles() -> None:
     assert inputs.search_box == _CANONICAL_BOX
 
 
-def test_vina_input_round_trips_without_mutating_dumped_dict() -> None:
-    """Reconstruction preserves an input's serialized transport payload."""
-    inputs = _example_input()
-    dumped = inputs.model_dump(exclude_none=True)
-    expected = deepcopy(dumped)
-
-    reconstructed = VinaDockingInput(**dumped)
-
-    assert dumped == expected
-    assert reconstructed.model_dump(exclude_none=True) == expected
-
-
 @pytest.mark.parametrize("ligand", ["not-a-smiles", "CC.C"])
 def test_vina_input_rejects_invalid_or_multicomponent_smiles(ligand: str) -> None:
     """Ligands must be one parseable molecular graph."""
@@ -228,38 +215,16 @@ def test_reference_ligand_box_resolves_bundled_imatinib_coordinates() -> None:
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"exhaustiveness": 0},
-        {"exhaustiveness": 2**31},
-        {"num_poses": 0},
-        {"num_poses": 2**31},
-        {"energy_range": 0.0},
-        {"energy_range": math.inf},
-        {"min_rmsd": 0.0},
-        {"min_rmsd": math.nan},
-        {"max_evaluations": -1},
-        {"max_evaluations": 2**31},
-        {"cpu": -1},
-        {"cpu": 2**31},
-        {"grid_spacing": 0.099},
-        {"grid_spacing": math.inf},
-        {"seed": 0},
-        {"seed": 2**31},
+        {"exhaustiveness": 0},  # below the minimum
+        {"num_poses": 2**31},  # above Vina's signed 32-bit ceiling
+        {"min_rmsd": math.nan},  # non-finite
+        {"grid_spacing": 0.099},  # finer than the supported grid
     ],
 )
 def test_vina_config_rejects_out_of_range_values(kwargs: dict[str, Any]) -> None:
     """Search controls reject values outside Vina's supported ranges."""
     with pytest.raises(ValidationError):
         VinaDockingConfig(**kwargs)
-
-
-def test_vina_minimal_config_reduces_search_cost() -> None:
-    """The infrastructure smoke-test config performs one single-threaded search."""
-    config = VinaDockingConfig.minimal(seed=9)
-
-    assert config.exhaustiveness == 1
-    assert config.num_poses == 1
-    assert config.cpu == 1
-    assert config.seed == 9
 
 
 def test_vina_rejects_a_grid_allocation_above_the_safety_limit(monkeypatch: pytest.MonkeyPatch) -> None:

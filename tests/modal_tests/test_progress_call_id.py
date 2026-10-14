@@ -119,13 +119,6 @@ def test_the_tailer_stamps_the_partition_it_is_reading(monkeypatch):
     assert getattr(handler.records[0], CALL_ID_FIELD) == "partition-xyz"
 
 
-def test_both_remote_paths_agree_on_the_field_name():
-    """One name, imported rather than duplicated, so the two paths cannot drift apart."""
-    from proto_tools.proto import CALL_ID_FIELD as proto_field
-
-    assert proto_field == CALL_ID_FIELD
-
-
 # --------------------------------------------------------------------------
 # A caller supplying its own partition
 # --------------------------------------------------------------------------

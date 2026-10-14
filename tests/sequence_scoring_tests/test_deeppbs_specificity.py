@@ -18,7 +18,6 @@ from proto_tools.tools.sequence_scoring.deeppbs_specificity import (
     DeepPBSSpecificityInput,
     run_deeppbs_specificity,
 )
-from proto_tools.tools.tool_registry import ToolRegistry
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # The standalone run.py imports the worker-injected ``standalone_helpers`` package,
@@ -26,16 +25,6 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 # canonicalization/runner logic can be imported and unit-tested on the host.
 sys.path.insert(0, str(Path(next(iter(_shs.__path__)))))
 _run = importlib.import_module("proto_tools.tools.sequence_scoring.deeppbs_specificity.standalone.run")
-
-# ── Registration ──────────────────────────────────────────────────────────────
-
-
-def test_tool_key_registered():
-    """Tool key is visible in ToolRegistry under sequence_scoring."""
-    spec = ToolRegistry.get("deeppbs-specificity")
-    assert spec.key == "deeppbs-specificity"
-    assert spec.category == "sequence_scoring"
-
 
 # ── Validation ────────────────────────────────────────────────────────────────
 
@@ -52,25 +41,6 @@ def test_input_rejects_empty_list():
         DeepPBSSpecificityInput(pdb_paths=[])
 
 
-def test_input_rejects_extra_fields():
-    """Unknown input fields are rejected."""
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        DeepPBSSpecificityInput(pdb_paths=["one.pdb"], extra_field="x")
-
-
-def test_config_exposes_no_path_fields():
-    """Repo/X3DNA/config paths are auto-provisioned into the cache, so no path field is exposed."""
-    path_fields = {
-        "deeppbs_repo_path",
-        "process_config_path",
-        "prediction_config_path",
-        "x3dna_bin_path",
-        "x3dna_home",
-    }
-    assert not (path_fields & set(DeepPBSSpecificityConfig.model_fields))
-    assert DeepPBSSpecificityConfig().allow_fallback is False
-
-
 def test_tool_declared_local_only():
     """DeepPBS needs a local repo and X3DNA install, so the tool declares itself local-only."""
     from proto_tools.tools import ToolRegistry
@@ -84,7 +54,7 @@ def test_tool_declared_local_only():
 
 @patch("proto_tools.tools.sequence_scoring.deeppbs_specificity.deeppbs_specificity.ToolInstance.dispatch")
 def test_run_calls_dispatch_and_returns_output(mock_dispatch):
-    """run_deeppbs_specificity returns canonicalized results."""
+    """run_deeppbs_specificity returns canonicalized results, including the fallback fields."""
     mock_dispatch.return_value = {
         "results": [
             {
@@ -96,8 +66,8 @@ def test_run_calls_dispatch_and_returns_output(mock_dispatch):
                 "mask": [1, 1],
                 "dna_mask": [1, 1],
                 "chain_labels": [0, 1],
-                "used_fallback": False,
-                "fallback_reason": None,
+                "used_fallback": True,
+                "fallback_reason": "DeepPBS dependency missing: x3dna-dssr not found in PATH.",
             }
         ]
     }
@@ -111,7 +81,8 @@ def test_run_calls_dispatch_and_returns_output(mock_dispatch):
     assert len(output.results) == 1
     assert output.results[0].source_method == "deeppbs"
     assert output.results[0].true_sequence == [0, 1]
-    assert output.results[0].used_fallback is False
+    assert output.results[0].used_fallback is True
+    assert "x3dna-dssr" in output.results[0].fallback_reason
     mock_dispatch.assert_called_once()
 
 
@@ -142,46 +113,6 @@ def test_run_threads_device_and_fallback_flag_into_payload(mock_dispatch):
     payload = mock_dispatch.call_args.args[1]
     assert payload["device"] == "cpu"
     assert payload["allow_fallback"] is False
-
-
-@patch("proto_tools.tools.sequence_scoring.deeppbs_specificity.deeppbs_specificity.ToolInstance.dispatch")
-def test_run_surfaces_fallback_fields(mock_dispatch):
-    """Fallback results round-trip used_fallback / fallback_reason through the wrapper."""
-    mock_dispatch.return_value = {
-        "results": [
-            {
-                "input_name": "candidate_0",
-                "source_method": "deeppbs",
-                "output_npz_path": "candidate_0.npz",
-                "predicted_ppm": [[0.25, 0.25, 0.25, 0.25]],
-                "true_sequence": [0],
-                "mask": [1],
-                "dna_mask": [1],
-                "chain_labels": [0],
-                "used_fallback": True,
-                "fallback_reason": "DeepPBS dependency missing: x3dna-dssr not found in PATH.",
-            }
-        ]
-    }
-
-    output = run_deeppbs_specificity(
-        DeepPBSSpecificityInput(pdb_paths=["candidate_0.pdb"]),
-        DeepPBSSpecificityConfig(),
-    )
-    validate_output(output)
-    assert output.results[0].used_fallback is True
-    assert "x3dna-dssr" in output.results[0].fallback_reason
-
-
-@patch("proto_tools.tools.sequence_scoring.deeppbs_specificity.deeppbs_specificity.ToolInstance.dispatch")
-def test_dispatch_errors_propagate(mock_dispatch):
-    """Dispatch failures propagate (decorator owns error policy; raises by default)."""
-    mock_dispatch.side_effect = RuntimeError("DeepPBS failed")
-    with pytest.raises(RuntimeError, match="DeepPBS failed"):
-        run_deeppbs_specificity(
-            DeepPBSSpecificityInput(pdb_paths=["candidate_0.pdb"]),
-            DeepPBSSpecificityConfig(),
-        )
 
 
 # ── Canonicalization (pure standalone logic) ──────────────────────────────────

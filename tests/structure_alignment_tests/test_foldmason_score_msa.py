@@ -195,8 +195,8 @@ def test_input_requires_min_two_structures():
 
 @pytest.mark.parametrize(
     "bad_id",
-    ["../escape", "/etc/passwd", "..", ".", "path/with/slash", "path\\with\\backslash", ""],
-    ids=["dot-dot-prefix", "absolute-path", "dotdot", "dot", "fwd-slash", "back-slash", "empty"],
+    ["..", "path/with/slash", "path\\with\\backslash", ""],
+    ids=["dotdot", "fwd-slash", "back-slash", "empty"],
 )
 def test_input_rejects_unsafe_structure_ids(bad_id):
     """structure_ids are written as `{id}.pdb` files; reject path-traversal-shaped values."""

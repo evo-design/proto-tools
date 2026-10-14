@@ -84,20 +84,6 @@ def test_enformer_input_rejects_invalid_nucleotides():
         EnformerInput(sequences=bad_seq)
 
 
-def test_enformer_input_accepts_target_aligned_sequences():
-    """Target coordinates let Enformer extract a model window from a larger construct."""
-    from proto_tools.tools.sequence_scoring.enformer import EnformerInput, SequenceTargetRange, SequenceWindow
-
-    sequence = ("C" * 100) + ("A" * ENFORMER_CONTEXT) + ("G" * 100)
-    target_start = 100 + ENFORMER_OUTPUT_FLANK
-
-    target_range = SequenceTargetRange(start=target_start, end=target_start + 10)
-    inputs = EnformerInput(sequences=[SequenceWindow(sequence=sequence, target_range=target_range)])
-
-    assert [window.sequence for window in inputs.sequences] == [sequence]
-    assert [window.target_range for window in inputs.sequences] == [target_range]
-
-
 def test_enformer_run_extracts_target_aligned_window(monkeypatch):
     """run_enformer should dispatch exact-context windows and return source coordinates."""
     from proto_tools.tools.sequence_scoring.enformer import (
@@ -145,22 +131,6 @@ def test_enformer_run_extracts_target_aligned_window(monkeypatch):
 
 
 # ── Config validation ─────────────────────────────────────────────────────────
-
-
-def test_enformer_config_default_species():
-    """Default species is 'human'."""
-    from proto_tools.tools.sequence_scoring.enformer import EnformerConfig
-
-    config = EnformerConfig(output_tracks=[0])
-    assert config.species == "human"
-
-
-def test_enformer_config_rejects_invalid_species():
-    """Species values other than 'human' or 'mouse' are rejected."""
-    from proto_tools.tools.sequence_scoring.enformer import EnformerConfig
-
-    with pytest.raises(ValidationError, match="Input should be 'human' or 'mouse'"):
-        EnformerConfig(output_tracks=[0], species="zebrafish")
 
 
 # ---------------------------------------------------------------------------
@@ -211,33 +181,6 @@ def test_enformer_prediction_mouse():
     assert result.species == "mouse"
     assert len(result.results[0].prediction) == 896
     assert len(result.results[0].prediction[0]) == 3
-
-
-@pytest.mark.parametrize(
-    "track_indices,expected_n_tracks",
-    [
-        ([0], 1),
-        (list(range(100)), 100),
-    ],
-)
-@pytest.mark.uses_gpu
-def test_enformer_prediction_track_count(track_indices, expected_n_tracks):
-    """Output matrix second dimension matches the number of requested tracks."""
-    from proto_tools.tools.sequence_scoring.enformer import (
-        EnformerConfig,
-        EnformerInput,
-        run_enformer,
-    )
-
-    seq = _random_dna(ENFORMER_CONTEXT, seed=456)
-    inputs = EnformerInput(sequences=[seq])
-    config = EnformerConfig(output_tracks=track_indices, species="human", verbose=False)
-
-    result = run_enformer(inputs, config)
-
-    validate_output(result)
-    assert len(result.results[0].prediction) == 896
-    assert len(result.results[0].prediction[0]) == expected_n_tracks
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────

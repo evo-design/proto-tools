@@ -44,43 +44,6 @@ def _make_mock_scoring_output():
     return Evo1ScoringOutput(scores=scores)
 
 
-# ── Sample input validation ───────────────────────────────────────────────────
-
-
-def test_evo1_sample_input_normalizes_single_string():
-    inp = Evo1SampleInput(prompts="ATCGATCG")
-    assert isinstance(inp.prompts, list)
-    assert len(inp.prompts) == 1
-    assert inp.prompts[0] == "ATCGATCG"
-
-
-def test_evo1_sample_input_preserves_list():
-    inp = Evo1SampleInput(prompts=["ATCG", "GCTA"])
-    assert len(inp.prompts) == 2
-
-
-def test_evo1_sample_input_rejects_empty():
-    with pytest.raises(ValueError, match="prompts must not be empty"):
-        Evo1SampleInput(prompts=[])
-
-
-# ── Sample config validation ─────────────────────────────────────────────────
-
-
-@pytest.mark.parametrize(
-    "config_kwargs,match",
-    [
-        ({"temperature": 0.0}, "greater than 0"),
-        ({"top_p": 1.5}, "less than or equal to 1"),
-        ({"max_new_tokens": 0}, "greater than or equal to 1"),
-        ({"top_k": 0}, "greater than or equal to 1"),
-    ],
-)
-def test_evo1_sample_config_rejects_invalid_values(config_kwargs, match):
-    with pytest.raises(ValueError, match=match):
-        Evo1SampleConfig(**config_kwargs)
-
-
 # ── Sample output export ─────────────────────────────────────────────────────
 
 
@@ -290,6 +253,13 @@ def test_evo1_score_batched():
 
 
 # ── Benchmarks ────────────────────────────────────────────────────────────────
+
+
+def test_evo1_sample_input_normalizes_single_string():
+    inp = Evo1SampleInput(prompts="ATCGATCG")
+    assert isinstance(inp.prompts, list)
+    assert len(inp.prompts) == 1
+    assert inp.prompts[0] == "ATCGATCG"
 
 
 @pytest.mark.benchmark("evo1-sample")

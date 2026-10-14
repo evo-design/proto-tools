@@ -1,1 +1,5 @@
 chai_lab==0.6.1
+# chai_lab pins numpy~=1.21 and reads MSAs as parquet through pandas[parquet], which leaves pyarrow
+# unbounded. pyarrow 26 requires NumPy 2, so without this bound a fresh env cannot import pyarrow and
+# every run with MSAs fails reading the aligned .pqt files.
+pyarrow<26

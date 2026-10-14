@@ -10,6 +10,7 @@ import os
 import random
 import socket
 from contextvars import ContextVar
+from functools import partial
 from typing import Any, ClassVar
 
 from pydantic import (
@@ -17,6 +18,7 @@ from pydantic import (
     ConfigDict,
     ModelWrapValidatorHandler,
     PrivateAttr,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
@@ -80,6 +82,7 @@ def ConfigField(
     description: str | None = None,
     reload_on_change: bool = False,
     include_in_key: bool = True,
+    credential: str | None = None,
     **kwargs: Any,
 ) -> Any:
     """Custom Field wrapper that automatically adds metadata flags to json_schema_extra.
@@ -93,6 +96,11 @@ def ConfigField(
         include_in_key (bool): If False, field is excluded from tool cache key
             generation. Fields that don't affect computation results (device,
             verbose, timeout) should set this to False.
+        credential (str | None): Marks the field as a credential (an API key, or a contact
+            email sent with requests) and names the environment variable it falls back to.
+            A value set in the config takes precedence; a blank one counts as unset. The
+            field defaults from the environment, never enters the cache key, and is left
+            out of ``repr``. Anything that persists or displays configs should drop it.
         kwargs: All other standard Pydantic Field arguments.
 
     Usage:
@@ -105,10 +113,23 @@ def ConfigField(
     json_schema_extra["reload_on_change"] = reload_on_change
     json_schema_extra["include_in_key"] = include_in_key
     json_schema_extra["_field_type"] = "ConfigField"
+    if credential is not None:
+        if default is not ... or "default_factory" in kwargs:
+            raise TypeError(f"ConfigField: a credential defaults from ${credential}; do not pass a default")
+        json_schema_extra["credential"] = credential
+        json_schema_extra["include_in_key"] = False
+        kwargs["default_factory"] = partial(_credential_from_env, credential)
+        kwargs.setdefault("repr", False)
+        description = f"{description} Falls back to ${credential}."
 
     kwargs["json_schema_extra"] = json_schema_extra
 
     return PydanticField(default, title=title, description=description, **kwargs)
+
+
+def _credential_from_env(env_var: str) -> str | None:
+    """Read a credential's fallback from the environment, treating a blank value as unset."""
+    return os.environ.get(env_var, "").strip() or None
 
 
 class BaseConfig(BaseModel):
@@ -287,6 +308,11 @@ class BaseConfig(BaseModel):
         """Return field names marked with ``include_in_key=False``."""
         return {name for name, info in cls.model_fields.items() if not _extra_dict(info).get("include_in_key", True)}
 
+    @classmethod
+    def credential_fields(cls) -> set[str]:
+        """Return the names of fields marked as credentials."""
+        return {name for name, info in cls.model_fields.items() if _extra_dict(info).get("credential")}
+
     def cache_key(self) -> str:
         """Deterministic string for cache key generation, excluding non-key fields at every level.
 
@@ -432,6 +458,15 @@ class BaseConfig(BaseModel):
             int | None: Effective timeout in seconds, or None for no cap.
         """
         return self.timeout
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _unset_blank_credential(cls, value: Any, info: ValidationInfo) -> Any:
+        """Strip a credential, and fall back to its environment variable when blank as when omitted."""
+        env_var = _extra_dict(cls.model_fields[info.field_name]).get("credential") if info.field_name else None
+        if env_var is None or not (value is None or isinstance(value, str)):
+            return value
+        return (value or "").strip() or _credential_from_env(env_var)
 
     @field_validator("device")
     @classmethod

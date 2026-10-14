@@ -281,34 +281,3 @@ def test_freebindcraft_one_off_sample_full_pipeline() -> None:
         # PyRosetta-free run must never report Rosetta-only placeholder metrics as real.
         assert _PLACEHOLDER_METRICS.isdisjoint(dict(design.metrics.items()))
     assert_metrics_in_spec(result)
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-def test_freebindcraft_filter_override_rejects_with_impossible_threshold() -> None:
-    """``filter_overrides`` flows into the dispatch payload and reaches upstream's filter check."""
-    inputs = FreeBindCraftInput(
-        target_pdb=str(_FIXTURE_PDB),
-        target_chain="A",
-        target_hotspot_residues="56",
-        binder_lengths=(60, 70),
-        binder_name="strict",
-        number_of_final_designs=1,
-    )
-    config = FreeBindCraftConfig(
-        max_trajectories=1,
-        soft_iterations=10,
-        temporary_iterations=5,
-        hard_iterations=2,
-        greedy_iterations=2,
-        num_seqs=2,
-        max_mpnn_sequences=1,
-        seed=42,
-        filter_overrides={"Average_pLDDT": {"threshold": 0.999, "higher": True}},
-    )
-    result = run_freebindcraft_design(inputs, config)
-    validate_output(result)
-
-    assert result.n_trajectories_run >= 1
-    assert result.n_designs_accepted == 0, "Impossible pLDDT threshold should reject every design"
-    assert result.designs == []

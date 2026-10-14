@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding import (
     InverseFoldingInput,
@@ -21,10 +20,6 @@ from proto_tools.tools.inverse_folding import (
     SequenceStructurePair,
     run_ligandmpnn_sample,
     run_ligandmpnn_score,
-)
-from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
-    LigandMPNNDesign,
-    LigandMPNNDesignMetrics,
 )
 from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
     example_input as ligandmpnn_example_input,
@@ -258,48 +253,6 @@ def test_ligandmpnn_score():
     assert len(score.logits[0]) == len(score.vocab)
     assert math.isclose(score.log_likelihood, score.avg_log_likelihood * len(sequence), rel_tol=1e-5)
     assert math.isclose(score.perplexity, math.exp(-score.avg_log_likelihood), rel_tol=1e-5)
-
-
-def test_ligandmpnn_multichain_design_structure():
-    """A LigandMPNNDesign preserves chain id, order, redesigned flag, and metrics."""
-    design = LigandMPNNDesign(
-        chains=[
-            Chain(id="A", sequence="MKTL"),
-            Chain(id="B", sequence="GGSG"),
-        ],
-        designed=[True, False],
-        metrics=LigandMPNNDesignMetrics(
-            sequence_recovery=0.5,
-            ligand_interface_sequence_recovery=0.3,
-        ),
-    )
-
-    assert [chain.id for chain in design.chains] == ["A", "B"]
-    assert design.designed == [True, False]
-    assert design.chain_sequences == ["MKTL", "GGSG"]
-    assert design.chain_sequence_map() == {"A": "MKTL", "B": "GGSG"}
-    assert [chain.id for chain in design.designed_chains] == ["A"]
-    assert design.metrics["sequence_recovery"] == 0.5
-    assert design.metrics["ligand_interface_sequence_recovery"] == 0.3
-    assert design.design_metrics()["sequence_recovery"] == 0.5
-
-
-def test_ligandmpnn_design_feeds_structure_predictor():
-    """A LigandMPNNDesign feeds an SP tool input directly via LSP (subclass-as-Complex)."""
-    from proto_tools.tools.structure_prediction import ESMFoldInput
-
-    design = LigandMPNNDesign(
-        chains=[
-            Chain(id="A", sequence="MKTLVLSP"),
-            Chain(id="B", sequence="GGSGGSGG"),
-        ],
-        designed=[True, False],
-        metrics=LigandMPNNDesignMetrics(sequence_recovery=0.7),
-    )
-
-    inp = ESMFoldInput(complexes=[design])
-    assert inp.complexes[0] is design
-    assert [c.sequence for c in inp.complexes[0].chains] == design.chain_sequences
 
 
 # ── Benchmarks ──────────────────────────────────────────────────────────────

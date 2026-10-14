@@ -47,6 +47,7 @@ APP_BUCKETS: dict[str, list[str]] = {
     "proto-tools-rfdiffusion3": ["RFdiffusion3Service"],
     "proto-tools-splice-transformer": ["SpliceTransformerService"],
     "proto-tools-spliceai": ["SpliceAIService"],
+    "proto-tools-spliceai2": ["SpliceAI2Service"],
     # CPU services — one app each, so deploying one does not build the others.
     "proto-tools-ccd-lookup": ["CcdLookupService"],
     "proto-tools-crispr-tracr-rna": ["CrisprTracrRNAService"],
@@ -171,6 +172,7 @@ SERVICE_TIERS: dict[str, str] = {
     "RFdiffusion3Service": "long",
     "SegmaskerService": "fast",
     "SpliceAIService": "long",
+    "SpliceAI2Service": "long",
     "SpliceTransformerService": "medium",
     "StructureMetricsService": "fast",
     "TMalignService": "fast",
@@ -267,6 +269,7 @@ GPU_SERVICES: frozenset[str] = frozenset(
         "RF3Service",
         "RFdiffusion3Service",
         "SpliceAIService",
+        "SpliceAI2Service",
         "SpliceTransformerService",
     }
 )
@@ -346,6 +349,7 @@ SERVICE_TO_MODULE: dict[str, str] = {
     "RFdiffusion3Service": "proto_tools.modal.structure_design.rfdiffusion3_deployment.rfdiffusion3_service",
     "SegmaskerService": "proto_tools.modal.sequence_utils.segmasker_deployment.segmasker_service",
     "SpliceAIService": "proto_tools.modal.rna_splicing.spliceai_deployment.spliceai_service",
+    "SpliceAI2Service": "proto_tools.modal.rna_splicing.spliceai2_deployment.spliceai2_service",
     "SpliceTransformerService": "proto_tools.modal.rna_splicing.splice_transformer_deployment.splice_transformer_service",
     "StructureMetricsService": (
         "proto_tools.modal.structure_scoring.structure_metrics_deployment.structure_metrics_service"

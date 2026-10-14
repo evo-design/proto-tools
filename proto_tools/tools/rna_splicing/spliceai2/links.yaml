@@ -1,0 +1,6 @@
+github: https://github.com/Illumina/SpliceAI2
+huggingface: https://huggingface.co/illumina-ai/SpliceAI2
+preprint: https://assets.illumina.com/content/dam/illumina-marketing/images/genomics-research/articles/spliceai2/SpliceAI2.pdf
+website: https://www.illumina.com/science/genomics-research/articles/introducing-spliceai2--the-next-generation-of-splicing-and-trans.html
+organizations:
+  - Illumina

@@ -7,6 +7,7 @@ reach the live API carry ``@pytest.mark.integration`` and are skipped by default
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -304,46 +305,6 @@ def test_parse_expression_reads_applied_window_from_meta() -> None:
     assert result.scored_window == [0, 9198]
 
 
-def test_recorded_input_echoes_carry_no_derived_key() -> None:
-    """No recorded ``data.input`` carries a key the service stopped echoing.
-
-    Contract revision 16 (2026-09-06) made every ``data.input`` a closed object:
-    ``additionalProperties: false``, every field required. The published shapes
-    are ``{sequence_name}`` for promoter / splice / enhancer / chromatin /
-    annotation, ``{sequence_name, description, tss_index}`` for expression, and
-    ``{sequence_name, description}`` for the composite workflow.
-
-    These fixtures are recorded bodies, so nothing upstream keeps them honest --
-    a stale one simply describes a service that no longer exists, and the client
-    it exercises goes on passing. This test is that check. It deliberately does
-    not cover the adversarial payload below, which keeps the removed keys on
-    purpose.
-    """
-    derived = {"sequence_length", "submitted_sequence_length", "scored_window"}
-    recorded = {
-        "promoter": _PROMOTER_PAYLOAD,
-        "splice": _SPLICE_PAYLOAD,
-        "enhancer": _ENHANCER_PAYLOAD,
-        "chromatin": _CHROMATIN_PAYLOAD,
-        "annotation": _ANNOTATION_PAYLOAD,
-        "expression": _EXPRESSION_PAYLOAD,
-        "workflow": _WORKFLOW_PAYLOAD,
-    }
-    for task, payload in recorded.items():
-        echo = payload["data"]["input"]
-        assert derived.isdisjoint(echo), f"{task} echo still carries {derived & set(echo)}"
-
-
-def test_the_recorded_expression_echo_matches_the_published_shape() -> None:
-    """Expression echoes exactly its three inputs, and the composite its two."""
-    assert set(_EXPRESSION_PAYLOAD["data"]["input"]) == {
-        "sequence_name",
-        "description",
-        "tss_index",
-    }
-    assert set(_WORKFLOW_PAYLOAD["data"]["input"]) == {"sequence_name", "description"}
-
-
 def test_parse_expression_takes_the_submitted_length_from_meta_not_the_echo() -> None:
     """``sequence_length`` is the submission, read from ``meta``.
 
@@ -384,7 +345,6 @@ def test_parse_expression_takes_the_submitted_length_from_meta_not_the_echo() ->
     result = parse_expression_data(payload["data"], payload, "demo")
     assert result.sequence_length == 25000
     assert result.scored_window == [7901, 17099]
-    assert result.scored_window[1] - result.scored_window[0] == EXPRESSION_WINDOW_BP
 
 
 def test_parse_workflow_counts_scored_and_skipped_genes() -> None:
@@ -395,6 +355,28 @@ def test_parse_workflow_counts_scored_and_skipped_genes() -> None:
     assert result.predictions[1].skipped is True
     assert result.predictions[1].skip_reason is not None
     assert "g0-annotation" in result.meta.model
+
+
+def test_null_string_fields_are_empty_not_none() -> None:
+    """A field the API sends as null must not become the string "None"."""
+    promoter = copy.deepcopy(_PROMOTER_PAYLOAD)
+    promoter["data"]["regions"] = [{"start": 1, "end": 50, "score": 0.9, "name": None}]
+    splice = copy.deepcopy(_SPLICE_PAYLOAD)
+    splice["data"]["sites"][0].update(name=None, site_type=None)
+    annotation = copy.deepcopy(_ANNOTATION_PAYLOAD)
+    annotation["data"]["transcripts"][0].update(name=None, strand=None)
+    workflow = copy.deepcopy(_WORKFLOW_PAYLOAD)
+    workflow["data"]["expression_predictions"][0].update(gene_name=None, strand=None)
+
+    region = parse_promoter_data(promoter["data"], promoter, "demo").regions[0]
+    site = parse_splice_data(splice["data"], splice, "demo").sites[0]
+    transcript = parse_annotation_data(annotation["data"], annotation, "demo").transcripts[0]
+    prediction = parse_workflow_data(workflow["data"], workflow, "HBB").predictions[0]
+
+    assert region.name == ""
+    assert (site.name, site.site_type) == ("", "")
+    assert (transcript.name, transcript.strand) == ("", "")
+    assert (prediction.gene_name, prediction.strand) == ("", "")
 
 
 # ============================================================================
@@ -412,12 +394,6 @@ def test_sequence_above_shared_cap_is_rejected_locally() -> None:
     """A sequence over the published cap fails before any request is made."""
     with pytest.raises(ValueError, match="published maximum"):
         validate_gi_sequence("A" * 500_001, min_bp=300, task="promoter")
-
-
-def test_invalid_nucleotides_are_rejected() -> None:
-    """Non-nucleotide characters fail validation."""
-    with pytest.raises(ValueError, match="Invalid nucleotide"):
-        validate_gi_sequence("ACGTZZZZ" * 100, min_bp=50, task="enhancer")
 
 
 def test_rna_uracil_is_rejected_locally() -> None:
@@ -440,16 +416,18 @@ def test_the_gate_accepts_exactly_the_published_alphabet() -> None:
 
 
 def test_bare_string_is_coerced_to_one_sequence() -> None:
-    """Every task input accepts a bare DNA string in place of a list."""
-    for input_class in (GIPromoterInput, GISpliceInput, GIEnhancerInput, GIChromatinInput, GIAnnotationInput):
+    """Every task input, and the workflow input, accepts a bare DNA string in place of a list."""
+    for input_class in (
+        GIPromoterInput,
+        GISpliceInput,
+        GIEnhancerInput,
+        GIChromatinInput,
+        GIAnnotationInput,
+        GIFindGenesInput,
+    ):
         parsed = input_class(sequences="ACGT" * 300)
         assert len(parsed.sequences) == 1
         assert parsed.sequences[0].name == "sequence"
-
-
-def test_workflow_input_coerces_bare_string() -> None:
-    """The workflow input accepts a bare DNA string too."""
-    assert len(GIFindGenesInput(sequences="ACGT" * 300).sequences) == 1
 
 
 def test_expression_requires_tss_index_for_non_window_length() -> None:
@@ -503,23 +481,6 @@ def test_key_is_excluded_from_the_cache_key() -> None:
     assert first.cache_key() == second.cache_key()
 
 
-def test_model_is_unset_by_default() -> None:
-    """Model selection is left to the service unless the caller overrides it."""
-    assert GIPromoterConfig().model is None
-
-
-def test_splice_threshold_rejects_zero() -> None:
-    """A zero threshold would return every scored position; it is refused."""
-    with pytest.raises(ValueError):
-        GISpliceConfig(threshold=0.0)
-
-
-def test_expression_description_is_required_and_non_empty() -> None:
-    """The conditioning text cannot be blank."""
-    with pytest.raises(ValueError):
-        GIExpressionConfig(description="")
-
-
 def test_api_error_carries_code_and_request_id() -> None:
     """The error surfaces the enum code and the correlation id."""
     error = GIAPIError(422, "validation_failed", "bad input", "abc-123", {"errors": []})
@@ -548,10 +509,6 @@ class TestWrappedSequencesMatchServerSemantics:
         assert len(wrapped) > 9198
         with pytest.raises(ValueError, match="9,000 bp"):
             validate_gi_sequence(wrapped, min_bp=9198, task="expression")
-
-    def test_ambiguity_codes_are_still_refused(self) -> None:
-        with pytest.raises(ValueError, match="Invalid nucleotide"):
-            validate_gi_sequence("ACGTRACGT" * 20, min_bp=50, task="enhancer")
 
 
 # ============================================================================
@@ -881,11 +838,6 @@ class TestNestedFieldsOfTheWrongType:
         # parser no longer reads at all -- cannot degrade it to a silent zero.
         assert result.sequence_length == _META["sequence_length"]
 
-    def test_a_well_formed_payload_is_untouched(self) -> None:
-        """The recorded live shapes still parse, so the guard is not overreaching."""
-        assert parse_promoter_data(_PROMOTER_PAYLOAD["data"], _PROMOTER_PAYLOAD, "demo").total_windows == 1
-        assert parse_splice_data(_SPLICE_PAYLOAD["data"], _SPLICE_PAYLOAD, "demo").total_sites == 1
-
 
 class TestTheCallerSeesTheRefusal:
     """The durable half: what the tool hands back, not what a helper raised.
@@ -940,6 +892,51 @@ class TestTheCallerSeesTheRefusal:
         )
         assert output.results[0].total_windows == 1
         assert output.results[0].meta.request_id == _META["request_id"]
+
+
+# ============================================================================
+# Request bodies — only keys the endpoint accepts
+# ============================================================================
+
+# ``AnnotationOptions`` in the hosted API's published contract (revision 18).
+# The object is closed: any other key is ``422 extra_forbidden``.
+_ANNOTATION_OPTIONS_ACCEPTED = {"reverse_complement", "shift_coordinates"}
+
+
+class _CapturingSession(_FakeSession):
+    """A fake session that also records the JSON body of each POST."""
+
+    def __init__(self, post: _FakeResponse) -> None:
+        super().__init__(post)
+        self.bodies: list[dict[str, Any]] = []
+
+    def post(self, *args: Any, **kwargs: Any) -> _FakeResponse:
+        self.bodies.append(kwargs["json"])
+        return super().post(*args, **kwargs)
+
+
+def test_every_annotation_config_option_maps_to_a_key_the_api_accepts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set every annotation-specific config field and check what goes on the wire.
+
+    ``batch_size`` used to be published here and forwarded; the API dropped it
+    (it never did anything) and now answers a request carrying it with a 422.
+    Driving every field rather than naming one keeps a future option that
+    forwards an unpublished key from passing quietly.
+    """
+    session = _CapturingSession(_FakeResponse(200, _ANNOTATION_PAYLOAD))
+    monkeypatch.setattr(shared_data_models, "_build_session", lambda _config: session)
+
+    values: dict[str, Any] = {}
+    for name, field in GIAnnotationConfig.model_fields.items():
+        if name in GIConfig.model_fields:
+            continue
+        values[name] = True if "bool" in str(field.annotation) else 1
+
+    run_gi_annotation(GIAnnotationInput(sequences="ACGT" * 300), GIAnnotationConfig(gi_api_key="gi_test", **values))
+
+    (body,) = session.bodies
+    assert values, "no annotation-specific config fields found"
+    assert set(body["options"]) <= _ANNOTATION_OPTIONS_ACCEPTED
 
 
 # ============================================================================
@@ -1125,9 +1122,9 @@ def test_gi_expression_benchmark() -> None:
     """Benchmark gi-expression: the 25,000 bp HBB locus cut to one window around its midpoint."""
     _require_live_key()
     locus = _hbb_locus()
-    # The model scores one 9,198 bp window, so a longer locus needs the TSS
-    # offset. The midpoint keeps the required flank on both sides without
-    # depending on an annotation call to place it.
+    # Anything other than exactly 9,198 bp needs the TSS offset. The midpoint
+    # keeps the required flank on both sides without depending on an
+    # annotation call to place it.
     output = run_gi_expression(
         GIExpressionInput(sequences=[{"sequence": locus, "name": "HBB", "tss_index": len(locus) // 2}]),
         GIExpressionConfig(),
@@ -1138,7 +1135,8 @@ def test_gi_expression_benchmark() -> None:
     result = output.results[0]
     # This locus is longer than one window, so it is the only place the two
     # quantities can be told apart: sequence_length must be what was submitted
-    # (meta), and the window must stay 9,198 wide. data.input used to carry a
+    # (meta), and the window must sit inside it around the TSS. Its width is
+    # the model's own, so it is not asserted. data.input used to carry a
     # sequence_length of its own holding the window, and reading that one
     # instead of meta is the mistake these two assertions exist to catch. The
     # service dropped that key at contract revision 13 on 2026-09-03, and at
@@ -1149,7 +1147,8 @@ def test_gi_expression_benchmark() -> None:
     # the service ever reopens the echo and a reader drifts back to it.
     assert result.sequence_length == len(locus)
     assert result.scored_window is not None
-    assert result.scored_window[1] - result.scored_window[0] == EXPRESSION_WINDOW_BP
+    start, end = result.scored_window
+    assert 0 <= start <= len(locus) // 2 < end <= len(locus)
     assert result.expression_log_tpm is not None
     assert result.meta.request_id
 

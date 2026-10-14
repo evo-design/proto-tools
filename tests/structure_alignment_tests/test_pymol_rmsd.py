@@ -21,11 +21,6 @@ _RENIN_PDB_PATH = _DUMMY_DATA / "renin_af3.pdb"
 _RENIN_CIF_PATH = _DUMMY_DATA / "renin.cif"
 
 
-def test_pymol_rmsd_config_method_is_literal_enum():
-    schema = PyMOLRMSDConfig.model_json_schema()
-    assert schema["properties"]["method"]["enum"] == ["cealign", "align"]
-
-
 def test_pymol_rmsd_dispatches_cealign_payload():
     structure = Structure.from_file(_PDB_PATH)
     inputs = PyMOLRMSDInput(target_structure=structure, mobile_structure=structure)

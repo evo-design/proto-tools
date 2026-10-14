@@ -219,7 +219,7 @@ def parse_promoter_data(data: dict[str, Any], payload: dict[str, Any], name: str
             start=int(region.get("start", 0)),
             end=int(region.get("end", 0)),
             score=float(region.get("score", 0.0)),
-            name=str(region.get("name", "")),
+            name=str(region.get("name") or ""),
         )
         for region in as_object_list(data.get("regions"), "data.regions")
     ]

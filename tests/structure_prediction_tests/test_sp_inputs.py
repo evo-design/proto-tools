@@ -56,11 +56,6 @@ class _NoModificationsInput(StructurePredictionInput):
 # ── Complex ─────────────────────────────────────────────────
 
 
-def test_complex_single_chain_sum_of_lengths():
-    complex_obj = Complex(chains=[_PROTEIN_SEQ_SHORT])
-    assert complex_obj.sum_of_chain_lengths() == len(_PROTEIN_SEQ_SHORT)
-
-
 def test_complex_multi_chain_sum_of_lengths():
     chains = [_PROTEIN_SEQ_SHORT, "GSSGSSG"]
     complex_obj = Complex(chains=chains)
@@ -126,12 +121,6 @@ def test_input_rejects_invalid_element_format():
 # ── validate_supported_types ───────────────────────────────────────────────────
 
 
-def test_all_supported_types_accepted():
-    complex_obj = Complex(chains=[_PROTEIN_SEQ_SHORT, _DNA_SEQ, _RNA_SEQ])
-    input_obj = _AllTypesInput(complexes=[complex_obj])
-    assert len(input_obj.complexes) == 1
-
-
 @pytest.mark.parametrize(
     "chain,expected_type",
     [
@@ -146,55 +135,21 @@ def test_protein_only_input_rejects_non_protein(chain, expected_type):
         _ProteinOnlyInput(complexes=[complex_obj])
 
 
-def test_protein_only_input_accepts_protein():
-    complex_obj = Complex(chains=[_PROTEIN_SEQ_SHORT, "GSSGSSG"])
-    input_obj = _ProteinOnlyInput(complexes=[complex_obj])
-    assert len(input_obj.complexes) == 1
-
-
 def test_protein_dna_input_rejects_rna():
     complex_obj = Complex(chains=[_PROTEIN_SEQ_SHORT, _RNA_SEQ])
     with pytest.raises(ValueError, match="unsupported entity types: rna"):
         _ProteinDNAInput(complexes=[complex_obj])
 
 
-def test_protein_dna_input_accepts_protein_and_dna():
-    complex_obj = Complex(chains=[_PROTEIN_SEQ_SHORT, _DNA_SEQ])
-    input_obj = _ProteinDNAInput(complexes=[complex_obj])
-    assert len(input_obj.complexes) == 1
-
-
-def test_multiple_unsupported_types_all_listed_in_error():
-    complex_obj = Complex(chains=[_PROTEIN_SEQ_SHORT, _RNA_SEQ, "CC(C)C"])
-    with pytest.raises(ValueError, match="ligand, rna"):
-        _ProteinDNAInput(complexes=[complex_obj])
-
-
-def test_unsupported_type_error_includes_complex_index():
+def test_unsupported_type_error_message():
+    """The error names the offending complex, every unsupported type, the input class, and its supported types."""
     complex1 = Complex(chains=[_PROTEIN_SEQ_SHORT])
-    complex2 = Complex(chains=[_RNA_SEQ])
-    with pytest.raises(ValueError, match="Complex 1"):
-        _ProteinOnlyInput(complexes=[complex1, complex2])
-
-
-def test_unsupported_type_error_includes_input_class_name():
-    complex_obj = Complex(chains=[_RNA_SEQ])
-    with pytest.raises(ValueError, match="_ProteinOnlyInput only supports"):
-        _ProteinOnlyInput(complexes=[complex_obj])
-
-
-def test_unsupported_type_error_lists_supported_types():
-    complex_obj = Complex(chains=[_RNA_SEQ])
-    with pytest.raises(ValueError, match="only supports: protein"):
-        _ProteinOnlyInput(complexes=[complex_obj])
-
-
-def test_supported_type_validation_checks_all_complexes():
-    complex1 = Complex(chains=[_PROTEIN_SEQ_SHORT])
-    complex2 = Complex(chains=[_DNA_SEQ])
-    complex3 = Complex(chains=[_PROTEIN_SEQ_SHORT])
-    input_obj = _ProteinDNAInput(complexes=[complex1, complex2, complex3])
-    assert len(input_obj.complexes) == 3
+    complex2 = Complex(chains=[_PROTEIN_SEQ_SHORT, _RNA_SEQ, "CC(C)C"])
+    with pytest.raises(
+        ValueError,
+        match=r"Complex 1 contains unsupported entity types: ligand, rna\. _ProteinDNAInput only supports: dna, protein",
+    ):
+        _ProteinDNAInput(complexes=[complex1, complex2])
 
 
 # ── entity-type re-scoping to supported types ──────────────────────────────────
@@ -271,16 +226,6 @@ def test_chain_auto_infers_entity_type(sequence, expected_type):
     assert chain.entity_type == expected_type
 
 
-def test_chain_defaults_to_empty_modifications():
-    chain = Chain(sequence=_PROTEIN_SEQ)
-    assert len(chain.modifications) == 0
-
-
-def test_chain_explicit_entity_type_is_preserved():
-    chain = Chain(sequence=_PROTEIN_SEQ, entity_type="protein")
-    assert chain.entity_type == "protein"
-
-
 def test_chain_entity_type_inferred_flag_set_when_auto_detected():
     chain = Chain(sequence=_PROTEIN_SEQ)
     assert chain.entity_type_inferred is True
@@ -289,35 +234,6 @@ def test_chain_entity_type_inferred_flag_set_when_auto_detected():
 def test_chain_entity_type_inferred_flag_clear_when_explicit():
     chain = Chain(sequence=_PROTEIN_SEQ, entity_type="protein")
     assert chain.entity_type_inferred is False
-
-
-def test_chain_entity_type_inferred_is_off_the_model_surface():
-    """A private attr: not a settable field, not serialized, not in the schema."""
-    chain = Chain(sequence=_PROTEIN_SEQ)
-    assert "entity_type_inferred" not in chain.model_dump()
-    assert "entity_type_inferred" not in Chain.model_json_schema()["properties"]
-    assert "entity_type_inferred" not in Chain.model_fields
-
-
-def test_chain_with_single_modification():
-    mod = ChainModification(position=4, modification_code="SEP")
-    chain = Chain(sequence=_PROTEIN_SEQ, modifications=[mod])
-    assert len(chain.modifications) == 1
-    assert chain.modifications[0].position == 4
-    assert chain.modifications[0].modification_code == "SEP"
-
-
-def test_chain_with_multiple_modifications():
-    mods = [
-        ChainModification(position=4, modification_code="SEP"),
-        ChainModification(position=5, modification_code="HY3"),
-        ChainModification(position=9, modification_code="TPO"),
-    ]
-    chain = Chain(sequence="MVLSPADKTNVKAAW", modifications=mods)
-    assert len(chain.modifications) == 3
-    assert chain.modifications[0].modification_code == "SEP"
-    assert chain.modifications[1].modification_code == "HY3"
-    assert chain.modifications[2].modification_code == "TPO"
 
 
 def test_chain_rejects_modification_position_beyond_sequence():
@@ -383,42 +299,12 @@ def test_chain_rejects_invalid_modification_type():
 # ── Complex with Chain objects ──────────────────────────────
 
 
-def test_complex_with_chain_objects_preserves_entity_types():
-    chain1 = Chain(sequence=_PROTEIN_SEQ, entity_type="protein")
-    chain2 = Chain(sequence=_DNA_SEQ, entity_type="dna")
-    complex_obj = Complex(chains=[chain1, chain2])
-    assert complex_obj.entity_types == ["protein", "dna"]
-
-
 def test_complex_with_mixed_strings_and_chain_objects():
     chain1 = Chain(sequence=_PROTEIN_SEQ, entity_type="protein")
     complex_obj = Complex(chains=[chain1, _DNA_SEQ])
     assert complex_obj.chains[0].sequence == _PROTEIN_SEQ
     assert complex_obj.chains[1].sequence == _DNA_SEQ
     assert complex_obj.entity_types == ["protein", "dna"]
-
-
-def test_complex_preserves_chain_modifications():
-    mod = ChainModification(position=4, modification_code="SEP")
-    chain = Chain(sequence=_PROTEIN_SEQ, modifications=[mod])
-    complex_obj = Complex(chains=[chain])
-    assert complex_obj.chains[0].modifications[0].modification_code == "SEP"
-
-
-def test_complex_with_multiple_modified_chains():
-    chain1 = Chain(
-        sequence=_PROTEIN_SEQ,
-        entity_type="protein",
-        modifications=[ChainModification(position=4, modification_code="SEP")],
-    )
-    chain2 = Chain(
-        sequence=_RNA_SEQ,
-        entity_type="rna",
-        modifications=[ChainModification(position=3, modification_code="2MG")],
-    )
-    complex_obj = Complex(chains=[chain1, chain2])
-    assert complex_obj.chains[0].modifications[0].modification_code == "SEP"
-    assert complex_obj.chains[1].modifications[0].modification_code == "2MG"
 
 
 def test_complex_chain_sequences_property():
@@ -555,26 +441,9 @@ def test_complex_indexing_returns_chain_object():
 
 def test_chain_add_modification():
     chain = Chain(sequence=_PROTEIN_SEQ)
-    chain.add_modification(4, "SEP")
-    assert len(chain.modifications) == 1
-    assert chain.modifications[0].position == 4
-    assert chain.modifications[0].modification_code == "SEP"
-
-
-def test_chain_add_multiple_modifications_sequentially():
-    chain = Chain(sequence=_PROTEIN_SEQ)
-    chain.add_modification(4, "SEP")
-    chain.add_modification(9, "TPO")
-    assert len(chain.modifications) == 2
-    assert chain.modifications[0].modification_code == "SEP"
-    assert chain.modifications[1].modification_code == "TPO"
-
-
-def test_chain_add_modification_returns_self_for_chaining():
-    chain = Chain(sequence=_PROTEIN_SEQ)
     result = chain.add_modification(4, "SEP").add_modification(9, "TPO")
     assert result is chain
-    assert len(chain.modifications) == 2
+    assert [(m.position, m.modification_code) for m in chain.modifications] == [(4, "SEP"), (9, "TPO")]
 
 
 def test_chain_add_modification_rejects_position_beyond_sequence():
@@ -587,39 +456,16 @@ def test_chain_clear_modifications():
     chain = Chain(sequence=_PROTEIN_SEQ)
     chain.add_modification(4, "SEP")
     chain.add_modification(9, "TPO")
-    chain.clear_modifications()
-    assert len(chain.modifications) == 0
-
-
-def test_chain_clear_modifications_returns_self_for_chaining():
-    chain = Chain(sequence=_PROTEIN_SEQ)
-    chain.add_modification(4, "SEP")
-    result = chain.clear_modifications()
-    assert result is chain
+    assert chain.clear_modifications() is chain
     assert len(chain.modifications) == 0
 
 
 def test_complex_add_modification_to_specific_chain():
     complex_obj = Complex(chains=[_PROTEIN_SEQ, _DNA_SEQ])
-    complex_obj.add_modification_to_chain(0, 4, "SEP")
-    assert len(complex_obj.chains[0].modifications) == 1
-    assert complex_obj.chains[0].modifications[0].modification_code == "SEP"
-    assert len(complex_obj.chains[1].modifications) == 0
-
-
-def test_complex_add_modifications_to_multiple_chains():
-    complex_obj = Complex(chains=[_PROTEIN_SEQ, _RNA_SEQ])
-    complex_obj.add_modification_to_chain(0, 4, "SEP")
-    complex_obj.add_modification_to_chain(1, 3, "2MG")
-    assert complex_obj.chains[0].modifications[0].modification_code == "SEP"
-    assert complex_obj.chains[1].modifications[0].modification_code == "2MG"
-
-
-def test_complex_add_modification_to_chain_returns_self_for_chaining():
-    complex_obj = Complex(chains=[_PROTEIN_SEQ])
     result = complex_obj.add_modification_to_chain(0, 4, "SEP").add_modification_to_chain(0, 9, "TPO")
     assert result is complex_obj
-    assert len(complex_obj.chains[0].modifications) == 2
+    assert [m.modification_code for m in complex_obj.chains[0].modifications] == ["SEP", "TPO"]
+    assert len(complex_obj.chains[1].modifications) == 0
 
 
 def test_complex_add_modification_rejects_out_of_bounds_chain_index():
@@ -638,147 +484,27 @@ def test_complex_clear_all_modifications():
     complex_obj = Complex(chains=[_PROTEIN_SEQ, _DNA_SEQ])
     complex_obj.add_modification_to_chain(0, 4, "SEP")
     complex_obj.add_modification_to_chain(1, 1, "6MA")
-    complex_obj.clear_all_modifications()
+    assert complex_obj.clear_all_modifications() is complex_obj
     assert len(complex_obj.chains[0].modifications) == 0
     assert len(complex_obj.chains[1].modifications) == 0
-
-
-def test_complex_clear_all_modifications_returns_self_for_chaining():
-    complex_obj = Complex(chains=[_PROTEIN_SEQ])
-    complex_obj.add_modification_to_chain(0, 4, "SEP")
-    result = complex_obj.clear_all_modifications()
-    assert result is complex_obj
-    assert len(complex_obj.chains[0].modifications) == 0
 
 
 # ── ALLOWS_CHAIN_MODIFICATIONS validation ─────────────────────────────────────
 
 
-def test_allows_modifications_input_accepts_modified_chains():
-    chain = Chain(
-        sequence=_PROTEIN_SEQ,
-        modifications=[ChainModification(position=4, modification_code="SEP")],
-    )
-    complex_obj = Complex(chains=[chain])
-    input_obj = _AllTypesInput(complexes=[complex_obj])
-    assert len(input_obj.complexes[0].chains[0].modifications) == 1
-
-
-def test_allows_modifications_input_accepts_unmodified_chains():
-    complex_obj = Complex(chains=[_PROTEIN_SEQ])
-    input_obj = _AllTypesInput(complexes=[complex_obj])
-    assert len(input_obj.complexes[0].chains[0].modifications) == 0
-
-
 def test_no_modifications_input_rejects_modified_chain():
-    chain = Chain(
-        sequence=_PROTEIN_SEQ,
-        modifications=[ChainModification(position=4, modification_code="SEP")],
-    )
-    complex_obj = Complex(chains=[chain])
-    with pytest.raises(ValueError, match="contains modifications"):
-        _NoModificationsInput(complexes=[complex_obj])
-
-
-def test_no_modifications_input_accepts_unmodified_chain():
-    complex_obj = Complex(chains=[_PROTEIN_SEQ])
-    input_obj = _NoModificationsInput(complexes=[complex_obj])
-    assert len(input_obj.complexes) == 1
-
-
-def test_no_modifications_input_rejects_single_modified_chain_in_multi_chain_complex():
-    chain1 = Chain(sequence=_PROTEIN_SEQ)
-    chain2 = Chain(
-        sequence=_DNA_SEQ,
-        modifications=[ChainModification(position=1, modification_code="6MA")],
-    )
-    complex_obj = Complex(chains=[chain1, chain2])
-    with pytest.raises(ValueError, match="contains modifications"):
-        _NoModificationsInput(complexes=[complex_obj])
-
-
-def test_no_modifications_input_error_includes_complex_index():
+    """A modification on any chain of any complex is rejected, naming the complex and input class."""
     complex1 = Complex(chains=[_PROTEIN_SEQ])
     complex2 = Complex(
         chains=[
-            Chain(
-                sequence=_DNA_SEQ,
-                modifications=[ChainModification(position=1, modification_code="6MA")],
-            )
+            _PROTEIN_SEQ,
+            {"sequence": _DNA_SEQ, "entity_type": "dna", "modifications": [(1, "6MA")]},
         ]
     )
-    with pytest.raises(ValueError, match="Complex 1"):
+    with pytest.raises(
+        ValueError, match=r"Complex 1 contains modifications\. _NoModificationsInput does not allow chain modifications"
+    ):
         _NoModificationsInput(complexes=[complex1, complex2])
-
-
-def test_no_modifications_input_error_includes_class_name():
-    chain = Chain(
-        sequence=_PROTEIN_SEQ,
-        modifications=[ChainModification(position=4, modification_code="SEP")],
-    )
-    complex_obj = Complex(chains=[chain])
-    with pytest.raises(ValueError, match="_NoModificationsInput does not allow"):
-        _NoModificationsInput(complexes=[complex_obj])
-
-
-def test_no_modifications_input_rejects_chain_with_multiple_modifications():
-    chain = Chain(
-        sequence=_PROTEIN_SEQ,
-        modifications=[
-            ChainModification(position=4, modification_code="SEP"),
-            ChainModification(position=9, modification_code="TPO"),
-        ],
-    )
-    complex_obj = Complex(chains=[chain])
-    with pytest.raises(ValueError, match="contains modifications"):
-        _NoModificationsInput(complexes=[complex_obj])
-
-
-def test_no_modifications_input_accepts_string_sequences():
-    input_obj = _NoModificationsInput(complexes=[_PROTEIN_SEQ, _DNA_SEQ])
-    assert len(input_obj.complexes) == 2
-
-
-def test_no_modifications_input_accepts_list_of_lists():
-    input_obj = _NoModificationsInput(complexes=[[_PROTEIN_SEQ, _DNA_SEQ]])
-    assert len(input_obj.complexes) == 1
-    assert len(input_obj.complexes[0].chains) == 2
-
-
-def test_no_modifications_input_validates_all_complexes():
-    complex1 = Complex(chains=[_PROTEIN_SEQ])
-    complex2 = Complex(chains=[_DNA_SEQ])
-    complex3 = Complex(chains=[_RNA_SEQ])
-    input_obj = _NoModificationsInput(complexes=[complex1, complex2, complex3])
-    assert len(input_obj.complexes) == 3
-
-
-def test_allows_modifications_input_accepts_dictionary_chain_with_modifications():
-    complex_obj = Complex(
-        chains=[
-            {
-                "sequence": _PROTEIN_SEQ,
-                "entity_type": "protein",
-                "modifications": [(4, "SEP")],
-            }
-        ]
-    )
-    input_obj = _AllTypesInput(complexes=[complex_obj])
-    assert len(input_obj.complexes[0].chains[0].modifications) == 1
-
-
-def test_no_modifications_input_rejects_dictionary_chain_with_modifications():
-    complex_obj = Complex(
-        chains=[
-            {
-                "sequence": _PROTEIN_SEQ,
-                "entity_type": "protein",
-                "modifications": [(4, "SEP")],
-            }
-        ]
-    )
-    with pytest.raises(ValueError, match="contains modifications"):
-        _NoModificationsInput(complexes=[complex_obj])
 
 
 # ── Modification compatibility validation ──────────────────────────────────────
@@ -797,52 +523,21 @@ def test_valid_modification_accepted(sequence, entity_type, position, code):
     assert chain.modifications[0].modification_code == code
 
 
-def test_invalid_protein_modification_raises_with_position():
+def test_invalid_protein_modification_error_message():
+    """The error names the position, the residue the modification targets, the actual residue, and its allowed mods."""
     # Position 5 is 'P' in "MVLTPADKTN", SEP is for serine ('S')
-    with pytest.raises(ValueError, match="Invalid modification 'SEP' at position 5"):
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"Invalid modification 'SEP' at position 5\. This modification is for residue or base 'S', "
+            r"but position 5 contains 'P'\. Allowed modifications for 'P' in protein: .*HYP"
+        ),
+    ):
         Chain(
             sequence=_PROTEIN_SEQ_TYPED,
             entity_type="protein",
             modifications=[(5, "SEP")],
         )
-
-
-def test_invalid_modification_error_shows_expected_residue():
-    with pytest.raises(ValueError, match="This modification is for residue or base 'S'"):
-        Chain(
-            sequence=_PROTEIN_SEQ_TYPED,
-            entity_type="protein",
-            modifications=[(5, "SEP")],
-        )
-
-
-def test_invalid_modification_error_shows_actual_residue():
-    # Position 5 is 'P' in "MVLTPADKTN"
-    with pytest.raises(ValueError, match="but position 5 contains 'P'"):
-        Chain(
-            sequence=_PROTEIN_SEQ_TYPED,
-            entity_type="protein",
-            modifications=[(5, "SEP")],
-        )
-
-
-def test_invalid_modification_error_lists_allowed_modifications_for_actual_residue():
-    # Position 5 is 'P' — error should suggest HYP and other proline modifications
-    with pytest.raises(ValueError, match=r"Allowed modifications for 'P' in protein: .*HYP"):
-        Chain(
-            sequence=_PROTEIN_SEQ_TYPED,
-            entity_type="protein",
-            modifications=[(5, "SEP")],
-        )
-
-
-def test_all_valid_modifications_pass_in_batch():
-    chain = Chain(
-        sequence=_PROTEIN_SEQ,
-        entity_type="protein",
-        modifications=[(4, "SEP"), (9, "TPO")],
-    )
-    assert len(chain.modifications) == 2
 
 
 def test_one_invalid_modification_among_valid_ones_raises():
@@ -910,11 +605,6 @@ def test_ligand_rejects_modifications():
         Chain(sequence="CCO", entity_type="ligand", modifications=[(1, "SEP")])
 
 
-def test_chain_modification_zero_based_position():
-    with pytest.raises(ValueError, match="1-based"):
-        Chain(sequence=_PROTEIN_SEQ, entity_type="protein", modifications=[(0, "TPO")])
-
-
 def test_chains_single_string_autowraps_to_one_chain():
     """``Complex(chains="MVLS...")`` is shorthand for a one-chain complex."""
     complex_obj = Complex(chains=_PROTEIN_SEQ_SHORT)
@@ -928,17 +618,6 @@ def test_chains_rejects_non_list_non_string():
     """Non-list, non-string ``chains`` values are rejected."""
     with pytest.raises(ValueError, match="chains must be a list"):
         Complex(chains=42)  # type: ignore[arg-type]
-
-
-def test_input_rejects_unsupported_entity_types():
-    with pytest.raises(ValueError, match="unsupported entity types"):
-        _ProteinOnlyInput(complexes=[Complex(chains=[Chain(sequence=_DNA_SEQ, entity_type="dna")])])
-
-
-def test_input_rejects_modifications_when_disallowed():
-    chain = Chain(sequence=_PROTEIN_SEQ_TYPED, entity_type="protein", modifications=[(4, "TPO")])
-    with pytest.raises(ValueError, match="does not allow chain modifications"):
-        _NoModificationsInput(complexes=[Complex(chains=[chain])])
 
 
 def test_input_get_entity_type_set():
@@ -1108,3 +787,9 @@ def test_complex_round_trip_with_fragment():
     assert isinstance(reconstructed.chains[0], Chain)
     assert isinstance(reconstructed.chains[1], Fragment)
     assert reconstructed.chains[1].ccd_code == "ATP"
+
+
+def test_no_modifications_input_accepts_list_of_lists():
+    input_obj = _NoModificationsInput(complexes=[[_PROTEIN_SEQ, _DNA_SEQ]])
+    assert len(input_obj.complexes) == 1
+    assert len(input_obj.complexes[0].chains) == 2

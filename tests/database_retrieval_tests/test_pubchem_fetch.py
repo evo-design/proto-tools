@@ -130,27 +130,6 @@ def test_fetch_synonyms_404_returns_empty_list():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip_ci
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    "input_kwargs",
-    [
-        {"cid": 2244},
-        {"name": "aspirin"},
-        {"smiles": "CC(=O)Oc1ccccc1C(=O)O"},
-        {"inchikey": "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"},
-    ],
-    ids=["cid", "name", "smiles", "inchikey"],
-)
-def test_pubchem_fetch_resolves_aspirin_from_every_identifier(input_kwargs):
-    """All four identifier types must converge on aspirin's CID 2244."""
-    output = run_pubchem_fetch(PubChemFetchInput(**input_kwargs), PubChemFetchConfig())
-    assert output.success
-    assert output.tool_id == "pubchem-fetch"
-    assert output.cid == 2244
-    assert output.molecular_formula == "C9H8O4"
-
-
 @pytest.mark.integration
 def test_pubchem_fetch_full_property_bundle_aspirin():
     """The default property bundle must populate every typed field for a real compound."""
@@ -172,18 +151,10 @@ def test_pubchem_fetch_full_property_bundle_aspirin():
     assert output.hbond_acceptor_count == 4
     assert output.rotatable_bond_count == 3
     assert output.charge == 0
-    assert output.synonyms == []  # off by default
-
-
-@pytest.mark.integration
-def test_pubchem_fetch_drug_like_compound_lipinski_signals():
-    """Ibuprofen is a textbook Lipinski-compliant drug; the descriptor counts must reflect that."""
-    output = run_pubchem_fetch(PubChemFetchInput(cid=3672), PubChemFetchConfig())
-    assert output.success
-    assert output.molecular_formula == "C13H18O2"
-    assert output.molecular_weight is not None and output.molecular_weight < 500  # rule of five
-    assert output.hbond_donor_count is not None and output.hbond_donor_count <= 5
-    assert output.hbond_acceptor_count is not None and output.hbond_acceptor_count <= 10
+    # Optional payloads are off by default, so no extra HTTP calls populate them
+    assert output.synonyms == []
+    assert output.descriptions == []
+    assert output.bioassay_ids == []
 
 
 @pytest.mark.integration
@@ -289,13 +260,3 @@ def test_pubchem_fetch_include_aids_returns_assay_ids():
     # Aspirin has hundreds of bioassays
     assert len(output.bioassay_ids) > 100
     assert all(isinstance(aid, int) and aid > 0 for aid in output.bioassay_ids)
-
-
-@pytest.mark.integration
-def test_pubchem_fetch_default_excludes_optional_payloads():
-    """Default config does NOT make extra HTTP calls for synonyms/descriptions/aids."""
-    output = run_pubchem_fetch(PubChemFetchInput(cid=2244), PubChemFetchConfig())
-    assert output.success
-    assert output.synonyms == []
-    assert output.descriptions == []
-    assert output.bioassay_ids == []

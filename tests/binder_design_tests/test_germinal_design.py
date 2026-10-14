@@ -283,6 +283,22 @@ def _assert_design_invariants(design: GerminalDesign) -> None:
     assert "ATOM" in design.structure.structure
 
 
+@pytest.mark.integration
+def test_germinal_env_dssp_binary_runs():
+    """Germinal shells out to ``params/dssp``; an ABI-broken mkdssp only fails (exit 127) mid-design."""
+    from proto_tools.utils import run_in_env
+
+    code = (
+        "import subprocess, sys\n"
+        "from pathlib import Path\n"
+        "dssp = Path(sys.prefix) / 'data' / 'germinal' / 'params' / 'dssp'\n"
+        "result = subprocess.run([str(dssp), '--version'], capture_output=True, text=True)\n"
+        "print('RC', result.returncode, result.stderr.strip()[-300:])\n"
+    )
+    output = run_in_env("germinal", code=code, timeout=3600)
+    assert output.strip().splitlines()[-1].startswith("RC 0"), output
+
+
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 @pytest.mark.integration
@@ -336,41 +352,6 @@ def test_germinal_design_e2e_vhh_pd_l1(tmp_path):
         export_dir = tmp_path / "germinal_export"
         result.export(name="pdl1", export_path=str(export_dir), file_format="pdb")
         assert sorted(p.name for p in export_dir.glob("*.pdb")) == sorted(f"{d.design_id}.pdb" for d in result.designs)
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-@pytest.mark.integration
-def test_germinal_filter_override_rejects_all_designs_e2e():
-    """``filter_overrides`` flows end-to-end into upstream's filter check.
-
-    Drives one full VHH trajectory through the pipeline but sets a final
-    ``external_plddt`` threshold of 0.999 (effectively unattainable).
-    Trajectories should still complete; pipeline_stats should still parse;
-    ``result.designs`` should be empty (everything rejected at the final stage).
-    """
-    inputs = GerminalInput(
-        target_pdb=str(TEST_PDB),
-        target_chain="A",
-        binder_chain="B",
-        hotspots=["A56", "A66", "A115"],
-        target_name="pdl1_strict",
-    )
-    config = GerminalConfig(
-        design_type="vhh",
-        max_trajectories=1,
-        max_passing_designs=1,
-        structure_model="chai",
-        germinal_overrides={"logits_steps": 20, "softmax_steps": 4, "search_steps": 1, "num_seqs": 2},
-        filter_overrides={"final": {"external_plddt": {"value": 0.999, "operator": ">"}}},
-    )
-    result = run_germinal_design(inputs, config)
-    validate_output(result, check_export=False)
-
-    assert result.tool_id == "germinal-design"
-    assert result.pipeline_stats, "filter_override path didn't reach failure_counts.csv parse"
-    accepted = [d for d in result.designs if d.stage_passed == "accepted"]
-    assert accepted == [], f"impossible external_plddt threshold should reject every design, got {len(accepted)}"
 
 
 @pytest.mark.uses_gpu

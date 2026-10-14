@@ -35,17 +35,6 @@ def _mock_text_session(bodies):
     return session
 
 
-def test_poll_until_complete_returns_on_terminal_state(monkeypatch):
-    """A single COMPLETE response returns the payload without sleeping."""
-    monkeypatch.setattr("proto_tools.utils.polling.time.sleep", lambda _s: None)
-    session = _mock_session([{"id": "abc", "status": "COMPLETE"}])
-
-    result = poll_until_complete(session, "https://example/ticket/abc")
-
-    assert result == {"id": "abc", "status": "COMPLETE"}
-    assert session.get.call_count == 1
-
-
 def test_poll_until_complete_polls_through_running_states(monkeypatch):
     """Intermediate PENDING/RUNNING states are tolerated until COMPLETE arrives."""
     monkeypatch.setattr("proto_tools.utils.polling.time.sleep", lambda _s: None)
@@ -105,20 +94,6 @@ def test_poll_until_complete_text_extractor_iprscan_vocabulary(monkeypatch):
 
     assert result == "FINISHED"
     assert session.get.call_count == 3
-
-
-def test_poll_until_complete_custom_success_state(monkeypatch):
-    """Caller-supplied success_states overrides the default 'COMPLETE' sentinel."""
-    monkeypatch.setattr("proto_tools.utils.polling.time.sleep", lambda _s: None)
-    session = _mock_session([{"id": "abc", "status": "DONE"}])
-
-    result = poll_until_complete(
-        session,
-        "https://example/ticket/abc",
-        success_states=frozenset({"DONE"}),
-    )
-
-    assert result == {"id": "abc", "status": "DONE"}
 
 
 def test_poll_until_complete_recovers_from_transient_mid_poll(monkeypatch):

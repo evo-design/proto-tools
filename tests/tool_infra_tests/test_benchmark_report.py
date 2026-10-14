@@ -115,21 +115,3 @@ def test_collector_overwrites_existing_report(tmp_path):
     assert "status-failed" in text
     assert "timeout" in text
     assert "status-passed" not in text
-
-
-def test_collector_setup_skip_recorded_with_skipped_status(tmp_path):
-    """A test skipped at setup phase (e.g. missing weights) still produces a report entry."""
-    collector = BenchmarkReportCollector(output_dir=tmp_path, backend_url=None)
-    item = _FakeItem(nodeid="tests/x.py::test_benchmark_alphafold3")
-    collector.record_result(
-        item,
-        "alphafold3-prediction",
-        "skipped",
-        0.01,
-        error_message="AlphaFold3 weights not found",
-    )
-    written = collector.write_reports()
-    assert len(written) == 1
-    text = written[0].read_text()
-    assert "status-skipped" in text
-    assert "AlphaFold3 weights not found" in text

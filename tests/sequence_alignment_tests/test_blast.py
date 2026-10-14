@@ -126,11 +126,6 @@ def test_input_raw_sequence():
     assert BlastSearchInput(query="ATGCGTAAA").query_type == "sequence"
 
 
-def test_input_protein_sequence():
-    inp = BlastSearchInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT")
-    assert inp.query_type == "sequence"
-
-
 def test_input_long_sequence_not_treated_as_path():
     # A sequence longer than the filesystem's NAME_MAX (255) once made the
     # path probe raise OSError(ENAMETOOLONG) instead of classifying it as a
@@ -169,12 +164,6 @@ def test_config_local_requires_db():
         BlastSearchConfig(search_mode="local")
 
 
-def test_config_local_with_db():
-    config = BlastSearchConfig(search_mode="local", local_db="/data/blast/nr")
-    assert config.search_mode == "local"
-    assert config.local_db == "/data/blast/nr"
-
-
 def test_config_online_only_warns_in_local(caplog):
     import logging
 
@@ -202,12 +191,6 @@ def test_config_local_only_warns_in_online(caplog):
 
 
 # ── XML → DataFrame parsing ───────────────────────────────────────────────
-
-
-def test_results_to_hits_empty():
-    hits = _blast_results_to_hits([])
-    assert len(hits) == 0
-    assert isinstance(hits, list)
 
 
 def test_results_to_hits_field_values():
@@ -380,6 +363,9 @@ def test_local_blastn_exact_match(nucl_blast_db):
     )
     assert result.num_hits >= 1
     assert result.hits[0].pident == pytest.approx(100.0)
+    assert result.execution_time > 0
+    assert result.metadata["search_mode"] == "local"
+    assert result.metadata["program"] == "blastn"
 
 
 @pytest.mark.integration
@@ -413,40 +399,6 @@ def test_local_blastn_fasta_file_query(nucl_blast_db, tmp_path):
         ),
     )
     assert result.num_hits >= 1
-
-
-@pytest.mark.integration
-def test_local_blastn_output_structure(nucl_blast_db):
-    """Verify output metadata and hits structure."""
-    query = "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTTATGCGTAAACCCGGGTTTTTTAAACCC"
-    result = run_blast_search(
-        BlastSearchInput(query=query),
-        BlastSearchConfig(
-            search_mode="local",
-            program="blastn",
-            local_db=nucl_blast_db,
-            task="blastn",
-        ),
-    )
-    assert isinstance(result, BlastSearchOutput)
-    assert result.execution_time > 0
-    assert result.metadata["search_mode"] == "local"
-    assert result.metadata["program"] == "blastn"
-    # Verify BlastHit has expected fields
-    assert len(result.hits) > 0
-    hit = result.hits[0]
-    assert hasattr(hit, "qseqid")
-    assert hasattr(hit, "sseqid")
-    assert hasattr(hit, "pident")
-    assert hasattr(hit, "length")
-    assert hasattr(hit, "mismatch")
-    assert hasattr(hit, "gapopen")
-    assert hasattr(hit, "qstart")
-    assert hasattr(hit, "qend")
-    assert hasattr(hit, "sstart")
-    assert hasattr(hit, "send")
-    assert hasattr(hit, "evalue")
-    assert hasattr(hit, "bitscore")
 
 
 @pytest.mark.integration
@@ -504,58 +456,6 @@ def test_online_blastp():
 
 
 @pytest.mark.integration
-@pytest.mark.skip_ci
-def test_online_blastn():
-    """Search a short nucleotide sequence against nt → verify structure."""
-    # Human beta-globin exon 1 fragment
-    query = "ATGGTGCATCTGACTCCTGAGGAGAAGTCTGCCGTTACTGCCCTGTGGGGCAAGGTG"
-    result = run_blast_search(
-        BlastSearchInput(query=query),
-        BlastSearchConfig(
-            search_mode="online",
-            program="blastn",
-            database="nt",
-            hitlist_size=5,
-            entrez_query="Homo sapiens[Organism]",
-        ),
-    )
-    assert isinstance(result, BlastSearchOutput)
-    assert result.success, f"BLAST search failed: {result.errors}"
-    assert result.num_hits >= 1
-    # Verify BlastHit has expected fields
-    assert len(result.hits) > 0
-    hit = result.hits[0]
-    assert hasattr(hit, "qseqid")
-    assert hasattr(hit, "sseqid")
-    assert hasattr(hit, "pident")
-    assert hasattr(hit, "length")
-    assert hasattr(hit, "mismatch")
-    assert hasattr(hit, "gapopen")
-    assert hasattr(hit, "qstart")
-    assert hasattr(hit, "qend")
-    assert hasattr(hit, "sstart")
-    assert hasattr(hit, "send")
-    assert hasattr(hit, "evalue")
-    assert hasattr(hit, "bitscore")
-
-
-@pytest.mark.integration
-def test_create_blast_db(tmp_path):
-    """Create a nucleotide BLAST database and verify output."""
-    fasta = tmp_path / "test.fasta"
-    fasta.write_text(">seq1\nATGCGTAAA\n>seq2\nCCCGGGTTT\n")
-
-    result = run_create_blast_db(
-        CreateBlastDbInput(fasta=str(fasta)),
-        CreateBlastDbConfig(dbtype="nucl", title="Test DB"),
-    )
-
-    assert result.success is True
-    assert Path(result.db_path).parent.resolve() == fasta.parent.resolve()
-    assert result.execution_time > 0
-
-
-@pytest.mark.integration
 def test_full_pipeline_create_db_search_export(tmp_path):
     """Full pipeline: create database → search → export results."""
     # Create database
@@ -563,8 +463,10 @@ def test_full_pipeline_create_db_search_export(tmp_path):
     fasta.write_text(_NUCL_DB_FASTA)
     db_result = run_create_blast_db(
         CreateBlastDbInput(fasta=str(fasta)),
-        CreateBlastDbConfig(dbtype="nucl"),
+        CreateBlastDbConfig(dbtype="nucl", title="Test DB"),
     )
+    assert db_result.success is True
+    assert Path(db_result.db_path).parent.resolve() == fasta.parent.resolve()
 
     # Search
     query = "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTTATGCGTAAACCCGGGTTTTTTAAACCC"

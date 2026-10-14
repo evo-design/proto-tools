@@ -19,7 +19,6 @@ from proto_tools.tools.structure_prediction import (
 from proto_tools.tools.structure_prediction.chai1.helpers import count_chai1_tokens
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
-    Complex,
 )
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
@@ -72,6 +71,25 @@ def test_msa_to_pqt_without_unpaired_keeps_paired_only(tmp_path):
     assert df["pairing_key"].tolist() == ["", "1", "2"]
 
 
+@pytest.mark.integration
+def test_chai1_env_parses_msa_pqt(tmp_path):
+    """The chai1 env reads the MSA parquet proto-tools writes (needs a NumPy 1.x-compatible pyarrow)."""
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.chai1.chai1 import _msa_to_pqt_file
+    from proto_tools.utils import run_in_env
+
+    pqt_path = tmp_path / "chain.aligned.pqt"
+    _msa_to_pqt_file(msa=MSA(aligned_sequences=["MKTAYIAKQR", "MKTAYIAKQA", "MKTAYIAKQE"]), pqt_path=str(pqt_path))
+
+    code = (
+        "import sys\n"
+        "from chai_lab.data.parsing.msas.aligned_pqt import parse_aligned_pqt_to_msa_context\n"
+        "print(parse_aligned_pqt_to_msa_context(sys.argv[1]).depth)\n"
+    )
+    output = run_in_env("chai1", code=code, args=[str(pqt_path)], timeout=1800)
+    assert output.strip().splitlines()[-1] == "3"
+
+
 @pytest.mark.benchmark("chai1-prediction")
 @pytest.mark.slow
 @pytest.mark.uses_gpu
@@ -103,8 +121,3 @@ def test_count_chai1_tokens_glycan_sums_sugar_heavy_atoms():
         Chain(sequence="MAN(6-1 FUC)(4-1 MAN)", entity_type="glycan"),
     ]
     assert count_chai1_tokens(chains) == 4 + 12 + 11 + 12  # protein 4 + MAN 12 + FUC 11 + MAN 12
-
-
-def test_chai1_input_within_token_budget_passes():
-    """A small protein + small ligand stays well under 2048 tokens."""
-    Chai1Input(complexes=[Complex(chains=["MKTL", "CCO"])])

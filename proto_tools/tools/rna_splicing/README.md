@@ -6,4 +6,4 @@ resolution, for analyzing alternative splicing and isoform usage. They help anti
 an edit changes which splice sites are used.
 
 - **Input:** an RNA or DNA sequence, or a sequence variant.
-- **Output:** per-position splice donor and acceptor probabilities, or a predicted change in splicing for a variant.
+- **Output:** per-position splice donor and acceptor probabilities, predicted splice junctions and transcripts, or a predicted change in splicing for a variant.

@@ -3,7 +3,7 @@
 set -euo pipefail
 source standalone_helpers.sh
 
-proto_check_gated_hf_repo "google/alphagenome-all-folds" "https://huggingface.co/google/alphagenome-all-folds" "README.md"
+proto_check_gated_hf_repo "google/alphagenome-all-folds" "https://huggingface.co/google/alphagenome-all-folds"
 
 echo "Setting up AlphaGenome standalone environment..."
 

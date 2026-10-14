@@ -237,6 +237,8 @@ module = [
     "tensorflow.*",
     "keras.*",
     "spliceai.*",
+    "spliceai2.*",
+    "pyfaidx.*",
     "inference.*",
     "malinois_scoring",
     "malinois_scoring.*",
@@ -421,6 +423,7 @@ exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*
 "proto_tools.modal.rna_splicing.pangolin_deployment" = ["README.md"]
 "proto_tools.modal.rna_splicing.splice_transformer_deployment" = ["README.md"]
 "proto_tools.modal.rna_splicing.spliceai_deployment" = ["README.md"]
+"proto_tools.modal.rna_splicing.spliceai2_deployment" = ["README.md"]
 "proto_tools.modal.sequence_alignment.mafft_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.alphagenome_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.borzoi_deployment" = ["README.md"]

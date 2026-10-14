@@ -43,7 +43,7 @@ from docstring_parser import DocstringStyle
 from docstring_parser import parse as parse_docstring
 from pydantic import BaseModel, Field
 
-from proto_tools.utils.tool_io import Directionality, Metrics
+from proto_tools.utils.tool_io import Directionality, Metrics, _extra_dict
 
 logger = logging.getLogger(__name__)
 
@@ -631,6 +631,10 @@ def _format_default(field_info: Any) -> Any:
     """
     if field_info.is_required():
         return None
+
+    credential_env_var = _extra_dict(field_info).get("credential")
+    if credential_env_var:
+        return EnvVarDefault(f"${credential_env_var}")
 
     factory = getattr(field_info, "default_factory", None)
     if factory is not None:

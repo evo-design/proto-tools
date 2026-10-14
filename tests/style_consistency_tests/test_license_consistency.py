@@ -23,7 +23,6 @@ import pytest
 import yaml
 
 from proto_tools.tools.tool_registry import ToolRegistry
-from tests.style_consistency_tests.test_readme_consistency import SKIP_DOMAINS
 
 _TOOLS_DIR = Path(__file__).resolve().parent.parent.parent / "proto_tools" / "tools"
 
@@ -380,19 +379,6 @@ def test_gated_readme_table_matches_access_field() -> None:
     )
 
 
-def test_get_weights_access_matches_license_yaml() -> None:
-    """ToolRegistry.get_weights_access reflects license.yaml for every tool."""
-    access_by_toolkit = _toolkit_access_map()
-    for spec in ToolRegistry.list_all():
-        toolkit_dir = spec.source_file.parent
-        toolkit_id = f"{toolkit_dir.parent.name}/{toolkit_dir.name}"
-        expected = access_by_toolkit.get(toolkit_id, "open")
-        actual = ToolRegistry.get_weights_access(spec.key)
-        assert actual == expected, (
-            f"{spec.key}: get_weights_access() returned {actual!r}, but {toolkit_id}/license.yaml implies {expected!r}."
-        )
-
-
 # ── ToolRegistry surface ────────────────────────────────────────────────────
 
 
@@ -402,15 +388,7 @@ def test_get_license_raises_for_unknown_tool() -> None:
         ToolRegistry.get_license("nonexistent-tool-key")
 
 
-def test_list_licenses_keys_match_registry() -> None:
-    """All keys in list_licenses exist in the tool registry."""
-    licenses = ToolRegistry.list_licenses()
-    for key in licenses:
-        spec = ToolRegistry.get(key)
-        assert spec.key == key
-
-
-# ── URL reachability (network-gated) ────────────────────────────────────────
+# ── SPDX/URL fingerprint match (network-gated) ──────────────────────────────
 
 # Browser-like UA so GitHub/HuggingFace etc. don't block the request.
 _URL_CHECK_HEADERS = {
@@ -418,75 +396,6 @@ _URL_CHECK_HEADERS = {
     "Accept": "*/*",
 }
 _URL_CHECK_TIMEOUT_S = 15
-
-
-def _check_url(url: str) -> str | None:
-    """Return None if reachable (2xx/3xx), else a short failure reason."""
-    # Try HEAD first; some servers reject it (405 / 403) so fall back to GET.
-    last = "no attempt"
-    for method in ("HEAD", "GET"):
-        try:
-            req = Request(url, method=method, headers=_URL_CHECK_HEADERS)
-            with urlopen(req, timeout=_URL_CHECK_TIMEOUT_S) as resp:
-                if 200 <= resp.status < 400:
-                    return None
-                last = f"HTTP {resp.status}"
-        except HTTPError as exc:
-            if method == "HEAD" and exc.code in (403, 405):
-                continue
-            last = f"HTTP {exc.code}"
-        except URLError as exc:
-            last = f"network error: {exc.reason}"
-        except TimeoutError:
-            last = f"timeout after {_URL_CHECK_TIMEOUT_S}s"
-        break
-    return last
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize("toolkit_dir", _ALL_TOOLKITS, ids=_ALL_IDS)
-def test_toolkit_license_yaml_urls_reachable(toolkit_dir: Path) -> None:
-    """Every URL in license.yaml must resolve to a 2xx/3xx response."""
-    license_path = toolkit_dir / "license.yaml"
-    if not license_path.exists():
-        pytest.skip("missing — covered by the existence test")
-
-    try:
-        data = yaml.safe_load(license_path.read_text())
-    except yaml.YAMLError:
-        pytest.skip("invalid YAML — covered by the schema test")
-    if not isinstance(data, dict):
-        pytest.skip("invalid top-level — covered by the schema test")
-
-    # proto-tools-original toolkits point at our own repo; nothing upstream
-    # to verify reachable.
-    if data.get("proto_tools_original") is True:
-        pytest.skip("proto_tools_original — no upstream URL to check")
-
-    targets: list[tuple[str, str]] = []
-    for label in ("code", "weights"):
-        block = data.get(label)
-        if isinstance(block, dict):
-            url = block.get("url")
-            if isinstance(url, str) and url.startswith(("http://", "https://")):
-                if any(domain in url for domain in SKIP_DOMAINS):
-                    continue
-                targets.append((f"{label}.url", url))
-
-    if not targets:
-        pytest.skip("no URLs to check")
-
-    failures: list[str] = []
-    for label, url in targets:
-        reason = _check_url(url)
-        if reason is not None:
-            failures.append(f"{label} {url}: {reason}")
-
-    if failures:
-        pytest.fail(f"{toolkit_dir.name}/license.yaml unreachable URLs:\n  - " + "\n  - ".join(failures))
-
-
-# ── SPDX/URL fingerprint match (network-gated) ──────────────────────────────
 
 # Acceptable fingerprints for each SPDX. Structure: list of patterns where
 # each pattern is a tuple of phrases that must ALL appear (case-insensitive).

@@ -99,7 +99,7 @@ Use this to annotate assembled contigs or synthetic constructs where no referenc
 
 ### GI Gene Expression (`gi-expression`)
 
-Predicts expression as log(TPM+1) from a single 9,198 bp window centred on a transcription start site, conditioned on a free-text description of the experimental context.
+Predicts expression as log(TPM+1) from the sequence around a transcription start site, conditioned on a free-text description of the experimental context.
 
 #### Applications
 
@@ -107,9 +107,9 @@ Use this to estimate the transcriptional output of a locus or a designed promote
 
 #### Usage Tips
 
-- **The window is exact.** Submit exactly 9,198 bp centred on the TSS, or a longer locus plus `tss_index` and let the service cut it. Under-length input is rejected rather than padded.
+- **Give it enough flank.** Submit at least 9,198 bp with the TSS at least 4,599 bp from each end, plus `tss_index` unless the sequence is exactly 9,198 bp. Each model's `bio_spec.recommended_flank_bp` says how much to fetch on each side of the TSS. A TSS too close to either end is rejected rather than padded.
 - **`description` is conditioning text, not a label.** It is fed to the model, so rewording it changes the prediction. Hold it fixed across runs you intend to compare.
-- **An in-range but wrong `tss_index` still scores.** It simply scores a different window, so the tool reads the applied window back from the response rather than assuming the request's.
+- **An in-range but wrong `tss_index` still scores.** It simply scores a different window, so the tool reads the applied window back from the response as `scored_window` rather than assuming it. Its width depends on the model.
 - **The sequence is never reverse-complemented.** Submit minus-strand genes in transcript orientation.
 
 ### GI Find Genes and Predict Expression (`gi-find-genes-and-predict-expression`)

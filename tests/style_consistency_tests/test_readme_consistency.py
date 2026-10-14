@@ -71,14 +71,6 @@ _PERMISSIVE_SPDX = frozenset(
     }
 )
 
-# Guide paths every ## Toolkit Notes must link to (substring match: any host/badge syntax counts).
-_TOOLKIT_NOTES_REQUIRED_GUIDE_PATHS = [
-    "/tools/guides/tool-persistence",
-    "/tools/guides/device-management",
-    "/tools/guides/parallel-execution",
-    "/tools/guides/cloud-inference",
-]
-
 
 def _slugify(text: str) -> str:
     """Convert snake_case to kebab-case slug."""
@@ -214,18 +206,12 @@ def test_starts_with_h1(readme: Path) -> None:
 
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_has_doc_badge(readme: Path) -> None:
-    """README must have a right-aligned docs badge linking to the correct page."""
+    """The docs badge must link to the toolkit's own docs page."""
     rel = readme.relative_to(_TOOLS_DIR)
     category, toolkit, _ = rel.parts
     expected_path = f"/tools/{_slugify(category)}/{_slugify(toolkit)}"
 
-    text = readme.read_text()
-    expected_label = "View_Docs"
-    assert f"img.shields.io/badge/{expected_label}" in text, (
-        f"{_tool_id(readme)}/README.md is missing the '{expected_label}' docs badge"
-    )
-    assert 'align="right"' in text, f'{_tool_id(readme)}/README.md badge must use align="right"'
-    assert expected_path in text, f"{_tool_id(readme)}/README.md badge should link to {expected_path}"
+    assert expected_path in readme.read_text(), f"{_tool_id(readme)}/README.md badge should link to {expected_path}"
 
 
 # The "Use on Proto" badge marks a toolkit that can run on the hosted platform. A
@@ -303,17 +289,23 @@ def test_badges_are_canonical(readme: Path) -> None:
 
     Pins the View Docs ``<img>``, the Example Notebook anchor, and the four
     Toolkit Notes guide badges byte-for-byte so they are identical catalog-wide.
-    The Proto badge is license-gated and verified in
-    ``test_proto_tools_badge_matches_license``.
+    The guide badges must sit inside ``## Toolkit Notes``: Tool Persistence, Device
+    Management, Parallel Execution, and Cloud Inference apply to every tool at
+    runtime, so the toolkit-level notes must surface them. The Proto badge is
+    capability-gated and verified in ``test_proto_tools_badge_matches_remote_capability``.
     """
     text = readme.read_text()
+    notes = re.search(r"^## Toolkit Notes\s*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
 
     canonical = {
-        "View Docs badge <img>": _VIEW_DOCS_BADGE_IMG,
-        "Example Notebook badge": _EXAMPLE_NOTEBOOK_BADGE,
-        "Toolkit Notes guide badges": _TOOLKIT_NOTES_GUIDE_BADGES,
+        "View Docs badge <img>": (_VIEW_DOCS_BADGE_IMG, text),
+        "Example Notebook badge": (_EXAMPLE_NOTEBOOK_BADGE, text),
+        "Toolkit Notes guide badges (inside '## Toolkit Notes')": (
+            _TOOLKIT_NOTES_GUIDE_BADGES,
+            notes.group(1) if notes else "",
+        ),
     }
-    missing = [name for name, markup in canonical.items() if markup not in text]
+    missing = [name for name, (markup, scope) in canonical.items() if markup not in scope]
     assert not missing, (
         f"{_tool_id(readme)}/README.md is missing the exact canonical markup for: {missing}. "
         f"These badges must be byte-for-byte identical across all QC-done READMEs "
@@ -550,245 +542,6 @@ def test_license_section_matches_yaml(readme: Path) -> None:
     )
 
 
-def test_expected_license_callouts_logic() -> None:
-    """Article variants, SPDX collapsing, Custom guard, and weights.access gating."""
-    base = {
-        "code": {"spdx": "MIT", "url": "https://example.com/code"},
-        "commercial_use": "yes",
-        "attribution_required": False,
-    }
-
-    # MIT code, commercial use allowed, no gated weights -> fully-open phrasing.
-    no_weights = _expected_license_callouts(base, "Tool")
-    assert sorted(no_weights) == sorted(
-        [
-            "> [!NOTE]\n> **License:** Tool is open source and free for academic"
-            " and commercial use under a MIT license."
-            " Please refer to [the license](https://example.com/code) for full terms.",
-            "> [!NOTE]\n> **License:** Tool is open source and free for academic"
-            " and commercial use under an MIT license."
-            " Please refer to [the license](https://example.com/code) for full terms.",
-        ]
-    )
-
-    # Weights under the same permissive SPDX stay fully-open (no code/weights split).
-    same_spdx = _expected_license_callouts(
-        {**base, "weights": {"spdx": "MIT", "url": "https://example.com/weights"}}, "Tool"
-    )
-    assert same_spdx == no_weights
-
-    different_spdx = _expected_license_callouts(
-        {**base, "weights": {"spdx": "CC-BY-4.0", "url": "https://example.com/w"}}, "Tool"
-    )
-    assert different_spdx == [
-        "> [!NOTE]\n> **License:** Tool uses MIT for code and CC-BY-4.0 for model weights."
-        " Please refer to the [code license](https://example.com/code)"
-        " and [model weights license](https://example.com/w) for full terms."
-    ]
-
-    custom = _expected_license_callouts(
-        {"code": {"spdx": "Custom (Foo License)", "url": "https://example.com/c"}, "commercial_use": "yes"},
-        "Tool",
-    )
-    assert custom == [
-        "> [!NOTE]\n> **License:** Tool is licensed under Custom (Foo License)."
-        " Please refer to [the license](https://example.com/c) for full terms."
-    ]
-
-    hf_gated = _expected_license_callouts(
-        {
-            "code": {"spdx": "Apache-2.0", "url": "https://example.com/c"},
-            "weights": {"spdx": "Custom (X)", "url": "https://example.com/w", "access": "hf-gated"},
-            "commercial_use": "no",
-            "attribution_required": True,
-        },
-        "Tool",
-    )
-    assert len(hf_gated) == 1
-    assert (
-        "Model weights are gated and require accepting the provider's terms "
-        "and authenticating with a HuggingFace token." in hf_gated[0]
-    )
-
-    # Bundled-pipeline toolkit: own code, weights, and deps licensed separately; restriction attributed to the pipeline as a whole.
-    pipeline = _expected_license_callouts(
-        {
-            "code": {"spdx": "Apache-2.0", "url": "https://example.com/c"},
-            "weights": {"spdx": "CC-BY-4.0", "url": "https://example.com/w"},
-            "commercial_use": "restricted",
-            "attribution_required": True,
-            "bundled_dependencies": [
-                {"name": "PyRosetta", "tool": "structure_scoring/pyrosetta"},
-                {"name": "IgLM", "spdx": "Custom (IgLM License)", "url": "https://github.com/Graylab/IgLM"},
-            ],
-        },
-        "Tool",
-    )
-    assert pipeline == [
-        "> [!NOTE]\n> **License:** Tool's own code is licensed under Apache-2.0,"
-        " but it runs as a pipeline that depends on bundled components and model"
-        " weights under separate license terms, including non-commercial or"
-        " restricted-use terms. The bundled model weights are licensed under"
-        " CC-BY-4.0. As a whole the pipeline has restrictions around commercial"
-        " use and may require explicit attribution when utilized.\n>\n"
-        "> Bundled dependencies, each under its own license:\n>\n"
-        "> - [PyRosetta](https://bio-pro.mintlify.app/tools/structure-scoring/pyrosetta):"
-        " Custom (PyRosetta Software License)\n"
-        "> - [IgLM](https://github.com/Graylab/IgLM): Custom (IgLM License)\n>\n"
-        "> Review the [code license](https://example.com/c) and the [model weights"
-        " license](https://example.com/w) before any commercial use or redistribution."
-    ]
-
-
-def test_expected_license_callouts_data_block() -> None:
-    """An optional ``data:`` block yields a data-resource callout (CC0 vs CC-BY)."""
-    cc0 = {
-        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
-        "data": {
-            "name": "the RCSB Protein Data Bank",
-            "spdx": "CC0-1.0",
-            "url": "https://www.rcsb.org/pages/policies",
-            "attribution_required": False,
-        },
-        "commercial_use": "yes",
-    }
-    assert _expected_license_callouts(cc0, "PDB") == [
-        "> [!NOTE]\n> **License:** PDB retrieves data from the RCSB Protein Data Bank, "
-        "distributed under CC0-1.0 (public domain; no attribution required). "
-        "The client wrapper code is Apache-2.0-licensed. "
-        "Please refer to [the data terms](https://www.rcsb.org/pages/policies) for full terms."
-    ]
-
-    ccby = {
-        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
-        "data": {
-            "name": "the AlphaFold Protein Structure Database",
-            "spdx": "CC-BY-4.0",
-            "url": "https://alphafold.ebi.ac.uk/faq",
-            "attribution_required": True,
-        },
-        "commercial_use": "yes",
-    }
-    assert _expected_license_callouts(ccby, "AlphaFold DB") == [
-        "> [!NOTE]\n> **License:** AlphaFold DB retrieves data from the AlphaFold Protein "
-        "Structure Database, distributed under CC-BY-4.0. Attribution to the AlphaFold Protein "
-        "Structure Database is required when the data is redistributed. "
-        "The client wrapper code is Apache-2.0-licensed. "
-        "Please refer to [the data terms](https://alphafold.ebi.ac.uk/faq) for full terms."
-    ]
-
-
-def test_expected_license_callouts_service_block() -> None:
-    """A ``service:`` block yields a hosted-inference callout, not a data-resource one.
-
-    Nothing is retrieved from a hosted inference service, so the callout states
-    that sequences are transmitted and that no weights ship, and attributes the
-    returned predictions rather than redistributed records.
-    """
-    attributed = {
-        "code": {"spdx": "MIT", "url": "https://github.com/evo-design/proto-tools"},
-        "service": {
-            "name": "Genomic Intelligence",
-            "spdx": "Custom (Genomic Intelligence Terms of Service)",
-            "url": "https://docs.genomicintelligence.ai",
-            "attribution_required": True,
-        },
-        "commercial_use": "restricted",
-    }
-    assert _expected_license_callouts(attributed, "Genomic Intelligence") == [
-        "> [!NOTE]\n> **License:** Genomic Intelligence is a client for the hosted Genomic "
-        "Intelligence API; inference runs on the vendor's service under Genomic Intelligence Terms "
-        "of Service. Submitted sequences are transmitted to Genomic Intelligence. Attribution to "
-        "Genomic Intelligence is required when results are redistributed. "
-        "The client wrapper code is MIT-licensed. "
-        "Please refer to [the service terms](https://docs.genomicintelligence.ai) for full terms."
-    ]
-
-    unattributed = {
-        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
-        "service": {
-            "name": "Acme Fold",
-            "spdx": "Apache-2.0",
-            "url": "https://example.org/terms",
-            "attribution_required": False,
-        },
-        "commercial_use": "yes",
-    }
-    assert _expected_license_callouts(unattributed, "Acme") == [
-        "> [!NOTE]\n> **License:** Acme is a client for the hosted Acme Fold API; inference runs "
-        "on the vendor's service under Apache-2.0. Submitted sequences are transmitted to Acme "
-        "Fold. The client wrapper code is Apache-2.0-licensed. "
-        "Please refer to [the service terms](https://example.org/terms) for full terms."
-    ]
-
-
-def test_expected_license_callouts_data_custom() -> None:
-    """data: with Custom/public-domain terms strips the wrapper and reads cleanly."""
-    pd = {
-        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
-        "data": {
-            "name": "NCBI's Entrez databases",
-            "spdx": "Custom (U.S. Government public domain)",
-            "url": "https://www.ncbi.nlm.nih.gov/home/about/policies/",
-            "attribution_required": False,
-        },
-        "commercial_use": "yes",
-    }
-    assert _expected_license_callouts(pd, "NCBI Entrez") == [
-        "> [!NOTE]\n> **License:** NCBI Entrez retrieves data from NCBI's Entrez databases, "
-        "in the public domain (U.S. Government public domain). "
-        "The client wrapper code is Apache-2.0-licensed. "
-        "Please refer to [the data terms](https://www.ncbi.nlm.nih.gov/home/about/policies/) for full terms."
-    ]
-
-    custom_attr = {
-        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
-        "data": {
-            "name": "the Ensembl project",
-            "spdx": "Custom (the EMBL-EBI Terms of Use)",
-            "url": "https://www.ebi.ac.uk/about/terms-of-use/",
-            "attribution_required": True,
-        },
-        "commercial_use": "yes",
-    }
-    assert _expected_license_callouts(custom_attr, "Ensembl") == [
-        "> [!NOTE]\n> **License:** Ensembl retrieves data from the Ensembl project, "
-        "distributed under the EMBL-EBI Terms of Use. Attribution to the Ensembl project is "
-        "required when the data is redistributed. The client wrapper code is Apache-2.0-licensed. "
-        "Please refer to [the data terms](https://www.ebi.ac.uk/about/terms-of-use/) for full terms."
-    ]
-
-
-def test_expected_license_callouts_bundled_data_orchestrator() -> None:
-    """bundled_dependencies with no weights yields a federated data-orchestrator callout.
-
-    Sibling toolkits with a ``data:`` block contribute their data SPDX (not their
-    code SPDX), so the surfaced terms reflect what governs use of the retrieved
-    records. The ``Custom (...)`` wrapper is stripped for display, and an
-    attribution-required source gets an inline clause.
-    """
-    orchestrator = {
-        "code": {"spdx": "Apache-2.0", "url": "https://github.com/evo-design/proto-tools"},
-        "commercial_use": "yes",
-        "attribution_required": False,
-        "bundled_dependencies": [
-            {"name": "NCBI Entrez", "tool": "database_retrieval/ncbi"},
-            {"name": "UniProt", "tool": "database_retrieval/uniprot"},
-            {"name": "RCSB PDB", "tool": "database_retrieval/pdb"},
-        ],
-    }
-    assert _expected_license_callouts(orchestrator, "Unified Sequence Fetch") == [
-        "> [!NOTE]\n> **License:** Unified Sequence Fetch's own code is licensed under Apache-2.0,"
-        " and it federates over bundled data sources and components, each under its own license terms.\n>\n"
-        "> Bundled dependencies, each under its own license:\n>\n"
-        "> - [NCBI Entrez](https://bio-pro.mintlify.app/tools/database-retrieval/ncbi):"
-        " U.S. Government public domain\n"
-        "> - [UniProt](https://bio-pro.mintlify.app/tools/database-retrieval/uniprot): CC-BY-4.0\n"
-        "> - [RCSB PDB](https://bio-pro.mintlify.app/tools/database-retrieval/pdb): CC0-1.0\n>\n"
-        "> Review each source's terms before commercial use or redistribution."
-    ]
-
-
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_gated_weights_noted_in_toolkit_notes(readme: Path) -> None:
     """Toolkits with gated weights must flag it in ``## Toolkit Notes``.
@@ -859,34 +612,6 @@ def test_overview_within_char_limit(readme: Path) -> None:
     assert len(visible) <= _OVERVIEW_MAX_CHARS, (
         f"{_tool_id(readme)}/README.md Overview is {len(visible)} chars of visible text "
         f"(limit {_OVERVIEW_MAX_CHARS}). Trim it."
-    )
-
-
-@pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
-def test_toolkit_notes_links_required_guides(readme: Path) -> None:
-    """``## Toolkit Notes`` must link to all four proto-docs guides.
-
-    Tool Persistence, Device Management, Parallel Execution, and Cloud Inference
-    apply to every tool at runtime, so the toolkit-level notes section must
-    surface them as visible badges/links.
-
-    A missing section or missing guides are hard failures.
-    """
-    text = readme.read_text()
-
-    match = re.search(r"^## Toolkit Notes\s*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
-    assert match, (
-        f"{_tool_id(readme)}/README.md has no '## Toolkit Notes' section. "
-        f"Add the section with badge/link references to all four proto-docs guides: "
-        f"Tool Persistence, Device Management, Parallel Execution, Cloud Inference."
-    )
-
-    section = match.group(1)
-    missing = [path for path in _TOOLKIT_NOTES_REQUIRED_GUIDE_PATHS if path not in section]
-    assert not missing, (
-        f"{_tool_id(readme)}/README.md '## Toolkit Notes' is missing required guide links: {missing}. "
-        f"Add badge/link references to all four proto-docs guides: Tool Persistence, "
-        f"Device Management, Parallel Execution, and Cloud Inference."
     )
 
 

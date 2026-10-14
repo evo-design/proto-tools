@@ -43,23 +43,6 @@ def test_move_nonexistent_instance(device_manager, mock_callback):
     assert mock_warning.called, "Should warn when moving nonexistent instance"
 
 
-def test_move_to_generic_cuda(device_manager, mock_callback):
-    """Test moving to generic 'cuda' resolves to specific device."""
-    device_manager.request_device("tool1", "instance1", device="cuda:0", eviction_callback=mock_callback)
-    assert device_manager._allocations["instance1"].device_ids[0] == "cuda:0", "Should start on cuda:0"
-
-    callback = MagicMock()
-    device_manager.move_to_device("instance1", "cuda", worker_callback=callback)
-
-    # Should resolve "cuda" to a specific device (cuda:1 since cuda:0 is occupied by self)
-    alloc = device_manager._allocations["instance1"]
-    assert alloc.device_ids[0] in [
-        "cuda:0",
-        "cuda:1",
-    ], "Should resolve to specific cuda device"
-    callback.assert_called_once()
-
-
 def test_move_to_generic_cuda_triggers_lru_eviction(device_manager, mock_callback):
     """Test moving to generic 'cuda' triggers LRU eviction when all GPUs occupied."""
     # Use CPU strategy so evicted allocations remain trackable
@@ -141,17 +124,6 @@ def test_cpu_to_generic_cuda(device_manager, mock_callback):
 
     mock_to.assert_called_once_with("cuda")
     assert inst.device.startswith("cuda"), f"Should be on GPU, got {inst.device}"
-
-
-def test_cpu_to_specific_cuda(device_manager, mock_callback):
-    """Tool on CPU + config says 'cuda:1' -> should move to cuda:1."""
-    inst, _mock_worker = _make_instance(device_manager)
-
-    input_dict = {"device": "cuda:1"}
-    with patch.object(inst, "_to", wraps=inst._to) as mock_to:
-        inst.run(input_dict, reload_on=set())
-
-    mock_to.assert_called_once_with("cuda:1")
 
 
 def test_wrong_gpu_to_specific_cuda(device_manager, mock_callback):

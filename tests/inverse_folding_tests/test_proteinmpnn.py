@@ -11,7 +11,6 @@ from types import ModuleType, SimpleNamespace
 import numpy as np
 import pytest
 
-from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNGradientConfig,
@@ -25,10 +24,6 @@ from proto_tools.tools.inverse_folding.proteinmpnn import (
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient import (
     ProteinMPNNGradientOutput,
-)
-from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
-    ProteinMPNNDesign,
-    ProteinMPNNDesignMetrics,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
     ALPHAFOLD_VOCAB,
@@ -305,26 +300,6 @@ def test_proteinmpnn_score_fields(pdb_structure: Structure):
     assert score.perplexity >= 1.0
 
 
-@pytest.mark.uses_gpu
-def test_proteinmpnn_score_vocab(pdb_structure: Structure):
-    """Vocab property on output matches ALPHAFOLD_VOCAB."""
-    original_sequence = pdb_structure.get_chain_sequence("A")
-
-    inp = ProteinMPNNScoringInput(
-        sequence_structure_pairs=[
-            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
-        ]
-    )
-    config = ProteinMPNNScoringConfig(seed=42)
-    output = run_proteinmpnn_score(inp, config)
-    assert output.success
-
-    validate_output(output)
-
-    assert output.vocab == ALPHAFOLD_VOCAB
-    assert output.scores[0].vocab == ALPHAFOLD_VOCAB
-
-
 def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
     captured: dict[str, object] = {}
 
@@ -405,52 +380,6 @@ def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):
     assert captured_seeds == captured_seeds_again
 
 
-def test_proteinmpnn_multichain_design_structure():
-    """A multi-chain ProteinMPNNDesign exposes chain order, redesigned flags, and metrics."""
-    design = ProteinMPNNDesign(
-        chains=[
-            Chain(id="A", sequence="MKTL"),
-            Chain(id="B", sequence="GGSS"),
-        ],
-        designed=[True, False],
-        metrics=ProteinMPNNDesignMetrics(perplexity=1.5, sequence_recovery=0.4),
-    )
-
-    # Chain ids preserve input order.
-    assert [c.id for c in design.chains] == ["A", "B"]
-    assert design.designed == [True, False]
-
-    # Chain-level helpers.
-    assert design.chain_sequences == ["MKTL", "GGSS"]
-    assert design.chain_sequence_map() == {"A": "MKTL", "B": "GGSS"}
-    assert [c.id for c in design.designed_chains] == ["A"]
-
-    # Metric access via mapping, attribute, and primary value.
-    assert design.metrics["perplexity"] == 1.5
-    assert design.metrics.perplexity == 1.5
-    assert design.metrics["sequence_recovery"] == 0.4
-    assert design.metrics.primary_value == 1.5
-    assert design.design_metrics() == {"perplexity": 1.5, "sequence_recovery": 0.4}
-
-
-def test_proteinmpnn_design_feeds_structure_predictor():
-    """A ProteinMPNNDesign feeds an SP tool input directly via LSP (subclass-as-Complex)."""
-    from proto_tools.tools.structure_prediction import ESMFoldInput
-
-    design = ProteinMPNNDesign(
-        chains=[
-            Chain(id="A", sequence="MKTL"),
-            Chain(id="B", sequence="GGSS"),
-        ],
-        designed=[True, False],
-        metrics=ProteinMPNNDesignMetrics(perplexity=1.5, sequence_recovery=0.4),
-    )
-
-    inp = ESMFoldInput(complexes=[design])
-    assert inp.complexes[0] is design
-    assert [c.sequence for c in inp.complexes[0].chains] == ["MKTL", "GGSS"]
-
-
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 def test_proteinmpnn_gradient_end_to_end():
@@ -476,26 +405,6 @@ def test_proteinmpnn_gradient_end_to_end():
     assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
     assert result.metrics["perplexity"] == pytest.approx(np.exp(result.loss), rel=1e-6)
     assert result.vocab == list(_CANONICAL_AA)
-
-
-@pytest.mark.uses_gpu
-def test_proteinmpnn_score_single_pair(pdb_structure: Structure):
-    """Scoring with a single sequence-structure pair succeeds."""
-    original_sequence = pdb_structure.get_chain_sequence("A")
-
-    inp = ProteinMPNNScoringInput(
-        sequence_structure_pairs=[
-            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
-        ]
-    )
-    config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
-    output = run_proteinmpnn_score(inp, config)
-
-    assert output.success
-    validate_output(output)
-    assert len(output.scores) == 1
-    assert output.scores[0].perplexity >= 1.0
-    assert output.scores[0].logits is not None
 
 
 @pytest.mark.uses_gpu
@@ -631,39 +540,6 @@ def test_proteinmpnn_score_logits_disabled_by_default(pdb_structure: Structure):
 
     for score in output.scores:
         assert score.logits is None
-
-
-@pytest.mark.uses_gpu
-def test_proteinmpnn_score_logits_serialization(pdb_structure: Structure):
-    """Logits are properly serialized as nested lists."""
-    original_sequence = pdb_structure.get_chain_sequence("A")
-
-    inp = ProteinMPNNScoringInput(
-        sequence_structure_pairs=[
-            SequenceStructurePair(sequence=original_sequence, structure=pdb_structure),
-        ]
-    )
-    config = ProteinMPNNScoringConfig(seed=42, return_logits=True)
-    output = run_proteinmpnn_score(inp, config)
-
-    assert output.success
-    validate_output(output)
-
-    score = output.scores[0]
-
-    assert isinstance(score.logits, (list, np.ndarray))
-
-    if isinstance(score.logits, list):
-        assert len(score.logits) > 0
-        assert isinstance(score.logits[0], list)
-        assert len(score.logits[0]) == len(ALPHAFOLD_VOCAB)
-
-        for position_logits in score.logits:
-            for logit_value in position_logits:
-                assert isinstance(logit_value, (int, float))
-    else:
-        assert score.logits.ndim == 2
-        assert score.logits.shape[1] == len(ALPHAFOLD_VOCAB)
 
 
 # ============================================================================

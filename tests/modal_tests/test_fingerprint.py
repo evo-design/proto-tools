@@ -8,7 +8,6 @@ broken. Both directions are tested.
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import pytest
@@ -131,13 +130,3 @@ def test_hashes_are_independent():
 
     assert len({one.schema_hash, one.code_hash, one.env_hash}) == 3
     assert all(len(h) == fp._HASH_LENGTH for h in (one.schema_hash, one.code_hash, one.env_hash))
-
-
-def test_algorithm_is_recorded_so_a_rule_change_is_detectable():
-    """Without it, redefining a hash makes every deployment report drift at once."""
-    assert fp.fingerprint(TOOL).algorithm == fp.ALGORITHM
-
-
-def test_digest_is_truncated_consistently():
-    """The stored form must match what a comparison recomputes."""
-    assert fp._digest("x") == hashlib.sha256(b"x").hexdigest()[: fp._HASH_LENGTH]

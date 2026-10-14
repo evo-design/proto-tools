@@ -2,13 +2,12 @@
 
 import logging
 import math
-from typing import ClassVar
 
 import numpy as np
 import pytest
 from pydantic import ValidationError
 from standalone_helpers.compression import compress_array
-from standalone_helpers.mixed_sequence import UPSTREAM_STRAND_TOKENS, tokenize_mixed_sequence
+from standalone_helpers.mixed_sequence import tokenize_mixed_sequence
 
 from proto_tools.tools.masked_models.execution import dispatch_masked_model
 from proto_tools.tools.masked_models.glm2 import GLM2EmbeddingsConfig
@@ -319,48 +318,22 @@ def test_mixed_gradient_export_preserves_values(tmp_path):
 # ── Numerical runtime checks with a tiny differentiable model ────────────────
 
 
-@pytest.fixture
-def tiny_mixed_runtime():
-    """Use a context-dependent toy MLM to test algorithms without model downloads."""
-    from types import SimpleNamespace
+@pytest.mark.integration
+def test_mixed_runtime_checks_run_in_env():
+    """Scoring, gradient, batching, sampling and request-validation checks run inside the glm2 env.
 
-    torch = pytest.importorskip("torch")
-    from standalone_helpers.mixed_mlm import MixedMLMAdapter, MixedMLMRuntime
+    ``standalone_helpers.mixed_mlm`` needs torch, which the base process does not have, so the
+    plain-assert suite ``_mixed_runtime_env_checks.py`` runs against a toy MLM in the built env.
+    A non-zero exit surfaces here as ``RuntimeError``.
+    """
+    from pathlib import Path
 
-    vocabulary = (
-        list(MIXED_VOCAB) + list("XBUZO") + ["<+>", "<->", "<mask>", "<cls>", "<pad>", "<eos>", "<unk>", "<sep>"]
-    )
-    vocab = {token: index for index, token in enumerate(vocabulary)}
+    from proto_tools.utils import run_in_env
 
-    class TinyModel(torch.nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.embedding = torch.nn.Embedding(len(vocab), 8)
-            self.projection = torch.nn.Linear(8, len(vocab))
-            self.config = SimpleNamespace(depth=2)
-
-        def forward(self, input_ids, attention_mask=None, output_hidden_states=False, **kwargs):
-            embedded = self.embedding(input_ids)
-            hidden = torch.tanh(embedded + embedded.mean(dim=1, keepdim=True))
-            return SimpleNamespace(logits=self.projection(hidden), hidden_states=(embedded, hidden))
-
-    class TinyAdapter(MixedMLMAdapter):
-        toolkit = "glm2"
-        checkpoints: ClassVar[dict[str, str]] = {"tattabio/gLM2_150M": "tiny"}
-        default_checkpoint = "tattabio/gLM2_150M"
-
-        @property
-        def embedding_layer(self):
-            return self.model.embedding
-
-        def _load_checkpoint(self, checkpoint):
-            with torch.random.fork_rng(devices=[]):
-                torch.manual_seed(0)
-                model = TinyModel()
-            tokenizer = SimpleNamespace(get_vocab=lambda: vocab, mask_token_id=vocab["<mask>"])
-            return model, tokenizer
-
-    return MixedMLMRuntime(TinyAdapter())
+    checks = Path(__file__).resolve().parent / "_mixed_runtime_env_checks.py"
+    compressed_array = Path(__file__).resolve().parents[2] / "proto_tools/utils/compressed_array.py"
+    output = run_in_env("glm2", script=str(checks), args=[str(compressed_array)], timeout=1800)
+    assert "ALL CHECKS PASSED" in output, output
 
 
 def test_mixed_runtime_ids_map_short_markers_and_masks_to_upstream_vocab(monkeypatch):
@@ -375,210 +348,3 @@ def test_mixed_runtime_ids_map_short_markers_and_masks_to_upstream_vocab(monkeyp
     tokenizer = SimpleNamespace(get_vocab=lambda: vocab)
     runtime = MixedMLMRuntime(SimpleNamespace(tokenizer=tokenizer, device="cpu"))
     assert runtime._ids([tokenize_mixed_sequence("<+>a<->A_", allow_masks=True)]) == [[2, 1, 3, 0, 4]]
-
-
-def _tiny_dispatch(runtime, operation, **payload):
-    from proto_tools.utils.compressed_array import decompress_result
-
-    return decompress_result(runtime.dispatch({"operation": operation, "device": "cpu", **payload}), to_list=True)
-
-
-def test_mixed_runtime_score_matches_full_vocab_reference_and_gradient(tiny_mixed_runtime):
-    import torch
-
-    runtime = tiny_mixed_runtime
-    # An embedding call first catches invalid reuse of inference tensors in backward.
-    _tiny_dispatch(runtime, "embeddings", sequences=[_LOCUS], return_logits=True)
-    result = _tiny_dispatch(runtime, "score", sequences=[_LOCUS], batch_size=2, return_logits=True)["scores"][0]
-    vocab = runtime.adapter.tokenizer.get_vocab()
-    ids = torch.tensor([[vocab[UPSTREAM_STRAND_TOKENS.get(token, token)] for token in _TOKENS]])
-    log_probs = []
-    for position in [1, 2, 4, 5]:
-        masked = ids.clone()
-        masked[0, position] = vocab["<mask>"]
-        with torch.no_grad():
-            logits = runtime.adapter.model(input_ids=masked).logits[0, position]
-            log_probs.append(torch.log_softmax(logits, dim=-1)[ids[0, position]].item())
-    assert result["avg_log_likelihood"] == pytest.approx(np.mean(log_probs), rel=1e-6)
-    gradient_result = _tiny_dispatch(
-        runtime,
-        "gradient",
-        sequence=_LOCUS,
-        logits=one_hot_mixed_logits(_LOCUS, sharpness=1.0),
-        temperature=None,
-        batch_size=2,
-    )
-    assert gradient_result["loss"] == pytest.approx(-np.mean(log_probs), rel=1e-6)
-    gradient = np.asarray(gradient_result["gradient"])
-    assert np.isfinite(gradient).all()
-    assert np.any(gradient != 0.0)
-    np.testing.assert_array_equal(gradient[[0, 3, 6, 7]], 0.0)
-    np.testing.assert_array_equal(gradient[[1, 2], 20:], 0.0)
-    np.testing.assert_array_equal(gradient[[4, 5], :20], 0.0)
-    assert all(parameter.grad is None for parameter in runtime.adapter.model.parameters())
-    assert not runtime.adapter.embedding_layer._forward_hooks
-
-
-@pytest.mark.parametrize("batch_size", [1, 2, 8])
-def test_mixed_runtime_relaxed_gradient_matches_finite_difference(tiny_mixed_runtime, batch_size):
-    runtime = tiny_mixed_runtime
-    logits = np.asarray(one_hot_mixed_logits("<+>M<+>a", sharpness=2.0))
-    payload = {"sequence": "<+>M<+>a", "logits": logits.tolist(), "temperature": 0.9, "batch_size": batch_size}
-    result = _tiny_dispatch(runtime, "gradient", **payload)
-    losses = []
-    epsilon = 0.01
-    for delta in [epsilon, -epsilon]:
-        perturbed = logits.copy()
-        perturbed[3, 21] += delta
-        losses.append(
-            _tiny_dispatch(runtime, "gradient", **{**payload, "logits": perturbed.tolist(), "compute_gradient": False})[
-                "loss"
-            ]
-        )
-    numerical = (losses[0] - losses[1]) / (2 * epsilon)
-    assert result["gradient"][3][21] == pytest.approx(numerical, rel=0.01, abs=3e-5)
-
-
-@pytest.mark.parametrize("batch_size", [1, 2, 8])
-def test_mixed_runtime_ste_uses_hard_context_and_soft_backward(tiny_mixed_runtime, batch_size):
-    import torch
-
-    runtime = tiny_mixed_runtime
-    temperature = 0.9
-    state = torch.tensor(one_hot_mixed_logits(_LOCUS, sharpness=0.7))
-    result = _tiny_dispatch(
-        runtime,
-        "gradient",
-        sequence=_LOCUS,
-        logits=state.tolist(),
-        temperature=temperature,
-        batch_size=batch_size,
-        use_ste=True,
-    )
-    score = _tiny_dispatch(runtime, "score", sequences=[_LOCUS], batch_size=2)["scores"][0]
-    assert result["loss"] == pytest.approx(-score["avg_log_likelihood"], rel=1e-6)
-
-    # Differentiate the toy model's hard context directly, without embedding hooks.
-    model = runtime.adapter.model
-    vocab = runtime.adapter.tokenizer.get_vocab()
-    ids = torch.tensor([vocab[UPSTREAM_STRAND_TOKENS.get(token, token)] for token in _TOKENS])
-    hard_embeddings = model.embedding(ids).detach().requires_grad_(True)
-    mask_embedding = model.embedding.weight[vocab["<mask>"]].detach()
-    positions = [1, 2, 4, 5]
-    losses = []
-    for position in positions:
-        context = torch.cat([hard_embeddings[:position], mask_embedding.unsqueeze(0), hard_embeddings[position + 1 :]])
-        prediction = model.projection(torch.tanh(mask_embedding + context.mean(dim=0)))
-        losses.append(torch.logsumexp(prediction, dim=0) - prediction[ids[position]])
-    reference_loss = torch.stack(losses).mean()
-    assert result["loss"] == pytest.approx(reference_loss.item(), rel=1e-6)
-    (embedding_gradient,) = torch.autograd.grad(reference_loss, hard_embeddings)
-
-    # STE preserves the softmax Jacobian, evaluated against the hard-context derivative.
-    expected = torch.zeros_like(state)
-    for position in positions:
-        columns = slice(0, 20) if _TOKENS[position].isupper() else slice(20, 24)
-        probabilities = torch.softmax(state[position, columns] / temperature, dim=0)
-        canonical_ids = [vocab[token] for token in MIXED_VOCAB[columns]]
-        probability_gradient = model.embedding.weight[canonical_ids] @ embedding_gradient[position]
-        expected[position, columns] = (
-            probabilities * (probability_gradient - (probabilities * probability_gradient).sum()) / temperature
-        )
-    gradient = np.asarray(result["gradient"])
-    np.testing.assert_allclose(gradient, expected.numpy(), rtol=1e-5, atol=1e-7)
-    assert np.isfinite(gradient).all()
-    assert np.any(gradient != 0.0)
-    np.testing.assert_array_equal(gradient[[0, 3, 6, 7]], 0.0)
-    np.testing.assert_array_equal(gradient[[1, 2], 20:], 0.0)
-    np.testing.assert_array_equal(gradient[[4, 5], :20], 0.0)
-    assert all(parameter.grad is None for parameter in model.parameters())
-    assert not runtime.adapter.embedding_layer._forward_hooks
-
-
-def test_mixed_runtime_gradient_removes_embedding_hook_after_failure(tiny_mixed_runtime, monkeypatch):
-    runtime = tiny_mixed_runtime
-    runtime.adapter.load(runtime.adapter.default_checkpoint, "cpu")
-
-    def fail_forward(*args, **kwargs):
-        raise RuntimeError("synthetic forward failure")
-
-    monkeypatch.setattr(runtime.adapter, "forward", fail_forward)
-    with pytest.raises(RuntimeError, match=r"synthetic forward failure"):
-        _tiny_dispatch(runtime, "gradient", sequence="+A+a", logits=one_hot_mixed_logits("+A+a"))
-    assert not runtime.adapter.embedding_layer._forward_hooks
-
-
-def test_mixed_runtime_batches_exact_lengths_and_restores_order(tiny_mixed_runtime, monkeypatch):
-    runtime = tiny_mixed_runtime
-    observed = []
-    forward = runtime.adapter.forward
-
-    def track(ids, **kwargs):
-        observed.append(tuple(ids.shape))
-        return forward(ids, **kwargs)
-
-    monkeypatch.setattr(runtime.adapter, "forward", track)
-    sequences = ["<+>M<+>a", "+a", "<->A<+>c", "<->AG"]
-    batched = _tiny_dispatch(runtime, "embeddings", sequences=sequences, batch_size=4, return_logits=True)["results"]
-    assert observed == [(2, 4), (1, 2), (1, 3)]
-    singles = _tiny_dispatch(runtime, "embeddings", sequences=sequences, batch_size=1, return_logits=True)["results"]
-    assert all("tokens" not in row for row in batched)
-    # Logit rows follow the canonical one-character-per-token sequence.
-    assert [len(row["logits"]) for row in batched] == [len(tokenize_mixed_sequence(sequence)) for sequence in sequences]
-    for batch, single in zip(batched, singles, strict=True):
-        np.testing.assert_allclose(batch["mean_embedding"], single["mean_embedding"], atol=1e-6)
-        np.testing.assert_allclose(batch["logits"], single["logits"], atol=1e-6)
-
-
-@pytest.mark.parametrize("method", ["single_pass", "iterative_refinement"])
-def test_mixed_runtime_sample_preserves_alphabets_and_fixed_context(tiny_mixed_runtime, method):
-    sequence = "<+>____<+>____<->X"
-    metadata = {**dict.fromkeys(range(2, 6), "protein"), **dict.fromkeys(range(7, 11), "dna")}
-    payload = {
-        "sequences": [sequence] * 3,
-        "mask_modalities": [metadata] * 3,
-        "seed": 7,
-        "sampling_method": method,
-        "num_steps": 3,
-        "return_logits": True,
-    }
-    output = _tiny_dispatch(tiny_mixed_runtime, "sample", **payload)["results"]
-    repeated = _tiny_dispatch(tiny_mixed_runtime, "sample", **payload)["results"]
-    assert [row["sequence"] for row in output] == [row["sequence"] for row in repeated]
-    assert len({row["sequence"] for row in output}) > 1
-    for row in output:
-        assert "tokens" not in row
-        assert tokenize_mixed_sequence(row["sequence"]) == list(row["sequence"])
-        assert [row["sequence"][i] for i in [0, 5, 10, 11]] == ["+", "+", "-", "X"]
-        assert all(token in MIXED_VOCAB[:20] for token in row["sequence"][1:5])
-        assert all(token in MIXED_VOCAB[20:] for token in row["sequence"][6:10])
-        assert np.asarray(row["logits"]).shape == (12, 24)
-
-
-@pytest.mark.parametrize(
-    ("payload", "error"),
-    [
-        ({"operation": "unknown"}, "unknown operation"),
-        ({"operation": "interactions", "sequences": ["+A+a"]}, "Only Minerva"),
-        ({"operation": "score", "sequences": ["+A+a"], "batch_size": 0}, "positive integer"),
-        ({"operation": "score", "sequences": ["<+>X"]}, "at least one canonical"),
-        ({"operation": "embeddings", "sequences": ["+" + "A" * 4096]}, "at most 4096"),
-        ({"operation": "sample", "sequences": ["<+>_"], "mask_modalities": [{}]}, "exactly the masked"),
-    ],
-)
-def test_mixed_runtime_rejects_invalid_requests_before_loading(tiny_mixed_runtime, monkeypatch, payload, error):
-    def unexpected_load(*args, **kwargs):
-        pytest.fail("Invalid requests must be rejected before model loading")
-
-    monkeypatch.setattr(tiny_mixed_runtime.adapter, "load", unexpected_load)
-    with pytest.raises(ValueError, match=error):
-        tiny_mixed_runtime.dispatch(payload)
-
-
-@pytest.mark.parametrize("method", ["single_pass", "iterative_refinement"])
-def test_mixed_runtime_sampling_is_independent_of_mask_mapping_order(tiny_mixed_runtime, method):
-    positions = [(position, "protein" if position < 6 else "dna") for position in [2, 3, 4, 5, 7, 8, 9, 10]]
-    payload = {"sequences": ["<+>____<+>____<->X"] * 3, "seed": 31, "sampling_method": method, "num_steps": 3}
-    forward = _tiny_dispatch(tiny_mixed_runtime, "sample", **payload, mask_modalities=[dict(positions)] * 3)
-    reverse = _tiny_dispatch(tiny_mixed_runtime, "sample", **payload, mask_modalities=[dict(reversed(positions))] * 3)
-    assert [row["sequence"] for row in forward["results"]] == [row["sequence"] for row in reverse["results"]]

@@ -208,9 +208,8 @@ class GIConfig(BaseConfig):
 
     gi_api_key: str | None = ConfigField(
         title="GI API Key",
-        default_factory=lambda: os.environ.get("GI_API_KEY"),
-        description="Bearer key for api.genomicintelligence.ai. Defaults to the GI_API_KEY env var if not set.",
-        include_in_key=False,
+        description="Bearer key for api.genomicintelligence.ai.",
+        credential="GI_API_KEY",
     )
     model: str | None = ConfigField(
         title="Model",

@@ -270,40 +270,6 @@ def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
     assert captured["payload"]["compute_gradient"] is True
 
 
-def test_gradient_dispatch_omits_embedded_ablm_metadata(monkeypatch):
-    captured: dict[str, object] = {}
-
-    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
-        captured.update(payload=payload)
-        return {
-            "gradient": [[0.0] * 20] * 3,
-            "loss": 0.0,
-            "metrics": {"avg_plddt": 0.5, "ptm": 0.5, "avg_pae": 1.0, "pae": None},
-            "vocab": _CANONICAL_VOCAB,
-            "pdb": _EXAMPLE_PDB,
-        }
-
-    monkeypatch.setattr(
-        "proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient.ToolInstance.dispatch",
-        fake_dispatch,
-    )
-
-    run_alphafold2_gradient(
-        AlphaFold2GradientInput(
-            logits=[[0.0] * 20] * 3,
-            target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
-            binder_chain="B",
-        ),
-        AlphaFold2GradientConfig(backend="germinal", device="cpu"),
-    )
-
-    assert "ablm_model" not in captured["payload"]
-    assert "cdr_lengths" not in captured["payload"]
-    assert "framework_lengths" not in captured["payload"]
-    assert "ablm_temp" not in captured["payload"]
-    assert "iglm_species" not in captured["payload"]
-
-
 def test_forward_mode_dispatch_contract(monkeypatch):
     """compute_gradient=False forwards the flag and returns gradient=None."""
     captured: dict[str, object] = {}
@@ -476,40 +442,8 @@ def test_homooligomer_uses_single_a3m_dispatch_path(monkeypatch):
 
 
 @pytest.mark.uses_gpu
-def test_gradient_end_to_end():
-    result = run_alphafold2_gradient(
-        AlphaFold2GradientInput(
-            logits=[[0.0] * 20] * 5,
-            temperature=1.0,
-            target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
-            target_chain="A",
-            binder_chain="B",
-        ),
-        AlphaFold2GradientConfig(
-            num_recycles=1,
-            loss_weights={"plddt": 1.0},
-        ),
-    )
-    validate_output(result)
-    assert result.tool_id == "alphafold2-gradient"
-    assert len(result.gradient) == 5
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert any(v != 0.0 for row in result.gradient for v in row)
-    assert math.isfinite(result.loss) and result.loss != 0.0
-    assert result.vocab == _CANONICAL_VOCAB
-    assert 0 <= result.metrics["avg_plddt"] <= 1.0
-    # Structure must be populated with per-residue pLDDT normalized to [0, 1]
-    # for proto-language's pLDDT-weighted semigreedy (1 - plddt sampling).
-    assert result.structure.source == "alphafold2-gradient"
-    assert is_valid_structure(result.structure.structure)
-    plddt = result.structure.per_residue_plddt
-    assert plddt is not None and all(0.0 <= v <= 1.0 for v in plddt)
-
-
-@pytest.mark.uses_gpu
 def test_forward_vs_gradient_consistency():
-    """compute_gradient=False should produce loss/metrics close to gradient mode.
+    """Gradient mode returns a well-formed output; compute_gradient=False produces loss/metrics close to it.
 
     XLA compiles ``fn`` and ``value_and_grad(fn)`` separately; FP reductions
     across dropout-enabled Evoformer layers drift a few percent even with
@@ -528,7 +462,23 @@ def test_forward_vs_gradient_consistency():
         inputs,
         AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}, seed=42, compute_gradient=False),
     )
-    assert grad.gradient is not None and fwd.gradient is None
+    validate_output(grad)
+    assert grad.tool_id == "alphafold2-gradient"
+    assert len(grad.gradient) == 5
+    assert all(len(row) == 20 for row in grad.gradient)
+    assert all(math.isfinite(v) for row in grad.gradient for v in row)
+    assert any(v != 0.0 for row in grad.gradient for v in row)
+    assert math.isfinite(grad.loss) and grad.loss != 0.0
+    assert grad.vocab == _CANONICAL_VOCAB
+    assert 0 <= grad.metrics["avg_plddt"] <= 1.0
+    # Structure must be populated with per-residue pLDDT normalized to [0, 1]
+    # for proto-language's pLDDT-weighted semigreedy (1 - plddt sampling).
+    assert grad.structure.source == "alphafold2-gradient"
+    assert is_valid_structure(grad.structure.structure)
+    plddt = grad.structure.per_residue_plddt
+    assert plddt is not None and all(0.0 <= v <= 1.0 for v in plddt)
+
+    assert fwd.gradient is None
     assert math.isclose(grad.loss, fwd.loss, rel_tol=0.1)
     assert math.isclose(grad.metrics["avg_plddt"], fwd.metrics["avg_plddt"], rel_tol=0.1)
     assert math.isclose(grad.metrics["ptm"], fwd.metrics["ptm"], rel_tol=0.1)
@@ -551,25 +501,8 @@ def test_gradient_recycle_mode_threads_through():
 
 
 @pytest.mark.uses_gpu
-def test_gradient_sensitivity():
-    target_kwargs = {
-        "target_pdb": str(_GRADIENT_EXAMPLE_PDB_PATH),
-        "target_chain": "A",
-        "binder_chain": "B",
-    }
-    config = AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0})
-    r1 = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0, **target_kwargs), config
-    )
-    r2 = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=[[5.0] + [0.0] * 19] * 5, temperature=1.0, **target_kwargs), config
-    )
-    assert r1.loss != r2.loss
-    assert r1.gradient != r2.gradient
-
-
-@pytest.mark.uses_gpu
-def test_gradient_loss_weights_matter():
+def test_gradient_responds_to_loss_weights_and_logits():
+    """Loss weights and input logits both reach the AF2 loss (not silently ignored)."""
     logits = [[0.1 * i + 0.05 * j for j in range(20)] for i in range(5)]
     target_kwargs = {
         "target_pdb": str(_GRADIENT_EXAMPLE_PDB_PATH),
@@ -584,7 +517,14 @@ def test_gradient_loss_weights_matter():
         AlphaFold2GradientInput(logits=logits, temperature=1.0, **target_kwargs),
         AlphaFold2GradientConfig(num_recycles=1, loss_weights={"con": 1.0}),
     )
+    r_shifted = run_alphafold2_gradient(
+        AlphaFold2GradientInput(logits=[[5.0] + [0.0] * 19] * 5, temperature=1.0, **target_kwargs),
+        AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
+    )
+    # Different loss weights change the gradient; different logits change loss and gradient.
     assert r_plddt.gradient != r_con.gradient
+    assert r_plddt.loss != r_shifted.loss
+    assert r_plddt.gradient != r_shifted.gradient
     assert all(math.isfinite(v) for row in r_plddt.gradient for v in row)
     assert all(math.isfinite(v) for row in r_con.gradient for v in row)
 

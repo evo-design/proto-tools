@@ -52,12 +52,6 @@ def test_hmmsearch_input_single_sequence():
     assert inputs.sequences == [SAMPLE_SEQUENCES[0]]
 
 
-def test_hmmsearch_input_list_sequences():
-    sequence_list = SAMPLE_SEQUENCES[:2]
-    inputs = PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=sequence_list)
-    assert inputs.sequences == sequence_list
-
-
 def test_hmmsearch_input_empty_sequences():
     with pytest.raises(ValueError, match="At least one sequence is required"):
         PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=[])
@@ -68,11 +62,6 @@ def test_phmmer_input_single_strings():
     inputs = PyPhmmerInput(sequences="MVLSPADKTNVKAAW", target_sequences="ATCGATCGATCGAT")
     assert inputs.sequences == ["MVLSPADKTNVKAAW"]
     assert inputs.target_sequences == ["ATCGATCGATCGAT"]
-
-
-def test_jackhmmer_config_invalid_max_iterations():
-    with pytest.raises(ValueError, match="greater than or equal to 1"):
-        PyJackhmmerConfig(max_iterations=0)
 
 
 # ── Helper functions ─────────────────────────────────────────────────────
@@ -125,6 +114,30 @@ def test_pyhmmer_hmmsearch_no_hits():
     assert result.success is True
     assert result.num_sequence_hits == 0
     assert result.num_domain_hits == 0
+
+
+@pytest.mark.integration
+def test_pyhmmer_hmmsearch_skip_filters_admits_more_hits():
+    """Disabling the MSV/Viterbi/Forward and bias filters surfaces hits the filters prune at the same E-value."""
+    inputs = PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=SAMPLE_SEQUENCES)
+    thresholds = {"evalue_threshold": 1000.0, "domain_evalue_threshold": 1000.0}
+    filtered = run_pyhmmer_hmmsearch(inputs, PyHmmsearchConfig(skip_filters=False, **thresholds))
+    unfiltered = run_pyhmmer_hmmsearch(inputs, PyHmmsearchConfig(skip_filters=True, **thresholds))
+    assert filtered.success and unfiltered.success
+    assert unfiltered.num_sequence_hits > filtered.num_sequence_hits
+
+
+@pytest.mark.integration
+def test_pyhmmer_hmmsearch_gathering_cutoffs_drop_hits():
+    """``bit_cutoffs='gathering'`` applies the HMM's GA thresholds, dropping hits a permissive E-value keeps."""
+    inputs = PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=SAMPLE_SEQUENCES)
+    permissive = run_pyhmmer_hmmsearch(
+        inputs, PyHmmsearchConfig(evalue_threshold=1000.0, domain_evalue_threshold=1000.0)
+    )
+    gathering = run_pyhmmer_hmmsearch(inputs, PyHmmsearchConfig(bit_cutoffs="gathering"))
+    assert gathering.success
+    assert gathering.metadata["bit_cutoffs"] == "gathering"
+    assert 0 < gathering.num_sequence_hits < permissive.num_sequence_hits
 
 
 @pytest.mark.integration
@@ -188,36 +201,6 @@ def test_pyhmmer_jackhmmer_success():
     assert result.num_sequence_hits >= 1
     assert result.metadata["max_iterations"] == 2
     assert len(result.metadata["iterations_per_query"]) == 1
-
-
-@pytest.mark.integration
-def test_pyhmmer_hmmsearch_bit_cutoffs_filters_hits():
-    """``bit_cutoffs='gathering'`` consumes the HMM's GA threshold; the test HMM has GA cutoffs."""
-    inputs = PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=SAMPLE_SEQUENCES)
-    permissive = run_pyhmmer_hmmsearch(
-        inputs,
-        PyHmmsearchConfig(evalue_threshold=1000.0, domain_evalue_threshold=1000.0),
-    )
-    gathering = run_pyhmmer_hmmsearch(inputs, PyHmmsearchConfig(bit_cutoffs="gathering"))
-    assert gathering.success
-    assert gathering.metadata["bit_cutoffs"] == "gathering"
-    # Gathering thresholds are stricter than evalue=1000 → ≤ permissive count
-    assert gathering.num_sequence_hits <= permissive.num_sequence_hits
-
-
-@pytest.mark.integration
-def test_pyhmmer_hmmsearch_skip_filters_monotonic():
-    """``skip_filters=True`` must return ≥ as many hits as ``False`` at the same E-value.
-
-    Pins the F1=F2=F3=1.0 + bias_filter=False mapping. A regression where any
-    of those four kwargs got dropped or typo'd would cause this to fail.
-    """
-    inputs = PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=SAMPLE_SEQUENCES)
-    e_threshold = 100.0  # permissive enough that filter changes affect counts
-    filtered = run_pyhmmer_hmmsearch(inputs, PyHmmsearchConfig(skip_filters=False, evalue_threshold=e_threshold))
-    unfiltered = run_pyhmmer_hmmsearch(inputs, PyHmmsearchConfig(skip_filters=True, evalue_threshold=e_threshold))
-    assert filtered.success and unfiltered.success
-    assert unfiltered.num_sequence_hits >= filtered.num_sequence_hits
 
 
 # ---------------------------------------------------------------------------

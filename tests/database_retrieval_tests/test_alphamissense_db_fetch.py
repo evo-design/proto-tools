@@ -86,35 +86,13 @@ def test_alphamissense_fetch_full_p04637_predictions():
         assert prediction.classification in valid_classes
     assert output.source_url.endswith("AF-P04637-F1-aa-substitutions.csv")
 
-
-@pytest.mark.integration
-def test_alphamissense_fetch_known_pathogenic_tp53_r175h():
-    """R175H is the most common cancer-driver TP53 mutation; AlphaMissense must call it pathogenic.
-
-    Filtering happens client-side now; the wrapper returns the full grid and
-    the caller picks the position/alt of interest.
-    """
-    output = run_alphamissense_db_fetch(
-        AlphaMissenseDBFetchInput(uniprot_id="P04637"),
-        AlphaMissenseDBFetchConfig(),
-    )
-    assert output.success
+    # R175H is the most common cancer-driver TP53 mutation; AlphaMissense must call it pathogenic.
     r175h = next(p for p in output.predictions if p.position == 175 and p.alt_aa == "H")
     assert r175h.wild_type_aa == "R"
     assert r175h.classification == "likely_pathogenic"
     assert r175h.pathogenicity_score > 0.7  # well above the 0.564 likely-pathogenic threshold
 
-
-@pytest.mark.integration
-def test_alphamissense_fetch_client_side_filter_at_hotspots():
-    """Realistic constraint loop: caller post-filters to confidently pathogenic at TP53 hotspots 175/248/273."""
-    output = run_alphamissense_db_fetch(
-        AlphaMissenseDBFetchInput(uniprot_id="P04637"),
-        AlphaMissenseDBFetchConfig(),
-    )
-    assert output.success
-    assert output.num_predictions == 393 * 19
-
+    # Client-side post-filter to confidently pathogenic calls at TP53 hotspots 175/248/273.
     hotspot_positions = {175, 248, 273}
     high_confidence_pathogenic = [
         p for p in output.predictions if p.position in hotspot_positions and p.pathogenicity_score >= 0.8
@@ -125,18 +103,10 @@ def test_alphamissense_fetch_client_side_filter_at_hotspots():
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize(
-    "uniprot_id, reason",
-    [
-        ("Q0Q0Q0", "fake accession"),
-        ("P0A6F5", "non-human (E. coli GroEL)"),
-    ],
-    ids=["fake-accession", "non-human"],
-)
-def test_alphamissense_fetch_returns_failure_when_no_data(uniprot_id, reason):
-    """Both bogus accessions and non-human accessions raise with a clear error."""
+def test_alphamissense_fetch_returns_failure_when_no_data():
+    """An accession with no AlphaMissense CSV (404) raises with a clear error."""
     with pytest.raises(Exception, match="AlphaMissense has no predictions"):
-        run_alphamissense_db_fetch(AlphaMissenseDBFetchInput(uniprot_id=uniprot_id), AlphaMissenseDBFetchConfig())
+        run_alphamissense_db_fetch(AlphaMissenseDBFetchInput(uniprot_id="Q0Q0Q0"), AlphaMissenseDBFetchConfig())
 
 
 @pytest.mark.integration
@@ -190,29 +160,8 @@ def test_workflow_uniprot_then_alphamissense_grid_consistency():
 
 
 @pytest.mark.integration
-def test_alphamissense_fetch_hg38_returns_genomic_coords():
-    """`coordinate_system='hg38'` returns the genomic-coord CSV with chrom/pos/ref/alt populated."""
-    output = run_alphamissense_db_fetch(
-        AlphaMissenseDBFetchInput(uniprot_id="P04637"),
-        AlphaMissenseDBFetchConfig(coordinate_system="hg38"),
-    )
-    assert output.success
-    # Genomic CSV is a subset (SNV-accessible only) — fewer rows than the full grid.
-    assert 0 < output.num_predictions < 393 * 19
-    assert output.source_url.endswith("AF-P04637-F1-hg38.csv")
-
-    # Every prediction has the genomic-coordinate fields populated.
-    for prediction in output.predictions:
-        assert prediction.chrom and prediction.chrom.startswith("chr")
-        assert prediction.pos is not None and prediction.pos > 0
-        assert prediction.ref in {"A", "C", "G", "T"}
-        assert prediction.alt in {"A", "C", "G", "T"}
-        assert prediction.transcript_id and prediction.transcript_id.startswith("ENST")
-
-
-@pytest.mark.integration
-def test_alphamissense_fetch_hg19_vs_hg38_have_same_classifications():
-    """A given protein variant gets the same pathogenicity score in hg19 vs hg38 mode."""
+def test_alphamissense_fetch_genomic_coords_agree_across_builds():
+    """Genomic-coord modes populate chrom/pos/ref/alt and give each protein variant the same score in hg19 and hg38."""
     hg19 = run_alphamissense_db_fetch(
         AlphaMissenseDBFetchInput(uniprot_id="P04637"),
         AlphaMissenseDBFetchConfig(coordinate_system="hg19"),
@@ -222,6 +171,17 @@ def test_alphamissense_fetch_hg19_vs_hg38_have_same_classifications():
         AlphaMissenseDBFetchConfig(coordinate_system="hg38"),
     )
     assert hg19.success and hg38.success
+
+    # Genomic CSV is a subset (SNV-accessible only) — fewer rows than the full grid.
+    assert 0 < hg38.num_predictions < 393 * 19
+    assert hg38.source_url.endswith("AF-P04637-F1-hg38.csv")
+    for prediction in hg38.predictions:
+        assert prediction.chrom and prediction.chrom.startswith("chr")
+        assert prediction.pos is not None and prediction.pos > 0
+        assert prediction.ref in {"A", "C", "G", "T"}
+        assert prediction.alt in {"A", "C", "G", "T"}
+        assert prediction.transcript_id and prediction.transcript_id.startswith("ENST")
+
     # Same protein variants are reachable by SNV in both genome builds, so the
     # row counts and per-variant scores must match.
     assert hg19.num_predictions == hg38.num_predictions

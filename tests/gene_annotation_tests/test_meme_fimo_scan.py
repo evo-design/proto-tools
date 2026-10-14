@@ -69,24 +69,6 @@ def test_input_single_sequence_normalized_to_list():
 
 
 @pytest.mark.integration
-def test_fimo_scan_basic_execution():
-    """FIMO finds the bundled motif in the sample DNA sequence."""
-    inputs = MEMEFimoScanInput(sequences=SAMPLE_SEQUENCE, motifs=str(EXAMPLE_MEME_FILE))
-    result = run_meme_fimo_scan(inputs, MEMEFimoScanConfig())
-
-    assert result.success is True
-    assert result.tool_id == "meme-fimo-scan"
-    assert len(result.results) == 1  # one bundle per input sequence
-    assert result.num_matches >= 1
-
-    match = result.results[0].matches[0]
-    assert match.motif_id == "SPYO_CRISPR1"
-    assert match.strand in {"+", "-"}
-    assert 0 < match.pvalue <= 1e-4
-    assert match.start <= match.stop
-
-
-@pytest.mark.integration
 def test_fimo_scan_results_align_to_inputs():
     """Output is 1:1 with inputs; a sequence with no occurrences yields an empty bundle."""
     inputs = MEMEFimoScanInput(sequences=[SAMPLE_SEQUENCE, NO_MATCH_SEQUENCE], motifs=str(EXAMPLE_MEME_FILE))
@@ -96,6 +78,12 @@ def test_fimo_scan_results_align_to_inputs():
     assert len(result.results) == 2  # positionally aligned to the two inputs
     assert len(result.results[0].matches) >= 1  # motif present in sequence 0
     assert result.results[1].matches == []  # no motif in sequence 1 -> empty bundle
+
+    match = result.results[0].matches[0]
+    assert match.motif_id == "SPYO_CRISPR1"
+    assert match.strand in {"+", "-"}
+    assert 0 < match.pvalue <= 1e-4
+    assert match.start <= match.stop
 
 
 @pytest.mark.integration

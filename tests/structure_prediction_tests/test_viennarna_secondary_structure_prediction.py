@@ -112,23 +112,6 @@ def test_viennarna_dna_to_rna_conversion():
 
 
 @pytest.mark.integration
-def test_viennarna_empty_sequence():
-    """An empty string in the sequence list should yield a null result entry."""
-    inputs = ViennaRNAInput(sequences=[""])
-    config = ViennaRNAConfig()
-
-    output = run_viennarna(inputs, config)
-
-    validate_output(output, check_export=False)
-
-    assert len(output.results) == 1
-    result = output.results[0]
-    assert result.sequence == ""
-    assert result.structure is None
-    assert result.mfe is None
-
-
-@pytest.mark.integration
 def test_viennarna_mixed_empty_and_valid_sequences():
     """Empty sequences interleaved with valid ones must each produce the correct result."""
     inputs = ViennaRNAInput(sequences=[_HAIRPIN, "", _POLY_A])

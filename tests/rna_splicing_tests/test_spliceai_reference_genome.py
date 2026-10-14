@@ -8,12 +8,10 @@ from __future__ import annotations
 
 import pytest
 
-from proto_tools.tools.rna_splicing.spliceai.spliceai_score import (
-    _GENOME_FASTA,
-    SpliceAIScoreConfig,
-)
+from proto_tools.tools.rna_splicing.reference_genome import GENOME_FASTA
+from proto_tools.tools.rna_splicing.spliceai.spliceai_score import SpliceAIScoreConfig
 
-ASSEMBLIES = sorted(_GENOME_FASTA)
+ASSEMBLIES = sorted(GENOME_FASTA)
 
 
 @pytest.mark.parametrize("assembly", ASSEMBLIES)
@@ -61,10 +59,9 @@ def test_existing_local_path_is_accepted(tmp_path) -> None:
 
 
 @pytest.mark.parametrize("device", ["modal", "proto"])
-@pytest.mark.parametrize("assembly", ASSEMBLIES)
-def test_named_assembly_runs_remotely(assembly: str, device: str) -> None:
+def test_named_assembly_runs_remotely(device: str) -> None:
     """A worker can provision an assembly by name, so it is the form that travels."""
-    assert SpliceAIScoreConfig(reference_fasta=assembly).remote_unsupported_reason(device) is None
+    assert SpliceAIScoreConfig(reference_fasta=ASSEMBLIES[0]).remote_unsupported_reason(device) is None
 
 
 @pytest.mark.parametrize("device", ["modal", "proto"])

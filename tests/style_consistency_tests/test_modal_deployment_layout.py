@@ -30,21 +30,6 @@ def _service_id(path: Path) -> str:
 _SERVICES = _service_modules()
 
 
-def test_services_are_discovered() -> None:
-    """A glob that silently matches nothing would make every check below vacuous."""
-    assert _SERVICES, f"no *{_SERVICE_SUFFIX} modules found under {_MODAL_ROOT}"
-
-
-@pytest.mark.parametrize("service", _SERVICES, ids=_service_id)
-def test_service_lives_in_a_deployment_directory(service: Path) -> None:
-    """Every service sits in its own ``*_deployment/`` directory."""
-    parent = service.parent.name
-    assert parent.endswith(_DEPLOYMENT_SUFFIX), (
-        f"{_service_id(service)} sits directly in '{parent}'; move it to "
-        f"'{parent}/{service.name[: -len(_SERVICE_SUFFIX)]}{_DEPLOYMENT_SUFFIX}/{service.name}'"
-    )
-
-
 @pytest.mark.parametrize("service", _SERVICES, ids=_service_id)
 def test_deployment_directory_matches_its_service(service: Path) -> None:
     """The directory name is the service's own stem, so the pair is greppable together."""

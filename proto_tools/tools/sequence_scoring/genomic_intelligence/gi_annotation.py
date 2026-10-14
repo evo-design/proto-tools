@@ -69,8 +69,6 @@ class GIAnnotationConfig(GIConfig):
     """Configuration for annotation.
 
     Attributes:
-        batch_size (int | None): Server-side batching hint. Leave unset for the
-            service default.
         reverse_complement (bool | None): Also scan the reverse complement.
             Detection already finds genes on either strand, so this changes the
             reported orientation rather than whether genes are found.
@@ -83,12 +81,6 @@ class GIAnnotationConfig(GIConfig):
         timeout_seconds (float): Wall-clock cap on the async wait.
     """
 
-    batch_size: int | None = ConfigField(
-        title="Batch Size",
-        default=None,
-        ge=1,
-        description="Server-side batching hint; unset uses the service default",
-    )
     reverse_complement: bool | None = ConfigField(
         title="Reverse Complement",
         default=None,
@@ -206,10 +198,10 @@ def parse_annotation_data(data: dict[str, Any], payload: dict[str, Any], name: s
     summary = as_object(data.get("summary"), "data.summary")
     transcripts = [
         Transcript(
-            name=str(record.get("name", "")),
+            name=str(record.get("name") or ""),
             start=int(record.get("start", 0)),
             end=int(record.get("end", 0)),
-            strand=str(record.get("strand", "")),
+            strand=str(record.get("strand") or ""),
             score=float(record.get("score", 0.0)),
             tss_position=record.get("tss_position"),
             polya_position=record.get("polya_position"),
@@ -239,8 +231,6 @@ def _annotation_options(config: GIAnnotationConfig) -> dict[str, Any]:
         dict[str, Any]: Options to send with the request.
     """
     options: dict[str, Any] = {}
-    if config.batch_size is not None:
-        options["batch_size"] = config.batch_size
     if config.reverse_complement is not None:
         options["reverse_complement"] = config.reverse_complement
     return options

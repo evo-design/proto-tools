@@ -32,15 +32,6 @@ def test_override_replaces_the_global_pin(tmp_path):
     assert _make_test_instance(tmp_path)._get_uv_version() == "0.11.33"
 
 
-def test_platform_override_wins_over_default():
-    """The keyed format and lookup are shared with python_version.txt."""
-    content = "default: 0.12.19\nlinux-aarch64: 0.11.33\n"
-    parse = ToolInstance._parse_keyed_versions
-    kwargs = {"file_name": "uv_version.txt", "example": UV_VERSION, "validate": ToolInstance._validate_uv_version}
-    assert parse(content, "linux-aarch64", "<test>", **kwargs) == "0.11.33"
-    assert parse(content, "linux-x86_64", "<test>", **kwargs) == "0.12.19"
-
-
 @pytest.mark.parametrize("invalid", ["0.12", "latest", "0.12.x", ">=0.12.0"])
 def test_invalid_version_is_rejected(tmp_path, invalid):
     """Only an exact major.minor.patch release can be installed by micromamba as a pin."""

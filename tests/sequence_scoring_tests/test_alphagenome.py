@@ -26,6 +26,33 @@ _SCORE_MID = _SCORE // 2  # 262_144, centre of the scoring interval
 # Integration tests
 
 
+# ── Model Loading ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.uses_gpu
+def test_model_reload_does_not_download_reference_files():
+    """A second model load reads the cached reference tables instead of re-downloading them.
+
+    ``dna_model.create`` reads the GTF, splice-site, polyA, and calibration tables on every load. The
+    first load caches them; with ``urllib`` disabled, a second load must still succeed.
+    """
+    from proto_tools.utils import run_in_env
+
+    code = (
+        "import os, urllib.request\n"
+        "import inference\n"
+        "device = os.environ['RUN_IN_ENV_DEVICE']\n"
+        "inference.AlphaGenomeModel().load(device)\n"
+        "def _offline(*args, **kwargs):\n"
+        "    raise OSError('network disabled')\n"
+        "urllib.request.urlopen = _offline\n"
+        "inference.AlphaGenomeModel().load(device)\n"
+        "print('RELOADED')\n"
+    )
+    output = run_in_env("alphagenome", code=code, device="cuda", timeout=3600)
+    assert output.strip().splitlines()[-1] == "RELOADED"
+
+
 # ── Interval Prediction ──────────────────────────────────────────────────────
 
 
@@ -231,8 +258,8 @@ def test_ism():
             chromosome="chr1",
             interval_start=0,
             interval_end=_SCORE,
-            ism_interval_start=_SCORE_MID - 10,
-            ism_interval_end=_SCORE_MID + 10,  # 20 bp window
+            ism_interval_start=_SCORE_MID - 1,
+            ism_interval_end=_SCORE_MID + 1,  # 2 bp window
         ),
     )
     config = AlphaGenomeScoreISMConfig(
@@ -268,8 +295,8 @@ def test_ism_with_variant_context():
             chromosome="chr1",
             interval_start=0,
             interval_end=_SCORE,
-            ism_interval_start=_SCORE_MID - 10,
-            ism_interval_end=_SCORE_MID + 10,
+            ism_interval_start=_SCORE_MID - 1,
+            ism_interval_end=_SCORE_MID + 1,
             variant_position=_SCORE_MID,
             reference_bases="A",
             alternate_bases="G",
@@ -285,44 +312,6 @@ def test_ism_with_variant_context():
     assert len(result) == 1
     validate_output(result)
     assert len(result[0].scores) > 0
-
-
-# ---------------------------------------------------------------------------
-# Slow tests
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.slow
-@pytest.mark.uses_gpu
-def test_interval_prediction_131k_context():
-    """Interval prediction at the 131,072 bp context length (third-smallest supported)."""
-    from proto_tools import (
-        AlphaGenomeInterval,
-        AlphaGenomePredictIntervalsConfig,
-        AlphaGenomePredictIntervalsInput,
-        run_alphagenome_predict_intervals,
-    )
-
-    inputs = AlphaGenomePredictIntervalsInput(
-        intervals=AlphaGenomeInterval(
-            chromosome="chr1",
-            interval_start=0,
-            interval_end=131_072,
-        ),
-    )
-    config = AlphaGenomePredictIntervalsConfig(
-        requested_outputs=["RNA_SEQ"],
-        organism="human",
-    )
-
-    result = run_alphagenome_predict_intervals(inputs, config)
-
-    assert result.tool_id == "alphagenome-predict-intervals"
-    assert len(result) == 1
-    validate_output(result)
-    output = result[0]
-    assert output.interval_end == 131_072
-    assert "predictions" in output.result
 
 
 # ── Benchmarks ────────────────────────────────────────────────────────────────

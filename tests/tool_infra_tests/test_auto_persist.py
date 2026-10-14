@@ -193,16 +193,11 @@ def test_auto_persist_scope_nesting_safe_via_shared_cache() -> None:
 def test_auto_persist_scope_mismatch_raises() -> None:
     """Passing an instance whose toolkit != the outer toolkit must raise ValueError."""
     wrong_inst = _make_fake_instance(toolkit="esm2")
-    with pytest.raises(ValueError, match=r"toolkit mismatch"):
+    with pytest.raises(ValueError, match=r"toolkit mismatch") as exc_info:
         with ToolInstance._auto_persist_scope("pyrosetta", instance=wrong_inst):
             pass  # pragma: no cover -- scope body shouldn't run
-    # Error message mentions both toolkits.
-    try:
-        with ToolInstance._auto_persist_scope("pyrosetta", instance=wrong_inst):
-            pass  # pragma: no cover
-    except ValueError as exc:
-        assert "esm2" in str(exc)
-        assert "pyrosetta" in str(exc)
+    assert "esm2" in str(exc_info.value)
+    assert "pyrosetta" in str(exc_info.value)
 
 
 # ── dispatch overlay integration ─────────────────────────────────────────────

@@ -13,10 +13,6 @@ from proto_tools.entities.ligands import (
     map_ccd_code_to_smiles,
     map_smiles_to_ccd_code,
 )
-from proto_tools.entities.provenance import (
-    Sha256Digest,
-    SourceProvenance,
-)
 from proto_tools.entities.structures import (
     GFP_CIF_PATH,
     BFactorType,
@@ -38,9 +34,6 @@ from proto_tools.entities.structures import (
 )
 
 __all__ = [
-    # Provenance
-    "Sha256Digest",
-    "SourceProvenance",
     # Antibodies
     "Antibody",
     "AntibodyLogits",

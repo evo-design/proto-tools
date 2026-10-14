@@ -213,8 +213,8 @@ def parse_workflow_data(data: dict[str, Any], payload: dict[str, Any], name: str
     predictions = [
         GenePrediction(
             gene_index=int(record.get("gene_index", index)),
-            gene_name=str(record.get("gene_name", "")),
-            strand=str(record.get("strand", "")),
+            gene_name=str(record.get("gene_name") or ""),
+            strand=str(record.get("strand") or ""),
             tss_position=int(record.get("tss_position", 0)),
             expression=record.get("expression"),
             expression_tpm=record.get("expression_tpm"),

@@ -23,8 +23,6 @@ from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 # Cro repressor from bacteriophage lambda; short, well-folded.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
-# L-tyrosine; resolves to CCD "TYR".
-_TYR_SMILES = "c1cc(ccc1C[C@@H](C(=O)O)N)O"
 
 
 # ── Helpers serialization ─────────────────────────────────────────────────────
@@ -134,31 +132,6 @@ def test_rf3_config_rejects_include_pae_matrix():
 
 
 @pytest.mark.uses_gpu
-def test_rf3_basic_execution():
-    """Single-chain prediction populates the headline metrics and a valid mmCIF."""
-    result = run_rf3_prediction(
-        RF3Input(complexes=[_CRO_SEQUENCE]),
-        RF3Config(use_msa=False, diffusion_batch_size=1, verbose=False),
-    )
-    assert result.success
-    assert result.tool_id == "rf3-prediction"
-    assert len(result.structures) == 1
-    s = result.structures[0]
-    assert is_valid_structure(s.structure_cif)
-    m = s.metrics
-    assert 0.0 <= m.avg_plddt <= 1.0
-    assert 0.0 <= m.ptm <= 1.0
-    assert m.avg_pae >= 0.0
-    assert m.pde >= 0.0
-    assert len(m.chain_ptm) == 1
-    # Single-chain inputs get empty chain-pair matrices (no pair to compute).
-    assert m.chain_pair_pae == []
-    assert m.chain_pair_pde == []
-    assert isinstance(m.has_clash, bool)
-    assert_metrics_in_spec(result)
-
-
-@pytest.mark.uses_gpu
 def test_rf3_multi_chain_populates_chain_pair_matrices():
     """A 2-chain input fills the (symmetric) 2-by-2 chain-pair PAE/PDE matrices."""
     comp = Complex(
@@ -182,30 +155,31 @@ def test_rf3_multi_chain_populates_chain_pair_matrices():
 
 
 @pytest.mark.uses_gpu
-def test_rf3_with_ligand_smiles():
-    """A protein + SMILES ligand complex folds and reports has_clash as a bool."""
-    comp = Complex(chains=[Chain(sequence=_CRO_SEQUENCE), Fragment(smiles=_TYR_SMILES)])
-    result = run_rf3_prediction(
-        RF3Input(complexes=[comp]),
-        RF3Config(use_msa=False, diffusion_batch_size=1, verbose=False),
-    )
-    assert result.success
-    s = result.structures[0]
-    assert isinstance(s.metrics.has_clash, bool)
-    assert is_valid_structure(s.structure_cif)
-
-
-@pytest.mark.uses_gpu
-def test_rf3_seed_advances_per_complex():
-    """Duplicate inputs in one call diversify because the wrapper advances ``seed + i``."""
+def test_rf3_single_chain_metrics_and_seed_advances_per_complex():
+    """Single-chain metrics are populated, and duplicate inputs diversify because the wrapper advances ``seed + i``."""
     result = run_rf3_prediction(
         RF3Input(complexes=[_CRO_SEQUENCE, _CRO_SEQUENCE]),
         RF3Config(use_msa=False, diffusion_batch_size=1, seed=42, verbose=False),
     )
     assert result.success
+    assert result.tool_id == "rf3-prediction"
     assert len(result.structures) == 2
     # The two structures must differ — confirms per-complex seed advancement.
     assert result.structures[0].structure != result.structures[1].structure
+
+    s = result.structures[0]
+    assert is_valid_structure(s.structure_cif)
+    m = s.metrics
+    assert 0.0 <= m.avg_plddt <= 1.0
+    assert 0.0 <= m.ptm <= 1.0
+    assert m.avg_pae >= 0.0
+    assert m.pde >= 0.0
+    assert len(m.chain_ptm) == 1
+    # Single-chain inputs get empty chain-pair matrices (no pair to compute).
+    assert m.chain_pair_pae == []
+    assert m.chain_pair_pde == []
+    assert isinstance(m.has_clash, bool)
+    assert_metrics_in_spec(result)
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────

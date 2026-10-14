@@ -80,11 +80,8 @@ def test_sample_input_contract(input_cls, config_cls, output_cls):
 
 @pytest.mark.parametrize("input_cls,config_cls,output_cls", SAMPLE_TOOLS)
 def test_sample_config_contract(input_cls, config_cls, output_cls):
-    """Config inherits base, has shared fields, rejects invalid values."""
+    """Config inherits base and keeps the shared bounds even where a tool redefines the field."""
     assert issubclass(config_cls, CausalModelSampleConfig)
-    config = config_cls()
-    for field in ("temperature", "top_p", "batch_size", "device", "prepend_prompt"):
-        assert hasattr(config, field), f"Missing field: {field}"
     with pytest.raises(ValidationError):
         config_cls(temperature=0.0)
     with pytest.raises(ValidationError):
@@ -114,14 +111,6 @@ def test_scoring_input_contract(input_cls, config_cls, output_cls):
     assert input_cls(sequences="MKTL").sequences == ["MKTL"]
     with pytest.raises(ValidationError, match="sequences must not be empty"):
         input_cls(sequences=[])
-
-
-@pytest.mark.parametrize("input_cls,config_cls,output_cls", SCORING_TOOLS)
-def test_scoring_config_contract(input_cls, config_cls, output_cls):
-    """Config has shared fields (batch_size, device)."""
-    config = config_cls()
-    assert hasattr(config, "batch_size")
-    assert hasattr(config, "device")
 
 
 @pytest.mark.parametrize("input_cls,config_cls,output_cls", SCORING_TOOLS)

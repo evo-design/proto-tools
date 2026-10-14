@@ -13,43 +13,16 @@ import logging
 import random
 import tarfile
 import time
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
 import requests
 
-from proto_tools.utils import base_config
+from proto_tools.utils.http_session import user_agent_for
 
 logger = logging.getLogger(__name__)
 
 MSA_SERVER_URL = "https://api.colabfold.com"
-
-
-def _proto_tools_version() -> str:
-    """Return the installed proto-tools version, or ``unknown`` where there is no distribution.
-
-    A Modal container puts proto-tools on the path by mounting the source tree rather than
-    installing it, so it carries no dist-info and ``version()`` raises. The version only decorates
-    a ``User-Agent``, so a search that would otherwise succeed must not fail for the want of it.
-    """
-    try:
-        return version("proto-tools")
-    except PackageNotFoundError:
-        return "unknown"
-
-
-def user_agent_for(identity: str | None = None) -> str:
-    """Build the ``User-Agent`` the server requires, naming proto-tools and the caller.
-
-    Args:
-        identity (str | None): Identifies the caller when the request originates elsewhere, such as
-            a hosted process searching on a user's behalf. Derived from this machine when omitted.
-
-    Returns:
-        str: A user agent naming proto-tools and the caller.
-    """
-    return f"proto-tools/{_proto_tools_version()} ({identity or base_config.client_identity()})"
 
 
 # Server-side statuses. Waiting helps only where the condition is expected to clear.

@@ -27,13 +27,13 @@ from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_
 
 def _warmup() -> None:
     """Deploy-time: warm the model, then stage every named assembly onto the volume."""
+    from proto_tools.tools.rna_splicing.reference_genome import GENOME_FASTA
     from proto_tools.tools.rna_splicing.spliceai.spliceai_predict import (
         SpliceAIPredictConfig,
         example_input,
         run_spliceai_predict,
     )
     from proto_tools.tools.rna_splicing.spliceai.spliceai_score import (
-        _GENOME_FASTA,
         SpliceAIScoreConfig,
         SpliceAIScoreInput,
         SpliceAIVariant,
@@ -43,7 +43,7 @@ def _warmup() -> None:
     run_spliceai_predict(example_input(), SpliceAIPredictConfig())
 
     probe = SpliceAIScoreInput(variants=[SpliceAIVariant(chromosome="1", position=100_000, ref="A", alt="C")])
-    for assembly in sorted(_GENOME_FASTA):
+    for assembly in sorted(GENOME_FASTA):
         run_spliceai_score(probe, SpliceAIScoreConfig(reference_fasta=assembly))
 
 

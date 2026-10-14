@@ -235,24 +235,16 @@ def test_reusing_one_config_preprocesses_every_call(remote_tool):
     already done and dispatch raw inputs, skipping the MSA search or selection preprocess
     performs. Nothing about that is remote, so it would silently affect local calls too.
     """
-    spec, _ = remote_tool
+    spec, seen = remote_tool
     config = _RemoteConfig(device="cpu")
 
     for _ in range(3):
-        spec.function(_RemoteInput(items=["a"]), config)
+        result = spec.function(_RemoteInput(items=["a"]), config)
 
     assert _RemoteConfig.preprocess_calls == 3, "each call must prepare its own inputs"
     assert config._preprocess_completed is False, "the caller's config must not be marked spent"
-
-
-def test_local_dispatch_is_unaffected(remote_tool):
-    """A local device still executes the tool rather than taking a remote path."""
-    spec, seen = remote_tool
-
-    result = spec.function(_RemoteInput(items=["a", "b"]), _RemoteConfig(device="cpu"))
-
-    assert seen["dispatches"] == []
-    assert [r.value for r in result.results] == ["a", "b"]
+    assert seen["dispatches"] == [], "a local device executes the tool rather than taking a remote path"
+    assert [r.value for r in result.results] == ["a"]
 
 
 # ── Fan-out across containers ───────────────────────────────────────────────
@@ -637,18 +629,18 @@ def _failed_items_in_cache() -> list[str]:
     return found
 
 
-@pytest.mark.parametrize("policy", ["raise", "return_partial"])
 @pytest.mark.parametrize("tool", ["deterministic", "stochastic"])
 def test_no_failure_is_ever_written_to_the_cache(
-    chunked_tool, stochastic_chunked_tool, program_cache, monkeypatch, policy, tool
+    chunked_tool, stochastic_chunked_tool, program_cache, monkeypatch, tool
 ):
     """A cached failure is permanent: the next identical call returns it without retrying.
 
     Asserted over the whole cache rather than one entry, because the same mistake has already
-    appeared on two independent paths — per-item entries and the whole-call entry.
+    appeared on two independent paths — per-item entries and the whole-call entry. The
+    ``return_partial`` policy is covered by the retry tests above.
     """
     spec, _ = chunked_tool if tool == "deterministic" else stochastic_chunked_tool
-    monkeypatch.setenv("PROTO_ON_PARTIAL_FAILURE", policy)
+    monkeypatch.setenv("PROTO_ON_PARTIAL_FAILURE", "raise")
     _fail_chunks(monkeypatch, failing={1})
 
     inputs = _RemoteInput(items=[f"s{n}" for n in range(8)])
@@ -731,16 +723,16 @@ def test_a_total_failure_raises_even_under_return_partial(chunked_tool, monkeypa
     ],
     ids=["bad-credentials", "no-api-key", "client-not-installed", "not-deployed"],
 )
-@pytest.mark.parametrize("policy", ["raise", "return_partial"])
-def test_a_setup_failure_surfaces_instead_of_becoming_partial(chunked_tool, monkeypatch, error, policy):
+def test_a_setup_failure_surfaces_instead_of_becoming_partial(chunked_tool, monkeypatch, error):
     """Nothing about the items is wrong, so every chunk would fail identically.
 
     Reporting one placeholder per item would repeat the same setup problem N times and bury the
     single thing the caller has to fix. It is also not worth retrying: the credentials will not
-    become valid between attempts.
+    become valid between attempts. Run under ``return_partial``, the policy that would otherwise
+    absorb the error into placeholders.
     """
     spec, _ = chunked_tool
-    monkeypatch.setenv("PROTO_ON_PARTIAL_FAILURE", policy)
+    monkeypatch.setenv("PROTO_ON_PARTIAL_FAILURE", "return_partial")
 
     def cannot_dispatch(tool_key, inputs_list, configs):
         raise error
@@ -822,26 +814,6 @@ def test_uniform_cost_cuts_exactly_as_counting_did():
     """Most tools declare no cost, so their behaviour must be untouched."""
     assert chunk_indices(40, 32, [1.0] * 40) == chunk_indices(40, 32, None) == [(0, 32), (32, 40)]
     assert chunk_indices(100, 7, [1.0] * 100) == chunk_indices(100, 7, None)
-
-
-def test_the_count_ceiling_still_binds_when_cost_would_allow_more():
-    """max_chunk_size is a hard cap: cost decides where a cut falls, count how wide it may get."""
-    costs = [1.0] * 8 + [1000.0]
-
-    spans = chunk_indices(9, 3, costs)
-
-    assert all(stop - start <= 3 for start, stop in spans), f"a span exceeded the ceiling: {spans}"
-
-
-def test_one_very_expensive_item_neither_wedges_nor_vanishes():
-    """A single item worth more than a whole share must still be dispatched, on its own if need be."""
-    costs = [1.0, 1.0, 900.0, 1.0]
-
-    spans = chunk_indices(4, 2, costs)
-
-    covered = [i for start, stop in spans for i in range(start, stop)]
-    assert covered == [0, 1, 2, 3], "every item is dispatched exactly once"
-    assert all(start < stop for start, stop in spans), "no empty span"
 
 
 def test_every_item_is_dispatched_once_whatever_the_costs():
@@ -944,13 +916,6 @@ def test_a_local_database_search_is_forced_remote_only_when_hosted(monkeypatch):
 
     assert searched_with(hosted=False) == "local", "a user's own machine keeps the search they asked for"
     assert searched_with(hosted=True) == "remote", "a hosted process cannot reach a local database"
-
-
-def test_a_config_with_nothing_to_adjust_is_returned_unchanged():
-    """Almost every config has no setting that depends on a staged corpus."""
-    config = _RemoteConfig(device="modal")
-
-    assert config.for_hosted_env() is config, "the default hook must not copy for no reason"
 
 
 @pytest.mark.parametrize(

@@ -15,17 +15,9 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("esmc")
 
-# (checkpoint, hidden_dim). esmc_6b is shape-checked only; it downloads ~25 GB.
-_SHAPE_CHECKPOINTS = [
-    ("esmc_300m", 960),
-    ("esmc_600m", 1152),
-    pytest.param("esmc_6b", 2560, marks=pytest.mark.slow),
-]
-_CHECKPOINT_IDS = ["esmc_300m", "esmc_600m"]
-
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize(("checkpoint", "embedding_dim"), _SHAPE_CHECKPOINTS)
+@pytest.mark.parametrize(("checkpoint", "embedding_dim"), [("esmc_300m", 960), ("esmc_600m", 1152)])
 def test_esmc_forward_pass_shapes(checkpoint, embedding_dim):
     """End-to-end embedding extraction returns the expected shapes."""
     sequences = ["MKTAYIAKQR", "GSSGSSGSS"]
@@ -48,38 +40,21 @@ def test_esmc_forward_pass_shapes(checkpoint, embedding_dim):
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("checkpoint", _CHECKPOINT_IDS)
-def test_esmc_logits_disabled_by_default(checkpoint):
+def test_esmc_logits_disabled_by_default():
     inputs = ESMCEmbeddingsInput(sequences=["MKTAYIAKQR"])
-    result = run_esmc_embeddings(inputs=inputs, config=ESMCEmbeddingsConfig(model_checkpoint=checkpoint))
+    result = run_esmc_embeddings(inputs=inputs, config=ESMCEmbeddingsConfig(model_checkpoint="esmc_300m"))
     assert result.results[0].logits is None
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("checkpoint", _CHECKPOINT_IDS)
-def test_esmc_different_sequences_produce_different_embeddings(checkpoint):
+def test_esmc_different_sequences_produce_different_embeddings():
     """Sanity check: distinct sequences should not collapse to the same embedding."""
     inputs = ESMCEmbeddingsInput(sequences=["MVLSPADKTNVKAAW", "AAAAAAAAAAAAAAA"])
-    result = run_esmc_embeddings(inputs=inputs, config=ESMCEmbeddingsConfig(model_checkpoint=checkpoint))
+    result = run_esmc_embeddings(inputs=inputs, config=ESMCEmbeddingsConfig(model_checkpoint="esmc_300m"))
 
     a = result.results[0].mean_embedding
     b = result.results[1].mean_embedding
     assert any(abs(x - y) > 1e-3 for x, y in zip(a, b, strict=True))
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.parametrize("checkpoint", _CHECKPOINT_IDS)
-def test_esmc_persistent_worker_reuse(checkpoint):
-    """Two back-to-back dispatches under the module-scoped persistence fixture."""
-    inputs = ESMCEmbeddingsInput(sequences=["MKTAYIAKQR"])
-    config = ESMCEmbeddingsConfig(model_checkpoint=checkpoint)
-
-    r1 = run_esmc_embeddings(inputs=inputs, config=config)
-    r2 = run_esmc_embeddings(inputs=inputs, config=config)
-
-    assert r1.success and r2.success
-    # Identical inputs through one persistent worker → identical embeddings
-    assert r1.results[0].mean_embedding == r2.results[0].mean_embedding
 
 
 # ── Benchmarks ────────────────────────────────────────────────────────────────

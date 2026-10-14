@@ -1,3 +1,5 @@
 # RFdiffusion3 via foundry
 rc-foundry[rfd3]==0.2.0
 gemmi
+# rc-foundry 0.2.0 imports AtomWorks APIs removed in atomworks 3.0
+atomworks<3

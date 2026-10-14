@@ -1,0 +1,822 @@
+{
+  "tool_id": "spliceai2-score",
+  "execution_time": 6.553805828094482,
+  "timestamp": "2026-10-10T13:01:42.282526",
+  "success": true,
+  "warnings": [],
+  "errors": [],
+  "metadata": {
+    "reference_fasta": "grch38",
+    "assembly": "GRCh38"
+  },
+  "results": [
+    {
+      "chromosome": "11",
+      "position": 5226929,
+      "ref": "C",
+      "alt": "T",
+      "strand": "-",
+      "donor_gain": [
+        {
+          "delta_score": 0.6439208984375,
+          "ref_score": 0.0640869140625,
+          "alt_score": 0.7080078125,
+          "distance": 16
+        },
+        {
+          "delta_score": 0.174285888671875,
+          "ref_score": 0.036163330078125,
+          "alt_score": 0.21044921875,
+          "distance": 38
+        },
+        {
+          "delta_score": 0.083282470703125,
+          "ref_score": 0.016082763671875,
+          "alt_score": 0.099365234375,
+          "distance": -12
+        },
+        {
+          "delta_score": 0.037628173828125,
+          "ref_score": 0.008941650390625,
+          "alt_score": 0.04656982421875,
+          "distance": 23
+        },
+        {
+          "delta_score": 0.03594970703125,
+          "ref_score": 0.00274658203125,
+          "alt_score": 0.0386962890625,
+          "distance": -24
+        },
+        {
+          "delta_score": 0.035552978515625,
+          "ref_score": 0.014068603515625,
+          "alt_score": 0.04962158203125,
+          "distance": -4
+        },
+        {
+          "delta_score": 0.035022735595703125,
+          "ref_score": 0.004650115966796875,
+          "alt_score": 0.0396728515625,
+          "distance": 19
+        },
+        {
+          "delta_score": 0.017974853515625,
+          "ref_score": 0.0341796875,
+          "alt_score": 0.052154541015625,
+          "distance": 271
+        },
+        {
+          "delta_score": 0.01318359375,
+          "ref_score": 0.46337890625,
+          "alt_score": 0.4765625,
+          "distance": 16176
+        },
+        {
+          "delta_score": 0.0087890625,
+          "ref_score": 0.9404296875,
+          "alt_score": 0.94921875,
+          "distance": -353
+        }
+      ],
+      "donor_loss": [
+        {
+          "delta_score": 0.8730368614196777,
+          "ref_score": 0.873046875,
+          "alt_score": 1.0013580322265625e-05,
+          "distance": 0
+        },
+        {
+          "delta_score": 0.002685546875,
+          "ref_score": 0.0941162109375,
+          "alt_score": 0.0914306640625,
+          "distance": 582
+        },
+        {
+          "delta_score": 0.001953125,
+          "ref_score": 0.8330078125,
+          "alt_score": 0.8310546875,
+          "distance": 27707
+        },
+        {
+          "delta_score": 0.0015549659729003906,
+          "ref_score": 0.0019474029541015625,
+          "alt_score": 0.0003924369812011719,
+          "distance": 4
+        },
+        {
+          "delta_score": 0.00146484375,
+          "ref_score": 0.88916015625,
+          "alt_score": 0.8876953125,
+          "distance": 27362
+        },
+        {
+          "delta_score": 0.0009765625,
+          "ref_score": 0.6416015625,
+          "alt_score": 0.640625,
+          "distance": 22438
+        },
+        {
+          "delta_score": 0.00078582763671875,
+          "ref_score": 0.01004791259765625,
+          "alt_score": 0.0092620849609375,
+          "distance": -218
+        },
+        {
+          "delta_score": 0.000606536865234375,
+          "ref_score": 0.0029144287109375,
+          "alt_score": 0.002307891845703125,
+          "distance": -246
+        },
+        {
+          "delta_score": 0.00048828125,
+          "ref_score": 0.90185546875,
+          "alt_score": 0.9013671875,
+          "distance": 7412
+        },
+        {
+          "delta_score": 0.00042724609375,
+          "ref_score": 0.0938720703125,
+          "alt_score": 0.09344482421875,
+          "distance": 7428
+        }
+      ],
+      "acceptor_gain": [
+        {
+          "delta_score": 0.017578125,
+          "ref_score": 0.3505859375,
+          "alt_score": 0.3681640625,
+          "distance": 16400
+        },
+        {
+          "delta_score": 0.00701904296875,
+          "ref_score": 0.05047607421875,
+          "alt_score": 0.0574951171875,
+          "distance": -15891
+        },
+        {
+          "delta_score": 0.00439453125,
+          "ref_score": 0.955078125,
+          "alt_score": 0.95947265625,
+          "distance": -1202
+        },
+        {
+          "delta_score": 0.0030517578125,
+          "ref_score": 0.02337646484375,
+          "alt_score": 0.02642822265625,
+          "distance": -12630
+        },
+        {
+          "delta_score": 0.0027618408203125,
+          "ref_score": 0.0220184326171875,
+          "alt_score": 0.0247802734375,
+          "distance": -12619
+        },
+        {
+          "delta_score": 0.00244140625,
+          "ref_score": 0.75732421875,
+          "alt_score": 0.759765625,
+          "distance": 26477
+        },
+        {
+          "delta_score": 0.001953125,
+          "ref_score": 0.8837890625,
+          "alt_score": 0.8857421875,
+          "distance": 7285
+        },
+        {
+          "delta_score": 0.001922607421875,
+          "ref_score": 0.0587158203125,
+          "alt_score": 0.060638427734375,
+          "distance": -931
+        },
+        {
+          "delta_score": 0.0017547607421875,
+          "ref_score": 0.0262603759765625,
+          "alt_score": 0.02801513671875,
+          "distance": -26239
+        },
+        {
+          "delta_score": 0.001678466796875,
+          "ref_score": 0.034271240234375,
+          "alt_score": 0.03594970703125,
+          "distance": -3239
+        }
+      ],
+      "acceptor_loss": [
+        {
+          "delta_score": 0.04296875,
+          "ref_score": 0.9111328125,
+          "alt_score": 0.8681640625,
+          "distance": -129
+        },
+        {
+          "delta_score": 0.0359344482421875,
+          "ref_score": 0.053741455078125,
+          "alt_score": 0.0178070068359375,
+          "distance": 111
+        },
+        {
+          "delta_score": 0.00439453125,
+          "ref_score": 0.92041015625,
+          "alt_score": 0.916015625,
+          "distance": 6164
+        },
+        {
+          "delta_score": 0.00238037109375,
+          "ref_score": 0.0083160400390625,
+          "alt_score": 0.0059356689453125,
+          "distance": -255
+        },
+        {
+          "delta_score": 0.002227783203125,
+          "ref_score": 0.040924072265625,
+          "alt_score": 0.0386962890625,
+          "distance": 651
+        },
+        {
+          "delta_score": 0.0020751953125,
+          "ref_score": 0.115234375,
+          "alt_score": 0.1131591796875,
+          "distance": 5870
+        },
+        {
+          "delta_score": 0.0017156600952148438,
+          "ref_score": 0.002719879150390625,
+          "alt_score": 0.0010042190551757812,
+          "distance": 98
+        },
+        {
+          "delta_score": 0.001708984375,
+          "ref_score": 0.0999755859375,
+          "alt_score": 0.0982666015625,
+          "distance": 7533
+        },
+        {
+          "delta_score": 0.0014495849609375,
+          "ref_score": 0.020965576171875,
+          "alt_score": 0.0195159912109375,
+          "distance": 648
+        },
+        {
+          "delta_score": 0.0012969970703125,
+          "ref_score": 0.0176849365234375,
+          "alt_score": 0.016387939453125,
+          "distance": -1157
+        }
+      ],
+      "junction_gain": [
+        {
+          "delta_score": 0.432373046875,
+          "ref_score": 0.070556640625,
+          "alt_score": 0.5029296875,
+          "donor_distance": 16,
+          "acceptor_distance": -129
+        },
+        {
+          "delta_score": 0.169403076171875,
+          "ref_score": 0.035552978515625,
+          "alt_score": 0.2049560546875,
+          "donor_distance": 38,
+          "acceptor_distance": -129
+        },
+        {
+          "delta_score": 0.1016845703125,
+          "ref_score": 0.1256103515625,
+          "alt_score": 0.227294921875,
+          "donor_distance": 7061,
+          "acceptor_distance": -129
+        },
+        {
+          "delta_score": 0.08721923828125,
+          "ref_score": 0.09185791015625,
+          "alt_score": 0.1790771484375,
+          "donor_distance": 16176,
+          "acceptor_distance": -129
+        },
+        {
+          "delta_score": 0.060882568359375,
+          "ref_score": 0.035552978515625,
+          "alt_score": 0.096435546875,
+          "donor_distance": 582,
+          "acceptor_distance": -129
+        },
+        {
+          "delta_score": 0.05572509765625,
+          "ref_score": 0.02783203125,
+          "alt_score": 0.08355712890625,
+          "donor_distance": -12,
+          "acceptor_distance": -129
+        },
+        {
+          "delta_score": 0.048004150390625,
+          "ref_score": 0.043243408203125,
+          "alt_score": 0.09124755859375,
+          "donor_distance": 16169,
+          "acceptor_distance": -129
+        },
+        {
+          "delta_score": 0.039459228515625,
+          "ref_score": 0.010894775390625,
+          "alt_score": 0.05035400390625,
+          "donor_distance": -24,
+          "acceptor_distance": -129
+        },
+        {
+          "delta_score": 0.038330078125,
+          "ref_score": 0.0672607421875,
+          "alt_score": 0.1055908203125,
+          "donor_distance": 7412,
+          "acceptor_distance": -129
+        },
+        {
+          "delta_score": 0.02892303466796875,
+          "ref_score": 0.00873565673828125,
+          "alt_score": 0.03765869140625,
+          "donor_distance": 19,
+          "acceptor_distance": -129
+        }
+      ],
+      "junction_loss": [
+        {
+          "delta_score": 0.7281923294067383,
+          "ref_score": 0.728515625,
+          "alt_score": 0.00032329559326171875,
+          "donor_distance": 0,
+          "acceptor_distance": -129
+        },
+        {
+          "delta_score": 0.056671142578125,
+          "ref_score": 0.1021728515625,
+          "alt_score": 0.045501708984375,
+          "donor_distance": 582,
+          "acceptor_distance": 111
+        },
+        {
+          "delta_score": 0.0269317626953125,
+          "ref_score": 0.04339599609375,
+          "alt_score": 0.0164642333984375,
+          "donor_distance": 7061,
+          "acceptor_distance": 111
+        },
+        {
+          "delta_score": 0.0229644775390625,
+          "ref_score": 0.03619384765625,
+          "alt_score": 0.0132293701171875,
+          "donor_distance": 16176,
+          "acceptor_distance": 111
+        },
+        {
+          "delta_score": 0.022610783576965332,
+          "ref_score": 0.022613525390625,
+          "alt_score": 2.7418136596679688e-06,
+          "donor_distance": 0,
+          "acceptor_distance": -217
+        },
+        {
+          "delta_score": 0.021759033203125,
+          "ref_score": 0.033172607421875,
+          "alt_score": 0.01141357421875,
+          "donor_distance": 271,
+          "acceptor_distance": 111
+        },
+        {
+          "delta_score": 0.02130126953125,
+          "ref_score": 0.0294189453125,
+          "alt_score": 0.00811767578125,
+          "donor_distance": 607,
+          "acceptor_distance": 111
+        },
+        {
+          "delta_score": 0.0154571533203125,
+          "ref_score": 0.02435302734375,
+          "alt_score": 0.0088958740234375,
+          "donor_distance": 7412,
+          "acceptor_distance": 111
+        },
+        {
+          "delta_score": 0.01433563232421875,
+          "ref_score": 0.021636962890625,
+          "alt_score": 0.00730133056640625,
+          "donor_distance": 2322,
+          "acceptor_distance": 111
+        },
+        {
+          "delta_score": 0.014129638671875,
+          "ref_score": 0.027191162109375,
+          "alt_score": 0.0130615234375,
+          "donor_distance": 27362,
+          "acceptor_distance": 111
+        }
+      ],
+      "metrics": {
+        "primary_metric": "summary_score",
+        "metric_type": "SpliceAI2ScoreMetrics",
+        "summary_score": 0.8730368614196777
+      }
+    },
+    {
+      "chromosome": "11",
+      "position": 5226820,
+      "ref": "C",
+      "alt": "T",
+      "strand": "-",
+      "donor_gain": [
+        {
+          "delta_score": 0.031005859375,
+          "ref_score": 0.46728515625,
+          "alt_score": 0.498291015625,
+          "distance": 16285
+        },
+        {
+          "delta_score": 0.019805908203125,
+          "ref_score": 0.052459716796875,
+          "alt_score": 0.072265625,
+          "distance": 125
+        },
+        {
+          "delta_score": 0.016357421875,
+          "ref_score": 0.0960693359375,
+          "alt_score": 0.1124267578125,
+          "distance": 691
+        },
+        {
+          "delta_score": 0.01416015625,
+          "ref_score": 0.1695556640625,
+          "alt_score": 0.1837158203125,
+          "distance": 16278
+        },
+        {
+          "delta_score": 0.013671875,
+          "ref_score": 0.6826171875,
+          "alt_score": 0.6962890625,
+          "distance": 22547
+        },
+        {
+          "delta_score": 0.012939453125,
+          "ref_score": 0.17919921875,
+          "alt_score": 0.192138671875,
+          "distance": 20415
+        },
+        {
+          "delta_score": 0.00946044921875,
+          "ref_score": 0.02130126953125,
+          "alt_score": 0.03076171875,
+          "distance": -25791
+        },
+        {
+          "delta_score": 0.00897216796875,
+          "ref_score": 0.036895751953125,
+          "alt_score": 0.045867919921875,
+          "distance": 147
+        },
+        {
+          "delta_score": 0.00830078125,
+          "ref_score": 0.9501953125,
+          "alt_score": 0.95849609375,
+          "distance": -244
+        },
+        {
+          "delta_score": 0.007568359375,
+          "ref_score": 0.20263671875,
+          "alt_score": 0.210205078125,
+          "distance": 16629
+        }
+      ],
+      "donor_loss": [
+        {
+          "delta_score": 0.00217437744140625,
+          "ref_score": 0.014984130859375,
+          "alt_score": 0.01280975341796875,
+          "distance": 97
+        },
+        {
+          "delta_score": 0.001953125,
+          "ref_score": 0.8291015625,
+          "alt_score": 0.8271484375,
+          "distance": 27816
+        },
+        {
+          "delta_score": 0.00154876708984375,
+          "ref_score": 0.00435638427734375,
+          "alt_score": 0.0028076171875,
+          "distance": -197
+        },
+        {
+          "delta_score": 0.0014190673828125,
+          "ref_score": 0.00742340087890625,
+          "alt_score": 0.00600433349609375,
+          "distance": -291
+        },
+        {
+          "delta_score": 0.00139617919921875,
+          "ref_score": 0.00946044921875,
+          "alt_score": 0.00806427001953125,
+          "distance": -109
+        },
+        {
+          "delta_score": 0.001171112060546875,
+          "ref_score": 0.00550079345703125,
+          "alt_score": 0.004329681396484375,
+          "distance": -223
+        },
+        {
+          "delta_score": 0.00095367431640625,
+          "ref_score": 0.003650665283203125,
+          "alt_score": 0.002696990966796875,
+          "distance": -209
+        },
+        {
+          "delta_score": 0.000762939453125,
+          "ref_score": 0.0021209716796875,
+          "alt_score": 0.0013580322265625,
+          "distance": 5036
+        },
+        {
+          "delta_score": 0.00075531005859375,
+          "ref_score": 0.0110626220703125,
+          "alt_score": 0.01030731201171875,
+          "distance": 6053
+        },
+        {
+          "delta_score": 0.0006656646728515625,
+          "ref_score": 0.0020751953125,
+          "alt_score": 0.0014095306396484375,
+          "distance": 85
+        }
+      ],
+      "acceptor_gain": [
+        {
+          "delta_score": 0.6640610694885254,
+          "ref_score": 1.430511474609375e-06,
+          "alt_score": 0.6640625,
+          "distance": -1
+        },
+        {
+          "delta_score": 0.0477447509765625,
+          "ref_score": 0.0240325927734375,
+          "alt_score": 0.07177734375,
+          "distance": -108
+        },
+        {
+          "delta_score": 0.02880859375,
+          "ref_score": 0.4052734375,
+          "alt_score": 0.43408203125,
+          "distance": 15428
+        },
+        {
+          "delta_score": 0.02545928955078125,
+          "ref_score": 0.00814056396484375,
+          "alt_score": 0.033599853515625,
+          "distance": -146
+        },
+        {
+          "delta_score": 0.02490234375,
+          "ref_score": 0.4033203125,
+          "alt_score": 0.42822265625,
+          "distance": 16509
+        },
+        {
+          "delta_score": 0.017333984375,
+          "ref_score": 0.05078125,
+          "alt_score": 0.068115234375,
+          "distance": -15782
+        },
+        {
+          "delta_score": 0.015716552734375,
+          "ref_score": 0.02337646484375,
+          "alt_score": 0.039093017578125,
+          "distance": -25905
+        },
+        {
+          "delta_score": 0.0145263671875,
+          "ref_score": 0.009124755859375,
+          "alt_score": 0.023651123046875,
+          "distance": 23
+        },
+        {
+          "delta_score": 0.0096435546875,
+          "ref_score": 0.1112060546875,
+          "alt_score": 0.120849609375,
+          "distance": 5979
+        },
+        {
+          "delta_score": 0.0087890625,
+          "ref_score": 0.9560546875,
+          "alt_score": 0.96484375,
+          "distance": -1093
+        }
+      ],
+      "acceptor_loss": [
+        {
+          "delta_score": 0.2958984375,
+          "ref_score": 0.9130859375,
+          "alt_score": 0.6171875,
+          "distance": -20
+        },
+        {
+          "delta_score": 0.010528564453125,
+          "ref_score": 0.041961669921875,
+          "alt_score": 0.03143310546875,
+          "distance": 760
+        },
+        {
+          "delta_score": 0.00507354736328125,
+          "ref_score": 0.02008056640625,
+          "alt_score": 0.01500701904296875,
+          "distance": 757
+        },
+        {
+          "delta_score": 0.00347900390625,
+          "ref_score": 0.07037353515625,
+          "alt_score": 0.06689453125,
+          "distance": 220
+        },
+        {
+          "delta_score": 0.0025787353515625,
+          "ref_score": 0.0195465087890625,
+          "alt_score": 0.0169677734375,
+          "distance": -1048
+        },
+        {
+          "delta_score": 0.00091552734375,
+          "ref_score": 0.0144195556640625,
+          "alt_score": 0.0135040283203125,
+          "distance": -1162
+        },
+        {
+          "delta_score": 0.0006866455078125,
+          "ref_score": 0.003444671630859375,
+          "alt_score": 0.002758026123046875,
+          "distance": -1174
+        },
+        {
+          "delta_score": 0.0006866455078125,
+          "ref_score": 0.00283050537109375,
+          "alt_score": 0.00214385986328125,
+          "distance": -1213
+        },
+        {
+          "delta_score": 0.000598907470703125,
+          "ref_score": 0.002849578857421875,
+          "alt_score": 0.00225067138671875,
+          "distance": 207
+        },
+        {
+          "delta_score": 0.000583648681640625,
+          "ref_score": 0.00261688232421875,
+          "alt_score": 0.002033233642578125,
+          "distance": -1178
+        }
+      ],
+      "junction_gain": [
+        {
+          "delta_score": 0.5312478542327881,
+          "ref_score": 2.1457672119140625e-06,
+          "alt_score": 0.53125,
+          "donor_distance": 109,
+          "acceptor_distance": -1
+        },
+        {
+          "delta_score": 0.0611572265625,
+          "ref_score": 0.026123046875,
+          "alt_score": 0.0872802734375,
+          "donor_distance": 109,
+          "acceptor_distance": -108
+        },
+        {
+          "delta_score": 0.0396728515625,
+          "ref_score": 0.0,
+          "alt_score": 0.0396728515625,
+          "donor_distance": 125,
+          "acceptor_distance": -1
+        },
+        {
+          "delta_score": 0.0368342399597168,
+          "ref_score": 4.76837158203125e-07,
+          "alt_score": 0.036834716796875,
+          "donor_distance": 7170,
+          "acceptor_distance": -1
+        },
+        {
+          "delta_score": 0.033567070960998535,
+          "ref_score": 2.2649765014648438e-06,
+          "alt_score": 0.0335693359375,
+          "donor_distance": 16285,
+          "acceptor_distance": -1
+        },
+        {
+          "delta_score": 0.03125,
+          "ref_score": 0.1136474609375,
+          "alt_score": 0.1448974609375,
+          "donor_distance": 691,
+          "acceptor_distance": 220
+        },
+        {
+          "delta_score": 0.028531193733215332,
+          "ref_score": 2.7418136596679688e-06,
+          "alt_score": 0.028533935546875,
+          "donor_distance": 22547,
+          "acceptor_distance": -1
+        },
+        {
+          "delta_score": 0.028106689453125,
+          "ref_score": 0.0,
+          "alt_score": 0.028106689453125,
+          "donor_distance": 691,
+          "acceptor_distance": -1
+        },
+        {
+          "delta_score": 0.02708756923675537,
+          "ref_score": 1.2040138244628906e-05,
+          "alt_score": 0.027099609375,
+          "donor_distance": 27471,
+          "acceptor_distance": -1
+        },
+        {
+          "delta_score": 0.02693939208984375,
+          "ref_score": 0.01093292236328125,
+          "alt_score": 0.037872314453125,
+          "donor_distance": 109,
+          "acceptor_distance": -146
+        }
+      ],
+      "junction_loss": [
+        {
+          "delta_score": 0.18115234375,
+          "ref_score": 0.7568359375,
+          "alt_score": 0.57568359375,
+          "donor_distance": 109,
+          "acceptor_distance": -20
+        },
+        {
+          "delta_score": 0.046234130859375,
+          "ref_score": 0.08349609375,
+          "alt_score": 0.037261962890625,
+          "donor_distance": 27816,
+          "acceptor_distance": -20
+        },
+        {
+          "delta_score": 0.044464111328125,
+          "ref_score": 0.1065673828125,
+          "alt_score": 0.062103271484375,
+          "donor_distance": 7170,
+          "acceptor_distance": -20
+        },
+        {
+          "delta_score": 0.039703369140625,
+          "ref_score": 0.0831298828125,
+          "alt_score": 0.043426513671875,
+          "donor_distance": 27471,
+          "acceptor_distance": -20
+        },
+        {
+          "delta_score": 0.02655029296875,
+          "ref_score": 0.05859375,
+          "alt_score": 0.03204345703125,
+          "donor_distance": 7521,
+          "acceptor_distance": -20
+        },
+        {
+          "delta_score": 0.026275634765625,
+          "ref_score": 0.088134765625,
+          "alt_score": 0.061859130859375,
+          "donor_distance": 16285,
+          "acceptor_distance": -20
+        },
+        {
+          "delta_score": 0.024200439453125,
+          "ref_score": 0.0640869140625,
+          "alt_score": 0.039886474609375,
+          "donor_distance": 22547,
+          "acceptor_distance": -20
+        },
+        {
+          "delta_score": 0.019927978515625,
+          "ref_score": 0.0657958984375,
+          "alt_score": 0.045867919921875,
+          "donor_distance": 125,
+          "acceptor_distance": -20
+        },
+        {
+          "delta_score": 0.015777587890625,
+          "ref_score": 0.04058837890625,
+          "alt_score": 0.024810791015625,
+          "donor_distance": 22892,
+          "acceptor_distance": -20
+        },
+        {
+          "delta_score": 0.0147705078125,
+          "ref_score": 0.046234130859375,
+          "alt_score": 0.031463623046875,
+          "donor_distance": 16278,
+          "acceptor_distance": -20
+        }
+      ],
+      "metrics": {
+        "primary_metric": "summary_score",
+        "metric_type": "SpliceAI2ScoreMetrics",
+        "summary_score": 0.6640610694885254
+      }
+    }
+  ]
+}

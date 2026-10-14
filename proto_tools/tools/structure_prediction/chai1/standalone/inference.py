@@ -1,10 +1,11 @@
 """Chai1 inference implementation."""
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger, get_random_int, set_torch_seed
+from standalone_helpers import get_logger, get_random_int, resolve_weights_dir, set_torch_seed
 
 logger = get_logger(__name__)
 
@@ -132,6 +133,11 @@ class Chai1Model:
         """
         logger.debug("Initializing Chai1")
 
+        # chai_lab reads CHAI_DOWNLOADS_DIR at import, so set it first: setup.sh staged the weights there.
+        weights_dir = resolve_weights_dir("chai1")
+        if weights_dir:
+            os.environ["CHAI_DOWNLOADS_DIR"] = weights_dir
+
         try:
             from chai_lab.chai1 import run_inference  # type: ignore[import-not-found]
 
@@ -168,8 +174,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         # are process-global and sticky — chai1 is excluded from the persistent-worker
         # seed reproducibility test (_SEED_PERSISTENT_EXCLUDED_KEYS) precisely
         # because they leak across dispatches within one worker.
-        import os
-
         import torch
 
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"

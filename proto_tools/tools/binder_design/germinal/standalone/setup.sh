@@ -99,13 +99,13 @@ fi
 
 # DSSP from conda-forge (salilab is dead + linked an unavailable boost 1.73). Symlink in place —
 # copying to $WEIGHTS_DIR breaks RPATH — and always reinstall so its libs stay in the env.
-"$MAMBA_BIN" install -y -p "$VENV_PATH" -c conda-forge dssp 2>/dev/null || true
+# Every py310 dssp 4.6.1 build links libmcfp 2.x and its mkdssp needs a symbol no libmcfp release has;
+# the 4.6.0 _0 build predates that dependency and loads cleanly.
+"$MAMBA_BIN" install -y -p "$VENV_PATH" -c conda-forge "dssp=4.6.0=*_0"
 mkdir -p "$GERMINAL_DIR/params"
-if [ -f "$VENV_PATH/bin/mkdssp" ]; then
-    ln -sf "$VENV_PATH/bin/mkdssp" "$GERMINAL_DIR/params/dssp"
-else
-    echo "WARNING: DSSP install failed; secondary-structure-dependent filters may be skipped."
-fi
+ln -sf "$VENV_PATH/bin/mkdssp" "$GERMINAL_DIR/params/dssp"
+# Fail the build here rather than mid-design if mkdssp cannot load its libraries.
+"$GERMINAL_DIR/params/dssp" --version >/dev/null
 
 # DAlphaBall (buried-unsat-hbond computation) — compiled from source, non-fatal.
 if [ ! -f "$WEIGHTS_DIR/binaries/DAlphaBall.gcc" ]; then

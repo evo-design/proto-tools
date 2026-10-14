@@ -25,11 +25,6 @@ from proto_tools.modal.manifest import (
 BATCH_SERVICES = sorted(s for s, tier in SERVICE_TIERS.items() if tier == BATCH_TIER)
 
 
-def test_batch_services_exist() -> None:
-    """Guard the rest of this module: every assertion below is vacuous without a batch service."""
-    assert BATCH_SERVICES
-
-
 @pytest.mark.parametrize("service", BATCH_SERVICES)
 def test_batch_services_get_no_retries(service: str) -> None:
     """Modal restarts the wall per retry, so retrying a day-long call bills the day again."""

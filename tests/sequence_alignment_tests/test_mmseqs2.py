@@ -34,7 +34,6 @@ from tests.conftest import benchmark_twice, random_dna_sequences, random_protein
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_DATA_DIR = Path("tests/dummy_data")
-PROTEIN_FASTA = TEST_DATA_DIR / "test_protein_sequences.faa"
 M8_FILE = TEST_DATA_DIR / "test_mmseqs_results.m8"
 
 
@@ -380,37 +379,7 @@ def test_genome_search_thread_fallback_reraises_unrelated_error(monkeypatch, tmp
 # ── M8 workflow (pure Python, local test data) ───────────────────────────
 
 
-def test_workflow_with_real_test_data():
-    """End-to-end parse → filter pipeline on local M8 file."""
-    if not M8_FILE.exists() or not PROTEIN_FASTA.exists():
-        pytest.skip("Test data files not found")
-
-    raw_output = M8_FILE.read_text()
-    df = _parse_m8_output(raw_output)
-    filtered_df = _filter_top_hits(df)
-
-    assert len(filtered_df) <= len(df)
-    query_counts = filtered_df.groupby("query").size()
-    assert all(count == 1 for count in query_counts)
-
-
-def test_column_names_consistency():
-    """Column names match MMseqs2 M8 format."""
-    if not M8_FILE.exists():
-        pytest.skip("Test data file not found")
-
-    raw_output = M8_FILE.read_text()
-    df = _parse_m8_output(raw_output)
-    assert list(df.columns) == ["query", "target", "pident", "evalue"]
-
-
 # ── Input validation ─────────────────────────────────────────────────────
-
-
-def test_search_proteins_input_valid():
-    """Sanity: a well-formed Input model accepts its required fields."""
-    inputs = Mmseqs2SearchProteinsInput(query_sequences=["MVLSPADKTN", "MKLLVVAAAA"])
-    assert len(inputs.query_sequences) == 2
 
 
 @pytest.mark.parametrize(
@@ -437,18 +406,6 @@ def test_search_proteins_input_valid():
 def test_input_field_validator_rejects_bad_value(input_cls, kwargs, msg):
     with pytest.raises(ValueError, match=msg):
         input_cls(**kwargs)
-
-
-@pytest.mark.parametrize(
-    "input_cls, base_kwargs, new_kwargs, cleared_field",
-    [
-        (Mmseqs2ClusteringInput, {}, {"mmseqs_db": "/p"}, "input_sequences"),
-    ],
-)
-def test_new_xor_modality_accepted(input_cls, base_kwargs, new_kwargs, cleared_field):
-    """Each tool's new XOR alternative (inline list or DB path) parses; the sibling field defaults to None."""
-    inputs = input_cls(**base_kwargs, **new_kwargs)
-    assert getattr(inputs, cleared_field) is None
 
 
 @pytest.mark.parametrize(
@@ -517,47 +474,6 @@ def test_genomes_config_rejects_empty_target_genomes():
 # ── Cache-key separation (Config-moved targets now participate in the per-item key) ──
 
 
-def test_proteins_per_item_cache_key_distinguishes_different_mmseqs_db():
-    """Same query + different `mmseqs_db` on Config → distinct per-item cache keys.
-
-    Regression test: before the Input→Config migration, `mmseqs_db` lived on Input as a
-    non-iterable sibling field that bypassed the per-item key, so a cached result for
-    one DB would silently be returned for queries against a different DB.
-    """
-    from proto_tools.utils.tool_cache import _generate_cache_key
-
-    query = "MVLSPADKTN"
-    cfg_a = Mmseqs2SearchProteinsConfig(mmseqs_db="/dbs/uniref30")
-    cfg_b = Mmseqs2SearchProteinsConfig(mmseqs_db="/dbs/uniref90")
-    key_a = _generate_cache_key("mmseqs2-search-proteins", input_item=query, config=cfg_a)
-    key_b = _generate_cache_key("mmseqs2-search-proteins", input_item=query, config=cfg_b)
-    assert key_a != key_b
-
-
-def test_proteins_per_item_cache_key_distinguishes_different_target_sequences():
-    """Same query + different inline `target_sequences` on Config → distinct per-item cache keys."""
-    from proto_tools.utils.tool_cache import _generate_cache_key
-
-    query = "MVLSPADKTN"
-    cfg_a = Mmseqs2SearchProteinsConfig(target_sequences=["AAAA"])
-    cfg_b = Mmseqs2SearchProteinsConfig(target_sequences=["BBBB"])
-    key_a = _generate_cache_key("mmseqs2-search-proteins", input_item=query, config=cfg_a)
-    key_b = _generate_cache_key("mmseqs2-search-proteins", input_item=query, config=cfg_b)
-    assert key_a != key_b
-
-
-def test_genomes_per_item_cache_key_distinguishes_different_target_db():
-    """Same query + different `target_db` on Config → distinct per-item cache keys."""
-    from proto_tools.utils.tool_cache import _generate_cache_key
-
-    query = "ATCG"
-    cfg_a = Mmseqs2SearchGenomesConfig(target_db="/dbs/genomes_a")
-    cfg_b = Mmseqs2SearchGenomesConfig(target_db="/dbs/genomes_b")
-    key_a = _generate_cache_key("mmseqs2-search-genomes", input_item=query, config=cfg_a)
-    key_b = _generate_cache_key("mmseqs2-search-genomes", input_item=query, config=cfg_b)
-    assert key_a != key_b
-
-
 def test_resolve_to_mmseqs_db_classifies_inputs(tmp_path):
     """Atoms detect DB stems / FASTA; resolver raises FileNotFoundError on missing path and RuntimeError on unknown format."""
     from proto_tools.tools.sequence_alignment.mmseqs2.standalone.run import (
@@ -618,6 +534,10 @@ def test_search_proteins_registered_dataset_missing_gives_setup_hint(monkeypatch
 
 @pytest.mark.integration
 def test_mmseqs_search_proteins_execution(tmp_path):
+    """End-to-end protein search with default ``threads=0`` (auto-detect).
+
+    mmseqs rejects ``--threads 0``, so the standalone must omit the flag to trigger auto-detection.
+    """
     db_file = tmp_path / "database.faa"
     db_file.write_text(">db1\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT\n")
 
@@ -627,12 +547,13 @@ def test_mmseqs_search_proteins_execution(tmp_path):
             "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT",
         ],
     )
-    config = Mmseqs2SearchProteinsConfig(mmseqs_db=str(db_file), threads=2)
+    config = Mmseqs2SearchProteinsConfig(mmseqs_db=str(db_file))
     result = run_mmseqs2_search_proteins(inputs, config)
 
     validate_output(result)
 
     assert isinstance(result, Mmseqs2SearchProteinsOutput)
+    assert result.success is True
     assert len(result) == 2
     assert result[0].num_hits >= 1
     assert result[1].num_hits >= 1
@@ -673,23 +594,6 @@ def test_mmseqs_clustering_execution():
 
     assert result[0].cluster_id == result[1].cluster_id
     assert result[2].cluster_id != result[0].cluster_id
-
-
-@pytest.mark.integration
-def test_mmseqs_clustering_all_identical():
-    sequences = [
-        "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT",
-        "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT",
-        "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT",
-    ]
-
-    inputs = Mmseqs2ClusteringInput(input_sequences=sequences)
-    config = Mmseqs2ClusteringConfig(min_seq_id=0.95)
-    result = run_mmseqs2_clustering(inputs, config)
-
-    assert result.num_clusters == 1
-    assert all(r.cluster_id == result[0].cluster_id for r in result)
-    assert len(result.representative_indices) == 1
 
 
 @pytest.mark.skip_ci
@@ -753,24 +657,6 @@ def test_search_genomes_target_db_fasta_path_execution(tmp_path):
         Mmseqs2SearchGenomesConfig(target_db=str(target)),
     )
     assert result.success and len(result) == 1
-
-
-@pytest.mark.integration
-def test_search_proteins_threads_zero_runs_successfully(tmp_path):
-    """Behavior: ``threads=0`` (auto-detect) successfully runs end-to-end.
-
-    Catches the regression where mmseqs rejected ``--threads 0`` directly and
-    the standalone needs to omit the flag entirely to trigger auto-detection.
-    """
-    db_file = tmp_path / "database.faa"
-    db_file.write_text(">db1\nMVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT\n")
-
-    inputs = Mmseqs2SearchProteinsInput(query_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"])
-    # Default threads=0 — verify the standalone correctly omits the flag
-    # rather than passing `--threads 0` (which mmseqs rejects).
-    result = run_mmseqs2_search_proteins(inputs, Mmseqs2SearchProteinsConfig(mmseqs_db=str(db_file)))
-    assert result.success is True
-    assert result[0].num_hits >= 1
 
 
 # ---------------------------------------------------------------------------

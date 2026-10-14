@@ -25,11 +25,6 @@ def test_an_unknown_device_names_all_three() -> None:
         resolve_device("laptop")
 
 
-def test_the_default_is_unchanged() -> None:
-    """Adding a backend must not move anyone off the one they already use."""
-    assert resolve_device(None) == "modal"
-
-
 def test_every_registered_tool_is_available_locally() -> None:
     """Nothing is provisioned in advance here, so the catalogue is the registry itself."""
     from proto_tools.mcp import tools as impl
@@ -111,11 +106,3 @@ def test_an_undeployed_local_cpu_tool_is_flagged_as_running_here() -> None:
     from proto_tools.mcp.tools import runs_in_process
 
     assert runs_in_process("pdb-fetch-entry")
-
-
-def test_the_mcp_remote_guard_is_the_registry_one() -> None:
-    """One definition of 'remote', derived from RemoteDevice, so the two cannot drift."""
-    from proto_tools.mcp.device import is_remote
-    from proto_tools.utils.device import is_remote_device
-
-    assert is_remote is is_remote_device

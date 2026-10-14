@@ -1,4 +1,4 @@
-"""tests/tool_infra_tests/test_cloud.py.
+"""tests/tool_infra_tests/test_proto.py.
 
 Tests for device="proto" dispatch via proto_tools.proto.dispatch_to_proto.
 
@@ -84,11 +84,6 @@ class _StubToolsNamespace:
     submit_calls: list[dict[str, Any]] = field(default_factory=list)
     get_calls: list[dict[str, Any]] = field(default_factory=list)
     log_iter_calls: list[dict[str, Any]] = field(default_factory=list)
-
-    # Back-compat alias so older assertions reading ``client.tools.calls`` still resolve to submit history.
-    @property
-    def calls(self) -> list[dict[str, Any]]:
-        return self.submit_calls
 
     def submit(
         self,
@@ -253,11 +248,6 @@ def test_proto_blocks_unsupported_config(fake_proto_client, clean_registry):
     assert fake_proto_client.last_instance is None
 
 
-def test_base_config_remote_unsupported_reason_defaults_none():
-    """The default hook returns None so ordinary tools still dispatch to cloud."""
-    assert _CloudConfig().remote_unsupported_reason("proto") is None
-
-
 def test_config_dependent_local_file_refusal():
     """A refusal that depends on how the tool is configured stays on the config."""
     from proto_tools.tools.sequence_alignment.blast.blast_search import BlastSearchConfig
@@ -347,8 +337,8 @@ def test_device_cloud_returns_validated_output(fake_proto_client, arm_stub_clien
 
     client = fake_proto_client.last_instance
     assert client is not None
-    assert len(client.tools.calls) == 1
-    call = client.tools.calls[0]
+    assert len(client.tools.submit_calls) == 1
+    call = client.tools.submit_calls[0]
     assert call["tool_key"] == "api-tool-2"
     assert call["inputs"] == {"payload": "hi"}
     # device='proto' is the client-side routing signal; the server picks its
@@ -462,7 +452,7 @@ def test_device_cloud_preprocesses_before_dispatching(fake_proto_client, arm_stu
     assert result.result == "from-api"
     client = fake_proto_client.last_instance
     assert client is not None
-    call = client.tools.calls[0]
+    call = client.tools.submit_calls[0]
     assert call["inputs"] == {"payload": "prepared:raw"}, "the server should receive prepared inputs"
     envelope = call["config"][INTERNAL_STATE_KEY]
     # Asserted per key rather than whole: the envelope carries whatever framework state has to
@@ -647,7 +637,8 @@ def test_proto_streams_remote_logs_through_local_logger(
     def _seed(c):
         c.tools.output_to_return = {"result": "ok"}
         c.tools.log_records = [
-            _StubLogRecord(msg="Starting ESMFold", level="info", stream="system", seq=1),
+            # Worker lines carry a logger-name prefix that replay must strip.
+            _StubLogRecord(msg="proto_tools.utils.progress: Starting ESMFold", level="info", stream="system", seq=1),
             _StubLogRecord(msg="Folded 1/3", level="info", stream="stdout", seq=2),
             _StubLogRecord(msg="GPU OOM averted", level="warning", stream="system", seq=3),
             _StubLogsEnd(final_seq=3),
@@ -762,29 +753,6 @@ def test_strip_logger_prefix():
     # No dotted logger head -> leave untouched (message may legitimately start with 'word: ').
     assert _strip_logger_prefix("Done: 5 sequences") == "Done: 5 sequences"
     assert _strip_logger_prefix("Folding 1 complex(es), num_recycles=3") == "Folding 1 complex(es), num_recycles=3"
-
-
-def test_proto_replay_strips_logger_prefix_on_plain_lines(
-    fake_proto_client, arm_stub_client, monkeypatch, caplog, clean_registry
-):
-    """Cloud log lines read like local: the worker logger-name prefix is stripped on every replayed line."""
-    monkeypatch.delenv("PROTO_WORKER_VERBOSE", raising=False)
-
-    def _seed(c):
-        c.tools.output_to_return = {"result": "ok"}
-        c.tools.log_records = [
-            _StubLogRecord(msg="proto_tools.utils.progress: Starting worker", level="info", stream="stdout", seq=1),
-            _StubLogsEnd(final_seq=1),
-        ]
-
-    arm_stub_client(_seed)
-    spec = _register_cloud_tool(clean_registry, "prefix-tool")
-    caplog.set_level(logging.DEBUG, logger="proto_tools.proto.remote")
-    spec.function(_CloudInput(payload="x"), _CloudConfig(device="proto", verbose=1))
-
-    msgs = [r.message for r in caplog.records if r.name == "proto_tools.proto.remote"]
-    assert "Starting worker" in msgs
-    assert "proto_tools.utils.progress: Starting worker" not in msgs
 
 
 def test_proto_update_status_records_drive_spinner_substatus(
@@ -1015,14 +983,13 @@ def test_batch_dispatch_submits_every_job_before_waiting(fake_proto_client, arm_
         client.tools.submit, client.tools.get = submit, get
 
     arm_stub_client(_seed)
-    spec = _register_cloud_tool(clean_registry, "batch-tool")
+    _register_cloud_tool(clean_registry, "batch-tool")
 
     results = dispatch_batch_to_proto("batch-tool", [_CloudInput(payload=p) for p in ("a", "b", "c")])
 
     assert [r.result for r in results] == ["ok", "ok", "ok"]
     assert order[:3] == ["submit", "submit", "submit"], f"submits must all precede any wait, got {order}"
     assert "get" in order[3:]
-    assert spec is not None
 
 
 def test_batch_dispatch_of_nothing_contacts_no_server(fake_proto_client, arm_stub_client, clean_registry):

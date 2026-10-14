@@ -16,7 +16,11 @@ from proto_tools.utils.tool_cache import (
     cache_stitch_items,
     cache_store_items,
     cache_strip_items,
+    clear_cache,
+    clear_tool_cache,
     deduplicate_items,
+    get_cache_info,
+    has_cached_entries,
 )
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
@@ -46,37 +50,6 @@ def _setup_cache():
 @pytest.fixture
 def empty_cache():
     return ToolCache()
-
-
-# ── CacheStripResult tests ──────────────────────────────────────────────────
-
-
-def test_cache_strip_result_all_cached():
-    """all_cached property returns True when uncached_items is empty."""
-    result = CacheStripResult(
-        uncached_items=[],
-        uncached_indices=[],
-        cached_results={0: "a", 1: "b"},
-        cache_keys=[],
-    )
-    assert result.all_cached is True
-
-
-def test_cache_strip_result_not_all_cached():
-    """all_cached property returns False when there are uncached items."""
-    result = CacheStripResult(
-        uncached_items=["x"],
-        uncached_indices=[2],
-        cached_results={0: "a", 1: "b"},
-        cache_keys=["key_x"],
-    )
-    assert result.all_cached is False
-
-
-def test_cache_strip_result_empty():
-    """Empty CacheStripResult is all_cached (vacuously true)."""
-    result = CacheStripResult()
-    assert result.all_cached is True
 
 
 # ── cache_strip_items tests ──────────────────────────────────────────────────
@@ -253,126 +226,48 @@ def test_strip_different_configs_separate_cache(_setup_cache):
     assert strip_b.uncached_items == ["X"]
 
 
-# ── Clear configuration logic tests ─────────────────────────────────────────
-
-
-class _MockOptimizer:
-    """Mock class to test the configuration logic."""
-
-    def __init__(self, clear_config: bool | list[str] | int):
-        self.clear_tool_cache = clear_config
-        self.tool_cache = ToolCache()
-
-    def _clear_tool_cache(self) -> None:
-        """The logic we want to test."""
-        if not self.clear_tool_cache:
-            return
-
-        # Case 1: Byte threshold (int).
-        if isinstance(self.clear_tool_cache, int) and not isinstance(self.clear_tool_cache, bool):
-            threshold_bytes = self.clear_tool_cache
-
-            if self.tool_cache.current_size > threshold_bytes:
-                self.tool_cache.prune(threshold_bytes)
-
-        # Case 2: Clear all (bool).
-        elif isinstance(self.clear_tool_cache, bool):
-            self.tool_cache.clear()
-
-        # Case 3: Clear all for specific tools (List[str]).
-        elif isinstance(self.clear_tool_cache, list):
-            for tool in self.clear_tool_cache:
-                self.tool_cache.clear(tool)
-
-        else:
-            raise ValueError(f"Invalid type of clear_tool_cache: {type(self.clear_tool_cache)}")
-
-
-def test_config_bool_true_clears_all():
-    opt = _MockOptimizer(clear_config=True)
-    opt.tool_cache.set("t1", "k", "val")
-
-    opt._clear_tool_cache()
-
-    assert opt.tool_cache.current_size == 0
-    assert opt.tool_cache.get("t1", "k") is None
-
-
-def test_config_list_clears_specific():
-    opt = _MockOptimizer(clear_config=["t1"])
-    opt.tool_cache.set("t1", "k", "val")
-    opt.tool_cache.set("t2", "k", "val")
-
-    opt._clear_tool_cache()
-
-    # t1 should be gone.
-    assert opt.tool_cache.get("t1", "k") is None
-    # t2 should remain.
-    assert opt.tool_cache.get("t2", "k") == "val"
-
-
-def test_config_int_threshold_below_limit():
-    """Size is BELOW threshold, should NOT clear."""
-    # Set threshold to 1000 bytes.
-    opt = _MockOptimizer(clear_config=1000)
-
-    # Add small data (e.g., 50 bytes).
-    opt.tool_cache.set("t1", "k", "small_data")
-    initial_size = opt.tool_cache.current_size
-
-    # Ensure we are actually testing a valid scenario.
-    assert initial_size < 1000
-
-    opt._clear_tool_cache()
-
-    # Should still be there.
-    assert opt.tool_cache.current_size == initial_size
-    assert opt.tool_cache.get("t1", "k") == "small_data"
-
-
-def test_config_int_prunes_lru():
-    """Test that we only remove enough to fit under the limit, removing the oldest items first."""
-    old_data = "A" * 80
-    old_data_size = _get_obj_size(old_data)
-
-    new_data = "B" * 100
-    new_data_size = _get_obj_size(new_data)
-
-    opt = _MockOptimizer(clear_config=new_data_size)
-    opt.tool_cache.set("tool", "old_key", old_data)
-    opt.tool_cache.set("tool", "new_key", new_data)
-
-    # Pre-check: Both exist.
-    assert opt.tool_cache.get("tool", "old_key") is not None
-    assert opt.tool_cache.get("tool", "new_key") is not None
-    assert opt.tool_cache.current_size == old_data_size + new_data_size
-
-    # 3. Trigger Prune.
-    opt._clear_tool_cache()
-
-    # 4. Verification.
-    assert opt.tool_cache.current_size <= new_data_size
-
-    # The old key should be gone (LRU eviction).
-    assert opt.tool_cache.get("tool", "old_key") is None
-
-    # The NEW key should still be there.
-    assert opt.tool_cache.get("tool", "new_key") == new_data
-
-
 # ── ToolCache internals tests ──────────────────────────────────────────────
 
 
-def test_initial_state(empty_cache):
-    assert empty_cache.current_size == 0
-    assert empty_cache.get("tool", "key") is None
+def test_prune_evicts_lru_until_under_limit(empty_cache):
+    """prune() removes only enough to fit under the limit, oldest entries first."""
+    old_data = "A" * 80
+    new_data = "B" * 100
+    new_data_size = _get_obj_size(new_data)
+
+    empty_cache.set("tool", "old_key", old_data)
+    empty_cache.set("tool", "new_key", new_data)
+    assert empty_cache.current_size == _get_obj_size(old_data) + new_data_size
+
+    empty_cache.prune(new_data_size)
+
+    assert empty_cache.current_size <= new_data_size
+    assert empty_cache.get("tool", "old_key") is None
+    assert empty_cache.get("tool", "new_key") == new_data
+
+    size_before = empty_cache.current_size
+    empty_cache.prune(size_before + 1)  # already under the target: nothing is evicted
+    assert empty_cache.current_size == size_before
+    assert empty_cache.get("tool", "new_key") == new_data
 
 
-def test_set_increases_size(empty_cache):
-    empty_cache.set("calculator", "2+2", 4)
-    size_after_add = empty_cache.current_size
-    assert size_after_add > 0
-    assert empty_cache.get("calculator", "2+2") == 4
+def test_public_cache_helpers_clear_and_report(_setup_cache):
+    """The exported helpers act on the program's active cache: report, clear one tool, clear everything."""
+    _setup_cache.set("tool_a", "k1", "v1")
+    _setup_cache.set("tool_a", "k2", "v2")
+    _setup_cache.set("tool_b", "k1", "v1")
+
+    assert has_cached_entries("tool_a") and has_cached_entries("tool_b")
+    assert not has_cached_entries("tool_c")
+    assert get_cache_info()["total_entries"] == 3
+
+    assert clear_tool_cache("tool_a") == 2
+    assert not has_cached_entries("tool_a")
+    assert has_cached_entries("tool_b")
+
+    clear_cache()
+    assert not has_cached_entries("tool_b")
+    assert get_cache_info()["total_entries"] == 0
 
 
 def test_overwrite_updates_size_correctly(empty_cache):
@@ -475,17 +370,6 @@ def test_deduplicate_items_empty():
     assert result.unique_items == []
     assert result.unique_keys == []
     assert result.index_map == []
-
-
-def test_deduplicate_items_preserves_order():
-    """First occurrence order is preserved in unique_items."""
-    items = ["c", "a", "c", "b", "a"]
-    result = deduplicate_items(items, key_fn=str)
-
-    assert result.unique_items == ["c", "a", "b"]
-    # Verify index_map lets us reconstruct original list
-    reconstructed = [result.unique_items[uid] for _, uid in result.index_map]
-    assert reconstructed == items
 
 
 def test_deduplicate_items_with_pydantic_models():

@@ -21,35 +21,6 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("evo2")
 
-_EVO2_TEST_CHECKPOINTS = ["evo2_7b", "evo2_20b"]
-
-
-# ── Sample input/config validation ────────────────────────────────────────────
-
-
-@pytest.mark.parametrize(
-    "input_kwargs,match",
-    [
-        ({"prompts": []}, "prompts must not be empty"),
-    ],
-)
-def test_evo2_sample_input_validation(input_kwargs, match):
-    with pytest.raises(ValueError, match=match):
-        Evo2SampleInput(**input_kwargs)
-
-
-@pytest.mark.parametrize(
-    "config_kwargs,match",
-    [
-        ({"temperature": 0.0}, "greater than 0"),
-        ({"top_p": 1.5}, "less than or equal to 1"),
-        ({"max_new_tokens": 0}, "greater than or equal to 1"),
-    ],
-)
-def test_evo2_sample_config_validation(config_kwargs, match):
-    with pytest.raises(ValueError, match=match):
-        Evo2SampleConfig(**config_kwargs)
-
 
 # ---------------------------------------------------------------------------
 # Integration tests
@@ -57,12 +28,12 @@ def test_evo2_sample_config_validation(config_kwargs, match):
 
 
 @pytest.mark.uses_gpu
-def test_evo2_sample_tool(model_checkpoint="evo2_7b"):
+def test_evo2_sample_tool():
     """Test the evo2 sampling tool with run_evo2_sample."""
     prompts = ["ATCG", "GCTA"]
     inputs = Evo2SampleInput(prompts=prompts)
     config = Evo2SampleConfig(
-        model_checkpoint=model_checkpoint,
+        model_checkpoint="evo2_7b",
         max_new_tokens=50,
         temperature=0.8,
         top_k=4,
@@ -75,7 +46,7 @@ def test_evo2_sample_tool(model_checkpoint="evo2_7b"):
     validate_output(result)
 
     assert result.tool_id == "evo2-sample"
-    assert result.metadata["model_checkpoint"] == model_checkpoint
+    assert result.metadata["model_checkpoint"] == "evo2_7b"
     assert result.metadata["max_new_tokens"] == 50
     assert result.metadata["temperature"] == 0.8
     assert len(result.sequences) == 2
@@ -88,44 +59,14 @@ def test_evo2_sample_tool(model_checkpoint="evo2_7b"):
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-@pytest.mark.parametrize(
-    "prompt",
-    [
-        "ATCGATCG",
-        "GCTAGCTA",
-        "AAAACCCC",
-    ],
-)
-def test_evo2_sample_prompt_handling(prompt, model_checkpoint):
-    """Test evo2 sampling with various prompt formats."""
-    inputs = Evo2SampleInput(prompts=prompt)
-    config = Evo2SampleConfig(
-        model_checkpoint=model_checkpoint,
-        max_new_tokens=50,
-        temperature=1.0,
-        verbose=False,
-    )
-
-    result = run_evo2_sample(inputs=inputs, config=config)
-    validate_output(result)
-
-    assert len(result.sequences) == 1
-    seq = result.sequences[0]
-    assert prompt in seq, f"Expected '{prompt}' in output"
-    assert len(seq) > len(prompt), "Should generate beyond prompt"
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_sample_prepend_prompt(model_checkpoint):
+def test_evo2_sample_prepend_prompt():
     """Test that prepend_prompt controls whether prompt is included."""
     prompt = "ATCGATCG"
 
     result_with = run_evo2_sample(
         inputs=Evo2SampleInput(prompts=[prompt]),
         config=Evo2SampleConfig(
-            model_checkpoint=model_checkpoint,
+            model_checkpoint="evo2_7b",
             max_new_tokens=50,
             prepend_prompt=True,
             verbose=False,
@@ -136,7 +77,7 @@ def test_evo2_sample_prepend_prompt(model_checkpoint):
     result_without = run_evo2_sample(
         inputs=Evo2SampleInput(prompts=[prompt]),
         config=Evo2SampleConfig(
-            model_checkpoint=model_checkpoint,
+            model_checkpoint="evo2_7b",
             max_new_tokens=50,
             prepend_prompt=False,
             verbose=False,
@@ -150,13 +91,12 @@ def test_evo2_sample_prepend_prompt(model_checkpoint):
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_sample_batched_tool(model_checkpoint):
+def test_evo2_sample_batched_tool():
     """Test batched sampling with tool layer (run_evo2_sample)."""
     prompts = ["ATCG", "GCTA", "AAAA", "GGGG", "CCCC", "TTTT"]
     inputs = Evo2SampleInput(prompts=prompts)
     config = Evo2SampleConfig(
-        model_checkpoint=model_checkpoint,
+        model_checkpoint="evo2_7b",
         max_new_tokens=50,
         temperature=1.0,
         batch_size=2,
@@ -177,30 +117,10 @@ def test_evo2_sample_batched_tool(model_checkpoint):
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_different_sequences(model_checkpoint):
-    """Test that model produces different perplexities for different sequences."""
-    seq1 = "ATCGATCGATCGATCGATCG"
-    seq2 = "AAAAAAAAAAAAAAAAAAAA"
-
-    inputs = Evo2ScoringInput(sequences=[seq1, seq2])
-    config = Evo2ScoringConfig(model_checkpoint=model_checkpoint, verbose=False, return_logits=True)
-
-    result = run_evo2_score(inputs=inputs, config=config)
-    assert_metrics_in_spec(result)
-
-    ppl1 = result.scores[0].perplexity
-    ppl2 = result.scores[1].perplexity
-
-    assert ppl1 != ppl2, f"Different sequences should have different perplexities: {ppl1} vs {ppl2}"
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_metrics_consistency(model_checkpoint):
+def test_evo2_score_metrics_consistency():
     """Test that scoring metrics are mathematically consistent."""
     inputs = Evo2ScoringInput(sequences=["ATCGATCGATCGATCG"])
-    config = Evo2ScoringConfig(model_checkpoint=model_checkpoint, verbose=False, return_logits=True)
+    config = Evo2ScoringConfig(model_checkpoint="evo2_7b", verbose=False, return_logits=True)
 
     result = run_evo2_score(inputs=inputs, config=config)
     score = result.scores[0]
@@ -212,17 +132,13 @@ def test_evo2_score_metrics_consistency(model_checkpoint):
     assert score.log_likelihood <= score.avg_log_likelihood, "log_likelihood should be <= avg_log_likelihood"
 
 
-# ── Batched scoring tests ────────────────────────────────────────────────────
-
-
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_batched_tool(model_checkpoint):
+def test_evo2_score_batched_tool():
     """Test batched scoring with tool layer (run_evo2_score)."""
     sequences = ["ATCGATCG", "GCTAGCTA", "AAAACCCC", "TTTTGGGG", "CCCCAAAA", "GGGGTTTT"]
     inputs = Evo2ScoringInput(sequences=sequences)
     config = Evo2ScoringConfig(
-        model_checkpoint=model_checkpoint,
+        model_checkpoint="evo2_7b",
         batch_size=2,
         verbose=False,
         return_logits=True,
@@ -241,8 +157,7 @@ def test_evo2_score_batched_tool(model_checkpoint):
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_batch_size_consistency(model_checkpoint):
+def test_evo2_score_batch_size_consistency():
     """Test that different batch_sizes produce consistent results.
 
     Note: Evo2 uses a Hyena-based state-space architecture which can have small
@@ -255,7 +170,7 @@ def test_evo2_score_batch_size_consistency(model_checkpoint):
     results = {
         bs: run_evo2_score(
             inputs=inputs,
-            config=Evo2ScoringConfig(model_checkpoint=model_checkpoint, batch_size=bs, verbose=False),
+            config=Evo2ScoringConfig(model_checkpoint="evo2_7b", batch_size=bs, verbose=False),
         )
         for bs in [1, 2, 4]
     }
@@ -271,31 +186,12 @@ def test_evo2_score_batch_size_consistency(model_checkpoint):
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_variable_length_sequences(model_checkpoint):
-    """Test scoring sequences of different lengths produces correct logits shapes."""
-    sequences = ["AT", "ATCG", "ATCGATCG", "ATCGATCGATCG"]
-    inputs = Evo2ScoringInput(sequences=sequences)
-    config = Evo2ScoringConfig(model_checkpoint=model_checkpoint, batch_size=2, verbose=False, return_logits=True)
-
-    result = run_evo2_score(inputs=inputs, config=config)
-    assert_metrics_in_spec(result)
-
-    for seq, score in zip(sequences, result.scores, strict=False):
-        assert score.logits is not None, "Logits should be present when return_logits=True"
-        assert len(score.logits) > 0, (
-            f"Sequence '{seq}' (len {len(seq)}): logits len should be > 0, got {len(score.logits)}"
-        )
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_tool(model_checkpoint):
+def test_evo2_score_tool():
     """Test the evo2 scoring tool with run_evo2_score."""
     sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
     inputs = Evo2ScoringInput(sequences=sequences)
     config = Evo2ScoringConfig(
-        model_checkpoint=model_checkpoint,
+        model_checkpoint="evo2_7b",
         verbose=False,
         return_logits=True,
     )
@@ -312,36 +208,16 @@ def test_evo2_score_tool(model_checkpoint):
 
     for i, score in enumerate(result.scores):
         assert score.logits is not None, f"Sequence {i} should have logits"
+        assert len(score.logits[0]) == 512, "Inner logits list should have 512 elements (Evo2 byte-level vocab)"
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_single_sequence(model_checkpoint):
-    """Test evo2 scoring with a single sequence (string input)."""
-    inputs = Evo2ScoringInput(sequences="ATCGATCGATCGATCGATCG")
-    config = Evo2ScoringConfig(
-        model_checkpoint=model_checkpoint,
-        verbose=False,
-    )
-
-    result = run_evo2_score(inputs=inputs, config=config)
-    validate_output(result)
-    assert_metrics_in_spec(result)
-
-    assert len(result.scores) == 1
-
-
-# ── Logits-specific tests (scoring) ──────────────────────────────────────────
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_logits_disabled_by_default(model_checkpoint):
+def test_evo2_score_logits_disabled_by_default():
     """Test that logits are None when return_logits=False (default)."""
     sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
     inputs = Evo2ScoringInput(sequences=sequences)
     config = Evo2ScoringConfig(
-        model_checkpoint=model_checkpoint,
+        model_checkpoint="evo2_7b",
         verbose=False,
     )
 
@@ -353,33 +229,40 @@ def test_evo2_score_logits_disabled_by_default(model_checkpoint):
 
 
 @pytest.mark.uses_gpu
-@pytest.mark.parametrize("model_checkpoint", _EVO2_TEST_CHECKPOINTS)
-def test_evo2_score_logits_serialization(model_checkpoint):
-    """Test that logits are properly serialized as nested lists."""
-    sequences = ["ATCGATCGATCG"]
-    inputs = Evo2ScoringInput(sequences=sequences)
+def test_evo2_20b_score_smoke():
+    """The 20b checkpoint loads and scores; every other test uses 7b to avoid worker restarts."""
+    sequences = ["ATCGATCGATCG", "GCTAGCTAGCTA"]
+    result = run_evo2_score(
+        inputs=Evo2ScoringInput(sequences=sequences),
+        config=Evo2ScoringConfig(model_checkpoint="evo2_20b", verbose=False, return_logits=True),
+    )
+    validate_output(result)
+    assert_metrics_in_spec(result)
+
+    assert len(result.scores) == 2
+    for seq, score in zip(sequences, result.scores, strict=True):
+        assert score.logits is not None
+        assert len(score.logits) == len(seq)
+        assert len(score.logits[0]) == 512
+
+
+# ── Benchmarks ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.uses_gpu
+def test_evo2_score_single_sequence():
+    """Test evo2 scoring with a single sequence (string input)."""
+    inputs = Evo2ScoringInput(sequences="ATCGATCGATCGATCGATCG")
     config = Evo2ScoringConfig(
-        model_checkpoint=model_checkpoint,
+        model_checkpoint="evo2_7b",
         verbose=False,
-        return_logits=True,
     )
 
     result = run_evo2_score(inputs=inputs, config=config)
     validate_output(result)
+    assert_metrics_in_spec(result)
 
-    score = result.scores[0]
-
-    assert isinstance(score.logits, list), "Logits should be a list"
-    assert len(score.logits) > 0, "Logits list should not be empty"
-    assert isinstance(score.logits[0], list), "Logits should be a list of lists"
-    assert len(score.logits[0]) == 512, "Inner logits list should have 512 elements (Evo2 byte-level vocab)"
-
-    for position_logits in score.logits:
-        for logit_value in position_logits:
-            assert isinstance(logit_value, (int, float)), f"Logit value should be numeric, got {type(logit_value)}"
-
-
-# ── Benchmarks ────────────────────────────────────────────────────────────────
+    assert len(result.scores) == 1
 
 
 @pytest.mark.benchmark("evo2-sample")

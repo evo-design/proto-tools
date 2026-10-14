@@ -115,57 +115,12 @@ def test_header_parsing(header, expected):
     assert _parse_orfipy_header(header) == expected
 
 
-# ── Integration ────────────────────────────────────────────────────────
-
-
-@pytest.mark.integration
-def test_full_workflow():
-    inp = OrfipyInput(sequences="ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAGTGA")
-    result = run_orfipy_prediction(inp, OrfipyConfig(min_len=30))
-
-    validate_output(result)
-    assert result.tool_id == "orfipy-prediction"
-    assert len(result.predicted_orfs) == 1
-    assert result.num_orfs == sum(len(sr) for sr in result.predicted_orfs)
-
-    if result.num_orfs > 0:
-        assert isinstance(result.predicted_orfs[0][0], ORF)
-
-
-@pytest.mark.integration
-def test_multiple_sequences_positional_ids():
-    inp = OrfipyInput(
-        sequences=[
-            "ATGCCCAAATTTGGGCCCAAATTTGGGCCCAAATTTGGGTAG",
-            "ATGTTTCCCGGGAAATTTCCCGGGTAA",
-        ],
-    )
-    result = run_orfipy_prediction(inp, OrfipyConfig(min_len=12))
-
-    validate_output(result)
-    assert len(result.predicted_orfs) == 2
-    # ORFs are labeled positionally (seq_0, seq_1, ...) in input order.
-    if result.predicted_orfs[0]:
-        assert result.predicted_orfs[0][0].parent_id == "seq_0"
-    if result.predicted_orfs[1]:
-        assert result.predicted_orfs[1][0].parent_id == "seq_1"
-
-
-def test_sequence_ids_length_mismatch_raises():
-    from proto_tools.utils import resolve_sequence_ids
-
-    with pytest.raises(ValueError, match="ids length"):
-        resolve_sequence_ids(["ATGAAA", "ATGBBB"], ["only_one"])
-
-
 # ── Computed fields ────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize(
     "orfs_per_sequence, expected_total",
     [
-        ([], 0),
-        ([1], 1),
         ([2, 1, 3], 6),
         ([0, 2, 0], 2),
     ],
@@ -183,27 +138,24 @@ def test_computed_fields_count(orfs_per_sequence, expected_total):
     assert output.num_orfs == expected_total
 
 
-def test_cache_reconstruction():
-    """Output works when reconstructed from cache (only predicted_orfs passed)."""
-    orfs = [_create_sample_orf("seq_0", "ORF.1"), _create_sample_orf("seq_0", "ORF.2")]
-    output = OrfipyOutput(
-        tool_id="orfipy-prediction",
-        execution_time=0.0,
-        success=True,
-        warnings=[],
-        metadata={},
-        results=[OrfPredictionResult(orfs=orfs)],
-    )
-    assert output.num_orfs == 2
-    assert output.predicted_orfs[0][0].orf_id == "ORF.1"
-    assert output.predicted_orfs[0][1].orf_id == "ORF.2"
-
-
 def test_translation_table_map_matches_literal():
     assert set(get_args(OrfipyTranslationTable)) == set(ORFIPY_TRANSLATION_TABLE_MAP.keys())
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.integration
+def test_orfipy_finds_known_orf():
+    """A hemoglobin alpha N-terminal fragment yields exactly one forward ORF spanning the input."""
+    result = run_orfipy_prediction(
+        OrfipyInput(sequences="ATGGTGCTGAGCCCGGCGGACAAGACCAACGTGAAGGCGGCGTGGGGCAAGTGA"), OrfipyConfig(min_len=30)
+    )
+    validate_output(result)
+    assert result.num_orfs == 1
+    orf = result.predicted_orfs[0][0]
+    assert (orf.nucleotide_start, orf.nucleotide_end, orf.strand) == (1, 54, "+")
+    assert orf.amino_acid_sequence == "MVLSPADKTNVKAAWGK"
 
 
 @pytest.mark.benchmark("orfipy-prediction")

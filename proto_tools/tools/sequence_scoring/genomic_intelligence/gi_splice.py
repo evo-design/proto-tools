@@ -201,10 +201,10 @@ def parse_splice_data(data: dict[str, Any], payload: dict[str, Any], name: str) 
     summary = as_object(data.get("summary"), "data.summary")
     sites = [
         SpliceSite(
-            name=str(site.get("name", "")),
+            name=str(site.get("name") or ""),
             start=int(site.get("start", 0)),
             end=int(site.get("end", 0)),
-            site_type=str(site.get("site_type", "")),
+            site_type=str(site.get("site_type") or ""),
             score=float(site.get("score", 0.0)),
         )
         for site in as_object_list(data.get("sites"), "data.sites")

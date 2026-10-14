@@ -32,34 +32,12 @@ def pdb_file_content() -> str:
 # ── Structure input validation ───────────────────────────────────────────
 
 
-def test_structure_from_pdb_filepath():
-    structure = InverseFoldingStructureInput(structure=TEST_PDB_FILE)
-    assert isinstance(structure.structure, Structure)
-
-
-def test_structure_from_pdb_content(pdb_file_content: str):
-    structure = InverseFoldingStructureInput(structure=pdb_file_content)
-    assert isinstance(structure.structure, Structure)
-
-
-def test_structure_with_designed():
-    structure = InverseFoldingStructureInput(structure=TEST_PDB_FILE, chains_to_redesign=["A"])
-    assert structure.chains_to_redesign is not None
-    assert structure.chains_to_redesign.chains == ["A"]
-
-
 def test_structure_designed_defaults_to_none_resolved_chains_returns_all():
     """Designed defaults to None; chain_ids_to_redesign resolves to all structure chains."""
     structure = InverseFoldingStructureInput(structure=TEST_PDB_FILE)
     assert structure.chains_to_redesign is None
     expected_chains = structure.structure.get_chain_ids()
     assert structure.chain_ids_to_redesign == expected_chains
-
-
-def test_structure_with_fixed():
-    structure = InverseFoldingStructureInput(structure=TEST_PDB_FILE, fixed_positions={"A": [1, 2, 3]})
-    assert structure.fixed_positions is not None
-    assert structure.fixed_positions.chains == {"A": [1, 2, 3]}
 
 
 def _offset_multichain_pdb() -> str:
@@ -173,20 +151,12 @@ def test_designed_complex_helpers():
 # ── InverseFoldingOutput ─────────────────────────────────────────────────
 
 
-def test_output_len():
-    output = InverseFoldingOutput(design_sets=[_MockDesignSet(complexes=[_mock_complex()])])
+def test_output_sequence_protocol():
+    """``InverseFoldingOutput`` delegates len/getitem/iter to its design sets."""
+    design_set = _MockDesignSet(complexes=[_mock_complex()])
+    output = InverseFoldingOutput(design_sets=[design_set])
     assert len(output) == 1
-
-
-def test_output_getitem():
-    design_set = _MockDesignSet(complexes=[_mock_complex()])
-    output = InverseFoldingOutput(design_sets=[design_set])
     assert output[0] == design_set
-
-
-def test_output_iter():
-    design_set = _MockDesignSet(complexes=[_mock_complex()])
-    output = InverseFoldingOutput(design_sets=[design_set])
     assert list(output) == [design_set]
 
 
@@ -252,11 +222,6 @@ def test_structure_rejects_unsupported_type():
         InverseFoldingStructureInput(structure=12345)
 
 
-def test_structure_rejects_invalid_fixed_residues():
-    with pytest.raises(ValueError, match="invalid positions"):
-        InverseFoldingStructureInput(structure=TEST_PDB_FILE, fixed_positions={"A": [99999]})
-
-
 # ── InverseFoldingScoringMetrics ─────────────────────────────────────────────────
 
 
@@ -316,17 +281,6 @@ def test_sequence_structure_pair_roundtrip():
     assert restored.structure.structure == original.structure.structure
     assert restored.fixed_positions is not None
     assert restored.fixed_positions.chains == {"A": [1, 2, 3]}
-
-
-def test_sequence_structure_pair_accepts_fixed_positions():
-    """fixed_positions accepts the {chain: [positions]} shorthand and exposes .chains."""
-    pair = SequenceStructurePair(
-        sequence="MVLSP",
-        structure=Structure.from_file(TEST_PDB_FILE),
-        fixed_positions={"A": [1, 2, 3]},
-    )
-    assert pair.fixed_positions is not None
-    assert pair.fixed_positions.chains == {"A": [1, 2, 3]}
 
 
 def test_sequence_structure_pair_rejects_invalid_fixed_chain():
@@ -394,16 +348,7 @@ def test_sample_output_polymorphism_roundtrip():
     assert restored_design.chain_sequences == ["MVLSP", "GGGS"]
     assert restored_design.metrics["perplexity"] == 1.5
     assert restored_design.metrics["sequence_recovery"] == 0.42
-
-
-def test_metrics_round_trip_preserves_values():
-    """ProteinMPNNDesign.model_validate(model_dump()) preserves metric values."""
-    from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import ProteinMPNNDesign
-
-    design = _proteinmpnn_design()
-    restored = ProteinMPNNDesign.model_validate(design.model_dump())
-    assert restored.metrics["perplexity"] == 1.5
-    assert restored.metrics.primary_value == 1.5
+    assert restored_design.metrics.primary_value == 1.5
 
 
 # ── Bridge to structure prediction ────────────────────────────────────────────
@@ -417,11 +362,3 @@ def test_designed_complex_feeds_structure_predictor():
     inp = ESMFoldInput(complexes=[designed])
     assert inp.complexes[0] is designed
     assert inp.complexes[0].chain_sequences == designed.chain_sequences
-
-
-def test_complex_accepts_mixed_chain_list():
-    """``Complex`` chains list still accepts mixed ``Chain``/string entries via the lenient validator."""
-    from proto_tools.entities.complex import Complex
-
-    mixed = Complex(chains=[Chain(id="A", sequence="MVLSP"), "GGGG"])
-    assert [c.sequence for c in mixed.chains] == ["MVLSP", "GGGG"]

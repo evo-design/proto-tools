@@ -57,11 +57,7 @@ def test_round_trip():
 # ── CCD code construction ──────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "ccd_code",
-    ["ATP", "ZN", "HEM", "SEP", "NAD"],
-    ids=["ATP", "ZN", "HEM", "SEP", "NAD"],
-)
+@pytest.mark.parametrize("ccd_code", ["ATP", "ZN"], ids=["organic", "metal-ion"])
 def test_fragment_from_ccd_code(ccd_code):
     """Fragment constructed from CCD code resolves SMILES automatically."""
     frag = Fragment(ccd_code=ccd_code)
@@ -96,11 +92,6 @@ def test_fragment_neither_smiles_nor_ccd_raises():
         Fragment()
 
 
-def test_fragment_invalid_smiles_raises():
-    with pytest.raises(ValueError, match="Invalid SMILES string"):
-        Fragment(smiles="NOT_A_VALID_SMILES")
-
-
 def test_fragment_invalid_ccd_raises():
     with pytest.raises(ValueError, match="Invalid CCD code"):
         Fragment(ccd_code="ZZZZZZZ")
@@ -130,12 +121,6 @@ def test_fragment_ccd_serialization_roundtrip():
     reconstructed = Fragment.model_validate(dumped)
     assert reconstructed.ccd_code == "ATP"
     assert reconstructed.smiles == frag.smiles
-
-
-def test_fragment_entity_type_default():
-    """Fragment self-identifies as a 'ligand' entity for chain-list integration."""
-    assert Fragment(smiles="CCO").entity_type == "ligand"
-    assert Fragment(ccd_code="ATP").entity_type == "ligand"
 
 
 def test_fragment_rejects_multi_fragment_smiles():

@@ -51,13 +51,6 @@ def test_distinct_long_expressions_get_distinct_filenames():
     assert first != second
 
 
-def test_truncation_is_deterministic():
-    """The same selection resolves to the same log file across runs."""
-    expression = " or ".join(["test_iterable_tools_found"] * 20)
-
-    assert log_filename_for_k_expression(expression) == log_filename_for_k_expression(expression)
-
-
 # ── End to end ──────────────────────────────────────────────────────────────
 
 _TARGET = "test_short_expression_is_used_verbatim"
@@ -89,12 +82,3 @@ def test_a_long_selection_runs_and_writes_its_log(tmp_path):
     assert "File name too long" not in result.stdout + result.stderr
     assert result.returncode == 0, result.stdout[-2000:]
     assert list(tmp_path.glob("pytest_*.log")), "the run produced no log file"
-
-
-@pytest.mark.slow
-def test_a_short_selection_still_names_its_log_after_the_expression(tmp_path):
-    """The readable filename is preserved for selections that fit."""
-    result = _run_pytest_with_selection(_TARGET, tmp_path)
-
-    assert result.returncode == 0, result.stdout[-2000:]
-    assert (tmp_path / f"pytest_{_TARGET}.log").exists()

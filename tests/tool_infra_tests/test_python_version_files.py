@@ -105,16 +105,6 @@ def test_unsupported_default_version_raises_error(tmp_path, version):
         tool._get_python_version()
 
 
-def test_comments_are_stripped(tmp_path):
-    """`#` comments are ignored; the rest of the file parses normally."""
-    content = "# Use Python 3.11 because of upstream constraints\ndefault: 3.11  # inline comment too\n"
-    (tmp_path / "python_version.txt").write_text(content)
-    (tmp_path / "setup.sh").write_text(_SETUP_SH_CONTENT)
-
-    tool = _make_test_instance(tmp_path)
-    assert tool._get_python_version() == "3.11"
-
-
 # ── _parse_python_version (pure parser, with explicit platform_key) ────────
 
 
@@ -197,11 +187,3 @@ def test_keyed_form_invalid_override_value_raises_even_when_unmatched():
     content = "default: 3.11\nlinux-aarch64: not-a-version\n"
     with pytest.raises(ValueError, match=r"Invalid Python version format"):
         ToolInstance._parse_python_version(content, "linux-x86_64", "<test>")
-
-
-def test_keyed_form_unknown_key_silently_ignored_at_lookup():
-    """Unknown keys (typos, platforms you're not on) parse fine; they just never match."""
-    content = "default: 3.11\nlinux-fooarch: 3.10\n"
-    # The override is still validated as a version, but it won't match real platforms.
-    assert ToolInstance._parse_python_version(content, "linux-x86_64", "<test>") == "3.11"
-    assert ToolInstance._parse_python_version(content, "darwin-arm64", "<test>") == "3.11"

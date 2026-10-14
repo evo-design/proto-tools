@@ -39,26 +39,32 @@ def test_parade_input_normalizes_and_validates() -> None:
         ParadeActivityInput(sequences="ACGTX")
 
 
+@pytest.mark.integration
 def test_parade_n_base_encodes_to_zero() -> None:
-    """N encodes to an all-zero column, matching upstream (0.25 assigned into an int one-hot truncates)."""
-    import sys
+    """N encodes to an all-zero column, matching upstream (0.25 assigned into an int one-hot truncates).
+
+    ``utrdata_cl`` imports ``torch``, so the encoding is checked inside the parade env.
+    """
     from pathlib import Path
 
-    torch = pytest.importorskip("torch")
-    pytest.importorskip("pandas")
+    from proto_tools.utils import run_in_env
 
     standalone = Path(__file__).resolve().parents[2] / "proto_tools/tools/sequence_scoring/parade/standalone"
-    sys.path.insert(0, str(standalone))
-    try:
-        import utrdata_cl
+    code = """
+import sys
 
-        encoded = utrdata_cl.Seq2Tensor()("ACGN")  # (4 channels A,C,G,T x 4 positions)
-    finally:
-        sys.path.remove(str(standalone))
-        sys.modules.pop("utrdata_cl", None)
+import torch
 
-    assert torch.equal(encoded[:, 0], torch.tensor([1.0, 0.0, 0.0, 0.0]))  # A -> one-hot
-    assert torch.equal(encoded[:, 3], torch.zeros(4))  # N -> all-zero (NOT 0.25)
+sys.path.insert(0, sys.argv[1])
+import utrdata_cl
+
+encoded = utrdata_cl.Seq2Tensor()("ACGN")  # (4 channels A,C,G,T x 4 positions)
+assert torch.equal(encoded[:, 0], torch.tensor([1.0, 0.0, 0.0, 0.0])), encoded  # A -> one-hot
+assert torch.equal(encoded[:, 3], torch.zeros(4)), encoded  # N -> all-zero (NOT 0.25)
+print("N_BASE_OK")
+"""
+    output = run_in_env("parade", code=code, args=[str(standalone)], timeout=1800)
+    assert "N_BASE_OK" in output, output
 
 
 @pytest.mark.integration
@@ -320,25 +326,6 @@ def test_parade_resolve_cell_type_accepts_codes_and_names() -> None:
     assert resolve_cell_type("PA-1") == "c13"
     with pytest.raises(ValueError, match="Unknown PARADE cell type"):
         resolve_cell_type("nope")
-
-
-def test_parade_cell_line_names_are_the_expected_panel_members() -> None:
-    """PARADE_CELL_LINE_NAMES holds exactly the six pairs, each keyed by a member of some panel."""
-    from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
-        PARADE_CELL_LINE_NAMES,
-        PARADE_CELL_TYPES,
-    )
-
-    assert PARADE_CELL_LINE_NAMES == {
-        "c1": "MDA-MB-231",
-        "c2": "HepG2",
-        "c4": "Jurkat",
-        "c6": "SW480",
-        "c17": "NALM6",
-        "c13": "PA-1",
-    }
-    panel_codes = {code for panel in PARADE_CELL_TYPES.values() for code in panel}
-    assert all(code in panel_codes for code in PARADE_CELL_LINE_NAMES)
 
 
 def test_parade_activity_config_resolves_cell_line_names() -> None:
@@ -710,31 +697,6 @@ def test_parade_gradient_run_dispatches_loss_terms(monkeypatch) -> None:
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-def test_parade_activity_real_gpu() -> None:
-    """Real GPU smoke test for PARADE UTR activity through the tool worker."""
-    _skip_if_no_gpu()
-
-    from proto_tools.tools.sequence_scoring.parade import (
-        ParadeActivityConfig,
-        ParadeActivityInput,
-        run_parade_activity,
-    )
-
-    result = run_parade_activity(
-        ParadeActivityInput(sequences=["ACGT" * 12 + "AC", "TGCA" * 12 + "GT"]),
-        ParadeActivityConfig(construct_type="utr5", batch_size=2, device="cuda"),
-    )
-
-    assert len(result.results) == 2
-    assert result.cell_types == ["c1", "c2", "c4", "c6", "c17"]
-    for sequence_result in result.results:
-        assert set(sequence_result.scores) == {"c1", "c2", "c4", "c6", "c17"}
-        assert all(math.isfinite(score) for score in sequence_result.scores.values())
-    assert_metrics_in_spec(result)
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
 def test_parade_activity_real_gpu_utr3() -> None:
     """Real GPU smoke test for the distinct 3'UTR checkpoint (6-cell panel incl. c13, ~240 nt)."""
     _skip_if_no_gpu()
@@ -849,8 +811,8 @@ def test_parade_mixed_length_grouping_preserves_order() -> None:
     """Interleaved-length input is grouped per length and reassembled in original order.
 
     Exercises the real standalone grouping path (which the mocked unit tests don't): scores
-    an interleaved 50/30/50/30 batch and checks each result matches the same sequence scored
-    within its own length group, position for position.
+    an interleaved 50/30/50/30 batch over the default utr5 panel and checks each result
+    matches the same sequence scored within its own length group, position for position.
     """
     _skip_if_no_gpu()
 
@@ -860,10 +822,15 @@ def test_parade_mixed_length_grouping_preserves_order() -> None:
         run_parade_activity,
     )
 
-    config = ParadeActivityConfig(construct_type="utr5", cell_types=["c1", "c2"], device="cuda")
+    config = ParadeActivityConfig(construct_type="utr5", device="cuda")
     interleaved = ["A" * 50, "C" * 30, "GC" * 25, "AT" * 15]  # lengths 50, 30, 50, 30
     mixed = run_parade_activity(ParadeActivityInput(sequences=interleaved), config)
     assert [r.sequence_length for r in mixed.results] == [50, 30, 50, 30]
+    assert mixed.cell_types == ["c1", "c2", "c4", "c6", "c17"]
+    for sequence_result in mixed.results:
+        assert set(sequence_result.scores) == {"c1", "c2", "c4", "c6", "c17"}
+        assert all(math.isfinite(score) for score in sequence_result.scores.values())
+    assert_metrics_in_spec(mixed)
 
     ref_50 = run_parade_activity(ParadeActivityInput(sequences=["A" * 50, "GC" * 25]), config)
     ref_30 = run_parade_activity(ParadeActivityInput(sequences=["C" * 30, "AT" * 15]), config)

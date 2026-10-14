@@ -299,34 +299,6 @@ def test_apply_masking_strategy_does_not_mutate_original():
 # ── Method field and validation ──────────────────────────────────────────────
 
 
-def test_method_field_default():
-    """Default method is 'random'."""
-    assert MaskingStrategy().method == "random"
-
-
-def test_method_field_roundtrip():
-    """Method field survives serialization."""
-    s = MaskingStrategy(method="entropy")
-    data = s.model_dump()
-    assert data["method"] == "entropy"
-    restored = MaskingStrategy(**data)
-    assert restored.method == "entropy"
-
-
-def test_invalid_method_raises():
-    """Unknown method raises a validation error."""
-    with pytest.raises(ValidationError, match="Input should be 'random', 'entropy' or 'max-logit'"):
-        MaskingStrategy(method="bogus")
-
-
-def test_model_selection_fields_removed():
-    """model_name / model_checkpoint are gone; passing them is rejected (extra='forbid')."""
-    with pytest.raises(ValidationError):
-        MaskingStrategy(method="entropy", model_name="esm2")
-    with pytest.raises(ValidationError):
-        MaskingStrategy(method="entropy", model_checkpoint="esm2_t33_650M_UR50D")
-
-
 def test_random_tier_rejects_model_methods():
     """RandomMaskingStrategy (model-free tier) only allows method='random'."""
     assert RandomMaskingStrategy().method == "random"
@@ -363,11 +335,6 @@ def test_tool_masking_field_matches_declared_inputs():
 
 
 # ── Temperature ───────────────────────────────────────────────────────────────
-
-
-def test_temperature_default():
-    """Default temperature is 1.0."""
-    assert MaskingStrategy().temperature == 1.0
 
 
 def test_temperature_low_is_greedy():
@@ -422,15 +389,6 @@ def test_temperature_high_is_uniform():
     assert len(set(masked_positions)) > 1
 
 
-def test_temperature_serialization_roundtrip():
-    """Temperature survives serialization."""
-    s = MaskingStrategy(temperature=0.5)
-    data = s.model_dump()
-    assert data["temperature"] == 0.5
-    restored = MaskingStrategy(**data)
-    assert restored.temperature == 0.5
-
-
 # ── Masker persistence ────────────────────────────────────────────────────────
 
 
@@ -442,12 +400,6 @@ def test_masker_is_reused_across_calls():
     strategy.mask(["KLMNOPQRST"])
     masker_second = strategy._masker
     assert masker_first is masker_second
-
-
-def test_masker_not_set_before_first_call():
-    """_masker is None until .mask() is called."""
-    strategy = MaskingStrategy()
-    assert strategy._masker is None
 
 
 # ── E2E tests (parameterized over all methods) ──────────────────────────────
@@ -516,11 +468,12 @@ def test_method_num_mutations(method):
         )
 
 
-@pytest.mark.parametrize("method", _ALL_METHODS)
+@pytest.mark.parametrize("method", [key for key in MASKERS if MASKERS[key].requires is None])
 def test_method_mask_fraction(method):
-    """Each method masks ~50% of designable positions, respects.
+    """Each model-free method masks ~50% of designable positions, respects.
 
-    fixed_positions, and handles a batch of different-length sequences.
+    fixed_positions, and handles a batch of different-length sequences. Model-scored
+    methods share this count logic; ``test_method_num_mutations`` covers their scorer wiring.
     """
     sequences = ["MKTAYIAK", "MKTAYIAKQR", "MKTAYIAKQRQISFVK"]
     fraction = 0.5

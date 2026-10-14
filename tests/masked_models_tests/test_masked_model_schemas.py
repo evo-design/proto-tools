@@ -11,7 +11,6 @@ from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelSampleInput,
     MaskedModelScoringMetrics,
     MaskedModelScoringOutput,
-    Projection2D,
     SequenceEmbedding,
 )
 
@@ -93,20 +92,6 @@ def test_scoring_metrics_attribute_access():
     assert scores["perplexity"] == 1.5
     with pytest.raises(AttributeError):
         _ = scores.nonexistent
-
-
-# ── Projection round-trip ───────────────────────────────────────────────────
-
-
-def test_sequence_embedding_round_trips_projection():
-    e = SequenceEmbedding(
-        mean_embedding=[0.1, 0.2],
-        attention_mask=[1, 1],
-        projection=Projection2D(x=1.5, y=-2.0),
-    )
-    assert e.model_dump()["projection"] == {"x": 1.5, "y": -2.0}
-    restored = SequenceEmbedding.model_validate_json(e.model_dump_json())
-    assert restored.projection == Projection2D(x=1.5, y=-2.0)
 
 
 # ── Export ──────────────────────────────────────────────────────────────────

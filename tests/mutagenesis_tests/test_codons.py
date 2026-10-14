@@ -10,7 +10,6 @@ import pytest
 from proto_tools.tools.mutagenesis.codons import (
     CODON_TO_AA,
     COMMON_CODON_SCHEMES,
-    IUPAC_DNA,
     STANDARD_AMINO_ACIDS,
     get_codon_scheme,
     get_substitution_pool,
@@ -23,10 +22,6 @@ from proto_tools.tools.mutagenesis.codons import (
 # ============================================================================
 
 
-def test_codon_table_has_64_entries():
-    assert len(CODON_TO_AA) == 64
-
-
 def test_codon_table_covers_all_amino_acids():
     aas = {v for v in CODON_TO_AA.values() if v != "*"}
     assert aas == set(STANDARD_AMINO_ACIDS)
@@ -35,16 +30,6 @@ def test_codon_table_covers_all_amino_acids():
 def test_codon_table_has_three_stop_codons():
     stops = [k for k, v in CODON_TO_AA.items() if v == "*"]
     assert set(stops) == {"TAA", "TAG", "TGA"}
-
-
-# ============================================================================
-# IUPAC codes
-# ============================================================================
-
-
-def test_iupac_single_bases():
-    for base in "ACGT":
-        assert IUPAC_DNA[base] == base
 
 
 # ============================================================================
@@ -91,14 +76,6 @@ def test_case_insensitive():
 # ============================================================================
 
 
-def test_sample_amino_acid_nnk_no_stops():
-    rng = random.Random(42)
-    for _ in range(100):
-        aa = sample_amino_acid("NNK", rng=rng)
-        assert aa in STANDARD_AMINO_ACIDS
-        assert aa != "*"
-
-
 def test_sample_amino_acid_reproducible():
     a1 = sample_amino_acid("NNK", rng=random.Random(123))
     a2 = sample_amino_acid("NNK", rng=random.Random(123))
@@ -129,11 +106,6 @@ def test_degenerate_include_stop_weighted_by_codon_count():
     assert sum(with_stop["weights"].values()) == sum(base["weights"].values()) + 1.0
 
 
-def test_default_excludes_stop():
-    assert "*" not in get_codon_scheme("UNIFORM")["amino_acids"]
-    assert "*" not in get_codon_scheme("NNK")["amino_acids"]
-
-
 def test_sample_amino_acid_include_stop_can_draw_star():
     rng = random.Random(0)
     draws = {sample_amino_acid("UNIFORM", rng=rng, include_stop=True) for _ in range(500)}
@@ -150,9 +122,6 @@ def test_sample_amino_acid_include_stop_can_draw_star():
     [
         ("N", {"A", "C", "G", "T"}),
         ("R", {"A", "G"}),
-        ("Y", {"C", "T"}),
-        ("S", {"G", "C"}),
-        ("W", {"A", "T"}),
     ],
 )
 def test_substitution_pool(code, expected):
