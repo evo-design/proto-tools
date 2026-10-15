@@ -83,6 +83,7 @@ def make_toolkit(tmp_path, monkeypatch):
         standalone: bool = True,
         local_only: str | None = None,
         in_init: bool = False,
+        standalone_files: tuple[str, ...] = (),
     ):
         package = package or f"extpkg_{uuid.uuid4().hex[:8]}"
         key = key or f"{toolkit.replace('_', '-')}-{uuid.uuid4().hex[:6]}"
@@ -98,6 +99,8 @@ def make_toolkit(tmp_path, monkeypatch):
         tool_file.write_text(_TOOL_MODULE.format(key=key, toolkit=toolkit, local_only=local_only))
         if standalone:
             shutil.copytree(_MOCK_STANDALONE, toolkit_dir / "standalone", ignore=shutil.ignore_patterns("__pycache__"))
+            for name in standalone_files:
+                (toolkit_dir / "standalone" / name).touch()
         module = f"{package}.tools.testing.{toolkit}"
         return importlib.import_module(module if in_init else f"{module}.{toolkit}")
 
@@ -175,6 +178,13 @@ def test_two_external_toolkits_with_one_name_are_refused(make_toolkit):
     with pytest.raises(ValueError, match=rf"same name as .*defines {first.key!r}"):
         make_toolkit("ext_dup_tk")
     assert first.key in ToolRegistry._registry
+
+
+def test_external_toolkit_with_a_standalone_helpers_copy_is_refused(make_toolkit):
+    """A local standalone_helpers file would shadow the helpers every worker is given, so registration refuses."""
+    with pytest.raises(ValueError, match=r"standalone_helpers\.py, a name reserved"):
+        make_toolkit("ext_helpers_tk", key="ext-helpers-run", standalone_files=("standalone_helpers.py",))
+    assert "ext-helpers-run" not in ToolRegistry._registry
 
 
 def test_external_in_process_tool_may_share_a_packaged_name(make_toolkit):

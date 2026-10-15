@@ -1017,11 +1017,12 @@ class ToolRegistry:
             cls._check_duplicate(key, func.__name__)
             source_file = Path(func.__code__.co_filename)
 
-            # An out-of-tree toolkit with its own environment needs a unique name and runs only locally.
+            # An out-of-tree toolkit with its own environment needs a unique name, no helper look-alikes, and runs only locally.
             resolved_local_only = local_only
             toolkit_dir = source_file.parent
             if not _is_packaged_toolkit_dir(toolkit_dir) and (toolkit_dir / "standalone").is_dir():
                 cls._check_toolkit_namespace(key, toolkit_dir)
+                cls._check_reserved_standalone_names(key, toolkit_dir)
                 if resolved_local_only is None:
                     resolved_local_only = _EXTERNAL_LOCAL_ONLY_REASON.format(key=key)
 
@@ -2115,6 +2116,29 @@ class ToolRegistry:
                     f"@tool({key!r}): toolkit directory {toolkit_dir} has the same name as {spec.toolkit_dir}, "
                     f"which defines {spec.key!r}. Toolkit directory names must be unique, so rename one of them."
                 )
+
+    @classmethod
+    def _check_reserved_standalone_names(cls, key: str, toolkit_dir: Path) -> None:
+        """Check that an out-of-tree toolkit's ``standalone/`` holds nothing named like the shared helpers.
+
+        proto_tools publishes ``standalone_helpers`` to every worker on ``PYTHONPATH`` and ``PATH``, so a
+        same-named file next to the worker script would shadow it.
+
+        Args:
+            key (str): Tool registry key being registered.
+            toolkit_dir (Path): Directory of the file defining the tool.
+
+        Raises:
+            ValueError: If ``standalone/`` contains a ``standalone_helpers`` package, module, or script.
+        """
+        standalone_dir = toolkit_dir / "standalone"
+        reserved = sorted(name for name in ToolInstance._HELPER_ARTIFACTS if (standalone_dir / name).exists())
+        if reserved:
+            raise ValueError(
+                f"@tool({key!r}): {standalone_dir} contains {', '.join(reserved)}, a name reserved for the "
+                f"standalone_helpers that proto_tools provides to every worker. Import or source the provided "
+                f"helpers directly, and rename or delete the local copy."
+            )
 
 
 def _coerce_model(instance: BaseModel, expected_class: type[BaseModel], tool_key: str, role: str) -> BaseModel:

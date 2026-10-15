@@ -56,6 +56,10 @@ def run_mytool_score(inputs: MyToolScoreInput, config: MyToolScoreConfig, instan
 
 Each tool needs its own config class.
 
+## Standalone helpers
+
+Your worker script and `setup.sh` get the same `standalone_helpers` as packaged toolkits, with nothing to copy: `from standalone_helpers import get_logger, resolve_weights_dir` works in `inference.py`, and `source standalone_helpers.sh` works in `setup.sh`. Because these are provided to every worker, the names `standalone_helpers/`, `standalone_helpers.py`, and `standalone_helpers.sh` are reserved inside your `standalone/` directory, and importing a toolkit that uses one raises a `ValueError`.
+
 ## Using it
 
 Import the module that defines the tool (or a package `__init__` that imports it). From then on the tool behaves like any other: `ToolRegistry.get("mytool-score")`, calling `run_mytool_score`, and `ToolInstance.persist_tool("mytool-score")` all work. Registration happens at import, so the `proto-tools` CLI and MCP server, which only import proto-tools, list packaged tools only.
