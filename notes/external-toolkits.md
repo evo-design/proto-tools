@@ -111,7 +111,7 @@ def run_mytool_score(inputs: MyToolScoreInput, config: MyToolScoreConfig, instan
 
 - Each tool needs a separate config class.
 - Tool keys must be unique across all registered tools.
-- A toolkit with a `standalone/` environment runs only on the local machine. It defaults to a `local_only` reason, so `device="modal"` or `device="proto"` raises a `ValueError` before anything is sent. Pass `local_only=` to `@tool` to state a different reason.
+- Running on remote devices (`device="modal"` or `device="proto"`) is coming soon.
 
 ## Step 5: Add docs and metadata
 
