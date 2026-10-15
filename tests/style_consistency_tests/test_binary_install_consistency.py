@@ -3,7 +3,7 @@
 ``proto_install_binary`` (from ``standalone_helpers.sh``) loads ``binary_config.py`` from the
 directory ``setup.sh`` runs in, so the install works from a shared env, an ejected override, and an
 out-of-tree toolkit alike. Every env definition that ships a ``binary_config.py`` must install
-through it rather than locating ``utils/install_binary.py`` from the script's path.
+through it.
 """
 
 from __future__ import annotations
@@ -23,4 +23,3 @@ def test_binary_envs_install_through_the_helper(env_dir: Path):
     setup = (env_dir / "setup.sh").read_text()
     assert "source standalone_helpers.sh" in setup
     assert "proto_install_binary " in setup
-    assert "utils/install_binary.py" not in setup

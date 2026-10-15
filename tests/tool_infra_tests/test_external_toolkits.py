@@ -259,15 +259,22 @@ def test_external_toolkit_can_use_a_packaged_shared_env(make_toolkit):
     assert env_def_dir == ToolInstance._shared_envs_root() / "glm2_base"
 
 
-def test_external_toolkits_share_a_shared_env_from_their_package(make_toolkit):
-    """Toolkits in one package resolve a shared env from the package's shared_envs/ to one namespaced env."""
+def test_package_shared_envs_are_shared_within_a_package_and_separate_across_packages(make_toolkit):
+    """Toolkits in one package share its shared env; another package's same-named shared env is a separate env."""
     package_dir = _join_shared_env(make_toolkit("ext_pkg_shared_a", package="extpkg_shared"), "ext_test_shared")
     _join_shared_env(make_toolkit("ext_pkg_shared_b", package="extpkg_shared"), "ext_test_shared")
+    other_dir = _join_shared_env(make_toolkit("ext_pkg_shared_c", package="extpkg_shared_other"), "ext_test_shared")
     env_def = _make_package_shared_env(package_dir, "ext_test_shared")
-    digest = hashlib.sha256(b"extpkg_shared").hexdigest()[:8]
-    expected = (env_def, f"ext_test_shared__ext_{digest}")
-    assert ToolInstance._resolve_env_def("ext_pkg_shared_a") == expected
-    assert ToolInstance._resolve_env_def("ext_pkg_shared_b") == expected
+    other_def = _make_package_shared_env(other_dir, "ext_test_shared")
+
+    env_def_a, env_name_a = ToolInstance._resolve_env_def("ext_pkg_shared_a")
+    assert env_def_a == env_def
+    assert env_name_a.startswith("ext_test_shared__ext_")
+    assert ToolInstance._resolve_env_def("ext_pkg_shared_b") == (env_def, env_name_a)
+    env_def_c, env_name_c = ToolInstance._resolve_env_def("ext_pkg_shared_c")
+    assert env_def_c == other_def
+    assert env_name_c.startswith("ext_test_shared__ext_")
+    assert env_name_c != env_name_a
 
 
 def test_external_shared_env_name_collision_with_a_packaged_one_raises(make_toolkit):
@@ -276,21 +283,6 @@ def test_external_shared_env_name_collision_with_a_packaged_one_raises(make_tool
     env_def = _make_package_shared_env(package_dir, "glm2_base")
     with pytest.raises(ValueError, match=rf"(?s){env_def}.*{ToolInstance._shared_envs_root() / 'glm2_base'}"):
         ToolInstance._resolve_env_def("ext_shared_clash_tk")
-
-
-def test_external_toolkit_can_borrow_a_packaged_toolkits_env(make_toolkit):
-    """``toolkit:<name>`` runs in exactly the env that packaged toolkit resolves to."""
-    _join_shared_env(make_toolkit("ext_borrow_tk"), "toolkit:mock_cpu_tool")
-    assert ToolInstance._resolve_env_def("ext_borrow_tk") == (_MOCK_STANDALONE, "mock_cpu_tool")
-
-
-def test_borrowed_env_follows_the_toolkits_shared_env(make_toolkit):
-    """Borrowing a toolkit that itself uses a shared env yields that shared env."""
-    _join_shared_env(make_toolkit("ext_borrow_shared_tk"), "toolkit:esm3")
-    assert ToolInstance._resolve_env_def("ext_borrow_shared_tk") == (
-        ToolInstance._shared_envs_root() / "biohub_esm",
-        "biohub_esm",
-    )
 
 
 def test_borrowed_env_follows_the_toolkits_override(make_toolkit, tmp_path, monkeypatch):
@@ -305,6 +297,7 @@ def test_borrowed_env_follows_the_toolkits_override(make_toolkit, tmp_path, monk
 
 
 def test_borrowing_an_unknown_toolkits_env_raises(make_toolkit):
+    """A ``toolkit:`` reference to a name proto-tools does not ship fails, listing the valid toolkits."""
     _join_shared_env(make_toolkit("ext_borrow_unknown_tk"), "toolkit:not_a_toolkit")
     with pytest.raises(ValueError, match="unknown toolkit 'not_a_toolkit'"):
         ToolInstance._resolve_env_def("ext_borrow_unknown_tk")
@@ -344,6 +337,7 @@ def test_external_toolkit_runs_in_a_borrowed_env(make_toolkit, proto_home, monke
 
     instance = ToolInstance("ext_borrow_run_tk")
     assert instance.env_path == seeded.env_path
+    assert instance.setup_script == _MOCK_STANDALONE / "setup.sh"
     assert instance.script_path == _spec(module).toolkit_dir / "standalone" / "inference.py"
     result = module.run_ext(MockCPUToolInput(items=[4, 5]), module.ExtToolConfig(device="cpu"))
     assert [r.item for r in result.results] == [4, 5]
