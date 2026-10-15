@@ -82,21 +82,24 @@ def make_toolkit(tmp_path, monkeypatch):
         package: str | None = None,
         standalone: bool = True,
         local_only: str | None = None,
+        in_init: bool = False,
     ):
         package = package or f"extpkg_{uuid.uuid4().hex[:8]}"
         key = key or f"{toolkit.replace('_', '-')}-{uuid.uuid4().hex[:6]}"
         made.append((package, toolkit))
 
-        # Package skeleton: <pkg>/tools/testing/<toolkit>/<toolkit>.py
+        # Package skeleton: <pkg>/tools/testing/<toolkit>/<toolkit>.py, or the toolkit's __init__.py with in_init
         package_dir = tmp_path / package
         toolkit_dir = package_dir / "tools" / "testing" / toolkit
         toolkit_dir.mkdir(parents=True)
         for pkg_dir in (package_dir, package_dir / "tools", package_dir / "tools" / "testing", toolkit_dir):
             (pkg_dir / "__init__.py").touch()
-        (toolkit_dir / f"{toolkit}.py").write_text(_TOOL_MODULE.format(key=key, toolkit=toolkit, local_only=local_only))
+        tool_file = toolkit_dir / ("__init__.py" if in_init else f"{toolkit}.py")
+        tool_file.write_text(_TOOL_MODULE.format(key=key, toolkit=toolkit, local_only=local_only))
         if standalone:
             shutil.copytree(_MOCK_STANDALONE, toolkit_dir / "standalone", ignore=shutil.ignore_patterns("__pycache__"))
-        return importlib.import_module(f"{package}.tools.testing.{toolkit}.{toolkit}")
+        module = f"{package}.tools.testing.{toolkit}"
+        return importlib.import_module(module if in_init else f"{module}.{toolkit}")
 
     yield _make
 
@@ -201,6 +204,13 @@ def test_external_env_name_is_namespaced_by_package(make_toolkit):
     digest = hashlib.sha256(b"extpkg_envname.tools.testing.ext_env_tk").hexdigest()[:8]
     assert env_name == f"ext_env_tk__ext_{digest}"
     assert ToolInstance._resolve_env_def("ext_env_tk") == (_spec(module).toolkit_dir / "standalone", env_name)
+
+
+def test_external_env_name_is_the_same_for_a_tool_in_the_toolkit_init(make_toolkit):
+    """A tool defined in the toolkit's __init__.py hashes the toolkit package, like one in a sibling module."""
+    make_toolkit("ext_init_tk", package="extpkg_init", in_init=True)
+    digest = hashlib.sha256(b"extpkg_init.tools.testing.ext_init_tk").hexdigest()[:8]
+    assert ToolInstance._resolve_env_def("ext_init_tk")[1] == f"ext_init_tk__ext_{digest}"
 
 
 def test_standalone_dir_override_applies_to_external_toolkits(make_toolkit, tmp_path, monkeypatch):

@@ -2386,8 +2386,10 @@ class ToolInstance:
         spec = cls._external_toolkit_spec(toolkit)
         if spec is None or spec.toolkit_dir != tool_dir:
             return None
+        # The defining module's package is the toolkit package, for a sibling module and for __init__.py alike.
+        module = sys.modules.get(spec.function.__module__)
         # A module loaded on its own (no package) falls back to the toolkit's location.
-        package = spec.function.__module__.rpartition(".")[0] or str(tool_dir.resolve())
+        package = getattr(module, "__package__", None) or str(tool_dir.resolve())
         return f"{toolkit}__ext_{hashlib.sha256(package.encode()).hexdigest()[:8]}"
 
     @classmethod
