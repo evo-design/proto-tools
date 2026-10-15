@@ -80,8 +80,8 @@ the binary for the current platform.
 
 #### How it works
 
-1. The tool's `setup.sh` walks up to find `utils/install_binary.py` and runs it
-2. `utils/install_binary.py` discovers the tool's `standalone/binary_config.py`
+1. The tool's `setup.sh` sources `standalone_helpers.sh` and calls `proto_install_binary <toolkit>`
+2. `proto_install_binary` runs `utils/install_binary.py`, which loads `binary_config.py` from the directory `setup.sh` runs in
 3. It reads the platform-specific download URL from `binary_config.URLS`
 4. Downloads the archive and calls `binary_config.extract()` to install binaries
 5. Binaries are placed in the venv's `bin/` directory alongside the venv Python
@@ -114,18 +114,9 @@ def extract(archive_path: Path, bin_dir: Path) -> None:
 ```bash
 #!/bin/bash
 set -euo pipefail
+source standalone_helpers.sh
 uv pip install -r requirements.txt
-# Walk up to find utils/install_binary.py
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SEARCH_DIR="$SCRIPT_DIR"
-while [ ! -f "$SEARCH_DIR/utils/install_binary.py" ]; do
-    SEARCH_DIR="$(dirname "$SEARCH_DIR")"
-    if [ "$SEARCH_DIR" = "/" ]; then
-        echo "ERROR: Could not find utils/install_binary.py" >&2
-        exit 1
-    fi
-done
-python "$SEARCH_DIR/utils/install_binary.py" my_tool
+proto_install_binary my_tool
 ```
 
 3. In `standalone/run.py`, find binaries relative to the venv Python:

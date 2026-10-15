@@ -7,7 +7,7 @@ can ``from standalone_helpers import get_logger`` and route records through the
 parent's structured-logging bridge.
 
 ``binary_config.py`` is the exception: it runs in the **setup-time subprocess**
-that ``setup.sh`` invokes via ``python utils/install_binary.py <toolkit>``. There
+that ``setup.sh`` invokes via ``proto_install_binary <toolkit>``. There
 is no parent drain thread to demultiplex tagged records there — setup.sh's stderr
 is mirrored to ``PROTO_ENV_LOG_DIR`` directly. ``binary_config.py`` files therefore
 don't use the bridge at all (they fall back to stdlib ``logging`` if they need

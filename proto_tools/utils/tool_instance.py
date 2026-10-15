@@ -2715,7 +2715,7 @@ class ToolInstance:
         env["PYTHON_EXE"] = str(self.env_path.absolute() / "bin" / "python")
         env["PIP_EXE"] = str(self.env_path.absolute() / "bin" / "pip")
         env["MAMBA_BIN"] = str(mamba_bin.absolute())
-        env["PACKAGE_ROOT"] = str(Path(__file__).parent.parent.parent.absolute())
+        env["PROTO_INSTALL_BINARY"] = str(Path(__file__).parent.absolute() / "install_binary.py")
 
         returncode, combined_output = _run_setup_script(
             self.setup_script,

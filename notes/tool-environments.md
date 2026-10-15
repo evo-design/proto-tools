@@ -355,7 +355,9 @@ Tools needing external binaries must use `utils/install_binary.py`. Never use ra
 1. Create `standalone/binary_config.py` with:
    - `URLS`: dict mapping `(system, machine)` tuples to download URLs (use `"arm64"` not `"aarch64"`)
    - `extract(archive_path: Path, bin_dir: Path)`: extracts/copies binaries into bin/
-2. In `setup.sh`, call `python "$SEARCH_DIR/utils/install_binary.py" <toolkit>`
+2. In `setup.sh`, `source standalone_helpers.sh` and call `proto_install_binary <toolkit>`.
+
+`proto_install_binary` loads `binary_config.py` from the directory `setup.sh` runs in, so the config travels with the env definition: a shared env keeps it in `shared_envs/<name>/`, and a `PROTO_<TOOLKIT>_STANDALONE_DIR` override uses the copy `eject-standalone` made, edits included. The same call works from an out-of-tree toolkit (see `external-toolkits.md`).
 
 See blast or mmseqs for the standard pattern, and for platform-independent tools (e.g., Java JARs), use the same URL for all platform keys.
 
