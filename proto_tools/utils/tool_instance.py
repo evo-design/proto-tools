@@ -62,7 +62,7 @@ import threading
 from collections.abc import Callable, Generator
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
 from proto_tools.utils.device import parse_device_string
@@ -78,6 +78,9 @@ from proto_tools.utils.persistent_worker import (
 )
 from proto_tools.utils.progress import get_current_tool_function, has_active_progress_bar, progress_bar, set_substatus
 from proto_tools.utils.tool_io import MissingAssetError
+
+if TYPE_CHECKING:
+    from proto_tools.tools.tool_registry import ToolSpec
 
 logger = logging.getLogger(__name__)
 
@@ -2047,33 +2050,39 @@ class ToolInstance:
                     shutil.rmtree(tool_dir, ignore_errors=True)
 
     @classmethod
-    def _get_tool_dirs(cls) -> dict[str, Path]:
-        """Return a ``{toolkit: dir_path}`` mapping for all standalone tools.
+    def _find_tool_dir(cls, toolkit: str) -> Path | None:
+        """Return the directory of a standalone toolkit, packaged or out-of-tree, or None if unknown.
 
-        Combines the packaged toolkits under ``proto_tools/tools/`` with the
-        out-of-tree toolkits currently in the registry. A packaged toolkit wins
-        a name clash, which registration already refuses.
+        Packaged toolkits come from the cached scan of ``proto_tools/tools/``; the registry is read
+        only for a name that scan does not know, so resolving a packaged toolkit never touches it.
         """
-        return {**cls._external_tool_dirs(), **cls._packaged_tool_dirs()}
+        packaged = cls._get_tool_dirs().get(toolkit)
+        if packaged is not None:
+            return packaged
+        spec = cls._external_toolkit_spec(toolkit)
+        return spec.toolkit_dir if spec is not None else None
 
     @classmethod
-    def _external_tool_dirs(cls) -> dict[str, Path]:
-        """Return ``{toolkit: dir_path}`` for registered out-of-tree toolkits with a ``standalone/`` dir.
+    def _external_toolkit_spec(cls, toolkit: str) -> "ToolSpec | None":
+        """Return a registered tool from the out-of-tree toolkit named ``toolkit``, or None.
 
-        Derived from the registry on every call, so a toolkit is visible as
-        soon as its package is imported and nothing needs invalidating.
+        Only toolkits with a ``standalone/`` dir count. Read from the registry on each call, so a
+        toolkit is visible as soon as its package is imported and nothing needs invalidating.
         """
         # Lazy import to avoid circular dep: tool_registry imports tool_instance
         from proto_tools.tools.tool_registry import ToolRegistry
 
-        return {
-            spec.toolkit_dir.name: spec.toolkit_dir
-            for spec in list(ToolRegistry._registry.values())
-            if spec.is_external and spec.has_standalone_env
-        }
+        return next(
+            (
+                spec
+                for spec in list(ToolRegistry._registry.values())
+                if spec.toolkit_dir.name == toolkit and spec.is_external and spec.has_standalone_env
+            ),
+            None,
+        )
 
     @classmethod
-    def _packaged_tool_dirs(cls) -> dict[str, Path]:
+    def _get_tool_dirs(cls) -> dict[str, Path]:
         """Return a ``{toolkit: dir_path}`` mapping for the standalone tools under ``proto_tools/tools/``.
 
         The mapping is computed once (single ``rglob``) and cached for the
@@ -2122,11 +2131,10 @@ class ToolInstance:
     @classmethod
     def _validate_toolkit(cls, toolkit: str) -> str:
         """Raise ValueError if *toolkit* has no standalone/ directory."""
-        tool_dirs = cls._get_tool_dirs()
-        if toolkit in tool_dirs:
+        if cls._find_tool_dir(toolkit) is not None:
             return toolkit
         raise ValueError(
-            f"Invalid toolkit: {toolkit!r}. Available worker groups with standalone dirs: {sorted(tool_dirs)}"
+            f"Invalid toolkit: {toolkit!r}. Available worker groups with standalone dirs: {sorted(cls._get_tool_dirs())}"
         )
 
     @classmethod
@@ -2320,7 +2328,7 @@ class ToolInstance:
                 ``shared_env.txt`` and ``setup.sh`` (ambiguous), or no
                 ``setup.sh`` is found at the resolved location.
         """
-        tool_dir = cls._get_tool_dirs().get(toolkit)
+        tool_dir = cls._find_tool_dir(toolkit)
         if tool_dir is None:
             raise ValueError(f"Unknown tool {toolkit!r}; valid: {sorted(cls._get_tool_dirs())}")
 
@@ -2373,23 +2381,19 @@ class ToolInstance:
         Returns:
             str | None: The env name, or None if ``tool_dir`` is not a registered out-of-tree toolkit.
         """
-        if cls._external_tool_dirs().get(toolkit) != tool_dir:
+        if toolkit in cls._get_tool_dirs():
             return None
-
-        # Lazy import to avoid circular dep: tool_registry imports tool_instance
-        from proto_tools.tools.tool_registry import ToolRegistry
-
-        module = next(
-            spec.function.__module__ for spec in list(ToolRegistry._registry.values()) if spec.toolkit_dir == tool_dir
-        )
+        spec = cls._external_toolkit_spec(toolkit)
+        if spec is None or spec.toolkit_dir != tool_dir:
+            return None
         # A module loaded on its own (no package) falls back to the toolkit's location.
-        package = module.rpartition(".")[0] or str(tool_dir.resolve())
+        package = spec.function.__module__.rpartition(".")[0] or str(tool_dir.resolve())
         return f"{toolkit}__ext_{hashlib.sha256(package.encode()).hexdigest()[:8]}"
 
     @classmethod
     def _find_script(cls, toolkit: str) -> Path:
         """Find the main standalone script (inference.py or run.py)."""
-        tool_dir = cls._get_tool_dirs().get(toolkit)
+        tool_dir = cls._find_tool_dir(toolkit)
         if tool_dir is not None:
             standalone_dir = tool_dir / "standalone"
             # Prefer inference.py, then run.py

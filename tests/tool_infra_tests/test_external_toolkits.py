@@ -183,14 +183,15 @@ def test_external_in_process_tool_may_share_a_packaged_name(make_toolkit):
 # ── Toolkit directories and environment naming ───────────────────────────────
 
 
-def test_tool_dirs_include_external_toolkits_while_registered(make_toolkit):
+def test_external_toolkit_dir_resolves_while_registered(make_toolkit):
+    """An out-of-tree toolkit resolves from the registry, outside the cached packaged scan."""
     spec = _spec(make_toolkit("ext_dirs_tk"))
-    tool_dirs = ToolInstance._get_tool_dirs()
-    assert tool_dirs["ext_dirs_tk"] == spec.toolkit_dir
-    assert tool_dirs["mock_cpu_tool"] == TOOLS_DIR / "testing" / "mock_cpu_tool"
+    assert ToolInstance._find_tool_dir("ext_dirs_tk") == spec.toolkit_dir
+    assert "ext_dirs_tk" not in ToolInstance._get_tool_dirs()
+    assert ToolInstance._find_tool_dir("mock_cpu_tool") == TOOLS_DIR / "testing" / "mock_cpu_tool"
 
     del ToolRegistry._registry[spec.key]
-    assert "ext_dirs_tk" not in ToolInstance._get_tool_dirs()
+    assert ToolInstance._find_tool_dir("ext_dirs_tk") is None
 
 
 def test_external_env_name_is_namespaced_by_package(make_toolkit):
