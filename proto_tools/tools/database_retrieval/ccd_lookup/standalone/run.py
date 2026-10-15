@@ -31,10 +31,13 @@ logger = get_logger(__name__)
 # Module-level caches (per-subprocess, lazy)
 # ============================================================================
 
-# Maps canonical SMILES -> CCD code (built once on first SMILES lookup).
+# Maps canonical SMILES -> CCD code (loaded once on first SMILES lookup).
 _SMILES_INDEX: dict[str, str] | None = None
-# Maps InChIKey -> CCD code (built once on first SMILES lookup).
+# Maps InChIKey -> CCD code (loaded once on first SMILES lookup).
 _INCHIKEY_INDEX: dict[str, str] | None = None
+# Index file written beside components.cif; bump _INDEX_FORMAT whenever the index contents change.
+_INDEX_FILENAME = "ccd_index.json"
+_INDEX_FORMAT = 1
 # gemmi cif.Document per components.cif path; reading the ~500 MB bundle is the dominant per-subprocess cost.
 _GEMMI_DOCS: dict[str, Any] = {}
 # Parsed (component, warnings) per "CODE|sanitize" key; component is None when the code is absent.
@@ -140,22 +143,19 @@ def _is_likely_ccd_code(s: str) -> bool:
 # ============================================================================
 
 
-def _build_ccd_indices(components_path: str) -> None:
+def _compute_ccd_indices(components_path: str) -> tuple[dict[str, str], dict[str, str]]:
     """Build canonical SMILES and InChIKey -> CCD code maps from the CCD bundle.
 
-    Populates module-level `_SMILES_INDEX` and `_INCHIKEY_INDEX`. This is
-    expensive (parses every block of the CCD), so it is invoked lazily on the
-    first SMILES lookup. Blocks that fail to parse are skipped, and parsed
-    components are cached for later sanitize=False lookups. Ambiguous InChIKeys
+    Expensive: parses every block of the CCD (about a minute and several GB of
+    memory). Blocks that fail to parse are skipped. Ambiguous InChIKeys
     (multiple codes mapping to one key) are dropped to keep lookups deterministic.
 
     Args:
         components_path (str): Path to the uncompressed components.cif.
-    """
-    global _SMILES_INDEX, _INCHIKEY_INDEX
-    if _SMILES_INDEX is not None and _INCHIKEY_INDEX is not None:
-        return
 
+    Returns:
+        tuple[dict[str, str], dict[str, str]]: (smiles_index, inchikey_index).
+    """
     from pdbeccdutils.core import ccd_reader
     from rdkit import Chem
 
@@ -171,7 +171,6 @@ def _build_ccd_indices(components_path: str) -> None:
             try:
                 # sanitize=False maximizes coverage; sanitization rejects many organometallic/hypervalent entries.
                 component = ccd_reader._parse_pdb_mmcif(block, False).component
-                _COMPONENT_CACHE.setdefault(f"{ccd_id}|0", (component, []))
                 mol = component.mol
                 if mol is None:
                     continue
@@ -195,13 +194,107 @@ def _build_ccd_indices(components_path: str) -> None:
         if n > 1:
             inchikey_index.pop(ikey, None)
 
-    _SMILES_INDEX = smiles_index
-    _INCHIKEY_INDEX = inchikey_index
     logger.info(
         "CCD indices built: %d unique SMILES, %d unique InChIKeys.",
         len(smiles_index),
         len(inchikey_index),
     )
+    return smiles_index, inchikey_index
+
+
+def _index_stamp(components_path: str) -> dict[str, Any]:
+    """Describe what an index depends on, so a saved index is reused only when all of it matches.
+
+    Canonical SMILES vary across RDKit versions, and parsing varies across
+    pdbeccdutils versions, so both are recorded alongside the bundle's size and
+    modification time.
+
+    Args:
+        components_path (str): Path to the uncompressed components.cif.
+
+    Returns:
+        dict[str, Any]: JSON-serializable stamp.
+    """
+    from importlib.metadata import version
+
+    import rdkit
+
+    stat = os.stat(components_path)
+    return {
+        "format": _INDEX_FORMAT,
+        "rdkit": rdkit.__version__,
+        "pdbeccdutils": version("pdbeccdutils"),
+        "components_size": stat.st_size,
+        "components_mtime_ns": stat.st_mtime_ns,
+    }
+
+
+def _read_index_file(index_path: str, stamp: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]] | None:
+    """Return the saved (smiles_index, inchikey_index), or None if the file is missing, unreadable, or stale.
+
+    Args:
+        index_path (str): Path to the saved index JSON.
+        stamp (dict[str, Any]): Stamp the saved index must match.
+
+    Returns:
+        tuple[dict[str, str], dict[str, str]] | None: Saved indices, or None to rebuild.
+    """
+    if not os.path.isfile(index_path):
+        return None
+    try:
+        with open(index_path) as f:
+            payload = json.load(f)
+    except (OSError, ValueError) as exc:
+        logger.warning("CCD index at %s failed to load (%s); rebuilding", index_path, exc)
+        return None
+    if payload.get("stamp") != stamp:
+        logger.info("CCD index at %s is stale; rebuilding", index_path)
+        return None
+    return payload["smiles"], payload["inchikey"]
+
+
+def _write_index_file(
+    index_path: str, stamp: dict[str, Any], smiles_index: dict[str, str], inchikey_index: dict[str, str]
+) -> None:
+    """Atomically write the indices to `index_path`; logs and continues when the directory is read-only.
+
+    Args:
+        index_path (str): Destination path for the index JSON.
+        stamp (dict[str, Any]): Stamp recorded with the indices.
+        smiles_index (dict[str, str]): Canonical SMILES -> CCD code.
+        inchikey_index (dict[str, str]): InChIKey -> CCD code.
+    """
+    tmp_path = f"{index_path}.tmp.{os.getpid()}"
+    try:
+        with open(tmp_path, "w") as f:
+            json.dump({"stamp": stamp, "smiles": smiles_index, "inchikey": inchikey_index}, f)
+        os.replace(tmp_path, index_path)
+    except OSError as exc:
+        logger.warning("Could not save CCD index to %s (%s); continuing without it", index_path, exc)
+        with contextlib.suppress(OSError):
+            os.remove(tmp_path)
+
+
+def _load_ccd_indices(components_path: str) -> None:
+    """Populate `_SMILES_INDEX` and `_INCHIKEY_INDEX`, from the saved index when it is current.
+
+    A missing or stale index is rebuilt from the bundle and saved beside
+    components.cif for later workers.
+
+    Args:
+        components_path (str): Path to the uncompressed components.cif.
+    """
+    global _SMILES_INDEX, _INCHIKEY_INDEX
+    if _SMILES_INDEX is not None and _INCHIKEY_INDEX is not None:
+        return
+
+    index_path = os.path.join(os.path.dirname(components_path), _INDEX_FILENAME)
+    stamp = _index_stamp(components_path)
+    indices = _read_index_file(index_path, stamp)
+    if indices is None:
+        indices = _compute_ccd_indices(components_path)
+        _write_index_file(index_path, stamp, *indices)
+    _SMILES_INDEX, _INCHIKEY_INDEX = indices
 
 
 def _smiles_to_ccd_code(smiles: str, components_path: str) -> str | None:
@@ -229,7 +322,7 @@ def _smiles_to_ccd_code(smiles: str, components_path: str) -> str | None:
     except Exception:
         ikey = None
 
-    _build_ccd_indices(components_path)
+    _load_ccd_indices(components_path)
     assert _SMILES_INDEX is not None and _INCHIKEY_INDEX is not None
 
     if canon and canon in _SMILES_INDEX:
@@ -710,9 +803,14 @@ def to_device(device: str) -> dict[str, Any]:
 # ============================================================================
 
 if __name__ == "__main__":
+    # setup.sh prebuilds the SMILES/InChIKey index so workers skip the full-bundle parse.
+    if len(sys.argv) == 3 and sys.argv[1] == "--build-index":
+        _load_ccd_indices(sys.argv[2])
+        sys.exit(0)
     if len(sys.argv) != 3:
         print(
-            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>",
+            f"Usage: python {sys.argv[0]} <input_json_path> <output_json_path>\n"
+            f"       python {sys.argv[0]} --build-index <components_cif_path>",
             file=sys.stderr,
         )
         sys.exit(1)
