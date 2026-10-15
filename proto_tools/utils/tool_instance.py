@@ -2377,11 +2377,29 @@ class ToolInstance:
         is named ``{shared_name}__ext_{digest}``, the digest being of that package, so every toolkit in
         the package shares it. Any other name resolves to ``proto_tools/shared_envs/`` unchanged.
 
+        An out-of-tree toolkit may instead name a packaged toolkit as ``toolkit:<name>`` and run in the
+        env that toolkit runs in (its override, shared env, or private env). Packaged toolkits share
+        only through ``proto_tools/shared_envs/``, so every shared packaged env is listed there.
+
         Raises:
-            ValueError: If the name exists both in the toolkit's package and in proto_tools.
+            ValueError: If the name exists both in the toolkit's package and in proto_tools, or a
+                ``toolkit:`` reference comes from a packaged toolkit or names an unknown one.
         """
-        packaged = cls._shared_envs_root() / shared_name
         package = cls._external_package(toolkit, tool_dir)
+        if shared_name.startswith("toolkit:"):
+            target = shared_name.removeprefix("toolkit:")
+            if package is None:
+                raise ValueError(
+                    f"Tool {toolkit!r} references {shared_name!r}, but only out-of-tree toolkits can run in "
+                    "another toolkit's env; move the env to proto_tools/shared_envs/ and reference it by name."
+                )
+            if target not in cls._get_tool_dirs():
+                raise ValueError(
+                    f"Tool {toolkit!r} references the env of unknown toolkit {target!r}; "
+                    f"valid: {sorted(cls._get_tool_dirs())}"
+                )
+            return cls._resolve_env_def(target)
+        packaged = cls._shared_envs_root() / shared_name
         if package is None:
             return packaged, shared_name
         # tool_dir is {package}/tools/{category}/{toolkit}.

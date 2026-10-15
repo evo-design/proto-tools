@@ -83,6 +83,18 @@ mypkg/
 
 The env is built once as `mypkg_scoring__ext_{hash}_env`, the hash being of your package (`mypkg`). A name not found in your package resolves to proto-tools' shared envs (e.g. `biohub_esm`), and a name defined in both raises a `ValueError`.
 
+### Borrowing a proto-tools toolkit's env
+
+To run in the env of a proto-tools toolkit that has no shared env, name it with a `toolkit:` prefix in `shared_env.txt`:
+
+```
+mypkg/tools/scoring/mytool/standalone/
+├── shared_env.txt     # contents: "toolkit:esm2"
+└── inference.py       # runs with esm2's Python and packages
+```
+
+Your worker then runs in exactly the env `esm2` runs in (`esm2_env`, or the env a `PROTO_ESM2_STANDALONE_DIR` override builds), and nothing extra is installed. A private env has no stability promise: its packages, and even its Python version, can change in any proto-tools release, so pin the proto-tools version your package depends on. Only out-of-tree toolkits can borrow an env; proto-tools' toolkits share only through `proto_tools/shared_envs/`.
+
 ## Step 3: Write the worker script
 
 `standalone/inference.py` runs inside the environment. It exposes `dispatch()` for persistent workers and a `__main__` block for one-shot runs:

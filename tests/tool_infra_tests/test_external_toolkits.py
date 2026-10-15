@@ -278,6 +278,38 @@ def test_external_shared_env_name_collision_with_a_packaged_one_raises(make_tool
         ToolInstance._resolve_env_def("ext_shared_clash_tk")
 
 
+def test_external_toolkit_can_borrow_a_packaged_toolkits_env(make_toolkit):
+    """``toolkit:<name>`` runs in exactly the env that packaged toolkit resolves to."""
+    _join_shared_env(make_toolkit("ext_borrow_tk"), "toolkit:mock_cpu_tool")
+    assert ToolInstance._resolve_env_def("ext_borrow_tk") == (_MOCK_STANDALONE, "mock_cpu_tool")
+
+
+def test_borrowed_env_follows_the_toolkits_shared_env(make_toolkit):
+    """Borrowing a toolkit that itself uses a shared env yields that shared env."""
+    _join_shared_env(make_toolkit("ext_borrow_shared_tk"), "toolkit:esm3")
+    assert ToolInstance._resolve_env_def("ext_borrow_shared_tk") == (
+        ToolInstance._shared_envs_root() / "biohub_esm",
+        "biohub_esm",
+    )
+
+
+def test_borrowed_env_follows_the_toolkits_override(make_toolkit, tmp_path, monkeypatch):
+    """A user override of the borrowed toolkit's env applies to every toolkit running in it."""
+    _join_shared_env(make_toolkit("ext_borrow_override_tk"), "toolkit:mock_cpu_tool")
+    override = tmp_path / "override"
+    shutil.copytree(_MOCK_STANDALONE, override, ignore=shutil.ignore_patterns("__pycache__", "*.py"))
+    monkeypatch.setenv("PROTO_MOCK_CPU_TOOL_STANDALONE_DIR", str(override))
+    env_def_dir, env_name = ToolInstance._resolve_env_def("ext_borrow_override_tk")
+    assert env_def_dir == override.resolve()
+    assert (env_def_dir, env_name) == ToolInstance._resolve_env_def("mock_cpu_tool")
+
+
+def test_borrowing_an_unknown_toolkits_env_raises(make_toolkit):
+    _join_shared_env(make_toolkit("ext_borrow_unknown_tk"), "toolkit:not_a_toolkit")
+    with pytest.raises(ValueError, match="unknown toolkit 'not_a_toolkit'"):
+        ToolInstance._resolve_env_def("ext_borrow_unknown_tk")
+
+
 # ── Dispatch ─────────────────────────────────────────────────────────────────
 
 
@@ -301,6 +333,20 @@ def test_external_toolkit_runs_one_shot(make_toolkit, proto_home, monkeypatch):
     assert len({r.pid for r in first.results}) == 1
     assert first.results[0].pid != second.results[0].pid
     assert first.results[0].pid != os.getpid()
+
+
+def test_external_toolkit_runs_in_a_borrowed_env(make_toolkit, proto_home, monkeypatch):
+    """The worker runs the out-of-tree toolkit's script in the borrowed env, building nothing."""
+    module = make_toolkit("ext_borrow_run_tk")
+    _join_shared_env(module, "toolkit:mock_cpu_tool")
+    seeded = _seed_env("mock_cpu_tool")
+    monkeypatch.setattr(ToolInstance, "_create_env", lambda self: pytest.fail("borrowed env was rebuilt"))
+
+    instance = ToolInstance("ext_borrow_run_tk")
+    assert instance.env_path == seeded.env_path
+    assert instance.script_path == _spec(module).toolkit_dir / "standalone" / "inference.py"
+    result = module.run_ext(MockCPUToolInput(items=[4, 5]), module.ExtToolConfig(device="cpu"))
+    assert [r.item for r in result.results] == [4, 5]
 
 
 def test_external_toolkit_runs_persistent(make_toolkit, proto_home, monkeypatch):

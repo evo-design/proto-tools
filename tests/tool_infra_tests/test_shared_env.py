@@ -94,6 +94,14 @@ def test_shared_env_marker_is_trimmed(fake_tools):
 # ── Validation errors ─────────────────────────────────────────────────────────
 
 
+def test_packaged_toolkit_cannot_borrow_another_toolkits_env(fake_tools):
+    """Packaged toolkits share only through shared_envs/, so a toolkit: reference from one raises."""
+    fake_tools["tool_dirs"]["donor"] = _make_tool(fake_tools["tools_root"], "donor", with_setup=True)
+    fake_tools["tool_dirs"]["borrower"] = _make_tool(fake_tools["tools_root"], "borrower", shared="toolkit:donor")
+    with pytest.raises(ValueError, match="only out-of-tree toolkits"):
+        ToolInstance._resolve_env_def("borrower")
+
+
 def test_unknown_tool_raises(fake_tools):
     with pytest.raises(ValueError, match="Unknown tool"):
         ToolInstance._resolve_env_def("nonexistent")
