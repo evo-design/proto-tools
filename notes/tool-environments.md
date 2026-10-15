@@ -352,7 +352,7 @@ environment once it gets the lock and reuses the finished build.
 
 ## Binary Installation
 
-Tools needing external binaries must use `utils/install_binary.py`. Never use raw `curl`/`wget` in `setup.sh`.
+Tools needing external binaries must install them with `proto_install_binary` (which runs `utils/install_binary.py`). Never use raw `curl`/`wget` in `setup.sh`.
 
 1. Create `standalone/binary_config.py` with:
    - `URLS`: dict mapping `(system, machine)` tuples to download URLs (use `"arm64"` not `"aarch64"`)

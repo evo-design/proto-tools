@@ -8,7 +8,7 @@ standalone/, a shared env, or a ``PROTO_<TOOLKIT>_STANDALONE_DIR`` override) hol
     extract(archive_path, bin_dir): function to extract binaries from the archive
 
 Usage:
-    python install_binary.py <toolkit> [config_path]   # config_path defaults to ./binary_config.py
+    python install_binary.py <toolkit>   # loads ./binary_config.py
 """
 
 import importlib.util
@@ -188,8 +188,8 @@ def install_binary(toolkit: str, config_path: Path = Path("binary_config.py")) -
 
 
 if __name__ == "__main__":
-    if len(sys.argv) not in (2, 3):
-        print(f"Usage: python {sys.argv[0]} <toolkit> [config_path]", file=sys.stderr)
+    if len(sys.argv) != 2:
+        print(f"Usage: python {sys.argv[0]} <toolkit>", file=sys.stderr)
         sys.exit(1)
 
-    install_binary(sys.argv[1], *(Path(arg) for arg in sys.argv[2:]))
+    install_binary(sys.argv[1])

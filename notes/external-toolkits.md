@@ -81,7 +81,7 @@ mypkg/
         └── othertool/standalone/shared_env.txt  # contents: "mypkg_scoring"
 ```
 
-The env is built once as `mypkg_scoring__ext_{hash}_env`, the hash being of your package (`mypkg`). A name not found in your package resolves to proto-tools' shared envs (e.g. `biohub_esm`), and a name defined in both raises a `ValueError`.
+The env is built once as `mypkg_scoring__ext_{hash}_env`, the hash being of your package (`mypkg`). A name not found in your package resolves to proto-tools' shared envs (e.g. `biohub_esm`), and a name defined in both raises a `ValueError`. Your package's `shared_envs/` is searched only for toolkits in the `tools/{category}/{toolkit}` layout from Step 1.
 
 ### Borrowing a proto-tools toolkit's env
 
@@ -93,7 +93,7 @@ mypkg/tools/scoring/mytool/standalone/
 └── inference.py       # runs with esm2's Python and packages
 ```
 
-Your worker then runs in exactly the env `esm2` runs in (`esm2_env`, or the env a `PROTO_ESM2_STANDALONE_DIR` override builds), and nothing extra is installed. A private env has no stability promise: its packages, and even its Python version, can change in any proto-tools release, so pin the proto-tools version your package depends on. Only out-of-tree toolkits can borrow an env; proto-tools' toolkits share only through `proto_tools/shared_envs/`.
+Your worker then runs in exactly the env `esm2` runs in (`esm2_env`, or the env a `PROTO_ESM2_STANDALONE_DIR` override builds), and nothing extra is installed. A private env has no stability promise: its packages, and even its Python version, can change in any proto-tools release, so pin the proto-tools version your package depends on. `proto-tools eject-standalone mytool` copies the env `esm2` ships with, ignoring any esm2 override. Only out-of-tree toolkits can borrow an env; proto-tools' toolkits share only through `proto_tools/shared_envs/`.
 
 ## Step 3: Write the worker script
 
