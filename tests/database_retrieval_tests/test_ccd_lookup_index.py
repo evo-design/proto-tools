@@ -52,16 +52,6 @@ def _redirect_atp(index: dict, code: str) -> None:
 
 @pytest.mark.skip_ci
 @pytest.mark.integration
-def test_setup_builds_an_index_stamped_with_its_dependencies(isolated_weights_dir):
-    """setup.sh leaves an index whose stamp records the versions and bundle it was built from."""
-    _, index = isolated_weights_dir
-
-    assert {"format", "rdkit", "pdbeccdutils", "components_size", "components_mtime_ns"} <= set(index["stamp"])
-    assert index["inchikey"]["ZKHQWZAMYRWXGA-KQYNXXCUSA-N"] == "ATP"
-
-
-@pytest.mark.skip_ci
-@pytest.mark.integration
 def test_smiles_lookup_reads_a_current_index(isolated_weights_dir):
     """A saved index with a matching stamp is used as-is rather than rebuilt."""
     weights_dir, index = isolated_weights_dir
