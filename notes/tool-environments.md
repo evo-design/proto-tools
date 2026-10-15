@@ -346,16 +346,20 @@ environment once it gets the lock and reuses the finished build.
 
 **When NOT to use:** Tools with conflicting Python versions, conflicting framework version pins, or genuinely independent dependency sets.
 
+**Out-of-tree toolkits:** a toolkit defined by a downstream package can also name a shared env in its package's `shared_envs/` directory (next to its `tools/`), built as `<name>__ext_<hash>_env`, or borrow a packaged toolkit's env with `toolkit:<name>` in `shared_env.txt`. Packaged toolkits share only through `shared_envs/`. See `external-toolkits.md`.
+
 **Migration note:** When a tool adopts a shared env (e.g. `esm3` migrated to `biohub_esm`), its on-disk env directory changes from `<toolkit>_env/` to `<shared_name>_env/`. The old directory is orphaned but harmless, and users can manually delete `PROTO_HOME/proto_tool_envs/<old_name>_env/` to reclaim disk.
 
 ## Binary Installation
 
-Tools needing external binaries must use `utils/install_binary.py`. Never use raw `curl`/`wget` in `setup.sh`.
+Tools needing external binaries must install them with `proto_install_binary` (which runs `utils/install_binary.py`). Never use raw `curl`/`wget` in `setup.sh`.
 
 1. Create `standalone/binary_config.py` with:
    - `URLS`: dict mapping `(system, machine)` tuples to download URLs (use `"arm64"` not `"aarch64"`)
    - `extract(archive_path: Path, bin_dir: Path)`: extracts/copies binaries into bin/
-2. In `setup.sh`, call `python "$SEARCH_DIR/utils/install_binary.py" <toolkit>`
+2. In `setup.sh`, `source standalone_helpers.sh` and call `proto_install_binary <toolkit>`.
+
+`proto_install_binary` loads `binary_config.py` from the directory `setup.sh` runs in, so the config travels with the env definition: a shared env keeps it in `shared_envs/<name>/`, and a `PROTO_<TOOLKIT>_STANDALONE_DIR` override uses the copy `eject-standalone` made, edits included. The same call works from an out-of-tree toolkit (see `external-toolkits.md`).
 
 See blast or mmseqs for the standard pattern, and for platform-independent tools (e.g., Java JARs), use the same URL for all platform keys.
 

@@ -84,16 +84,18 @@ def make_toolkit(tmp_path, monkeypatch):
         local_only: str | None = None,
         in_init: bool = False,
         standalone_files: tuple[str, ...] = (),
+        category: str | None = "testing",
     ):
         package = package or f"extpkg_{uuid.uuid4().hex[:8]}"
         key = key or f"{toolkit.replace('_', '-')}-{uuid.uuid4().hex[:6]}"
         made.append((package, toolkit))
 
-        # Package skeleton: <pkg>/tools/testing/<toolkit>/<toolkit>.py, or the toolkit's __init__.py with in_init
+        # Package skeleton: <pkg>/tools/<category>/<toolkit>/<toolkit>.py, or the toolkit's __init__.py with in_init
         package_dir = tmp_path / package
-        toolkit_dir = package_dir / "tools" / "testing" / toolkit
+        parent_dir = package_dir / "tools" / category if category else package_dir / "tools"
+        toolkit_dir = parent_dir / toolkit
         toolkit_dir.mkdir(parents=True)
-        for pkg_dir in (package_dir, package_dir / "tools", package_dir / "tools" / "testing", toolkit_dir):
+        for pkg_dir in (package_dir, package_dir / "tools", parent_dir, toolkit_dir):
             (pkg_dir / "__init__.py").touch()
         tool_file = toolkit_dir / ("__init__.py" if in_init else f"{toolkit}.py")
         tool_file.write_text(_TOOL_MODULE.format(key=key, toolkit=toolkit, local_only=local_only))
@@ -101,7 +103,9 @@ def make_toolkit(tmp_path, monkeypatch):
             shutil.copytree(_MOCK_STANDALONE, toolkit_dir / "standalone", ignore=shutil.ignore_patterns("__pycache__"))
             for name in standalone_files:
                 (toolkit_dir / "standalone" / name).touch()
-        module = f"{package}.tools.testing.{toolkit}"
+        module = ".".join(part for part in (package, "tools", category, toolkit) if part)
+        # A second toolkit in an already-imported package is a new entry in a directory the import system has listed.
+        importlib.invalidate_caches()
         return importlib.import_module(module if in_init else f"{module}.{toolkit}")
 
     yield _make
@@ -233,16 +237,116 @@ def test_standalone_dir_override_applies_to_external_toolkits(make_toolkit, tmp_
     assert env_name.startswith("ext_override_tk__override_")
 
 
-def test_external_toolkit_can_use_a_packaged_shared_env(make_toolkit):
-    """An out-of-tree toolkit joining a packaged shared env builds that env, under its packaged name."""
-    module = make_toolkit("ext_shared_tk")
+def _join_shared_env(module, shared_name: str) -> Path:
+    """Swap a test toolkit's private env definition for a ``shared_env.txt`` naming ``shared_name``."""
     standalone = _spec(module).toolkit_dir / "standalone"
     for name in ("setup.sh", "python_version.txt"):
         (standalone / name).unlink()
-    (standalone / "shared_env.txt").write_text("glm2_base\n")
+    (standalone / "shared_env.txt").write_text(f"{shared_name}\n")
+    return standalone.parents[3]
+
+
+def _make_package_shared_env(package_dir: Path, shared_name: str) -> Path:
+    """Write a shared env definition into a test package's ``shared_envs/``."""
+    env_def = package_dir / "shared_envs" / shared_name
+    shutil.copytree(_MOCK_STANDALONE, env_def, ignore=shutil.ignore_patterns("__pycache__", "*.py"))
+    return env_def
+
+
+def test_external_toolkit_can_use_a_packaged_shared_env(make_toolkit):
+    """An out-of-tree toolkit joining a packaged shared env builds that env, under its packaged name."""
+    _join_shared_env(make_toolkit("ext_shared_tk"), "glm2_base")
     env_def_dir, env_name = ToolInstance._resolve_env_def("ext_shared_tk")
     assert env_name == "glm2_base"
     assert env_def_dir == ToolInstance._shared_envs_root() / "glm2_base"
+
+
+def test_package_shared_envs_are_shared_within_a_package_and_separate_across_packages(make_toolkit):
+    """Toolkits in one package share its shared env; another package's same-named shared env is a separate env."""
+    package_dir = _join_shared_env(make_toolkit("ext_pkg_shared_a", package="extpkg_shared"), "ext_test_shared")
+    _join_shared_env(make_toolkit("ext_pkg_shared_b", package="extpkg_shared"), "ext_test_shared")
+    other_dir = _join_shared_env(make_toolkit("ext_pkg_shared_c", package="extpkg_shared_other"), "ext_test_shared")
+    env_def = _make_package_shared_env(package_dir, "ext_test_shared")
+    other_def = _make_package_shared_env(other_dir, "ext_test_shared")
+
+    env_def_a, env_name_a = ToolInstance._resolve_env_def("ext_pkg_shared_a")
+    assert env_def_a == env_def
+    assert env_name_a.startswith("ext_test_shared__ext_")
+    assert ToolInstance._resolve_env_def("ext_pkg_shared_b") == (env_def, env_name_a)
+    env_def_c, env_name_c = ToolInstance._resolve_env_def("ext_pkg_shared_c")
+    assert env_def_c == other_def
+    assert env_name_c.startswith("ext_test_shared__ext_")
+    assert env_name_c != env_name_a
+
+
+def test_missing_package_shared_env_error_names_both_locations(make_toolkit):
+    """An out-of-tree toolkit's unknown shared env names its package's shared_envs/ and proto-tools'."""
+    package_dir = _join_shared_env(make_toolkit("ext_shared_missing_tk"), "ext_missing_shared")
+    with pytest.raises(ValueError, match=rf"(?s){package_dir / 'shared_envs' / 'ext_missing_shared'}.*proto-tools"):
+        ToolInstance._resolve_env_def("ext_shared_missing_tk")
+
+
+def test_package_shared_envs_need_the_category_layout(make_toolkit, tmp_path):
+    """A toolkit outside <package>/tools/<category>/<toolkit> never searches a directory beyond its package."""
+    module = make_toolkit("ext_flat_tk", category=None)
+    standalone = _spec(module).toolkit_dir / "standalone"
+    for name in ("setup.sh", "python_version.txt"):
+        (standalone / name).unlink()
+    (standalone / "shared_env.txt").write_text("ext_flat_shared\n")
+    # tool_dir.parents[2] of the flat layout is the import root, not the package.
+    _make_package_shared_env(tmp_path, "ext_flat_shared")
+    with pytest.raises(ValueError, match="searched only for a toolkit at <package>/tools/<category>/<toolkit>"):
+        ToolInstance._resolve_env_def("ext_flat_tk")
+
+
+def test_package_shared_env_of_a_module_without_a_package_is_keyed_by_directory(make_toolkit, monkeypatch):
+    """Toolkits loaded without a package still get per-package shared env names, from their package directory."""
+    names = []
+    for suffix in ("a", "b"):
+        toolkit = f"ext_nopkg_{suffix}"
+        module = make_toolkit(toolkit, package=f"extpkg_nopkg_{suffix}")
+        monkeypatch.setattr(module, "__package__", None)
+        _make_package_shared_env(_join_shared_env(module, "ext_nopkg_shared"), "ext_nopkg_shared")
+        names.append(ToolInstance._resolve_env_def(toolkit)[1])
+    assert all(name.startswith("ext_nopkg_shared__ext_") for name in names)
+    assert names[0] != names[1]
+
+
+def test_external_shared_env_name_collision_with_a_packaged_one_raises(make_toolkit):
+    """A package shared env named like a packaged one is ambiguous, so resolving it fails naming both dirs."""
+    package_dir = _join_shared_env(make_toolkit("ext_shared_clash_tk"), "glm2_base")
+    env_def = _make_package_shared_env(package_dir, "glm2_base")
+    with pytest.raises(ValueError, match=rf"(?s){env_def}.*{ToolInstance._shared_envs_root() / 'glm2_base'}"):
+        ToolInstance._resolve_env_def("ext_shared_clash_tk")
+
+
+def test_borrowed_env_follows_the_toolkits_override(make_toolkit, tmp_path, monkeypatch):
+    """A user override of the borrowed toolkit's env applies to every toolkit running in it."""
+    _join_shared_env(make_toolkit("ext_borrow_override_tk"), "toolkit:mock_cpu_tool")
+    override = tmp_path / "override"
+    shutil.copytree(_MOCK_STANDALONE, override, ignore=shutil.ignore_patterns("__pycache__", "*.py"))
+    monkeypatch.setenv("PROTO_MOCK_CPU_TOOL_STANDALONE_DIR", str(override))
+    env_def_dir, env_name = ToolInstance._resolve_env_def("ext_borrow_override_tk")
+    assert env_def_dir == override.resolve()
+    assert (env_def_dir, env_name) == ToolInstance._resolve_env_def("mock_cpu_tool")
+
+
+def test_eject_of_a_borrowing_toolkit_copies_the_packaged_env(make_toolkit, tmp_path, monkeypatch):
+    """Eject copies the env the borrowed toolkit ships with, even while that toolkit has an override."""
+    _join_shared_env(make_toolkit("ext_borrow_eject_tk"), "toolkit:mock_cpu_tool")
+    override = tmp_path / "override"
+    shutil.copytree(_MOCK_STANDALONE, override, ignore=shutil.ignore_patterns("__pycache__", "*.py"))
+    (override / "setup.sh").write_text("#!/bin/bash\necho patched\n")
+    monkeypatch.setenv("PROTO_MOCK_CPU_TOOL_STANDALONE_DIR", str(override))
+    dest = ToolInstance.eject_standalone("ext_borrow_eject_tk", tmp_path / "ejected")
+    assert (dest / "setup.sh").read_text() == (_MOCK_STANDALONE / "setup.sh").read_text()
+
+
+def test_borrowing_an_unknown_toolkits_env_raises(make_toolkit):
+    """A ``toolkit:`` reference to a name proto-tools does not ship fails, listing the valid toolkits."""
+    _join_shared_env(make_toolkit("ext_borrow_unknown_tk"), "toolkit:not_a_toolkit")
+    with pytest.raises(ValueError, match="unknown proto-tools toolkit 'not_a_toolkit'"):
+        ToolInstance._resolve_env_def("ext_borrow_unknown_tk")
 
 
 # ── Dispatch ─────────────────────────────────────────────────────────────────
@@ -268,6 +372,21 @@ def test_external_toolkit_runs_one_shot(make_toolkit, proto_home, monkeypatch):
     assert len({r.pid for r in first.results}) == 1
     assert first.results[0].pid != second.results[0].pid
     assert first.results[0].pid != os.getpid()
+
+
+def test_external_toolkit_runs_in_a_borrowed_env(make_toolkit, proto_home, monkeypatch):
+    """The worker runs the out-of-tree toolkit's script in the borrowed env, building nothing."""
+    module = make_toolkit("ext_borrow_run_tk")
+    _join_shared_env(module, "toolkit:mock_cpu_tool")
+    seeded = _seed_env("mock_cpu_tool")
+    monkeypatch.setattr(ToolInstance, "_create_env", lambda self: pytest.fail("borrowed env was rebuilt"))
+
+    instance = ToolInstance("ext_borrow_run_tk")
+    assert instance.env_path == seeded.env_path
+    assert instance.setup_script == _MOCK_STANDALONE / "setup.sh"
+    assert instance.script_path == _spec(module).toolkit_dir / "standalone" / "inference.py"
+    result = module.run_ext(MockCPUToolInput(items=[4, 5]), module.ExtToolConfig(device="cpu"))
+    assert [r.item for r in result.results] == [4, 5]
 
 
 def test_external_toolkit_runs_persistent(make_toolkit, proto_home, monkeypatch):

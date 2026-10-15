@@ -1,14 +1,14 @@
 """proto_tools/utils/install_binary.py.
 
-Called from standalone/setup.sh scripts during ToolInstance venv creation.
-Each tool provides its own `binary_config.py` in its standalone/ directory with:
+Called from standalone/setup.sh scripts during ToolInstance venv creation, through the
+``proto_install_binary`` shell helper. The env-def directory setup.sh runs from (a toolkit's
+standalone/, a shared env, or a ``PROTO_<TOOLKIT>_STANDALONE_DIR`` override) holds a
+``binary_config.py`` with:
     URLS: dict mapping (system, machine) tuples to download URLs
     extract(archive_path, bin_dir): function to extract binaries from the archive
 
-This script discovers and loads the tool's config automatically.
-
 Usage:
-    python install_binary.py <toolkit>
+    python install_binary.py <toolkit>   # loads ./binary_config.py
 """
 
 import importlib.util
@@ -38,27 +38,6 @@ _ARCH_ALIASES: dict[str, str] = {
     "arm64": "arm64",
     "aarch64": "arm64",
 }
-
-
-def _find_tool_config(toolkit: str) -> Path:
-    """Find a tool's binary_config.py by scanning for standalone/ directories.
-
-    Uses the same discovery pattern as ToolInstance._determine_valid_model_name().
-
-    Args:
-        toolkit (str): Name of the tool directory to search for.
-    """
-    tools_dir = Path(__file__).parent.parent / "tools"  # utils/ -> proto_tools/ -> tools/
-
-    for item in tools_dir.rglob("*"):
-        if item.is_dir() and item.name == toolkit and (item / "standalone").exists():
-            config_path = item / "standalone" / "binary_config.py"
-            if config_path.exists():
-                return config_path
-
-    raise ValueError(
-        f"No binary_config.py found for tool: {toolkit}. Expected at: <tool_dir>/standalone/binary_config.py"
-    )
 
 
 def _load_tool_config(config_path: Path) -> Any:
@@ -129,17 +108,19 @@ def _download_with_progress(url: str, dest: Path) -> None:
         raise OSError(f"Download truncated from {url}: got {downloaded}/{total} bytes")
 
 
-def install_binary(toolkit: str) -> None:
+def install_binary(toolkit: str, config_path: Path = Path("binary_config.py")) -> None:
     """Download and install a platform-specific binary into the active venv.
 
-    Discovers the tool's binary_config.py, reads its URLS and extract function,
-    downloads the appropriate archive for the current platform, and extracts
-    binaries into the venv's bin/ directory.
+    Loads ``config_path``, reads its URLS and extract function, downloads the
+    appropriate archive for the current platform, and extracts binaries into the
+    venv's bin/ directory.
 
     Args:
-        toolkit (str): Name of the tool to install binaries for.
+        toolkit (str): Name of the tool, used in progress and error messages.
+        config_path (Path): The tool's binary_config.py, relative to the working directory by default.
     """
-    config_path = _find_tool_config(toolkit)
+    if not config_path.is_file():
+        raise FileNotFoundError(f"{toolkit}: no binary_config.py at {config_path.absolute()}")
     config = _load_tool_config(config_path)
 
     system = platform.system()

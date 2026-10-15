@@ -20,6 +20,7 @@
 #   proto_download_gdrive <file_id> <dest>
 #   proto_sha256 <path>
 #   proto_download_verified <url> <dest> <sha256>
+#   proto_install_binary <toolkit>
 # ============================================================================
 
 
@@ -348,4 +349,23 @@ proto_download_verified() {
         return 1
     fi
     mv "${dest}.part" "$dest"
+}
+
+
+# ---------------------------------------------------------------------------
+# proto_install_binary <toolkit>
+#
+# Download the platform-specific binary described by binary_config.py in the
+# current directory (the env-def dir setup.sh runs from) into the venv's bin/.
+# The installer is proto_tools/utils/install_binary.py, located through
+# $PROTO_INSTALL_BINARY; <toolkit> labels its progress and error messages.
+#
+# Example:
+#   proto_install_binary blast
+#
+# Reference: tools/sequence_alignment/blast/standalone/setup.sh
+# ---------------------------------------------------------------------------
+proto_install_binary() {
+    local toolkit="$1"
+    python "${PROTO_INSTALL_BINARY:?PROTO_INSTALL_BINARY is unset; run setup.sh through proto-tools}" "$toolkit"
 }
