@@ -157,8 +157,8 @@ def test_external_toolkit_is_external_and_local_only(make_toolkit):
 
 
 def test_external_toolkit_keeps_its_own_local_only_reason(make_toolkit):
-    spec = _spec(make_toolkit(local_only="reads a licence file from your own disk."))
-    assert spec.local_only == "reads a licence file from your own disk."
+    spec = _spec(make_toolkit(local_only="reads a licence file from local disk."))
+    assert spec.local_only == "reads a licence file from local disk."
 
 
 def test_external_in_process_tool_gets_no_local_only_default(make_toolkit):
@@ -255,7 +255,7 @@ def test_external_toolkit_refuses_a_remote_device(make_toolkit):
 
 
 def test_external_toolkit_runs_one_shot(make_toolkit, proto_home, monkeypatch):
-    """Each call starts a fresh worker from the toolkit's own standalone/ in its namespaced env."""
+    """Each call starts a fresh worker from the toolkit's standalone/ in its namespaced env."""
     module = make_toolkit("ext_oneshot_tk")
     instance = _seed_env("ext_oneshot_tk")
     assert instance.env_path.parent == proto_home / "proto_tool_envs"

@@ -118,7 +118,7 @@ _REMOTE_ROADMAP_NOTE = "We are looking into supporting remote options for these 
 # real choice meaning the whole batch goes to one execution.
 _UNSET_CHUNK_SIZE = -1
 
-# Default local_only reason for an out-of-tree toolkit with its own environment; remote workers only ship proto_tools.
+# Default local_only reason for an out-of-tree toolkit with a standalone environment; remote workers only ship proto_tools.
 _EXTERNAL_LOCAL_ONLY_REASON = (
     "{key} is defined outside proto_tools, so no remote worker has its environment. Run locally with "
     "device='cpu' or device='cuda'."
@@ -1017,7 +1017,7 @@ class ToolRegistry:
             cls._check_duplicate(key, func.__name__)
             source_file = Path(func.__code__.co_filename)
 
-            # An out-of-tree toolkit with its own environment needs a unique name, no helper look-alikes, and runs only locally.
+            # An out-of-tree toolkit with a standalone environment needs a unique name, no helper look-alikes, and runs only locally.
             resolved_local_only = local_only
             toolkit_dir = source_file.parent
             if not _is_packaged_toolkit_dir(toolkit_dir) and (toolkit_dir / "standalone").is_dir():

@@ -144,7 +144,10 @@ Key requirements for new tools:
 - `examples/example.ipynb` notebook
 - Follow the `__init__.py` export chain: tool -> category -> `tools/__init__.py`
 
-To create a toolkit in your own package, see [notes/external-toolkits.md](notes/external-toolkits.md).
+To create a custom toolkit for your project, either:
+
+- Add proto-tools to your project as a git submodule, install it in editable mode (`pip install -e path/to/proto-tools`), and add the toolkit inside it following the steps above.
+- Define the toolkit in your package as an [out-of-tree toolkit](notes/external-toolkits.md).
 
 See [CLAUDE.md](CLAUDE.md) for the full architecture reference.
 

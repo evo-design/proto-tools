@@ -2022,7 +2022,7 @@ class ToolInstance:
         When a tool moves between categories, git removes tracked files but
         gitignored runtime copies (standalone_helpers/, standalone_helpers.sh)
         persist at the old path. This detects and removes those phantom dirs.
-        Only ever run on proto_tools' own tools dir, never on an out-of-tree
+        Only ever run on the proto_tools tools dir, never on an out-of-tree
         toolkit's repository.
         """
         if tools_dir is None:
@@ -2388,7 +2388,7 @@ class ToolInstance:
             return None
         # The defining module's package is the toolkit package, for a sibling module and for __init__.py alike.
         module = sys.modules.get(spec.function.__module__)
-        # A module loaded on its own (no package) falls back to the toolkit's location.
+        # A module loaded without a package falls back to the toolkit's location.
         package = getattr(module, "__package__", None) or str(tool_dir.resolve())
         return f"{toolkit}__ext_{hashlib.sha256(package.encode()).hexdigest()[:8]}"
 

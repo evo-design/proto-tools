@@ -1,6 +1,6 @@
 # Out-of-tree Toolkits
 
-A package outside proto-tools can define its own toolkits: its own `@tool` functions, models, docs files, and `standalone/` environment, with the source living in that package's repository. Importing the package registers its tools, and they then run locally through the same environment system as packaged tools, whether proto-tools is installed editable or as a regular wheel.
+A package outside proto-tools can define toolkits, with `@tool` functions, models, docs files, and a `standalone/` environment, all kept in that package's repository. Importing the package registers its tools, and they then run locally through the same environment system as packaged tools, whether proto-tools is installed editable or as a regular wheel.
 
 ## Layout
 
@@ -30,7 +30,7 @@ Metadata (`cite.bib`, `license.yaml`, `links.yaml`, the example notebook, and RE
 
 ## Writing a tool
 
-A tool follows the same `Input -> Config -> run_*() -> Output` pattern as a packaged one (see `CONTRIBUTING.md` and the `implement-tool` skill). The run function dispatches to its own toolkit directory name:
+A tool follows the same `Input -> Config -> run_*() -> Output` pattern as a packaged one (see `CONTRIBUTING.md` and the `implement-tool` skill). The run function dispatches to the toolkit's directory name:
 
 ```python
 from typing import Any
@@ -54,7 +54,7 @@ def run_mytool_score(inputs: MyToolScoreInput, config: MyToolScoreConfig, instan
     return MyToolScoreOutput(**result)
 ```
 
-Each tool needs its own config class.
+Each tool needs a separate config class.
 
 ## Standalone helpers
 
@@ -77,7 +77,7 @@ The environment is built from your `standalone/` exactly as for a packaged toolk
 
 ## Local only
 
-An out-of-tree toolkit with a `standalone/` environment runs only on the local machine: remote workers ship proto-tools' own toolkits, not yours. It defaults to a `local_only` reason, so `device="modal"` or `device="proto"` raises a `ValueError` before anything is sent. Pass `local_only=` to `@tool` to state your own reason. A tool without a `standalone/` directory runs in-process and follows the usual device routing.
+An out-of-tree toolkit with a `standalone/` environment runs only on the local machine: remote workers ship only the toolkits packaged with proto-tools. It defaults to a `local_only` reason, so `device="modal"` or `device="proto"` raises a `ValueError` before anything is sent. Pass `local_only=` to `@tool` to state a different reason. A tool without a `standalone/` directory runs in-process and follows the usual device routing.
 
 ## Packaging
 
@@ -94,7 +94,7 @@ include = ["mypkg*"]
 ## Not yet supported
 
 - Binary installs through `install_binary.py` and `standalone/binary_config.py`.
-- Shared envs defined by your own package.
+- Shared envs defined by your package.
 - Discovery by the `proto-tools` CLI and MCP server.
 - Docs pages: `ToolRegistry.get_docs_url` returns `None`.
 - Remote devices.
