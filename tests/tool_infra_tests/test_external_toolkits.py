@@ -102,6 +102,8 @@ def make_toolkit(tmp_path, monkeypatch):
             for name in standalone_files:
                 (toolkit_dir / "standalone" / name).touch()
         module = f"{package}.tools.testing.{toolkit}"
+        # A second toolkit in an already-imported package is a new entry in a directory the import system has listed.
+        importlib.invalidate_caches()
         return importlib.import_module(module if in_init else f"{module}.{toolkit}")
 
     yield _make
@@ -233,16 +235,47 @@ def test_standalone_dir_override_applies_to_external_toolkits(make_toolkit, tmp_
     assert env_name.startswith("ext_override_tk__override_")
 
 
-def test_external_toolkit_can_use_a_packaged_shared_env(make_toolkit):
-    """An out-of-tree toolkit joining a packaged shared env builds that env, under its packaged name."""
-    module = make_toolkit("ext_shared_tk")
+def _join_shared_env(module, shared_name: str) -> Path:
+    """Swap a test toolkit's private env definition for a ``shared_env.txt`` naming ``shared_name``."""
     standalone = _spec(module).toolkit_dir / "standalone"
     for name in ("setup.sh", "python_version.txt"):
         (standalone / name).unlink()
-    (standalone / "shared_env.txt").write_text("glm2_base\n")
+    (standalone / "shared_env.txt").write_text(f"{shared_name}\n")
+    return standalone.parents[3]
+
+
+def _make_package_shared_env(package_dir: Path, shared_name: str) -> Path:
+    """Write a shared env definition into a test package's ``shared_envs/``."""
+    env_def = package_dir / "shared_envs" / shared_name
+    shutil.copytree(_MOCK_STANDALONE, env_def, ignore=shutil.ignore_patterns("__pycache__", "*.py"))
+    return env_def
+
+
+def test_external_toolkit_can_use_a_packaged_shared_env(make_toolkit):
+    """An out-of-tree toolkit joining a packaged shared env builds that env, under its packaged name."""
+    _join_shared_env(make_toolkit("ext_shared_tk"), "glm2_base")
     env_def_dir, env_name = ToolInstance._resolve_env_def("ext_shared_tk")
     assert env_name == "glm2_base"
     assert env_def_dir == ToolInstance._shared_envs_root() / "glm2_base"
+
+
+def test_external_toolkits_share_a_shared_env_from_their_package(make_toolkit):
+    """Toolkits in one package resolve a shared env from the package's shared_envs/ to one namespaced env."""
+    package_dir = _join_shared_env(make_toolkit("ext_pkg_shared_a", package="extpkg_shared"), "ext_test_shared")
+    _join_shared_env(make_toolkit("ext_pkg_shared_b", package="extpkg_shared"), "ext_test_shared")
+    env_def = _make_package_shared_env(package_dir, "ext_test_shared")
+    digest = hashlib.sha256(b"extpkg_shared").hexdigest()[:8]
+    expected = (env_def, f"ext_test_shared__ext_{digest}")
+    assert ToolInstance._resolve_env_def("ext_pkg_shared_a") == expected
+    assert ToolInstance._resolve_env_def("ext_pkg_shared_b") == expected
+
+
+def test_external_shared_env_name_collision_with_a_packaged_one_raises(make_toolkit):
+    """A package shared env named like a packaged one is ambiguous, so resolving it fails naming both dirs."""
+    package_dir = _join_shared_env(make_toolkit("ext_shared_clash_tk"), "glm2_base")
+    env_def = _make_package_shared_env(package_dir, "glm2_base")
+    with pytest.raises(ValueError, match=rf"(?s){env_def}.*{ToolInstance._shared_envs_root() / 'glm2_base'}"):
+        ToolInstance._resolve_env_def("ext_shared_clash_tk")
 
 
 # ── Dispatch ─────────────────────────────────────────────────────────────────

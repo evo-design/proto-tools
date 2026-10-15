@@ -2309,9 +2309,10 @@ class ToolInstance:
         If the tool's standalone dir contains ``shared_env.txt``, the env def
         comes from ``shared_envs/<name>/`` and the env name is ``<name>``;
         multiple tools opting into the same shared env will share one physical
-        env on disk. Otherwise the env def is the tool's own ``standalone/``
-        directory and the env name is the tool's directory name, namespaced by
-        ``_external_env_name`` for an out-of-tree toolkit.
+        env on disk (see ``_shared_env_def`` for an out-of-tree toolkit's shared
+        envs). Otherwise the env def is the tool's ``standalone/`` directory and
+        the env name is the tool's directory name, with an ``__ext_{digest}``
+        suffix for an out-of-tree toolkit (see ``_external_package``).
 
         Args:
             toolkit (str): The tool's directory name (e.g. ``"esm3"``).
@@ -2325,8 +2326,9 @@ class ToolInstance:
         Raises:
             ValueError: If the tool dir is unknown, ``shared_env.txt`` points to
                 a non-existent shared env, the tool dir contains both
-                ``shared_env.txt`` and ``setup.sh`` (ambiguous), or no
-                ``setup.sh`` is found at the resolved location.
+                ``shared_env.txt`` and ``setup.sh`` (ambiguous), an out-of-tree
+                shared env's name is also a packaged one, or no ``setup.sh`` is
+                found at the resolved location.
         """
         tool_dir = cls._find_tool_dir(toolkit)
         if tool_dir is None:
@@ -2353,33 +2355,65 @@ class ToolInstance:
             shared_name = marker.read_text().strip()
             if not shared_name:
                 raise ValueError(f"shared_env.txt for tool {toolkit!r} is empty")
-            env_def_dir = cls._shared_envs_root() / shared_name
+            env_def_dir, env_name = cls._shared_env_def(toolkit, tool_dir, shared_name)
             shared_setup = env_def_dir / "setup.sh"
             if not shared_setup.is_file():
                 raise ValueError(
                     f"Tool {toolkit!r} references shared env {shared_name!r}, but {shared_setup} does not exist."
                 )
-            return env_def_dir, shared_name
+            return env_def_dir, env_name
 
         if not local_setup.is_file():
             raise ValueError(f"No setup.sh found for tool {toolkit!r} (looked in {standalone_dir})")
-        return standalone_dir, cls._external_env_name(toolkit, tool_dir) or toolkit
+        package = cls._external_package(toolkit, tool_dir)
+        return standalone_dir, toolkit if package is None else f"{toolkit}{cls._external_suffix(package)}"
 
     @classmethod
-    def _external_env_name(cls, toolkit: str, tool_dir: Path) -> str | None:
-        """Return the namespaced env name of an out-of-tree toolkit, or None for a packaged one.
+    def _shared_env_def(cls, toolkit: str, tool_dir: Path, shared_name: str) -> tuple[Path, str]:
+        """Resolve the shared env a toolkit's ``shared_env.txt`` names to ``(env_def_dir, env_name)``.
 
-        Out-of-tree envs live alongside packaged ones under ``proto_tool_envs/``, so they are named
-        ``{toolkit}__ext_{digest}``, where the digest is of the package defining the toolkit
-        (e.g. ``mypkg.tools.scoring.mytool``). Two downstream packages with a same-named toolkit
-        never build over each other's env, while every install of one package shares a single env.
+        An out-of-tree toolkit first looks in its package's ``shared_envs/`` (next to its ``tools/``
+        directory, as ``proto_tools/shared_envs/`` sits next to ``proto_tools/tools/``). Such an env
+        is named ``{shared_name}__ext_{digest}``, the digest being of that package, so every toolkit in
+        the package shares it. Any other name resolves to ``proto_tools/shared_envs/`` unchanged.
+
+        Raises:
+            ValueError: If the name exists both in the toolkit's package and in proto_tools.
+        """
+        packaged = cls._shared_envs_root() / shared_name
+        package = cls._external_package(toolkit, tool_dir)
+        if package is None:
+            return packaged, shared_name
+        # tool_dir is {package}/tools/{category}/{toolkit}.
+        package_dir = tool_dir.parents[2]
+        external = package_dir / "shared_envs" / shared_name
+        if not external.is_dir():
+            return packaged, shared_name
+        if packaged.is_dir():
+            raise ValueError(
+                f"Shared env {shared_name!r} is defined both in {external} and in {packaged}; "
+                "rename the directory under your package's shared_envs/ (and the shared_env.txt files naming it)."
+            )
+        # The package owning shared_envs/ is the toolkit package minus its tools.{category}.{toolkit} tail.
+        parts = package.split(".")
+        owner = ".".join(parts[:-3]) if len(parts) > 3 else str(package_dir.resolve())
+        return external, f"{shared_name}{cls._external_suffix(owner)}"
+
+    @classmethod
+    def _external_package(cls, toolkit: str, tool_dir: Path) -> str | None:
+        """Return the package defining an out-of-tree toolkit, or None for a packaged one.
+
+        The package (e.g. ``mypkg.tools.scoring.mytool``) is what namespaces the toolkit's env names
+        under ``proto_tool_envs/``: every install of one downstream package shares its envs, and
+        two packages with a same-named toolkit never build over each other's.
 
         Args:
             toolkit (str): The toolkit's directory name.
             tool_dir (Path): The toolkit directory.
 
         Returns:
-            str | None: The env name, or None if ``tool_dir`` is not a registered out-of-tree toolkit.
+            str | None: The toolkit's package, or its resolved directory for a module loaded without a
+                package. None if ``tool_dir`` is not a registered out-of-tree toolkit.
         """
         if toolkit in cls._get_tool_dirs():
             return None
@@ -2388,9 +2422,12 @@ class ToolInstance:
             return None
         # The defining module's package is the toolkit package, for a sibling module and for __init__.py alike.
         module = sys.modules.get(spec.function.__module__)
-        # A module loaded without a package falls back to the toolkit's location.
-        package = getattr(module, "__package__", None) or str(tool_dir.resolve())
-        return f"{toolkit}__ext_{hashlib.sha256(package.encode()).hexdigest()[:8]}"
+        return getattr(module, "__package__", None) or str(tool_dir.resolve())
+
+    @staticmethod
+    def _external_suffix(owner: str) -> str:
+        """Return the ``__ext_{digest}`` env-name suffix for an out-of-tree package."""
+        return f"__ext_{hashlib.sha256(owner.encode()).hexdigest()[:8]}"
 
     @classmethod
     def _find_script(cls, toolkit: str) -> Path:

@@ -346,6 +346,8 @@ environment once it gets the lock and reuses the finished build.
 
 **When NOT to use:** Tools with conflicting Python versions, conflicting framework version pins, or genuinely independent dependency sets.
 
+**Out-of-tree toolkits:** a toolkit defined by a downstream package can also name a shared env in its package's `shared_envs/` directory (next to its `tools/`), built as `<name>__ext_<hash>_env`. See `external-toolkits.md`.
+
 **Migration note:** When a tool adopts a shared env (e.g. `esm3` migrated to `biohub_esm`), its on-disk env directory changes from `<toolkit>_env/` to `<shared_name>_env/`. The old directory is orphaned but harmless, and users can manually delete `PROTO_HOME/proto_tool_envs/<old_name>_env/` to reclaim disk.
 
 ## Binary Installation

@@ -52,7 +52,36 @@ proto_install_pytorch                 # only if the tool needs PyTorch
 uv pip install -r requirements.txt
 ```
 
-`standalone_helpers.sh` is provided on `PATH` while `setup.sh` runs, so its helpers (`proto_install_pytorch` and the rest) work without copying anything. To join a packaged shared env instead (e.g. `biohub_esm`), replace these files with a `standalone/shared_env.txt` naming it.
+`standalone_helpers.sh` is provided on `PATH` while `setup.sh` runs, so its helpers (`proto_install_pytorch` and the rest) work without copying anything.
+
+### Prebuilt binaries
+
+To install a platform-specific binary, add `standalone/binary_config.py` (a `URLS` dict keyed by `(system, machine)` and an `extract(archive_path, bin_dir)` function, see "Binary Installation" in `tool-environments.md`) and call the helper from `setup.sh`:
+
+```bash
+proto_install_binary mytool
+```
+
+It reads `binary_config.py` from the directory `setup.sh` runs in, so it works from your package exactly as from a packaged toolkit.
+
+### Shared envs
+
+To reuse one env across several toolkits, put its definition (`setup.sh`, `python_version.txt`, and the rest) in a `shared_envs/<name>/` directory next to your package's `tools/`, and replace each toolkit's env files with a `standalone/shared_env.txt` naming it:
+
+```
+mypkg/
+├── shared_envs/
+│   └── mypkg_scoring/
+│       ├── setup.sh
+│       ├── python_version.txt
+│       └── requirements.txt
+└── tools/
+    └── scoring/
+        ├── mytool/standalone/shared_env.txt     # contents: "mypkg_scoring"
+        └── othertool/standalone/shared_env.txt  # contents: "mypkg_scoring"
+```
+
+The env is built once as `mypkg_scoring__ext_{hash}_env`, the hash being of your package (`mypkg`). A name not found in your package resolves to proto-tools' shared envs (e.g. `biohub_esm`), and a name defined in both raises a `ValueError`.
 
 ## Step 3: Write the worker script
 
@@ -150,8 +179,6 @@ The `proto-tools` CLI and MCP server only import proto-tools, so they list packa
 
 ## Not yet supported
 
-- Binary installs through `install_binary.py` and `standalone/binary_config.py`.
-- Shared envs defined by your package.
 - Discovery by the `proto-tools` CLI and MCP server.
 - Docs pages on the proto-tools docs site.
 - Remote devices.
