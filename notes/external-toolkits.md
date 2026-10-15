@@ -54,7 +54,7 @@ def run_mytool_score(inputs: MyToolScoreInput, config: MyToolScoreConfig, instan
     return MyToolScoreOutput(**result)
 ```
 
-Give each tool its own config class, since registration records the tool key on it.
+Each tool needs its own config class.
 
 ## Using it
 
