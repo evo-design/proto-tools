@@ -41,10 +41,6 @@ class PyRosettaScorer:
     def _ensure_init(self, scorefxn_name: str | None = None) -> None:
         """Initialize PyRosetta on first use.
 
-        PyRosetta initializes once per process, so the corrections set here hold for every later call.
-        Score-function tools mark ``scorefxn`` as ``reload_on_change``, which restarts the persistent
-        worker whenever the requested score function changes.
-
         Flags:
             ``-mute all``: Suppress PyRosetta's C-level stdout/stderr output.
             ``-ignore_unrecognized_res true``: Silently drop residues PyRosetta
