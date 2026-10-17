@@ -392,7 +392,7 @@ class BindCraftConfig(BaseConfig):
             default: ``"4stage"``.
         use_multimer_design (bool): Use AF2 multimer parameters during hallucination.
             Every upstream preset uses multimer.
-        omit_AAs (str): Amino acids to ban during design (no separator). Upstream default: ``"C"``.
+        omit_AAs (str): Comma-separated amino acids to ban during design. Upstream default: ``"C"``.
         force_reject_AA (bool): Reject any design containing ``omit_AAs``.
         soft_iterations (int): Soft-stage iterations. Used by 2stage/3stage/4stage.
         temporary_iterations (int): Temporary-stage iterations. Used by 3stage/4stage.
