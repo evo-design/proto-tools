@@ -29,9 +29,6 @@ _BINDCRAFT_FIXTURE_PDB = (
     Path(__file__).resolve().parents[2] / "structure_prediction" / "alphafold2" / "example_input_fixture.pdb"
 )
 
-# Upstream keys whose config field is spelled differently here, mapped to that field.
-_RENAMED_UPSTREAM_KEYS: dict[str, str] = {"omit_AAs": "excluded_amino_acids"}
-
 _USER_FACING_UPSTREAM_KEYS: frozenset[str] = frozenset(
     {
         "design_algorithm",
