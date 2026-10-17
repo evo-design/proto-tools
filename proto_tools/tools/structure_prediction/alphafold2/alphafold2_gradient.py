@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.entities.structures import BFactorType, Structure
@@ -29,6 +29,7 @@ from proto_tools.utils import (
     ToolInstance,
     one_hot_protein_logits,
 )
+from proto_tools.utils.sequence import normalize_excluded_amino_acids
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,7 @@ class AlphaFold2GradientConfig(BaseConfig):
         description="Amino acids to ban during optimization (e.g. ['C', 'W']).",
         examples=[["C"], ["C", "W"]],
     )
+
     num_recycles: int = ConfigField(
         title="Number of Recycles",
         default=3,
@@ -301,6 +303,12 @@ class AlphaFold2GradientConfig(BaseConfig):
         description="Device to run the model on (GPU-required tool overrides BaseConfig 'cpu' default)",
         include_in_key=False,
     )
+
+    @field_validator("omit_aas", mode="before")
+    @classmethod
+    def validate_omit_aas(cls, value: Any) -> Any:
+        """Normalize and validate excluded amino-acid codes."""
+        return normalize_excluded_amino_acids(value)
 
     @model_validator(mode="after")
     def validate_design_surface(self) -> Self:

@@ -4,6 +4,7 @@ Tests for random protein sampling tool.
 """
 
 import pytest
+from pydantic import ValidationError
 
 from proto_tools.tools.mutagenesis.codons import get_codon_scheme
 from proto_tools.tools.mutagenesis.random_protein import (
@@ -83,10 +84,16 @@ def test_excluded_amino_acids_are_not_sampled():
     assert result.metadata["excluded_amino_acids"] == ["C", "A"]
 
 
-def test_excluded_amino_acids_normalize_case_and_dedupe():
-    config = RandomProteinSampleConfig(excluded_amino_acids=["c", "A", "c"], seed=3)
+def test_excluded_amino_acids_dedupe_preserving_order():
+    config = RandomProteinSampleConfig(excluded_amino_acids=["C", "A", "C"], seed=3)
 
     assert config.excluded_amino_acids == ["C", "A"]
+
+
+def test_excluded_amino_acids_reject_lowercase():
+    """Codes are taken as written; see ``normalize_excluded_amino_acids`` for why case is kept."""
+    with pytest.raises(ValidationError, match="Input should be"):
+        RandomProteinSampleConfig(excluded_amino_acids=["c"])
 
 
 def test_excluded_amino_acids_empty_list_means_no_exclusions():

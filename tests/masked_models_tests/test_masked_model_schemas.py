@@ -97,8 +97,15 @@ _SAMPLE_CONFIGS = [ESM2SampleConfig, ESM3SampleConfig, AbLangSampleConfig, GLM2S
 
 @pytest.mark.parametrize("config_cls", _SAMPLE_CONFIGS)
 def test_sample_config_normalizes_excluded_amino_acids(config_cls):
-    assert config_cls(excluded_amino_acids=["c", "L", "C"]).excluded_amino_acids == ["C", "L"]
+    assert config_cls(excluded_amino_acids=["C", "L", "C"]).excluded_amino_acids == ["C", "L"]
     assert config_cls(excluded_amino_acids=[]).excluded_amino_acids is None
+
+
+@pytest.mark.parametrize("config_cls", _SAMPLE_CONFIGS)
+def test_sample_config_rejects_lowercase_excluded_amino_acids(config_cls):
+    """Codes are taken as written. Lowercase is a DNA base in the mixed alphabet, never a residue."""
+    with pytest.raises(ValidationError, match="Input should be"):
+        config_cls(excluded_amino_acids=["c"])
 
 
 @pytest.mark.parametrize("config_cls", _SAMPLE_CONFIGS)

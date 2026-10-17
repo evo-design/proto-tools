@@ -175,7 +175,7 @@ class MixedSampleConfig(MixedModelConfig):
     excluded_amino_acids: list[AminoAcid] | None = ConfigField(
         default=None,
         title="Excluded Amino Acids",
-        description="Single-letter codes never sampled at masked protein positions (e.g. ['C'])",
+        description="Uppercase codes never sampled at masked protein positions (e.g. ['C']); DNA unaffected",
         examples=[["C"]],
     )
 

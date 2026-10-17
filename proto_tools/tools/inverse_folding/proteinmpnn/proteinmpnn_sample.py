@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 import numpy as np
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from proto_tools.entities.complex import Chain
 from proto_tools.entities.ligands import Fragment
@@ -24,6 +24,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
 from proto_tools.utils.progress import progress_bar
+from proto_tools.utils.sequence import normalize_excluded_amino_acids
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,12 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         description="Single-letter codes of amino acids to exclude (e.g. ['C'] to forbid cysteine)",
         examples=[["C"]],
     )
+
+    @field_validator("excluded_amino_acids", mode="before")
+    @classmethod
+    def validate_excluded_amino_acids(cls, value: Any) -> Any:
+        """Normalize and validate excluded amino-acid codes."""
+        return normalize_excluded_amino_acids(value)
 
 
 class ProteinMPNNDesignMetrics(Metrics):

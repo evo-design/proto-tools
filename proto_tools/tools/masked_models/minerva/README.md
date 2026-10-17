@@ -91,7 +91,7 @@ Propose local sequence edits for a design or variant-screening loop while keepin
 - **Premasked inputs require `mask_modalities`.** Supply one mapping per sequence that labels every `_` position as `"protein"` or `"dna"`. For example, `+M_+a_` needs `mask_modalities=[{3: "protein", 6: "dna"}]`. Explicit masks bypass automatic selection for the batch.
 - **The allowed alphabet is preserved per site.** Protein positions sample among the 20 canonical amino acids; DNA positions sample among lowercase `acgt`. A selected position can draw its original token again, so the number of masks is not a guaranteed number of substitutions.
 - **`sampling_method` selects the fill algorithm.** `single_pass` fills all masks together. `iterative_refinement` progressively commits predictions and uses `num_steps`, `schedule`, `strategy`, `top_p`, and `temperature_annealing`. `temperature` controls sampling diversity and `seed` makes proposals reproducible.
-- **`excluded_amino_acids` bans residues from masked protein positions.** Pass single-letter codes (e.g. `["C"]` to forbid new cysteines). DNA positions, unmasked tokens, and the returned logits are unaffected.
+- **`excluded_amino_acids` bans residues from masked protein positions.** Pass uppercase single-letter codes (e.g. `["C"]` to forbid new cysteines); this alphabet is case-sensitive, so lowercase `c` is cytosine and is not accepted here. DNA positions, unmasked tokens, and the returned logits are unaffected.
 - **Optional sampling logits describe the completed locus.** They come from a final unmasked forward pass. Export prepared mixed strings as JSON or text; they are not nucleotide or protein FASTA records.
 
 ### Minerva Gradient (`minerva-gradient`)
