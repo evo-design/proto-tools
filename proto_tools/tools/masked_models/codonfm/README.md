@@ -81,6 +81,7 @@ Masked-codon resampling is the local-edit primitive behind coding-sequence desig
 
 - **`num_mutations` overrides `mask_fraction`.** It sets an exact number of positions to resample, not a guaranteed Hamming distance: the model can draw the original codon again.
 - **`temperature` controls diversity.** Below 1.0 sharpens toward the model's favorite codon; above 1.0 broadens exploration. Because sampling is stochastic, pass a `seed` for reproducible proposals.
+- **`excluded_amino_acids` bans residues from resampled codons.** Pass single-letter codes (e.g. `["C"]` to forbid new cysteines); every codon encoding one of them is dropped from the draw, so the constraint is on the translated residue rather than on any specific codon. Codons outside the resampled positions are untouched, so an excluded residue already present in the input survives unless its codon is masked.
 
 ## Toolkit Notes
 

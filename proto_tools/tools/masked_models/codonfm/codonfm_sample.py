@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     CODON_SIZE,
@@ -13,9 +13,11 @@ from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     MaskableCodonSequenceInput,
     resolve_checkpoint_source,
 )
+from proto_tools.tools.mutagenesis.codons import codons_encoding
 from proto_tools.tools.tool_registry import tool
 from proto_tools.transforms.masking import RandomMaskingStrategy, apply_masking_strategy
-from proto_tools.utils import BaseConfig, BaseToolOutput, ConfigField, ToolInstance
+from proto_tools.utils import AminoAcid, BaseConfig, BaseToolOutput, ConfigField, ToolInstance
+from proto_tools.utils.sequence import normalize_excluded_amino_acids
 
 CodonFMSampleInput = MaskableCodonSequenceInput
 
@@ -32,6 +34,8 @@ class CodonFMSampleConfig(BaseConfig):
         temperature (float): Softmax temperature for codon sampling; higher is more diverse.
         device (str): Device used for CodonFM inference.
         batch_size (int): Number of (same-length) sequences per GPU forward pass.
+        excluded_amino_acids (list[AminoAcid] | None): Amino acids no resampled codon may
+            encode; every codon translating to one of them is dropped from the draw.
     """
 
     model_checkpoint: CodonFMCheckpoint = ConfigField(
@@ -65,6 +69,18 @@ class CodonFMSampleConfig(BaseConfig):
         description="Number of same-length sequences to sample per GPU batch.",
         include_in_key=False,
     )
+    excluded_amino_acids: list[AminoAcid] | None = ConfigField(
+        title="Excluded Amino Acids",
+        default=None,
+        description="Single-letter codes no resampled codon may encode (e.g. ['C'] to forbid cysteine)",
+        examples=[["C"]],
+    )
+
+    @field_validator("excluded_amino_acids", mode="before")
+    @classmethod
+    def validate_excluded_amino_acids(cls, value: Any) -> Any:
+        """Normalize and validate excluded amino-acid codes."""
+        return normalize_excluded_amino_acids(value)
 
     def preprocess(self, inputs: Any) -> Any:
         """Mask the codons to resample, unless the caller already marked them.
@@ -165,6 +181,8 @@ def run_codonfm_sample(
     input) is masked and refilled
     by sampling from the model's per-codon distribution over the 61 sense codons (stop codons are
     excluded, so a resampled codon is never a premature stop); sequence length is preserved.
+    ``excluded_amino_acids`` narrows that draw further, dropping every codon that encodes one of
+    the named residues.
 
     Args:
         inputs (CodonFMSampleInput): Coding sequences to resample.
@@ -191,6 +209,7 @@ def run_codonfm_sample(
             "device": config.device,
             "verbose": config.verbose,
             "seed": config.seed,
+            "excluded_codons": codons_encoding(config.excluded_amino_acids or []),
         },
         instance=instance,
         config=config,
