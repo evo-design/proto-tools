@@ -62,6 +62,7 @@ class AbLangSampleConfig(MaskedModelSampleConfig):
             spread-of-variants logic is incompatible with stochastic sampling).
         return_logits (bool): Include per-position logits in the output (large; disable to
             save memory). Triggers a second ``likelihood``-mode forward pass per batch.
+        excluded_amino_acids (list[AminoAcid] | None): Amino acids never sampled at masked positions.
     """
 
     temperature: float = ConfigField(
@@ -141,6 +142,7 @@ def run_ablang_sample(
             "return_logits": config.return_logits,
             "temperature": config.temperature,
             "seed": config.seed,
+            "excluded_amino_acids": config.excluded_amino_acids,
         },
         instance=instance,
         config=config,

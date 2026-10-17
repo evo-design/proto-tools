@@ -484,6 +484,7 @@ class AbLangModel:
         return_logits: bool = False,
         temperature: float = 1.0,
         seed: int | None = None,
+        excluded_amino_acids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Fill masked (_) positions in antibody sequences.
 
@@ -504,6 +505,8 @@ class AbLangModel:
 
         When ``return_logits=True``, runs an additional ``likelihood`` mode pass
         on the filled-in sequences and returns per-residue AA-only logits.
+
+        ``excluded_amino_acids`` are never drawn on the sampling path.
         """
         import torch
 
@@ -539,7 +542,9 @@ class AbLangModel:
             formatted = self._format_sequences(batch)
 
             if use_sampling:
-                restored = self._sample_at_mask_positions(formatted, temperature, n_seqs=len(batch))
+                restored = self._sample_at_mask_positions(
+                    formatted, temperature, n_seqs=len(batch), excluded_amino_acids=excluded_amino_acids
+                )
             elif self._is_ablang1:
                 restored = self.model.restore(formatted, align=align)
             else:
@@ -556,7 +561,9 @@ class AbLangModel:
 
         return {"sequences": restored_sequences, "logits": all_logits}
 
-    def _sample_at_mask_positions(self, formatted: list[Any], temperature: float, n_seqs: int) -> list[str]:
+    def _sample_at_mask_positions(
+        self, formatted: list[Any], temperature: float, n_seqs: int, excluded_amino_acids: list[str] | None = None
+    ) -> list[str]:
         """Sample at masked positions using temperature-scaled multinomial.
 
         Mirrors the library's ``AbRestore.restore(align=False)`` flow but
@@ -577,7 +584,11 @@ class AbLangModel:
         with torch.no_grad():
             predictions = self.model.AbLang(tokens)[:, :, 1:21]  # AA columns only
 
+        assert self._ablang_vocab is not None
+        # Column j holds vocab ID j + 1.
+        excluded_cols = [self._ablang_vocab[aa] - 1 for aa in excluded_amino_acids or []]
         scaled = predictions / temperature
+        scaled[:, :, excluded_cols] = -torch.inf
         probs = torch.softmax(scaled, dim=-1)
 
         batch_n, seq_len, num_aa = probs.shape
@@ -831,6 +842,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
             temperature=input_dict.get("temperature", 1.0),
             seed=input_dict.get("seed"),
+            excluded_amino_acids=input_dict["excluded_amino_acids"],
         )
     if operation == "compute_gradient":
         return _model.compute_gradient(

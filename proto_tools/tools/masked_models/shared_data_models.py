@@ -15,13 +15,14 @@ from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.transforms.masking import MASK_TOKEN
 from proto_tools.utils import (
+    AminoAcid,
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
     ConfigField,
     InputField,
 )
-from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
+from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS, normalize_excluded_amino_acids
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 # Named separately so the error reports the intended fix rather than the characters it decomposes into.
@@ -289,6 +290,8 @@ class MaskedModelSampleConfig(BaseConfig):
         batch_size (int): Number of sequences to process simultaneously on GPU.
             Larger batches improve throughput but use more GPU memory.
         device (str): Device to run the model on.
+        excluded_amino_acids (list[AminoAcid] | None): Amino acids never sampled at
+            masked positions; unmasked residues and returned logits are unaffected.
     """
 
     batch_size: int = ConfigField(
@@ -303,6 +306,18 @@ class MaskedModelSampleConfig(BaseConfig):
         description="Device to run the model on",
         include_in_key=False,
     )
+    excluded_amino_acids: list[AminoAcid] | None = ConfigField(
+        title="Excluded Amino Acids",
+        default=None,
+        description="Single-letter codes never sampled at masked positions (e.g. ['C'] to forbid cysteine)",
+        examples=[["C"]],
+    )
+
+    @field_validator("excluded_amino_acids", mode="before")
+    @classmethod
+    def validate_excluded_amino_acids(cls, value: Any) -> Any:
+        """Normalize and validate excluded amino-acid codes."""
+        return normalize_excluded_amino_acids(value)
 
 
 class MaskedModelSample(BaseModel):

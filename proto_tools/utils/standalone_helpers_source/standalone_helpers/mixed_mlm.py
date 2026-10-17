@@ -247,6 +247,8 @@ class MixedMLMRuntime:
         short = {upstream: marker for marker, upstream in UPSTREAM_STRAND_TOKENS.items()}
         reverse_vocab = {value: short.get(key, key) for key, value in vocab.items()}
         vocab_ids = self._vocab_ids()
+        excluded = set(payload.get("excluded_amino_acids") or [])
+        protein_ids = [vocab[aa] for aa in PROTEIN_TOKENS if aa not in excluded]
         mask_id = self.adapter.tokenizer.mask_token_id
         results: list[Any] = [None] * len(tokens)
         for indices in _batches(tokens, payload.get("batch_size", 1)):
@@ -256,7 +258,7 @@ class MixedMLMRuntime:
             for row, index in enumerate(indices):
                 for position, modality in mask_modalities[index].items():
                     allowed[row, position - 1] = False
-                    candidates = vocab_ids[:20] if modality == "protein" else vocab_ids[20:]
+                    candidates = protein_ids if modality == "protein" else vocab_ids[20:]
                     allowed[row, position - 1, candidates] = True
 
             def forward(masked_ids: Any, permitted: Any = allowed) -> Any:

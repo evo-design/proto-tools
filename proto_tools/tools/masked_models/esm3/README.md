@@ -45,6 +45,7 @@ This tool drives guided point mutation, variant generation, and infilling at des
 - **`iterative_refinement` produces more coherent joint samples than `single_pass`.** It runs ESM3's `batch_generate` over `num_steps` rounds (cosine or linear unmask schedule) instead of filling every mask independently in one pass; it is roughly `num_steps×` slower. Default to it when masking more than a handful of sites.
 - **`masking_strategy` controls which positions get masked before sampling.** See the [masking strategy README](https://github.com/evo-design/proto-tools/blob/main/proto_tools/transforms/masking/README.md) for the available selection methods and tuning parameters. As an alternative to passing a strategy, pre-mask exact positions with `_` directly in the input string and the masking strategy is skipped entirely.
 - **`temperature` scales the per-position logits before sampling.** Values of 0.5 to 0.7 yield conservative mutations close to the input; values above 1.0 broaden exploration of the model's distribution.
+- **`excluded_amino_acids` bans residues from masked positions.** Pass single-letter codes (e.g. `["C"]` to forbid new cysteines); their logits are set to `-inf` before sampling, on both the `single_pass` and `iterative_refinement` paths. Unmasked residues are untouched, and returned logits stay unmasked so they still show what the model would have predicted.
 
 ### ESM3 Scoring (`esm3-score`)
 
