@@ -38,7 +38,7 @@ class PyRosettaScorer:
         self._has_dalphaball = False
         self._beta_nov16 = False
 
-    def _ensure_init(self, scorefxn_name: str | None = None) -> None:
+    def _ensure_init(self, beta_nov16: bool | None = None) -> None:
         """Initialize PyRosetta on first use.
 
         Flags:
@@ -66,20 +66,19 @@ class PyRosettaScorer:
                 ``get_fa_scorefxn()`` (= beta_nov16).
 
         Args:
-            scorefxn_name (str | None): Score function the call evaluates, or ``None`` for
-                operations that do not read energy parameters (SAP, SASA).
+            beta_nov16 (bool | None): Whether the call's score function needs the beta_nov16
+                corrections, or ``None`` for operations that do not read energy parameters (SAP, SASA).
 
         Raises:
             RuntimeError: If PyRosetta is already initialized with corrections that do not match
-                ``scorefxn_name``.
+                ``beta_nov16``.
         """
-        beta_nov16 = scorefxn_name is not None and scorefxn_name.startswith("beta_nov16")
         if self._initialized:
-            if scorefxn_name is not None and beta_nov16 != self._beta_nov16:
+            if beta_nov16 is not None and beta_nov16 != self._beta_nov16:
                 raise RuntimeError(
-                    f"pyrosetta: score function {scorefxn_name!r} needs beta_nov16 corrections "
-                    f"{'on' if beta_nov16 else 'off'}, but this worker initialized PyRosetta with them "
-                    f"{'on' if self._beta_nov16 else 'off'}; restart the worker to switch."
+                    f"pyrosetta: this call needs beta_nov16 corrections {'on' if beta_nov16 else 'off'}, "
+                    f"but this worker initialized PyRosetta with them {'on' if self._beta_nov16 else 'off'}; "
+                    "restart the worker to switch."
                 )
             return
         import pyrosetta
@@ -94,7 +93,7 @@ class PyRosettaScorer:
             extra_opts += f" -holes:dalphaball {dalphaball}"
             self._has_dalphaball = True
         pyrosetta.init(extra_options=extra_opts)
-        self._beta_nov16 = beta_nov16
+        self._beta_nov16 = bool(beta_nov16)
         self._initialized = True
 
     def _find_dropped_residues(self, pose: Any) -> list[str]:
@@ -404,7 +403,7 @@ class PyRosettaScorer:
         Returns:
             dict: {"results": [{"total_energy": float, "energy_terms": {...}, ...}, ...]}
         """
-        self._ensure_init(scorefxn_name)
+        self._ensure_init()
         import pyrosetta
         from pyrosetta.rosetta.core.scoring.methods import (
             EnergyMethodOptions,
@@ -505,7 +504,7 @@ class PyRosettaScorer:
                 "relax_cycles": int, "dropped_residues": [...]}]}`` — one entry
                 per input, in input order.
         """
-        self._ensure_init(scorefxn_name)
+        self._ensure_init()
         import os
         import tempfile
 
@@ -754,7 +753,7 @@ class PyRosettaScorer:
                 ``delta_unsat_hbonds`` (int | None),
                 ``dropped_residues`` (list[str]).
         """
-        self._ensure_init(scorefxn_name)
+        self._ensure_init()
         import pyrosetta
         from pyrosetta.rosetta.protocols.analysis import InterfaceAnalyzerMover
 
@@ -843,6 +842,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     global _scorer
     if _scorer is None:
         _scorer = PyRosettaScorer()
+
+    # Score-function operations carry the corrections flag; SAP/SASA run under whatever init the worker has.
+    _scorer._ensure_init(input_dict.get("beta_nov16_corrections"))
 
     operation = input_dict["operation"]
     pdb_contents = input_dict["pdb_contents"]

@@ -11,9 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import PyRosettaRelaxConfig
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import (
+    BETA_NOV16_CORRECTIONS,
     MAX_CHAINS_FOR_PDB,
     ScoringStructureInput,
     relax_inputs_via_pyrosetta,
+    uses_beta_nov16_corrections,
     warn_about_dropped_residues,
 )
 from proto_tools.tools.tool_registry import tool
@@ -255,7 +257,6 @@ class PyRosettaInterfaceAnalyzerConfig(BaseConfig):
         default="ref2015",
         description="Rosetta score function name",
         examples=["ref2015", "beta_nov16", "ref2015_cart"],
-        reload_on_change=True,
     )
     pre_relax_structures: bool = ConfigField(
         title="Pre-relax Structures",
@@ -292,6 +293,11 @@ class PyRosettaInterfaceAnalyzerConfig(BaseConfig):
                 ],
             },
         )
+
+    @classmethod
+    def reload_fields(cls) -> set[str] | None:
+        """Restart the worker only when the beta_nov16 corrections switch, since PyRosetta inits once per process."""
+        return {BETA_NOV16_CORRECTIONS}
 
     @property
     def cpus_per_instance(self) -> int | None:
@@ -425,6 +431,7 @@ def run_pyrosetta_interface_analyzer(
         "binder_chains": binder_chains,
         "target_chains": target_sides,
         "scorefxn": config.scorefxn,  # type: ignore[union-attr]
+        BETA_NOV16_CORRECTIONS: uses_beta_nov16_corrections(config.scorefxn),  # type: ignore[union-attr]
         "seed": config.seed,  # type: ignore[union-attr]
         "device": "cpu",
     }

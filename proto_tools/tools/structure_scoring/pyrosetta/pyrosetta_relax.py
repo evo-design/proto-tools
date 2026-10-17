@@ -17,8 +17,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import (
+    BETA_NOV16_CORRECTIONS,
     ScoringStructureInput,
     prepare_pdb_and_chain_maps,
+    uses_beta_nov16_corrections,
     warn_about_dropped_residues,
 )
 from proto_tools.tools.tool_registry import tool
@@ -152,7 +154,6 @@ class PyRosettaRelaxConfig(BaseConfig):
         default="ref2015",
         description="Rosetta score function name",
         examples=["ref2015", "beta_nov16", "ref2015_cart"],
-        reload_on_change=True,
     )
     relax_cycles: int = ConfigField(
         title="FastRelax Cycles",
@@ -192,6 +193,11 @@ class PyRosettaRelaxConfig(BaseConfig):
         title="Copy Start B-factors",
         description="Copy per-residue B-factors from the starting pose to the relaxed pose.",
     )
+
+    @classmethod
+    def reload_fields(cls) -> set[str] | None:
+        """Restart the worker only when the beta_nov16 corrections switch, since PyRosetta inits once per process."""
+        return {BETA_NOV16_CORRECTIONS}
 
     @property
     def cpus_per_instance(self) -> int | None:
@@ -306,6 +312,7 @@ def run_pyrosetta_relax(
         # chain_ids_list intentionally omitted: relax operates on the whole pose,
         # not a chain selection. Future: add per-chain MoveMap toggles if needed.
         "scorefxn": config.scorefxn,  # type: ignore[union-attr]
+        BETA_NOV16_CORRECTIONS: uses_beta_nov16_corrections(config.scorefxn),  # type: ignore[union-attr]
         "relax_cycles": config.relax_cycles,  # type: ignore[union-attr]
         "constrain_to_start": config.constrain_to_start,  # type: ignore[union-attr]
         "max_iter": config.max_iter,  # type: ignore[union-attr]
