@@ -152,6 +152,7 @@ class PyRosettaRelaxConfig(BaseConfig):
         default="ref2015",
         description="Rosetta score function name",
         examples=["ref2015", "beta_nov16", "ref2015_cart"],
+        reload_on_change=True,
     )
     relax_cycles: int = ConfigField(
         title="FastRelax Cycles",

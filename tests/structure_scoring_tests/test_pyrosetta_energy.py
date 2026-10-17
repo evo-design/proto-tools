@@ -6,17 +6,24 @@ import pytest
 
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
+    PyRosettaEnergyConfig,
     PyRosettaEnergyInput,
     ResidueEnergy,
     run_pyrosetta_energy,
 )
+from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_sap import PyRosettaSAPInput, run_pyrosetta_sap
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import ScoringStructureInput
+from proto_tools.utils.tool_instance import ToolInstance
 from tests.conftest import benchmark_twice
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_PDB = str(Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb")
 TEST_CIF_MULTICHAIN = str(Path(__file__).parent.parent / "dummy_data" / "renin.cif")
+
+# Reference totals for TEST_PDB from a standalone PyRosetta process initialized with only the flags each score function needs.
+REF2015_TOTAL = -602.176
+BETA_NOV16_TOTAL = -373.803
 
 # ── Validation ────────────────────────────────────────────────────────────────
 
@@ -120,6 +127,29 @@ def test_run_pyrosetta_energy_with_pre_relax_preprocess():
     assert relaxed.results[0].total_energy < raw.results[0].total_energy - 1.0, (
         f"Relaxed energy {relaxed.results[0].total_energy} should be lower than raw {raw.results[0].total_energy}"
     )
+
+
+@pytest.mark.integration
+def test_ref2015_energy_matches_reference_rosetta_init():
+    """ref2015 scores with REF2015's database parameters, untouched by the beta_nov16 corrections."""
+    result = run_pyrosetta_energy(PyRosettaEnergyInput(inputs=[TEST_PDB]))
+    assert result.results[0].total_energy == pytest.approx(REF2015_TOTAL, abs=0.01)
+
+
+@pytest.mark.integration
+def test_persistent_worker_scores_each_scorefxn_with_matching_corrections():
+    """One persistent worker serves beta_nov16, SAP, and ref2015 calls in any order with correct energies."""
+    inputs = PyRosettaEnergyInput(inputs=[TEST_PDB])
+    beta = PyRosettaEnergyConfig(scorefxn="beta_nov16")
+    with ToolInstance.persist_tool("pyrosetta"):
+        beta_first = run_pyrosetta_energy(inputs, beta).results[0].total_energy
+        assert run_pyrosetta_sap(PyRosettaSAPInput(inputs=[TEST_PDB])).success
+        ref2015 = run_pyrosetta_energy(inputs, PyRosettaEnergyConfig()).results[0].total_energy
+        beta_again = run_pyrosetta_energy(inputs, beta).results[0].total_energy
+
+    assert ref2015 == pytest.approx(REF2015_TOTAL, abs=0.01)
+    assert beta_first == pytest.approx(BETA_NOV16_TOTAL, abs=0.01)
+    assert beta_again == pytest.approx(BETA_NOV16_TOTAL, abs=0.01)
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────

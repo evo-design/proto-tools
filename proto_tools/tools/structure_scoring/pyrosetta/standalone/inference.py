@@ -36,9 +36,14 @@ class PyRosettaScorer:
         """Initialize scorer with lazy PyRosetta loading."""
         self._initialized = False
         self._has_dalphaball = False
+        self._beta_nov16 = False
 
-    def _ensure_init(self) -> None:
+    def _ensure_init(self, scorefxn_name: str | None = None) -> None:
         """Initialize PyRosetta on first use.
+
+        PyRosetta initializes once per process, so the corrections set here hold for every later call.
+        Score-function tools mark ``scorefxn`` as ``reload_on_change``, which restarts the persistent
+        worker whenever the requested score function changes.
 
         Flags:
             ``-mute all``: Suppress PyRosetta's C-level stdout/stderr output.
@@ -56,33 +61,44 @@ class PyRosettaScorer:
             ``-ignore_zero_occupancy true``: Skip atoms with zero occupancy
                 during PDB load. Matches BindCraft's init (defensive default
                 for heterogeneous PDB sources).
-            ``-corrections::beta_nov16 true``: Enable the November 2016 beta
-                corrections (refined HBnet, disulfide, solvation terms). REQUIRED
-                for ``create_score_function("beta_nov16")`` — without it PyRosetta
-                exits ("garbage scorefunction"). It also makes the default
-                ``pr.get_fa_scorefxn()`` return beta_nov16, but scoring here always
-                names its score function via ``config.scorefxn`` and never calls
-                ``get_fa_scorefxn()``, so an explicitly-named
-                ``create_score_function("ref2015")`` is NOT remapped — it stays
-                genuine ref2015. The beta_nov16 metrics (``Binder_Energy_Score``,
-                ``interface_dG``, ``delta_unsat_hbonds``) therefore require
-                ``scorefxn="beta_nov16"``; the default ``"ref2015"`` yields ref2015.
-                Matches BindCraft/Germinal, which init the same flag and relax/score
-                via ``get_fa_scorefxn()`` (= beta_nov16).
+            ``-corrections::beta_nov16 true``: Set only for a ``beta_nov16*``
+                score function. The flag replaces process-wide energy parameters
+                (atom solvation free energies, partial charges, H-bond strengths,
+                dielectric, rama and rotamer tables) that every score function
+                reads, so REF2015 is scored without it. ``beta_nov16`` matches
+                BindCraft/Germinal, which init this flag and score with
+                ``get_fa_scorefxn()`` (= beta_nov16).
+
+        Args:
+            scorefxn_name (str | None): Score function the call evaluates, or ``None`` for
+                operations that do not read energy parameters (SAP, SASA).
+
+        Raises:
+            RuntimeError: If PyRosetta is already initialized with corrections that do not match
+                ``scorefxn_name``.
         """
+        beta_nov16 = scorefxn_name is not None and scorefxn_name.startswith("beta_nov16")
         if self._initialized:
+            if scorefxn_name is not None and beta_nov16 != self._beta_nov16:
+                raise RuntimeError(
+                    f"pyrosetta: score function {scorefxn_name!r} needs beta_nov16 corrections "
+                    f"{'on' if beta_nov16 else 'off'}, but this worker initialized PyRosetta with them "
+                    f"{'on' if self._beta_nov16 else 'off'}; restart the worker to switch."
+                )
             return
         import pyrosetta
 
         extra_opts = (
-            "-mute all -ignore_unrecognized_res true -remember_unrecognized_res true"
-            " -ignore_zero_occupancy true -corrections::beta_nov16 true"
+            "-mute all -ignore_unrecognized_res true -remember_unrecognized_res true -ignore_zero_occupancy true"
         )
+        if beta_nov16:
+            extra_opts += " -corrections::beta_nov16 true"
         dalphaball = Path(sys.executable).parent / "DAlphaBall"
         if dalphaball.is_file():
             extra_opts += f" -holes:dalphaball {dalphaball}"
             self._has_dalphaball = True
         pyrosetta.init(extra_options=extra_opts)
+        self._beta_nov16 = beta_nov16
         self._initialized = True
 
     def _find_dropped_residues(self, pose: Any) -> list[str]:
@@ -392,7 +408,7 @@ class PyRosettaScorer:
         Returns:
             dict: {"results": [{"total_energy": float, "energy_terms": {...}, ...}, ...]}
         """
-        self._ensure_init()
+        self._ensure_init(scorefxn_name)
         import pyrosetta
         from pyrosetta.rosetta.core.scoring.methods import (
             EnergyMethodOptions,
@@ -493,7 +509,7 @@ class PyRosettaScorer:
                 "relax_cycles": int, "dropped_residues": [...]}]}`` — one entry
                 per input, in input order.
         """
-        self._ensure_init()
+        self._ensure_init(scorefxn_name)
         import os
         import tempfile
 
@@ -742,7 +758,7 @@ class PyRosettaScorer:
                 ``delta_unsat_hbonds`` (int | None),
                 ``dropped_residues`` (list[str]).
         """
-        self._ensure_init()
+        self._ensure_init(scorefxn_name)
         import pyrosetta
         from pyrosetta.rosetta.protocols.analysis import InterfaceAnalyzerMover
 

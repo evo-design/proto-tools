@@ -231,6 +231,11 @@ Two rules for tool authors:
 Runtime-only fields (e.g. `timeout`) set `reload_on_change=False` and do not
 trigger restarts.
 
+A config whose calls run correctly on a worker in any reload state (e.g.
+`pyrosetta-sap`, which never reads the score-function parameters its siblings
+reload on) overrides `reload_fields()` to return `None`. Its calls then neither
+restart the shared worker nor overwrite the tracked values.
+
 ### Exception: in-process checkpoint swap
 
 A few tools expose several **mutually exclusive** checkpoints that callers switch

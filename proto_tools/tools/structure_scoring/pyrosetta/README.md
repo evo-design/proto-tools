@@ -38,6 +38,7 @@ This tool is appropriate for relative energy comparison across variants of the s
 #### Usage Tips
 
 - **Compare REU values only across variants of the same protein with the same score function.** Rosetta energies are not absolute thermodynamic quantities and do not transfer across proteins of different sizes or across different score function settings. Switching `scorefxn` from `ref2015` to `beta_nov16` produces a different scale and the values are not comparable.
+- **`beta_nov16` score functions enable Rosetta's `-corrections::beta_nov16` parameters for the whole process.** Other score functions, including `ref2015`, run without them. Changing `scorefxn` therefore restarts a persistent PyRosetta worker (a few seconds of re-initialization).
 - **Run with `pre_relax_structures=True` when scoring raw predicted complexes.** Predicted structures from AlphaFold, Chai, Boltz, and similar tools commonly carry steric clashes that produce extremely high `fa_rep` values and dominate the total energy. Relaxing first resolves these clashes so the other energy terms become interpretable.
 - **Chain selection filters the per-residue breakdown only.** When `chains_to_score` is set on a `ScoringStructureInput`, `total_energy` and `energy_terms` are still computed on the full pose. Each per-residue energy reflects that residue's contribution within the full complex, including pair interactions with the unselected chains. Score a chain in isolation by extracting it into its own `Structure` first.
 
