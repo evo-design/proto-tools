@@ -158,15 +158,7 @@ def test_tool_config_accepts_none(config_model):
 
 @pytest.mark.parametrize("config_model", _list_of_all_tool_config_models())
 def test_amino_acid_exclusion_fields_normalize(config_model):
-    """Every ``list[AminoAcid]`` exclusion field normalizes its codes the same way.
-
-    Tools across families let a caller ban residues from generated sequence. They are
-    interchangeable only if they agree on what the input means, so each such field must run
-    ``normalize_excluded_amino_acids``: deduplicate, fold an empty list to ``None``, and reject
-    excluding every canonical residue. Codes are taken as written rather than case-converted,
-    since lowercase spells a DNA base in the mixed protein/DNA alphabet. Tools whose field is
-    an upstream-shaped string are out of scope; this covers the list-typed ones.
-    """
+    """Every ``list[AminoAcid]`` exclusion field normalizes its codes the same way."""
     for field_name in _AMINO_ACID_EXCLUSION_FIELDS & set(config_model.model_fields):
         annotation = config_model.model_fields[field_name].annotation
         if list[AminoAcid] not in get_args(annotation):
