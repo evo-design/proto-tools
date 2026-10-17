@@ -158,7 +158,7 @@ class NAMPNNSpecificityConfig(BaseConfig):
             (e.g. ``"XCG"``). Matched against the model alphabet one character at a time, so
             case is meaningful: uppercase are amino acids plus ``X``, lowercase are DNA
             (``a``/``c``/``g``/``t``, ``x``) and RNA (``b``/``d``/``h``/``u``/``y``) tokens.
-            Upstream defaults to ``"X"``; this tool omits nothing by default.
+            Defaults to upstream's ``"X"``, so the unknown-residue token is never placed.
         design_na_only (bool): Restrict design tokens to nucleic acid positions.
         output_directory (str | None): Optional directory for canonical NPZ artifacts.
         keep_intermediate (bool): Keep intermediate raw NA-MPNN output directories.
@@ -191,7 +191,7 @@ class NAMPNNSpecificityConfig(BaseConfig):
     )
     omit_aa: str = ConfigField(
         title="Omit Residues",
-        default="",
+        default="X",
         description="Residue tokens to omit, concatenated with no separator (e.g. 'XCG'); case-sensitive",
     )
     design_na_only: bool = ConfigField(
