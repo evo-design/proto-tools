@@ -6,12 +6,13 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
+    AminoAcid,
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
@@ -19,6 +20,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.sequence import normalize_excluded_amino_acids
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
@@ -27,11 +29,13 @@ _BINDCRAFT_FIXTURE_PDB = (
     Path(__file__).resolve().parents[2] / "structure_prediction" / "alphafold2" / "example_input_fixture.pdb"
 )
 
+# Upstream keys whose config field is spelled differently here, mapped to that field.
+_RENAMED_UPSTREAM_KEYS: dict[str, str] = {"omit_AAs": "excluded_amino_acids"}
+
 _USER_FACING_UPSTREAM_KEYS: frozenset[str] = frozenset(
     {
         "design_algorithm",
         "use_multimer_design",
-        "omit_AAs",
         "force_reject_AA",
         "soft_iterations",
         "temporary_iterations",
@@ -392,8 +396,9 @@ class BindCraftConfig(BaseConfig):
             default: ``"4stage"``.
         use_multimer_design (bool): Use AF2 multimer parameters during hallucination.
             Every upstream preset uses multimer.
-        omit_AAs (str): Comma-separated amino acids to ban during design. Upstream default: ``"C"``.
-        force_reject_AA (bool): Reject any design containing ``omit_AAs``.
+        excluded_amino_acids (list[AminoAcid] | None): Amino acids to ban during design; joined
+            into upstream's ``omit_AAs``. Upstream default: ``["C"]``.
+        force_reject_AA (bool): Reject any design containing an excluded amino acid.
         soft_iterations (int): Soft-stage iterations. Used by 2stage/3stage/4stage.
         temporary_iterations (int): Temporary-stage iterations. Used by 3stage/4stage.
         hard_iterations (int): Hard-stage iterations. Used by 3stage/4stage.
@@ -464,15 +469,23 @@ class BindCraftConfig(BaseConfig):
         description="Use AF2 multimer params during hallucination. Every upstream preset uses multimer.",
         reload_on_change=True,
     )
-    omit_AAs: str = ConfigField(
-        title="Omit Amino Acids",
-        default="C",
-        description="Comma-separated amino acids to ban during design (e.g. 'C' or 'C,W').",
+    excluded_amino_acids: list[AminoAcid] | None = ConfigField(
+        title="Excluded Amino Acids",
+        default_factory=lambda: ["C"],
+        description="Amino acids to ban during design; upstream calls this omit_AAs",
+        examples=[["C"], ["C", "W"]],
     )
+
+    @field_validator("excluded_amino_acids", mode="before")
+    @classmethod
+    def validate_excluded_amino_acids(cls, value: Any) -> Any:
+        """Normalize and validate excluded amino-acid codes."""
+        return normalize_excluded_amino_acids(value)
+
     force_reject_AA: bool = ConfigField(
         title="Force Reject AA",
         default=False,
-        description="Drop any MPNN sequence containing residues from omit_AAs (hard reject, not a soft penalty).",
+        description="Drop any MPNN sequence containing an excluded amino acid (hard reject, not soft).",
     )
 
     soft_iterations: int = ConfigField(
@@ -965,6 +978,8 @@ def run_bindcraft_design(
             "number_of_final_designs": inputs.number_of_final_designs,
             "advanced_settings": {
                 **{key: getattr(config, key) for key in _USER_FACING_UPSTREAM_KEYS},
+                # ColabDesign's rm_aa splits on commas; [] or None bans nothing.
+                "omit_AAs": ",".join(config.excluded_amino_acids or []),
                 **_HARDCODED_INTERNAL_SETTINGS,
             },
             "filter_overrides": config.filter_overrides,

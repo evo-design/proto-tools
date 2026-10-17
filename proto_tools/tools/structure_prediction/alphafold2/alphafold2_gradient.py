@@ -132,7 +132,7 @@ class AlphaFold2GradientConfig(BaseConfig):
         include_pae_matrix (bool): Attach full per-residue PAE matrix. Default: ``False``.
         bias_redesign (float | None): Persistent softmax bias toward wildtype at
             non-design positions. Germinal backend only.
-        omit_aas (list[AminoAcid] | None): Amino acids to ban (e.g. ``["C", "W"]``).
+        excluded_amino_acids (list[AminoAcid] | None): Amino acids to ban (e.g. ``["C", "W"]``).
         num_recycles (int): AF2 recycling iterations.
         recycle_mode (Literal["last", "sample", "average", "first"]): Which recycle's
             output is used for loss/gradient. ``"last"`` matches Germinal's VHH default;
@@ -176,7 +176,7 @@ class AlphaFold2GradientConfig(BaseConfig):
         gt=0.0,
         description="Soft bias strength for non-design positions toward the wildtype template.",
     )
-    omit_aas: list[AminoAcid] | None = ConfigField(
+    excluded_amino_acids: list[AminoAcid] | None = ConfigField(
         title="Omit Amino Acids",
         default=None,
         description="Amino acids to ban during optimization (e.g. ['C', 'W']).",
@@ -304,9 +304,9 @@ class AlphaFold2GradientConfig(BaseConfig):
         include_in_key=False,
     )
 
-    @field_validator("omit_aas", mode="before")
+    @field_validator("excluded_amino_acids", mode="before")
     @classmethod
-    def validate_omit_aas(cls, value: Any) -> Any:
+    def validate_excluded_amino_acids(cls, value: Any) -> Any:
         """Normalize and validate excluded amino-acid codes."""
         return normalize_excluded_amino_acids(value)
 
@@ -419,7 +419,9 @@ def run_alphafold2_gradient(
                 "design_positions": inputs.design_positions,
                 "bias_redesign": config.bias_redesign,
                 # ColabDesign's prep_inputs(rm_aa=...) expects a comma-separated string.
-                "omit_aas": ",".join(config.omit_aas) if config.omit_aas else None,
+                "excluded_amino_acids": (
+                    ",".join(config.excluded_amino_acids) if config.excluded_amino_acids else None
+                ),
                 "num_recycles": config.num_recycles,
                 "recycle_mode": config.recycle_mode,
                 "model_num": config.model_num,

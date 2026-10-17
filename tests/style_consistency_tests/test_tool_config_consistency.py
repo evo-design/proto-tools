@@ -24,8 +24,8 @@ _BANNED_UI_SCHEMA_KEYS = frozenset({"advanced", "hidden", "depends_on", "x-depen
 # Field names that hold a credential; every one must be marked so it is never persisted or displayed.
 _CREDENTIAL_NAME = re.compile(r"(api_key|token|secret|password|email)$")
 _ENV_VAR_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
-# Fields that ban residues from generated sequence; they must agree on how codes are read.
-_AMINO_ACID_EXCLUSION_FIELDS = frozenset({"excluded_amino_acids", "omit_aas"})
+# The field that bans residues from generated sequence; every tool spells it the same way.
+_AMINO_ACID_EXCLUSION_FIELD = "excluded_amino_acids"
 
 
 def _list_of_all_tool_config_models():
@@ -159,7 +159,7 @@ def test_tool_config_accepts_none(config_model):
 @pytest.mark.parametrize("config_model", _list_of_all_tool_config_models())
 def test_amino_acid_exclusion_fields_normalize(config_model):
     """Every ``list[AminoAcid]`` exclusion field normalizes its codes the same way."""
-    for field_name in _AMINO_ACID_EXCLUSION_FIELDS & set(config_model.model_fields):
+    for field_name in {_AMINO_ACID_EXCLUSION_FIELD} & set(config_model.model_fields):
         annotation = config_model.model_fields[field_name].annotation
         if list[AminoAcid] not in get_args(annotation):
             continue

@@ -18,6 +18,7 @@ from proto_tools.tools import (
 )
 from proto_tools.tools.binder_design.bindcraft.bindcraft_design import (
     _HARDCODED_INTERNAL_SETTINGS,
+    _RENAMED_UPSTREAM_KEYS,
     _USER_FACING_UPSTREAM_KEYS,
 )
 from proto_tools.tools.tool_registry import ToolRegistry
@@ -60,6 +61,9 @@ def test_user_facing_config_defaults_match_pinned_upstream() -> None:
     """User-facing Config defaults equal the upstream snapshot byte-for-byte."""
     upstream = json.loads(_UPSTREAM_SNAPSHOT.read_text())
     cfg = BindCraftConfig().model_dump()
+    # Keys we spell differently are compared in the upstream form the payload sends.
+    for upstream_key, field in _RENAMED_UPSTREAM_KEYS.items():
+        cfg[upstream_key] = ",".join(cfg.pop(field) or [])
     skip = _UPSTREAM_INFRA_KEYS | _HARDCODED_INTERNAL_SETTINGS.keys()
     mismatches = [f"{k}: ours={cfg[k]!r} upstream={v!r}" for k, v in upstream.items() if k not in skip and cfg[k] != v]
     assert not mismatches, "Default-value drift from upstream:\n" + "\n".join(mismatches)
@@ -67,7 +71,7 @@ def test_user_facing_config_defaults_match_pinned_upstream() -> None:
 
 def test_upstream_keys_partition_into_user_facing_or_hardcoded() -> None:
     """Every upstream advanced key is either on the Config or in the hardcoded dict."""
-    user_facing = set(_USER_FACING_UPSTREAM_KEYS)
+    user_facing = set(_USER_FACING_UPSTREAM_KEYS) | set(_RENAMED_UPSTREAM_KEYS)
     hardcoded = set(_HARDCODED_INTERNAL_SETTINGS)
     assert user_facing.isdisjoint(hardcoded)
     assert user_facing | hardcoded == _UPSTREAM_KNOBS
