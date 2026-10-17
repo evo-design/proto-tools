@@ -142,6 +142,11 @@ class PyRosettaSAPConfig(BaseConfig):
             return inputs
         return inputs.model_copy(update={"inputs": relax_inputs_via_pyrosetta(inputs.inputs, self.relax_config)})
 
+    @classmethod
+    def reload_fields(cls) -> set[str] | None:
+        """Return ``None`` so SAP reuses the live worker whatever score function it was started for."""
+        return None
+
     @property
     def cpus_per_instance(self) -> int | None:
         """Opt in to ToolPool CPU fan-out — PyRosetta runs single-threaded per pose."""

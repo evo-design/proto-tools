@@ -299,8 +299,13 @@ class BaseConfig(BaseModel):
         return data
 
     @classmethod
-    def reload_fields(cls) -> set[str]:
-        """Return field names marked with ``reload_on_change=True``."""
+    def reload_fields(cls) -> set[str] | None:
+        """Return field names marked with ``reload_on_change=True``.
+
+        A subclass may instead return worker-payload keys derived from its fields, or ``None`` when its
+        calls run on a persistent worker in any reload state, so they neither restart the worker nor
+        change the tracked values.
+        """
         return {name for name, info in cls.model_fields.items() if _extra_dict(info).get("reload_on_change", False)}
 
     @classmethod
