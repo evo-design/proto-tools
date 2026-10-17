@@ -176,8 +176,11 @@ def test_amino_acid_exclusion_fields_normalize(config_model):
         )
         with pytest.raises(ValidationError, match="cannot exclude all 20"):
             config_model(**{field_name: list(PROTEIN_AMINO_ACIDS)})
-        with pytest.raises(ValidationError, match="Input should be"):
-            config_model(**{field_name: ["c"]})
+        # Lowercase is a DNA base in the mixed alphabet, and 'X' is an ambiguous code: neither
+        # names a residue to exclude, so both are rejected rather than guessed at.
+        for rejected in (["c"], ["X"]):
+            with pytest.raises(ValidationError, match="Input should be"):
+                config_model(**{field_name: rejected})
 
 
 # ── Tool-key stamping ────────────────────────────────────────────────────────

@@ -4,13 +4,7 @@ import json
 import re
 
 import pytest
-from pydantic import ValidationError
 
-from proto_tools.tools.masked_models.ablang import AbLangSampleConfig
-from proto_tools.tools.masked_models.esm2 import ESM2SampleConfig
-from proto_tools.tools.masked_models.esm3 import ESM3SampleConfig
-from proto_tools.tools.masked_models.glm2 import GLM2SampleConfig
-from proto_tools.tools.masked_models.minerva import MinervaSampleConfig
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelEmbeddingsOutput,
     MaskedModelInput,
@@ -19,7 +13,6 @@ from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelScoringOutput,
     SequenceEmbedding,
 )
-from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 
 # ── Input normalization ─────────────────────────────────────────────────────
 
@@ -88,36 +81,6 @@ def test_reported_position_locates_the_first_listed_character():
 def test_input_rejects_empty_sequence():
     with pytest.raises(ValueError, match=r"sequences\[0\]: cannot be empty"):
         MaskedModelInput(sequences=[""])
-
-
-# ── Excluded amino acids ────────────────────────────────────────────────────
-
-_SAMPLE_CONFIGS = [ESM2SampleConfig, ESM3SampleConfig, AbLangSampleConfig, GLM2SampleConfig, MinervaSampleConfig]
-
-
-@pytest.mark.parametrize("config_cls", _SAMPLE_CONFIGS)
-def test_sample_config_normalizes_excluded_amino_acids(config_cls):
-    assert config_cls(excluded_amino_acids=["C", "L", "C"]).excluded_amino_acids == ["C", "L"]
-    assert config_cls(excluded_amino_acids=[]).excluded_amino_acids is None
-
-
-@pytest.mark.parametrize("config_cls", _SAMPLE_CONFIGS)
-def test_sample_config_rejects_lowercase_excluded_amino_acids(config_cls):
-    """Codes are taken as written. Lowercase is a DNA base in the mixed alphabet, never a residue."""
-    with pytest.raises(ValidationError, match="Input should be"):
-        config_cls(excluded_amino_acids=["c"])
-
-
-@pytest.mark.parametrize("config_cls", _SAMPLE_CONFIGS)
-def test_sample_config_rejects_excluding_every_amino_acid(config_cls):
-    with pytest.raises(ValidationError, match="cannot exclude all 20"):
-        config_cls(excluded_amino_acids=list(PROTEIN_AMINO_ACIDS))
-
-
-@pytest.mark.parametrize("config_cls", _SAMPLE_CONFIGS)
-def test_sample_config_rejects_non_canonical_excluded_amino_acids(config_cls):
-    with pytest.raises(ValidationError, match="excluded_amino_acids"):
-        config_cls(excluded_amino_acids=["X"])
 
 
 # ── MaskedModelScoringMetrics attribute access ──────────────────────────────
