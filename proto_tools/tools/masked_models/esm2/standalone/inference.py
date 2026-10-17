@@ -176,6 +176,7 @@ class ESM2Model:
         verbose: bool = False,
         return_logits: bool = False,
         seed: int | None = None,
+        excluded_amino_acids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Sample amino acids at masked ('_') positions in protein sequences.
 
@@ -200,6 +201,7 @@ class ESM2Model:
             verbose (bool): Whether to print progress.
             return_logits (bool): Whether to return per-position AA logits.
             seed (int | None): Random seed for reproducible sampling.
+            excluded_amino_acids (list[str] | None): Amino acids never sampled at masked positions.
 
         Returns:
             dict[str, Any]: Dictionary with "sequences" and optionally "logits".
@@ -227,7 +229,12 @@ class ESM2Model:
                 device_obj=device_obj,
                 verbose=verbose,
                 return_logits=return_logits,
+                excluded_amino_acids=excluded_amino_acids,
             )
+
+        excluded_idx = torch.tensor(
+            [AMINO_ACIDS_LIST.index(aa) for aa in excluded_amino_acids or []], dtype=torch.long, device=device_obj
+        )
 
         # Record mask positions, replace '_' with the model's mask token
         mask_token = self.tokenizer.mask_token
@@ -281,7 +288,7 @@ class ESM2Model:
                 else:
                     pos_t = torch.tensor(positions, device=device_obj)
                     pos_logits = aa_logits[seq_idx, pos_t]
-                    scaled = pos_logits / max(temperature, 1e-8)
+                    scaled = (pos_logits / max(temperature, 1e-8)).index_fill(-1, excluded_idx, -torch.inf)
                     probs = torch.softmax(scaled, dim=-1)
                     sampled_idx = torch.multinomial(probs, 1).squeeze(-1)
 
@@ -312,6 +319,7 @@ class ESM2Model:
         device_obj: torch.device,
         verbose: bool,
         return_logits: bool,
+        excluded_amino_acids: list[str] | None,
     ) -> dict[str, Any]:
         """Iterative refinement loop on top of HF ``EsmForMaskedLM``.
 
@@ -324,6 +332,7 @@ class ESM2Model:
         mask_token_id = int(self.tokenizer.mask_token_id)
         valid_token_ids = [int(t) for t in self.amino_acid_token_ids.tolist()]
         id_to_aa = {int(tid): aa for aa, tid in zip(AMINO_ACIDS_LIST, valid_token_ids, strict=True)}
+        sampleable_token_ids = [tid for tid, aa in id_to_aa.items() if aa not in (excluded_amino_acids or [])]
 
         if verbose:
             logger.info(
@@ -369,7 +378,7 @@ class ESM2Model:
                 forward_fn=forward_fn,
                 initial_tokens=core_ids,
                 mask_token_id=mask_token_id,
-                valid_token_ids=valid_token_ids,
+                valid_token_ids=sampleable_token_ids,
                 num_steps=num_steps,
                 schedule=schedule,
                 strategy=strategy,
@@ -803,6 +812,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
             return_logits=input_dict["return_logits"],
             seed=input_dict["seed"],
+            excluded_amino_acids=input_dict["excluded_amino_acids"],
         )
     if operation == "score":
         return _model.score(

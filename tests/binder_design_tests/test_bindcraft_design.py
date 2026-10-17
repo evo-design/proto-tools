@@ -60,6 +60,8 @@ def test_user_facing_config_defaults_match_pinned_upstream() -> None:
     """User-facing Config defaults equal the upstream snapshot byte-for-byte."""
     upstream = json.loads(_UPSTREAM_SNAPSHOT.read_text())
     cfg = BindCraftConfig().model_dump()
+    # We spell omit_AAs differently; compare it in the upstream form the payload sends.
+    cfg["omit_AAs"] = ",".join(cfg.pop("excluded_amino_acids") or [])
     skip = _UPSTREAM_INFRA_KEYS | _HARDCODED_INTERNAL_SETTINGS.keys()
     mismatches = [f"{k}: ours={cfg[k]!r} upstream={v!r}" for k, v in upstream.items() if k not in skip and cfg[k] != v]
     assert not mismatches, "Default-value drift from upstream:\n" + "\n".join(mismatches)
@@ -67,7 +69,7 @@ def test_user_facing_config_defaults_match_pinned_upstream() -> None:
 
 def test_upstream_keys_partition_into_user_facing_or_hardcoded() -> None:
     """Every upstream advanced key is either on the Config or in the hardcoded dict."""
-    user_facing = set(_USER_FACING_UPSTREAM_KEYS)
+    user_facing = set(_USER_FACING_UPSTREAM_KEYS) | {"omit_AAs"}
     hardcoded = set(_HARDCODED_INTERNAL_SETTINGS)
     assert user_facing.isdisjoint(hardcoded)
     assert user_facing | hardcoded == _UPSTREAM_KNOBS

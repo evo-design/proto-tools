@@ -4,6 +4,8 @@ import json
 import os
 import shutil
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -484,6 +486,7 @@ class AbLangModel:
         return_logits: bool = False,
         temperature: float = 1.0,
         seed: int | None = None,
+        excluded_amino_acids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Fill masked (_) positions in antibody sequences.
 
@@ -504,6 +507,8 @@ class AbLangModel:
 
         When ``return_logits=True``, runs an additional ``likelihood`` mode pass
         on the filled-in sequences and returns per-residue AA-only logits.
+
+        ``excluded_amino_acids`` are never drawn, on the sampling, greedy, or aligned path.
         """
         import torch
 
@@ -538,12 +543,14 @@ class AbLangModel:
             batch = sequences[i : i + batch_size]
             formatted = self._format_sequences(batch)
 
-            if use_sampling:
-                restored = self._sample_at_mask_positions(formatted, temperature, n_seqs=len(batch))
-            elif self._is_ablang1:
-                restored = self.model.restore(formatted, align=align)
-            else:
-                restored = self.model(formatted, mode="restore", align=align)
+            # Scoped to the draw only, so the return_logits pass below reports unmasked logits.
+            with self._excluded_amino_acid_logits(excluded_amino_acids):
+                if use_sampling:
+                    restored = self._sample_at_mask_positions(formatted, temperature, n_seqs=len(batch))
+                elif self._is_ablang1:
+                    restored = self.model.restore(formatted, align=align)
+                else:
+                    restored = self.model(formatted, mode="restore", align=align)
 
             # Strip <> special tokens and padding dashes from library output
             restored_clean = [str(s).replace("<", "").replace(">", "").replace("-", "") for s in restored]
@@ -556,12 +563,50 @@ class AbLangModel:
 
         return {"sequences": restored_sequences, "logits": all_logits}
 
+    @contextmanager
+    def _excluded_amino_acid_logits(self, excluded_amino_acids: list[str] | None) -> Iterator[None]:
+        """Drive every residue choice away from ``excluded_amino_acids`` for the duration.
+
+        A forward hook on the model drops the excluded amino-acid columns to ``-inf``, which
+        covers all three fill paths at once: our own multinomial draw, the library's greedy
+        ``restore``, and its ``align=True`` spread. ``restore`` reads the same logits for its
+        ``torch.max`` decode, so no upstream code has to be reimplemented to constrain it.
+
+        On the ``align=True`` path the library also ranks its alignment variants from these
+        logits, so an exclusion can shift which variant wins; that only happens when the
+        model's top residue at the anchor position is one the caller banned.
+
+        Yields nothing and installs no hook when there is nothing to exclude.
+        """
+        import torch
+
+        if not excluded_amino_acids:
+            yield
+            return
+        if self._ablang_vocab is None:
+            raise RuntimeError("ablang: vocabulary unavailable; call load() first")
+        # Full-vocab column indices; the library slices [:, :, 1:21] after this hook runs.
+        columns = [self._ablang_vocab[aa] for aa in excluded_amino_acids]
+
+        def hook(_module: Any, _args: Any, output: Any) -> Any:
+            masked = output.clone()
+            masked[..., columns] = -torch.inf
+            return masked
+
+        handle = self.model.AbLang.register_forward_hook(hook)
+        try:
+            yield
+        finally:
+            handle.remove()
+
     def _sample_at_mask_positions(self, formatted: list[Any], temperature: float, n_seqs: int) -> list[str]:
         """Sample at masked positions using temperature-scaled multinomial.
 
         Mirrors the library's ``AbRestore.restore(align=False)`` flow but
         replaces the final ``torch.argmax`` with a ``torch.multinomial`` draw
         from the temperature-scaled softmax over the 20 amino-acid tokens.
+        Excluded residues are already ``-inf`` here, masked by the caller's
+        ``_excluded_amino_acid_logits`` hook.
         Mask tokens (==23 in both ablang1 and ablang2 vocabs) are the only
         positions whose tokens get rewritten; everything else passes through.
         """
@@ -831,6 +876,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
             temperature=input_dict.get("temperature", 1.0),
             seed=input_dict.get("seed"),
+            excluded_amino_acids=input_dict["excluded_amino_acids"],
         )
     if operation == "compute_gradient":
         return _model.compute_gradient(

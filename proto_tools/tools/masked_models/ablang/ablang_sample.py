@@ -58,10 +58,12 @@ class AbLangSampleConfig(MaskedModelSampleConfig):
             samples from the unscaled model distribution; higher values flatten
             the distribution toward uniform, lower values sharpen toward greedy.
         align (bool): Run ANARCI alignment first; enables restoration of unknown numbers of
-            missing residues at chain termini. Forces greedy decoding (ANARCI's
-            spread-of-variants logic is incompatible with stochastic sampling).
+            missing residues at chain termini. Requires paired antibodies, which is AbLang's
+            own limitation. Forces greedy decoding (ANARCI's spread-of-variants logic is
+            incompatible with stochastic sampling).
         return_logits (bool): Include per-position logits in the output (large; disable to
             save memory). Triggers a second ``likelihood``-mode forward pass per batch.
+        excluded_amino_acids (list[AminoAcid] | None): Amino acids never sampled at masked positions.
     """
 
     temperature: float = ConfigField(
@@ -73,7 +75,7 @@ class AbLangSampleConfig(MaskedModelSampleConfig):
     align: bool = ConfigField(
         title="ANARCI-aligned Restore",
         default=False,
-        description="Run ANARCI alignment first; enables extension of unknown-length termini",
+        description="Run ANARCI alignment first to extend unknown-length termini; paired input only",
     )
     return_logits: bool = ConfigField(
         title="Return Logits",
@@ -127,6 +129,13 @@ def run_ablang_sample(
     """Restore masked positions in antibody sequences using AbLang."""
     sequences = [ab.to_sequence() for ab in inputs.antibodies]
     model_choice = _resolve_model_choice(inputs.antibodies)
+    if config.align and any(ab.heavy_chain is None or ab.light_chain is None for ab in inputs.antibodies):
+        # AbLang supports the ANARCI spread only for paired input; its own public entry point
+        # asserts this, and calling restore() directly would fail deeper with an IndexError.
+        raise ValueError(
+            "ablang-sample: align=True requires every antibody to have both a heavy_chain and a "
+            "light_chain. Supply the missing chain, or set align=False."
+        )
     logger.debug("Using local venv for AbLang sampling: %s", model_choice)
     result = ToolInstance.dispatch(
         "ablang",
@@ -141,6 +150,7 @@ def run_ablang_sample(
             "return_logits": config.return_logits,
             "temperature": config.temperature,
             "seed": config.seed,
+            "excluded_amino_acids": config.excluded_amino_acids,
         },
         instance=instance,
         config=config,

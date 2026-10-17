@@ -5,7 +5,7 @@ Sequence validation, detection, and ID resolution utilities.
 
 import logging
 from collections.abc import Collection
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 # ============================================================================
 # Sequence Constants
@@ -25,6 +25,33 @@ PROTEIN_AMINO_ACIDS = "".join(get_args(AminoAcid))
 
 
 _PROTEIN_AA_INDEX = {aa: i for i, aa in enumerate(PROTEIN_AMINO_ACIDS)}
+
+
+def normalize_excluded_amino_acids(value: Any) -> Any:
+    """Deduplicate an ``excluded_amino_acids`` config value and fold an empty list to ``None``.
+
+    Use as a ``mode="before"`` field validator; the ``list[AminoAcid]`` annotation then rejects
+    anything that is not an uppercase canonical code. Case is deliberately not converted: in a
+    mixed protein/DNA alphabet lowercase spells a DNA base, so ``["c"]`` is rejected rather than
+    read as cysteine.
+
+    Args:
+        value (Any): Raw field value.
+
+    Returns:
+        Any: ``None`` for ``None`` or an empty list, else the deduplicated list.
+
+    Raises:
+        ValueError: If every canonical amino acid is excluded.
+    """
+    if not isinstance(value, list):
+        return value
+    if not value:
+        return None
+    normalized = list(dict.fromkeys(value))
+    if set(PROTEIN_AMINO_ACIDS) <= set(normalized):
+        raise ValueError("excluded_amino_acids cannot exclude all 20 canonical amino acids")
+    return normalized
 
 
 def one_hot_protein_logits(sequence: str, *, sharpness: float = 20.0) -> list[list[float]]:

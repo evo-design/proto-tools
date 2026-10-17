@@ -12,7 +12,9 @@ from pydantic import ValidationError
 from pydantic.fields import PydanticUndefined
 
 from proto_tools.tools.tool_registry import ToolRegistry
+from proto_tools.utils import AminoAcid
 from proto_tools.utils import BaseConfig as ToolsBaseConfig
+from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from tests.style_consistency_tests.helpers import field_description_is_valid, find_missing_fields_in_docstring
 
 _MAX_FIELD_TITLE_LENGTH = 31
@@ -22,6 +24,8 @@ _BANNED_UI_SCHEMA_KEYS = frozenset({"advanced", "hidden", "depends_on", "x-depen
 # Field names that hold a credential; every one must be marked so it is never persisted or displayed.
 _CREDENTIAL_NAME = re.compile(r"(api_key|token|secret|password|email)$")
 _ENV_VAR_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
+# The field that bans residues from generated sequence; every tool spells it the same way.
+_AMINO_ACID_EXCLUSION_FIELD = "excluded_amino_acids"
 
 
 def _list_of_all_tool_config_models():
@@ -147,6 +151,36 @@ def test_tool_config_accepts_none(config_model):
     except ValidationError as exc:
         pytest.skip(f"{config_model.__name__} default config does not construct on this platform: {exc}")
     assert isinstance(default_config, config_model)
+
+
+# ── Amino-acid exclusion fields ─────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("config_model", _list_of_all_tool_config_models())
+def test_amino_acid_exclusion_fields_normalize(config_model):
+    """Every ``list[AminoAcid]`` exclusion field normalizes its codes the same way."""
+    for field_name in {_AMINO_ACID_EXCLUSION_FIELD} & set(config_model.model_fields):
+        annotation = config_model.model_fields[field_name].annotation
+        if list[AminoAcid] not in get_args(annotation):
+            continue
+        try:
+            config_model(**{field_name: ["C", "C", "L"]})
+        except ValidationError as exc:
+            pytest.skip(f"{config_model.__name__} needs other fields set: {exc}")
+
+        assert getattr(config_model(**{field_name: ["C", "C", "L"]}), field_name) == ["C", "L"], (
+            f"{config_model.__name__}.{field_name} must deduplicate its codes"
+        )
+        assert getattr(config_model(**{field_name: []}), field_name) is None, (
+            f"{config_model.__name__}.{field_name} must treat an empty list as no exclusions"
+        )
+        with pytest.raises(ValidationError, match="cannot exclude all 20"):
+            config_model(**{field_name: list(PROTEIN_AMINO_ACIDS)})
+        # Lowercase is a DNA base in the mixed alphabet, and 'X' is an ambiguous code: neither
+        # names a residue to exclude, so both are rejected rather than guessed at.
+        for rejected in (["c"], ["X"]):
+            with pytest.raises(ValidationError, match="Input should be"):
+                config_model(**{field_name: rejected})
 
 
 # ── Tool-key stamping ────────────────────────────────────────────────────────

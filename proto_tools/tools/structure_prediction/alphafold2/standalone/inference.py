@@ -703,7 +703,7 @@ class AlphaFold2Model:
         binder_chain: str | None = None,
         design_positions: list[int] | None = None,
         bias_redesign: float | None = None,
-        omit_aas: str | None = None,
+        excluded_amino_acids: str | None = None,
         num_recycles: int = 3,
         recycle_mode: str = "last",
         model_num: int = 1,
@@ -764,8 +764,8 @@ class AlphaFold2Model:
         }
         if target_hotspot:
             prep_kwargs["hotspot"] = target_hotspot
-        if omit_aas:
-            prep_kwargs["rm_aa"] = omit_aas
+        if excluded_amino_acids:
+            prep_kwargs["rm_aa"] = excluded_amino_acids
 
         # Germinal-specific prep_inputs kwargs (bias_redesign, pos,
         # starting_binder_seq) are only supported by the Germinal ColabDesign fork.
@@ -869,7 +869,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             binder_chain=input_dict.get("binder_chain"),
             design_positions=input_dict.get("design_positions"),
             bias_redesign=input_dict.get("bias_redesign"),
-            omit_aas=input_dict.get("omit_aas"),
+            excluded_amino_acids=input_dict.get("excluded_amino_acids"),
             num_recycles=input_dict["num_recycles"],
             recycle_mode=input_dict.get("recycle_mode", "last"),
             model_num=input_dict["model_num"],

@@ -83,18 +83,6 @@ def test_excluded_amino_acids_are_not_sampled():
     assert result.metadata["excluded_amino_acids"] == ["C", "A"]
 
 
-def test_excluded_amino_acids_normalize_case_and_dedupe():
-    config = RandomProteinSampleConfig(excluded_amino_acids=["c", "A", "c"], seed=3)
-
-    assert config.excluded_amino_acids == ["C", "A"]
-
-
-def test_excluded_amino_acids_empty_list_means_no_exclusions():
-    config = RandomProteinSampleConfig(excluded_amino_acids=[])
-
-    assert config.excluded_amino_acids is None
-
-
 def test_excluded_amino_acids_respect_codon_scheme_distribution():
     info = get_codon_scheme("NDT")
     reachable = set(info["amino_acids"])

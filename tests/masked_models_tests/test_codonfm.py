@@ -35,6 +35,7 @@ from proto_tools.tools.masked_models.codonfm import (
     run_codonfm_score,
 )
 from proto_tools.tools.masked_models.codonfm.shared_data_models import CODONFM_CHECKPOINTS, CODONFM_MAX_NT
+from proto_tools.tools.mutagenesis.codons import CODON_TO_AA
 from proto_tools.transforms.masking import RandomMaskingStrategy
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
@@ -397,6 +398,28 @@ def test_codonfm_sample_dispatch_contract(monkeypatch) -> None:
         assert "_" not in sampled, "every mask is refilled before the result is returned"
     assert [item.sequence for item in result.results] == list(result.sequences)
     assert len(result) == 2
+    assert captured["payload"]["excluded_codons"] == [], "no exclusions means no codons withheld"
+
+
+def test_codonfm_sample_sends_codons_for_excluded_amino_acids(monkeypatch) -> None:
+    """The config names residues; the worker is told which codons those are."""
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured["payload"] = payload
+        return {"sequences": [sequence.replace("___", "AAA") for sequence in payload["sequences"]]}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.masked_models.codonfm.codonfm_sample.ToolInstance.dispatch",
+        staticmethod(fake_dispatch),
+    )
+
+    run_codonfm_sample(
+        CodonFMSampleInput(sequences=[_CDS]),
+        CodonFMSampleConfig(model_checkpoint="encodon_80m", device="cpu", excluded_amino_acids=["C", "W"]),
+    )
+
+    assert sorted(captured["payload"]["excluded_codons"]) == ["TGC", "TGG", "TGT"]
 
     with pytest.raises(ValueError, match="mutable positions"):
         run_codonfm_sample(
@@ -569,6 +592,36 @@ def test_codonfm_sample_real_gpu_rewrites_only_the_masked_codon() -> None:
     )
     assert sampled[target] in CODONFM_CODON_VOCAB, "the masked codon was refilled with a real codon"
     assert sampled[target] not in {"TAA", "TAG", "TGA"}, "resampling never inserts a premature stop"
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_codonfm_sample_real_gpu_never_encodes_an_excluded_amino_acid() -> None:
+    """Every resampled codon translates to a permitted residue.
+
+    Sixty codons are masked at a high temperature. The unconstrained control below reaches the
+    excluded residues at every seed tried at this length, so a clean constrained run is evidence
+    the codons were withheld rather than a lucky draw.
+    """
+    _skip_if_no_gpu()
+    excluded = ["C", "L", "W"]
+    masked = "___" * 60
+    config = {"model_checkpoint": "encodon_80m", "device": "cuda", "temperature": 2.0, "seed": 0}
+
+    result = run_codonfm_sample(
+        CodonFMSampleInput(sequences=[masked]),
+        CodonFMSampleConfig(excluded_amino_acids=excluded, **config),
+    )
+    sampled = result.sequences[0]
+    residues = {CODON_TO_AA[sampled[i : i + 3]] for i in range(0, len(sampled), 3)}
+
+    assert len(sampled) == len(masked)
+    assert not residues & set(excluded), f"excluded residue encoded in {sampled}"
+
+    # Without the setting the same draw does reach them, so the assertion above is not vacuous.
+    unconstrained = run_codonfm_sample(CodonFMSampleInput(sequences=[masked]), CodonFMSampleConfig(**config))
+    free = unconstrained.sequences[0]
+    assert {CODON_TO_AA[free[i : i + 3]] for i in range(0, len(free), 3)} & set(excluded)
 
 
 @pytest.mark.uses_gpu

@@ -23,6 +23,7 @@ from proto_tools.transforms.masking import (
     apply_masking_strategy,
 )
 from proto_tools.utils import AminoAcid, BaseConfig, BaseToolOutput, ConfigField
+from proto_tools.utils.sequence import normalize_excluded_amino_acids
 
 logger = logging.getLogger(__name__)
 
@@ -138,16 +139,9 @@ class RandomProteinSampleConfig(BaseConfig):
 
     @field_validator("excluded_amino_acids", mode="before")
     @classmethod
-    def normalize_excluded_amino_acids(cls, value: Any) -> Any:
+    def validate_excluded_amino_acids(cls, value: Any) -> Any:
         """Normalize and validate excluded amino-acid codes."""
-        if value is None:
-            return None
-        if not isinstance(value, list):
-            return value
-        if len(value) == 0:
-            return None
-        normalized = [aa.upper() if isinstance(aa, str) else aa for aa in value]
-        return list(dict.fromkeys(normalized))
+        return normalize_excluded_amino_acids(value)
 
     def preprocess(self, inputs: Any) -> Any:
         """Apply masking strategy unless sequences are already pre-masked."""

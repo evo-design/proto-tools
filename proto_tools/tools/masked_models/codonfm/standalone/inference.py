@@ -486,14 +486,15 @@ class CodonFMModel:
         temperature: float,
         batch_size: int,
         device: str,
+        excluded_codons: list[str] | None = None,
     ) -> list[str]:
         """Refill the codons marked ``___`` by drawing new ones from Encodon.
 
         Which codons to resample is decided before the call and carried in the sequences
         themselves, the same contract the ESM samplers use. Each masked codon is refilled from
         the model's per-codon distribution (temperature-scaled softmax over the 61 sense codons;
-        the three stop codons are excluded so resampling never inserts a premature stop) in a
-        single forward pass. Sequence length is preserved.
+        the three stop codons are excluded so resampling never inserts a premature stop, as are
+        any ``excluded_codons``) in a single forward pass. Sequence length is preserved.
 
         Args:
             sequences: Coding sequences (codon-aligned DNA) with resample positions as ``___``.
@@ -501,6 +502,8 @@ class CodonFMModel:
             batch_size: Sequences per forward pass (grouped by length).
             device: Execution device. Codon draws follow the process-wide torch seed, set by
                 the dispatcher before this runs.
+            excluded_codons: Sense codons removed from the draw, as resolved by the caller from
+                its ``excluded_amino_acids`` setting.
 
         Returns:
             list[str]: One mutated coding sequence per input, in input order.
@@ -513,7 +516,11 @@ class CodonFMModel:
         dev = torch.device(device)
         # Restrict resampling to the 61 sense codons so a masked interior codon can never be
         # replaced with a premature stop (TAA/TAG/TGA); ``codons``/``codon_token_ids`` stay aligned.
-        codons = [c for c in self.tokenizer.codons if c not in _STOP_CODONS]
+        # Codons for an excluded amino acid drop out here, so the draw never reaches them.
+        banned = _STOP_CODONS | frozenset(excluded_codons or ())
+        codons = [c for c in self.tokenizer.codons if c not in banned]
+        if not codons:
+            raise ValueError("codonfm: excluded_codons leaves no sense codon to sample")
         codon_token_ids = torch.tensor([self.tokenizer.encoder[c] for c in codons], device=dev)
         mask_id = int(self.tokenizer.mask_token_id)
 
@@ -678,6 +685,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 temperature=float(input_dict.get("temperature", 1.0)),
                 batch_size=batch_size,
                 device=device,
+                excluded_codons=input_dict.get("excluded_codons"),
             )
         }
     if operation == "gradient":
