@@ -2,54 +2,44 @@
 
 The `netmhcpan-peptides` and `netmhcpan-protein` tools wrap **netMHCpan 4.1**
 (developed and verified against **4.1b**), which DTU Health Tech distributes
-under an **academic software license** gated behind per-user registration. It
-cannot be auto-downloaded and the license forbids redistributing it, so it is
-never bundled with proto-tools: you provision it once by hand. The steps below
-are copy-paste once you have accepted the terms.
+under an **academic software license** gated behind per-user registration. 
 
-The license is free only for publicly funded academic, education and research
-institutions, and it is granted for internal research at a single site.
-Commercial use requires a separate license from <health-software@dtu.dk>.
+netMHCpan 4.1 cannot be auto-downloaded and the license forbids redistribution,
+so in order to use these tools you must accept terms to download the software.
+
+Important:
+The license free for publicly funded academic, educational, and research
+institutions. Commercial use requires a separate license from <health-software@dtu.dk>.
 
 ## 1. Accept the license and request the package
 
 1. Go to [services.healthtech.dtu.dk/services/NetMHCpan-4.1](https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/)
    and open the **Downloads** tab, or go straight to the
    [Linux download request form](https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=4.1&packageversion=4.1b&platform=Linux).
-2. Read the academic software license agreement shown on that form and **accept
-   it explicitly** — you are the licensee, and proto-tools cannot accept the
-   terms for you. Then submit the request. An **institutional e-mail address is
-   required**: the license is granted only to publicly funded academic,
-   education and research institutions, for internal research at a single site.
-   Commercial use needs a separate license from <health-software@dtu.dk>.
-3. DTU e-mails you a **time-limited download link**. Use it to fetch
-   `netMHCpan-4.1b.Linux.tar.gz` (the macOS build is `netMHCpan-4.1b.Darwin.tar.gz`).
+2. Read the academic software license agreement on the above page. After agreeing
+   to terms of use, you will be able to submit a request to download the software.
+   You must specify an institutional e-mail address (@<university>.edu) in order
+   to download the software. 
+3. If you are approved to access the software, DTU will e-mail you a
+  **time-limited download link**. Use it to fetch
+   `netMHCpan-4.1b.Linux.tar.gz` (or the macOS build is `netMHCpan-4.1b.Darwin.tar.gz`).
 
 ## 2. Extract the software
+
+Once you have downloaded the software from the above link, extract it using the
+following command:
 
 ```bash
 mkdir -p ~/netmhcpan && tar -xzf ~/Downloads/netMHCpan-4.1b.Linux.tar.gz -C ~/netmhcpan
 # Produces ~/netmhcpan/netMHCpan-4.1 — this directory is the install root.
 ```
 
-## 3. Add the data files (required)
+The archive holds only the software. netMHCpan also needs its network weights
+and threshold tables, which DTU publishes as a separate, ungated `data.tar.gz`;
+proto-tools downloads and extracts those into the install root for you the first
+time a netMHCpan tool runs, so there is nothing further to fetch by hand.
 
-The software archive does **not** contain the network weights and threshold
-tables. They are a separate, ungated download that must be extracted *inside*
-the `netMHCpan-4.1` directory, where it creates `data/`. netMHCpan cannot run
-without it.
-
-```bash
-curl -L -o /tmp/netmhcpan_data.tar.gz \
-  https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/data.tar.gz
-tar -xzf /tmp/netmhcpan_data.tar.gz -C ~/netmhcpan/netMHCpan-4.1
-# Produces ~/netmhcpan/netMHCpan-4.1/data/. The software archive ships
-# <Platform>_<arch>/data as a symlink to it, which is the path the tool reads,
-# so extracting at the install root (not inside the platform directory) is what
-# makes it resolve.
-```
-
-## 4. Make the install discoverable
+## 3. Make the install discoverable
 
 Either stage it into the managed cache, in which case **no environment variable
 is needed**:
@@ -76,7 +66,7 @@ them per call. Resolution order is `netmhcpan_dir`, then `NETMHCPAN_HOME`, then
 > per-environment cache cannot be pre-populated; use the
 > `export NETMHCPAN_HOME=...` alternative above.
 
-## 5. Nothing in the install needs editing
+## 4. Nothing in the install needs editing
 
 netMHCpan's own `netMHCpan-4.1.readme` tells you to edit the shipped
 `netMHCpan` launcher to hardcode `NMHOME` and `TMPDIR`. **Skip that step.**
@@ -90,7 +80,10 @@ proto-tools invokes the platform binary
   never executed;
 - there is no hardcoded path to keep in sync if you move the install.
 
-## 6. Verify
+## 5. Verify
+
+Run this after a netMHCpan tool has been invoked once, so the data files are in
+place:
 
 ```bash
 INSTALL=~/netmhcpan/netMHCpan-4.1          # or "$NETMHCPAN_CACHE"
@@ -116,10 +109,22 @@ required; passing a plain directory path fails with `Cannot make tmpdir`.
   `PROTO_NETMHCPAN_WEIGHTS_DIR` is set and `<Platform>_<arch>/bin/netMHCpan` is
   not there, setup fails immediately with the paths it checked - a typo is an
   error, not a silent skip.
-- **Step 3 skipped.** An install whose binary is present but whose
-  `data/MHC_pseudo.dat` is missing fails fast, naming `data.tar.gz` and where to
-  extract it.
-- **Unknown allele.** Allele names are checked against the install's own
+- **Data files cannot be fetched automatically.** They are only downloaded into
+  an install root that is writable and that identifies itself as 4.1 (the
+  `data.tar.gz` URL is version-specific, and 4.1 and 4.2 data are not
+  interchangeable). A read-only or unrecognised install root fails fast with the
+  reason, and the data can be added by hand:
+
+  ```bash
+  curl -L -o /tmp/netmhcpan_data.tar.gz \
+    https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/data.tar.gz
+  tar -xzf /tmp/netmhcpan_data.tar.gz -C ~/netmhcpan/netMHCpan-4.1
+  ```
+
+  Extract at the install root, not inside the platform directory: the software
+  archive ships `<Platform>_<arch>/data` as a symlink to `../data`, and that
+  symlink is the path the tool reads.
+- **Unknown allele.** Allele names are checked against the install's
   `MHC_pseudo.dat` before the binary is spawned, so a bad name raises an error
   naming the allele with near-miss suggestions. Note that the binary accepts
   only the unstarred spelling (`HLA-A02:01`); the tools normalize `HLA-A*02:01`
