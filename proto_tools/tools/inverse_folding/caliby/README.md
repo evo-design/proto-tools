@@ -2,6 +2,8 @@
 
 # Caliby
 
+![Caliby](https://proto-bio.github.io/proto-assets/images/tool/caliby/hero.png)
+
 > [!NOTE]
 > **License:** Caliby is open source and free for academic and commercial use under an Apache-2.0 license and may require explicit attribution when utilized. Please refer to [the license](https://github.com/ProteinDesignLab/caliby/blob/main/LICENSE) for full terms.
 
