@@ -409,6 +409,7 @@ exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*
 "proto_tools.modal.gene_annotation.miranda_deployment" = ["README.md"]
 "proto_tools.modal.gene_annotation.promoter_calculator_deployment" = ["README.md"]
 "proto_tools.modal.gene_annotation.pyhmmer_deployment" = ["README.md"]
+"proto_tools.modal.inverse_folding.caliby_deployment" = ["README.md"]
 "proto_tools.modal.inverse_folding.esm_if1_deployment" = ["README.md"]
 "proto_tools.modal.inverse_folding.fampnn_deployment" = ["README.md"]
 "proto_tools.modal.inverse_folding.ligandmpnn_deployment" = ["README.md"]
