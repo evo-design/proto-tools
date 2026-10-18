@@ -6,7 +6,6 @@ import pytest
 
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_sasa import (
-    PyRosettaSASAConfig,
     PyRosettaSASAInput,
     ResidueSASA,
     run_pyrosetta_sasa,
@@ -32,17 +31,6 @@ def test_sasa_input_normalizes_single_structure():
 def test_sasa_input_rejects_invalid_chain():
     with pytest.raises(ValueError, match="not in structure"):
         PyRosettaSASAInput(inputs=[{"structure": TEST_PDB, "chains_to_score": ["Z"]}])
-
-
-def test_sasa_config_rejects_all_atoms_as_apolar():
-    """Rosetta exits when non-C/S atoms are included without excluding polar ones by charge."""
-    with pytest.raises(ValueError, match="requires exclude_polar_atoms_by_charge=True"):
-        PyRosettaSASAConfig(hydrophobic_carbon_sulfur_only=False, exclude_polar_atoms_by_charge=False)
-
-
-def test_sasa_config_allows_charge_based_apolar_definition():
-    config = PyRosettaSASAConfig(hydrophobic_carbon_sulfur_only=False, exclude_polar_atoms_by_charge=True)
-    assert not config.hydrophobic_carbon_sulfur_only
 
 
 # ── Integration ───────────────────────────────────────────────────────────────
@@ -91,20 +79,6 @@ def test_run_pyrosetta_sasa_hydrophobic_breakdown():
     # Per-residue values sum to the reported totals.
     assert sum(r.hsasa for r in sasa.per_residue) == pytest.approx(sasa["hydrophobic_sasa"], rel=1e-9)
     assert sum(r.hsasa_sc for r in sasa.per_residue) == pytest.approx(sasa["hydrophobic_sasa_sc"], rel=1e-9)
-
-
-@pytest.mark.integration
-def test_run_pyrosetta_sasa_charge_based_definition_changes_result():
-    """The apolar definition is configurable, so the charge-based form must differ."""
-    default = run_pyrosetta_sasa(PyRosettaSASAInput(inputs=[Structure(structure=TEST_PDB)]))
-    by_charge = run_pyrosetta_sasa(
-        PyRosettaSASAInput(inputs=[Structure(structure=TEST_PDB)]),
-        PyRosettaSASAConfig(hydrophobic_carbon_sulfur_only=False, exclude_polar_atoms_by_charge=True),
-    )
-    assert default.success and by_charge.success
-    assert by_charge.results[0]["hydrophobic_sasa"] > default.results[0]["hydrophobic_sasa"]
-    # Total SASA does not depend on the apolar definition.
-    assert by_charge.results[0].total_sasa == pytest.approx(default.results[0].total_sasa, rel=1e-9)
 
 
 @pytest.mark.integration

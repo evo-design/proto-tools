@@ -303,10 +303,6 @@ class PyRosettaScorer:
         pdb_contents: list[str],
         probe_radius: float = 1.4,
         chain_ids_list: list[list[str] | None] | None = None,
-        hydrophobic_carbon_sulfur_only: bool = True,
-        exclude_polar_atoms_by_charge: bool = False,
-        polar_charge_cutoff: float = 0.4,
-        use_big_polar_hydrogen: bool = False,
     ) -> dict[str, Any]:
         """Compute SASA and hydrophobic SASA for a list of PDB content strings.
 
@@ -326,21 +322,14 @@ class PyRosettaScorer:
 
         Hydrophobic SASA comes off the same ``SasaCalc`` object as total SASA, so it
         costs no extra calculation. Rosetta classifies apolar surface per atom rather
-        than per residue, and the sidechain and backbone components are reported
-        separately because backbone area tracks fold and chain length rather than
-        sequence identity.
+        than per residue, counting carbon and sulfur, and the sidechain and backbone
+        components are reported separately because backbone area tracks fold and chain
+        length rather than sequence identity.
 
         Args:
             pdb_contents (list[str]): PDB format content strings.
             probe_radius (float): Solvent probe radius in Angstroms.
             chain_ids_list (list[list[str] | None] | None): Per-structure chain IDs.
-            hydrophobic_carbon_sulfur_only (bool): Count only carbon and sulfur as
-                apolar. Rosetta's default.
-            exclude_polar_atoms_by_charge (bool): Classify apolar atoms by partial
-                charge against ``polar_charge_cutoff``.
-            polar_charge_cutoff (float): Partial-charge threshold above which an atom
-                counts as polar. Applies only when excluding polar atoms by charge.
-            use_big_polar_hydrogen (bool): Use the larger polar hydrogen radius.
 
         Returns:
             dict: {"results": [{"total_sasa": float, "hydrophobic_sasa": float, ...}, ...]}
@@ -356,11 +345,6 @@ class PyRosettaScorer:
 
             calc = SasaCalc()
             calc.set_probe_radius(probe_radius)
-            # Rosetta rejects including non-C/S atoms without also excluding polar ones by charge.
-            calc.set_include_carbon_sulfer_only_in_hydrophobic_calc(hydrophobic_carbon_sulfur_only)
-            calc.set_exclude_polar_atoms_by_charge(exclude_polar_atoms_by_charge)
-            calc.set_polar_charge_cutoff(polar_charge_cutoff)
-            calc.set_use_big_polar_hydrogen(use_big_polar_hydrogen)
             calc.calculate(pose)
 
             residue_sasa = calc.get_residue_sasa()
@@ -900,10 +884,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             pdb_contents,
             probe_radius=input_dict["probe_radius"],
             chain_ids_list=chain_ids_list,
-            hydrophobic_carbon_sulfur_only=input_dict["hydrophobic_carbon_sulfur_only"],
-            exclude_polar_atoms_by_charge=input_dict["exclude_polar_atoms_by_charge"],
-            polar_charge_cutoff=input_dict["polar_charge_cutoff"],
-            use_big_polar_hydrogen=input_dict["use_big_polar_hydrogen"],
         )
     if operation == "energy":
         return _scorer.compute_energy(
