@@ -48,7 +48,8 @@ dependencies = [
     "numba>=0.60.0",
 
     "biopython",
-    "biotite>=0.38.0",
+    # biotite 2.0 requires Python >=3.12 and changed the annotate_sse and superimpose return types.
+    "biotite>=0.38.0,<2",
     "gemmi",
 
     "rdkit!=2026.3.3",
