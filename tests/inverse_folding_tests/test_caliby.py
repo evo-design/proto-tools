@@ -4,6 +4,7 @@ Tests for Caliby sequence design, Potts-energy scoring, and sidechain packing.
 """
 
 import math
+import re
 from pathlib import Path
 
 import pytest
@@ -148,20 +149,10 @@ def test_caliby_score_structure_input_rejects_misaligned_conformer(pdb_structure
         )
 
 
-def test_caliby_structure_input_accepts_matching_conformer(pdb_structure):
-    """A conformer with the same chain IDs and residue counts is accepted."""
-    inp = CalibyStructureInput(structure=pdb_structure, conformers=[Structure.from_file(TEST_PDB_FILE)])
-    assert len(inp.conformers) == 1
-
-
-def test_caliby_structure_input_accepts_empty_conformers(pdb_structure):
-    """An empty conformer list is single-structure design, not an error."""
-    inp = CalibyStructureInput(structure=pdb_structure)
-    assert inp.ensemble_structures == [pdb_structure]
-
-
 def test_caliby_ensemble_structures_puts_primary_conformer_first(pdb_structure):
     """``ensemble_structures`` is the primary conformer followed by the supplied conformers."""
+    assert CalibyStructureInput(structure=pdb_structure).ensemble_structures == [pdb_structure]
+
     conformer = Structure.from_file(TEST_PDB_FILE)
     inp = CalibyStructureInput(structure=pdb_structure, conformers=[conformer])
     assert inp.ensemble_structures[0] is pdb_structure
@@ -203,17 +194,13 @@ def test_caliby_configs_accept_custom_ckpt_path(config_class):
     assert config.model_checkpoint == "/models/custom_caliby.ckpt"
 
 
-@pytest.mark.parametrize("checkpoint", DESIGN_CHECKPOINTS)
-def test_caliby_design_configs_accept_bundled_design_checkpoints(checkpoint):
-    """Every bundled design checkpoint is valid for design and scoring."""
-    assert CalibySampleConfig(model_checkpoint=checkpoint).model_checkpoint == checkpoint
-    assert CalibyScoreConfig(model_checkpoint=checkpoint).model_checkpoint == checkpoint
-
-
-@pytest.mark.parametrize("checkpoint", PACKER_CHECKPOINTS)
-def test_caliby_pack_config_accepts_bundled_packer_checkpoints(checkpoint):
-    """Every bundled packer checkpoint is valid for packing."""
-    assert CalibyPackConfig(model_checkpoint=checkpoint).model_checkpoint == checkpoint
+def test_setup_script_downloads_every_bundled_checkpoint():
+    """setup.sh must fetch exactly the checkpoints the configs accept by name."""
+    setup_sh = (
+        Path(__file__).parents[2] / "proto_tools" / "tools" / "inverse_folding" / "caliby" / "standalone" / "setup.sh"
+    ).read_text()
+    downloaded = set(re.findall(r'^\s*"([a-z0-9_]+)",\s*$', setup_sh, flags=re.MULTILINE))
+    assert downloaded == set(DESIGN_CHECKPOINTS) | set(PACKER_CHECKPOINTS)
 
 
 @pytest.mark.parametrize("config_class", _ALL_CONFIG_CLASSES)
@@ -241,17 +228,12 @@ def test_caliby_sample_config_folds_empty_exclusions_to_none():
     assert CalibySampleConfig(excluded_amino_acids=[]).excluded_amino_acids is None
 
 
-def test_caliby_pack_input_wraps_single_path():
-    """A bare path is wrapped into a one-item structure list."""
-    inp = CalibyPackInput(structures=str(TEST_PDB_FILE))
+@pytest.mark.parametrize("as_structure", [False, True], ids=["path", "structure"])
+def test_caliby_pack_input_wraps_a_bare_item(as_structure, pdb_structure):
+    """A bare path or Structure is wrapped into a one-item structure list."""
+    inp = CalibyPackInput(structures=pdb_structure if as_structure else str(TEST_PDB_FILE))
     assert len(inp.structures) == 1
     assert inp.structures[0].get_chain_ids() == ["A"]
-
-
-def test_caliby_pack_input_wraps_single_structure(pdb_structure):
-    """A bare Structure is wrapped into a one-item structure list."""
-    inp = CalibyPackInput(structures=pdb_structure)
-    assert len(inp.structures) == 1
 
 
 @pytest.mark.parametrize("file_format", ["csv", "json"])
