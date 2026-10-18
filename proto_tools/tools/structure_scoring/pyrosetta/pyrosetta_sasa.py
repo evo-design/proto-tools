@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -130,7 +130,9 @@ class PyRosettaSASAMetrics(Metrics):
         Returns:
             float: Backbone hydrophobic SASA in Å².
         """
-        return float(self["hydrophobic_sasa"]) - float(self["hydrophobic_sasa_sc"])
+        total = cast(float, self["hydrophobic_sasa"])
+        sidechain = cast(float, self["hydrophobic_sasa_sc"])
+        return float(total) - float(sidechain)
 
 
 class PyRosettaSASAInput(BaseToolInput):
