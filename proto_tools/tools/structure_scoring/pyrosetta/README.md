@@ -86,7 +86,7 @@ This tool is appropriate for developability assessment during therapeutic protei
 
 ### PyRosetta SASA (`pyrosetta-sasa`)
 
-Computes total and per-residue Solvent Accessible Surface Area using Rosetta's `SasaCalc` module with a configurable probe radius. Returns the total SASA in Å² together with a per-residue breakdown of chain, 1-indexed residue index, three-letter residue name, and SASA value.
+Computes total and per-residue Solvent Accessible Surface Area using Rosetta's `SasaCalc` module with a configurable probe radius. Returns the total SASA in Å², the exposed hydrophobic (apolar) surface area split into sidechain and backbone components, and a per-residue breakdown of chain, 1-indexed residue index, three-letter residue name, and the corresponding total and hydrophobic areas.
 
 #### Applications
 
@@ -97,6 +97,9 @@ This tool is appropriate for identifying buried and exposed residues, characteri
 - **`probe_radius` defaults to 1.4 Å.** This is the conventional water probe radius. Larger probe values are sometimes used to approximate the accessibility seen by larger solvent molecules or interaction partners.
 - **Per-residue SASA values near 0 indicate fully buried residues.** Values above approximately 100 Å² indicate significant solvent exposure for a typical residue. Combine with residue identity to identify exposed hydrophobic residues as aggregation hotspots.
 - **Total SASA scales with protein size.** Normalise by residue count or surface area when comparing across proteins of different sizes.
+- **Prefer `hydrophobic_sasa_sc` when ranking designs on a shared backbone.** Backbone area dominates the hydrophobic total (roughly three quarters of it on a typical monomer) and tracks fold and chain length rather than sequence, so it masks the differences between designs. The sidechain component responds to sequence choice, which is what a redesign changes.
+- **The apolar definition is configurable, and the default is carbon and sulfur only.** Setting `exclude_polar_atoms_by_charge=True` classifies atoms by partial charge against `polar_charge_cutoff` instead, which assigns considerably more area as apolar. Report which definition was used when quoting values, since the two are not comparable.
+- **`hydrophobic_sasa` and `pyrosetta-sap` measure related but distinct things.** Hydrophobic SASA is an unweighted exposed apolar area in Å². SAP weights per-residue hydrophobicity by local solvent exposure over a neighbourhood and carries a published calibration for aggregation risk. Reach for SAP for developability filtering against established thresholds, and for hydrophobic SASA when a plain physical area is wanted, for instance as a denominator or alongside a buried-area calculation.
 
 ## Toolkit Notes
 

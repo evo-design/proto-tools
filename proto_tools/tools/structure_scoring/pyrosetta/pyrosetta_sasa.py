@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import PyRosettaRelaxConfig
@@ -42,6 +42,9 @@ class ResidueSASA(BaseModel):
         residue_index (int): 1-indexed residue position.
         residue_name (str): Three-letter residue code.
         sasa (float): Solvent accessible surface area in Angstroms squared.
+        hsasa (float): Hydrophobic (apolar) SASA in Angstroms squared.
+        hsasa_sc (float): Sidechain component of hydrophobic SASA in Angstroms squared.
+        hsasa_bb (float): Backbone component of hydrophobic SASA in Angstroms squared.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -50,6 +53,9 @@ class ResidueSASA(BaseModel):
     residue_index: int = Field(title="Residue Index", description="1-indexed residue position")
     residue_name: str = Field(title="Residue Name", description="Three-letter residue code")
     sasa: float = Field(title="SASA", description="Per-residue solvent-accessible surface area in Å²")
+    hsasa: float = Field(title="Hydrophobic SASA", description="Per-residue hydrophobic (apolar) SASA in Å²")
+    hsasa_sc: float = Field(title="Hydrophobic SASA (Sidechain)", description="Sidechain hydrophobic SASA in Å²")
+    hsasa_bb: float = Field(title="Hydrophobic SASA (Backbone)", description="Backbone hydrophobic SASA in Å²")
 
 
 class PyRosettaSASAMetrics(Metrics):
@@ -62,6 +68,13 @@ class PyRosettaSASAMetrics(Metrics):
             ``pyrosetta-energy``, whose ``total_energy`` is always the whole-pose
             total regardless of chain selection — SASA can be meaningfully
             summed over a residue subset, energy cannot.)
+        hydrophobic_sasa (float): Exposed apolar surface area in Å², classified per
+            atom by Rosetta rather than by residue identity.
+        hydrophobic_sasa_sc (float): Sidechain component of ``hydrophobic_sasa``. This
+            is usually the quantity of interest when ranking designs on a shared
+            backbone, since the backbone component tracks fold and chain length
+            rather than sequence.
+        hydrophobic_sasa_bb (float): Backbone component of ``hydrophobic_sasa``.
 
     Attributes:
         per_residue (list[ResidueSASA]): Per-residue SASA breakdown. Declared
@@ -77,6 +90,30 @@ class PyRosettaSASAMetrics(Metrics):
             "max": None,
             "unit": "Å²",
             "better_values_are": "context-dependent",
+        },
+        "hydrophobic_sasa": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": None,
+            "unit": "Å²",
+            "better_values_are": "lower",
+        },
+        "hydrophobic_sasa_sc": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": None,
+            "unit": "Å²",
+            "better_values_are": "lower",
+        },
+        "hydrophobic_sasa_bb": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": None,
+            "unit": "Å²",
+            "better_values_are": "lower",
         },
     }
     primary_metric: str | None = Field(
@@ -126,6 +163,15 @@ class PyRosettaSASAConfig(BaseConfig):
             each input structure before scoring. Default ``False``.
         relax_config (PyRosettaRelaxConfig): Settings used when
             ``pre_relax_structures=True``. Ignored otherwise.
+        hydrophobic_carbon_sulfur_only (bool): Count only carbon and sulfur atoms as
+            apolar when computing hydrophobic SASA. This is Rosetta's default.
+        exclude_polar_atoms_by_charge (bool): Classify apolar atoms by partial charge
+            against ``polar_charge_cutoff`` instead of by element alone. Rosetta
+            requires this when ``hydrophobic_carbon_sulfur_only`` is ``False``.
+        polar_charge_cutoff (float): Partial-charge threshold above which an atom counts
+            as polar. Applies only when ``exclude_polar_atoms_by_charge`` is ``True``.
+        use_big_polar_hydrogen (bool): Use the larger polar hydrogen radius when
+            computing hydrophobic SASA.
     """
 
     probe_radius: float = ConfigField(
@@ -144,6 +190,38 @@ class PyRosettaSASAConfig(BaseConfig):
         title="Relax Config",
         description="Settings used when pre_relax_structures=True. Ignored otherwise.",
     )
+    hydrophobic_carbon_sulfur_only: bool = ConfigField(
+        title="Carbon and Sulfur Only",
+        default=True,
+        description="Count only carbon and sulfur as apolar in hydrophobic SASA (Rosetta default).",
+    )
+    exclude_polar_atoms_by_charge: bool = ConfigField(
+        title="Exclude Polar Atoms by Charge",
+        default=False,
+        description="Classify apolar atoms by partial charge rather than by element alone.",
+    )
+    polar_charge_cutoff: float = ConfigField(
+        title="Polar Charge Cutoff",
+        default=0.4,
+        gt=0.0,
+        description="Partial-charge threshold above which an atom counts as polar.",
+    )
+    use_big_polar_hydrogen: bool = ConfigField(
+        title="Use Big Polar Hydrogen",
+        default=False,
+        description="Use the larger polar hydrogen radius in hydrophobic SASA.",
+    )
+
+    @model_validator(mode="after")
+    def validate_hydrophobic_definition(self) -> PyRosettaSASAConfig:
+        """Reject the one knob combination Rosetta exits on."""
+        if not self.hydrophobic_carbon_sulfur_only and not self.exclude_polar_atoms_by_charge:
+            raise ValueError(
+                "hydrophobic_carbon_sulfur_only=False requires exclude_polar_atoms_by_charge=True; "
+                "Rosetta otherwise counts every atom as apolar and exits. Set "
+                "exclude_polar_atoms_by_charge=True to classify atoms by partial charge instead."
+            )
+        return self
 
     def preprocess(self, inputs: PyRosettaSASAInput) -> PyRosettaSASAInput:  # type: ignore[override]
         """Apply optional FastRelax preprocess to input structures."""
@@ -196,7 +274,13 @@ class PyRosettaSASAOutput(BaseToolOutput):
                 "residue_index": res.residue_index,
                 "residue_name": res.residue_name,
                 "sasa": res.sasa,
+                "hsasa": res.hsasa,
+                "hsasa_sc": res.hsasa_sc,
+                "hsasa_bb": res.hsasa_bb,
                 "total_sasa": result["total_sasa"],
+                "hydrophobic_sasa": result["hydrophobic_sasa"],
+                "hydrophobic_sasa_sc": result["hydrophobic_sasa_sc"],
+                "hydrophobic_sasa_bb": result["hydrophobic_sasa_bb"],
             }
             for i, result in enumerate(self.results)
             for res in result.per_residue
@@ -251,6 +335,11 @@ def run_pyrosetta_sasa(
     a configurable probe radius. SASA measures the surface area of a protein
     accessible to solvent molecules.
 
+    Hydrophobic SASA, the exposed apolar surface area, comes off the same
+    calculation and is reported alongside it, split into sidechain and backbone
+    components. Rosetta classifies apolar surface per atom, so these are areas
+    rather than counts of hydrophobic residues.
+
     Args:
         inputs (PyRosettaSASAInput): Structures to analyze with optional chain selection.
         config (PyRosettaSASAConfig | None): Configuration with probe radius.
@@ -268,6 +357,10 @@ def run_pyrosetta_sasa(
         "pdb_contents": pdb_contents,
         "chain_ids_list": chain_ids_list,
         "probe_radius": config.probe_radius,  # type: ignore[union-attr]
+        "hydrophobic_carbon_sulfur_only": config.hydrophobic_carbon_sulfur_only,  # type: ignore[union-attr]
+        "exclude_polar_atoms_by_charge": config.exclude_polar_atoms_by_charge,  # type: ignore[union-attr]
+        "polar_charge_cutoff": config.polar_charge_cutoff,  # type: ignore[union-attr]
+        "use_big_polar_hydrogen": config.use_big_polar_hydrogen,  # type: ignore[union-attr]
         "device": "cpu",
     }
 
