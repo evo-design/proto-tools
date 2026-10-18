@@ -258,6 +258,24 @@ _SHARED_METRIC_SPEC: dict[str, MetricSpec] = {
         "unit": None,
         "better_values_are": "context-dependent",
     },
+    "best_rank_ba": {
+        "description": "Lowest binding-affinity %rank over all pairs.",
+        "availability": "only when include_binding_affinity is set",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "percent",
+        "better_values_are": "context-dependent",
+    },
+    "best_affinity_nm": {
+        "description": "Tightest predicted affinity over all pairs; lower binds more tightly.",
+        "availability": "only when include_binding_affinity is set",
+        "type": "float",
+        "min": 0.0,
+        "max": None,
+        "unit": "nM",
+        "better_values_are": "context-dependent",
+    },
 }
 
 
@@ -267,6 +285,9 @@ class NetMHCpanMetrics(Metrics):
     Counts and the smooth propensity are reported together on purpose: counts are what
     immunology reads, while ``binding_propensity`` is differentiable-in-practice and so is
     the sensible objective for a sampler.
+
+    ``best_rank_ba`` and ``best_affinity_nm`` are present only when the run requested
+    binding affinity; otherwise they are absent rather than zero.
 
     Attributes:
         primary_metric (str | None): Headline metric used to rank results.
@@ -363,6 +384,10 @@ def binding_from_record(record: dict[str, str], strong_rank: float, weak_rank: f
 def summarize(bindings: list[NetMHCpanBinding], weak_rank: float) -> dict[str, float | int]:
     """Build the shared summary metric values for one item's predictions.
 
+    The two binding-affinity metrics are included only when the predictions carry BA
+    values, which happens when ``include_binding_affinity`` was set. Omitting the keys
+    entirely leaves those metrics genuinely absent rather than reported as zero.
+
     Args:
         bindings (list[NetMHCpanBinding]): Every peptide-allele prediction for one item.
         weak_rank (float): Weak-binder threshold the propensity curve is centred on.
@@ -374,13 +399,20 @@ def summarize(bindings: list[NetMHCpanBinding], weak_rank: float) -> dict[str, f
     strong = sum(1 for binding in bindings if binding.binder_class == "strong")
     weak = sum(1 for binding in bindings if binding.binder_class == "weak")
     propensities = [binding_propensity(binding.rank_el, weak_rank) for binding in bindings]
-    return {
+    metrics: dict[str, float | int] = {
         "strong_binder_count": strong,
         "weak_binder_count": weak,
         "strong_binder_fraction": strong / total if total else 0.0,
         "best_rank": min((binding.rank_el for binding in bindings), default=100.0),
         "binding_propensity": math.fsum(propensities) / total if total else 0.0,
     }
+    ranks_ba = [binding.rank_ba for binding in bindings if binding.rank_ba is not None]
+    if ranks_ba:
+        metrics["best_rank_ba"] = min(ranks_ba)
+    affinities = [binding.affinity_nm for binding in bindings if binding.affinity_nm is not None]
+    if affinities:
+        metrics["best_affinity_nm"] = min(affinities)
+    return metrics
 
 
 class NetMHCpanConfig(BaseConfig):

@@ -298,6 +298,32 @@ def test_summarize_empty_bindings_reports_no_binder():
     assert metrics["binding_propensity"] == 0.0
 
 
+def test_summarize_omits_affinity_metrics_without_binding_affinity():
+    """EL-only predictions leave the BA metrics absent rather than reporting a zero."""
+    metrics = summarize([_binding(0.1), _binding(5.0)], 2.0)
+    assert "best_rank_ba" not in metrics
+    assert "best_affinity_nm" not in metrics
+
+
+def test_summarize_reports_tightest_affinity_when_present():
+    """With BA values the two affinity metrics are the minima over the bindings."""
+    weak, strong = _binding(5.0), _binding(0.1)
+    weak.rank_ba, weak.affinity_nm = 40.0, 28000.0
+    strong.rank_ba, strong.affinity_nm = 0.08, 7.3
+    metrics = summarize([weak, strong], 2.0)
+    assert metrics["best_rank_ba"] == 0.08
+    assert metrics["best_affinity_nm"] == 7.3
+
+
+def test_summarize_affinity_metrics_ignore_bindings_missing_them():
+    """A mix of BA and EL-only bindings summarizes over the ones carrying values."""
+    with_ba, without = _binding(0.2), _binding(0.3)
+    with_ba.rank_ba, with_ba.affinity_nm = 1.5, 120.0
+    metrics = summarize([with_ba, without], 2.0)
+    assert metrics["best_rank_ba"] == 1.5
+    assert metrics["best_affinity_nm"] == 120.0
+
+
 # ── stdout parsing (hand-written tables, not captured output) ────────────────
 
 
@@ -429,6 +455,25 @@ def test_netmhcpan_peptides_binding_affinity_flag_populates_ba_fields():
     assert (el_binding.score_ba, el_binding.rank_ba, el_binding.affinity_nm) == (None, None, None)
     # -BA is additive, so the eluted-ligand prediction must be unchanged by the flag.
     assert ba_binding.rank_el == el_binding.rank_el
+
+
+@pytest.mark.integration
+def test_netmhcpan_affinity_metrics_track_include_binding_affinity():
+    """The two BA metrics appear only with -BA, and equal the minima over the bindings."""
+    _require_netmhcpan()
+    inputs = NetMHCpanPeptidesInput(peptides=[_A0201_BINDER, _A0201_NON_BINDER])
+    panel = ["HLA-A02:01", "HLA-B07:02"]
+
+    with_ba = run_netmhcpan_peptides(inputs, NetMHCpanPeptidesConfig(alleles=panel, include_binding_affinity=True))
+    el_only = run_netmhcpan_peptides(inputs, NetMHCpanPeptidesConfig(alleles=panel))
+
+    for prediction in with_ba.predictions:
+        assert prediction.best_rank_ba == min(b.rank_ba for b in prediction.bindings)
+        assert prediction.best_affinity_nm == min(b.affinity_nm for b in prediction.bindings)
+
+    for prediction in el_only.predictions:
+        assert "best_rank_ba" not in prediction
+        assert "best_affinity_nm" not in prediction
 
 
 @pytest.mark.integration
