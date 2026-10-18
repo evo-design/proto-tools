@@ -320,12 +320,6 @@ class PyRosettaScorer:
         chain-subset sum physically incoherent. Per-residue output is filtered
         by chain selection in both tools.
 
-        Hydrophobic SASA comes off the same ``SasaCalc`` object as total SASA, so it
-        costs no extra calculation. Rosetta classifies apolar surface per atom rather
-        than per residue, counting carbon and sulfur, and the sidechain and backbone
-        components are reported separately because backbone area tracks fold and chain
-        length rather than sequence identity.
-
         Args:
             pdb_contents (list[str]): PDB format content strings.
             probe_radius (float): Solvent probe radius in Angstroms.
