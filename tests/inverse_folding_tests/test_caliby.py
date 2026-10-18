@@ -274,6 +274,31 @@ def test_caliby_score_output_export(file_format, tmp_path):
 # Integration tests (GPU required, run with --integration or --all)
 # ============================================================================
 @pytest.mark.uses_gpu
+def test_caliby_sample_accepts_chains_with_unmodelled_gaps(tmp_path):
+    """A chain break must not be mistaken for residues dropped by preprocessing."""
+    # Drop an interior stretch to leave a chain break, as an experimental structure would have.
+    kept = [
+        line
+        for line in BENCHMARK_PDB_FILE.read_text().splitlines(keepends=True)
+        if not (line.startswith("ATOM") and 100 <= int(line[22:26]) <= 103)
+    ]
+    gapped = tmp_path / "gapped.pdb"
+    gapped.write_text("".join(kept))
+
+    structure = Structure(structure=str(gapped))
+    # get_chain_sequences() pads each break with "-", so it runs longer than the residue count.
+    assert len(structure.get_chain_sequences()["A"]) > len(structure.get_chain_positions("A"))
+
+    inp = CalibySampleInput(inputs=[CalibyStructureInput(structure=structure)])
+    output = run_caliby_sample(inp, CalibySampleConfig(potts_sweeps=20, seed=0))
+    assert output.success, f"Failed to design a gapped structure: {output}"
+
+    design = output.design_sets[0].complexes[0]
+    for chain in design.chains:
+        assert len(chain.sequence) == len(structure.get_chain_positions(chain.id))
+
+
+@pytest.mark.uses_gpu
 def test_caliby_sample_rejects_nucleic_acid_chains():
     """A nucleic acid chain is dropped by the featurizer, so the chain mismatch is reported."""
     structure = Structure(structure=str(PROTEIN_DNA_PDB_FILE))

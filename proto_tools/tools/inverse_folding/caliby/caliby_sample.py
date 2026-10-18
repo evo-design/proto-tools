@@ -480,7 +480,9 @@ def run_caliby_sample(
         disable=not config.verbose,
     ):
         chain_ids = inp.structure.get_chain_ids()
-        native_sequences = inp.structure.get_chain_sequences()
+        # Observed residues per chain. get_chain_sequences() pads each chain break with '-',
+        # so its length overcounts any structure with unmodelled regions.
+        native_residue_counts = {cid: len(inp.structure.get_chain_positions(cid)) for cid in chain_ids}
         redesign_set = set(inp.chain_ids_to_redesign)
         all_chain_seqs: list[list[str]] = []
         all_energies: list[float] = []
@@ -527,7 +529,7 @@ def run_caliby_sample(
                     f"structure has {len(chain_ids)} chains ({chain_ids})"
                 )
             for cid, seq in zip(chain_ids, chain_seqs, strict=True):
-                expected = len(native_sequences[cid])
+                expected = native_residue_counts[cid]
                 if len(seq) != expected:
                     raise ValueError(
                         f"caliby-sample: designed chain {cid} has {len(seq)} residues but the input "
