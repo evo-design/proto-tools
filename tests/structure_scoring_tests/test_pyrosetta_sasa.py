@@ -57,6 +57,30 @@ def test_run_pyrosetta_sasa_on_pdb():
 
 
 @pytest.mark.integration
+def test_run_pyrosetta_sasa_hydrophobic_breakdown():
+    """Pin hydrophobic SASA against Rosetta's values so a definition change is caught."""
+    result = run_pyrosetta_sasa(PyRosettaSASAInput(inputs=[Structure(structure=TEST_PDB)]))
+    assert_metrics_in_spec(result)
+    sasa = result.results[0]
+
+    # Reference values from SasaCalc on this structure at probe radius 1.4 A.
+    assert sasa.total_sasa == pytest.approx(14891.8141, rel=1e-4)
+    assert sasa["hydrophobic_sasa"] == pytest.approx(6802.4432, rel=1e-4)
+    assert sasa["hydrophobic_sasa_sc"] == pytest.approx(1504.5349, rel=1e-4)
+    # Backbone is derived the way Rosetta derives it, as the total minus the sidechain part.
+    assert sasa.hydrophobic_sasa_bb() == pytest.approx(5297.9083, rel=1e-4)
+    assert sasa.per_residue[0].hsasa_bb() == pytest.approx(
+        sasa.per_residue[0].hsasa - sasa.per_residue[0].hsasa_sc, rel=1e-9
+    )
+    # Apolar surface is a subset of total surface.
+    assert sasa["hydrophobic_sasa"] < sasa.total_sasa
+
+    # Per-residue values sum to the reported totals.
+    assert sum(r.hsasa for r in sasa.per_residue) == pytest.approx(sasa["hydrophobic_sasa"], rel=1e-9)
+    assert sum(r.hsasa_sc for r in sasa.per_residue) == pytest.approx(sasa["hydrophobic_sasa_sc"], rel=1e-9)
+
+
+@pytest.mark.integration
 def test_run_pyrosetta_sasa_chain_selection_filters_residues():
     """Chain A selection should return fewer residues and different SASA than whole complex."""
     whole = run_pyrosetta_sasa(PyRosettaSASAInput(inputs=[TEST_CIF_MULTICHAIN]))
@@ -74,6 +98,10 @@ def test_run_pyrosetta_sasa_chain_selection_filters_residues():
     )
     assert all(r.chain_id == "A" for r in chain_a_res.per_residue), "All residues should be from chain A"
     assert chain_a_res.total_sasa < whole_res.total_sasa, "Chain A SASA should be less than whole complex SASA"
+    assert chain_a_res["hydrophobic_sasa"] < whole_res["hydrophobic_sasa"], (
+        "Chain A hydrophobic SASA should be less than whole complex"
+    )
+    assert sum(r.hsasa for r in chain_a_res.per_residue) == pytest.approx(chain_a_res["hydrophobic_sasa"], rel=1e-9)
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────

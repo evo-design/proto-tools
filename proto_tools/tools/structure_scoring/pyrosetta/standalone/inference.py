@@ -304,7 +304,7 @@ class PyRosettaScorer:
         probe_radius: float = 1.4,
         chain_ids_list: list[list[str] | None] | None = None,
     ) -> dict[str, Any]:
-        """Compute SASA for a list of PDB content strings.
+        """Compute SASA and hydrophobic SASA for a list of PDB content strings.
 
         SASA is always calculated on the full pose: PyRosetta's ``SasaCalc``
         scores every residue in context, including the effect of buried
@@ -326,7 +326,7 @@ class PyRosettaScorer:
             chain_ids_list (list[list[str] | None] | None): Per-structure chain IDs.
 
         Returns:
-            dict: {"results": [{"total_sasa": float, "per_residue": [...]}, ...]}
+            dict: {"results": [{"total_sasa": float, "hydrophobic_sasa": float, ...}, ...]}
         """
         self._ensure_init()
         from pyrosetta.rosetta.core.scoring.sasa import SasaCalc
@@ -342,6 +342,8 @@ class PyRosettaScorer:
             calc.calculate(pose)
 
             residue_sasa = calc.get_residue_sasa()
+            residue_hsasa = calc.get_residue_hsasa()
+            residue_hsasa_sc = calc.get_residue_hsasa_sc()
 
             # Build selector and get selected indices
             selector = self._build_residue_selector(pose, chain_ids)
@@ -349,22 +351,32 @@ class PyRosettaScorer:
 
             per_residue = []
             total_sasa = 0.0
+            hydrophobic_sasa = 0.0
+            hydrophobic_sasa_sc = 0.0
             for idx in selected:
                 chain_id, pdb_resnum, res_name = self._get_residue_info(pose, idx)
                 sasa_val = float(residue_sasa[idx])
+                hsasa_val = float(residue_hsasa[idx])
+                hsasa_sc_val = float(residue_hsasa_sc[idx])
                 total_sasa += sasa_val
+                hydrophobic_sasa += hsasa_val
+                hydrophobic_sasa_sc += hsasa_sc_val
                 per_residue.append(
                     {
                         "chain_id": chain_id,
                         "residue_index": pdb_resnum,
                         "residue_name": res_name,
                         "sasa": sasa_val,
+                        "hsasa": hsasa_val,
+                        "hsasa_sc": hsasa_sc_val,
                     }
                 )
 
             results.append(
                 {
                     "total_sasa": total_sasa,
+                    "hydrophobic_sasa": hydrophobic_sasa,
+                    "hydrophobic_sasa_sc": hydrophobic_sasa_sc,
                     "per_residue": per_residue,
                     "dropped_residues": dropped_residues,
                 }
