@@ -148,6 +148,50 @@ def _build_fixed_pos_seq(
     return ",".join(tokens)
 
 
+def _build_symmetry_pos(chain_groups: list[list[str]] | None, structure_path: str) -> str:
+    """Build Caliby's ``symmetry_pos`` string, tying each group's chains by residue number.
+
+    Caliby ties positions by residue number, so every chain in a group must carry the same
+    numbering. Resolution runs against the structure Caliby loads, and a numbering
+    disagreement raises rather than silently tying a subset.
+
+    Args:
+        chain_groups (list[list[str]] | None): Chain IDs to tie, one list per group.
+        structure_path (str): Path to the structure the groups are resolved against.
+
+    Returns:
+        str: Groups as ``"A15,B15|A16,B16"``, empty when nothing is tied.
+
+    Raises:
+        ValueError: If a group's chains do not share identical residue numbering.
+    """
+    if not chain_groups:
+        return ""
+
+    atom_array = _load_atom_array(structure_path)
+    numbering: dict[str, list[int]] = {}
+    for chain_id in {cid for group in chain_groups for cid in group}:
+        residues = atom_array.res_id[atom_array.chain_id == chain_id]
+        numbering[chain_id] = sorted(dict.fromkeys(int(r) for r in residues))
+
+    groups: list[str] = []
+    for group in chain_groups:
+        reference = numbering[group[0]]
+        if not reference:
+            raise ValueError(f"caliby: chain {group[0]!r} has no residues to tie")
+        for chain_id in group[1:]:
+            if numbering[chain_id] != reference:
+                raise ValueError(
+                    f"caliby: chains {group[0]!r} and {chain_id!r} are tied together but carry "
+                    f"different residue numbering ({len(reference)} vs {len(numbering[chain_id])} "
+                    "residues). Caliby ties positions by residue number, so renumber the chains to "
+                    "match before tying them."
+                )
+        groups.extend(",".join(f"{cid}{res_num}" for cid in group) for res_num in reference)
+
+    return "|".join(groups)
+
+
 def _split_chain_sequences(sequence: str, chain_ids: list[str]) -> list[str]:
     """Split a ``":"``-joined Caliby sequence into per-chain strings in ``chain_ids`` order.
 
@@ -309,6 +353,7 @@ class CalibyRunner:
         chain_ids: list[str],
         chains_to_redesign: list[str] | None,
         fixed_positions: dict[str, list[int]] | None,
+        symmetric_chains: list[list[str]] | None,
         num_sequences: int,
         batch_size: int,
         temperature: float,
@@ -328,6 +373,7 @@ class CalibyRunner:
             chain_ids (list[str]): All polymer chain IDs, in input structure order.
             chains_to_redesign (list[str] | None): Chains whose sequence is redesigned.
             fixed_positions (dict[str, list[int]] | None): Per-chain residue numbers to fix.
+            symmetric_chains (list[list[str]] | None): Chain groups sampled to one sequence.
             num_sequences (int): Sequences to design.
             batch_size (int): Conformers per forward pass; ensemble-conditioned design only.
             temperature (float): Final Potts sampling temperature.
@@ -351,6 +397,11 @@ class CalibyRunner:
         from caliby import make_constraints, make_ensemble_constraints
 
         fixed_pos_seq = _build_fixed_pos_seq(chain_ids, chains_to_redesign, fixed_positions)
+        symmetry_pos = _build_symmetry_pos(symmetric_chains, primary_path)
+        # Only the columns that carry a value; an all-empty dict must stay None.
+        constraint_cols = {
+            key: value for key, value in (("fixed_pos_seq", fixed_pos_seq), ("symmetry_pos", symmetry_pos)) if value
+        }
         overrides = {"potts_sampling_cfg": {"potts_sweeps": potts_sweeps}}
 
         with (
@@ -361,8 +412,8 @@ class CalibyRunner:
                 # Element 0 is the primary conformer; the rest are aggregated position-wise.
                 pdb_to_conformers = {_ENSEMBLE_KEY: [str(staged_primary), *(str(path) for path in staged_conformers)]}
                 constraint_df = (
-                    make_ensemble_constraints({_ENSEMBLE_KEY: {"fixed_pos_seq": fixed_pos_seq}}, pdb_to_conformers)
-                    if fixed_pos_seq
+                    make_ensemble_constraints({_ENSEMBLE_KEY: constraint_cols}, pdb_to_conformers)
+                    if constraint_cols
                     else None
                 )
                 results = self.model.ensemble_sample(
@@ -379,9 +430,7 @@ class CalibyRunner:
                     sampling_overrides=overrides,
                 )
             else:
-                constraint_df = (
-                    make_constraints({staged_primary.stem: {"fixed_pos_seq": fixed_pos_seq}}) if fixed_pos_seq else None
-                )
+                constraint_df = make_constraints({staged_primary.stem: constraint_cols}) if constraint_cols else None
                 results = self.model.sample(
                     [str(staged_primary)],
                     out_dir=out_dir,
@@ -541,6 +590,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             chain_ids=input_dict["chain_ids"],
             chains_to_redesign=input_dict["chains_to_redesign"],
             fixed_positions=input_dict["fixed_positions"],
+            symmetric_chains=input_dict["symmetric_chains"],
             num_sequences=input_dict["num_sequences"],
             batch_size=input_dict["batch_size"],
             temperature=input_dict["temperature"],

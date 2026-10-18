@@ -270,9 +270,69 @@ def test_caliby_score_output_export(file_format, tmp_path):
         assert "AGSM:KTV" in text
 
 
+def _write_homodimer(tmp_path) -> Structure:
+    """Two identical copies of the benchmark monomer, offset so the chains do not clash."""
+    lines = [line for line in BENCHMARK_PDB_FILE.read_text().splitlines(keepends=True) if line.startswith("ATOM")]
+    doubled = list(lines)
+    for line in lines:
+        shifted = float(line[30:38]) + 60.0
+        doubled.append(f"{line[:21]}B{line[22:30]}{shifted:8.3f}{line[38:]}")
+    path = tmp_path / "homodimer.pdb"
+    path.write_text("".join(doubled) + "END\n")
+    return Structure(structure=str(path))
+
+
+def test_symmetric_chains_accepts_a_single_bare_group(tmp_path):
+    """``["A", "B"]`` is one group, not two groups of one chain."""
+    inp = CalibyStructureInput(structure=_write_homodimer(tmp_path), symmetric_chains=["A", "B"])
+    assert inp.symmetric_chains is not None
+    assert [list(group.chains) for group in inp.symmetric_chains] == [["A", "B"]]
+
+
+def test_symmetric_chains_rejects_a_group_of_one(tmp_path):
+    with pytest.raises(ValidationError, match="must tie at least two chains"):
+        CalibyStructureInput(structure=_write_homodimer(tmp_path), symmetric_chains=[["A"]])
+
+
+def test_symmetric_chains_rejects_unknown_chain(tmp_path):
+    with pytest.raises(ValidationError, match="not in structure"):
+        CalibyStructureInput(structure=_write_homodimer(tmp_path), symmetric_chains=[["A", "Z"]])
+
+
+def test_symmetric_chains_rejects_chain_in_two_groups(tmp_path):
+    structure = _write_homodimer(tmp_path)
+    with pytest.raises(ValidationError, match="more than one symmetric_chains group"):
+        CalibyStructureInput(structure=structure, symmetric_chains=[["A", "B"], ["B", "A"]])
+
+
+def test_symmetric_chains_rejects_mismatched_residue_numbering():
+    """Caliby ties by residue number, so chains of differing length cannot be tied."""
+    with pytest.raises(ValidationError, match="different residue numbering"):
+        CalibyStructureInput(structure=str(MULTI_CHAIN_PDB_FILE), symmetric_chains=[["A", "B"]])
+
+
 # ============================================================================
 # Integration tests (GPU required, run with --integration or --all)
 # ============================================================================
+@pytest.mark.uses_gpu
+def test_caliby_sample_ties_symmetric_chains(tmp_path):
+    """Tied chains must come out identical; untied ones are designed independently."""
+    structure = _write_homodimer(tmp_path)
+    config = CalibySampleConfig(num_sequences_per_structure=1, potts_sweeps=50, seed=0)
+
+    tied = run_caliby_sample(
+        CalibySampleInput(inputs=[CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"])]), config
+    )
+    assert tied.success, f"Failed to design with symmetric_chains: {tied}"
+    tied_chains = tied.design_sets[0].complexes[0].chain_sequence_map()
+    assert tied_chains["A"] == tied_chains["B"]
+
+    # Untied, the same two identical chains are designed independently and diverge.
+    untied = run_caliby_sample(CalibySampleInput(inputs=[CalibyStructureInput(structure=structure)]), config)
+    untied_chains = untied.design_sets[0].complexes[0].chain_sequence_map()
+    assert untied_chains["A"] != untied_chains["B"]
+
+
 @pytest.mark.uses_gpu
 def test_caliby_sample_accepts_chains_with_unmodelled_gaps(tmp_path):
     """A chain break must not be mistaken for residues dropped by preprocessing."""

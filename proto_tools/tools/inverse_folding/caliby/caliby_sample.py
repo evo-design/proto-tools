@@ -13,7 +13,7 @@ from pydantic import Field, field_validator, model_validator
 
 from proto_tools.entities.complex import Chain
 from proto_tools.entities.ligands import Fragment
-from proto_tools.entities.structures import Structure
+from proto_tools.entities.structures import ChainSelection, Structure
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -136,6 +136,12 @@ class CalibyStructureInput(InverseFoldingStructureInput):
         fixed_positions (ResidueSelection | None): Per-chain positions whose residue
             identity is held fixed (1-indexed). Inherited from
             :class:`InverseFoldingStructureInput`.
+        symmetric_chains (list[ChainSelection] | None): Chain groups designed to a single
+            shared sequence, one group per set of tied chains. Caliby folds each group's
+            Potts parameters into one variable before sampling, so the tied chains are
+            identical by construction and the reported energy describes that assembly.
+            Without it the chains of a homooligomer are designed independently and come
+            out different. Chains in a group must share residue numbering.
 
     Examples:
         >>> # Single structure
@@ -147,6 +153,12 @@ class CalibyStructureInput(InverseFoldingStructureInput):
         ...     conformers=ensemble.structures,
         ...     chains_to_redesign=["A"],
         ... )
+
+        >>> # Homotrimer: all three chains share one designed sequence
+        >>> inp = CalibyStructureInput(
+        ...     structure="/path/to/trimer.cif",
+        ...     symmetric_chains=["A", "B", "C"],
+        ... )
     """
 
     conformers: list[Structure] = Field(
@@ -155,10 +167,58 @@ class CalibyStructureInput(InverseFoldingStructureInput):
         description="Additional conformers of the same molecule; empty = single-structure design.",
     )
 
+    symmetric_chains: list[ChainSelection] | None = Field(
+        default=None,
+        title="Symmetric Chains",
+        description="Chain groups designed to one shared sequence, e.g. [['A', 'B', 'C']] for a homotrimer.",
+    )
+
+    @field_validator("symmetric_chains", mode="before")
+    @classmethod
+    def _wrap_single_symmetry_group(cls, value: Any) -> Any:
+        """Accept one bare group, so ``["A", "B", "C"]`` means a single tie."""
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list) and value and all(isinstance(item, str) for item in value):
+            return [value]
+        return value
+
     @model_validator(mode="after")
     def _validate_conformer_alignment(self) -> "CalibyStructureInput":
         """Require every conformer to align with the primary conformer."""
         validate_conformer_alignment(self.structure, self.conformers)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_symmetric_chains(self) -> "CalibyStructureInput":
+        """Require tied groups to name at least two distinct chains that exist and align."""
+        if self.symmetric_chains is None:
+            return self
+
+        available = self.structure.get_chain_ids()
+        seen: set[str] = set()
+        for group in self.symmetric_chains:
+            chains = list(group.chains)
+            if len(chains) < 2:
+                raise ValueError(f"symmetric_chains group {chains} must tie at least two chains")
+            if len(set(chains)) != len(chains):
+                raise ValueError(f"symmetric_chains group {chains} repeats a chain")
+            missing = [cid for cid in chains if cid not in available]
+            if missing:
+                raise ValueError(f"symmetric_chains names chain(s) {missing} not in structure (have {available})")
+            overlap = seen.intersection(chains)
+            if overlap:
+                raise ValueError(f"chain(s) {sorted(overlap)} appear in more than one symmetric_chains group")
+            seen.update(chains)
+
+            # Caliby ties positions by residue number, so the group must share numbering.
+            reference = self.structure.get_chain_positions(chains[0])
+            for cid in chains[1:]:
+                if self.structure.get_chain_positions(cid) != reference:
+                    raise ValueError(
+                        f"chains {chains[0]!r} and {cid!r} are tied together but carry different residue "
+                        "numbering; Caliby ties positions by residue number, so renumber them to match"
+                    )
         return self
 
     @property
@@ -500,6 +560,9 @@ def run_caliby_sample(
                 "chains_to_redesign": inp.chain_ids_to_redesign,
                 "fixed_positions": (
                     inp.fixed_positions.to_residue_numbers(inp.structure) if inp.fixed_positions is not None else None
+                ),
+                "symmetric_chains": (
+                    [list(group.chains) for group in inp.symmetric_chains] if inp.symmetric_chains else None
                 ),
                 "num_sequences": config.num_sequences_per_structure,
                 "batch_size": config.batch_size,
