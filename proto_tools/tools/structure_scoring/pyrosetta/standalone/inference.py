@@ -344,7 +344,6 @@ class PyRosettaScorer:
             residue_sasa = calc.get_residue_sasa()
             residue_hsasa = calc.get_residue_hsasa()
             residue_hsasa_sc = calc.get_residue_hsasa_sc()
-            residue_hsasa_bb = calc.get_residue_hsasa_bb()
 
             # Build selector and get selected indices
             selector = self._build_residue_selector(pose, chain_ids)
@@ -354,17 +353,14 @@ class PyRosettaScorer:
             total_sasa = 0.0
             hydrophobic_sasa = 0.0
             hydrophobic_sasa_sc = 0.0
-            hydrophobic_sasa_bb = 0.0
             for idx in selected:
                 chain_id, pdb_resnum, res_name = self._get_residue_info(pose, idx)
                 sasa_val = float(residue_sasa[idx])
                 hsasa_val = float(residue_hsasa[idx])
                 hsasa_sc_val = float(residue_hsasa_sc[idx])
-                hsasa_bb_val = float(residue_hsasa_bb[idx])
                 total_sasa += sasa_val
                 hydrophobic_sasa += hsasa_val
                 hydrophobic_sasa_sc += hsasa_sc_val
-                hydrophobic_sasa_bb += hsasa_bb_val
                 per_residue.append(
                     {
                         "chain_id": chain_id,
@@ -373,7 +369,6 @@ class PyRosettaScorer:
                         "sasa": sasa_val,
                         "hsasa": hsasa_val,
                         "hsasa_sc": hsasa_sc_val,
-                        "hsasa_bb": hsasa_bb_val,
                     }
                 )
 
@@ -382,7 +377,6 @@ class PyRosettaScorer:
                     "total_sasa": total_sasa,
                     "hydrophobic_sasa": hydrophobic_sasa,
                     "hydrophobic_sasa_sc": hydrophobic_sasa_sc,
-                    "hydrophobic_sasa_bb": hydrophobic_sasa_bb,
                     "per_residue": per_residue,
                     "dropped_residues": dropped_residues,
                 }

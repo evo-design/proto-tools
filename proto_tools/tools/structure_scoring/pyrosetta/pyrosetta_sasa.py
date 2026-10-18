@@ -44,7 +44,6 @@ class ResidueSASA(BaseModel):
         sasa (float): Solvent accessible surface area in Angstroms squared.
         hsasa (float): Hydrophobic (apolar) SASA in Angstroms squared.
         hsasa_sc (float): Sidechain component of hydrophobic SASA in Angstroms squared.
-        hsasa_bb (float): Backbone component of hydrophobic SASA in Angstroms squared.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -55,7 +54,14 @@ class ResidueSASA(BaseModel):
     sasa: float = Field(title="SASA", description="Per-residue solvent-accessible surface area in Å²")
     hsasa: float = Field(title="Hydrophobic SASA", description="Per-residue hydrophobic (apolar) SASA in Å²")
     hsasa_sc: float = Field(title="Hydrophobic SASA (Sidechain)", description="Sidechain hydrophobic SASA in Å²")
-    hsasa_bb: float = Field(title="Hydrophobic SASA (Backbone)", description="Backbone hydrophobic SASA in Å²")
+
+    def hsasa_bb(self) -> float:
+        """Backbone component of this residue's hydrophobic SASA.
+
+        Returns:
+            float: Backbone hydrophobic SASA in Å².
+        """
+        return self.hsasa - self.hsasa_sc
 
 
 class PyRosettaSASAMetrics(Metrics):
@@ -74,7 +80,6 @@ class PyRosettaSASAMetrics(Metrics):
             is usually the quantity of interest when ranking designs on a shared
             backbone, since the backbone component tracks fold and chain length
             rather than sequence.
-        hydrophobic_sasa_bb (float): Backbone component of ``hydrophobic_sasa``.
 
     Attributes:
         per_residue (list[ResidueSASA]): Per-residue SASA breakdown. Declared
@@ -107,14 +112,6 @@ class PyRosettaSASAMetrics(Metrics):
             "unit": "Å²",
             "better_values_are": "lower",
         },
-        "hydrophobic_sasa_bb": {
-            "availability": "always",
-            "type": "float",
-            "min": 0.0,
-            "max": None,
-            "unit": "Å²",
-            "better_values_are": "lower",
-        },
     }
     primary_metric: str | None = Field(
         default="total_sasa",
@@ -126,6 +123,14 @@ class PyRosettaSASAMetrics(Metrics):
         title="Per-Residue SASA",
         description="Per-residue SASA breakdown",
     )
+
+    def hydrophobic_sasa_bb(self) -> float:
+        """Backbone component of the structure's hydrophobic SASA.
+
+        Returns:
+            float: Backbone hydrophobic SASA in Å².
+        """
+        return float(self["hydrophobic_sasa"]) - float(self["hydrophobic_sasa_sc"])
 
 
 class PyRosettaSASAInput(BaseToolInput):
@@ -235,11 +240,11 @@ class PyRosettaSASAOutput(BaseToolOutput):
                 "sasa": res.sasa,
                 "hsasa": res.hsasa,
                 "hsasa_sc": res.hsasa_sc,
-                "hsasa_bb": res.hsasa_bb,
+                "hsasa_bb": res.hsasa_bb(),
                 "total_sasa": result["total_sasa"],
                 "hydrophobic_sasa": result["hydrophobic_sasa"],
                 "hydrophobic_sasa_sc": result["hydrophobic_sasa_sc"],
-                "hydrophobic_sasa_bb": result["hydrophobic_sasa_bb"],
+                "hydrophobic_sasa_bb": result.hydrophobic_sasa_bb(),
             }
             for i, result in enumerate(self.results)
             for res in result.per_residue

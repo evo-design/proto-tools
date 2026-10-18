@@ -86,7 +86,7 @@ This tool is appropriate for developability assessment during therapeutic protei
 
 ### PyRosetta SASA (`pyrosetta-sasa`)
 
-Computes total and per-residue Solvent Accessible Surface Area using Rosetta's `SasaCalc` module with a configurable probe radius. Returns the total SASA in Å², the exposed hydrophobic (apolar) surface area split into sidechain and backbone components, and a per-residue breakdown of chain, 1-indexed residue index, three-letter residue name, and the corresponding total and hydrophobic areas.
+Computes total and per-residue Solvent Accessible Surface Area using Rosetta's `SasaCalc` module with a configurable probe radius. Returns the total SASA in Å², the exposed hydrophobic (apolar) surface area and its sidechain component, and a per-residue breakdown of chain, 1-indexed residue index, three-letter residue name, and the corresponding total and hydrophobic areas.
 
 #### Applications
 

@@ -67,11 +67,10 @@ def test_run_pyrosetta_sasa_hydrophobic_breakdown():
     assert sasa.total_sasa == pytest.approx(14891.8141, rel=1e-4)
     assert sasa["hydrophobic_sasa"] == pytest.approx(6802.4432, rel=1e-4)
     assert sasa["hydrophobic_sasa_sc"] == pytest.approx(1504.5349, rel=1e-4)
-    assert sasa["hydrophobic_sasa_bb"] == pytest.approx(5297.9083, rel=1e-4)
-
-    # The sidechain and backbone components partition the total.
-    assert sasa["hydrophobic_sasa_sc"] + sasa["hydrophobic_sasa_bb"] == pytest.approx(
-        sasa["hydrophobic_sasa"], rel=1e-9
+    # Backbone is derived the way Rosetta derives it, as the total minus the sidechain part.
+    assert sasa.hydrophobic_sasa_bb() == pytest.approx(5297.9083, rel=1e-4)
+    assert sasa.per_residue[0].hsasa_bb() == pytest.approx(
+        sasa.per_residue[0].hsasa - sasa.per_residue[0].hsasa_sc, rel=1e-9
     )
     # Apolar surface is a subset of total surface.
     assert sasa["hydrophobic_sasa"] < sasa.total_sasa
