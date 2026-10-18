@@ -10,7 +10,7 @@ depends on how the upstream author distributes them.
 | AlphaGenome | HuggingFace: [google/alphagenome-all-folds](https://huggingface.co/google/alphagenome-all-folds) | Accept Google DeepMind terms, then authenticate with HF (see below) |
 | SpliceAI2 | HuggingFace: [illumina-ai/SpliceAI2](https://huggingface.co/illumina-ai/SpliceAI2) | Accept the Illumina SpliceAI2 Model Terms of Use (non-commercial organizations only) in the form at the top of the model card, then authenticate with HF (see below) |
 | X3DNA | Gated software (used by `x3dna-fiber`): register free at [x3dna.org](https://x3dna.org/) | After registering, see [`x3dna/SETUP.md`](../proto_tools/tools/structure_prediction/x3dna/SETUP.md) to stage it into the cache (no environment variable needed). |
-| netMHCpan | Gated software (used by `netmhcpan-peptides`, `netmhcpan-protein`): request the academic package at [NetMHCpan-4.1](https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/) | Academic/non-profit only, one site, no redistribution; commercial use needs a separate license from <health-software@dtu.dk>. After the download link arrives, see [`netmhcpan/SETUP.md`](../proto_tools/tools/epitope_prediction/netmhcpan/SETUP.md) — the separate `data.tar.gz` is also required. |
+| netMHCpan | Gated software (used by `netmhcpan-peptides`, `netmhcpan-protein`): request the academic package at [NetMHCpan-4.1](https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/) | Academic/non-profit only, no redistribution; commercial use needs a separate license from <health-software@dtu.dk>. A download link will be sent via email after you are approved. See [`netmhcpan/SETUP.md`](../proto_tools/tools/epitope_prediction/netmhcpan/SETUP.md) for next steps. |
 
 ## For HuggingFace-gated models
 
