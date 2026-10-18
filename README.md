@@ -113,6 +113,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/gene_annotation/promoter_calculator/">promoter_calculator/</a>
 └── <a href="proto_tools/tools/gene_annotation/pyhmmer/">pyhmmer/</a>
 <a href="proto_tools/tools/inverse_folding/">inverse_folding/</a>                # Sequence design from structures
+├── <a href="proto_tools/tools/inverse_folding/caliby/">caliby/</a>
 ├── <a href="proto_tools/tools/inverse_folding/esm_if1/">esm_if1/</a>
 ├── <a href="proto_tools/tools/inverse_folding/fampnn/">fampnn/</a>
 ├── <a href="proto_tools/tools/inverse_folding/ligandmpnn/">ligandmpnn/</a>
