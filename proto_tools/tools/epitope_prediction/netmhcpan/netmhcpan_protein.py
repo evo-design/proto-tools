@@ -68,10 +68,10 @@ class NetMHCpanProteinConfig(NetMHCpanConfig):
 
     Attributes:
         peptide_lengths (list[int]): k-mer lengths to enumerate from each sequence
-            (netMHCpan ``-l``). Defaults to netMHCpan's own default of 8-11.
+            (netMHCpan ``-l``). Defaults to the netMHCpan default of 8-11.
         alleles (list[str]): MHC class I alleles to predict against. Accepts the
             ``HLA-A02:01``, ``HLA-A*02:01`` and ``A*02:01`` spellings. Defaults to
-            netMHCpan's own default allele.
+            the netMHCpan default allele.
         include_binding_affinity (bool): Also predict binding affinity (``-BA``), adding
             BA score, BA %rank and nM affinity alongside the eluted-ligand columns.
         strong_rank (float): %rank at or below which a peptide is a strong binder.

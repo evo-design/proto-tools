@@ -6,7 +6,7 @@
 # binary. PROTO_HOME / PROTO_MODEL_CACHE are forwarded automatically.
 
 [passthrough]
-# netMHCpan install root (NMHOME is the variable netMHCpan's own wrapper uses).
+# netMHCpan install root (NMHOME is the variable the netMHCpan launcher script uses).
 NETMHCPAN_HOME
 NMHOME
 # Per-tool override pointing at the install (resolve_weights_dir("netmhcpan")).

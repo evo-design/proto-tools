@@ -511,7 +511,7 @@ def test_netmhcpan_peptides_unknown_allele_error_names_the_allele():
         run_netmhcpan_peptides(NetMHCpanPeptidesInput(peptides=[_A0201_BINDER]), config)
 
     # The one-shot dispatch path re-raises as CalledProcessError, carrying the standalone's
-    # own message on .stderr, so the actionable text is asserted rather than the type.
+    # message on .stderr, so the actionable text is asserted rather than the type.
     message = _error_text(excinfo.value)
     assert "HLA-Z99:99" in message
     assert "Unknown allele" in message
@@ -561,7 +561,7 @@ def test_netmhcpan_peptides_export_csv_and_json(tmp_path):
 # (the generating commands are listed in test/comm). They are an oracle the wrapper did
 # not generate, so comparing against them exercises the parser, the allele round-trip,
 # the FASTA windowing and the synthetic-identity mapping all at once. The files are read
-# from the user's own licensed install at run time and never committed here, so no
+# from the user's licensed install at run time and never committed here, so no
 # netMHCpan output is redistributed.
 
 

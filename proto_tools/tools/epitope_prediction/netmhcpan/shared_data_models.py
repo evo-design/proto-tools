@@ -12,7 +12,7 @@ from proto_tools.utils import BaseConfig, ConfigField
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 # netMHCpan accepts only the unstarred allele spelling ("HLA-A02:01"); "HLA-A*02:01" and
-# "A*02:01" are rejected with exit status 1, while its own output table echoes the starred
+# "A*02:01" are rejected with exit status 1, while its output table echoes the starred
 # form. All three spellings are accepted here and normalized to the one the binary takes.
 _STAR = "*"
 
@@ -304,7 +304,7 @@ class NetMHCpanProteinMetrics(NetMHCpanMetrics):
 def classify(rank: float, strong_rank: float, weak_rank: float) -> BinderClass:
     """Classify a peptide-allele pair from its EL %rank and the configured thresholds.
 
-    The binary's own ``BindLevel`` column is deliberately not trusted here: it is derived
+    The ``BindLevel`` column netMHCpan prints is not used here: it is derived
     from the eluted-ligand %rank even when ``-BA`` is requested, which makes it ambiguous
     about which quantity produced it. Classifying explicitly from ``rank_el`` keeps the
     reported class and the reported rank consistent by construction.
@@ -389,7 +389,7 @@ class NetMHCpanConfig(BaseConfig):
     Attributes:
         alleles (list[str]): MHC class I alleles to predict against. Accepts the
             ``HLA-A02:01``, ``HLA-A*02:01`` and ``A*02:01`` spellings. Defaults to
-            netMHCpan's own default allele.
+            the netMHCpan default allele.
         include_binding_affinity (bool): Also predict binding affinity (``-BA``), adding
             BA score, BA %rank and nM affinity alongside the eluted-ligand columns.
         strong_rank (float): %rank at or below which a peptide is a strong binder.

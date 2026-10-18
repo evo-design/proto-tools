@@ -57,7 +57,7 @@ Or keep it where it is and point one variable at the install root:
 export NETMHCPAN_HOME=~/netmhcpan/netMHCpan-4.1
 ```
 
-`NMHOME` (netMHCpan's own variable) and `PROTO_NETMHCPAN_WEIGHTS_DIR` are
+`NMHOME` (a variable of the netMHCpan software) and `PROTO_NETMHCPAN_WEIGHTS_DIR` are
 accepted equivalently, and the `netmhcpan_dir` config field overrides all of
 them per call. Resolution order is `netmhcpan_dir`, then `NETMHCPAN_HOME`, then
 `NMHOME`, then the managed cache.
@@ -68,7 +68,7 @@ them per call. Resolution order is `netmhcpan_dir`, then `NETMHCPAN_HOME`, then
 
 ## 4. Nothing in the install needs editing
 
-netMHCpan's own `netMHCpan-4.1.readme` tells you to edit the shipped
+The `netMHCpan-4.1.readme` shipped with the software tells you to edit the shipped
 `netMHCpan` launcher to hardcode `NMHOME` and `TMPDIR`. **Skip that step.**
 proto-tools invokes the platform binary
 (`<install>/<Platform>_<arch>/bin/netMHCpan`) directly, passing `-rdir` and

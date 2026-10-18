@@ -19,7 +19,7 @@ _BIN_RELPATH = "bin/netMHCpan"
 _PSEUDO_RELPATH = "data/MHC_pseudo.dat"
 
 # Environment variables that may point at an install root, in resolution order after the
-# explicit config field. NMHOME is netMHCpan's own documented variable.
+# explicit config field. NMHOME is the variable documented by the netMHCpan software.
 _ENV_VARS = ("NETMHCPAN_HOME", "NMHOME")
 
 # A FASTA identity is truncated to 15 characters in the output table, so user-supplied
@@ -171,7 +171,7 @@ def validate_alleles(alleles: list[str], pseudo_path: str) -> None:
 def parse_output(text: str) -> tuple[str | None, list[dict]]:
     """Parse netMHCpan stdout into a version string and one record per peptide x allele.
 
-    Columns are keyed off the table's own header row rather than fixed offsets: the column
+    Columns are keyed off the table's header row rather than fixed offsets: the column
     set varies across netMHCpan versions, with the -BA flag (which *adds* Score_BA /
     %Rank_BA / Aff(nM) alongside the EL columns), and with whether the input supplied
     measurement values (the Exp column). BindLevel is the final column and its value
@@ -183,7 +183,7 @@ def parse_output(text: str) -> tuple[str | None, list[dict]]:
 
     Returns:
         tuple[str | None, list[dict]]: The reported version, and raw string-valued records
-            keyed by the table's own column names.
+            keyed by the table's column names.
 
     Raises:
         ValueError: If no result table header is present in the output.
