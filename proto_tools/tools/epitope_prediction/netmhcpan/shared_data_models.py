@@ -12,9 +12,8 @@ from proto_tools.utils import BaseConfig, ConfigField
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 # netMHCpan accepts only the unstarred allele spelling ("HLA-A02:01"); "HLA-A*02:01" and
-# "A*02:01" are rejected outright with exit status 1. The output table, confusingly, echoes
-# the starred form. Callers supply all three spellings in the wild, so normalize on the way
-# in rather than letting the binary fail.
+# "A*02:01" are rejected with exit status 1, while its own output table echoes the starred
+# form. All three spellings are accepted here and normalized to the one the binary takes.
 _STAR = "*"
 
 # A bare HLA locus such as "A02:01" needs the species prefix restored. Non-human prefixes
@@ -32,9 +31,9 @@ MAX_PEPTIDE_LENGTH = 14
 # would mean scoring a peptide the caller never asked about, so off-alphabet input is rejected.
 _STANDARD_AMINO_ACIDS = frozenset("ACDEFGHIKLMNPQRSTVWY")
 
-# Steepness of the logistic used by ``binding_propensity``. Applied in log-rank space so the
-# curve is centred on the weak-binder threshold and decreases smoothly with %rank. Not an
-# upstream parameter, so it is a constant rather than a config knob.
+# Steepness of the logistic used by ``binding_propensity``, applied in log-rank space so the
+# curve is centred on the weak-binder threshold and decreases smoothly with %rank. This is
+# not a netMHCpan parameter and is not configurable.
 _PROPENSITY_STEEPNESS = 2.0
 
 BinderClass = Literal["strong", "weak", "non-binder"]

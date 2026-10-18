@@ -22,19 +22,25 @@ code:
     selling, renting, leasing, sublicensing or otherwise transferring rights to the
     software, removing proprietary notices, and publishing any benchmark results to a
     third party without HEALTH''s prior written consent. Section 10 requires that any
-    reference to the software cite one or more of the publications set forth in the
-    manual. The software is provided "as is" without warranty of any kind (Section 9),
+    reference to the software "will cite one or more publications as set forth in the
+    manual and in agreement with common scientific practice" (the clause is scoped to
+    "the software for crystallographic computations", an evident template artifact in
+    DTU''s agreement text), and bars using the name of the Licensed Software or of
+    HEALTH in promotional material without consent. The software is provided "as is"
+    without warranty of any kind (Section 9),
     HEALTH has no support obligation (Section 6), the agreement is governed by Danish
     law (Section 12), and on termination the LICENSEE must destroy all full and partial
-    copies (Section 11). Full terms ship as netMHCpan-4.1_license.txt with the download
-    and are displayed at the canonical URL above before download.'
+    copies (Section 11). Full terms are displayed on the download request form reached
+    from the Downloads tab of the canonical URL above, and ship as
+    netMHCpan-4.1_license.txt with the download.'
 commercial_use: 'no'
 redistribution: false
 attribution_required: true
 notes: 'netMHCpan is proprietary precompiled software from DTU Health Tech, free only for
   publicly funded academic, education or research institutions and gated behind per-user
-  registration with an institutional e-mail address; a commercial license must be obtained
-  from health-software@dtu.dk. It is user-provisioned: proto-tools never downloads, vendors
+  registration; a commercial license must be obtained from health-software@dtu.dk. DTU''s
+  download request form additionally requires an institutional e-mail address, which is a
+  condition of the download process rather than a term of the agreement. It is user-provisioned: proto-tools never downloads, vendors
   or images the archive, because the license is non-transferable and forbids giving the
   software to third parties alone or integrated into other software. Both tools are therefore
   registered local_only and can never run on a remote or hosted worker. Modification of the

@@ -228,9 +228,9 @@ def run_netmhcpan_peptides(
 
     output_data = ToolInstance.dispatch("netmhcpan", input_data, instance=instance, config=config)
 
-    # Key by (allele, peptide) rather than relying on row order. Repeated peptides share a
-    # row, which is correct because the prediction is identical, and a missing key is a
-    # parser or allele mismatch that must surface rather than silently drop a peptide.
+    # Rows are matched on (allele, peptide), so the order netMHCpan prints them in does not
+    # matter. A repeated peptide shares one row and gets the same prediction each time; an
+    # expected pair that is absent raises below.
     by_key = {
         (binding.allele, binding.peptide): binding
         for binding in (

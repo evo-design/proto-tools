@@ -596,8 +596,8 @@ def test_matches_upstream_reference_el_peptides():
         binding = ours[row["Peptide"]]
         assert binding.score_el == float(row["Score_EL"])
         assert binding.rank_el == float(row["%Rank_EL"])
-        # We classify from rank_el rather than trusting the binary's BindLevel column,
-        # so this asserts the two agree.
+        # binder_class is derived from rank_el; this asserts it agrees with the
+        # BindLevel column netMHCpan printed.
         assert binding.binder_class == _UPSTREAM_BIND_LEVELS[row["BindLevel"]]
 
 
