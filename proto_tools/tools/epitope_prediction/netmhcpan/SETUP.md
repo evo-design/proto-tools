@@ -11,7 +11,7 @@ Important:
 The license free for publicly funded academic, educational, and research
 institutions. Commercial use requires a separate license from <health-software@dtu.dk>.
 
-## 1. Accept the license and request the package
+## 1. Request the software
 
 1. Go to [services.healthtech.dtu.dk/services/NetMHCpan-4.1](https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/)
    and open the **Downloads** tab, or go straight to the
@@ -34,10 +34,10 @@ mkdir -p ~/netmhcpan && tar -xzf ~/Downloads/netMHCpan-4.1b.Linux.tar.gz -C ~/ne
 # Produces ~/netmhcpan/netMHCpan-4.1 — this directory is the install root.
 ```
 
-The archive holds only the software. netMHCpan also needs its network weights
-and threshold tables, which DTU publishes as a separate, ungated `data.tar.gz`;
-proto-tools downloads and extracts those into the install root for you the first
-time a netMHCpan tool runs, so there is nothing further to fetch by hand.
+The archive contains only the software. netMHCpan also needs its network weights
+and threshold tables, which DTU publishes as a separate, ungated download. These
+are fetched into the install root the first time a netMHCpan tool runs, so there
+is nothing further to download by hand.
 
 ## 3. Make the install discoverable
 
