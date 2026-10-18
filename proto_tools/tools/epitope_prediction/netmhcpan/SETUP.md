@@ -8,7 +8,7 @@ netMHCpan 4.1 cannot be auto-downloaded and the license forbids redistribution,
 so in order to use these tools you must accept terms to download the software.
 
 Important:
-The license free for publicly funded academic, educational, and research
+The license is free for publicly funded academic, educational, and research
 institutions. Commercial use requires a separate license from <health-software@dtu.dk>.
 
 ## 1. Request the software
