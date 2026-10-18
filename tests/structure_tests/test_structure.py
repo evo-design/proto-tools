@@ -1413,6 +1413,12 @@ def test_secondary_structure_percentages_per_chain(pdl1_complex):
     assert chain_a != whole
 
 
+def test_longest_alpha_helix_detects_helices(protein_from_pdb_file):
+    """A structure with helical content reports a nonzero longest helix run."""
+    assert protein_from_pdb_file.secondary_structure_percentages()["helix"] > 0
+    assert protein_from_pdb_file.longest_alpha_helix() > 0
+
+
 def test_gyration_radius_positive(pdl1_complex):
     """Gyration radius is positive and per-chain is smaller than whole complex."""
     whole = pdl1_complex.gyration_radius()
