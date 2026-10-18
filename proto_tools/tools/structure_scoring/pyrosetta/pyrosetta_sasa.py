@@ -294,11 +294,6 @@ def run_pyrosetta_sasa(
     a configurable probe radius. SASA measures the surface area of a protein
     accessible to solvent molecules.
 
-    Hydrophobic SASA, the exposed apolar surface area, comes off the same
-    calculation and is reported alongside it, split into sidechain and backbone
-    components. Rosetta classifies apolar surface per atom, counting carbon and
-    sulfur, so these are areas rather than counts of hydrophobic residues.
-
     Args:
         inputs (PyRosettaSASAInput): Structures to analyze with optional chain selection.
         config (PyRosettaSASAConfig | None): Configuration with probe radius.
