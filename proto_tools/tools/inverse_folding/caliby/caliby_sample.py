@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities.complex import Chain
 from proto_tools.entities.ligands import Fragment
@@ -113,6 +113,105 @@ def validate_conformer_alignment(primary: Structure, conformers: list[Structure]
             )
 
 
+class ResidueIdentitySelection(BaseModel):
+    """Per-chain residue positions paired with the residue identity to place at each.
+
+    The identity-bearing counterpart to
+    :class:`~proto_tools.entities.structures.selection.ResidueSelection`, which selects
+    positions without saying what belongs there. Interface matches that primitive
+    (``validate_against`` plus ``to_residue_numbers``) so selections behave uniformly,
+    but it lives here because Caliby is its only consumer.
+
+    **All positions are 1-indexed**, matching the rest of proto-tools; position ``1`` is
+    the first residue in the chain.
+
+    Accepts at construction:
+
+    - ``{"A": {26: "W"}}`` -> ``ResidueIdentitySelection(chains={"A": {26: "W"}})``
+    - ``{"A": {26: "W"}, "B": {4: "G"}}``
+
+    Attributes:
+        chains (dict[str, dict[int, AminoAcid]]): Per-chain maps of 1-indexed position to
+            the one-letter residue code to place there.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    chains: dict[str, dict[int, AminoAcid]] = Field(
+        title="Chains",
+        description="Per-chain maps of 1-indexed position to the residue code to place there.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, data: Any) -> Any:
+        """Accept the canonical kwargs form or the per-chain shorthand."""
+        if isinstance(data, ResidueIdentitySelection):
+            return {"chains": {cid: dict(pins) for cid, pins in data.chains.items()}}
+        if isinstance(data, dict):
+            keys = set(data.keys())
+            if keys == {"chains"} and isinstance(data["chains"], dict):
+                return {"chains": dict(data["chains"])}
+            if "chains" not in keys:
+                return {"chains": dict(data)}
+            raise ValueError(
+                "ResidueIdentitySelection dict must be either {'chains': {...}} or "
+                f"{{chain_id: {{position: residue}}}}; got mixed keys {sorted(keys)}."
+            )
+        raise ValueError(f"Cannot coerce {type(data).__name__} to ResidueIdentitySelection")
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> "ResidueIdentitySelection":
+        """Reject an empty selection and non-positive positions."""
+        if not self.chains:
+            raise ValueError("ResidueIdentitySelection cannot be empty; use None at the parent field instead.")
+        for chain_id, pins in self.chains.items():
+            if not pins:
+                raise ValueError(f"ResidueIdentitySelection chain {chain_id!r} has no positions; omit the chain.")
+            invalid = sorted(pos for pos in pins if pos < 1)
+            if invalid:
+                raise ValueError(
+                    f"ResidueIdentitySelection chain {chain_id!r}: positions {invalid} must be 1-indexed (>= 1)."
+                )
+        return self
+
+    def validate_against(self, structure: Structure, label: str = "selection") -> None:
+        """Raise if any selected chain is missing or any position is out of range.
+
+        Args:
+            structure (Structure): The structure to check against.
+            label (str): Prefix for error messages, typically the parent field name.
+
+        Raises:
+            ValueError: If a chain is absent, or a position exceeds its chain's residue count.
+        """
+        available = set(structure.get_chain_ids())
+        for chain_id, pins in self.chains.items():
+            if chain_id not in available:
+                raise ValueError(f"{label}: chain {chain_id!r} not in structure (available: {sorted(available)})")
+            length = len(structure.get_chain_positions(chain_id))
+            invalid = sorted(pos for pos in pins if pos > length)
+            if invalid:
+                raise ValueError(
+                    f"{label}: invalid positions {invalid} for chain {chain_id!r} (chain has {length} residues)"
+                )
+
+    def to_residue_numbers(self, structure: Structure) -> dict[str, dict[int, str]]:
+        """Resolve each chain's 1-indexed positions to residue numbers, keeping identities.
+
+        Args:
+            structure (Structure): The structure whose residue numbering to resolve against.
+
+        Returns:
+            dict[str, dict[int, str]]: Per-chain maps of residue number to residue code.
+        """
+        resolved: dict[str, dict[int, str]] = {}
+        for chain_id, pins in self.chains.items():
+            numbering = structure.get_chain_positions(chain_id)
+            resolved[chain_id] = {numbering[pos - 1]: residue for pos, residue in sorted(pins.items())}
+        return resolved
+
+
 class CalibyStructureInput(InverseFoldingStructureInput):
     """A backbone plus an optional conformer ensemble to condition on.
 
@@ -142,6 +241,12 @@ class CalibyStructureInput(InverseFoldingStructureInput):
             identical by construction and the reported energy describes that assembly.
             Without it the chains of a homooligomer are designed independently and come
             out different. Chains in a group must share residue numbering.
+        pinned_residues (ResidueIdentitySelection | None): Residue identities to place at
+            chosen positions and hold fixed (1-indexed). Unlike ``fixed_positions``, which
+            conditions on whatever the structure already carries, this supplies the
+            identity, so it can pin a residue the structure does not have. Caliby
+            conditions on these positions, so they must not also appear in
+            ``fixed_positions``.
 
     Examples:
         >>> # Single structure
@@ -173,6 +278,12 @@ class CalibyStructureInput(InverseFoldingStructureInput):
         description="Chain groups designed to one shared sequence, e.g. [['A', 'B', 'C']] for a homotrimer.",
     )
 
+    pinned_residues: ResidueIdentitySelection | None = Field(
+        default=None,
+        title="Pinned Residues",
+        description="Residue identities to place and hold fixed, e.g. {'A': {26: 'W'}} (1-indexed).",
+    )
+
     @field_validator("symmetric_chains", mode="before")
     @classmethod
     def _wrap_single_symmetry_group(cls, value: Any) -> Any:
@@ -195,17 +306,14 @@ class CalibyStructureInput(InverseFoldingStructureInput):
         if self.symmetric_chains is None:
             return self
 
-        available = self.structure.get_chain_ids()
         seen: set[str] = set()
         for group in self.symmetric_chains:
+            group.validate_against(self.structure, label="symmetric_chains")
             chains = list(group.chains)
             if len(chains) < 2:
                 raise ValueError(f"symmetric_chains group {chains} must tie at least two chains")
             if len(set(chains)) != len(chains):
                 raise ValueError(f"symmetric_chains group {chains} repeats a chain")
-            missing = [cid for cid in chains if cid not in available]
-            if missing:
-                raise ValueError(f"symmetric_chains names chain(s) {missing} not in structure (have {available})")
             overlap = seen.intersection(chains)
             if overlap:
                 raise ValueError(f"chain(s) {sorted(overlap)} appear in more than one symmetric_chains group")
@@ -219,6 +327,29 @@ class CalibyStructureInput(InverseFoldingStructureInput):
                         f"chains {chains[0]!r} and {cid!r} are tied together but carry different residue "
                         "numbering; Caliby ties positions by residue number, so renumber them to match"
                     )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_pinned_residues(self) -> "CalibyStructureInput":
+        """Validate pinned positions against the structure and against ``fixed_positions``."""
+        if self.pinned_residues is None:
+            return self
+
+        self.pinned_residues.validate_against(self.structure, label="pinned_residues")
+
+        # Caliby appends overridden positions to fixed_pos_seq, so pinning already fixes them.
+        if self.fixed_positions is not None:
+            overlap = sorted(
+                f"{chain_id}{pos}"
+                for chain_id, pins in self.pinned_residues.chains.items()
+                for pos in pins
+                if pos in set(self.fixed_positions.chains.get(chain_id, []))
+            )
+            if overlap:
+                raise ValueError(
+                    f"position(s) {overlap} appear in both pinned_residues and fixed_positions; pinning an "
+                    "identity already holds that position fixed"
+                )
         return self
 
     @property
@@ -563,6 +694,9 @@ def run_caliby_sample(
                 ),
                 "symmetric_chains": (
                     [list(group.chains) for group in inp.symmetric_chains] if inp.symmetric_chains else None
+                ),
+                "pinned_residues": (
+                    inp.pinned_residues.to_residue_numbers(inp.structure) if inp.pinned_residues else None
                 ),
                 "num_sequences": config.num_sequences_per_structure,
                 "batch_size": config.batch_size,

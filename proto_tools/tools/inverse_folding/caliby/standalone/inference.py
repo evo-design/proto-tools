@@ -148,6 +148,31 @@ def _build_fixed_pos_seq(
     return ",".join(tokens)
 
 
+def _build_fixed_pos_override_seq(pinned_residues: dict[str, dict[int, str]] | None) -> str:
+    """Build Caliby's ``fixed_pos_override_seq`` string from supplied residue identities.
+
+    Caliby rewrites the residue type at these positions, re-derives the atom array's
+    residue names, then appends the positions to ``fixed_pos_seq``, so an override is
+    conditioned on without being listed as fixed separately. Caliby also refuses to fix
+    sidechains at an overridden position, since the structure's sidechain atoms belong to
+    the residue that was replaced.
+
+    Args:
+        pinned_residues (dict[str, dict[int, str]] | None): Per-chain maps of residue
+            number to the one-letter code to place there.
+
+    Returns:
+        str: Overrides as ``"A26:A,A27:L"``, empty when nothing is pinned.
+    """
+    if not pinned_residues:
+        return ""
+    return ",".join(
+        f"{chain_id}{number}:{residue}"
+        for chain_id, pins in pinned_residues.items()
+        for number, residue in sorted(pins.items())
+    )
+
+
 def _build_symmetry_pos(chain_groups: list[list[str]] | None, structure_path: str) -> str:
     """Build Caliby's ``symmetry_pos`` string, tying each group's chains by residue number.
 
@@ -354,6 +379,7 @@ class CalibyRunner:
         chains_to_redesign: list[str] | None,
         fixed_positions: dict[str, list[int]] | None,
         symmetric_chains: list[list[str]] | None,
+        pinned_residues: dict[str, dict[int, str]] | None,
         num_sequences: int,
         batch_size: int,
         temperature: float,
@@ -374,6 +400,8 @@ class CalibyRunner:
             chains_to_redesign (list[str] | None): Chains whose sequence is redesigned.
             fixed_positions (dict[str, list[int]] | None): Per-chain residue numbers to fix.
             symmetric_chains (list[list[str]] | None): Chain groups sampled to one sequence.
+            pinned_residues (dict[str, dict[int, str]] | None): Per-chain residue numbers mapped
+                to the residue code to place and condition on.
             num_sequences (int): Sequences to design.
             batch_size (int): Conformers per forward pass; ensemble-conditioned design only.
             temperature (float): Final Potts sampling temperature.
@@ -392,15 +420,23 @@ class CalibyRunner:
             ValueError: If Caliby returns a different number of designs than requested.
         """
         _verify_fixed_positions(primary_path, fixed_positions)
+        _verify_fixed_positions(primary_path, {cid: list(pins) for cid, pins in (pinned_residues or {}).items()})
         self.ensure_loaded(model_checkpoint, device)
 
         from caliby import make_constraints, make_ensemble_constraints
 
         fixed_pos_seq = _build_fixed_pos_seq(chain_ids, chains_to_redesign, fixed_positions)
         symmetry_pos = _build_symmetry_pos(symmetric_chains, primary_path)
+        override_seq = _build_fixed_pos_override_seq(pinned_residues)
         # Only the columns that carry a value; an all-empty dict must stay None.
         constraint_cols = {
-            key: value for key, value in (("fixed_pos_seq", fixed_pos_seq), ("symmetry_pos", symmetry_pos)) if value
+            key: value
+            for key, value in (
+                ("fixed_pos_seq", fixed_pos_seq),
+                ("symmetry_pos", symmetry_pos),
+                ("fixed_pos_override_seq", override_seq),
+            )
+            if value
         }
         overrides = {"potts_sampling_cfg": {"potts_sweeps": potts_sweeps}}
 
@@ -591,6 +627,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             chains_to_redesign=input_dict["chains_to_redesign"],
             fixed_positions=input_dict["fixed_positions"],
             symmetric_chains=input_dict["symmetric_chains"],
+            pinned_residues=input_dict["pinned_residues"],
             num_sequences=input_dict["num_sequences"],
             batch_size=input_dict["batch_size"],
             temperature=input_dict["temperature"],

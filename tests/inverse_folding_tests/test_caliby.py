@@ -293,9 +293,60 @@ def test_symmetric_chains_rejects_mismatched_residue_numbering():
         CalibyStructureInput(structure=str(MULTI_CHAIN_PDB_FILE), symmetric_chains=[["A", "B"]])
 
 
+def test_pinned_residues_accepts_per_chain_shorthand(pdb_structure):
+    """The bare ``{chain: {position: residue}}`` form coerces to the canonical shape."""
+    inp = CalibyStructureInput(structure=pdb_structure, pinned_residues={"A": {3: "W"}})
+    assert inp.pinned_residues is not None
+    assert inp.pinned_residues.chains == {"A": {3: "W"}}
+
+
+def test_pinned_residues_rejects_unknown_chain(pdb_structure):
+    with pytest.raises(ValidationError, match="chain 'Z' not in structure"):
+        CalibyStructureInput(structure=pdb_structure, pinned_residues={"Z": {3: "W"}})
+
+
+def test_pinned_residues_rejects_position_past_chain_end(pdb_structure):
+    beyond = len(pdb_structure.get_chain_positions("A")) + 1
+    with pytest.raises(ValidationError, match="invalid positions"):
+        CalibyStructureInput(structure=pdb_structure, pinned_residues={"A": {beyond: "W"}})
+
+
+def test_pinned_residues_rejects_non_positive_position(pdb_structure):
+    with pytest.raises(ValidationError, match="must be 1-indexed"):
+        CalibyStructureInput(structure=pdb_structure, pinned_residues={"A": {0: "W"}})
+
+
+def test_pinned_residues_rejects_overlap_with_fixed_positions(pdb_structure):
+    """Caliby conditions on overridden positions, so naming one as fixed too is contradictory."""
+    with pytest.raises(ValidationError, match="appear in both pinned_residues and fixed_positions"):
+        CalibyStructureInput(structure=pdb_structure, pinned_residues={"A": {3: "W"}}, fixed_positions={"A": [3]})
+
+
+def test_pinned_residues_resolve_to_structure_residue_numbers(pdb_structure):
+    """1-indexed positions map onto the chain's own residue numbering, identities preserved."""
+    selection = CalibyStructureInput(structure=pdb_structure, pinned_residues={"A": {1: "W", 3: "G"}}).pinned_residues
+    assert selection is not None
+    numbering = pdb_structure.get_chain_positions("A")
+    assert selection.to_residue_numbers(pdb_structure) == {"A": {numbering[0]: "W", numbering[2]: "G"}}
+
+
 # ============================================================================
 # Integration tests (GPU required, run with --integration or --all)
 # ============================================================================
+@pytest.mark.uses_gpu
+def test_caliby_sample_pins_supplied_residue_identities(pdb_structure):
+    """A pinned identity appears in the design even where the structure lacks it."""
+    inp = CalibySampleInput(
+        inputs=[CalibyStructureInput(structure=pdb_structure, pinned_residues={"A": {3: "W", 4: "W", 5: "W"}})]
+    )
+    output = run_caliby_sample(inp, CalibySampleConfig(num_sequences_per_structure=1, potts_sweeps=20, seed=0))
+    assert output.success, f"Failed to design with pinned residues: {output}"
+
+    designed = output.design_sets[0].complexes[0].chains[0].sequence
+    assert designed[2:5] == "WWW"
+    assert len(designed) == len(pdb_structure.get_chain_sequence("A"))
+
+
 @pytest.mark.uses_gpu
 def test_caliby_sample_ties_symmetric_chains(tmp_path):
     """Tied chains must come out identical; untied ones are designed independently."""
