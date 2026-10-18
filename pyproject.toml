@@ -221,6 +221,7 @@ module = [
     "progen3.*",
     "vortex.*",
     "fampnn.*",
+    "caliby.*",
     "mpnn.*",
     "bioemu.*",
     "enformer_pytorch.*",

@@ -161,7 +161,9 @@ class CalibyPackOutput(BaseToolOutput):
 # ============================================================================
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return CalibyPackInput(structures=[str(Path(__file__).parents[1] / "example_input_fixture.pdb")])
+    return CalibyPackInput(
+        structures=[Structure.from_file(str(Path(__file__).parents[1] / "example_input_fixture.pdb"))]
+    )
 
 
 @tool(
