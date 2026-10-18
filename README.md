@@ -105,6 +105,8 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/database_retrieval/rfam/">rfam/</a>
 ├── <a href="proto_tools/tools/database_retrieval/sequence_fetch/">sequence_fetch/</a>
 └── <a href="proto_tools/tools/database_retrieval/uniprot/">uniprot/</a>
+<a href="proto_tools/tools/epitope_prediction/">epitope_prediction/</a>             # MHC binding and T-cell epitope prediction
+└── <a href="proto_tools/tools/epitope_prediction/netmhcpan/">netmhcpan/</a>
 <a href="proto_tools/tools/gene_annotation/">gene_annotation/</a>                # Sequence annotation
 ├── <a href="proto_tools/tools/gene_annotation/crispr_tracr_rna/">crispr_tracr_rna/</a>
 ├── <a href="proto_tools/tools/gene_annotation/meme/">meme/</a>

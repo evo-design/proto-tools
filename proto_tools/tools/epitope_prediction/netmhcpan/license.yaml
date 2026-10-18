@@ -1,0 +1,46 @@
+code:
+  spdx: Custom (DTU Health Tech Academic Software License)
+  url: https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/
+  text: 'ACADEMIC SOFTWARE LICENSE AGREEMENT FOR END-USERS AT PUBLICLY FUNDED ACADEMIC,
+    EDUCATION OR RESEARCH INSTITUTIONS FOR THE USE OF netMHCpan. Entered into between
+    DTU Health Tech, Technical University of Denmark ("HEALTH") and the LICENSEE by
+    accepting the terms at download. Section 2 (License): "Subject to the terms and
+    conditions of this Agreement a non-exclusive, non-transferable License to use and
+    copy the Licensed Software is made available free of charge for the LICENSEE which
+    is a non-profit educational, academic and/or research institution. The License is
+    only granted for personal and internal use in research only at one Site, where a
+    Site is defined as a set of contiguous buildings in one location. The software will
+    be used at only one location of LICENSEE." Also from Section 2: "The user and any
+    research assistants, co-workers or other workers who may use the Software agree to
+    not give the program to third parties or grant licenses on software, which include
+    the Software, alone or integrated into other software, to third parties.
+    Modification of the source code is prohibited without the prior written consent of
+    HEALTH. Any use of the software which results in any form of commercialization is
+    not allowed under this license." Non-academic users must obtain a commercial license
+    from health-software@dtu.dk. Section 7 (Software Protection) additionally forbids
+    creating derivative works, decompiling or reverse engineering, redistributing,
+    selling, renting, leasing, sublicensing or otherwise transferring rights to the
+    software, removing proprietary notices, and publishing any benchmark results to a
+    third party without HEALTH''s prior written consent. Section 10 requires that any
+    reference to the software cite one or more of the publications set forth in the
+    manual. The software is provided "as is" without warranty of any kind (Section 9),
+    HEALTH has no support obligation (Section 6), the agreement is governed by Danish
+    law (Section 12), and on termination the LICENSEE must destroy all full and partial
+    copies (Section 11). Full terms ship as netMHCpan-4.1_license.txt with the download
+    and are displayed at the canonical URL above before download.'
+commercial_use: 'no'
+redistribution: false
+attribution_required: true
+notes: 'netMHCpan is proprietary precompiled software from DTU Health Tech, free only for
+  publicly funded academic, education or research institutions and gated behind per-user
+  registration with an institutional e-mail address; a commercial license must be obtained
+  from health-software@dtu.dk. It is user-provisioned: proto-tools never downloads, vendors
+  or images the archive, because the license is non-transferable and forbids giving the
+  software to third parties alone or integrated into other software. Both tools are therefore
+  registered local_only and can never run on a remote or hosted worker. Modification of the
+  source code is prohibited without DTU''s written consent, which is why the wrapper invokes
+  the platform binary directly rather than editing the shipped tcsh launcher. Publishing
+  benchmark results to a third party requires prior written consent, so the tests assert
+  structural and relational properties rather than committing score tables. Cite Reynisson
+  et al. (2020).'
+last_updated: '2026-10-18'
