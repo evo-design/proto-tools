@@ -2,6 +2,8 @@
 
 # netMHCpan
 
+![netMHCpan](https://proto-bio.github.io/proto-assets/images/tool/netmhcpan/hero.png)
+
 > [!NOTE]
 > **License:** netMHCpan is licensed under Custom (DTU Health Tech Academic Software License) and has restrictions around commercial use and may require explicit attribution when utilized. Model weights are not publicly distributed and must be requested from the provider. Please refer to [the license](https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/) for full terms.
 >
