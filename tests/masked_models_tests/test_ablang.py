@@ -412,6 +412,46 @@ def test_ablang_score_return_logits():
         assert score.vocab == list(PROTEIN_AMINO_ACIDS)
 
 
+def test_ablang_sample_align_requires_paired_antibodies():
+    """AbLang's ANARCI spread is paired-only, so an unpaired request is refused up front.
+
+    Without this, the single-chain request reaches ``restore()`` and dies on an ``IndexError``
+    from inside the library's light-chain lookup.
+    """
+    inputs = AbLangSampleInput(antibodies=[Antibody(heavy_chain=VH_SEQ)])
+    with pytest.raises(ValueError, match="align=True requires every antibody"):
+        run_ablang_sample(inputs, AbLangSampleConfig(align=True))
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_ablang_sample_align_excludes_amino_acids():
+    """``align=True`` restores a paired antibody and still honours ``excluded_amino_acids``.
+
+    Alignment rewrites the heavy C-terminus, so positions are not stable across runs; the
+    region after the last unmasked framework residues is entirely model-generated, which is
+    what gets checked.
+    """
+    anchor = VH_SEQ[88:98]
+    heavy = VH_SEQ[:98] + "_" * 12 + VH_SEQ[110:]
+    inputs = AbLangSampleInput(antibodies=[Antibody(heavy_chain=heavy, light_chain=VL_SEQ)])
+
+    def generated_tail(excluded):
+        result = run_ablang_sample(inputs, AbLangSampleConfig(align=True, excluded_amino_acids=excluded, seed=5))
+        heavy_out = result.results[0].sequence.split("|")[0]
+        index = heavy_out.rfind(anchor)
+        assert index >= 0, f"framework anchor missing from {heavy_out}"
+        return heavy_out[index + len(anchor) :]
+
+    unconstrained = generated_tail(None)
+    assert unconstrained, "align produced no generated tail"
+    excluded = sorted(set(unconstrained))[:2]
+
+    constrained = generated_tail(excluded)
+    assert constrained, "align produced no generated tail under exclusions"
+    assert not set(constrained) & set(excluded), f"excluded {excluded} appeared in generated tail {constrained}"
+
+
 @pytest.mark.uses_gpu
 def test_ablang_sample_return_logits():
     """``return_logits=True`` returns per-position AA logits over the restored sequences."""

@@ -38,6 +38,7 @@ This tool is appropriate for relative energy comparison across variants of the s
 #### Usage Tips
 
 - **Compare REU values only across variants of the same protein with the same score function.** Rosetta energies are not absolute thermodynamic quantities and do not transfer across proteins of different sizes or across different score function settings. Switching `scorefxn` from `ref2015` to `beta_nov16` produces a different scale and the values are not comparable.
+- **`beta_nov16` score functions enable Rosetta's `-corrections::beta_nov16` parameters for the whole process.** Other score functions, including `ref2015`, run without them. Changing `scorefxn` therefore restarts a persistent PyRosetta worker (a few seconds of re-initialization).
 - **Run with `pre_relax_structures=True` when scoring raw predicted complexes.** Predicted structures from AlphaFold, Chai, Boltz, and similar tools commonly carry steric clashes that produce extremely high `fa_rep` values and dominate the total energy. Relaxing first resolves these clashes so the other energy terms become interpretable.
 - **Chain selection filters the per-residue breakdown only.** When `chains_to_score` is set on a `ScoringStructureInput`, `total_energy` and `energy_terms` are still computed on the full pose. Each per-residue energy reflects that residue's contribution within the full complex, including pair interactions with the unselected chains. Score a chain in isolation by extracting it into its own `Structure` first.
 
@@ -85,7 +86,7 @@ This tool is appropriate for developability assessment during therapeutic protei
 
 ### PyRosetta SASA (`pyrosetta-sasa`)
 
-Computes total and per-residue Solvent Accessible Surface Area using Rosetta's `SasaCalc` module with a configurable probe radius. Returns the total SASA in Å² together with a per-residue breakdown of chain, 1-indexed residue index, three-letter residue name, and SASA value.
+Computes total and per-residue Solvent Accessible Surface Area using Rosetta's `SasaCalc` module with a configurable probe radius. Returns the total SASA in Å², the exposed hydrophobic (apolar) surface area and its sidechain component, and a per-residue breakdown of chain, 1-indexed residue index, three-letter residue name, and the corresponding total and hydrophobic areas.
 
 #### Applications
 
@@ -96,6 +97,9 @@ This tool is appropriate for identifying buried and exposed residues, characteri
 - **`probe_radius` defaults to 1.4 Å.** This is the conventional water probe radius. Larger probe values are sometimes used to approximate the accessibility seen by larger solvent molecules or interaction partners.
 - **Per-residue SASA values near 0 indicate fully buried residues.** Values above approximately 100 Å² indicate significant solvent exposure for a typical residue. Combine with residue identity to identify exposed hydrophobic residues as aggregation hotspots.
 - **Total SASA scales with protein size.** Normalise by residue count or surface area when comparing across proteins of different sizes.
+- **Prefer `hydrophobic_sasa_sc` when ranking designs on a shared backbone.** Backbone area dominates the hydrophobic total (roughly three quarters of it on a typical monomer) and tracks fold and chain length rather than sequence, so it masks the differences between designs. The sidechain component responds to sequence choice, which is what a redesign changes.
+- **Apolar surface is classified per atom, counting carbon and sulfur.** This is Rosetta's own definition, applied per atom rather than by residue identity, so the result is an area and not a count of hydrophobic residues.
+- **`hydrophobic_sasa` and `pyrosetta-sap` measure related but distinct things.** Hydrophobic SASA is an unweighted exposed apolar area in Å². SAP weights per-residue hydrophobicity by local solvent exposure over a neighbourhood and carries a published calibration for aggregation risk. Reach for SAP for developability filtering against established thresholds, and for hydrophobic SASA when a plain physical area is wanted, for instance as a denominator or alongside a buried-area calculation.
 
 ## Toolkit Notes
 

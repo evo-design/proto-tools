@@ -66,6 +66,7 @@ class ESM3SampleConfig(MaskedModelSampleConfig):
         batch_size (int): Sequences per GPU forward pass.
         device (str): Device to run on.
         return_logits (bool): Include per-position logits.
+        excluded_amino_acids (list[AminoAcid] | None): Amino acids never sampled at masked positions.
     """
 
     # Has a model → supplies per-position logits, so model-informed masking is valid.
@@ -197,6 +198,7 @@ def run_esm3_sample(
             "verbose": config.verbose,
             "return_logits": config.return_logits,
             "seed": config.seed,
+            "excluded_amino_acids": config.excluded_amino_acids,
         },
         instance=instance,
         config=config,

@@ -1,3 +1,4 @@
 ablang2==0.2.1
+pandas  # ablang2 imports it but does not declare it: TobiasHeOl/AbLang2#19
 numba
 numpy<2.5  # numba 0.66 raises ImportError on numpy 2.5+, which ablang2 imports via ablang1

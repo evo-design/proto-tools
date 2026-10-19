@@ -343,7 +343,7 @@ uv pip install -r requirements.txt --no-build-isolation-package flash-attn --ref
 
 ### 13. Binary Installation Failure
 
-**Symptoms:** `Failed to download blast after 3 attempts`, `No binary available for (Linux, x86_64)`, `No binary_config.py found`.
+**Symptoms:** `Failed to download blast after 3 attempts`, `No binary available for (Linux, x86_64)`, `no binary_config.py at <path>`.
 
 **Root Cause:** `utils/install_binary.py` downloads external binaries during `setup.sh`. Failures from network issues, platform not in `binary_config.py`, or truncated downloads.
 

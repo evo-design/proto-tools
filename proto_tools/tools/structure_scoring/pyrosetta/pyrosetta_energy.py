@@ -11,10 +11,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_relax import PyRosettaRelaxConfig
 from proto_tools.tools.structure_scoring.pyrosetta.shared_data_models import (
+    BETA_NOV16_CORRECTIONS,
     ScoringStructureInput,
     prepare_pdb_and_chain_maps,
     relax_inputs_via_pyrosetta,
     remap_per_residue_chain_ids,
+    uses_beta_nov16_corrections,
     warn_about_dropped_residues,
 )
 from proto_tools.tools.tool_registry import tool
@@ -173,6 +175,11 @@ class PyRosettaEnergyConfig(BaseConfig):
             return inputs
         return inputs.model_copy(update={"inputs": relax_inputs_via_pyrosetta(inputs.inputs, self.relax_config)})
 
+    @classmethod
+    def reload_fields(cls) -> set[str] | None:
+        """Restart the worker only when the beta_nov16 corrections switch, since PyRosetta inits once per process."""
+        return {BETA_NOV16_CORRECTIONS}
+
     @property
     def cpus_per_instance(self) -> int | None:
         """Opt in to ToolPool CPU fan-out — PyRosetta runs single-threaded per pose."""
@@ -296,6 +303,7 @@ def run_pyrosetta_energy(
         "pdb_contents": pdb_contents,
         "chain_ids_list": chain_ids_list,
         "scorefxn": config.scorefxn,  # type: ignore[union-attr]
+        BETA_NOV16_CORRECTIONS: uses_beta_nov16_corrections(config.scorefxn),  # type: ignore[union-attr]
         "device": "cpu",
     }
 

@@ -36,8 +36,9 @@ class PyRosettaScorer:
         """Initialize scorer with lazy PyRosetta loading."""
         self._initialized = False
         self._has_dalphaball = False
+        self._beta_nov16 = False
 
-    def _ensure_init(self) -> None:
+    def _ensure_init(self, beta_nov16: bool | None = None) -> None:
         """Initialize PyRosetta on first use.
 
         Flags:
@@ -56,33 +57,43 @@ class PyRosettaScorer:
             ``-ignore_zero_occupancy true``: Skip atoms with zero occupancy
                 during PDB load. Matches BindCraft's init (defensive default
                 for heterogeneous PDB sources).
-            ``-corrections::beta_nov16 true``: Enable the November 2016 beta
-                corrections (refined HBnet, disulfide, solvation terms). REQUIRED
-                for ``create_score_function("beta_nov16")`` — without it PyRosetta
-                exits ("garbage scorefunction"). It also makes the default
-                ``pr.get_fa_scorefxn()`` return beta_nov16, but scoring here always
-                names its score function via ``config.scorefxn`` and never calls
-                ``get_fa_scorefxn()``, so an explicitly-named
-                ``create_score_function("ref2015")`` is NOT remapped — it stays
-                genuine ref2015. The beta_nov16 metrics (``Binder_Energy_Score``,
-                ``interface_dG``, ``delta_unsat_hbonds``) therefore require
-                ``scorefxn="beta_nov16"``; the default ``"ref2015"`` yields ref2015.
-                Matches BindCraft/Germinal, which init the same flag and relax/score
-                via ``get_fa_scorefxn()`` (= beta_nov16).
+            ``-corrections::beta_nov16 true``: Set only for a ``beta_nov16*``
+                score function. The flag replaces process-wide energy parameters
+                (atom solvation free energies, partial charges, H-bond strengths,
+                dielectric, rama and rotamer tables) that every score function
+                reads, so REF2015 is scored without it. ``beta_nov16`` matches
+                BindCraft/Germinal, which init this flag and score with
+                ``get_fa_scorefxn()`` (= beta_nov16).
+
+        Args:
+            beta_nov16 (bool | None): Whether the call's score function needs the beta_nov16
+                corrections, or ``None`` for operations that do not read energy parameters (SAP, SASA).
+
+        Raises:
+            RuntimeError: If PyRosetta is already initialized with corrections that do not match
+                ``beta_nov16``.
         """
         if self._initialized:
+            if beta_nov16 is not None and beta_nov16 != self._beta_nov16:
+                raise RuntimeError(
+                    f"pyrosetta: this call needs beta_nov16 corrections {'on' if beta_nov16 else 'off'}, "
+                    f"but this worker initialized PyRosetta with them {'on' if self._beta_nov16 else 'off'}; "
+                    "restart the worker to switch."
+                )
             return
         import pyrosetta
 
         extra_opts = (
-            "-mute all -ignore_unrecognized_res true -remember_unrecognized_res true"
-            " -ignore_zero_occupancy true -corrections::beta_nov16 true"
+            "-mute all -ignore_unrecognized_res true -remember_unrecognized_res true -ignore_zero_occupancy true"
         )
+        if beta_nov16:
+            extra_opts += " -corrections::beta_nov16 true"
         dalphaball = Path(sys.executable).parent / "DAlphaBall"
         if dalphaball.is_file():
             extra_opts += f" -holes:dalphaball {dalphaball}"
             self._has_dalphaball = True
         pyrosetta.init(extra_options=extra_opts)
+        self._beta_nov16 = bool(beta_nov16)
         self._initialized = True
 
     def _find_dropped_residues(self, pose: Any) -> list[str]:
@@ -293,7 +304,7 @@ class PyRosettaScorer:
         probe_radius: float = 1.4,
         chain_ids_list: list[list[str] | None] | None = None,
     ) -> dict[str, Any]:
-        """Compute SASA for a list of PDB content strings.
+        """Compute SASA and hydrophobic SASA for a list of PDB content strings.
 
         SASA is always calculated on the full pose: PyRosetta's ``SasaCalc``
         scores every residue in context, including the effect of buried
@@ -315,7 +326,7 @@ class PyRosettaScorer:
             chain_ids_list (list[list[str] | None] | None): Per-structure chain IDs.
 
         Returns:
-            dict: {"results": [{"total_sasa": float, "per_residue": [...]}, ...]}
+            dict: {"results": [{"total_sasa": float, "hydrophobic_sasa": float, ...}, ...]}
         """
         self._ensure_init()
         from pyrosetta.rosetta.core.scoring.sasa import SasaCalc
@@ -331,6 +342,8 @@ class PyRosettaScorer:
             calc.calculate(pose)
 
             residue_sasa = calc.get_residue_sasa()
+            residue_hsasa = calc.get_residue_hsasa()
+            residue_hsasa_sc = calc.get_residue_hsasa_sc()
 
             # Build selector and get selected indices
             selector = self._build_residue_selector(pose, chain_ids)
@@ -338,22 +351,32 @@ class PyRosettaScorer:
 
             per_residue = []
             total_sasa = 0.0
+            hydrophobic_sasa = 0.0
+            hydrophobic_sasa_sc = 0.0
             for idx in selected:
                 chain_id, pdb_resnum, res_name = self._get_residue_info(pose, idx)
                 sasa_val = float(residue_sasa[idx])
+                hsasa_val = float(residue_hsasa[idx])
+                hsasa_sc_val = float(residue_hsasa_sc[idx])
                 total_sasa += sasa_val
+                hydrophobic_sasa += hsasa_val
+                hydrophobic_sasa_sc += hsasa_sc_val
                 per_residue.append(
                     {
                         "chain_id": chain_id,
                         "residue_index": pdb_resnum,
                         "residue_name": res_name,
                         "sasa": sasa_val,
+                        "hsasa": hsasa_val,
+                        "hsasa_sc": hsasa_sc_val,
                     }
                 )
 
             results.append(
                 {
                     "total_sasa": total_sasa,
+                    "hydrophobic_sasa": hydrophobic_sasa,
+                    "hydrophobic_sasa_sc": hydrophobic_sasa_sc,
                     "per_residue": per_residue,
                     "dropped_residues": dropped_residues,
                 }
@@ -831,6 +854,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     global _scorer
     if _scorer is None:
         _scorer = PyRosettaScorer()
+
+    # Score-function operations carry the corrections flag; SAP/SASA run under whatever init the worker has.
+    _scorer._ensure_init(input_dict.get("beta_nov16_corrections"))
 
     operation = input_dict["operation"]
     pdb_contents = input_dict["pdb_contents"]

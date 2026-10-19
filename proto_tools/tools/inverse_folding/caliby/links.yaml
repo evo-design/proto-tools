@@ -1,0 +1,6 @@
+github: https://github.com/ProteinDesignLab/caliby
+preprint: https://doi.org/10.1101/2025.09.30.679633
+huggingface:
+  - https://huggingface.co/ProteinDesignLab/caliby-weights
+organizations:
+  - Stanford University

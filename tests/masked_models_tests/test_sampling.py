@@ -303,6 +303,112 @@ def test_all_fixed_positions_is_identity(
     assert result.sequences == [seq]
 
 
+# ── Excluded amino acids ──────────────────────────────────────────────────────
+
+# Fully masked, so every output residue is drawn from the model's distribution.
+_EXCLUDED_AAS = ["C", "L", "W"]
+
+_VH_SEQ = (
+    "AVKLVQAGGGVVQPGRSLRLSCIASGFTFSNYGMHWVRQAPGKGLEWVAVIWYNGSRTYY"
+    "GDSVKGRFTISRDNSKRTLYMQMNSLRTEDTAVYYCARDPDILTAFSFDYWGQGVLVTVSS"
+)
+
+
+def _sample_esm(run_fn, input_cls, config_cls, excluded, sampling_method):
+    result = run_fn(
+        input_cls(sequences=["_" * 24]),
+        config_cls(
+            excluded_amino_acids=excluded,
+            sampling_method=sampling_method,
+            num_steps=3,
+            temperature=2.0,
+            seed=5,
+        ),
+    )
+    return result.sequences
+
+
+def _sample_ablang(excluded, sampling_method):
+    if sampling_method != "single_pass":
+        pytest.skip("AbLang has no iterative-refinement path")
+    from proto_tools.entities.antibody import Antibody
+    from proto_tools.tools.masked_models.ablang import (
+        AbLangSampleConfig,
+        AbLangSampleInput,
+        run_ablang_sample,
+    )
+
+    # AbLang needs antibody context, so mask the CDR3 loop rather than the whole chain.
+    heavy = _VH_SEQ[:98] + "_" * 12 + _VH_SEQ[110:]
+    result = run_ablang_sample(
+        AbLangSampleInput(antibodies=[Antibody(heavy_chain=heavy)]),
+        AbLangSampleConfig(excluded_amino_acids=excluded, temperature=2.0, seed=5),
+    )
+    return [sample.sequence[98:110] for sample in result.results]
+
+
+def _sample_mixed(toolkit, checkpoint, excluded, sampling_method):
+    from tests.masked_models_tests._mixed_checks import call_model
+
+    # Protein-modality masks only; the DNA alphabet is unaffected by the setting.
+    result = call_model(
+        toolkit,
+        "sample",
+        checkpoint,
+        {"sequences": ["<+>" + "_" * 12], "mask_modalities": [dict.fromkeys(range(2, 14), "protein")]},
+        excluded_amino_acids=excluded,
+        sampling_method=sampling_method,
+        num_steps=3,
+        temperature=2.0,
+        seed=5,
+    )
+    return [sample.sequence[1:] for sample in result.results]
+
+
+EXCLUSION_SAMPLERS = [
+    pytest.param(
+        lambda excluded, method: _sample_esm(run_esm2_sample, ESM2SampleInput, ESM2SampleConfig, excluded, method),
+        id="esm2",
+        marks=pytest.mark.uses_gpu,
+    ),
+    pytest.param(
+        lambda excluded, method: _sample_esm(run_esm3_sample, ESM3SampleInput, ESM3SampleConfig, excluded, method),
+        id="esm3",
+        marks=pytest.mark.uses_gpu,
+    ),
+    pytest.param(_sample_ablang, id="ablang", marks=pytest.mark.uses_gpu),
+    pytest.param(
+        lambda excluded, method: _sample_mixed("glm2", "tattabio/gLM2_150M", excluded, method),
+        id="glm2",
+        marks=pytest.mark.uses_gpu,
+    ),
+    pytest.param(
+        lambda excluded, method: _sample_mixed("minerva", "gbrixi/minerva-mlm", excluded, method),
+        id="minerva",
+        marks=pytest.mark.uses_gpu,
+    ),
+]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("sampling_method", ["single_pass", "iterative_refinement"])
+@pytest.mark.parametrize("sample_fn", EXCLUSION_SAMPLERS)
+def test_excluded_amino_acids_never_sampled(sample_fn, sampling_method):
+    """Excluded residues never appear at masked positions, and the rest still fill.
+
+    High temperature on a fully masked window makes an unconstrained sampler
+    overwhelmingly likely to emit at least one excluded residue, so a clean
+    run is evidence the mask applied rather than luck.
+    """
+    sampled = sample_fn(_EXCLUDED_AAS, sampling_method)
+
+    assert sampled, "sampler returned no sequences"
+    for sequence in sampled:
+        assert "_" not in sequence
+        assert not set(sequence) & set(_EXCLUDED_AAS), f"excluded residue in {sequence}"
+        assert not return_invalid_protein_chars(sequence)
+
+
 # ── Cross-toolkit overlay isolation ───────────────────────────────────────────
 
 

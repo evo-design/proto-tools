@@ -118,6 +118,33 @@ _REMOTE_ROADMAP_NOTE = "We are looking into supporting remote options for these 
 # real choice meaning the whole batch goes to one execution.
 _UNSET_CHUNK_SIZE = -1
 
+# Default local_only reason for an out-of-tree toolkit with a standalone environment; remote workers only ship proto_tools.
+_EXTERNAL_LOCAL_ONLY_REASON = (
+    "{key} is defined outside proto_tools, so no remote worker has its environment. Run locally with "
+    "device='cpu' or device='cuda'."
+)
+
+
+def _is_packaged_toolkit_dir(toolkit_dir: Path) -> bool:
+    """Whether a toolkit directory ships with proto_tools, i.e. sits under ``proto_tools/tools/``.
+
+    Compares unresolved paths, which is exact for imported modules since ``TOOLS_DIR`` and every tool's
+    ``co_filename`` derive from the same ``sys.path`` entry.
+    """
+    return toolkit_dir.is_relative_to(TOOLS_DIR)
+
+
+@functools.cache
+def _packaged_toolkit_names() -> dict[str, Path]:
+    """Map each packaged toolkit directory name (``proto_tools/tools/{category}/{toolkit}/``) to its path."""
+    return {
+        toolkit_dir.name: toolkit_dir
+        for category_dir in TOOLS_DIR.iterdir()
+        if category_dir.is_dir() and not category_dir.name.startswith(("_", "."))
+        for toolkit_dir in category_dir.iterdir()
+        if toolkit_dir.is_dir() and not toolkit_dir.name.startswith(("_", "."))
+    }
+
 
 def _has_deployment(key: str) -> bool:
     """Whether a deployment is written for ``key``.
@@ -777,6 +804,21 @@ class ToolSpec(BaseModel):
     }
 
     @property
+    def toolkit_dir(self) -> Path:
+        """The toolkit directory: the one holding the file that defines this tool."""
+        return self.source_file.parent
+
+    @property
+    def is_external(self) -> bool:
+        """Whether this tool is defined outside ``proto_tools/tools/``.
+
+        True for a toolkit in a downstream package, and also for tools defined in test files or
+        notebooks. Only external toolkits with a ``standalone/`` directory get the out-of-tree
+        rules: a namespaced environment, a unique toolkit name, and local-only dispatch.
+        """
+        return not _is_packaged_toolkit_dir(self.toolkit_dir)
+
+    @property
     def has_standalone_env(self) -> bool:
         """Whether this tool ships a ``standalone/`` directory with an isolated env.
 
@@ -785,7 +827,7 @@ class ToolSpec(BaseModel):
         (e.g. ``random_nucleotide``, ``random_protein``, simple sequence
         utilities) — these cannot be used with ``ToolInstance.persist_tool``.
         """
-        return (self.source_file.parent / "standalone").is_dir()
+        return (self.toolkit_dir / "standalone").is_dir()
 
     @property
     def local_cpu(self) -> bool:
@@ -974,6 +1016,15 @@ class ToolRegistry:
         ) -> Callable[..., BaseToolOutput]:
             cls._check_duplicate(key, func.__name__)
             source_file = Path(func.__code__.co_filename)
+
+            # An out-of-tree toolkit with a standalone environment needs a unique name, no helper look-alikes, and runs only locally.
+            resolved_local_only = local_only
+            toolkit_dir = source_file.parent
+            if not _is_packaged_toolkit_dir(toolkit_dir) and (toolkit_dir / "standalone").is_dir():
+                cls._check_toolkit_namespace(key, toolkit_dir)
+                cls._check_reserved_standalone_names(key, toolkit_dir)
+                if resolved_local_only is None:
+                    resolved_local_only = _EXTERNAL_LOCAL_ONLY_REASON.format(key=key)
 
             if (iterable_input_fields is None) != (iterable_output_field is None):
                 raise ValueError(
@@ -1516,7 +1567,7 @@ class ToolRegistry:
                 iterable_input_fields=iterable_input_fields,
                 iterable_output_field=iterable_output_field,
                 max_chunk_size=resolved_max_chunk_size,
-                local_only=local_only,
+                local_only=resolved_local_only,
                 cacheable=cacheable,
                 stochastic=stochastic,
                 post_process_iterable=post_process_iterable,
@@ -1961,38 +2012,34 @@ class ToolRegistry:
     def get_docs_url(cls, key: str) -> str | None:
         """Get the documentation URL for a tool.
 
-        Computes the URL from the tool's directory location: every tool under
-        ``proto_tools/tools/{category}/{toolkit}/`` maps deterministically
-        to ``https://bio-pro.mintlify.app/tools/{category-kebab}/{tool-kebab}``,
-        because proto-docs auto-generates one page per tool dir on each sync.
+        Computes the URL from the directory of the file that defines the tool:
+        every tool under ``proto_tools/tools/{category}/{toolkit}/`` maps
+        deterministically to
+        ``https://bio-pro.mintlify.app/tools/{category-kebab}/{toolkit-kebab}``,
+        because proto-docs auto-generates one page per toolkit dir on each sync.
 
-        Returns ``None`` only when the tool's directory can't be located on
-        disk (e.g. a registry entry with no corresponding source tree — not a
-        case that should occur for shipped tools).
+        Returns ``None`` for a tool defined anywhere else (a test file, a
+        notebook, or a package outside proto_tools), since no docs page exists
+        for it.
 
         Args:
             key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search').
 
         Returns:
-            str | None: Documentation URL, or None if the tool directory
-                cannot be resolved.
+            str | None: Documentation URL, or None if the tool is not defined
+                under ``proto_tools/tools/{category}/{toolkit}/``.
 
         Raises:
             ValueError: If tool key is not found in registry.
         """
-        spec = cls.get(key)
-        normalized = key.replace("-", "_")
-        category_dir = TOOLS_DIR / spec.category
-        if not category_dir.is_dir():
+        toolkit_dir = cls.get(key).source_file.parent
+        if not toolkit_dir.is_relative_to(TOOLS_DIR):
             return None
-        for tool_dir in sorted(category_dir.iterdir()):
-            if not tool_dir.is_dir() or tool_dir.name.startswith("_"):
-                continue
-            if normalized == tool_dir.name or normalized.startswith(tool_dir.name + "_"):
-                category_kebab = spec.category.replace("_", "-")
-                tool_kebab = tool_dir.name.replace("_", "-")
-                return f"https://bio-pro.mintlify.app/tools/{category_kebab}/{tool_kebab}"
-        return None
+        parts = toolkit_dir.relative_to(TOOLS_DIR).parts
+        if len(parts) != 2:
+            return None
+        category, toolkit = parts
+        return f"https://bio-pro.mintlify.app/tools/{category.replace('_', '-')}/{toolkit.replace('_', '-')}"
 
     @classmethod
     def get_example_notebook_path(cls, key: str) -> Path | None:
@@ -2034,6 +2081,64 @@ class ToolRegistry:
             else:
                 error_msg += f"\nExisting tool: {existing_label}"
             raise ValueError(error_msg)
+
+    @classmethod
+    def _check_toolkit_namespace(cls, key: str, toolkit_dir: Path) -> None:
+        """Check that an out-of-tree toolkit with an environment has a name no other toolkit uses.
+
+        Workers, environments, build failures and ``PROTO_<TOOLKIT>_STANDALONE_DIR`` are all keyed by
+        the toolkit directory name, so a shared name would let two toolkits run in or rebuild each
+        other's environment.
+
+        Args:
+            key (str): Tool registry key being registered.
+            toolkit_dir (Path): Directory of the file defining the tool.
+
+        Raises:
+            ValueError: If the name matches a packaged toolkit, or a different out-of-tree toolkit
+                directory that is already registered.
+        """
+        name = toolkit_dir.name
+        packaged = _packaged_toolkit_names().get(name)
+        if packaged is not None:
+            raise ValueError(
+                f"@tool({key!r}): toolkit directory {toolkit_dir} has the same name as the packaged toolkit "
+                f"{packaged}. Toolkit directory names are shared with proto_tools, so rename the directory."
+            )
+        for spec in list(cls._registry.values()):
+            if (
+                spec.is_external
+                and spec.has_standalone_env
+                and spec.toolkit_dir.name == name
+                and spec.toolkit_dir.resolve() != toolkit_dir.resolve()
+            ):
+                raise ValueError(
+                    f"@tool({key!r}): toolkit directory {toolkit_dir} has the same name as {spec.toolkit_dir}, "
+                    f"which defines {spec.key!r}. Toolkit directory names must be unique, so rename one of them."
+                )
+
+    @classmethod
+    def _check_reserved_standalone_names(cls, key: str, toolkit_dir: Path) -> None:
+        """Check that an out-of-tree toolkit's ``standalone/`` holds nothing named like the shared helpers.
+
+        proto_tools publishes ``standalone_helpers`` to every worker on ``PYTHONPATH`` and ``PATH``, so a
+        same-named file next to the worker script would shadow it.
+
+        Args:
+            key (str): Tool registry key being registered.
+            toolkit_dir (Path): Directory of the file defining the tool.
+
+        Raises:
+            ValueError: If ``standalone/`` contains a ``standalone_helpers`` package, module, or script.
+        """
+        standalone_dir = toolkit_dir / "standalone"
+        reserved = sorted(name for name in ToolInstance._HELPER_ARTIFACTS if (standalone_dir / name).exists())
+        if reserved:
+            raise ValueError(
+                f"@tool({key!r}): {standalone_dir} contains {', '.join(reserved)}, a name reserved for the "
+                f"standalone_helpers that proto_tools provides to every worker. Import or source the provided "
+                f"helpers directly, and rename or delete the local copy."
+            )
 
 
 def _coerce_model(instance: BaseModel, expected_class: type[BaseModel], tool_key: str, role: str) -> BaseModel:
@@ -2362,50 +2467,39 @@ def _re_emit_warnings(warning_list: list[warnings.WarningMessage]) -> None:
 
 
 def _find_tool_metadata_file(tool_key: str, filename: str) -> Path | None:
-    """Find a metadata file (cite.bib, links.yaml, etc.) in tool directories.
+    """Find a metadata file (cite.bib, links.yaml, etc.) in a tool's toolkit directory.
 
-    Maps tool key (e.g., 'evo2-sample') to tool directory (e.g., evo2/)
-    and checks for the given filename.
+    The toolkit directory is the one holding the file that defines the tool,
+    so the lookup is the same for every tool wherever it lives on disk.
 
     Args:
         tool_key (str): Tool registry key (e.g., 'evo2-sample', 'blast-search')
-        filename (str): Name of file to find (e.g., 'cite.bib', 'links.yaml')
+        filename (str): Path relative to the toolkit directory (e.g., 'cite.bib',
+            'examples/example.ipynb')
 
     Returns:
-        Path | None: Path to the file, or None if not found
+        Path | None: Path to the file, or None if the tool is unregistered or the
+            file does not exist
     """
-    # Tool keys are kebab-case but directories are snake_case
-    normalized_key = tool_key.replace("-", "_")
-
-    for category_dir in TOOLS_DIR.iterdir():
-        if not category_dir.is_dir() or category_dir.name.startswith("_"):
-            continue
-
-        for tool_dir in category_dir.iterdir():
-            if not tool_dir.is_dir() or tool_dir.name.startswith("_"):
-                continue
-
-            # e.g., 'evo2_sample' matches 'evo2', 'blast_search' matches 'blast'
-            if normalized_key == tool_dir.name or normalized_key.startswith(tool_dir.name + "_"):
-                file_path = tool_dir / filename
-                if file_path.exists():
-                    return file_path
-
-    return None
+    spec = ToolRegistry._registry.get(tool_key)
+    if spec is None:
+        return None
+    path = spec.source_file.parent / filename
+    return path if path.exists() else None
 
 
 def _find_citation_file(tool_key: str) -> Path | None:
-    """Find cite.bib for a tool by searching tool directories."""
+    """Find cite.bib in a tool's toolkit directory."""
     return _find_tool_metadata_file(tool_key, "cite.bib")
 
 
 def _find_links_file(tool_key: str) -> Path | None:
-    """Find links.yaml for a tool by searching tool directories."""
+    """Find links.yaml in a tool's toolkit directory."""
     return _find_tool_metadata_file(tool_key, "links.yaml")
 
 
 def _find_license_file(tool_key: str) -> Path | None:
-    """Find license.yaml for a tool by searching tool directories."""
+    """Find license.yaml in a tool's toolkit directory."""
     return _find_tool_metadata_file(tool_key, "license.yaml")
 
 

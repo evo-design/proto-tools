@@ -117,6 +117,19 @@ COMMON_CODON_SCHEMES: list[str] = [
 ]
 
 
+def codons_encoding(amino_acids: Collection[str]) -> list[str]:
+    """Return every codon translating to one of ``amino_acids``, in genetic-code order.
+
+    Args:
+        amino_acids (Collection[str]): One-letter codes; ``"*"`` selects the stop codons.
+
+    Returns:
+        list[str]: Matching codons; empty when nothing matches.
+    """
+    wanted = set(amino_acids)
+    return [codon for codon, aa in CODON_TO_AA.items() if aa in wanted]
+
+
 # ============================================================================
 # Codon scheme expansion
 # ============================================================================

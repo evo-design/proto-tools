@@ -1,0 +1,13 @@
+# Environment variables for the netMHCpan tool.
+#
+# netMHCpan is user-provisioned: the download is gated behind DTU's academic
+# license registration and cannot be fetched automatically, so forward the user's
+# install location into the isolated env where setup.sh and run.py look for the
+# binary. PROTO_HOME / PROTO_MODEL_CACHE are forwarded automatically.
+
+[passthrough]
+# netMHCpan install root (NMHOME is the variable the netMHCpan launcher script uses).
+NETMHCPAN_HOME
+NMHOME
+# Per-tool override pointing at the install (resolve_weights_dir("netmhcpan")).
+PROTO_NETMHCPAN_WEIGHTS_DIR

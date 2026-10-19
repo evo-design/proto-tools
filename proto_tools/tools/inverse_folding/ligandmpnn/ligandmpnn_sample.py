@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from proto_tools.entities.complex import Chain
 from proto_tools.entities.ligands import Fragment
@@ -24,6 +24,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
 from proto_tools.utils.progress import progress_bar
+from proto_tools.utils.sequence import normalize_excluded_amino_acids
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         description="Single-letter codes of amino acids to exclude (e.g. ['C'] to forbid cysteine)",
         examples=[["C"]],
     )
+
     sc_num_denoising_steps: int = ConfigField(
         title="Sidechain Denoising Steps",
         default=8,
@@ -122,6 +124,12 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         ge=1,
         description="Side-chain packing samples; only used with model_type='original'.",
     )
+
+    @field_validator("excluded_amino_acids", mode="before")
+    @classmethod
+    def validate_excluded_amino_acids(cls, value: Any) -> Any:
+        """Normalize and validate excluded amino-acid codes."""
+        return normalize_excluded_amino_acids(value)
 
     @model_validator(mode="after")
     def _validate_legacy_only_fields(self) -> "LigandMPNNSampleConfig":

@@ -1,6 +1,9 @@
 """Tests for `proto_tools.utils.install_binary` retry and integrity logic."""
 
 import io
+import os
+import subprocess
+import sys
 import urllib.error
 from pathlib import Path
 
@@ -20,9 +23,10 @@ class _Response(io.BytesIO):
 
 @pytest.fixture
 def stub_platform(tmp_path, monkeypatch):
-    """Stub config discovery, extract, sleep, and platform so the retry loop can be driven without I/O."""
+    """Stub config loading, extract, sleep, and platform so the retry loop can be driven without I/O."""
     monkeypatch.setattr(install_binary.time, "sleep", lambda _s: None)
-    monkeypatch.setattr(install_binary, "_find_tool_config", lambda _t: tmp_path / "binary_config.py")
+    (tmp_path / "binary_config.py").touch()
+    monkeypatch.chdir(tmp_path)
     fake_config = type(
         "M", (), {"URLS": {("Linux", "x86_64"): "http://example/file"}, "extract": staticmethod(lambda *_a: None)}
     )
@@ -111,3 +115,40 @@ def test_download_failure_names_the_url(stub_platform, capsys):
         install_binary.install_binary("dummy")
 
     assert "http://example/file" in capsys.readouterr().out
+
+
+def test_install_binary_requires_a_config(tmp_path, monkeypatch):
+    """A setup directory without binary_config.py fails with the path it looked at."""
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(FileNotFoundError, match=str(tmp_path / "binary_config.py")):
+        install_binary.install_binary("dummy")
+
+
+def test_proto_install_binary_uses_the_setup_directory_config(tmp_path):
+    """The shell helper installs from binary_config.py in its working directory, wherever that lives."""
+    archive = tmp_path / "demo.bin"
+    archive.write_bytes(b"demo binary")
+    setup_dir = tmp_path / "anywhere" / "standalone"
+    setup_dir.mkdir(parents=True)
+    (setup_dir / "binary_config.py").write_text(
+        f"""import os, platform, shutil
+URLS = {{(platform.system(), arch): {archive.as_uri()!r} for arch in ("x86_64", "arm64")}}
+def extract(archive_path, bin_dir):
+    shutil.copy(archive_path, os.environ["DEMO_OUT"])
+"""
+    )
+    helpers_dir = Path(install_binary.__file__).parent / "standalone_helpers_source"
+    env = {
+        **os.environ,
+        "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}:{helpers_dir}",
+        "PROTO_INSTALL_BINARY": install_binary.__file__,
+        "DEMO_OUT": str(tmp_path / "installed.bin"),
+    }
+    subprocess.run(
+        ["bash", "-c", "set -euo pipefail; source standalone_helpers.sh; proto_install_binary demo"],
+        cwd=setup_dir,
+        env=env,
+        check=True,
+        capture_output=True,
+    )
+    assert (tmp_path / "installed.bin").read_bytes() == b"demo binary"

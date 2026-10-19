@@ -309,7 +309,7 @@ When a tool needs to download model weights or archives during setup:
 - Use `curl -fsSL` (not `wget` — `wget` is not available in micromamba environments)
 - Use `python -c "import zipfile; ..."` (not `unzip` — `unzip` is not available in micromamba environments)
 - `set -euo pipefail` at the top ensures `curl` failures are fatal — no need for explicit error checks
-- For prebuilt binaries, use `utils/install_binary.py` instead (see `notes/tool-environments.md`)
+- For prebuilt binaries, use `proto_install_binary` from `standalone_helpers.sh` instead (see "Binary Installation" in `notes/tool-environments.md`)
 
 ```bash
 # Download model weights

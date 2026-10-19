@@ -142,7 +142,7 @@ Both variables default to off, so setup output stays quiet unless a caller opts 
 When a tool's packaged `standalone/` setup does not work on your machine (a cluster needs a different CUDA wheel, a pinned version has to change, an install step needs patching) you can override the whole env definition without editing the installed package. This works identically whether proto-tools was installed editable (`pip install -e`) or as a regular wheel, since the override points at a directory you control rather than at the package. Two pieces:
 
 - `proto-tools eject-standalone <toolkit> [--dir DIR]` copies the tool's packaged env-def directory (resolving shared envs) into `DIR/<toolkit>/` (default `./proto_standalone/<toolkit>/`), giving you an editable copy of every file the env is built from (`setup.sh`, `python_version.txt`, `requirements.txt`, `env_vars.txt`, `binary_config.py`, ...). It always copies the packaged baseline, ignoring any active override.
-- `PROTO_<TOOLKIT>_STANDALONE_DIR=<path>` makes `ToolInstance._resolve_env_def` use `<path>` as the env-def dir instead of the packaged one. `<TOOLKIT>` is the toolkit's **folder name** uppercased (e.g. `esm2` → `PROTO_ESM2_STANDALONE_DIR`), not a tool registration key like `esm2-embed`. `eject-standalone` accepts either form and prints the exact variable to export. The override builds under an isolated env name (`<toolkit>__override_<hash>_env`), so it never clobbers the packaged env and two projects pointing at different override dirs get separate envs on disk. Editing the override's files triggers the usual setup-hash rebuild.
+- `PROTO_<TOOLKIT>_STANDALONE_DIR=<path>` makes `ToolInstance._resolve_env_def` use `<path>` as the env-def dir instead of the packaged one. `<TOOLKIT>` is the toolkit's **folder name** uppercased (e.g. `esm2` → `PROTO_ESM2_STANDALONE_DIR`), not a tool registration key like `esm2-embed`. `eject-standalone` accepts either form and prints the exact variable to export. The override builds under an isolated env name (`<toolkit>__override_<hash>_env`), so it never clobbers the packaged env and two projects pointing at different override dirs get separate envs on disk. Editing the override's files triggers the usual setup-hash rebuild. An out-of-tree toolkit's env is likewise namespaced, as `<toolkit>__ext_<hash>_env` (see `external-toolkits.md`).
 
 **Scope: the environment definition, not the tool implementation.** The override changes *how the environment is built* (which wheels, which CUDA build, which install steps), never what the tool computes. `run.py`, `inference.py`, and the modules they import are not ejected and are always loaded from the installed package, so a tool's results stay attributable to the version of proto-tools that produced them. `binary_config.py` is the one Python file that is ejected, because it configures the binary install rather than the computation. If an override directory left over from an older release still contains `run.py` or `inference.py`, proto-tools logs a warning that the file is ignored.
 
@@ -346,16 +346,20 @@ environment once it gets the lock and reuses the finished build.
 
 **When NOT to use:** Tools with conflicting Python versions, conflicting framework version pins, or genuinely independent dependency sets.
 
+**Out-of-tree toolkits:** a toolkit defined by a downstream package can also name a shared env in its package's `shared_envs/` directory (next to its `tools/`), built as `<name>__ext_<hash>_env`, or borrow a packaged toolkit's env with `toolkit:<name>` in `shared_env.txt`. Packaged toolkits share only through `shared_envs/`. See `external-toolkits.md`.
+
 **Migration note:** When a tool adopts a shared env (e.g. `esm3` migrated to `biohub_esm`), its on-disk env directory changes from `<toolkit>_env/` to `<shared_name>_env/`. The old directory is orphaned but harmless, and users can manually delete `PROTO_HOME/proto_tool_envs/<old_name>_env/` to reclaim disk.
 
 ## Binary Installation
 
-Tools needing external binaries must use `utils/install_binary.py`. Never use raw `curl`/`wget` in `setup.sh`.
+Tools needing external binaries must install them with `proto_install_binary` (which runs `utils/install_binary.py`). Never use raw `curl`/`wget` in `setup.sh`.
 
 1. Create `standalone/binary_config.py` with:
    - `URLS`: dict mapping `(system, machine)` tuples to download URLs (use `"arm64"` not `"aarch64"`)
    - `extract(archive_path: Path, bin_dir: Path)`: extracts/copies binaries into bin/
-2. In `setup.sh`, call `python "$SEARCH_DIR/utils/install_binary.py" <toolkit>`
+2. In `setup.sh`, `source standalone_helpers.sh` and call `proto_install_binary <toolkit>`.
+
+`proto_install_binary` loads `binary_config.py` from the directory `setup.sh` runs in, so the config travels with the env definition: a shared env keeps it in `shared_envs/<name>/`, and a `PROTO_<TOOLKIT>_STANDALONE_DIR` override uses the copy `eject-standalone` made, edits included. The same call works from an out-of-tree toolkit (see `external-toolkits.md`).
 
 See blast or mmseqs for the standard pattern, and for platform-independent tools (e.g., Java JARs), use the same URL for all platform keys.
 

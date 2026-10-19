@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/ProteinDesignLab/caliby/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: Caliby (Shuai et al., Protein Design Lab, Stanford) is Apache-2.0; the checkpoints on HuggingFace at ProteinDesignLab/caliby-weights are Apache-2.0 and ungated. Caliby bundles graph layers from Chroma (Generate Biomedicines, Apache-2.0) and adapts the Chroma Potts decoder; both carry their original copyright notices.
+last_updated: '2026-10-18'

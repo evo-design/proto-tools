@@ -21,6 +21,21 @@ logger = logging.getLogger(__name__)
 # cannot be represented in PDB at all, so PyRosetta scoring is impossible.
 MAX_CHAINS_FOR_PDB = 62
 
+# Worker payload key: whether PyRosetta initializes with ``-corrections::beta_nov16``.
+BETA_NOV16_CORRECTIONS = "beta_nov16_corrections"
+
+
+def uses_beta_nov16_corrections(scorefxn: str) -> bool:
+    """Return whether *scorefxn* needs PyRosetta's process-wide ``-corrections::beta_nov16`` parameters.
+
+    Args:
+        scorefxn (str): Rosetta score function name.
+
+    Returns:
+        bool: ``True`` for ``beta_nov16`` score functions (``beta_nov16``, ``beta_nov16_cart``, ...).
+    """
+    return scorefxn.startswith("beta_nov16")
+
 
 class ScoringStructureInput(StructureInputBase):
     """Bundles a structure with optional chain selection for scoring.

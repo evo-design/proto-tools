@@ -4,7 +4,7 @@ import logging
 import math
 from typing import Any, ClassVar, Literal, cast
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from standalone_helpers.mixed_sequence import (
     AMBIGUOUS_PROTEIN_TOKENS,
     DNA_TOKENS,
@@ -14,8 +14,9 @@ from standalone_helpers.mixed_sequence import (
 )
 
 from proto_tools.transforms.masking import MaskingInput, MaskingStrategy
-from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils import AminoAcid, BaseConfig, ConfigField
 from proto_tools.utils.base_config import _marked_preprocessed
+from proto_tools.utils.sequence import normalize_excluded_amino_acids
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,8 @@ class MixedSampleConfig(MixedModelConfig):
         strategy (Literal['random', 'entropy']): Select commitments randomly or by confidence.
         temperature_annealing (bool): Cool temperature during iterative refinement.
         return_logits (bool): Return biological logits, evaluated on the completed sequence.
+        excluded_amino_acids (list[AminoAcid] | None): Amino acids never sampled at masked
+            protein positions; DNA positions, unmasked tokens, and returned logits are unaffected.
     """
 
     masking_inputs: ClassVar[frozenset[MaskingInput]] = frozenset({MaskingInput.LOGITS})
@@ -169,6 +172,18 @@ class MixedSampleConfig(MixedModelConfig):
         title="Return Logits",
         description="Include biological logits from a final forward pass over each completed sequence",
     )
+    excluded_amino_acids: list[AminoAcid] | None = ConfigField(
+        default=None,
+        title="Excluded Amino Acids",
+        description="Uppercase codes never sampled at masked protein positions (e.g. ['C']); DNA unaffected",
+        examples=[["C"]],
+    )
+
+    @field_validator("excluded_amino_acids", mode="before")
+    @classmethod
+    def validate_excluded_amino_acids(cls, value: Any) -> Any:
+        """Normalize and validate excluded amino-acid codes."""
+        return normalize_excluded_amino_acids(value)
 
     def preprocess(self, inputs: Any) -> Any:
         """Select tokens once, preserving original modalities in the normalized input."""

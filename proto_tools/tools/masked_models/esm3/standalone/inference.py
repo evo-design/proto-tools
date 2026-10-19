@@ -178,6 +178,7 @@ class ESM3Model:
         verbose: bool = False,
         return_logits: bool = False,
         seed: int | None = None,
+        excluded_amino_acids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Sample amino acids at masked ('_') positions in protein sequences.
 
@@ -203,6 +204,7 @@ class ESM3Model:
             verbose (bool): Whether to print progress.
             return_logits (bool): Whether to return per-position AA logits.
             seed (int | None): Random seed for reproducible sampling.
+            excluded_amino_acids (list[str] | None): Amino acids never sampled at masked positions.
 
         Returns:
             dict[str, Any]: Dictionary with "sequences" and optionally "logits".
@@ -230,7 +232,12 @@ class ESM3Model:
                 device_obj=device_obj,
                 verbose=verbose,
                 return_logits=return_logits,
+                excluded_amino_acids=excluded_amino_acids,
             )
+
+        excluded_idx = torch.tensor(
+            [AMINO_ACIDS_LIST.index(aa) for aa in excluded_amino_acids or []], dtype=torch.long, device=device_obj
+        )
 
         # Record mask positions, replace '_' with the model's mask token
         mask_token = self.tokenizer.mask_token
@@ -281,7 +288,7 @@ class ESM3Model:
                 else:
                     pos_t = torch.tensor(positions, device=device_obj)
                     pos_logits = aa_logits[seq_idx, pos_t]
-                    scaled = pos_logits / max(temperature, 1e-8)
+                    scaled = (pos_logits / max(temperature, 1e-8)).index_fill(-1, excluded_idx, -torch.inf)
                     probs = torch.softmax(scaled, dim=-1)
                     sampled_idx = torch.multinomial(probs, 1).squeeze(-1)
 
@@ -312,6 +319,7 @@ class ESM3Model:
         device_obj: torch.device,
         verbose: bool,
         return_logits: bool,
+        excluded_amino_acids: list[str] | None,
     ) -> dict[str, Any]:
         """Iterative refinement via ESM3 SDK ``batch_generate``.
 
@@ -321,6 +329,8 @@ class ESM3Model:
         from esm.sdk.api import ESMProtein, GenerationConfig
 
         mask_token = self.tokenizer.mask_token
+        vocab = self.tokenizer.get_vocab()
+        invalid_ids = [vocab[aa] for aa in excluded_amino_acids or []]
 
         if verbose:
             logger.info(
@@ -347,6 +357,7 @@ class ESM3Model:
                     temperature=temperature,
                     temperature_annealing=temperature_annealing,
                     top_p=top_p,
+                    invalid_ids=invalid_ids,
                 )
                 for _ in batch_sequences
             ]
@@ -629,6 +640,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
             return_logits=input_dict["return_logits"],
             seed=input_dict["seed"],
+            excluded_amino_acids=input_dict["excluded_amino_acids"],
         )
     if operation == "score":
         return _model.score(

@@ -36,6 +36,7 @@ class MinervaSampleConfig(MinervaConfig, MixedSampleConfig):
         strategy (Literal['random', 'entropy']): Random or confidence-based commitment selection.
         temperature_annealing (bool): Cool temperature during iterative refinement.
         return_logits (bool): Include biological logits from the completed sequence.
+        excluded_amino_acids (list[AminoAcid] | None): Amino acids never sampled at masked protein positions.
     """
 
 

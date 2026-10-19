@@ -156,7 +156,22 @@ def test_ccd_lookup_returns_metadata_for_entries_rdkit_cannot_sanitize():
 
     assert czl.formula == "Fe8 H6 S9"
     assert hb1.formula == "C23 H13 N3 O3 Ru"
+    assert czl.formula_weight == pytest.approx(741.35, abs=1.0)
+    assert hb1.formula_weight == pytest.approx(480.44, abs=1.0)
     assert not czl.errors and not hb1.errors
+
+
+@pytest.mark.skip_ci
+@pytest.mark.integration
+def test_ccd_lookup_computes_descriptors_without_sanitization():
+    """sanitize=False still yields formula_weight and RDKit physchem descriptors."""
+    result = run_ccd_lookup(CcdLookupInput(identifiers=["ATP"]), CcdLookupConfig(sanitize=False))
+    validate_output(result)
+    (atp,) = result.results
+
+    assert atp.formula_weight == pytest.approx(507.18, abs=1.0)
+    assert {"molecular_weight", "logp", "tpsa", "num_h_donors", "num_h_acceptors"} <= set(atp.physchem_properties)
+    assert not any("formula_weight" in w for w in atp.warnings)
 
 
 @pytest.mark.skip_ci

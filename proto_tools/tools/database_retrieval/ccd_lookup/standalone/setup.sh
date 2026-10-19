@@ -5,6 +5,7 @@
 # downloads the wwPDB Chemical Component Dictionary (components.cif) into the
 # tool's weights directory. The CCD bundle is ~115MB compressed and ~500MB
 # uncompressed; pdbeccdutils prefers the uncompressed mmCIF for fast lookups.
+# Finally prebuilds the SMILES/InChIKey -> CCD code index beside it.
 
 set -euo pipefail
 
@@ -47,5 +48,13 @@ else
     # gunzip -k preserves the .gz; remove it to save ~70MB.
     rm -f "${CCD_GZ}"
 fi
+
+# ----------------------------------------------------------------------------
+# SMILES/InChIKey index
+# ----------------------------------------------------------------------------
+# Parsing every CCD entry takes about a minute and several GB, so build the
+# index once here; run.py reuses it while its version/bundle stamp matches.
+echo "[ccd_lookup] Building SMILES/InChIKey index..."
+python run.py --build-index "${CCD_CIF}"
 
 echo "[ccd_lookup] Setup complete. CCD data at: ${CCD_CIF}"
