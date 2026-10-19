@@ -335,7 +335,7 @@ def run_caliby_score(
         unit="structure",
         disable=not config.verbose,
     ):
-        with ensemble_paths(inp.ensemble_structures) as (primary_path, conformer_paths):
+        with ensemble_paths(inp.ensemble_structures) as (primary_path, conformer_paths, _):
             input_dict = {
                 "operation": "score",
                 "primary_path": str(primary_path),
