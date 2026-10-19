@@ -49,7 +49,7 @@ inherits the unrestricted case.
 public `allowed_mask` input yet: a user-facing masking API should be supported consistently
 across every applicable backend rather than tool by tool, and only the mixed models have a
 masking seam today. Forbidden tokens are expressed in the meantime by passing exact zeros with
-`temperature=None`, or through a tool's own field, such as AlphaFold2's `omit_aas`.
+`temperature=None`, or through a tool's own field, such as AlphaFold2's `excluded_amino_acids`.
 
 **Infinite logits are never transmitted.** Matrix construction rejects non-finite values, so a
 `-inf` column is not a way to forbid a token.
@@ -143,8 +143,8 @@ softmax branch against the raw input, so `opt["soft"] = 0` makes the supplied di
 reach AlphaFold verbatim, and `aux["grad"]["seq"]` is then the probability-space derivative.
 The worker sets `soft=0, hard=0` and pins `temp` to keep the unused softmax branch finite.
 
-Because the bias terms feed only that unused branch, `soft`, `hard`, `omit_aas` and
-`bias_redesign` have no effect in probability mode. They are **refused** when combined with
+Because the bias terms feed only that unused branch, `soft`, `hard`,
+`excluded_amino_acids` and `bias_redesign` have no effect in probability mode. They are **refused** when combined with
 `temperature=None` rather than silently ignored.
 
 ## Output

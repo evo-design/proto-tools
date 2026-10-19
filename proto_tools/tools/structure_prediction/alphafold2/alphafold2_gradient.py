@@ -364,8 +364,9 @@ def _reject_unused_softmax_knobs(inputs: AlphaFold2GradientInput, config: AlphaF
 
     ``temperature=None`` consumes the supplied probabilities verbatim, which ColabDesign
     expresses as ``soft=0``. Its softmax branch is then unused, so every knob feeding only that
-    branch — the ``hard`` straight-through blend, and the ``bias`` behind ``omit_aas`` and
-    ``bias_redesign`` — would have no effect. Refuse them rather than drop them silently.
+    branch — the ``hard`` straight-through blend, and the ``bias`` behind
+    ``excluded_amino_acids`` and ``bias_redesign`` — would have no effect. Refuse them rather
+    than drop them silently.
 
     Args:
         inputs (AlphaFold2GradientInput): Binder input, read for ``temperature``.
@@ -381,8 +382,8 @@ def _reject_unused_softmax_knobs(inputs: AlphaFold2GradientInput, config: AlphaF
         ignored.append(f"soft={config.soft}")
     if config.hard != 0.0:
         ignored.append(f"hard={config.hard}")
-    if config.omit_aas:
-        ignored.append(f"omit_aas={config.omit_aas}")
+    if config.excluded_amino_acids:
+        ignored.append(f"excluded_amino_acids={config.excluded_amino_acids}")
     if config.bias_redesign is not None:
         ignored.append(f"bias_redesign={config.bias_redesign}")
     if ignored:

@@ -93,7 +93,7 @@ def test_gradient_config_rejects_bad_loss_weights():
     [
         ({"hard": 0.5}, "hard=0.5"),
         ({"soft": 0.25}, "soft=0.25"),
-        ({"omit_aas": ["C"]}, "omit_aas"),
+        ({"excluded_amino_acids": ["C"]}, "excluded_amino_acids"),
         ({"bias_redesign": 2.0}, "bias_redesign=2.0"),
     ],
 )
