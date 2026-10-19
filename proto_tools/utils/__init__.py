@@ -54,7 +54,6 @@ from proto_tools.utils.sequence_logits import (
     NucleotideSequenceLogits,
     ProteinSequenceLogits,
     SequenceLogits,
-    SequenceLogitsBundle,
     iter_sequence_logits,
 )
 from proto_tools.utils.system_info import (
@@ -127,7 +126,6 @@ __all__ = [
     "NucleotideSequenceLogits",
     "ProteinSequenceLogits",
     "SequenceLogits",
-    "SequenceLogitsBundle",
     "iter_sequence_logits",
     # MSA
     "extract_msa_sequences",

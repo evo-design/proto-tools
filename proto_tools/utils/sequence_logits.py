@@ -9,7 +9,7 @@ import math
 from collections.abc import Iterator, Sequence
 from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict, RootModel, model_validator
+from pydantic import BaseModel, RootModel, model_validator
 from typing_extensions import Self
 
 from proto_tools.utils.sequence import DNA_NUCLEOTIDES, PROTEIN_AMINO_ACIDS
@@ -186,8 +186,8 @@ class NucleotideSequenceLogits(SequenceLogits):
 def iter_sequence_logits(model: BaseModel) -> Iterator[tuple[str, SequenceLogits]]:
     """Yield ``(path, matrix)`` for every relaxed matrix reachable from a model's fields.
 
-    Walks direct :class:`SequenceLogits` fields, lists of them, and nested
-    :class:`SequenceLogitsBundle` models. Other nested models are not traversed, so an input
+    Walks direct :class:`SequenceLogits` fields, lists of them, and nested models that expose
+    their own ``iter_sequence_logits()``. Other nested models are not traversed, so an input
     carrying a ``Structure`` or similar is not walked needlessly.
 
     Args:
@@ -202,8 +202,10 @@ def iter_sequence_logits(model: BaseModel) -> Iterator[tuple[str, SequenceLogits
         value = getattr(model, name, None)
         if isinstance(value, SequenceLogits):
             yield name, value
-        elif isinstance(value, SequenceLogitsBundle):
-            for path, matrix in iter_sequence_logits(value):
+        elif callable(getattr(value, "iter_sequence_logits", None)):
+            # A composite field declares its own matrices, so nested models opt in rather than
+            # every BaseModel being walked.
+            for path, matrix in value.iter_sequence_logits():
                 yield f"{name}.{path}", matrix
         elif isinstance(value, list):
             for index, item in enumerate(value):
@@ -211,27 +213,10 @@ def iter_sequence_logits(model: BaseModel) -> Iterator[tuple[str, SequenceLogits
                     yield f"{name}[{index}]", item
 
 
-class SequenceLogitsBundle(BaseModel):
-    """Base for composite inputs holding several named relaxed matrices.
-
-    Gradient inputs find matrices through :func:`iter_sequence_logits`, which recurses into
-    bundles. Composing a bundle therefore keeps a multi-chain input (an antibody's heavy and
-    light chains, say) inside the shared contract instead of special-casing it.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    def iter_sequence_logits(self) -> Iterator[tuple[str, SequenceLogits]]:
-        """Yield ``(field_path, matrix)`` for every populated matrix on this bundle."""
-        # -> this bundle's (path, (L, V) matrix) pairs
-        return iter_sequence_logits(self)
-
-
 __all__ = [
     "PROBABILITY_SUM_TOLERANCE",
     "NucleotideSequenceLogits",
     "ProteinSequenceLogits",
     "SequenceLogits",
-    "SequenceLogitsBundle",
     "iter_sequence_logits",
 ]

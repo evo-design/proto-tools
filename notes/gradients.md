@@ -79,8 +79,8 @@ SequenceLogits                     (L, V) RootModel; shape, rectangularity, fini
 ├── CodonSequenceLogits            V=64, lexicographic DNA codons
 └── MixedSequenceLogits            V=24, ACDEFGHIKLMNPQRSTVWYacgt
 
-SequenceLogitsBundle               composite holding several named matrices
-└── AntibodyLogits                 heavy_chain / light_chain
+AntibodyLogits                     composite; exposes iter_sequence_logits() for its chains
+                                   heavy_chain / light_chain
 
 GradientInput                      temperature, sequence_logits(), allowed_tokens(), validation
 ├── ProteinGradientInput           + logits: ProteinSequenceLogits

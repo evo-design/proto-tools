@@ -27,9 +27,9 @@ class GradientInput(BaseToolInput):
     """Shared contract for one relaxed-sequence gradient evaluation step.
 
     Subclasses declare the relaxed state they consume — a vocabulary-specific
-    :class:`~proto_tools.utils.sequence_logits.SequenceLogits` field, or a
-    :class:`~proto_tools.utils.sequence_logits.SequenceLogitsBundle` composing several — and
-    this base owns the temperature semantics and gradient-coordinate contract they share.
+    :class:`~proto_tools.utils.sequence_logits.SequenceLogits` field, or a composite model
+    exposing its own ``iter_sequence_logits()`` — and this base owns the temperature semantics
+    and the gradient contract they share.
 
     ``temperature`` fixes both how that state is read and which space the returned gradient
     lives in:
