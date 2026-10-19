@@ -1,5 +1,6 @@
 """netMHCpan MHC class I binding prediction runner."""
 
+import difflib
 import os
 import platform
 import re
@@ -18,6 +19,13 @@ logger = get_logger(__name__)
 _BIN_RELPATH = "bin/netMHCpan"
 _PSEUDO_RELPATH = "data/MHC_pseudo.dat"
 
+# netMHCpan gates the -a flag on data/allelenames, which is not the same set as
+# data/MHC_pseudo.dat: 355 names appear only in the pseudo-sequence file, as alternate
+# spellings the binary rejects (MHC_pseudo.dat has BoLA-100901 and H2-Db where allelenames
+# has BoLA-1:00901 and H-2-Db). Allele validation therefore reads allelenames, and
+# MHC_pseudo.dat is used only to confirm the data files are present.
+_ALLELENAMES_RELPATH = "data/allelenames"
+
 # Environment variables that may point at an install root, in resolution order after the
 # explicit config field. NMHOME is the variable documented by the netMHCpan software.
 _ENV_VARS = ("NETMHCPAN_HOME", "NMHOME")
@@ -35,7 +43,9 @@ _PEPLIST_IDENTITY = "PEPLIST"
 _TDIR_TEMPLATE = "netMHCpanXXXXXX"
 
 _VERSION_RE = re.compile(r"NetMHCpan version (\S+)")
-_BAD_ALLELE_RE = re.compile(r"Error\.\s+(\S+)\s+cannot be found in hla_pseudo list")
+
+# netMHCpan rejects an allele with one of two messages, depending on which list it checked.
+_BAD_ALLELE_RE = re.compile(r"Error\.\s+(\S+)\s+cannot be found in (?:hla_pseudo|allelenames) list")
 
 
 def _platform_dir() -> str:
@@ -44,9 +54,9 @@ def _platform_dir() -> str:
 
 
 def _install_paths(root: str) -> tuple[str, str]:
-    """Return the binary and pseudo-sequence paths implied by an install root."""
+    """Return the binary and allele-name list paths implied by an install root."""
     base = os.path.join(root, _platform_dir())
-    return os.path.join(base, _BIN_RELPATH), os.path.join(base, _PSEUDO_RELPATH)
+    return os.path.join(base, _BIN_RELPATH), os.path.join(base, _ALLELENAMES_RELPATH)
 
 
 def _require_install(root: str, source: str) -> tuple[str, str]:
@@ -61,30 +71,33 @@ def _require_install(root: str, source: str) -> tuple[str, str]:
         source (str): Human-readable origin of the setting, named in error messages.
 
     Returns:
-        tuple[str, str]: Absolute paths to the netMHCpan binary and to MHC_pseudo.dat.
+        tuple[str, str]: Absolute paths to the netMHCpan binary and to its allele-name list.
 
     Raises:
-        FileNotFoundError: If the root holds no binary, or the data files are missing.
+        FileNotFoundError: If the root holds no runnable binary, or the data files are missing.
     """
-    binary, pseudo = _install_paths(root)
-    if not os.path.isfile(binary):
+    binary, allelenames = _install_paths(root)
+    if not os.access(binary, os.X_OK):
+        detail = "is not executable" if os.path.isfile(binary) else "was not found"
         raise FileNotFoundError(
-            f"{source} is set to {root!r} but no netMHCpan binary was found at "
+            f"{source} is set to {root!r} but the netMHCpan binary {detail} at "
             f"{_platform_dir()}/{_BIN_RELPATH} underneath it. Point it at the netMHCpan-4.1 "
             "install root (the directory holding the per-platform subdirectory)."
         )
-    if not os.path.isfile(pseudo):
-        raise FileNotFoundError(
-            f"netMHCpan install at {root} (from {source}) is missing its data files "
-            f"({_platform_dir()}/{_PSEUDO_RELPATH}). Download data.tar.gz from "
-            "https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/ and extract it inside "
-            "the netMHCpan-4.1 directory."
-        )
-    return binary, pseudo
+    base = os.path.join(root, _platform_dir())
+    for relpath in (_PSEUDO_RELPATH, _ALLELENAMES_RELPATH):
+        if not os.path.isfile(os.path.join(base, relpath)):
+            raise FileNotFoundError(
+                f"netMHCpan install at {root} (from {source}) is missing its data files "
+                f"({_platform_dir()}/{relpath}). Download data.tar.gz from "
+                "https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/ and extract it inside "
+                "the netMHCpan-4.1 directory."
+            )
+    return binary, allelenames
 
 
 def resolve_install(netmhcpan_dir: str | None = None) -> tuple[str, str]:
-    """Locate a usable netMHCpan install and return its binary and pseudo-sequence paths.
+    """Locate a usable netMHCpan install and return its binary and allele-name list paths.
 
     Resolution order: the explicit ``netmhcpan_dir`` config field, then ``NETMHCPAN_HOME`` /
     ``NMHOME``, then the managed weights cache. The first three are explicit settings, so an
@@ -93,10 +106,10 @@ def resolve_install(netmhcpan_dir: str | None = None) -> tuple[str, str]:
 
     Args:
         netmhcpan_dir (str | None): Explicit install root, or None to use the environment
-            and the managed cache.
+            and the managed cache. An empty string counts as unset.
 
     Returns:
-        tuple[str, str]: Absolute paths to the netMHCpan binary and to MHC_pseudo.dat.
+        tuple[str, str]: Absolute paths to the netMHCpan binary and to its allele-name list.
 
     Raises:
         FileNotFoundError: If an explicit setting is invalid, or nothing is provisioned.
@@ -111,7 +124,7 @@ def resolve_install(netmhcpan_dir: str | None = None) -> tuple[str, str]:
     cache_root = resolve_weights_dir("netmhcpan")
     if cache_root:
         cached_binary, _ = _install_paths(cache_root)
-        if os.path.isfile(cached_binary):
+        if os.access(cached_binary, os.X_OK):
             return _require_install(cache_root, "$PROTO_NETMHCPAN_WEIGHTS_DIR / the managed cache")
 
     raise FileNotFoundError(
@@ -125,10 +138,10 @@ def resolve_install(netmhcpan_dir: str | None = None) -> tuple[str, str]:
     )
 
 
-def load_supported_alleles(pseudo_path: str) -> set[str]:
-    """Return every allele name the install accepts, read from MHC_pseudo.dat."""
+def load_supported_alleles(allelenames_path: str) -> set[str]:
+    """Return every allele name the binary accepts, read from its allelenames list."""
     alleles = set()
-    with open(pseudo_path) as handle:
+    with open(allelenames_path) as handle:
         for line in handle:
             fields = line.split()
             if fields:
@@ -136,35 +149,35 @@ def load_supported_alleles(pseudo_path: str) -> set[str]:
     return alleles
 
 
-def validate_alleles(alleles: list[str], pseudo_path: str) -> None:
+def validate_alleles(alleles: list[str], allelenames_path: str) -> None:
     """Reject alleles the install does not know, before spawning the binary.
 
     The binary exits 1 on the first unknown allele, so validating up front reports every
-    bad name at once and keeps a typo from looking like a tool failure.
+    bad name at once and keeps a typo from looking like a tool failure. Validation reads
+    data/allelenames, which is the list the binary itself gates the -a flag on.
 
     Args:
         alleles (list[str]): Normalized allele names.
-        pseudo_path (str): Path to the install's MHC_pseudo.dat.
+        allelenames_path (str): Path to the install's data/allelenames.
 
     Raises:
-        ValueError: If any allele is absent from the install's pseudo-sequence list.
+        ValueError: If any allele is absent from the install's allele-name list.
     """
-    supported = load_supported_alleles(pseudo_path)
+    supported = load_supported_alleles(allelenames_path)
     unknown = [allele for allele in alleles if allele not in supported]
     if not unknown:
         return
     hints = {}
     for allele in unknown:
-        prefix = allele[:5]
-        near = sorted(name for name in supported if name.startswith(prefix))[:5]
+        near = difflib.get_close_matches(allele, supported, n=5, cutoff=0.6)
         if near:
             hints[allele] = near
     detail = "; ".join(f"{allele} (did you mean {', '.join(near)}?)" for allele, near in hints.items())
     raise ValueError(
         f"Unknown allele(s) for this netMHCpan install: {', '.join(unknown)}. "
         f"{detail} "
-        f"This install lists {len(supported)} alleles in {_PSEUDO_RELPATH}; names must use the "
-        "unstarred form, e.g. HLA-A02:01."
+        f"This install lists {len(supported)} alleles in {_ALLELENAMES_RELPATH}; names must use the "
+        "unstarred form, e.g. HLA-A02:01 or BoLA-1:00901."
     )
 
 
@@ -216,7 +229,7 @@ def parse_output(text: str) -> tuple[str | None, list[dict]]:
         records.append(record)
 
     if headers is None:
-        raise ValueError(f"netMHCpan produced no result table. Output was:\n{text}")
+        raise ValueError(f"netMHCpan produced no result table. Output was:\n{_diagnostic_lines(text)}")
     return version, records
 
 
@@ -234,6 +247,16 @@ def _write_fasta(sequences: list[str], directory: str) -> str:
     with open(path, "w") as handle:
         handle.writelines(f">{_SYNTHETIC_ID_PREFIX}{index}\n{sequence}\n" for index, sequence in enumerate(sequences))
     return path
+
+
+def _diagnostic_lines(output: str) -> str:
+    """Strip netMHCpan's option dump, leaving the lines that say what went wrong.
+
+    Every invocation echoes its full parameter list as ``#``-prefixed lines, around forty
+    of them, which buries the one line that matters when a run fails.
+    """
+    kept = [line for line in output.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+    return "\n".join(kept) if kept else output.strip()
 
 
 def _invoke(argv: list[str], workdir: str, install_base: str) -> str:
@@ -268,7 +291,7 @@ def _invoke(argv: list[str], workdir: str, install_base: str) -> str:
                 f"netMHCpan rejected allele {bad.group(1)!r}. Allele names must use the unstarred "
                 "form, e.g. HLA-A02:01."
             )
-        raise RuntimeError(f"netMHCpan exited {completed.returncode}:\n{combined}")
+        raise RuntimeError(f"netMHCpan exited {completed.returncode}:\n{_diagnostic_lines(combined)}")
     return combined
 
 

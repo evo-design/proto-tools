@@ -36,6 +36,14 @@ code:
 commercial_use: 'no'
 redistribution: false
 attribution_required: true
+weights:
+  spdx: Custom (DTU Health Tech Academic Software License)
+  url: https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/data.tar.gz
+  access: request
+  text: 'The networks and threshold tables ship as a separate data.tar.gz, which is itself an
+    ungated download and is fetched automatically. They are usable only with the netMHCpan
+    software, which is obtained by request from DTU Health Tech after agreeing to the academic
+    license terms, so the toolkit as a whole is gated on that request.'
 notes: 'netMHCpan is proprietary precompiled software from DTU Health Tech, free only for
   publicly funded academic, education or research institutions and gated behind per-user
   registration; a commercial license must be obtained from health-software@dtu.dk. DTU''s

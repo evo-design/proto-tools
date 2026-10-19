@@ -158,7 +158,7 @@ def binding_propensity(rank: float, weak_rank: float) -> float:
         weak_rank (float): Weak-binder %rank threshold the curve is centred on.
 
     Returns:
-        float: Propensity in (0, 1).
+        float: Propensity in (0, 1], reaching exactly 1.0 only for a non-positive rank.
     """
     if rank <= 0.0:
         return 1.0

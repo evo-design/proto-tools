@@ -121,8 +121,9 @@ def test_normalize_allele_spellings_converge(spelling):
 
 
 def test_normalize_allele_leaves_non_human_prefix_untouched():
-    """A non-human prefix is passed through verbatim; MHC_pseudo.dat is case-sensitive."""
-    assert normalize_allele("BoLA-100901") == "BoLA-100901"
+    """A non-human prefix passes through verbatim; the allele-name list is case-sensitive."""
+    assert normalize_allele("BoLA-1:00901") == "BoLA-1:00901"
+    assert normalize_allele("H-2-Db") == "H-2-Db"
 
 
 @pytest.mark.parametrize("name", ["", "   "])
@@ -298,6 +299,41 @@ def test_summarize_empty_bindings_reports_no_binder():
     assert metrics["binding_propensity"] == 0.0
 
 
+def test_validate_alleles_accepts_names_from_the_allelenames_list(tmp_path):
+    """Validation reads data/allelenames, which is the list the binary gates -a on."""
+    names = tmp_path / "allelenames"
+    names.write_text("HLA-A02:01 HLA-A02:01\nBoLA-1:00901 BoLA-1:00901\nH-2-Db H-2-Db\n")
+    _standalone_run.validate_alleles(["HLA-A02:01", "BoLA-1:00901", "H-2-Db"], str(names))
+
+
+def test_validate_alleles_rejects_pseudo_only_spellings(tmp_path):
+    """A spelling present only in MHC_pseudo.dat is rejected, since the binary rejects it too."""
+    names = tmp_path / "allelenames"
+    names.write_text("BoLA-1:00901 BoLA-1:00901\nH-2-Db H-2-Db\n")
+    with pytest.raises(ValueError) as excinfo:
+        _standalone_run.validate_alleles(["BoLA-100901"], str(names))
+    assert "BoLA-100901" in str(excinfo.value)
+
+
+def test_validate_alleles_suggestions_are_names_the_binary_accepts(tmp_path):
+    """Near-miss suggestions are drawn from the accepted list, not from a wider one."""
+    names = tmp_path / "allelenames"
+    names.write_text("HLA-A02:01 x\nHLA-A02:02 x\nHLA-B07:02 x\n")
+    supported = _standalone_run.load_supported_alleles(str(names))
+    with pytest.raises(ValueError) as excinfo:
+        _standalone_run.validate_alleles(["HLA-A02:1"], str(names))
+    message = str(excinfo.value)
+    suggested = [name for name in supported if name in message]
+    assert suggested, "expected at least one suggestion"
+    assert all(name in supported for name in suggested)
+
+
+def test_diagnostic_lines_drops_the_option_dump():
+    """The parameter echo is stripped so a failure message shows what actually went wrong."""
+    noisy = "# [-rth float] 0.5 Rank Threshold\n# [-BA] 0 Include Binding affinity\nError. boom\n"
+    assert _standalone_run._diagnostic_lines(noisy) == "Error. boom"
+
+
 def test_summarize_omits_affinity_metrics_without_binding_affinity():
     """EL-only predictions leave the BA metrics absent rather than reporting a zero."""
     metrics = summarize([_binding(0.1), _binding(5.0)], 2.0)
@@ -455,6 +491,55 @@ def test_netmhcpan_peptides_binding_affinity_flag_populates_ba_fields():
     assert (el_binding.score_ba, el_binding.rank_ba, el_binding.affinity_nm) == (None, None, None)
     # -BA is additive, so the eluted-ligand prediction must be unchanged by the flag.
     assert ba_binding.rank_el == el_binding.rank_el
+
+
+def test_protein_rejects_sequences_too_short_for_any_window():
+    """A sequence shorter than the shortest requested length is an error, not an empty scan.
+
+    Reporting it as a scan with no bindings would claim the sequence presents nothing, which
+    is the most favourable value of the primary metric for a sequence never scored.
+    """
+    with pytest.raises(ValueError) as excinfo:
+        run_netmhcpan_protein(
+            NetMHCpanProteinInput(sequences=["MKTIIALSYIFCLVFAQ", "MKTIIALSY"]),
+            NetMHCpanProteinConfig(peptide_lengths=[11]),
+        )
+    message = str(excinfo.value)
+    assert "sequences[1]" in message
+    assert "11" in message
+
+
+@pytest.mark.integration
+def test_netmhcpan_protein_strong_binders_per_100_residues_matches_the_formula():
+    """Epitope density is the strong-binder count over residues times alleles, per 100."""
+    _require_netmhcpan()
+    panel = ["HLA-A02:01", "HLA-B07:02"]
+    result = run_netmhcpan_protein(
+        NetMHCpanProteinInput(sequences=[_PROTEIN]),
+        NetMHCpanProteinConfig(alleles=panel, peptide_lengths=[9]),
+    )
+    scan = result.results[0]
+    expected = scan.strong_binder_count / (scan.sequence_length * len(panel)) * 100.0
+    assert scan.strong_binders_per_100_residues == pytest.approx(expected)
+
+
+@pytest.mark.integration
+def test_netmhcpan_protein_export_csv_carries_a_sequence_index(tmp_path):
+    """The protein CSV export has one row per window-allele pair, keyed by input index."""
+    import csv
+
+    _require_netmhcpan()
+    panel = ["HLA-A02:01", "HLA-B07:02"]
+    result = run_netmhcpan_protein(
+        NetMHCpanProteinInput(sequences=[_PROTEIN, _PROTEIN[:20]]),
+        NetMHCpanProteinConfig(alleles=panel, peptide_lengths=[9]),
+    )
+    result.export("scan", tmp_path, "csv")
+    with (tmp_path / "scan.csv").open() as handle:
+        rows = list(csv.reader(handle))
+    assert rows[0][0] == "sequence_index"
+    assert len(rows) == sum(len(s.bindings) for s in result.results) + 1
+    assert {row[0] for row in rows[1:]} == {"0", "1"}
 
 
 @pytest.mark.integration

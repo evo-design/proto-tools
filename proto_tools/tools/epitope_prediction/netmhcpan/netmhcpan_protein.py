@@ -21,13 +21,7 @@ from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputF
 
 logger = logging.getLogger(__name__)
 
-# A protein scan is one row per window per allele, so a chunk covers far fewer sequences
-# than the peptide tool covers peptides.
 _MAX_CHUNK_SIZE = 64
-
-# The standalone writes synthetic FASTA ids because netMHCpan truncates the Identity column
-# to 15 characters, which would make user-supplied headers collide.
-_SYNTHETIC_ID_PREFIX = "s"
 
 
 class NetMHCpanProteinInput(BaseToolInput):
@@ -244,6 +238,15 @@ def run_netmhcpan_protein(
         28
     """
     logger.debug("Using local venv for netmhcpan protein scanning")
+    shortest = min(config.peptide_lengths)
+    too_short = [(index, len(sequence)) for index, sequence in enumerate(inputs.sequences) if len(sequence) < shortest]
+    if too_short:
+        detail = ", ".join(f"sequences[{index}] has {length} residues" for index, length in too_short)
+        raise ValueError(
+            f"{detail}; every sequence must be at least {shortest} residues to yield a window at "
+            f"peptide_lengths={config.peptide_lengths}. Shorten peptide_lengths or drop the sequence."
+        )
+
     input_data = {
         "operation": "predict_protein",
         "sequences": inputs.sequences,
@@ -258,8 +261,8 @@ def run_netmhcpan_protein(
 
     output_data = ToolInstance.dispatch("netmhcpan", input_data, instance=instance, config=config)
 
-    # Group by the synthetic FASTA id the standalone wrote, which is the input index. Row
-    # order is not assumed: netMHCpan groups its output by peptide length and allele.
+    # Group by the FASTA id the standalone wrote, which it returns one per input sequence.
+    # Row order is not assumed: netMHCpan groups its output by peptide length and allele.
     grouped: dict[str, list[NetMHCpanBinding]] = {}
     for record in output_data["records"]:
         grouped.setdefault(record["Identity"], []).append(
@@ -267,8 +270,9 @@ def run_netmhcpan_protein(
         )
 
     results = []
-    for index, sequence in enumerate(inputs.sequences):
-        bindings = grouped.get(f"{_SYNTHETIC_ID_PREFIX}{index}", [])
+    identities = output_data["identities"]
+    for index, (sequence, identity) in enumerate(zip(inputs.sequences, identities, strict=True)):
+        bindings = grouped.get(identity, [])
         expected = sum(max(0, len(sequence) - length + 1) for length in config.peptide_lengths) * len(config.alleles)
         if len(bindings) != expected:
             raise ValueError(
@@ -277,9 +281,7 @@ def run_netmhcpan_protein(
                 f"{len(config.alleles)} allele(s) over {len(sequence)} residues)"
             )
         metrics = summarize(bindings, config.weak_rank)
-        strong_per_100 = (
-            metrics["strong_binder_count"] / (len(sequence) * len(config.alleles)) * 100.0 if sequence else 0.0
-        )
+        strong_per_100 = metrics["strong_binder_count"] / (len(sequence) * len(config.alleles)) * 100.0
         results.append(
             ProteinScan(
                 sequence_length=len(sequence),

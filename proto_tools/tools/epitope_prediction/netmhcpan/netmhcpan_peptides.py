@@ -19,8 +19,6 @@ from proto_tools.utils import BaseToolInput, BaseToolOutput, InputField, ToolIns
 
 logger = logging.getLogger(__name__)
 
-# One peptide against a panel of alleles is microseconds of arithmetic; the cost is process
-# startup. Chunk generously so fan-out amortizes the binary's startup over many peptides.
 _MAX_CHUNK_SIZE = 2048
 
 
