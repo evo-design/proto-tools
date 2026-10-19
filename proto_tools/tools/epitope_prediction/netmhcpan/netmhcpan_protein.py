@@ -280,7 +280,8 @@ def run_netmhcpan_protein(
                 f"{expected} were expected ({len(config.peptide_lengths)} length(s) x "
                 f"{len(config.alleles)} allele(s) over {len(sequence)} residues)"
             )
-        metrics = summarize(bindings, config.weak_rank)
+        # Summary values land in the Metrics extras, so they are passed as untyped kwargs.
+        metrics: dict[str, Any] = summarize(bindings, config.weak_rank)
         strong_per_100 = metrics["strong_binder_count"] / (len(sequence) * len(config.alleles)) * 100.0
         results.append(
             ProteinScan(

@@ -247,9 +247,9 @@ def run_netmhcpan_peptides(
                     f"got {len(by_key)} rows covering {sorted({key[0] for key in by_key})}"
                 )
             bindings.append(binding)
-        predictions.append(
-            PeptidePrediction(peptide=peptide, bindings=bindings, **summarize(bindings, config.weak_rank))
-        )
+        # Summary values land in the Metrics extras, so they are passed as untyped kwargs.
+        metrics: dict[str, Any] = summarize(bindings, config.weak_rank)
+        predictions.append(PeptidePrediction(peptide=peptide, bindings=bindings, **metrics))
 
     return NetMHCpanPeptidesOutput(
         predictions=predictions,

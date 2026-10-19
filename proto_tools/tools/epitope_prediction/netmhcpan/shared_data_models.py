@@ -162,7 +162,7 @@ def binding_propensity(rank: float, weak_rank: float) -> float:
     """
     if rank <= 0.0:
         return 1.0
-    return 1.0 / (1.0 + (rank / weak_rank) ** _PROPENSITY_STEEPNESS)
+    return float(1.0 / (1.0 + (rank / weak_rank) ** _PROPENSITY_STEEPNESS))
 
 
 class NetMHCpanBinding(BaseModel):

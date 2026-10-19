@@ -6,6 +6,7 @@ import platform
 import re
 import subprocess
 import tempfile
+from typing import Any
 
 from standalone_helpers import get_logger, resolve_weights_dir
 
@@ -181,7 +182,7 @@ def validate_alleles(alleles: list[str], allelenames_path: str) -> None:
     )
 
 
-def parse_output(text: str) -> tuple[str | None, list[dict]]:
+def parse_output(text: str) -> tuple[str | None, list[dict[str, str]]]:
     """Parse netMHCpan stdout into a version string and one record per peptide x allele.
 
     Columns are keyed off the table's header row rather than fixed offsets: the column
@@ -203,7 +204,7 @@ def parse_output(text: str) -> tuple[str | None, list[dict]]:
     """
     version = None
     headers: list[str] | None = None
-    records: list[dict] = []
+    records: list[dict[str, str]] = []
 
     for line in text.splitlines():
         if version is None:
@@ -300,7 +301,7 @@ def install_base_of(binary: str) -> str:
     return os.path.dirname(os.path.dirname(binary))
 
 
-def _base_argv(binary: str, workdir: str, alleles: list[str], config: dict) -> list[str]:
+def _base_argv(binary: str, workdir: str, alleles: list[str], config: dict[str, Any]) -> list[str]:
     """Build the argument list common to both input modes."""
     install_base = install_base_of(binary)
     argv = [
@@ -321,7 +322,7 @@ def _base_argv(binary: str, workdir: str, alleles: list[str], config: dict) -> l
     return argv
 
 
-def predict_peptides(input_dict: dict) -> dict:
+def predict_peptides(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Score explicit peptides against an allele panel.
 
     ``-l`` is deliberately not passed: netMHCpan ignores it in peptide mode and predicts
@@ -341,7 +342,7 @@ def predict_peptides(input_dict: dict) -> dict:
     return {"version": version, "records": records, "identities": [_PEPLIST_IDENTITY] * len(peptides)}
 
 
-def predict_protein(input_dict: dict) -> dict:
+def predict_protein(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Enumerate k-mers from each protein sequence and score them against an allele panel."""
     binary, pseudo = resolve_install(input_dict.get("netmhcpan_dir"))
     alleles = input_dict["alleles"]
@@ -361,7 +362,7 @@ def predict_protein(input_dict: dict) -> dict:
 _OPERATIONS = {"predict_peptides": predict_peptides, "predict_protein": predict_protein}
 
 
-def dispatch(input_dict: dict) -> dict:
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Route a dispatch payload to the requested netMHCpan operation."""
     operation = input_dict["operation"]
     if operation not in _OPERATIONS:
@@ -369,12 +370,12 @@ def dispatch(input_dict: dict) -> dict:
     return _OPERATIONS[operation](input_dict)
 
 
-def to_device(device: str) -> dict:
+def to_device(device: str) -> dict[str, Any]:
     """Report device moves as satisfied; netMHCpan is a CPU-only binary."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
-def get_memory_stats() -> dict:
+def get_memory_stats() -> dict[str, Any]:
     """Report that GPU memory statistics do not apply to this CPU-only tool."""
     return {"available": False, "framework": "cpu", "note": "CPU tool"}
 
