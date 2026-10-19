@@ -14,6 +14,8 @@ from typing_extensions import Self
 
 from proto_tools.utils.sequence import DNA_NUCLEOTIDES, PROTEIN_AMINO_ACIDS
 
+# Shapes below use L = sequence positions (rows) and V = vocabulary size (columns).
+
 # Absolute tolerance on the row-sum check in probability mode (``temperature=None``).
 PROBABILITY_SUM_TOLERANCE = 1e-6
 
@@ -36,6 +38,7 @@ class SequenceLogits(RootModel[list[list[float]]]):
     @model_validator(mode="after")
     def validate_matrix(self) -> Self:
         """Check for a non-empty, rectangular ``(L, V)`` grid of finite numbers."""
+        # root: (L, V) -> rejects empty, ragged, and non-finite matrices.
         vocab = type(self).VOCAB
         if not vocab:
             raise ValueError(
@@ -43,7 +46,7 @@ class SequenceLogits(RootModel[list[list[float]]]):
             )
         if not self.root:
             raise ValueError("logits must contain at least one position")
-        width = len(vocab)
+        width = len(vocab)  # V
         for index, row in enumerate(self.root):
             if len(row) != width:
                 raise ValueError(f"logits row {index + 1} must have {width} columns, got {len(row)}")
@@ -53,24 +56,29 @@ class SequenceLogits(RootModel[list[list[float]]]):
 
     def __len__(self) -> int:
         """Return the number of positions."""
+        # -> L
         return len(self.root)
 
     def __iter__(self) -> Iterator[list[float]]:  # type: ignore[override]
         """Iterate over position rows, rather than Pydantic's ``(field, value)`` pairs."""
+        # -> L rows, each (V,)
         return iter(self.root)
 
     def __getitem__(self, index: int) -> list[float]:
         """Return one position row."""
+        # -> (V,)
         return self.root[index]
 
     @property
     def shape(self) -> tuple[int, int]:
         """Return the ``(L, V)`` matrix shape."""
+        # -> (L, V)
         return len(self.root), len(type(self).VOCAB)
 
     @property
     def vocab(self) -> list[str]:
         """Return the column symbols, in column order."""
+        # -> V symbols, column-ordered
         return list(type(self).VOCAB)
 
     def validate_fixed_rows(self, *, allowed: list[list[bool]], label: str = "logits") -> None:
@@ -86,6 +94,7 @@ class SequenceLogits(RootModel[list[list[float]]]):
         Raises:
             ValueError: If the mask is misaligned, or a fixed-context row holds a nonzero value.
         """
+        # allowed: (L, V) bool -> every all-False row of root must be exactly zero.
         if len(allowed) != len(self.root):
             raise ValueError(f"{label}: allowed-token mask must have one row per position")
         for index, (row, mask) in enumerate(zip(self.root, allowed, strict=True)):
@@ -108,10 +117,11 @@ class SequenceLogits(RootModel[list[list[float]]]):
                 outside its permitted columns, or does not sum to 1.0 within
                 :data:`PROBABILITY_SUM_TOLERANCE`.
         """
+        # allowed: (L, V) bool | None -> each active row must be a simplex over its permitted columns.
         if allowed is not None and len(allowed) != len(self.root):
             raise ValueError(f"{label}: allowed-token mask must have one row per position")
         for index, row in enumerate(self.root):
-            mask = allowed[index] if allowed is not None else None
+            mask = allowed[index] if allowed is not None else None  # (V,) or None
             if mask is not None and not any(mask):
                 continue
             position = index + 1
@@ -144,11 +154,13 @@ class SequenceLogits(RootModel[list[list[float]]]):
             ValueError: If ``temperature`` is not positive and finite, or a row is not a strictly
                 positive probability distribution.
         """
+        # probabilities: (L, V) simplex -> (L, V) logits, T * log(p).
         if not math.isfinite(temperature) or temperature <= 0.0:
             raise ValueError(f"temperature must be positive and finite, got {temperature!r}")
-        distribution = cls([[float(value) for value in row] for row in probabilities])
+        distribution = cls([[float(value) for value in row] for row in probabilities])  # (L, V), validated below
         distribution.validate_probabilities(label="probabilities")
         for index, row in enumerate(distribution.root):
+            # log(0) is -inf, which cannot cross JSON; refuse rather than floor the distribution.
             zeros = [column for column, value in enumerate(row) if value == 0.0]
             if zeros:
                 raise ValueError(
@@ -185,6 +197,7 @@ def iter_sequence_logits(model: BaseModel) -> Iterator[tuple[str, SequenceLogits
         tuple[str, SequenceLogits]: Dotted field path (``"logits"``, ``"antibody.heavy_chain"``,
             ``"logits[0]"``) and the matrix found there.
     """
+    # -> one (path, (L, V) matrix) pair per relaxed field, recursing into bundles only.
     for name in type(model).model_fields:
         value = getattr(model, name, None)
         if isinstance(value, SequenceLogits):
@@ -210,6 +223,7 @@ class SequenceLogitsBundle(BaseModel):
 
     def iter_sequence_logits(self) -> Iterator[tuple[str, SequenceLogits]]:
         """Yield ``(field_path, matrix)`` for every populated matrix on this bundle."""
+        # -> this bundle's (path, (L, V) matrix) pairs
         return iter_sequence_logits(self)
 
 
