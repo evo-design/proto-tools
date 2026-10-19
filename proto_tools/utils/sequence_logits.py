@@ -155,7 +155,8 @@ class SequenceLogits(RootModel[list[list[float]]]):
                 raise ValueError(
                     f"{label} row {position} must leave its non-permitted columns at zero when temperature is None"
                 )
-            if not math.isclose(sum(row), 1.0, abs_tol=PROBABILITY_SUM_TOLERANCE):
+            # rel_tol is pinned to 0 so the check is purely absolute, as the constant says.
+            if not math.isclose(sum(row), 1.0, rel_tol=0.0, abs_tol=PROBABILITY_SUM_TOLERANCE):
                 raise ValueError(f"{label} row {position} must be a probability distribution when temperature is None")
 
     @classmethod
