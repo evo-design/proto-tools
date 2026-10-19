@@ -171,6 +171,26 @@ from proto_tools.tools.database_retrieval import (
     run_uniprot_fetch,
 )
 
+# Epitope prediction tools
+from proto_tools.tools.epitope_prediction import (
+    NetMHCpanBinding,
+    NetMHCpanConfig,
+    NetMHCpanMetrics,
+    NetMHCpanPeptidesConfig,
+    NetMHCpanPeptidesInput,
+    NetMHCpanPeptidesOutput,
+    NetMHCpanProteinConfig,
+    NetMHCpanProteinInput,
+    NetMHCpanProteinMetrics,
+    NetMHCpanProteinOutput,
+    PeptidePrediction,
+    ProteinScan,
+    normalize_allele,
+    normalize_alleles,
+    run_netmhcpan_peptides,
+    run_netmhcpan_protein,
+)
+
 # Gene annotation tools
 from proto_tools.tools.gene_annotation import (
     CrisprArray,
@@ -1150,6 +1170,23 @@ __all__ = [
     "PyJackhmmerConfig",
     "PyJackhmmerOutput",
     "PyHmmerConfig",
+    # Epitope prediction - netMHCpan
+    "NetMHCpanBinding",
+    "NetMHCpanConfig",
+    "NetMHCpanMetrics",
+    "NetMHCpanPeptidesConfig",
+    "NetMHCpanPeptidesInput",
+    "NetMHCpanPeptidesOutput",
+    "NetMHCpanProteinConfig",
+    "NetMHCpanProteinInput",
+    "NetMHCpanProteinMetrics",
+    "NetMHCpanProteinOutput",
+    "PeptidePrediction",
+    "ProteinScan",
+    "normalize_allele",
+    "normalize_alleles",
+    "run_netmhcpan_peptides",
+    "run_netmhcpan_protein",
     # CRISPRtracrRNA
     "CrisprTracrRNAConfig",
     "CrisprTracrRNAInput",
