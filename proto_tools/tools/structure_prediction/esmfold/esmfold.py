@@ -37,9 +37,9 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     PROTEIN_AMINO_ACIDS,
     ConfigField,
-    GradientInput,
     GradientOutput,
     InputField,
+    ProteinGradientInput,
     ToolInstance,
     return_invalid_protein_chars,
 )
@@ -277,12 +277,12 @@ class ESMFoldConfig(StructurePredictionConfig):
         return inputs
 
 
-class ESMFoldGradientInput(GradientInput):
+class ESMFoldGradientInput(ProteinGradientInput):
     """Input for differentiable ESMFold confidence scoring.
 
     Attributes:
-        logits (list[list[float]]): Target-chain logits in proto amino-acid order.
-        temperature (float): Softmax temperature for the target-chain relaxed sequence.
+        logits (ProteinSequenceLogits): Relaxed target-chain state in proto amino-acid order.
+        temperature (float | None): Inherited — softmax temperature, or None for probabilities.
         chains (list[str]): Complete complex chain sequences. Entries listed in
             ``target_chain_indices`` are replaced by the hard decode of ``logits``
             before folding, but their lengths must match ``len(logits)``.
@@ -664,7 +664,7 @@ def run_esmfold_gradient(
         {
             "operation": "compute_gradient",
             "complex_data": prepared_complex,
-            "logits": inputs.logits,
+            "logits": inputs.logits.root,
             "target_chain_indices": inputs.target_chain_indices,
             "temperature": inputs.temperature,
             "soft": config.soft,

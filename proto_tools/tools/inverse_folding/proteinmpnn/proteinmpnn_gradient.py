@@ -3,17 +3,16 @@
 import logging
 from typing import Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
 
 from proto_tools.entities.structures import ChainSelection, ResidueSelection, Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    PROTEIN_AMINO_ACIDS,
     BaseConfig,
-    BaseToolInput,
     ConfigField,
     GradientOutput,
     InputField,
+    ProteinGradientInput,
     ToolInstance,
     one_hot_protein_logits,
 )
@@ -23,27 +22,23 @@ logger = logging.getLogger(__name__)
 ProteinMPNNModelChoice = Literal["proteinmpnn", "v_48_002", "v_48_010", "v_48_030", "abmpnn", "soluble"]
 
 
-class ProteinMPNNGradientInput(BaseToolInput):
+class ProteinMPNNGradientInput(ProteinGradientInput):
     """Input for relaxed ProteinMPNN perplexity gradients.
 
     Attributes:
-        logits (list[list[float]]): Relaxed sequence state, shape ``L x 20`` in
+        logits (ProteinSequenceLogits): Relaxed sequence state, shape ``L x 20`` in
             canonical amino-acid order ``ACDEFGHIKLMNPQRSTVWY``.
+        temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
+            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
+            gradient; ``None`` reads them as probabilities and returns a probability-space
+            gradient.
         structure (Structure): Backbone structure to condition ProteinMPNN on.
         chains_to_redesign (ChainSelection | None): Chains to score/design. If
             ``None``, all chains in ``structure`` are used.
         fixed_positions (ResidueSelection | None): Per-chain positions excluded
             from the perplexity objective.
-        temperature (float | None): Optional softmax temperature. When set,
-            applies ``softmax(input / temperature)`` before evaluating the
-            relaxed sequence. When ``None``, the input is used as-is.
     """
 
-    logits: list[list[float]] = InputField(
-        title="Logits",
-        description="Relaxed sequence logits with shape (L, 20) in canonical amino-acid order.",
-        examples=[[[0.0] * 20, [0.0] * 20]],
-    )
     structure: Structure = InputField(
         title="Input Structure",
         description="Backbone structure for ProteinMPNN conditioning.",
@@ -58,25 +53,6 @@ class ProteinMPNNGradientInput(BaseToolInput):
         title="Fixed Positions",
         description="Per-chain 1-indexed residue positions excluded from the ProteinMPNN objective.",
     )
-    temperature: float | None = InputField(
-        default=None,
-        title="Temperature",
-        description="Softmax temperature. Applies softmax(input / T) when set.",
-        gt=0.0,
-    )
-
-    @field_validator("logits")
-    @classmethod
-    def validate_logits(cls, logits: list[list[float]]) -> list[list[float]]:
-        """Ensure logits are a non-empty rectangular ``L x 20`` matrix."""
-        if not logits:
-            raise ValueError("logits must contain at least one position")
-
-        expected_width = len(PROTEIN_AMINO_ACIDS)
-        for idx, row in enumerate(logits):
-            if len(row) != expected_width:
-                raise ValueError(f"logits row {idx} must have {expected_width} columns, got {len(row)}")
-        return logits
 
     @model_validator(mode="before")
     @classmethod
@@ -201,7 +177,7 @@ def run_proteinmpnn_gradient(
                 "operation": "compute_gradient",
                 "pdb_path": str(pdb_path),
                 "chain_ids": chain_ids,
-                "logits": inputs.logits,
+                "logits": inputs.logits.root,
                 "temperature": inputs.temperature,
                 "use_ste": config.use_ste,
                 "compute_gradient": config.compute_gradient,

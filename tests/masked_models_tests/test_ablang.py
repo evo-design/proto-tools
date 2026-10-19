@@ -58,8 +58,8 @@ VL_SEQ = "SYELTQPPSVSVSPGQTARITCSANALPNQYAYWYQQKPGRAPVMVIYKDTQRPSGIPQRFSSSTSGTTV
 
 def test_ablang_gradient_input_validation():
     inp = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20, [1.0] * 20]))
-    assert inp.antibody.heavy_chain == [[0.0] * 20, [1.0] * 20]
-    assert inp.temperature is None
+    assert inp.antibody.heavy_chain.root == [[0.0] * 20, [1.0] * 20]
+    assert inp.temperature == 1.0
 
     inp_with_temp = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20]), temperature=0.6)
     assert inp_with_temp.temperature == 0.6
@@ -111,7 +111,7 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["logits"] == heavy + light
     assert captured["payload"]["chain_break_position"] == 1
     assert captured["payload"]["model_choice"] == "ablang2-paired"
-    assert captured["payload"]["temperature"] is None
+    assert captured["payload"]["temperature"] == 1.0  # shared default
     assert captured["payload"]["use_ste"] is False
     assert captured["payload"]["compute_gradient"] is True  # default
     assert captured["payload"]["batch_size"] is None  # default auto

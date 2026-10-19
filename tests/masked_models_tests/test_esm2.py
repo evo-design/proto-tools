@@ -38,8 +38,8 @@ _persistent_tool = make_persistent_fixture("esm2")
 
 def test_esm2_gradient_input_validation():
     inp = ESM2GradientInput(logits=[[0.0] * 20, [1.0] * 20])
-    assert inp.logits == [[0.0] * 20, [1.0] * 20]
-    assert inp.temperature is None
+    assert inp.logits.root == [[0.0] * 20, [1.0] * 20]
+    assert inp.temperature == 1.0
 
     inp_with_temp = ESM2GradientInput(logits=[[0.0] * 20], temperature=0.6)
     assert inp_with_temp.temperature == 0.6
@@ -142,6 +142,29 @@ def test_esm2_gradient_single_sequence():
     assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
     assert result.metrics["perplexity"] == pytest.approx(math.exp(result.loss), rel=1e-6)
     assert result.vocab == AMINO_ACIDS_LIST
+
+
+@pytest.mark.uses_gpu
+def test_esm2_gradient_probability_mode_matches_logit_mode():
+    """temperature=None on softmax(L) must reproduce temperature=1.0 on L, in both coordinates.
+
+    The two modes evaluate the same relaxed sequence, so the losses agree exactly and the
+    gradients are related by the softmax Jacobian:
+    ``g_logit[i] = p[i] * (g_prob[i] - sum_j p[j] * g_prob[j])``.
+    """
+    logits = one_hot_protein_logits("MKTL", sharpness=2.0)
+    probabilities = [[math.exp(v) / sum(math.exp(u) for u in row) for v in row] for row in logits]
+    config = ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", batch_size=2, seed=42)
+
+    logit_mode = run_esm2_gradient(ESM2GradientInput(logits=logits, temperature=1.0), config)
+    probability_mode = run_esm2_gradient(ESM2GradientInput(logits=probabilities, temperature=None), config)
+
+    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=1e-5)
+    assert logit_mode.gradient is not None and probability_mode.gradient is not None
+    for probs, g_prob, g_logit in zip(probabilities, probability_mode.gradient, logit_mode.gradient, strict=True):
+        weighted = sum(p * g for p, g in zip(probs, g_prob, strict=True))
+        expected = [p * (g - weighted) for p, g in zip(probs, g_prob, strict=True)]
+        assert g_logit == pytest.approx(expected, rel=1e-3, abs=1e-6)
 
 
 @pytest.mark.uses_gpu

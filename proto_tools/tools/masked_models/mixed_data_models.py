@@ -1,7 +1,7 @@
 """Shared contracts for mixed protein/DNA masked language models."""
 
 import json
-import math
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
@@ -26,8 +26,10 @@ from proto_tools.tools.masked_models.shared_data_models import (
 from proto_tools.transforms.masking import MASK_TOKEN
 from proto_tools.utils import (
     BaseToolInput,
+    GradientInput,
     GradientOutput,
     InputField,
+    SequenceLogits,
 )
 
 MixedModality = Literal["protein", "dna"]
@@ -140,30 +142,31 @@ class MixedSequenceSampleInput(MixedSequenceInput):
         return self
 
 
-class MixedSequenceGradientInput(BaseToolInput):
+class MixedSequenceLogits(SequenceLogits):
+    """A relaxed ``(L, 24)`` mixed protein/DNA state in ``ACDEFGHIKLMNPQRSTVWYacgt`` order."""
+
+    VOCAB: ClassVar[Sequence[str]] = tuple(MIXED_VOCAB)
+
+
+class MixedSequenceGradientInput(GradientInput):
     """Relaxed biological tokens aligned to a fixed mixed-sequence template.
 
     Attributes:
         sequence (str): Fully specified template fixing modality and ``+``/``-`` strand markers.
-        logits (list[list[float]]): One 24-column row per model token in
+        logits (MixedSequenceLogits): One 24-column row per model token in
             ``ACDEFGHIKLMNPQRSTVWYacgt`` order. Fixed context rows must be zero.
-        temperature (float | None): Softmax temperature; ``None`` requires probability
-            distributions over the permitted modality and zero elsewhere.
+        temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
+            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
+            gradient; ``None`` reads them as modality-restricted probabilities and returns a
+            probability-space gradient.
     """
 
     sequence: str = InputField(
         title="Sequence", description="Prepared template fixing each token's modality and strand markers"
     )
-    logits: list[list[float]] = InputField(
+    logits: MixedSequenceLogits = InputField(
         title="Logits",
         description="Token-aligned (L, 24) state in ACDEFGHIKLMNPQRSTVWYacgt order; fixed rows are zero",
-    )
-    temperature: float | None = InputField(
-        default=1.0,
-        title="Temperature",
-        gt=0.0,
-        allow_inf_nan=False,
-        description="Apply softmax(input / T); None requires modality-restricted probabilities",
     )
 
     @field_validator("sequence")
@@ -172,27 +175,38 @@ class MixedSequenceGradientInput(BaseToolInput):
         """Validate tokens and store one-character strand markers."""
         return "".join(tokenize_mixed_sequence(sequence))
 
-    @model_validator(mode="after")
-    def validate_relaxed_sequence(self) -> "MixedSequenceGradientInput":
-        """Check token alignment, finite state, fixed context, and probability domains."""
+    def allowed_tokens(self, path: str, logits: SequenceLogits) -> list[list[bool]]:  # noqa: ARG002 — path is part of the hook signature
+        """Restrict each position to its template token's modality.
+
+        Strand markers and ambiguous symbols are fixed context: they permit no column, so the
+        shared validator requires their rows to be zero in both temperature modes.
+
+        Args:
+            path (str): Field path of the matrix being validated.
+            logits (SequenceLogits): The token-aligned relaxed state.
+
+        Returns:
+            list[list[bool]]: Per-token permitted columns — protein tokens take columns 0-19,
+                DNA tokens take 20-23, everything else takes none.
+
+        Raises:
+            ValueError: If the state is not token-aligned, or fixes every position.
+        """
         tokens = list(self.sequence)
-        if len(tokens) != len(self.logits):
+        if len(tokens) != len(logits):
             raise ValueError("logits must have one row per model token, including strand markers")
-        if not any(t in MIXED_VOCAB for t in tokens):
+        width = len(MIXED_VOCAB)
+        mask: list[list[bool]] = []
+        for token in tokens:
+            row = [False] * width
+            if token in PROTEIN_TOKENS:
+                row[:20] = [True] * 20
+            elif token in DNA_TOKENS:
+                row[20:] = [True] * (width - 20)
+            mask.append(row)
+        if not any(any(row) for row in mask):
             raise ValueError("Gradient input requires at least one canonical protein or DNA token")
-        for index, (token, row) in enumerate(zip(tokens, self.logits, strict=True)):
-            if len(row) != len(MIXED_VOCAB) or not all(math.isfinite(v) for v in row):
-                raise ValueError(f"logits row {index + 1} must contain 24 finite numbers")
-            if token not in MIXED_VOCAB:
-                if any(row):
-                    raise ValueError(f"Fixed context row {index + 1} must contain zeros")
-            elif self.temperature is None:
-                permitted = range(20) if token in PROTEIN_TOKENS else range(20, 24)
-                if any(v < 0.0 or (j not in permitted and v != 0.0) for j, v in enumerate(row)) or not math.isclose(
-                    sum(row), 1.0, abs_tol=1e-6
-                ):
-                    raise ValueError(f"logits row {index + 1} must be a probability distribution within its modality")
-        return self
+        return mask
 
 
 class MixedSequenceEmbedding(SequenceEmbedding):
@@ -330,6 +344,7 @@ __all__ = [
     "MixedSequenceEmbedding",
     "MixedSequenceGradientInput",
     "MixedSequenceInput",
+    "MixedSequenceLogits",
     "MixedSequenceSample",
     "MixedSequenceSampleInput",
     "one_hot_mixed_logits",

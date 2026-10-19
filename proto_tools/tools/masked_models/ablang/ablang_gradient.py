@@ -11,36 +11,33 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
     ConfigField,
+    GradientInput,
     GradientOutput,
+    ProteinSequenceLogits,
     ToolInstance,
     one_hot_protein_logits,
 )
-from proto_tools.utils.tool_io import BaseToolInput, InputField
+from proto_tools.utils.tool_io import InputField
 
 logger = logging.getLogger(__name__)
 
 
-class AbLangGradientInput(BaseToolInput):
+class AbLangGradientInput(GradientInput):
     """Input for the AbLang gradient tool.
 
     Attributes:
-        antibody (AntibodyLogits): Antibody with relaxed sequence distributions.
-            The model variant is selected automatically based on which chains
-            are provided.
-        temperature (float | None): Optional softmax temperature. When set, applies
-            ``softmax(input / temperature)`` before computing the gradient. When
-            ``None`` (default), the input is used as-is.
+        antibody (AntibodyLogits): Antibody with relaxed sequence distributions, one matrix
+            per chain. The model variant is selected automatically from which chains are
+            provided, and the returned gradient concatenates them heavy-then-light.
+        temperature (float | None): Softmax temperature. The default ``1.0`` reads each chain
+            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
+            gradient; ``None`` reads them as probabilities and returns a probability-space
+            gradient.
     """
 
     antibody: AntibodyLogits = InputField(
         title="Antibody Logits",
         description="Antibody with relaxed sequence distributions over amino acids.",
-    )
-    temperature: float | None = InputField(
-        default=None,
-        title="Temperature",
-        description="Softmax temperature. Applies softmax(input / T) when set.",
-        gt=0.0,
     )
 
 
@@ -104,7 +101,8 @@ class AbLangGradientConfig(BaseConfig):
 
 def example_input() -> AbLangGradientInput:
     """Minimal valid input for testing and examples."""
-    return AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=one_hot_protein_logits("EVQLVESG", sharpness=2.0)))
+    heavy = ProteinSequenceLogits(one_hot_protein_logits("EVQLVESG", sharpness=2.0))
+    return AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy))
 
 
 @tool(
@@ -131,12 +129,12 @@ def run_ablang_gradient(
 
     chain_break_position: int | None = None
     if ab.heavy_chain is not None and ab.light_chain is not None:
-        logits = ab.heavy_chain + ab.light_chain
+        logits = ab.heavy_chain.root + ab.light_chain.root
         chain_break_position = len(ab.heavy_chain)
     elif ab.heavy_chain is not None:
-        logits = ab.heavy_chain
+        logits = ab.heavy_chain.root
     else:
-        logits = ab.light_chain  # type: ignore[assignment]
+        logits = ab.light_chain.root  # type: ignore[union-attr]
 
     logger.debug(
         "Using local worker for AbLang gradient (model_choice=%s)",

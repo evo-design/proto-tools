@@ -79,7 +79,7 @@ This tool is appropriate for differentiable antibody-design pipelines that updat
 #### Usage Tips
 
 - **Input logits use the canonical protein order `ACDEFGHIKLMNPQRSTVWY`.** The tool implementation internally maps to AbLang's vocabulary order before the forward pass and returns the gradient in the same canonical order, so the user does not need to handle the AbLang-specific token order separately.
-- **Set `temperature` to apply a softmax before scoring.** When `temperature` is set, the tool implementation applies `softmax(input / temperature)` to the input logits before the forward pass. Leave `temperature=None` (the default) when the user already provides a normalised probability distribution.
+- **`temperature` fixes the input coordinate system.** The default `1.0` reads `logits` as unnormalized and applies `softmax(logits / T)`, so the returned gradient is logit-space. Setting it to `None` reads them as probabilities — every active row nonnegative and summing to 1 within `1e-6` — and the returned gradient is probability-space. Both chains share one `temperature`.
 - **Use the Straight-Through Estimator option for discrete-token gradients.** Setting `use_ste=True` substitutes hard one-hot tokens in the forward pass while allowing gradients to flow through the soft probabilities, which can produce sharper update directions for some discrete-design loops. The default (`use_ste=False`) uses soft blended embeddings.
 - **Set `compute_gradient=False` for forward-only scoring.** This skips the backward pass and returns `gradient=None` together with the loss value, which is useful for ranking candidates from a Monte Carlo proposal without paying the backward-pass cost.
 

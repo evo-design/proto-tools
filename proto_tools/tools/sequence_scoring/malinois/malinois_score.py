@@ -14,9 +14,11 @@ from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
+    BatchedNucleotideGradientInput,
     ConfigField,
     GradientOutput,
     InputField,
+    NucleotideSequenceLogits,
     ToolInstance,
     return_invalid_nucleotide_chars,
 )
@@ -340,54 +342,17 @@ class MalinoisGradientLossTerm(BaseModel):
     )
 
 
-class MalinoisGradientInput(BaseToolInput):
+class MalinoisGradientInput(BatchedNucleotideGradientInput):
     """Input for differentiable Malinois sequence optimization.
 
     Attributes:
-        logits (MalinoisLogits): Batched relaxed DNA sequence logits with shape
-            ``(B, L, 4)`` in ``A,C,G,T`` order. Use ``B=1`` for a single
-            design candidate.
-        temperature (float): Softmax temperature used to relax logits.
+        logits (list[NucleotideSequenceLogits]): Batched relaxed DNA state with shape
+            ``(B, L, 4)`` in ``A,C,G,T`` order. Use ``B=1`` for a single design candidate.
+        temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
+            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
+            gradient; ``None`` reads them as probabilities and returns a probability-space
+            gradient.
     """
-
-    logits: MalinoisLogits = InputField(
-        title="Logits",
-        description="Batched relaxed DNA logits with shape (B, L, 4) in A,C,G,T order.",
-        examples=[[[[0.0] * 4] * 200]],
-    )
-    temperature: float = InputField(
-        default=1.0,
-        gt=0.0,
-        title="Temperature",
-        description="Softmax temperature used to convert logits into relaxed nucleotide probabilities.",
-    )
-
-    @field_validator("logits")
-    @classmethod
-    def validate_logits(cls, logits: MalinoisLogits) -> MalinoisLogits:
-        """Ensure logits are a non-empty ``B x L x 4`` tensor."""
-        if not logits:
-            raise ValueError("logits must contain at least one batch item")
-        expected_width = len(DNA_NUCLEOTIDES)
-        seq_length: int | None = None
-        for batch_idx, matrix in enumerate(logits):
-            if not matrix:
-                raise ValueError(f"logits batch {batch_idx} must contain at least one position")
-            if not isinstance(matrix[0], list):
-                raise ValueError("logits must have shape (B, L, 4); use batch size 1 for a single candidate")
-            if seq_length is None:
-                seq_length = len(matrix)
-            elif len(matrix) != seq_length:
-                raise ValueError(
-                    f"all batched logits must have the same sequence length; "
-                    f"batch 0 has {seq_length}, batch {batch_idx} has {len(matrix)}"
-                )
-            for row_idx, row in enumerate(matrix):
-                if len(row) != expected_width:
-                    raise ValueError(
-                        f"logits batch {batch_idx} row {row_idx} must have {expected_width} columns, got {len(row)}"
-                    )
-        return logits
 
 
 class MalinoisGradientConfig(BaseConfig):
@@ -628,7 +593,7 @@ def example_input() -> Any:
 
 def example_gradient_input() -> Any:
     """Minimal valid input for differentiable Malinois examples."""
-    return MalinoisGradientInput(logits=[[[0.0] * len(DNA_NUCLEOTIDES)] * 200])
+    return MalinoisGradientInput(logits=[NucleotideSequenceLogits([[0.0] * len(DNA_NUCLEOTIDES)] * 200)])
 
 
 @tool(
@@ -733,7 +698,7 @@ def run_malinois_gradient(
         "malinois",
         {
             "operation": "compute_gradient",
-            "logits": inputs.logits,
+            "logits": [item.root for item in inputs.logits],
             "temperature": inputs.temperature,
             "loss_terms": [term.model_dump() for term in config.loss_terms],
             "seq_length": config.seq_length,

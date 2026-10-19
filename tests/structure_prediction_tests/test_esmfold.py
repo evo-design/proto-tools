@@ -6,6 +6,7 @@ Cross-tool integration coverage lives in ``test_structure_prediction.py``;
 this file holds the cold/warm benchmark and any ESMFold-specific tests.
 """
 
+import math
 from unittest.mock import patch
 
 import pytest
@@ -163,6 +164,24 @@ def test_esmfold_gradient_smoke():
     assert len(output.gradient) == 4
     assert all(len(row) == 20 for row in output.gradient)
     assert output.loss == pytest.approx(output.metrics["loss_plddt"])
+
+
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_esmfold_gradient_probability_mode_matches_logit_mode():
+    """temperature=None on softmax(L) evaluates the same relaxed sequence as temperature=1.0 on L."""
+    logits = one_hot_protein_logits("MKTL", sharpness=2.0)
+    probabilities = [[math.exp(v) / sum(math.exp(u) for u in row) for v in row] for row in logits]
+    config = ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0})
+
+    logit_mode = run_esmfold_gradient(ESMFoldGradientInput(logits=logits, chains=["MKTL"]), config)
+    probability_mode = run_esmfold_gradient(
+        ESMFoldGradientInput(logits=probabilities, chains=["MKTL"], temperature=None), config
+    )
+
+    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=1e-4)
+    assert probability_mode.gradient is not None
+    assert all(math.isfinite(v) for row in probability_mode.gradient for v in row)
 
 
 @pytest.mark.benchmark("esmfold-prediction")

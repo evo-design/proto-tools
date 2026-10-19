@@ -8,10 +8,10 @@ import numpy as np
 import pandas as pd
 import stability_data
 import torch
-import torch.nn.functional as F
 import utrdata_cl as utrdata
 from pl_regressor import RNARegressor
 from standalone_helpers import get_logger
+from standalone_helpers.relaxation import relaxed_probs
 from torch.utils.data import DataLoader
 from utrdata_cl import CELLTYPE_CODES_UTR3, CELLTYPE_CODES_UTR5
 
@@ -162,17 +162,6 @@ def _predict_stability_group(model: Any, *, sequences: list[str], batch_size: in
     return [float(value) for value in predictions]
 
 
-def _relaxed_dna_probs(logits: Any, *, temperature: float, soft: float, hard: float) -> Any:
-    """Convert ``... x L x 4`` DNA logits to relaxed probabilities with optional STE."""
-    probs = F.softmax(logits / temperature, dim=-1)
-    hard_probs = F.one_hot(probs.argmax(dim=-1), num_classes=len(DNA_VOCAB)).to(probs.dtype)
-    relaxed = (1.0 - soft) * hard_probs + soft * probs
-    if hard > 0.0:
-        straight_through = hard_probs + probs - probs.detach()
-        relaxed = hard * straight_through + (1.0 - hard) * relaxed
-    return relaxed
-
-
 def _featurize_logits(relaxed: Any, construct_type: str, cell: str) -> Any:
     """Build the model input for one cell condition from relaxed (B, L, 4) logits.
 
@@ -196,7 +185,7 @@ def compute_gradient(
     model: Any,
     *,
     logits_list: list[list[list[float]]],
-    temperature: float,
+    temperature: float | None,
     construct_type: str,
     loss_terms: list[dict[str, Any]],
     soft: float,
@@ -214,7 +203,7 @@ def compute_gradient(
         if logits.ndim != 3:
             raise ValueError(f"parade: logits must have rank 3 (B, L, 4), got rank {logits.ndim}")
 
-        relaxed = _relaxed_dna_probs(logits, temperature=temperature, soft=soft, hard=hard)
+        relaxed = relaxed_probs(logits, temperature=temperature, soft=soft, hard=hard)
         batch_size = int(relaxed.shape[0])
 
         # PARADE conditions on a single cell type per forward pass (via the condition

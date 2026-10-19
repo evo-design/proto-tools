@@ -163,7 +163,7 @@ def test_mixed_sequence_one_hot_alignment_and_probability_mode():
             assert sum(row) == 1.0
         else:
             assert not any(row)
-    assert MixedSequenceGradientInput(sequence=_LOCUS, logits=rows, temperature=None).logits == rows
+    assert MixedSequenceGradientInput(sequence=_LOCUS, logits=rows, temperature=None).logits.root == rows
 
 
 @pytest.mark.parametrize("sharpness", [math.nan, math.inf, -math.inf])
@@ -179,16 +179,26 @@ def test_mixed_gradient_rejects_alignment_fixed_context_and_nonfinite_values():
     rows[0][0] = 1.0
     with pytest.raises(ValidationError, match=r"Fixed context row 1"):
         MixedSequenceGradientInput(sequence=_LOCUS, logits=rows)
-    for row in [[0.0] * 23, [math.nan] * 24, [math.inf] * 24]:
-        with pytest.raises(ValidationError, match=r"24 finite numbers"):
+    with pytest.raises(ValidationError, match=r"must have 24 columns"):
+        MixedSequenceGradientInput(sequence="+A", logits=[[0.0] * 24, [0.0] * 23])
+    for row in [[math.nan] * 24, [math.inf] * 24]:
+        with pytest.raises(ValidationError, match=r"only finite numbers"):
             MixedSequenceGradientInput(sequence="+A", logits=[[0.0] * 24, row])
     with pytest.raises(ValidationError, match=r"at least one canonical"):
         MixedSequenceGradientInput(sequence="<+>X", logits=[[0.0] * 24] * 2)
 
 
-@pytest.mark.parametrize("row", [[0.0] * 24, [-1.0] + [0.0] * 23, [0.0] * 20 + [1.0, 0.0, 0.0, 0.0]])
-def test_mixed_gradient_probability_mode_rejects_wrong_domains(row):
-    with pytest.raises(ValidationError, match=r"probability distribution within its modality"):
+@pytest.mark.parametrize(
+    "row, expected",
+    [
+        ([0.0] * 24, r"must be a probability distribution"),
+        ([-1.0] + [0.0] * 23, r"must be nonnegative"),
+        # DNA mass on a protein token: outside the position's permitted modality block.
+        ([0.0] * 20 + [1.0, 0.0, 0.0, 0.0], r"non-permitted columns at zero"),
+    ],
+)
+def test_mixed_gradient_probability_mode_rejects_wrong_domains(row, expected):
+    with pytest.raises(ValidationError, match=expected):
         MixedSequenceGradientInput(sequence="+A", logits=[[0.0] * 24, row], temperature=None)
 
 

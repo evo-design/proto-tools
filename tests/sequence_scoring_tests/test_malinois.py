@@ -164,6 +164,39 @@ def test_malinois_gradient_rejects_wrong_sequence_length() -> None:
         run_malinois_gradient(MalinoisGradientInput(logits=[[[0.0] * 4] * 199]), MalinoisGradientConfig())
 
 
+def _softmax_rows(logits):
+    """Softmax each row of a logits matrix."""
+    rows = []
+    for row in logits:
+        peak = max(row)
+        exponentiated = [math.exp(value - peak) for value in row]
+        total = sum(exponentiated)
+        rows.append([value / total for value in exponentiated])
+    return rows
+
+
+@pytest.mark.uses_gpu
+def test_malinois_gradient_probability_mode_matches_logit_mode() -> None:
+    """temperature=None on softmax(L) evaluates the same relaxed sequence as temperature=1.0 on L."""
+    from proto_tools.tools.sequence_scoring.malinois import (
+        MalinoisGradientConfig,
+        MalinoisGradientInput,
+        run_malinois_gradient,
+    )
+
+    logits = [[0.1, 0.2, 0.3, 0.4]] * 200
+    config = MalinoisGradientConfig(device="cuda")
+
+    logit_mode = run_malinois_gradient(MalinoisGradientInput(logits=[logits], temperature=1.0), config)
+    probability_mode = run_malinois_gradient(
+        MalinoisGradientInput(logits=[_softmax_rows(logits)], temperature=None), config
+    )
+
+    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=1e-5)
+    assert probability_mode.gradient is not None
+    assert all(math.isfinite(v) for matrix in probability_mode.gradient for row in matrix for v in row)
+
+
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 def test_malinois_real_gpu_scores_sequences() -> None:

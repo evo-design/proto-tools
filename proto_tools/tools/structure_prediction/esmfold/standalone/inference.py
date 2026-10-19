@@ -15,6 +15,7 @@ from typing import Any
 
 import torch
 from standalone_helpers import AMINO_ACIDS_LIST, get_logger, move_model_to_device, release_cuda_memory, serialize_output
+from standalone_helpers.relaxation import relaxed_probs, resolve_temperature
 
 logger = get_logger(__name__)
 # Suppress transformers logging
@@ -112,7 +113,7 @@ class ESMFoldModel:
         target_chain_indices: list[int],
         residue_idx_offset: int,
         chain_linker: str,
-        temperature: float = 1.0,
+        temperature: float | None = 1.0,
         soft: float = 1.0,
         hard: float = 0.0,
         loss_weights: dict[str, float] | None = None,
@@ -184,10 +185,10 @@ class ESMFoldModel:
 
             # Differentiable path; tensors must be saved for backward.
             with torch.inference_mode(False), torch.set_grad_enabled(compute_gradient), _allow_tf32():
-                relaxed_probs = _relaxed_amino_acid_probs(logits, temperature=temperature, soft=soft, hard=hard)
+                relaxed = relaxed_probs(logits, temperature=temperature, soft=soft, hard=hard)
                 outputs = self._run_relaxed_forward(
                     complex_data,
-                    relaxed_probs=relaxed_probs,
+                    relaxed=relaxed,
                     target_chain_indices=target_chain_indices,
                     residue_idx_offset=residue_idx_offset,
                     chain_linker=chain_linker,
@@ -245,7 +246,7 @@ class ESMFoldModel:
         self,
         complex_data: dict[str, Any],
         *,
-        relaxed_probs: torch.Tensor,
+        relaxed: torch.Tensor,
         target_chain_indices: list[int],
         residue_idx_offset: int,
         chain_linker: str,
@@ -266,7 +267,7 @@ class ESMFoldModel:
             aa=aa,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            relaxed_probs=relaxed_probs,
+            relaxed=relaxed,
             target_spans=target_spans,
             num_recycles=num_recycles,
         )
@@ -281,7 +282,7 @@ class ESMFoldModel:
         aa: torch.Tensor,
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
-        relaxed_probs: torch.Tensor,
+        relaxed: torch.Tensor,
         target_spans: list[tuple[int, int]],
         num_recycles: int,
     ) -> dict[str, torch.Tensor | None]:
@@ -308,9 +309,7 @@ class ESMFoldModel:
             [self.model.config.vocab_list.index(aa_symbol) for aa_symbol in AMINO_ACIDS_LIST],
             device=self.device,
         )
-        relaxed_esm_embeddings = relaxed_probs.to(token_embeddings.dtype) @ self.model.esm.embeddings.word_embeddings(
-            esm_ids
-        )
+        relaxed_esm_embeddings = relaxed.to(token_embeddings.dtype) @ self.model.esm.embeddings.word_embeddings(esm_ids)
         for start, end in target_spans:
             token_embeddings[0, start + 1 : end + 1] = relaxed_esm_embeddings
 
@@ -339,7 +338,7 @@ class ESMFoldModel:
                 [OPENFOLD_AMINO_ACIDS.index(aa_symbol) + 1 for aa_symbol in AMINO_ACIDS_LIST],
                 device=self.device,
             )
-            relaxed_aa_embeddings = relaxed_probs.to(aa_embeddings.dtype) @ self.model.embedding(af2_ids)
+            relaxed_aa_embeddings = relaxed.to(aa_embeddings.dtype) @ self.model.embedding(af2_ids)
             for start, end in target_spans:
                 aa_embeddings[0, start:end] = relaxed_aa_embeddings
             s_s_0 = s_s_0 + aa_embeddings
@@ -607,25 +606,6 @@ def _decode_logits(logits: torch.Tensor) -> str:
     return "".join(AMINO_ACIDS_LIST[int(index)] for index in indices)
 
 
-def _relaxed_amino_acid_probs(
-    logits: torch.Tensor,
-    *,
-    temperature: float,
-    soft: float,
-    hard: float,
-) -> torch.Tensor:
-    """Convert logits to relaxed amino-acid probabilities with optional STE."""
-    import torch.nn.functional as F
-
-    probs = F.softmax(logits / temperature, dim=-1)
-    hard_probs = F.one_hot(probs.argmax(dim=-1), num_classes=len(AMINO_ACIDS_LIST)).to(probs.dtype)
-    relaxed = (1.0 - soft) * hard_probs + soft * probs
-    if hard > 0.0:
-        straight_through = hard_probs + probs - probs.detach()
-        relaxed = hard * straight_through + (1.0 - hard) * relaxed
-    return relaxed
-
-
 def _sequence_to_aatype(sequence: str, device: str | torch.device) -> torch.Tensor:
     """Convert a protein sequence to OpenFold/ESMFold residue indices."""
     mapping = {aa: idx for idx, aa in enumerate(OPENFOLD_AMINO_ACIDS)}
@@ -692,7 +672,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             target_chain_indices=input_dict["target_chain_indices"],
             residue_idx_offset=input_dict["residue_idx_offset"],
             chain_linker=input_dict["chain_linker"],
-            temperature=input_dict["temperature"],
+            temperature=resolve_temperature(input_dict["temperature"]),
             soft=input_dict["soft"],
             hard=input_dict["hard"],
             loss_weights=input_dict["loss_weights"],

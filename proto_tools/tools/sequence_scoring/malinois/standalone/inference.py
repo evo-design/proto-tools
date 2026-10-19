@@ -15,8 +15,8 @@ from typing import Any, cast
 
 import malinois_scoring
 import torch
-import torch.nn.functional as F
 from standalone_helpers import get_logger, move_model_to_device, resolve_weights_dir, serialize_output, set_torch_seed
+from standalone_helpers.relaxation import relaxed_probs, resolve_temperature
 
 logger = get_logger(__name__)
 
@@ -275,7 +275,7 @@ class MalinoisModel:
         self,
         *,
         logits_list: list[list[list[float]]],
-        temperature: float,
+        temperature: float | None,
         loss_terms: list[dict[str, Any]],
         soft: float,
         hard: float,
@@ -292,7 +292,7 @@ class MalinoisModel:
             if logits.ndim != 3:
                 raise ValueError(f"malinois: logits must have rank 3 (B, L, 4), got rank {logits.ndim}")
 
-            relaxed = _relaxed_dna_probs(logits, temperature=temperature, soft=soft, hard=hard)
+            relaxed = relaxed_probs(logits, temperature=temperature, soft=soft, hard=hard)
             insert = relaxed.transpose(1, 2)
             prepped = self.flank_builder(insert)
             predictions = self.model(prepped)
@@ -394,7 +394,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
         return _model.compute_gradient(
             logits_list=input_dict["logits"],
-            temperature=float(input_dict["temperature"]),
+            temperature=resolve_temperature(input_dict["temperature"]),
             loss_terms=loss_terms,
             soft=float(input_dict.get("soft", 1.0)),
             hard=float(input_dict.get("hard", 0.0)),
@@ -427,23 +427,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
         )
     }
-
-
-def _relaxed_dna_probs(
-    logits: torch.Tensor,
-    *,
-    temperature: float,
-    soft: float,
-    hard: float,
-) -> torch.Tensor:
-    """Convert ``... x L x 4`` DNA logits to relaxed probabilities with optional STE."""
-    probs = F.softmax(logits / temperature, dim=-1)
-    hard_probs = F.one_hot(probs.argmax(dim=-1), num_classes=len(DNA_VOCAB)).to(probs.dtype)
-    relaxed = (1.0 - soft) * hard_probs + soft * probs
-    if hard > 0.0:
-        straight_through = hard_probs + probs - probs.detach()
-        relaxed = hard * straight_through + (1.0 - hard) * relaxed
-    return relaxed
 
 
 def to_device(device: str) -> dict[str, Any]:

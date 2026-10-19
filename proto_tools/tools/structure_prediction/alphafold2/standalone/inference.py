@@ -620,7 +620,7 @@ class AlphaFold2Model:
         af_model: Any,
         *,
         logits: list[list[float]],
-        temperature: float,
+        temperature: float | None,
         soft: float,
         hard: float,
         num_recycles: int,
@@ -636,6 +636,8 @@ class AlphaFold2Model:
         Germinal's ``soft_seq()`` handles alpha=2.0 scaling and persistent bias
         internally. When ``backprop=True``, JAX autograd chain-rules through the
         full expression and the returned gradient is exact ``∂loss/∂logits``.
+        ``temperature=None`` consumes ``logits`` as probabilities instead, so that
+        gradient is probability-space; see the ``opt`` assignment below.
         When ``backprop=False``, the forward pass runs through ``model["fn"]``
         (no grad_fn) and ``gradient`` is ``None`` in the returned dict.
         """
@@ -646,9 +648,18 @@ class AlphaFold2Model:
 
         opt = af_model.opt
         opt["num_recycles"] = num_recycles
-        opt["temp"] = temperature
-        opt["soft"] = soft
-        opt["hard"] = hard
+        if temperature is None:
+            # soft_seq() always softmaxes, so probability mode is expressed as soft=0: its
+            # blend between the softmax branch and the raw input then selects the input, so the
+            # supplied distribution reaches AlphaFold verbatim. "temp" only feeds the unused
+            # softmax branch, and is pinned to keep that denominator finite.
+            opt["temp"] = 1.0
+            opt["soft"] = 0.0
+            opt["hard"] = 0.0
+        else:
+            opt["temp"] = temperature
+            opt["soft"] = soft
+            opt["hard"] = hard
         if seed is not None:
             af_model.set_seed(seed)
         if loss_weights:
@@ -694,7 +705,7 @@ class AlphaFold2Model:
         self,
         *,
         logits: list[list[float]],
-        temperature: float = 1.0,
+        temperature: float | None = 1.0,
         soft: float = 1.0,
         hard: float = 0.0,
         target_pdb: str,

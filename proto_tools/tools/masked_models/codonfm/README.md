@@ -65,7 +65,7 @@ This exposes Encodon as a differentiable, codon-level naturalness prior for cont
 
 #### Usage Tips
 
-- **`temperature` converts the raw input into a per-position distribution.** The default `1.0` applies `softmax(logits / T)`; set it to `None` only when every row is already a non-negative probability distribution summing to 1.
+- **`temperature` fixes the input coordinate system.** The default `1.0` reads `logits` as unnormalized and applies `softmax(logits / T)`, so the returned gradient is logit-space. Setting it to `None` reads them as probabilities — every active row nonnegative and summing to 1 within `1e-6` — and the returned gradient is probability-space.
 - **`use_ste` enables the Straight-Through Estimator** for stronger guidance toward discrete codons while keeping a usable gradient.
 - **`compute_gradient=False` runs forward-only.** The `gradient` field is `None` but `loss` and `metrics` are still populated. This is a masked pseudo-log-likelihood objective; it is distinct from the visible-token objective returned by `codonfm-fitness`.
 

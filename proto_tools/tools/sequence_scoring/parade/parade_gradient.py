@@ -1,7 +1,6 @@
 """Differentiable PARADE UTR activity objectives for gradient-based design."""
 
 import json
-import math
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
@@ -21,10 +20,10 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     DNA_NUCLEOTIDES,
     BaseConfig,
-    BaseToolInput,
+    BatchedNucleotideGradientInput,
     ConfigField,
     GradientOutput,
-    InputField,
+    NucleotideSequenceLogits,
     ToolInstance,
 )
 from proto_tools.utils.device import RemoteDevice
@@ -92,56 +91,17 @@ class ParadeGradientLossTerm(BaseModel):
         return value
 
 
-class ParadeGradientInput(BaseToolInput):
+class ParadeGradientInput(BatchedNucleotideGradientInput):
     """Input for differentiable PARADE UTR optimization.
 
     Attributes:
-        logits (ParadeLogits): Batched relaxed UTR logits with shape ``(B, L, 4)`` in
-            ``A,C,G,T`` order. Use ``B=1`` for a single design candidate.
-        temperature (float): Softmax temperature used to relax logits.
+        logits (list[NucleotideSequenceLogits]): Batched relaxed UTR state with shape
+            ``(B, L, 4)`` in ``A,C,G,T`` order. Use ``B=1`` for a single design candidate.
+        temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
+            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
+            gradient; ``None`` reads them as probabilities and returns a probability-space
+            gradient.
     """
-
-    logits: ParadeLogits = InputField(
-        title="Logits",
-        description="Batched relaxed UTR logits with shape (B, L, 4) in A,C,G,T order.",
-        examples=[[[[0.0] * 4] * 50]],
-    )
-    temperature: float = InputField(
-        default=1.0,
-        gt=0.0,
-        allow_inf_nan=False,
-        title="Temperature",
-        description="Softmax temperature used to convert logits into relaxed nucleotide probabilities.",
-    )
-
-    @field_validator("logits")
-    @classmethod
-    def validate_logits(cls, logits: ParadeLogits) -> ParadeLogits:
-        """Ensure logits are a non-empty ``B x L x 4`` tensor."""
-        if not logits:
-            raise ValueError("logits must contain at least one batch item")
-        expected_width = len(DNA_NUCLEOTIDES)
-        seq_length: int | None = None
-        for batch_idx, matrix in enumerate(logits):
-            if not matrix:
-                raise ValueError(f"logits batch {batch_idx} must contain at least one position")
-            if not isinstance(matrix[0], list):
-                raise ValueError("logits must have shape (B, L, 4); use batch size 1 for a single candidate")
-            if seq_length is None:
-                seq_length = len(matrix)
-            elif len(matrix) != seq_length:
-                raise ValueError(
-                    f"all batched logits must have the same sequence length; "
-                    f"batch 0 has {seq_length}, batch {batch_idx} has {len(matrix)}"
-                )
-            for row_idx, row in enumerate(matrix):
-                if len(row) != expected_width:
-                    raise ValueError(
-                        f"logits batch {batch_idx} row {row_idx} must have {expected_width} columns, got {len(row)}"
-                    )
-                if not all(math.isfinite(value) for value in row):
-                    raise ValueError(f"logits batch {batch_idx} row {row_idx} must contain only finite numbers")
-        return logits
 
 
 class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
@@ -368,7 +328,7 @@ class ParadeGradientOutput(GradientOutput):
 
 def example_gradient_input() -> Any:
     """Minimal valid input for differentiable PARADE examples."""
-    return ParadeGradientInput(logits=[[[0.0] * len(DNA_NUCLEOTIDES)] * 50])
+    return ParadeGradientInput(logits=[NucleotideSequenceLogits([[0.0] * len(DNA_NUCLEOTIDES)] * 50)])
 
 
 @tool(
@@ -410,7 +370,7 @@ def run_parade_gradient(
         "parade",
         {
             "operation": "gradient",
-            "logits": inputs.logits,
+            "logits": [item.root for item in inputs.logits],
             "temperature": inputs.temperature,
             "construct_type": config.construct_type,
             "loss_terms": [term.model_dump() for term in config.loss_terms],

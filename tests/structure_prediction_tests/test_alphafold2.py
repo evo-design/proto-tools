@@ -88,6 +88,105 @@ def test_gradient_config_rejects_bad_loss_weights():
         AlphaFold2GradientConfig(loss_weights={"pldd": 1.0})
 
 
+@pytest.mark.parametrize(
+    "overrides, ignored",
+    [
+        ({"hard": 0.5}, "hard=0.5"),
+        ({"soft": 0.25}, "soft=0.25"),
+        ({"omit_aas": ["C"]}, "omit_aas"),
+        ({"bias_redesign": 2.0}, "bias_redesign=2.0"),
+    ],
+)
+def test_gradient_probability_mode_rejects_softmax_only_knobs(overrides, ignored):
+    """temperature=None drives ColabDesign at soft=0, so softmax-only knobs are refused."""
+    inputs = AlphaFold2GradientInput(
+        logits=[[1.0 / 20] * 20] * 2,
+        target_pdb=_GRADIENT_EXAMPLE_PDB_PATH,
+        binder_chain="B",
+        temperature=None,
+    )
+    with pytest.raises(ValueError, match=ignored):
+        run_alphafold2_gradient(inputs, AlphaFold2GradientConfig(**overrides))
+
+
+def test_gradient_probability_mode_accepts_default_config(monkeypatch):
+    """With defaults, temperature=None reaches the worker and asks for soft=0 relaxation."""
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured["payload"] = payload
+        return {
+            "gradient": [[0.0] * 20] * 2,
+            "loss": 1.0,
+            "metrics": {"avg_plddt": 0.5, "ptm": 0.5, "avg_pae": 1.0},
+            "vocab": list(PROTEIN_AMINO_ACIDS),
+            "pdb": _GRADIENT_EXAMPLE_PDB_PATH.read_text(),
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+    run_alphafold2_gradient(
+        AlphaFold2GradientInput(
+            logits=[[1.0 / 20] * 20] * 2,
+            target_pdb=_GRADIENT_EXAMPLE_PDB_PATH,
+            binder_chain="B",
+            temperature=None,
+        ),
+        AlphaFold2GradientConfig(),
+    )
+    assert captured["payload"]["temperature"] is None
+    assert captured["payload"]["soft"] == 1.0  # the worker maps probability mode to opt soft=0
+
+
+def _softmax_rows(logits):
+    """Softmax each row of a logits matrix."""
+    rows = []
+    for row in logits:
+        peak = max(row)
+        exponentiated = [math.exp(value - peak) for value in row]
+        total = sum(exponentiated)
+        rows.append([value / total for value in exponentiated])
+    return rows
+
+
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_gradient_probability_mode_folds_the_same_binder():
+    """temperature=None must pass the distribution through, not let ColabDesign softmax it again.
+
+    AF2's loss drifts a few percent between identical runs even at a fixed seed, so this
+    compares a *saturated* one-hot distribution against the equivalent saturated logits: both
+    describe the same near-discrete binder. A second softmax would smear that one-hot toward
+    uniform (exp(1) against 19 exp(0) terms) and fold a different binder entirely, well outside
+    the tolerance.
+    """
+    logits = one_hot_protein_logits("EVQLVESG", sharpness=20.0)
+    probabilities = _softmax_rows(logits)
+    config = AlphaFold2GradientConfig(num_recycles=0, model_num=1, seed=42)
+
+    logit_mode = run_alphafold2_gradient(
+        AlphaFold2GradientInput(logits=logits, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="B"),
+        config,
+    )
+    probability_mode = run_alphafold2_gradient(
+        AlphaFold2GradientInput(
+            logits=probabilities,
+            target_pdb=_GRADIENT_EXAMPLE_PDB_PATH,
+            binder_chain="B",
+            temperature=None,
+        ),
+        config,
+    )
+
+    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=0.1)
+    assert probability_mode.gradient is not None
+    assert len(probability_mode.gradient) == len(logits)
+    assert all(len(row) == 20 for row in probability_mode.gradient)
+    assert all(math.isfinite(v) for row in probability_mode.gradient for v in row)
+
+
 def test_gradient_input_requires_target_pdb():
     with pytest.raises(ValidationError, match="target_pdb"):
         AlphaFold2GradientInput(logits=[[0.0] * 20], temperature=1.0)

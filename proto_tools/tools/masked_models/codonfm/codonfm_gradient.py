@@ -3,76 +3,54 @@
 import math
 from typing import Any
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
+from typing_extensions import Self
 
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     CODONFM_CODON_VOCAB,
     CODONFM_MAX_NT,
     CODONFM_NUM_CODONS,
     CodonFMCheckpoint,
+    CodonSequenceLogits,
     one_hot_codon_logits,
     resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseConfig, BaseToolInput, ConfigField, GradientOutput, ToolInstance
+from proto_tools.utils import BaseConfig, ConfigField, GradientInput, GradientOutput, ToolInstance
 from proto_tools.utils.tool_io import InputField
 
 # Encodon caps sequences at (2048 - 2) codons (CLS/SEP); the differentiable state is per-codon.
 CODONFM_MAX_CODONS = CODONFM_MAX_NT // 3
 
 
-class CodonFMGradientInput(BaseToolInput):
+class CodonFMGradientInput(GradientInput):
     """Input for the CodonFM gradient tool.
 
     Attributes:
-        logits (list[list[float]]): Relaxed coding-sequence state with shape ``(L, 64)`` in
+        logits (CodonSequenceLogits): Relaxed coding-sequence state with shape ``(L, 64)`` in
             lexicographic DNA codon order (``AAA, AAC, AAG, AAT, ...``; see
             :data:`CODONFM_CODON_VOCAB`). ``L`` must be ≤ 2046 (Encodon's positional cap minus
             the CLS/SEP tokens); over-length inputs raise ``ValueError``. Each row's argmax codon
             is used as that position's masked-language-model target.
-        temperature (float | None): Optional softmax temperature. When set, applies
-            ``softmax(input / temperature)`` before computing the gradient. When ``None``,
-            every input row must already be a probability distribution.
+        temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
+            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
+            gradient; ``None`` reads them as probabilities and returns a probability-space
+            gradient.
     """
 
-    logits: list[list[float]] = InputField(
+    logits: CodonSequenceLogits = InputField(
         title="Logits",
-        description="Relaxed coding-sequence logits with shape (L, 64) in lexicographic DNA codon order.",
+        description="Relaxed coding-sequence state with shape (L, 64) in lexicographic codon order.",
         examples=[[[0.0] * CODONFM_NUM_CODONS, [0.0] * CODONFM_NUM_CODONS]],
     )
 
-    temperature: float | None = InputField(
-        default=1.0,
-        title="Temperature",
-        description="Softmax temperature. Applies softmax(input / T) when set.",
-        gt=0.0,
-        allow_inf_nan=False,
-    )
-
-    @field_validator("logits")
-    @classmethod
-    def validate_logits(cls, logits: list[list[float]]) -> list[list[float]]:
-        """Ensure logits are a non-empty rectangular ``L x 64`` matrix within the codon cap."""
-        if not logits:
-            raise ValueError("logits must contain at least one codon position")
-        if len(logits) > CODONFM_MAX_CODONS:
-            raise ValueError(
-                f"codonfm: supports sequences up to {CODONFM_MAX_CODONS} codons; input has length {len(logits)}."
-            )
-        for idx, row in enumerate(logits):
-            if len(row) != CODONFM_NUM_CODONS:
-                raise ValueError(f"logits row {idx} must have {CODONFM_NUM_CODONS} columns, got {len(row)}")
-            if not all(math.isfinite(value) for value in row):
-                raise ValueError(f"logits row {idx} must contain only finite numbers")
-        return logits
-
     @model_validator(mode="after")
-    def validate_probabilities_without_temperature(self) -> "CodonFMGradientInput":
-        """Require probability-simplex rows when softmax is explicitly disabled."""
-        if self.temperature is None:
-            for idx, row in enumerate(self.logits):
-                if any(value < 0.0 for value in row) or not math.isclose(sum(row), 1.0, abs_tol=1e-6):
-                    raise ValueError(f"logits row {idx} must be a probability distribution when temperature is None")
+    def validate_codon_count(self) -> Self:
+        """Reject inputs beyond Encodon's positional cap."""
+        if len(self.logits) > CODONFM_MAX_CODONS:
+            raise ValueError(
+                f"codonfm: supports sequences up to {CODONFM_MAX_CODONS} codons; input has length {len(self.logits)}."
+            )
         return self
 
 
@@ -177,7 +155,7 @@ def run_codonfm_gradient(
         "codonfm",
         {
             "operation": "gradient",
-            "logits": inputs.logits,
+            "logits": inputs.logits.root,
             "temperature": inputs.temperature,
             "use_ste": config.use_ste,
             "compute_gradient": config.compute_gradient,

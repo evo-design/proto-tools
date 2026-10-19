@@ -23,9 +23,9 @@ from proto_tools.utils import (
     AminoAcid,
     BaseConfig,
     ConfigField,
-    GradientInput,
     GradientOutput,
     InputField,
+    ProteinGradientInput,
     ToolInstance,
     one_hot_protein_logits,
 )
@@ -56,15 +56,15 @@ _VALID_LOSS_KEYS = frozenset(
 _BINDER_FIXTURE_PDB = Path(__file__).resolve().parent / "example_input_fixture.pdb"
 
 
-class AlphaFold2GradientInput(GradientInput):
+class AlphaFold2GradientInput(ProteinGradientInput):
     """Input for AlphaFold2 binder-design (forward scoring or gradient).
 
-    Extends GradientInput with target-template structural data required
+    Extends ProteinGradientInput with target-template structural data required
     for binder redesign against a frozen target.
 
     Attributes:
-        logits (list[list[float]]): Inherited — relaxed sequence logits (L x 20).
-        temperature (float): Inherited — softmax temperature.
+        logits (ProteinSequenceLogits): Inherited — relaxed binder state (L x 20).
+        temperature (float | None): Inherited — softmax temperature, or None for probabilities.
         target_pdb (Structure): Target+binder template PDB. Accepts a file path,
             raw PDB/CIF content string, ``Structure`` object, or a dict in the
             shape produced by ``Structure.model_dump(mode='json')``.
@@ -359,6 +359,40 @@ class AlphaFold2GradientOutput(GradientOutput):
         json_path.write_text(json.dumps(payload, indent=2))
 
 
+def _reject_unused_softmax_knobs(inputs: AlphaFold2GradientInput, config: AlphaFold2GradientConfig) -> None:
+    """Refuse config that ColabDesign would silently ignore in probability mode.
+
+    ``temperature=None`` consumes the supplied probabilities verbatim, which ColabDesign
+    expresses as ``soft=0``. Its softmax branch is then unused, so every knob feeding only that
+    branch — the ``hard`` straight-through blend, and the ``bias`` behind ``omit_aas`` and
+    ``bias_redesign`` — would have no effect. Refuse them rather than drop them silently.
+
+    Args:
+        inputs (AlphaFold2GradientInput): Binder input, read for ``temperature``.
+        config (AlphaFold2GradientConfig): Config whose relaxation knobs are checked.
+
+    Raises:
+        ValueError: If probability mode is combined with a knob that only affects the softmax.
+    """
+    if inputs.temperature is not None:
+        return
+    ignored = []
+    if config.soft != 1.0:
+        ignored.append(f"soft={config.soft}")
+    if config.hard != 0.0:
+        ignored.append(f"hard={config.hard}")
+    if config.omit_aas:
+        ignored.append(f"omit_aas={config.omit_aas}")
+    if config.bias_redesign is not None:
+        ignored.append(f"bias_redesign={config.bias_redesign}")
+    if ignored:
+        raise ValueError(
+            "alphafold2-gradient: temperature=None consumes the supplied probabilities directly, "
+            f"leaving ColabDesign's softmax branch unused, so {', '.join(ignored)} would have no "
+            "effect. Drop them, or set a positive temperature to optimize in logit space."
+        )
+
+
 def example_input() -> AlphaFold2GradientInput:
     """Minimal valid input — short VHH-like binder with biased logits and PD-L1 template."""
     return AlphaFold2GradientInput(
@@ -396,6 +430,7 @@ def run_alphafold2_gradient(
     ``compute_gradient=False`` runs forward only (gradient=None); loss, metrics,
     and Structure are identical to gradient mode.
     """
+    _reject_unused_softmax_knobs(inputs, config)
     logger.debug(
         "Running AlphaFold2 binder design: model=%d, compute_gradient=%s",
         config.model_num,
@@ -408,7 +443,7 @@ def run_alphafold2_gradient(
             "alphafold2",
             {
                 "operation": "compute_gradient",
-                "logits": inputs.logits,
+                "logits": inputs.logits.root,
                 "temperature": inputs.temperature,
                 "soft": config.soft,
                 "hard": config.hard,

@@ -720,6 +720,42 @@ def test_parade_activity_real_gpu_utr3() -> None:
     assert_metrics_in_spec(result)
 
 
+def _softmax_rows(logits):
+    """Softmax each row of a logits matrix."""
+    rows = []
+    for row in logits:
+        peak = max(row)
+        exponentiated = [math.exp(value - peak) for value in row]
+        total = sum(exponentiated)
+        rows.append([value / total for value in exponentiated])
+    return rows
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_parade_gradient_probability_mode_matches_logit_mode() -> None:
+    """temperature=None on softmax(L) evaluates the same relaxed sequence as temperature=1.0 on L."""
+    _skip_if_no_gpu()
+
+    from proto_tools.tools.sequence_scoring.parade import (
+        ParadeGradientConfig,
+        ParadeGradientInput,
+        run_parade_gradient,
+    )
+
+    logits = [[0.1, 0.2, 0.3, 0.4]] * 50
+    config = ParadeGradientConfig(device="cuda")
+
+    logit_mode = run_parade_gradient(ParadeGradientInput(logits=[logits], temperature=1.0), config)
+    probability_mode = run_parade_gradient(
+        ParadeGradientInput(logits=[_softmax_rows(logits)], temperature=None), config
+    )
+
+    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=1e-5)
+    assert probability_mode.gradient is not None
+    assert all(math.isfinite(v) for matrix in probability_mode.gradient for row in matrix for v in row)
+
+
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 def test_parade_gradient_real_gpu_utr3() -> None:

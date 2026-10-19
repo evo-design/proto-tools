@@ -524,6 +524,32 @@ def test_codonfm_score_real_gpu() -> None:
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
+def test_codonfm_gradient_probability_mode_matches_logit_mode() -> None:
+    """temperature=None on softmax(L) must reproduce temperature=1.0 on L, in both coordinates.
+
+    The two modes evaluate the same relaxed coding sequence, so the losses agree and the
+    gradients are related by the softmax Jacobian:
+    ``g_logit[i] = p[i] * (g_prob[i] - sum_j p[j] * g_prob[j])``.
+    """
+    _skip_if_no_gpu()
+
+    logits = one_hot_codon_logits(_CDS, sharpness=2.0)
+    probabilities = [[math.exp(v) / sum(math.exp(u) for u in row) for v in row] for row in logits]
+    config = CodonFMGradientConfig(model_checkpoint="encodon_80m", batch_size=4, device="cuda")
+
+    logit_mode = run_codonfm_gradient(CodonFMGradientInput(logits=logits, temperature=1.0), config)
+    probability_mode = run_codonfm_gradient(CodonFMGradientInput(logits=probabilities, temperature=None), config)
+
+    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=1e-5)
+    assert logit_mode.gradient is not None and probability_mode.gradient is not None
+    for probs, g_prob, g_logit in zip(probabilities, probability_mode.gradient, logit_mode.gradient, strict=True):
+        weighted = sum(p * g for p, g in zip(probs, g_prob, strict=True))
+        expected = [p * (g - weighted) for p, g in zip(probs, g_prob, strict=True)]
+        assert g_logit == pytest.approx(expected, rel=1e-3, abs=1e-6)
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
 def test_codonfm_gradient_real_gpu() -> None:
     """Real GPU smoke test for the differentiable masked-PLL codon objective."""
     _skip_if_no_gpu()

@@ -54,6 +54,7 @@ This tool supplies the loss and gradient signal that gradient-based or MCMC sequ
 - **`compute_gradient` defaults to `True`.** It runs a forward and backward pass and returns the gradient with respect to the input logits; set it `False` for forward-only scoring (`gradient=None`). The loss, metrics, and predicted structure are identical in both modes.
 - **`loss_weights` selects and weights the confidence terms.** Non-negative weights over `plddt`, `ptm`, and `pae` (default `{"plddt": 1.0}`); terms with weight `0.0` are skipped, and all-zero weights short-circuit to a zero gradient with `loss=0.0`.
 - **`logits` and the returned `gradient` share canonical amino-acid order `ACDEFGHIKLMNPQRSTVWY`.** Every chain listed in `target_chain_indices` must have length `len(logits)`; non-target chains fold normally with their fixed sequences.
+- **`temperature` fixes the input coordinate system.** The default `1.0` reads `logits` as unnormalized and applies `softmax(logits / T)`, so the returned gradient is logit-space. Setting it to `None` reads them as probabilities — every active row nonnegative and summing to 1 within `1e-6` — and the returned gradient is probability-space. `soft` and `hard` then blend that relaxed state toward a hard argmax one-hot.
 - **`soft` and `hard` trade smoothness for discreteness.** The default (`soft=1.0`, `hard=0.0`) uses pure soft probabilities for smooth optimization; set `hard=1.0` for a straight-through estimator (the forward pass sees argmax tokens while gradients still flow through the soft probabilities).
 
 ## Toolkit Notes
