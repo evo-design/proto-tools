@@ -89,6 +89,9 @@ class CalibyScoreConfig(BaseConfig):
     Attributes:
         model_checkpoint (str): Bundled design checkpoint name or a path to a ``.ckpt``
             file. Scoring uses the same models as design.
+        batch_size (int): Conformers per forward pass when scoring against an ensemble.
+            Scoring a single structure passes one structure through at a time, so this has
+            no effect there. Lower it first when an ensemble score runs out of GPU memory.
         return_local_energies (bool): Include the per-position local conditional energy
             matrix in the output. Adds roughly ``seq_len x 22`` floats per structure.
         device (str): Device to run the model on.
@@ -100,6 +103,12 @@ class CalibyScoreConfig(BaseConfig):
         description="Bundled design checkpoint name, or a path to a custom .ckpt file.",
         examples=["caliby", "soluble_caliby"],
         reload_on_change=True,
+    )
+    batch_size: int = ConfigField(
+        title="Batch Size",
+        default=4,
+        ge=1,
+        description="Conformers per forward pass; applies to ensemble scoring only.",
     )
     return_local_energies: bool = ConfigField(
         title="Return Local Energies",
@@ -332,6 +341,7 @@ def run_caliby_score(
                 "primary_path": str(primary_path),
                 "conformer_paths": [str(p) for p in conformer_paths],
                 "return_local_energies": config.return_local_energies,
+                "batch_size": config.batch_size,
                 "model_checkpoint": config.model_checkpoint,
                 "device": config.device,
             }
