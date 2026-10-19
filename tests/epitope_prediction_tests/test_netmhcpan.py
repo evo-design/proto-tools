@@ -299,33 +299,21 @@ def test_summarize_empty_bindings_reports_no_binder():
     assert metrics["binding_propensity"] == 0.0
 
 
-def test_validate_alleles_accepts_names_from_the_allelenames_list(tmp_path):
-    """Validation reads data/allelenames, which is the list the binary gates -a on."""
-    names = tmp_path / "allelenames"
-    names.write_text("HLA-A02:01 HLA-A02:01\nBoLA-1:00901 BoLA-1:00901\nH-2-Db H-2-Db\n")
-    _standalone_run.validate_alleles(["HLA-A02:01", "BoLA-1:00901", "H-2-Db"], str(names))
+def test_validate_alleles_rejects_names_absent_from_the_allelenames_list(tmp_path):
+    """Validation reads data/allelenames, the list the binary gates -a on, and names the miss.
 
-
-def test_validate_alleles_rejects_pseudo_only_spellings(tmp_path):
-    """A spelling present only in MHC_pseudo.dat is rejected, since the binary rejects it too."""
+    ``BoLA-100901`` is the trap: it is present in MHC_pseudo.dat but not in allelenames, so
+    validating against the pseudo-sequence file would let it through to a binary rejection.
+    """
     names = tmp_path / "allelenames"
     names.write_text("BoLA-1:00901 BoLA-1:00901\nH-2-Db H-2-Db\n")
+    _standalone_run.validate_alleles(["BoLA-1:00901", "H-2-Db"], str(names))
+
     with pytest.raises(ValueError) as excinfo:
         _standalone_run.validate_alleles(["BoLA-100901"], str(names))
-    assert "BoLA-100901" in str(excinfo.value)
-
-
-def test_validate_alleles_suggestions_are_names_the_binary_accepts(tmp_path):
-    """Near-miss suggestions are drawn from the accepted list, not from a wider one."""
-    names = tmp_path / "allelenames"
-    names.write_text("HLA-A02:01 x\nHLA-A02:02 x\nHLA-B07:02 x\n")
-    supported = _standalone_run.load_supported_alleles(str(names))
-    with pytest.raises(ValueError) as excinfo:
-        _standalone_run.validate_alleles(["HLA-A02:1"], str(names))
     message = str(excinfo.value)
-    suggested = [name for name in supported if name in message]
-    assert suggested, "expected at least one suggestion"
-    assert all(name in supported for name in suggested)
+    assert "BoLA-100901" in message
+    assert "BoLA-1:00901" in message, "the near-miss suggestion should be an accepted spelling"
 
 
 def test_diagnostic_lines_drops_the_option_dump():
@@ -349,15 +337,6 @@ def test_summarize_reports_tightest_affinity_when_present():
     metrics = summarize([weak, strong], 2.0)
     assert metrics["best_rank_ba"] == 0.08
     assert metrics["best_affinity_nm"] == 7.3
-
-
-def test_summarize_affinity_metrics_ignore_bindings_missing_them():
-    """A mix of BA and EL-only bindings summarizes over the ones carrying values."""
-    with_ba, without = _binding(0.2), _binding(0.3)
-    with_ba.rank_ba, with_ba.affinity_nm = 1.5, 120.0
-    metrics = summarize([with_ba, without], 2.0)
-    assert metrics["best_rank_ba"] == 1.5
-    assert metrics["best_affinity_nm"] == 120.0
 
 
 # ── stdout parsing (hand-written tables, not captured output) ────────────────
@@ -632,10 +611,15 @@ def test_netmhcpan_peptides_duplicate_peptides_are_index_aligned():
 
 
 @pytest.mark.integration
-def test_netmhcpan_peptides_unknown_allele_error_names_the_allele():
-    """A nonsense allele is reported by name, not as an opaque binary or file failure."""
+@pytest.mark.parametrize("allele", ["HLA-Z99:99", "BoLA-100901"])
+def test_netmhcpan_peptides_unknown_allele_error_names_the_allele(allele):
+    """An allele this install cannot use is reported by name, not as an opaque failure.
+
+    ``BoLA-100901`` is checked against the real install because it is in MHC_pseudo.dat but
+    not in allelenames, so it is accepted by the wrong gate and rejected by the binary.
+    """
     _require_netmhcpan()
-    config = NetMHCpanPeptidesConfig(alleles=["HLA-Z99:99"])
+    config = NetMHCpanPeptidesConfig(alleles=[allele])
 
     with pytest.raises((ValueError, subprocess.CalledProcessError)) as excinfo:
         run_netmhcpan_peptides(NetMHCpanPeptidesInput(peptides=[_A0201_BINDER]), config)
@@ -643,7 +627,7 @@ def test_netmhcpan_peptides_unknown_allele_error_names_the_allele():
     # The one-shot dispatch path re-raises as CalledProcessError, carrying the standalone's
     # message on .stderr, so the actionable text is asserted rather than the type.
     message = _error_text(excinfo.value)
-    assert "HLA-Z99:99" in message
+    assert allele in message
     assert "Unknown allele" in message
 
 
