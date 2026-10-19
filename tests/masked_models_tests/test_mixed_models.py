@@ -163,7 +163,7 @@ def test_mixed_sequence_one_hot_alignment_and_probability_mode():
             assert sum(row) == 1.0
         else:
             assert not any(row)
-    assert MixedSequenceGradientInput(sequence=_LOCUS, logits=rows, temperature=None).logits.root == rows
+    assert MixedSequenceGradientInput(sequence=_LOCUS, logits=rows, temperature=None).logits == rows
 
 
 @pytest.mark.parametrize("sharpness", [math.nan, math.inf, -math.inf])

@@ -58,7 +58,7 @@ VL_SEQ = "SYELTQPPSVSVSPGQTARITCSANALPNQYAYWYQQKPGRAPVMVIYKDTQRPSGIPQRFSSSTSGTTV
 
 def test_ablang_gradient_input_validation():
     inp = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20, [1.0] * 20]))
-    assert inp.antibody.heavy_chain.root == [[0.0] * 20, [1.0] * 20]
+    assert inp.antibody.heavy_chain == [[0.0] * 20, [1.0] * 20]
     assert inp.temperature == 1.0
 
     inp_with_temp = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20]), temperature=0.6)

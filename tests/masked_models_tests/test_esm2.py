@@ -38,7 +38,7 @@ _persistent_tool = make_persistent_fixture("esm2")
 
 def test_esm2_gradient_input_validation():
     inp = ESM2GradientInput(logits=[[0.0] * 20, [1.0] * 20])
-    assert inp.logits.root == [[0.0] * 20, [1.0] * 20]
+    assert inp.logits == [[0.0] * 20, [1.0] * 20]
     assert inp.temperature == 1.0
 
     inp_with_temp = ESM2GradientInput(logits=[[0.0] * 20], temperature=0.6)

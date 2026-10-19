@@ -69,6 +69,22 @@ class SequenceLogits(RootModel[list[list[float]]]):
         # -> (V,)
         return self.root[index]
 
+    def __eq__(self, other: object) -> bool:
+        """Compare equal to the same matrix type, or to a plain nested list of rows.
+
+        Lets callers and tests write ``inputs.logits == [[...]]`` rather than reaching through
+        ``.root``. Matrices of different vocabularies never compare equal, even when their
+        values coincide.
+        """
+        if isinstance(other, SequenceLogits):
+            return type(self) is type(other) and self.root == other.root
+        if isinstance(other, list):
+            return self.root == other
+        return NotImplemented
+
+    # Pydantic leaves non-frozen models unhashable; defining __eq__ keeps that explicit.
+    __hash__ = None  # type: ignore[assignment]
+
     @property
     def shape(self) -> tuple[int, int]:
         """Return the ``(L, V)`` matrix shape."""
