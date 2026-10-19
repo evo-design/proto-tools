@@ -27,7 +27,11 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.tools.tool_registry import ToolRegistry
-from proto_tools.utils.gradient_models import GradientInput, GradientOutput
+from proto_tools.utils.gradient_models import (
+    BatchedNucleotideGradientInput,
+    GradientInput,
+    GradientOutput,
+)
 from proto_tools.utils.sequence_logits import (
     ProteinSequenceLogits,
     SequenceLogits,
@@ -236,6 +240,88 @@ def test_logit_mode_does_not_apply_probability_rules(spec: Any) -> None:
         # Shift only the active rows; fixed-context rows must stay zero in both modes.
         _set_path(payload, path, [[value - 3.0 for value in row] if any(row) else row for row in rows])
     assert spec.input_model(**payload).temperature == 1.0
+
+
+# ── from_probabilities on the tool input ─────────────────────────────────────
+
+
+def _positive_probabilities(matrix: SequenceLogits, allowed: list[list[bool]] | None) -> list[list[float]]:
+    """Build rows biased toward the first permitted column, strictly positive where permitted.
+
+    ``from_probabilities`` refuses exact zeros, so every permitted column gets some mass. A row
+    with no permitted column is fixed context and carries no state, so it stays all-zero — the
+    only valid value for it in either temperature mode.
+    """
+    _, width = matrix.shape
+    rows: list[list[float]] = []
+    for index in range(len(matrix)):
+        mask = allowed[index] if allowed is not None else [True] * width
+        permitted = [column for column, ok in enumerate(mask) if ok]
+        row = [0.0] * width
+        for rank, column in enumerate(permitted):
+            row[column] = 2.0 if rank == 0 else 1.0
+        total = sum(row)
+        rows.append(row if total == 0.0 else [value / total for value in row])
+    return rows
+
+
+def _build_from_probabilities(spec: Any, temperature: float) -> tuple[Any, dict[str, list[list[float]]]]:
+    """Construct a tool input through its ``from_probabilities`` factory.
+
+    Returns the input together with the distributions it was built from, keyed by the same
+    paths ``sequence_logits()`` reports.
+    """
+    example = _example(spec)
+    fields = example.model_dump(exclude_none=True)
+    fields.pop("temperature", None)
+    targets = {
+        path: _positive_probabilities(matrix, example.allowed_tokens(path, matrix))
+        for path, matrix in example.sequence_logits().items()
+    }
+
+    if issubclass(spec.input_model, BatchedNucleotideGradientInput):
+        fields.pop("logits")
+        built = spec.input_model.from_probabilities(list(targets.values()), temperature=temperature, **fields)
+    elif "antibody" in spec.input_model.model_fields:
+        fields.pop("antibody")
+        chains = {path.split(".", 1)[1]: rows for path, rows in targets.items()}
+        built = spec.input_model.from_probabilities(temperature=temperature, **chains, **fields)
+    else:
+        fields.pop("logits")
+        built = spec.input_model.from_probabilities(targets["logits"], temperature=temperature, **fields)
+    return built, targets
+
+
+@pytest.mark.parametrize("spec", _GRADIENT_SPECS, ids=lambda spec: spec.key)
+@pytest.mark.parametrize("temperature", [0.5, 1.0, 2.5])
+def test_from_probabilities_sets_a_consistent_temperature(spec: Any, temperature: float) -> None:
+    """The factory stores the temperature it converted at, so softmax reproduces the input.
+
+    Going through ``SequenceLogits.from_probabilities`` and then passing a different
+    ``temperature`` to the constructor silently reshapes the distribution; this is the contract
+    that makes that impossible when the factory is used.
+    """
+    built, targets = _build_from_probabilities(spec, temperature)
+
+    assert built.temperature == temperature
+    rebuilt = built.sequence_logits()
+    assert set(rebuilt) == set(targets)
+    for path, matrix in rebuilt.items():
+        for row, expected in zip(matrix.root, targets[path], strict=True):
+            if not any(expected):
+                # Fixed context: no state to reproduce, and the logits stay zero.
+                assert not any(row)
+                continue
+            scaled = [value / temperature for value in row]
+            peak = max(scaled)
+            exponentiated = [math.exp(value - peak) for value in scaled]
+            total = sum(exponentiated)
+            actual = [value / total for value in exponentiated]
+            active = [column for column, value in enumerate(expected) if value > 0.0]
+            renormalized = sum(actual[column] for column in active)
+            assert [actual[column] / renormalized for column in active] == pytest.approx(
+                [expected[column] for column in active], abs=1e-9
+            ), f"{spec.key} {path} did not round-trip"
 
 
 # ── SequenceLogits ───────────────────────────────────────────────────────────

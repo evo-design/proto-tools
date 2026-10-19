@@ -56,9 +56,28 @@ masking seam today. Forbidden tokens are expressed in the meantime by passing ex
 
 ## Starting from a probability distribution
 
-`SequenceLogits.from_probabilities(P, temperature=T)` returns `T * log(P)`, which
-`softmax(logits / T)` inverts exactly, so a caller can seed an optimizer from a distribution
-and keep working in logit space.
+A gradient input's own `from_probabilities()` is the recommended interface:
+
+```python
+inputs = ESM2GradientInput.from_probabilities(P, temperature=0.5)
+```
+
+It converts the matrix and stores the matching `temperature` in one call, so the two cannot
+disagree. `SequenceLogits.from_probabilities(P, temperature=T)` is the numerical primitive
+underneath, returning `T * log(P)`, which `softmax(logits / T)` inverts exactly. Pairing that
+primitive with a *different* `temperature` on the input silently reshapes the distribution —
+`P` raised to the power `T_build / T_use` and renormalized — with no error, which is the whole
+reason the tool-level factory exists.
+
+It follows the three input shapes. The base takes one `(L, V)` distribution plus the tool's
+remaining fields; `BatchedNucleotideGradientInput` takes `(B, L, 4)`;
+`AbLangGradientInput` takes `heavy_chain=` / `light_chain=`; and
+`MixedSequenceGradientInput` converts only each row's permitted modality block, since a valid
+mixed row must hold exact zeros outside it and `log(0)` is not finite.
+
+The factory is only needed to optimize in logit space. To have a backend consume probabilities
+as they are, pass them straight to the constructor with `temperature=None` — no conversion is
+involved and there is nothing to mismatch.
 
 It requires **strictly positive** probabilities. An exact zero maps to an infinite logit, so it
 is refused rather than quietly floored — there is no epsilon substitution, because silently

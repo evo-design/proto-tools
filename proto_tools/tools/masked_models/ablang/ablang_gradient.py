@@ -1,6 +1,7 @@
 """AbLang masked pseudo-log-likelihood gradient tool."""
 
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 from pydantic import Field
@@ -39,6 +40,39 @@ class AbLangGradientInput(GradientInput):
         title="Antibody Logits",
         description="Antibody with relaxed sequence distributions over amino acids.",
     )
+
+    @classmethod
+    def from_probabilities(  # type: ignore[override] -- chains are named, not a single matrix
+        cls,
+        *,
+        heavy_chain: Sequence[Sequence[float]] | None = None,
+        light_chain: Sequence[Sequence[float]] | None = None,
+        temperature: float = 1.0,
+        **fields: Any,
+    ) -> "AbLangGradientInput":
+        """Build an input whose chain logits reproduce the given distributions.
+
+        At least one chain must be supplied, and both are converted at the same temperature the
+        input stores, so the two cannot disagree.
+
+        Args:
+            heavy_chain (Sequence[Sequence[float]] | None): ``(Lh, 20)`` strictly positive rows.
+            light_chain (Sequence[Sequence[float]] | None): ``(Ll, 20)`` strictly positive rows.
+            temperature (float): Positive, finite temperature stored on the input.
+            fields (Any): Any remaining input fields.
+
+        Returns:
+            AbLangGradientInput: Input satisfying ``softmax(chain / temperature) == chain probs``.
+        """
+        convert = ProteinSequenceLogits.from_probabilities
+        return cls(
+            antibody=AntibodyLogits(
+                heavy_chain=None if heavy_chain is None else convert(heavy_chain, temperature=temperature),
+                light_chain=None if light_chain is None else convert(light_chain, temperature=temperature),
+            ),
+            temperature=temperature,
+            **fields,
+        )
 
 
 class AbLangGradientOutput(GradientOutput):

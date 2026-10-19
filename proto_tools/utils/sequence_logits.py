@@ -164,6 +164,10 @@ class SequenceLogits(RootModel[list[list[float]]]):
 
         Returns ``temperature * log(p)``, which ``softmax(logits / temperature)`` inverts exactly.
 
+        This is the numerical primitive. Prefer a gradient input's own ``from_probabilities()``,
+        which also stores the matching ``temperature`` so the conversion and the reading cannot
+        disagree; pairing this result with a different temperature reshapes the distribution.
+
         Args:
             probabilities (Sequence[Sequence[float]]): ``(L, V)`` rows, each a strictly positive
                 probability distribution.

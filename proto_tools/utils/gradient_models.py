@@ -6,6 +6,7 @@ Shared input and output contracts for relaxed-sequence gradient tools.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +85,57 @@ class GradientInput(BaseToolInput):
         """
         return None
 
+    @classmethod
+    def relaxed_state_type(cls, field: str = "logits") -> type[SequenceLogits]:
+        """Return the :class:`SequenceLogits` subclass a field holds.
+
+        Args:
+            field (str): Name of the relaxed-state field.
+
+        Returns:
+            type[SequenceLogits]: The vocabulary-specific matrix type declared for that field.
+
+        Raises:
+            TypeError: If the field is absent or is not a single ``SequenceLogits``.
+        """
+        info = cls.model_fields.get(field)
+        annotation = info.annotation if info is not None else None
+        if isinstance(annotation, type) and issubclass(annotation, SequenceLogits):
+            return annotation
+        raise TypeError(f"{cls.__name__} has no single {field!r} matrix, so it needs its own from_probabilities()")
+
+    @classmethod
+    def from_probabilities(
+        cls,
+        probabilities: Sequence[Sequence[float]],
+        *,
+        temperature: float = 1.0,
+        **fields: Any,
+    ) -> Self:
+        """Build an input whose logits reproduce ``probabilities`` under its own temperature.
+
+        This is the recommended way to start from a distribution: the temperature is given once
+        and used both to convert the logits and to read them back, so the two cannot disagree.
+        Converting by hand through
+        :meth:`~proto_tools.utils.sequence_logits.SequenceLogits.from_probabilities` and then
+        passing a different ``temperature`` to the constructor silently reshapes the
+        distribution.
+
+        Only needed to optimize in logit space. To have a backend consume probabilities as they
+        are, pass them straight to the constructor with ``temperature=None``.
+
+        Args:
+            probabilities (Sequence[Sequence[float]]): ``(L, V)`` rows, each a strictly positive
+                probability distribution.
+            temperature (float): Positive, finite temperature stored on the input.
+            fields (Any): The tool's remaining input fields, such as a structure or template.
+
+        Returns:
+            Self: Input satisfying ``softmax(logits / temperature) == probabilities``.
+        """
+        matrix = cls.relaxed_state_type().from_probabilities(probabilities, temperature=temperature)
+        return cls(logits=matrix, temperature=temperature, **fields)
+
     @model_validator(mode="after")
     def validate_relaxed_state(self) -> Self:
         """Enforce fixed-context zeros always, and the probability contract when temperature is None."""
@@ -127,6 +179,30 @@ class BatchedNucleotideGradientInput(GradientInput):
         min_length=1,
         examples=[[[[0.0] * 4] * 50]],
     )
+
+    @classmethod
+    def from_probabilities(  # type: ignore[override] -- a batch takes (B, L, V), not (L, V)
+        cls,
+        probabilities: Sequence[Sequence[Sequence[float]]],
+        *,
+        temperature: float = 1.0,
+        **fields: Any,
+    ) -> Self:
+        """Build a batched input whose logits reproduce ``probabilities`` under its temperature.
+
+        Args:
+            probabilities (Sequence[Sequence[Sequence[float]]]): ``(B, L, 4)`` rows, each row a
+                strictly positive probability distribution.
+            temperature (float): Positive, finite temperature stored on the input.
+            fields (Any): The tool's remaining input fields.
+
+        Returns:
+            Self: Input satisfying ``softmax(logits / temperature) == probabilities``.
+        """
+        matrices = [
+            NucleotideSequenceLogits.from_probabilities(item, temperature=temperature) for item in probabilities
+        ]
+        return cls(logits=matrices, temperature=temperature, **fields)
 
     @model_validator(mode="after")
     def validate_batch_lengths(self) -> Self:

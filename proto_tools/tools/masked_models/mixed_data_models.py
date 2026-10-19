@@ -1,6 +1,7 @@
 """Shared contracts for mixed protein/DNA masked language models."""
 
 import json
+import math
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, ClassVar, Literal
@@ -141,6 +142,37 @@ class MixedSequenceSampleInput(MixedSequenceInput):
         return self
 
 
+def mixed_allowed_mask(sequence: str, length: int) -> list[list[bool]]:
+    """Build the per-token mask of permitted columns for a mixed template.
+
+    Args:
+        sequence (str): Prepared template, normalized to one-character strand markers.
+        length (int): Number of relaxed rows the mask must cover.
+
+    Returns:
+        list[list[bool]]: ``(L, 24)`` mask — protein tokens take columns 0-19, DNA tokens 20-23,
+            and markers or ambiguous symbols take none.
+
+    Raises:
+        ValueError: If the template is not token-aligned with ``length``, or fixes every position.
+    """
+    tokens = list("".join(tokenize_mixed_sequence(sequence)))
+    if len(tokens) != length:
+        raise ValueError("logits must have one row per model token, including strand markers")
+    width = len(MIXED_VOCAB)
+    mask: list[list[bool]] = []
+    for token in tokens:
+        row = [False] * width
+        if token in PROTEIN_TOKENS:
+            row[:20] = [True] * 20
+        elif token in DNA_TOKENS:
+            row[20:] = [True] * (width - 20)
+        mask.append(row)
+    if not any(any(row) for row in mask):
+        raise ValueError("Gradient input requires at least one canonical protein or DNA token")
+    return mask
+
+
 class MixedSequenceLogits(SequenceLogits):
     """A relaxed ``(L, 24)`` mixed protein/DNA state in ``ACDEFGHIKLMNPQRSTVWYacgt`` order."""
 
@@ -191,21 +223,57 @@ class MixedSequenceGradientInput(GradientInput):
         Raises:
             ValueError: If the state is not token-aligned, or fixes every position.
         """
-        tokens = list(self.sequence)
-        if len(tokens) != len(logits):
-            raise ValueError("logits must have one row per model token, including strand markers")
-        width = len(MIXED_VOCAB)
-        mask: list[list[bool]] = []
-        for token in tokens:
-            row = [False] * width
-            if token in PROTEIN_TOKENS:
-                row[:20] = [True] * 20
-            elif token in DNA_TOKENS:
-                row[20:] = [True] * (width - 20)
-            mask.append(row)
-        if not any(any(row) for row in mask):
-            raise ValueError("Gradient input requires at least one canonical protein or DNA token")
-        return mask
+        return mixed_allowed_mask(self.sequence, len(logits))
+
+    @classmethod
+    def from_probabilities(
+        cls,
+        probabilities: Sequence[Sequence[float]],
+        *,
+        temperature: float = 1.0,
+        **fields: Any,
+    ) -> "MixedSequenceGradientInput":
+        """Build an input whose logits reproduce modality-restricted ``probabilities``.
+
+        Each row must be a distribution over its own modality block, with exact zeros outside
+        it — which plain logits cannot express, since ``log(0)`` is not finite. The backend
+        normalizes within the permitted block, so only the permitted columns need converting
+        and the rest are left at zero, where the modality mask discards them anyway.
+
+        Args:
+            probabilities (Sequence[Sequence[float]]): ``(L, 24)`` token-aligned rows, strictly
+                positive within each row's modality block and zero outside it.
+            temperature (float): Positive, finite temperature stored on the input.
+            fields (Any): Remaining input fields; must include ``sequence``.
+
+        Returns:
+            MixedSequenceGradientInput: Input reproducing ``probabilities`` within each modality.
+
+        Raises:
+            ValueError: If ``sequence`` is missing, or a row is not a valid modality-restricted
+                distribution with strictly positive permitted entries.
+        """
+        if "sequence" not in fields:
+            raise ValueError("mixed gradient from_probabilities requires the sequence template")
+        mask = mixed_allowed_mask(fields["sequence"], len(probabilities))
+        MixedSequenceLogits([[float(v) for v in row] for row in probabilities]).validate_probabilities(
+            allowed=mask, label="probabilities"
+        )
+
+        rows: list[list[float]] = []
+        for index, (row, permitted) in enumerate(zip(probabilities, mask, strict=True)):
+            converted = [0.0] * len(MIXED_VOCAB)
+            for column, allowed in enumerate(permitted):
+                if not allowed:
+                    continue
+                if row[column] <= 0.0:
+                    raise ValueError(
+                        f"probabilities row {index + 1} column {column} must be strictly positive; "
+                        "pass the distribution directly with temperature=None to keep exact zeros"
+                    )
+                converted[column] = temperature * math.log(row[column])
+            rows.append(converted)
+        return cls(logits=rows, temperature=temperature, **fields)
 
 
 class MixedSequenceEmbedding(SequenceEmbedding):
@@ -344,6 +412,7 @@ __all__ = [
     "MixedSequenceGradientInput",
     "MixedSequenceInput",
     "MixedSequenceLogits",
+    "mixed_allowed_mask",
     "MixedSequenceSample",
     "MixedSequenceSampleInput",
     "one_hot_mixed_logits",
