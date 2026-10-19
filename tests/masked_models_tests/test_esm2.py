@@ -25,7 +25,7 @@ from proto_tools.tools.masked_models.esm2 import (
 )
 from proto_tools.tools.masked_models.esm2.esm2_gradient import ESM2GradientOutput
 from proto_tools.utils import one_hot_protein_logits
-from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import AMINO_ACIDS_LIST
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.vocabulary import AMINO_ACIDS_LIST
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output

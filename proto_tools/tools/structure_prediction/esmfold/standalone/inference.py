@@ -16,6 +16,7 @@ from typing import Any
 import torch
 from standalone_helpers import AMINO_ACIDS_LIST, get_logger, move_model_to_device, release_cuda_memory, serialize_output
 from standalone_helpers.relaxation import relaxed_probs, resolve_temperature
+from standalone_helpers.vocabulary import ALPHAFOLD_RESTYPES, gather_indices
 
 logger = get_logger(__name__)
 # Suppress transformers logging
@@ -23,7 +24,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 
 # ESMFold PAE head maximum: 31 bins at 1.025 A spacing, used to normalize PAE loss to [0, 1].
 PAE_MAXIMUM = 31.75
-OPENFOLD_AMINO_ACIDS = list("ARNDCQEGHILKMFPSTWYV")
+OPENFOLD_AMINO_ACIDS = ALPHAFOLD_RESTYPES
 
 
 class ESMFoldModel:
@@ -306,7 +307,7 @@ class ESMFoldModel:
         esm_attention_mask = esmaa != self.model.esm_dict_padding_idx
         token_embeddings = self.model.esm.embeddings.word_embeddings(esmaa)
         esm_ids = torch.tensor(
-            [self.model.config.vocab_list.index(aa_symbol) for aa_symbol in AMINO_ACIDS_LIST],
+            gather_indices(AMINO_ACIDS_LIST, self.model.config.vocab_list, label="esmfold/esm"),
             device=self.device,
         )
         relaxed_esm_embeddings = relaxed.to(token_embeddings.dtype) @ self.model.esm.embeddings.word_embeddings(esm_ids)
@@ -334,8 +335,9 @@ class ESMFoldModel:
         s_z_0 = s_s_0.new_zeros(batch_size, seq_len, seq_len, cfg.trunk.pairwise_state_dim)
         if self.model.config.esmfold_config.embed_aa:
             aa_embeddings = self.model.embedding(aa)
+            # OpenFold reserves index 0, so the residue table starts at 1.
             af2_ids = torch.tensor(
-                [OPENFOLD_AMINO_ACIDS.index(aa_symbol) + 1 for aa_symbol in AMINO_ACIDS_LIST],
+                gather_indices(AMINO_ACIDS_LIST, OPENFOLD_AMINO_ACIDS, offset=1, label="esmfold/openfold"),
                 device=self.device,
             )
             relaxed_aa_embeddings = relaxed.to(aa_embeddings.dtype) @ self.model.embedding(af2_ids)

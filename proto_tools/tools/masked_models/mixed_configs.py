@@ -5,13 +5,8 @@ import math
 from typing import Any, ClassVar, Literal, cast
 
 from pydantic import field_validator, model_validator
-from standalone_helpers.mixed_sequence import (
-    AMBIGUOUS_PROTEIN_TOKENS,
-    DNA_TOKENS,
-    PROTEIN_TOKENS,
-    STRAND_TOKENS,
-    tokenize_mixed_sequence,
-)
+from standalone_helpers.mixed_sequence import STRAND_TOKENS, tokenize_mixed_sequence
+from standalone_helpers.vocabulary import AMBIGUOUS_PROTEIN_TOKENS, DNA_TOKENS, PROTEIN_TOKENS
 
 from proto_tools.transforms.masking import MaskingInput, MaskingStrategy
 from proto_tools.utils import AminoAcid, BaseConfig, ConfigField

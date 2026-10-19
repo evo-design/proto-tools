@@ -37,7 +37,7 @@ import pytest
 import proto_tools.tools.testing  # noqa: F401
 from proto_tools import setup_logging
 from proto_tools.tools.tool_registry import ToolRegistry
-from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import (
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.vocabulary import (
     AMINO_ACIDS_LIST,
     DNA_NUCLEOTIDES,
 )

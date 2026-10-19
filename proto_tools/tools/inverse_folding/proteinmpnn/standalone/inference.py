@@ -12,18 +12,18 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 from standalone_helpers import get_logger, log_likelihood_metrics
+from standalone_helpers.vocabulary import ALPHAFOLD_RESTYPES, AMINO_ACIDS_LIST, gather_indices
 
 logger = get_logger(__name__)
 
 DEFAULT_TEMPERATURE = 1.0
-CANONICAL_VOCAB: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
+CANONICAL_VOCAB: list[str] = AMINO_ACIDS_LIST
 
-# Alphabet ordering for logits interpretation
-ALPHAFOLD_VOCAB: list[str] = list(
-    "ARNDCQEGHILKMFPSTWYVX"
-)  # ColabDesign autoconverts to Alphafold alphabet for ProteinMPNN scoring
-ALPHAFOLD_AA_VOCAB: list[str] = ALPHAFOLD_VOCAB[:20]
-CANONICAL_TO_ALPHAFOLD_INDICES: list[int] = [CANONICAL_VOCAB.index(aa) for aa in ALPHAFOLD_AA_VOCAB]
+# ColabDesign autoconverts to the AlphaFold alphabet for ProteinMPNN scoring, with a trailing
+# unknown symbol the relaxed state does not cover.
+ALPHAFOLD_VOCAB: list[str] = [*ALPHAFOLD_RESTYPES, "X"]
+ALPHAFOLD_AA_VOCAB: list[str] = ALPHAFOLD_RESTYPES
+CANONICAL_TO_ALPHAFOLD_INDICES: list[int] = gather_indices(ALPHAFOLD_AA_VOCAB, CANONICAL_VOCAB, label="proteinmpnn")
 
 # Maps model_choice to ColabDesign's (model_name, weights) parameters.
 # v_48_002/010/020/030 are the same architecture trained at different noise levels;

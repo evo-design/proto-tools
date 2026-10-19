@@ -9,6 +9,7 @@ from typing import ClassVar, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 # netMHCpan accepts only the unstarred allele spelling ("HLA-A02:01"); "HLA-A*02:01" and
@@ -29,7 +30,7 @@ MAX_PEPTIDE_LENGTH = 14
 
 # The 20 standard amino acids. netMHCpan silently rewrites any other residue to "X", which
 # would mean scoring a peptide the caller never asked about, so off-alphabet input is rejected.
-_STANDARD_AMINO_ACIDS = frozenset("ACDEFGHIKLMNPQRSTVWY")
+_STANDARD_AMINO_ACIDS = frozenset(PROTEIN_AMINO_ACIDS)
 
 # Steepness of the logistic used by ``binding_propensity``, applied in log-rank space so the
 # curve is centred on the weak-binder threshold and decreases smoothly with %rank. This is

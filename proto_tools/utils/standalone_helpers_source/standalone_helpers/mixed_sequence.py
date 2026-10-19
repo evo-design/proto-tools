@@ -4,13 +4,12 @@ import math
 from itertools import pairwise
 
 from .proto_logging import get_logger
+from .vocabulary import AMBIGUOUS_PROTEIN_TOKENS, DNA_TOKENS, MIXED_VOCAB, PROTEIN_TOKENS
 
 logger = get_logger(__name__)
 
-PROTEIN_TOKENS = "ACDEFGHIKLMNPQRSTVWY"
-DNA_TOKENS = "acgt"
-AMBIGUOUS_PROTEIN_TOKENS = "XBUZO"
-MIXED_VOCAB = list(PROTEIN_TOKENS + DNA_TOKENS)
+__all__ = ["AMBIGUOUS_PROTEIN_TOKENS", "DNA_TOKENS", "MIXED_VOCAB", "PROTEIN_TOKENS"]
+
 STRAND_TOKENS = "+-"
 # Upstream tokenizers spell the one-character strand markers as special tokens.
 UPSTREAM_STRAND_TOKENS = {"+": "<+>", "-": "<->"}

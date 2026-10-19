@@ -56,13 +56,15 @@ from .seeding import (
     set_jax_seed,
     set_torch_seed,
 )
-from .serialization import (
+from .serialization import serialize_output
+from .subprocess_utils import run_teed
+from .vocabulary import (
+    ALPHAFOLD_RESTYPES,
     AMINO_ACIDS_LIST,
     DNA_NUCLEOTIDES,
     RNA_NUCLEOTIDES,
-    serialize_output,
+    gather_indices,
 )
-from .subprocess_utils import run_teed
 from .weights import resolve_weights_dir
 
 __all__ = [
@@ -95,10 +97,13 @@ __all__ = [
     "set_jax_seed",
     "set_torch_seed",
     # serialization
+    "serialize_output",
+    # vocabulary
+    "ALPHAFOLD_RESTYPES",
     "AMINO_ACIDS_LIST",
     "DNA_NUCLEOTIDES",
     "RNA_NUCLEOTIDES",
-    "serialize_output",
+    "gather_indices",
     # subprocess
     "run_teed",
     # weights

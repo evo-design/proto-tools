@@ -6,13 +6,12 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
-from standalone_helpers.mixed_sequence import (
+from standalone_helpers.mixed_sequence import one_hot_mixed_logits, tokenize_mixed_sequence
+from standalone_helpers.vocabulary import (
     AMBIGUOUS_PROTEIN_TOKENS,
     DNA_TOKENS,
     MIXED_VOCAB,
     PROTEIN_TOKENS,
-    one_hot_mixed_logits,
-    tokenize_mixed_sequence,
 )
 
 from proto_tools.tools.masked_models.shared_data_models import (

@@ -10,10 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from standalone_helpers import get_logger, log_likelihood_metrics, serialize_output
+from standalone_helpers.vocabulary import AMINO_ACIDS_LIST
 
 logger = get_logger(__name__)
 
-STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
+STANDARD_AMINO_ACIDS = "".join(AMINO_ACIDS_LIST)
 
 
 # Mirror of setup.sh's URL table — kept in sync by hand (URLs are static).
