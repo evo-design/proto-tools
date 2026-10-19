@@ -223,7 +223,7 @@ def run_caliby_pack(
         )
     ):
         # Staged numbered 1..N per chain: Caliby matches residues on number alone, ignoring insertion codes.
-        with ensemble_paths([structure]) as (structure_path, _):
+        with ensemble_paths([structure]) as (structure_path, _, chain_map):
             input_dict = {
                 "operation": "pack",
                 "primary_path": str(structure_path),
@@ -235,6 +235,10 @@ def run_caliby_pack(
             }
             result = ToolInstance.dispatch("caliby", input_dict, instance=instance, config=config)
 
-        packed.append(restore_numbering(result["cif_string"], chain_residue_ids(structure), source="caliby-pack"))
+        packed.append(
+            restore_numbering(
+                result["cif_string"], chain_residue_ids(structure), source="caliby-pack", chain_map=chain_map
+            )
+        )
 
     return CalibyPackOutput(packed_structures=packed)

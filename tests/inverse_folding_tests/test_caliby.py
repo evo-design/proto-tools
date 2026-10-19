@@ -117,10 +117,22 @@ def offset_numbered_structure(pdb_structure):
     return _renumber(pdb_structure, offset=100, gap_after=30, gap_size=20)
 
 
+@pytest.fixture(scope="module", params=["pdb", "cif"])
+def insertion_coded_structure(request, pdb_structure):
+    """The test backbone numbered 1..5, 5A, 6..64, as PDB and as CIF: position 6 is residue ``5A``."""
+    structure = _with_insertion_code(pdb_structure, after=5)
+    if request.param == "cif":
+        return Structure(structure=structure.structure_cif, structure_format="cif", source="test")
+    return structure
+
+
 @pytest.fixture(scope="module")
-def insertion_coded_structure(pdb_structure):
-    """The test backbone numbered 1..5, 5A, 6..64: position 6 is residue ``5A``."""
-    return _with_insertion_code(pdb_structure, after=5)
+def two_character_chain_structure(pdb_structure):
+    """The test backbone as a CIF whose only chain is ``AB``, an ID PDB format cannot hold."""
+    gemmi_struct = pdb_structure.gemmi_struct.clone()
+    for chain in gemmi_struct[0]:
+        chain.name = "AB"
+    return Structure(structure=gemmi_struct.make_mmcif_document().as_string(), structure_format="cif", source="test")
 
 
 @pytest.fixture(scope="module")
@@ -397,7 +409,7 @@ def test_chain_residue_ids_keep_insertion_codes(insertion_coded_structure):
 
 def test_sequential_pdb_numbers_each_residue_by_its_position(insertion_coded_structure):
     """The staged copy numbers residues 1..N with no insertion codes, sequence unchanged."""
-    staged = Structure(structure=sequential_pdb(insertion_coded_structure), structure_format="pdb", source="test")
+    staged = Structure(structure=sequential_pdb(insertion_coded_structure)[0], structure_format="pdb", source="test")
     assert chain_residue_ids(staged)["A"] == [(n, "") for n in range(1, 66)]
     assert staged.get_chain_sequence("A") == insertion_coded_structure.get_chain_sequence("A")
 
@@ -405,8 +417,21 @@ def test_sequential_pdb_numbers_each_residue_by_its_position(insertion_coded_str
 def test_restore_numbering_round_trips_insertion_codes(insertion_coded_structure):
     """An output written in staged numbering gets the input residue IDs back."""
     residue_ids = chain_residue_ids(insertion_coded_structure)
-    staged = Structure(structure=sequential_pdb(insertion_coded_structure), structure_format="pdb", source="test")
+    staged = Structure(structure=sequential_pdb(insertion_coded_structure)[0], structure_format="pdb", source="test")
     restored = restore_numbering(staged.structure_cif, residue_ids, source="test")
+    assert chain_residue_ids(restored) == residue_ids
+
+
+def test_restore_numbering_maps_shortened_chain_ids_back(two_character_chain_structure):
+    """A CIF chain ID too long for PDB is staged shortened and restored on the output."""
+    pdb_content, chain_map = sequential_pdb(two_character_chain_structure)
+    staged = Structure(structure=pdb_content, structure_format="pdb", source="test")
+    assert staged.get_chain_ids() == [chain_map["AB"]]
+    assert len(chain_map["AB"]) == 1
+
+    residue_ids = chain_residue_ids(two_character_chain_structure)
+    restored = restore_numbering(staged.structure_cif, residue_ids, source="test", chain_map=chain_map)
+    assert restored.get_chain_ids() == ["AB"]
     assert chain_residue_ids(restored) == residue_ids
 
 
@@ -745,8 +770,11 @@ def test_caliby_pack_adds_sidechains(pdb_structure):
 @pytest.mark.uses_gpu
 def test_caliby_pack_keeps_insertion_coded_numbering(insertion_coded_structure):
     """The packed structure comes back in the input's numbering, insertion codes included."""
+    backbone = _backbone_only(insertion_coded_structure)
+    if insertion_coded_structure.structure_format == "cif":
+        backbone = Structure(structure=backbone.structure_cif, structure_format="cif", source="test")
     output = run_caliby_pack(
-        CalibyPackInput(structures=[_backbone_only(insertion_coded_structure)]),
+        CalibyPackInput(structures=[backbone]),
         CalibyPackConfig(diffusion_steps=10, seed=42),
     )
     assert output.success, f"Failed to pack an insertion-coded structure: {output}"
@@ -754,6 +782,30 @@ def test_caliby_pack_keeps_insertion_coded_numbering(insertion_coded_structure):
     packed = output.packed_structures[0]
     assert chain_residue_ids(packed) == chain_residue_ids(insertion_coded_structure)
     assert packed.get_chain_sequence("A") == insertion_coded_structure.get_chain_sequence("A")
+
+
+@pytest.mark.uses_gpu
+def test_caliby_handles_a_chain_id_too_long_for_pdb(two_character_chain_structure):
+    """A multi-character CIF chain can be constrained, and designs and packs keep its ID."""
+    native = two_character_chain_structure.get_chain_sequence("AB")
+    inp = CalibySampleInput(
+        inputs=[CalibyStructureInput(structure=two_character_chain_structure, fixed_positions={"AB": [3, 30]})]
+    )
+    output = run_caliby_sample(inp, CalibySampleConfig(num_sequences_per_structure=1, potts_sweeps=20, seed=0))
+    assert output.success, f"Failed to design a two-character chain: {output}"
+
+    design = output.design_sets[0].complexes[0]
+    designed = design.chain_sequence_map()["AB"]
+    assert designed[2] == native[2]
+    assert designed[29] == native[29]
+    assert design.structure.get_chain_ids() == ["AB"]
+    assert chain_residue_ids(design.structure) == chain_residue_ids(two_character_chain_structure)
+
+    packed = run_caliby_pack(
+        CalibyPackInput(structures=[design.structure]), CalibyPackConfig(diffusion_steps=10, seed=0)
+    )
+    assert packed.success, f"Failed to pack a two-character chain: {packed}"
+    assert packed.packed_structures[0].get_chain_ids() == ["AB"]
 
 
 # ============================================================================
