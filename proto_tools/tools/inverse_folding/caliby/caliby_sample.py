@@ -327,6 +327,34 @@ class CalibyStructureInput(InverseFoldingStructureInput):
                         f"chains {chains[0]!r} and {cid!r} are tied together but carry different residue "
                         "numbering; Caliby ties positions by residue number, so renumber them to match"
                     )
+
+        # Caliby copies the group representative's residue onto the other members, but only rewrites
+        # residue names where a position is not conditioned on. A tied chain that is held fixed
+        # therefore keeps its input sequence while the energy reports the tied assignment, so the
+        # returned chains disagree with each other and with the reported energy.
+        tied = sorted(seen)
+        if self.chains_to_redesign is not None:
+            redesigned = set(self.chains_to_redesign.chains)
+            held = [cid for cid in tied if cid not in redesigned]
+            if held:
+                raise ValueError(
+                    f"symmetric_chains ties chain(s) {held} that chains_to_redesign holds fixed; a tied "
+                    "chain must be redesigned, since Caliby would otherwise return its input sequence "
+                    "while reporting the energy of the tied one"
+                )
+        for field_name, selection in (
+            ("fixed_positions", self.fixed_positions),
+            ("pinned_residues", getattr(self, "pinned_residues", None)),
+        ):
+            if selection is None:
+                continue
+            clashing = sorted(set(selection.chains).intersection(tied))
+            if clashing:
+                raise ValueError(
+                    f"{field_name} constrains chain(s) {clashing} that symmetric_chains ties; a tied "
+                    "chain cannot carry position-level constraints, since conditioned positions are not "
+                    "rewritten with the tied residue"
+                )
         return self
 
     @model_validator(mode="after")

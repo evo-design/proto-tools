@@ -252,13 +252,24 @@ def test_caliby_score_output_export(file_format, tmp_path):
         assert "AGSM:KTV" in text
 
 
-def _write_homodimer(tmp_path) -> Structure:
+def _write_homodimer(tmp_path, *, waters: bool = False) -> Structure:
     """Two identical copies of the benchmark monomer, offset so the chains do not clash."""
     lines = [line for line in BENCHMARK_PDB_FILE.read_text().splitlines(keepends=True) if line.startswith("ATOM")]
     doubled = list(lines)
     for line in lines:
         shifted = float(line[30:38]) + 60.0
         doubled.append(f"{line[:21]}B{line[22:30]}{shifted:8.3f}{line[38:]}")
+    if waters:
+        # Deposited structures number waters independently per chain, which must not be read
+        # as the polymer chains carrying different residue numbering.
+        serial = 9000
+        for chain_id, first in (("A", 501), ("B", 701)):
+            for offset in range(3):
+                serial += 1
+                doubled.append(
+                    f"HETATM{serial:5d}  O   HOH {chain_id}{first + offset:4d}"
+                    "      50.000  50.000  50.000  1.00 30.00           O  \n"
+                )
     path = tmp_path / "homodimer.pdb"
     path.write_text("".join(doubled) + "END\n")
     return Structure(structure=str(path))
@@ -277,7 +288,8 @@ def test_symmetric_chains_rejects_a_group_of_one(tmp_path):
 
 
 def test_symmetric_chains_rejects_unknown_chain(tmp_path):
-    with pytest.raises(ValidationError, match="not in structure"):
+    """Each group is validated against the structure under its own field label."""
+    with pytest.raises(ValidationError, match=r"symmetric_chains: chain\(s\) \['Z'\] not in structure"):
         CalibyStructureInput(structure=_write_homodimer(tmp_path), symmetric_chains=[["A", "Z"]])
 
 
@@ -285,6 +297,22 @@ def test_symmetric_chains_rejects_chain_in_two_groups(tmp_path):
     structure = _write_homodimer(tmp_path)
     with pytest.raises(ValidationError, match="more than one symmetric_chains group"):
         CalibyStructureInput(structure=structure, symmetric_chains=[["A", "B"], ["B", "A"]])
+
+
+def test_symmetric_chains_rejects_chain_held_fixed_by_chains_to_redesign(tmp_path):
+    """A tied chain that is not redesigned keeps its input sequence, so the tie would not hold."""
+    structure = _write_homodimer(tmp_path)
+    with pytest.raises(ValidationError, match="that chains_to_redesign holds fixed"):
+        CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"], chains_to_redesign=["B"])
+
+
+def test_symmetric_chains_rejects_position_constraints_on_a_tied_chain(tmp_path):
+    """Conditioned positions are not rewritten with the tied residue, so the two conflict."""
+    structure = _write_homodimer(tmp_path)
+    with pytest.raises(ValidationError, match="that symmetric_chains ties"):
+        CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"], fixed_positions={"A": [5]})
+    with pytest.raises(ValidationError, match="that symmetric_chains ties"):
+        CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"], pinned_residues={"A": {5: "W"}})
 
 
 def test_symmetric_chains_rejects_mismatched_residue_numbering():
@@ -301,7 +329,8 @@ def test_pinned_residues_accepts_per_chain_shorthand(pdb_structure):
 
 
 def test_pinned_residues_rejects_unknown_chain(pdb_structure):
-    with pytest.raises(ValidationError, match="chain 'Z' not in structure"):
+    """The selection is validated against the structure under its own field label."""
+    with pytest.raises(ValidationError, match="pinned_residues: chain 'Z' not in structure"):
         CalibyStructureInput(structure=pdb_structure, pinned_residues={"Z": {3: "W"}})
 
 
@@ -348,22 +377,34 @@ def test_caliby_sample_pins_supplied_residue_identities(pdb_structure):
 
 
 @pytest.mark.uses_gpu
-def test_caliby_sample_ties_symmetric_chains(tmp_path):
-    """Tied chains must come out identical; untied ones are designed independently."""
-    structure = _write_homodimer(tmp_path)
-    config = CalibySampleConfig(num_sequences_per_structure=1, potts_sweeps=50, seed=0)
+@pytest.mark.parametrize("waters", [False, True], ids=["dry", "solvated"])
+def test_caliby_sample_ties_symmetric_chains(tmp_path, waters):
+    """Tied chains come out identical, including when per-chain waters are present.
 
-    tied = run_caliby_sample(
-        CalibySampleInput(inputs=[CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"])]), config
+    Waters are numbered independently per chain, so reading them as polymer numbering
+    would reject a solvated homooligomer outright.
+    """
+    structure = _write_homodimer(tmp_path, waters=waters)
+    output = run_caliby_sample(
+        CalibySampleInput(inputs=[CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"])]),
+        CalibySampleConfig(num_sequences_per_structure=1, potts_sweeps=20, seed=0),
     )
-    assert tied.success, f"Failed to design with symmetric_chains: {tied}"
-    tied_chains = tied.design_sets[0].complexes[0].chain_sequence_map()
-    assert tied_chains["A"] == tied_chains["B"]
+    assert output.success, f"Failed to design with symmetric_chains: {output}"
+    chains = output.design_sets[0].complexes[0].chain_sequence_map()
+    assert chains["A"] == chains["B"]
 
-    # Untied, the same two identical chains are designed independently and diverge.
-    untied = run_caliby_sample(CalibySampleInput(inputs=[CalibyStructureInput(structure=structure)]), config)
-    untied_chains = untied.design_sets[0].complexes[0].chain_sequence_map()
-    assert untied_chains["A"] != untied_chains["B"]
+
+@pytest.mark.uses_gpu
+def test_caliby_sample_designs_untied_chains_independently(tmp_path):
+    """Two identical untied chains diverge, so the tie above is not holding vacuously."""
+    structure = _write_homodimer(tmp_path)
+    output = run_caliby_sample(
+        CalibySampleInput(inputs=[CalibyStructureInput(structure=structure)]),
+        CalibySampleConfig(num_sequences_per_structure=1, potts_sweeps=50, seed=0),
+    )
+    assert output.success, f"Failed to design: {output}"
+    chains = output.design_sets[0].complexes[0].chain_sequence_map()
+    assert chains["A"] != chains["B"]
 
 
 @pytest.mark.uses_gpu

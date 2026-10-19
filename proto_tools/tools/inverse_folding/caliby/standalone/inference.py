@@ -61,18 +61,26 @@ def _configure_caliby_env(model_checkpoint: str) -> None:
         )
 
 
-def _load_atom_array(structure_path: str) -> Any:
+def _load_atom_array(structure_path: str, *, amino_acids_only: bool = False) -> Any:
     """Read a structure file's first model into a biotite ``AtomArray``.
 
     Args:
         structure_path (str): Path to a PDB file.
+        amino_acids_only (bool): Drop waters, ligands and other hetero residues, matching
+            what ``Structure.get_chain_positions`` reports and what Caliby's featurizer
+            keeps. Residue-numbering comparisons must set this, since hetero residues are
+            numbered independently per chain.
 
     Returns:
         Any: The parsed ``biotite.structure.AtomArray``.
     """
+    import biotite.structure as struc
     import biotite.structure.io.pdb as pdb
 
-    return pdb.get_structure(pdb.PDBFile.read(structure_path), model=1)
+    atom_array = pdb.get_structure(pdb.PDBFile.read(structure_path), model=1)
+    if amino_acids_only:
+        atom_array = atom_array[struc.filter_amino_acids(atom_array)]
+    return atom_array
 
 
 def _verify_fixed_positions(structure_path: str, fixed_positions: dict[str, list[int]] | None) -> None:
@@ -93,7 +101,7 @@ def _verify_fixed_positions(structure_path: str, fixed_positions: dict[str, list
     if not fixed_positions:
         return
 
-    atom_array = _load_atom_array(structure_path)
+    atom_array = _load_atom_array(structure_path, amino_acids_only=True)
     present = set(zip(atom_array.chain_id.tolist(), atom_array.res_id.tolist(), strict=True))
     missing = [
         f"{chain_id}{number}"
@@ -193,7 +201,7 @@ def _build_symmetry_pos(chain_groups: list[list[str]] | None, structure_path: st
     if not chain_groups:
         return ""
 
-    atom_array = _load_atom_array(structure_path)
+    atom_array = _load_atom_array(structure_path, amino_acids_only=True)
     numbering: dict[str, list[int]] = {}
     for chain_id in {cid for group in chain_groups for cid in group}:
         residues = atom_array.res_id[atom_array.chain_id == chain_id]
@@ -206,11 +214,12 @@ def _build_symmetry_pos(chain_groups: list[list[str]] | None, structure_path: st
             raise ValueError(f"caliby: chain {group[0]!r} has no residues to tie")
         for chain_id in group[1:]:
             if numbering[chain_id] != reference:
+                differing = sorted(set(reference).symmetric_difference(numbering[chain_id]))
                 raise ValueError(
                     f"caliby: chains {group[0]!r} and {chain_id!r} are tied together but carry "
-                    f"different residue numbering ({len(reference)} vs {len(numbering[chain_id])} "
-                    "residues). Caliby ties positions by residue number, so renumber the chains to "
-                    "match before tying them."
+                    f"different residue numbering; {len(differing)} residue number(s) appear in one "
+                    f"chain but not the other, starting at {differing[:5]}. Caliby ties positions by "
+                    "residue number, so renumber the chains to match before tying them."
                 )
         groups.extend(",".join(f"{cid}{res_num}" for cid in group) for res_num in reference)
 
