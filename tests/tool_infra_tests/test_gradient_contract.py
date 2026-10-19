@@ -303,6 +303,32 @@ def test_validate_probabilities_honors_an_allowed_mask() -> None:
         off_domain.validate_probabilities(allowed=permitted)
 
 
+@pytest.mark.parametrize(
+    "allowed, expected",
+    [
+        ([[False] * 3, [True] * 20], r"mask row 1 must have 20 columns, got 3"),
+        ([[True] * 3, [True] * 20], r"mask row 1 must have 20 columns, got 3"),
+        ([[], [True] * 20], r"mask row 1 must have 20 columns, got 0"),
+        ([[False] * 99, [True] * 20], r"mask row 1 must have 20 columns, got 99"),
+        ([[True] * 20], r"mask must have 2 rows, got 1"),
+    ],
+)
+@pytest.mark.parametrize("method", ["validate_fixed_rows", "validate_probabilities"])
+def test_malformed_allowed_mask_is_rejected_by_both_validators(
+    allowed: list[list[bool]], expected: str, method: str
+) -> None:
+    """A mask that is not ``(L, V)`` is refused, naming the mask rather than blaming the data.
+
+    Without the width check, a short or empty mask row reads as all-``False`` and both
+    validators would take it for a deliberate fixed-context marker: the probability checks get
+    skipped and the position goes unvalidated.
+    """
+    matrix = ProteinSequenceLogits([[1.0 / 20] * 20, [1.0 / 20] * 20])
+
+    with pytest.raises(ValueError, match=expected):
+        getattr(matrix, method)(allowed=allowed)
+
+
 def test_validate_fixed_rows_requires_zeros_in_both_modes() -> None:
     """A row with no permitted column must be exactly zero."""
     permitted = [[False] * 20]

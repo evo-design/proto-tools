@@ -81,6 +81,29 @@ class SequenceLogits(RootModel[list[list[float]]]):
         # -> V symbols, column-ordered
         return list(type(self).VOCAB)
 
+    def validate_allowed_mask(self, allowed: list[list[bool]], *, label: str = "logits") -> None:
+        """Check an allowed-token mask is an ``(L, V)`` boolean grid matching this matrix.
+
+        Without the width check a short or empty mask row reads as all-``False``, which the
+        validators would take for a deliberate fixed-context marker and skip.
+
+        Args:
+            allowed (list[list[bool]]): Candidate mask of permitted columns per position.
+            label (str): Field path used in error messages.
+
+        Raises:
+            ValueError: If the mask does not have one ``V``-wide row per position.
+        """
+        # allowed: must be exactly (L, V) to be interpretable at all.
+        length, width = self.shape
+        if len(allowed) != length:
+            raise ValueError(f"{label}: allowed-token mask must have {length} rows, got {len(allowed)}")
+        for index, row in enumerate(allowed):
+            if len(row) != width:
+                raise ValueError(
+                    f"{label}: allowed-token mask row {index + 1} must have {width} columns, got {len(row)}"
+                )
+
     def validate_fixed_rows(self, *, allowed: list[list[bool]], label: str = "logits") -> None:
         """Require rows with no permitted column to be exactly zero.
 
@@ -92,11 +115,10 @@ class SequenceLogits(RootModel[list[list[float]]]):
             label (str): Field path used in error messages.
 
         Raises:
-            ValueError: If the mask is misaligned, or a fixed-context row holds a nonzero value.
+            ValueError: If the mask is not ``(L, V)``, or a fixed-context row holds a nonzero value.
         """
         # allowed: (L, V) bool -> every all-False row of root must be exactly zero.
-        if len(allowed) != len(self.root):
-            raise ValueError(f"{label}: allowed-token mask must have one row per position")
+        self.validate_allowed_mask(allowed, label=label)
         for index, (row, mask) in enumerate(zip(self.root, allowed, strict=True)):
             if not any(mask) and any(value != 0.0 for value in row):
                 raise ValueError(f"Fixed context row {index + 1} must contain zeros")
@@ -113,13 +135,13 @@ class SequenceLogits(RootModel[list[list[float]]]):
             label (str): Field path used in error messages.
 
         Raises:
-            ValueError: If the mask is misaligned, or an active row is negative, carries mass
+            ValueError: If the mask is not ``(L, V)``, or an active row is negative, carries mass
                 outside its permitted columns, or does not sum to 1.0 within
                 :data:`PROBABILITY_SUM_TOLERANCE`.
         """
         # allowed: (L, V) bool | None -> each active row must be a simplex over its permitted columns.
-        if allowed is not None and len(allowed) != len(self.root):
-            raise ValueError(f"{label}: allowed-token mask must have one row per position")
+        if allowed is not None:
+            self.validate_allowed_mask(allowed, label=label)
         for index, row in enumerate(self.root):
             mask = allowed[index] if allowed is not None else None  # (V,) or None
             if mask is not None and not any(mask):
