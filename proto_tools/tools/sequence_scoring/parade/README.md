@@ -59,7 +59,7 @@ Use this tool inside gradient-based UTR design loops (e.g. Fast SeqProp) to maxi
 #### Usage Tips
 
 - **Logits are batched.** Pass logits with shape `B x L x 4` in `A,C,G,T` order; use `B=1` for a single candidate. Every batch item must share one sequence length.
-- **`temperature` fixes the input coordinate system.** The default `1.0` reads `logits` as unnormalized and applies `softmax(logits / T)`, so the returned gradient is logit-space. Setting it to `None` reads them as probabilities — every active row nonnegative and summing to 1 within `1e-6` — and the returned gradient is probability-space. `soft` and `hard` then blend that relaxed state toward a hard argmax one-hot.
+- **`temperature` tells the tool what your `logits` already are.** Leave it at the default `1.0` to pass unnormalized scores — the tool applies `softmax(logits / temperature)` for you and returns the gradient with respect to those scores. Set it to `None` to pass per-position probabilities instead, each row nonnegative and summing to 1; the tool uses them unchanged and returns the gradient with respect to the probabilities. Either way the gradient lines up with what you passed in, so you can apply it directly. `soft` and `hard` then blend that relaxed state toward a hard argmax one-hot.
 - **Terms target cell codes.** Each loss term names a `cell_type` — its code (`c2`) or cell-line name (`HepG2`, case-insensitive) — a `direction` (`max`/`min`), and a `weight`; all must be in the `construct_type` panel.
 - **Soft/hard mixing controls relaxation.** `soft=1.0, hard=0.0` is fully soft; increasing `hard` uses a straight-through hard-forward estimator.
 

@@ -72,7 +72,7 @@ This tool exposes ESM-2 as a differentiable, structure-free protein-language-mod
 
 #### Usage Tips
 
-- **`temperature` fixes the input coordinate system.** The default `1.0` reads `logits` as unnormalized and applies `softmax(logits / T)`, so the returned gradient is logit-space. Setting it to `None` reads them as probabilities — every active row nonnegative and summing to 1 within `1e-6` — and the returned gradient is probability-space.
+- **`temperature` tells the tool what your `logits` already are.** Leave it at the default `1.0` to pass unnormalized scores — the tool applies `softmax(logits / temperature)` for you and returns the gradient with respect to those scores. Set it to `None` to pass per-position probabilities instead, each row nonnegative and summing to 1; the tool uses them unchanged and returns the gradient with respect to the probabilities. Either way the gradient lines up with what you passed in, so you can apply it directly.
 - **`use_ste` enables the Straight-Through Estimator.** The forward then runs on hard one-hot tokens while gradients still route through the soft probabilities, giving stronger guidance toward discrete sequences. Leave it off for smooth optimization over the relaxed simplex.
 - **`compute_gradient` toggles whether the backward pass runs.** When set to `False`, the `gradient` field is `None`, but `loss` and `metrics` (log-likelihood, perplexity, and so on) are still populated. Useful for ranking MCMC proposals without paying the backward cost.
 

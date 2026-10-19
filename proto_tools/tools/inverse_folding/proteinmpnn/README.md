@@ -64,8 +64,8 @@ Use this when ProteinMPNN is one term in a larger optimization over a continuous
 
 #### Usage Tips
 
-- **`logits` columns must be in the order `ACDEFGHIKLMNPQRSTVWY`.** The columns are read by position, so a different amino-acid ordering silently produces the wrong gradient.
-- **`temperature` fixes the input coordinate system.** The default `1.0` reads `logits` as unnormalized and applies `softmax(logits / T)`, so the returned gradient is logit-space. Setting it to `None` reads them as probabilities — every active row nonnegative and summing to 1 within `1e-6` — and the returned gradient is probability-space.
+- **`logits` columns are in the shared amino-acid order `ACDEFGHIKLMNPQRSTVWY`**, which every gradient tool uses and which you can import as `proto_tools.utils.PROTEIN_AMINO_ACIDS`. Columns are read by position, so passing a different ordering silently produces the wrong gradient.
+- **`temperature` tells the tool what your `logits` already are.** Leave it at the default `1.0` to pass unnormalized scores — the tool applies `softmax(logits / temperature)` for you and returns the gradient with respect to those scores. Set it to `None` to pass per-position probabilities instead, each row nonnegative and summing to 1; the tool uses them unchanged and returns the gradient with respect to the probabilities. Either way the gradient lines up with what you passed in, so you can apply it directly.
 - **`compute_gradient` (default `True`).** Returns the gradient of the mean negative log-likelihood with respect to `logits`. Set `False` for forward-only scoring (`loss` only, `gradient` is `None`), for example to cheaply rank MCMC proposals.
 - **`use_ste` (default `True`) sets the forward pass.** Straight-through: a hard one-hot in the forward pass with soft-probability gradients in the backward pass. Set `False` for fully soft blended embeddings, smoother but biased.
 - **`fixed_positions` is counted from 1 and is left out of the objective.** Positions you list are excluded from both the loss and its gradient, so set it to optimize only the residues you are designing.

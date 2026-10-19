@@ -77,7 +77,7 @@ Use the masked-language-model objective as a differentiable prior in sequence op
 #### Usage Tips
 
 - **The matrix axis includes every model token.** Columns are `ACDEFGHIKLMNPQRSTVWYacgt`. Strand-marker and ambiguous-context rows must be zero; their returned gradients are also zero. Opposite-modality columns do not influence a position.
-- **`temperature` fixes the input coordinate system.** The default `1.0` reads `logits` as unnormalized and applies a softmax within each position's modality, so the returned gradient is logit-space. With `temperature=None`, each active row must be a nonnegative distribution summing to 1 within `1e-6` over its own modality block and zero elsewhere, and the returned gradient is probability-space. Fixed-context rows stay zero in both modes. `one_hot_mixed_logits()` builds a valid starting state from a template.
+- **`temperature` tells the tool what your `logits` already are.** Leave it at the default `1.0` to pass unnormalized scores — the tool applies a softmax within each position's own modality and returns the gradient with respect to those scores. Set it to `None` to pass probabilities instead: each editable row must sum to 1 across its own modality block and be zero outside it. Rows for fixed context stay zero either way. `one_hot_mixed_logits()` builds a valid starting state from a template.
 - **The objective masks canonical sites one at a time.** The target at each site is its current discrete argmax token. `use_ste=True` uses hard forward tokens with soft derivatives; `compute_gradient=False` returns the objective with `gradient=None`.
 
 ## Toolkit Notes
