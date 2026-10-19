@@ -5,6 +5,7 @@ Caliby Potts-model sequence design, optionally conditioned on a conformer ensemb
 
 import contextlib
 import logging
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar
@@ -71,9 +72,7 @@ def validate_checkpoint(value: str, allowed: tuple[str, ...], operation: str) ->
     raise ValueError(f"Unknown Caliby checkpoint '{value}'. Choose one of {list(allowed)}, or pass a .ckpt path.")
 
 
-def validate_conformer_alignment(
-    primary: Structure, conformers: list[Structure], *, require_matching_numbering: bool = False
-) -> None:
+def validate_conformer_alignment(primary: Structure, conformers: list[Structure]) -> None:
     """Require every conformer to share the primary conformer's chain IDs and residue counts.
 
     Caliby aggregates Potts parameters position-wise, so the ensemble must agree on chains and
@@ -82,19 +81,16 @@ def validate_conformer_alignment(
     each chain, not a residue number. Absolute numbering is therefore free to differ, as it
     does when a generative sampler renumbers conformers from 1.
 
-    Numbering only has to match when a constraint names positions by residue number. Those
-    strings are re-keyed to every conformer, so a conformer numbered differently would resolve
-    them against the wrong residues, or against none at all, per conformer.
+    Position-level constraints are ordinals too: every conformer is staged numbered 1..N
+    per chain (see :func:`ensemble_paths`), so position ``i`` names each conformer's
+    ``i``-th residue whatever its original numbering.
 
     Args:
         primary (Structure): The primary conformer.
         conformers (list[Structure]): The other ensemble members.
-        require_matching_numbering (bool): Also require identical per-chain residue numbers.
-            Set when a position-level constraint is supplied.
 
     Raises:
-        ValueError: If any conformer's chain IDs or per-chain residue counts differ, or its
-            numbering differs while ``require_matching_numbering`` is set.
+        ValueError: If any conformer's chain IDs or per-chain residue counts differ.
     """
     if not conformers:
         return
@@ -109,10 +105,7 @@ def validate_conformer_alignment(
                 f"{primary_chains}; every conformer must match the primary conformer."
             )
         numbering = {cid: conformer.get_chain_positions(cid) for cid in chains}
-        if require_matching_numbering:
-            differing = [cid for cid in chains if numbering[cid] != primary_numbering[cid]]
-        else:
-            differing = [cid for cid in chains if len(numbering[cid]) != len(primary_numbering[cid])]
+        differing = [cid for cid in chains if len(numbering[cid]) != len(primary_numbering[cid])]
         if differing:
             chain_id = differing[0]
             got, want = numbering[chain_id], primary_numbering[chain_id]
@@ -120,8 +113,8 @@ def validate_conformer_alignment(
             raise ValueError(
                 f"conformers[{index}] does not align with the primary structure on chain(s) "
                 f"{differing}: chain {chain_id} has {detail}. Caliby aggregates Potts parameters "
-                "position-wise, so every conformer must carry the primary conformer's residue "
-                "numbering; renumber the ensemble to match the primary structure."
+                "position-wise, so every conformer must have the primary conformer's residue count "
+                "in every chain."
             )
 
 
@@ -130,9 +123,10 @@ class ResidueIdentitySelection(BaseModel):
 
     The identity-bearing counterpart to
     :class:`~proto_tools.entities.structures.selection.ResidueSelection`, which selects
-    positions without saying what belongs there. Interface matches that primitive
-    (``validate_against`` plus ``to_residue_numbers``) so selections behave uniformly,
-    but it lives here because Caliby is its only consumer.
+    positions without saying what belongs there. It shares that primitive's
+    ``validate_against``, but lives here because Caliby is its only consumer. There is no
+    ``to_residue_numbers``: Caliby receives positions as ordinals on a sequentially
+    numbered copy, since resolving them to residue numbers drops insertion codes.
 
     **All positions are 1-indexed**, matching the rest of proto-tools; position ``1`` is
     the first residue in the chain.
@@ -207,21 +201,6 @@ class ResidueIdentitySelection(BaseModel):
                 raise ValueError(
                     f"{label}: invalid positions {invalid} for chain {chain_id!r} (chain has {length} residues)"
                 )
-
-    def to_residue_numbers(self, structure: Structure) -> dict[str, dict[int, str]]:
-        """Resolve each chain's 1-indexed positions to residue numbers, keeping identities.
-
-        Args:
-            structure (Structure): The structure whose residue numbering to resolve against.
-
-        Returns:
-            dict[str, dict[int, str]]: Per-chain maps of residue number to residue code.
-        """
-        resolved: dict[str, dict[int, str]] = {}
-        for chain_id, pins in self.chains.items():
-            numbering = structure.get_chain_positions(chain_id)
-            resolved[chain_id] = {numbering[pos - 1]: residue for pos, residue in sorted(pins.items())}
-        return resolved
 
 
 class CalibyStructureInput(InverseFoldingStructureInput):
@@ -309,10 +288,7 @@ class CalibyStructureInput(InverseFoldingStructureInput):
     @model_validator(mode="after")
     def _validate_conformer_alignment(self) -> "CalibyStructureInput":
         """Require every conformer to align with the primary conformer."""
-        # Only position-level constraints are re-keyed per conformer by residue number;
-        # chains_to_redesign emits whole-chain tokens, which numbering cannot affect.
-        constrains_positions = self.fixed_positions is not None or self.pinned_residues is not None
-        validate_conformer_alignment(self.structure, self.conformers, require_matching_numbering=constrains_positions)
+        validate_conformer_alignment(self.structure, self.conformers)
         return self
 
     @model_validator(mode="after")
@@ -321,6 +297,7 @@ class CalibyStructureInput(InverseFoldingStructureInput):
         if self.symmetric_chains is None:
             return self
 
+        residue_ids = chain_residue_ids(self.structure)
         seen: set[str] = set()
         for group in self.symmetric_chains:
             group.validate_against(self.structure, label="symmetric_chains")
@@ -334,10 +311,11 @@ class CalibyStructureInput(InverseFoldingStructureInput):
                 raise ValueError(f"chain(s) {sorted(overlap)} appear in more than one symmetric_chains group")
             seen.update(chains)
 
-            # Caliby ties positions by residue number, so the group must share numbering.
-            reference = self.structure.get_chain_positions(chains[0])
+            # Caliby ties positions by residue number, so the group must share numbering,
+            # insertion codes included.
+            reference = residue_ids[chains[0]]
             for cid in chains[1:]:
-                if self.structure.get_chain_positions(cid) != reference:
+                if residue_ids[cid] != reference:
                     raise ValueError(
                         f"chains {chains[0]!r} and {cid!r} are tied together but carry different residue "
                         "numbering; Caliby ties positions by residue number, so renumber them to match"
@@ -611,13 +589,112 @@ class CalibySampleOutput(InverseFoldingOutput):
     )
 
 
+def chain_residue_ids(structure: Structure) -> dict[str, list[tuple[int, str]]]:
+    """Per-chain polymer residue IDs as ``(number, insertion code)``, in chain order.
+
+    Unlike ``Structure.get_chain_positions``, keeps the insertion code, so ``10`` and
+    ``10A`` stay distinct residues.
+
+    Args:
+        structure (Structure): The structure to read.
+
+    Returns:
+        dict[str, list[tuple[int, str]]]: Chain ID to residue IDs, first model only.
+    """
+    gemmi_struct = structure.gemmi_struct
+    gemmi_struct.setup_entities()
+    return {
+        chain.name: [(residue.seqid.num, residue.seqid.icode.strip()) for residue in chain.get_polymer()]
+        for chain in gemmi_struct[0]
+        if chain.get_polymer()
+    }
+
+
+def sequential_pdb(structure: Structure) -> str:
+    """PDB content with each chain's residues renumbered 1..N and insertion codes cleared.
+
+    Caliby addresses residues as ``<chain><number>`` and its position syntax has no
+    insertion codes, so ``10`` and ``10A`` would resolve to the same residue. Numbering
+    by ordinal makes a residue's number equal its 1-indexed position, which is how every
+    selection in this toolkit is written. The model is unaffected, since its
+    ``residue_index`` feature is already a within-chain ordinal. Non-polymer residues are
+    numbered after the polymer so none can share a number with a polymer residue.
+
+    Args:
+        structure (Structure): The structure to renumber.
+
+    Returns:
+        str: The renumbered structure as PDB content.
+    """
+    import gemmi
+
+    gemmi_struct = gemmi.read_pdb_string(structure.structure_pdb)
+    gemmi_struct.setup_entities()
+    for model in gemmi_struct:
+        for chain in model:
+            polymer = chain.get_polymer()
+            polymer_subchain = polymer.subchain_id() if polymer else None
+            polymer_count = len(polymer)
+            polymer_index = other_index = 0
+            for residue in chain:
+                if polymer_subchain is not None and residue.subchain == polymer_subchain:
+                    polymer_index += 1
+                    residue.seqid = gemmi.SeqId(polymer_index, " ")
+                else:
+                    other_index += 1
+                    residue.seqid = gemmi.SeqId(polymer_count + other_index, " ")
+    return gemmi_struct.make_pdb_string()  # type: ignore[no-any-return]
+
+
+def restore_numbering(cif: str, residue_ids: dict[str, list[tuple[int, str]]], source: str) -> Structure:
+    """Wrap a Caliby output CIF, giving its polymer residues back their input numbering.
+
+    Caliby writes the sequentially numbered structure it was given, so each chain's
+    ``i``-th polymer residue takes the ``i``-th input residue ID, insertion code included.
+
+    Args:
+        cif (str): The CIF content Caliby wrote.
+        residue_ids (dict[str, list[tuple[int, str]]]): Input residue IDs, as
+            ``chain_residue_ids`` returns them.
+        source (str): ``source`` label for the returned structure.
+
+    Returns:
+        Structure: The output structure in the input structure's numbering.
+
+    Raises:
+        ValueError: If an output chain is absent from the input or has a different
+            number of polymer residues, so its residues cannot be matched back.
+    """
+    import gemmi
+
+    gemmi_struct = Structure(structure=cif, structure_format="cif", source=source).gemmi_struct
+    gemmi_struct.setup_entities()
+    for model in gemmi_struct:
+        for chain in model:
+            polymer = chain.get_polymer()
+            if not polymer:
+                continue
+            original = residue_ids.get(chain.name)
+            if original is None or len(original) != len(polymer):
+                raise ValueError(
+                    f"{source}: output chain {chain.name} has {len(polymer)} residues but the input chain has "
+                    f"{len(original) if original is not None else 'none'}, so its residue numbering cannot be restored"
+                )
+            for residue, (number, icode) in zip(polymer, original, strict=True):
+                residue.seqid = gemmi.SeqId(number, icode or " ")
+    restored = gemmi_struct.make_mmcif_document().as_string()
+    return Structure(structure=restored, structure_format="cif", source=source)
+
+
 @contextlib.contextmanager
 def ensemble_paths(structures: list[Structure]) -> Iterator[tuple[Path, list[Path]]]:
-    """Materialize an ensemble to temp PDB files, primary conformer first.
+    """Materialize an ensemble to sequentially numbered temp PDB files, primary conformer first.
 
     PDB rather than CIF because Caliby reads chain IDs from ``label_asym_id``, which
     ``Structure.write_cif`` leaves unset, so a CIF arrives with every chain annotated
-    ``'.'`` and no chain- or residue-level constraint can resolve.
+    ``'.'`` and no chain- or residue-level constraint can resolve. Each file is
+    renumbered by :func:`sequential_pdb`, so a 1-indexed position is also the residue
+    number Caliby resolves, in every conformer.
 
     Args:
         structures (list[Structure]): The ensemble, as ``ensemble_structures`` returns it.
@@ -626,8 +703,12 @@ def ensemble_paths(structures: list[Structure]) -> Iterator[tuple[Path, list[Pat
         tuple[Path, list[Path]]: The primary conformer's path, then the other members'
             paths in ensemble order (empty without an ensemble).
     """
-    with contextlib.ExitStack() as stack:
-        paths = [stack.enter_context(structure.temp_file("pdb")) for structure in structures]
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        paths = []
+        for index, structure in enumerate(structures):
+            path = Path(tmp_dir) / f"structure_{index}.pdb"
+            path.write_text(sequential_pdb(structure))
+            paths.append(path)
         yield paths[0], paths[1:]
 
 
@@ -717,6 +798,7 @@ def run_caliby_sample(
         # Observed residues per chain. get_chain_sequences() pads each chain break with '-',
         # so its length overcounts any structure with unmodelled regions.
         native_residue_counts = {cid: len(inp.structure.get_chain_positions(cid)) for cid in chain_ids}
+        residue_ids = chain_residue_ids(inp.structure)
         redesign_set = set(inp.chain_ids_to_redesign)
         all_chain_seqs: list[list[str]] = []
         all_energies: list[float] = []
@@ -732,14 +814,19 @@ def run_caliby_sample(
                 "conformer_paths": [str(p) for p in conformer_paths],
                 "chain_ids": chain_ids,
                 "chains_to_redesign": inp.chain_ids_to_redesign,
+                # Staged files are numbered 1..N per chain, so 1-indexed positions are residue numbers.
                 "fixed_positions": (
-                    inp.fixed_positions.to_residue_numbers(inp.structure) if inp.fixed_positions is not None else None
+                    {cid: list(positions) for cid, positions in inp.fixed_positions.chains.items()}
+                    if inp.fixed_positions is not None
+                    else None
                 ),
                 "symmetric_chains": (
                     [list(group.chains) for group in inp.symmetric_chains] if inp.symmetric_chains else None
                 ),
                 "pinned_residues": (
-                    inp.pinned_residues.to_residue_numbers(inp.structure) if inp.pinned_residues else None
+                    {cid: dict(pins) for cid, pins in inp.pinned_residues.chains.items()}
+                    if inp.pinned_residues
+                    else None
                 ),
                 "num_sequences": config.num_sequences_per_structure,
                 "batch_size": config.batch_size,
@@ -788,7 +875,7 @@ def run_caliby_sample(
                 CalibyDesign(
                     chains=chains,
                     designed=designed,
-                    structure=Structure(structure=cif, structure_format="cif", source="caliby-sample"),
+                    structure=restore_numbering(cif, residue_ids, source="caliby-sample"),
                     metrics=CalibyDesignMetrics(
                         potts_energy=energy,
                         avg_potts_energy=energy / total_length if total_length else 0.0,

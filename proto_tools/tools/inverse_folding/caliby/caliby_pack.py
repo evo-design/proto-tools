@@ -12,6 +12,9 @@ from pydantic import Field, field_validator
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.inverse_folding.caliby.caliby_sample import (
     PACKER_CHECKPOINTS,
+    chain_residue_ids,
+    ensemble_paths,
+    restore_numbering,
     validate_checkpoint,
 )
 from proto_tools.tools.tool_registry import tool
@@ -219,8 +222,8 @@ def run_caliby_pack(
             disable=not config.verbose,
         )
     ):
-        # PDB, not CIF: Caliby reads chain IDs from label_asym_id, which write_cif leaves unset.
-        with structure.temp_file("pdb") as structure_path:
+        # Staged numbered 1..N per chain: Caliby matches residues on number alone, ignoring insertion codes.
+        with ensemble_paths([structure]) as (structure_path, _):
             input_dict = {
                 "operation": "pack",
                 "primary_path": str(structure_path),
@@ -232,6 +235,6 @@ def run_caliby_pack(
             }
             result = ToolInstance.dispatch("caliby", input_dict, instance=instance, config=config)
 
-        packed.append(Structure(structure=result["cif_string"], structure_format="cif", source="caliby-pack"))
+        packed.append(restore_numbering(result["cif_string"], chain_residue_ids(structure), source="caliby-pack"))
 
     return CalibyPackOutput(packed_structures=packed)
