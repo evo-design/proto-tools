@@ -71,21 +71,30 @@ def validate_checkpoint(value: str, allowed: tuple[str, ...], operation: str) ->
     raise ValueError(f"Unknown Caliby checkpoint '{value}'. Choose one of {list(allowed)}, or pass a .ckpt path.")
 
 
-def validate_conformer_alignment(primary: Structure, conformers: list[Structure]) -> None:
-    """Require every conformer to share the primary conformer's chain IDs and residue numbering.
+def validate_conformer_alignment(
+    primary: Structure, conformers: list[Structure], *, require_matching_numbering: bool = False
+) -> None:
+    """Require every conformer to share the primary conformer's chain IDs and residue counts.
 
-    Caliby aggregates Potts parameters position-wise across the ensemble, and rejects a
-    mismatch by comparing residue numbers elementwise rather than residue counts. Checking
-    the same thing here reports it against the offending input before the model loads.
-    Renumbered ensembles are the common case: a sampler emitting conformers numbered from 1,
-    against a primary carrying its deposited numbering, matches on counts but not on numbers.
+    Caliby aggregates Potts parameters position-wise, so the ensemble must agree on chains and
+    on how many residues each chain contributes. Upstream enforces this by comparing
+    ``batch["residue_index"]``, which is ``within_chain_res_idx``: a 0-based ordinal within
+    each chain, not a residue number. Absolute numbering is therefore free to differ, as it
+    does when a generative sampler renumbers conformers from 1.
+
+    Numbering only has to match when a constraint names positions by residue number. Those
+    strings are re-keyed to every conformer, so a conformer numbered differently would resolve
+    them against the wrong residues, or against none at all, per conformer.
 
     Args:
         primary (Structure): The primary conformer.
         conformers (list[Structure]): The other ensemble members.
+        require_matching_numbering (bool): Also require identical per-chain residue numbers.
+            Set when a position-level constraint is supplied.
 
     Raises:
-        ValueError: If any conformer's chain IDs or per-chain residue numbers differ.
+        ValueError: If any conformer's chain IDs or per-chain residue counts differ, or its
+            numbering differs while ``require_matching_numbering`` is set.
     """
     if not conformers:
         return
@@ -100,7 +109,10 @@ def validate_conformer_alignment(primary: Structure, conformers: list[Structure]
                 f"{primary_chains}; every conformer must match the primary conformer."
             )
         numbering = {cid: conformer.get_chain_positions(cid) for cid in chains}
-        differing = [cid for cid in chains if numbering[cid] != primary_numbering[cid]]
+        if require_matching_numbering:
+            differing = [cid for cid in chains if numbering[cid] != primary_numbering[cid]]
+        else:
+            differing = [cid for cid in chains if len(numbering[cid]) != len(primary_numbering[cid])]
         if differing:
             chain_id = differing[0]
             got, want = numbering[chain_id], primary_numbering[chain_id]
@@ -297,7 +309,10 @@ class CalibyStructureInput(InverseFoldingStructureInput):
     @model_validator(mode="after")
     def _validate_conformer_alignment(self) -> "CalibyStructureInput":
         """Require every conformer to align with the primary conformer."""
-        validate_conformer_alignment(self.structure, self.conformers)
+        # Only position-level constraints are re-keyed per conformer by residue number;
+        # chains_to_redesign emits whole-chain tokens, which numbering cannot affect.
+        constrains_positions = self.fixed_positions is not None or self.pinned_residues is not None
+        validate_conformer_alignment(self.structure, self.conformers, require_matching_numbering=constrains_positions)
         return self
 
     @model_validator(mode="after")

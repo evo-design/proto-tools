@@ -127,17 +127,28 @@ def test_caliby_structure_input_rejects_conformer_with_different_residue_count(p
     assert "'A'" in str(exc.value)
 
 
-def test_caliby_structure_input_rejects_renumbered_conformer(pdb_structure):
-    """A renumbered conformer matches on residue count but not on residue numbering.
+def test_caliby_structure_input_accepts_renumbered_conformer(pdb_structure):
+    """Upstream aligns on a per-chain ordinal, so absolute numbering may differ.
 
-    This is what a generative sampler emits when it renumbers from 1, and Caliby compares
-    residue numbers elementwise, so matching counts alone are not enough.
+    A generative sampler renumbering conformers from 1 is the common case, and Caliby
+    aggregates positionally, so matching residue counts are enough on their own.
     """
     renumbered = _renumber(pdb_structure, offset=100, gap_after=30, gap_size=20)
+    assert renumbered.get_chain_positions("A") != pdb_structure.get_chain_positions("A")
     assert len(renumbered.get_chain_positions("A")) == len(pdb_structure.get_chain_positions("A"))
 
-    with pytest.raises(ValueError, match="does not align"):
-        CalibyStructureInput(structure=pdb_structure, conformers=[renumbered])
+    inp = CalibyStructureInput(structure=pdb_structure, conformers=[renumbered])
+    assert len(inp.conformers) == 1
+
+
+def test_caliby_structure_input_rejects_renumbered_conformer_when_positions_are_constrained(pdb_structure):
+    """Position constraints are re-keyed per conformer by residue number, so numbering must match."""
+    renumbered = _renumber(pdb_structure, offset=100, gap_after=30, gap_size=20)
+
+    with pytest.raises(ValidationError, match="does not align"):
+        CalibyStructureInput(structure=pdb_structure, conformers=[renumbered], fixed_positions={"A": [5]})
+    with pytest.raises(ValidationError, match="does not align"):
+        CalibyStructureInput(structure=pdb_structure, conformers=[renumbered], pinned_residues={"A": {5: "W"}})
 
 
 def test_caliby_score_structure_input_rejects_misaligned_conformer(pdb_structure, multi_chain_structure):
