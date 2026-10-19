@@ -17,7 +17,11 @@ CPU-only and environment-free.
 from __future__ import annotations
 
 import pytest
-from standalone_helpers.vocabulary import ALPHAFOLD_RESTYPES, AMINO_ACIDS_LIST, gather_indices
+from standalone_helpers.vocabulary import AMINO_ACIDS_LIST, gather_indices
+
+# Stands in for any model's native ordering. A real one lives in that model's standalone
+# directory, not here: this exercises the mapping, not a particular model's vocabulary.
+NATIVE_ORDER = list("ARNDCQEGHILKMFPSTWYV")
 
 
 def _apply(axis: list[str], indices: list[int]) -> list[str]:
@@ -30,8 +34,8 @@ def _apply(axis: list[str], indices: list[int]) -> list[str]:
 
 def test_gather_indices_reorders_into_target_order() -> None:
     """Gathering a source-ordered axis by the result yields target order."""
-    indices = gather_indices(ALPHAFOLD_RESTYPES, AMINO_ACIDS_LIST)
-    assert _apply(AMINO_ACIDS_LIST, indices) == ALPHAFOLD_RESTYPES
+    indices = gather_indices(NATIVE_ORDER, AMINO_ACIDS_LIST)
+    assert _apply(AMINO_ACIDS_LIST, indices) == NATIVE_ORDER
 
 
 def test_permutation_directions_are_mutual_inverses() -> None:
@@ -41,17 +45,17 @@ def test_permutation_directions_are_mutual_inverses() -> None:
     directions differ only in argument order, so there is no separate hand-written inverse to
     get backwards.
     """
-    to_native = gather_indices(ALPHAFOLD_RESTYPES, AMINO_ACIDS_LIST)
-    from_native = gather_indices(AMINO_ACIDS_LIST, ALPHAFOLD_RESTYPES)
+    to_native = gather_indices(NATIVE_ORDER, AMINO_ACIDS_LIST)
+    from_native = gather_indices(AMINO_ACIDS_LIST, NATIVE_ORDER)
 
     native_ordered = _apply(AMINO_ACIDS_LIST, to_native)
     assert _apply(native_ordered, from_native) == AMINO_ACIDS_LIST
 
 
-def test_alphafold_restypes_is_a_permutation_of_the_proto_order() -> None:
-    """The shared AlphaFold order covers exactly the 20 canonical amino acids."""
-    assert sorted(ALPHAFOLD_RESTYPES) == sorted(AMINO_ACIDS_LIST)
-    assert len(ALPHAFOLD_RESTYPES) == 20
+def test_fixture_order_is_a_permutation_of_the_proto_order() -> None:
+    """The stand-in native order covers exactly the 20 canonical amino acids."""
+    assert sorted(NATIVE_ORDER) == sorted(AMINO_ACIDS_LIST)
+    assert len(NATIVE_ORDER) == 20
 
 
 # ── Superset sources ─────────────────────────────────────────────────────────
@@ -63,7 +67,7 @@ def test_superset_source_maps_one_directionally() -> None:
     ProteinMPNN's alphabet is the AlphaFold order plus ``X``; tokenizer vocabularies are much
     larger supersets. Only the direction targeting the smaller vocabulary is total.
     """
-    alphabet_with_x = [*ALPHAFOLD_RESTYPES, "X"]
+    alphabet_with_x = [*NATIVE_ORDER, "X"]
 
     indices = gather_indices(AMINO_ACIDS_LIST, alphabet_with_x)
     assert _apply(alphabet_with_x, indices) == AMINO_ACIDS_LIST
@@ -97,8 +101,8 @@ def test_mapping_source_reports_absent_symbols() -> None:
 
 def test_offset_shifts_every_index() -> None:
     """``offset`` covers models that reserve leading indices, such as OpenFold's index 0."""
-    plain = gather_indices(AMINO_ACIDS_LIST, ALPHAFOLD_RESTYPES)
-    shifted = gather_indices(AMINO_ACIDS_LIST, ALPHAFOLD_RESTYPES, offset=1)
+    plain = gather_indices(AMINO_ACIDS_LIST, NATIVE_ORDER)
+    shifted = gather_indices(AMINO_ACIDS_LIST, NATIVE_ORDER, offset=1)
 
     assert shifted == [index + 1 for index in plain]
 

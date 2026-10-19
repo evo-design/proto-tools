@@ -59,7 +59,6 @@ from .seeding import (
 from .serialization import serialize_output
 from .subprocess_utils import run_teed
 from .vocabulary import (
-    ALPHAFOLD_RESTYPES,
     AMINO_ACIDS_LIST,
     DNA_NUCLEOTIDES,
     RNA_NUCLEOTIDES,
@@ -99,7 +98,6 @@ __all__ = [
     # serialization
     "serialize_output",
     # vocabulary
-    "ALPHAFOLD_RESTYPES",
     "AMINO_ACIDS_LIST",
     "DNA_NUCLEOTIDES",
     "RNA_NUCLEOTIDES",

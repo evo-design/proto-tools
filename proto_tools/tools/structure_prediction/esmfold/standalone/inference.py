@@ -16,7 +16,7 @@ from typing import Any
 import torch
 from standalone_helpers import AMINO_ACIDS_LIST, get_logger, move_model_to_device, release_cuda_memory, serialize_output
 from standalone_helpers.relaxation import relaxed_probs, resolve_temperature
-from standalone_helpers.vocabulary import ALPHAFOLD_RESTYPES, gather_indices
+from standalone_helpers.vocabulary import gather_indices
 
 logger = get_logger(__name__)
 # Suppress transformers logging
@@ -24,7 +24,8 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 
 # ESMFold PAE head maximum: 31 bins at 1.025 A spacing, used to normalize PAE loss to [0, 1].
 PAE_MAXIMUM = 31.75
-OPENFOLD_AMINO_ACIDS = ALPHAFOLD_RESTYPES
+# OpenFold's own residue order, the ground truth for ESMFold's structure module.
+OPENFOLD_AMINO_ACIDS = list("ARNDCQEGHILKMFPSTWYV")
 
 
 class ESMFoldModel:

@@ -29,14 +29,19 @@ from pathlib import Path
 from typing import Any
 
 from standalone_helpers import AMINO_ACIDS_LIST, get_jax_memory_stats, get_logger, resolve_jax_device, serialize_output
-from standalone_helpers.vocabulary import ALPHAFOLD_RESTYPES, gather_indices
+from standalone_helpers.vocabulary import gather_indices
 
 logger = get_logger(__name__)
 
-# Gather proto-ordered columns into AlphaFold restype order, and the returned gradient back.
-# The two differ only in argument order, so the inverse cannot be written backwards.
-PROTO_TO_AF2 = gather_indices(ALPHAFOLD_RESTYPES, AMINO_ACIDS_LIST, label="alphafold2")
-AF2_TO_PROTO = gather_indices(AMINO_ACIDS_LIST, ALPHAFOLD_RESTYPES, label="alphafold2")
+# AlphaFold2's own residue order (3-letter codes sorted alphabetically: ALA, ARG, ASN, ...),
+# the ground truth for this model. Differs from proto's AMINO_ACIDS_LIST, which is sorted by
+# one-letter code.
+AF2_RESTYPES: list[str] = list("ARNDCQEGHILKMFPSTWYV")
+
+# Gather proto-ordered columns into AF2 order, and the returned gradient back. The two differ
+# only in argument order, so the inverse cannot be written backwards.
+PROTO_TO_AF2 = gather_indices(AF2_RESTYPES, AMINO_ACIDS_LIST, label="alphafold2")
+AF2_TO_PROTO = gather_indices(AMINO_ACIDS_LIST, AF2_RESTYPES, label="alphafold2")
 
 # Configure stderr handler so debug output is captured by persistent worker
 _handler = logging.StreamHandler(sys.stderr)

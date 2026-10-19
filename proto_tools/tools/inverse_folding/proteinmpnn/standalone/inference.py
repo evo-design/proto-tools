@@ -12,7 +12,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 from standalone_helpers import get_logger, log_likelihood_metrics
-from standalone_helpers.vocabulary import ALPHAFOLD_RESTYPES, AMINO_ACIDS_LIST, gather_indices
+from standalone_helpers.vocabulary import AMINO_ACIDS_LIST, gather_indices
 
 logger = get_logger(__name__)
 
@@ -21,8 +21,8 @@ CANONICAL_VOCAB: list[str] = AMINO_ACIDS_LIST
 
 # ColabDesign autoconverts to the AlphaFold alphabet for ProteinMPNN scoring, with a trailing
 # unknown symbol the relaxed state does not cover.
-ALPHAFOLD_VOCAB: list[str] = [*ALPHAFOLD_RESTYPES, "X"]
-ALPHAFOLD_AA_VOCAB: list[str] = ALPHAFOLD_RESTYPES
+ALPHAFOLD_VOCAB: list[str] = list("ARNDCQEGHILKMFPSTWYVX")
+ALPHAFOLD_AA_VOCAB: list[str] = ALPHAFOLD_VOCAB[:20]
 CANONICAL_TO_ALPHAFOLD_INDICES: list[int] = gather_indices(ALPHAFOLD_AA_VOCAB, CANONICAL_VOCAB, label="proteinmpnn")
 
 # Maps model_choice to ColabDesign's (model_name, weights) parameters.

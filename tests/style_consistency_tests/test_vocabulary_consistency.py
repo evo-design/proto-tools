@@ -83,9 +83,11 @@ def test_mixed_vocab_blocks_are_protein_then_dna() -> None:
 
 # ── No third copy ────────────────────────────────────────────────────────────
 
+# Only proto's own interface order is guarded. A model's native ordering is declared in its
+# toolkit's ``standalone/`` directory on purpose: those orders are fixed by separate upstreams
+# and coincide only by accident, so one shared constant would couple the models wrongly.
 _CANONICAL_ALPHABETS = {
     "ACDEFGHIKLMNPQRSTVWY": "standalone_helpers.vocabulary.AMINO_ACIDS_LIST",
-    "ARNDCQEGHILKMFPSTWYV": "standalone_helpers.vocabulary.ALPHAFOLD_RESTYPES",
 }
 
 

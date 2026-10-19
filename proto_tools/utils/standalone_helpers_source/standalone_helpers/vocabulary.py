@@ -13,10 +13,15 @@ from .proto_logging import get_logger
 
 logger = get_logger(__name__)
 
-# ── Canonical worker-side vocabulary orders ─────────────────────────────────
-# This module is the single source of truth for column orders on the worker side. A toolkit
-# references these constants rather than retyping an alphabet; the parent's matching source is
-# ``proto_tools/utils/sequence.py``, and a consistency test pins the two together.
+# ── Proto's interface vocabulary orders ─────────────────────────────────────
+# These are the column orders every tool must accept inputs in and return gradients and
+# embeddings in. The parent's matching source is ``proto_tools/utils/sequence.py``, and a
+# consistency test pins the two together.
+#
+# A model's own native ordering does NOT belong here: it is that model's ground truth and lives
+# beside its other files in the toolkit's ``standalone/`` directory, mapped onto the orders
+# below with ``gather_indices``. Those orderings are fixed by separate upstreams and only
+# coincide by accident, so sharing one constant between models would couple them wrongly.
 
 AMINO_ACIDS_LIST: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
 """Canonical 20 standard amino acids in alphabetical order; proto's protein column order."""
@@ -26,12 +31,6 @@ DNA_NUCLEOTIDES: str = "ACGT"
 
 RNA_NUCLEOTIDES: str = "ACGU"
 """Standard RNA nucleotides."""
-
-ALPHAFOLD_RESTYPES: list[str] = list("ARNDCQEGHILKMFPSTWYV")
-"""The AlphaFold residue order, shared by AlphaFold2, OpenFold/ESMFold and ProteinMPNN.
-
-Differs from :data:`AMINO_ACIDS_LIST`, which is sorted by one-letter code.
-"""
 
 PROTEIN_TOKENS: str = "".join(AMINO_ACIDS_LIST)
 """Uppercase protein tokens in the mixed protein/DNA vocabulary."""

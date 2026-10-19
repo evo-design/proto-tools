@@ -139,6 +139,22 @@ relaxed = (1 - soft) * one_hot(argmax(probs)) + soft * probs
 `resolve_temperature()` coerces the transported value, returning `None` for probability mode
 and rejecting non-positive or non-finite temperatures.
 
+### Vocabulary ordering
+
+`standalone_helpers/vocabulary.py` holds **proto's interface orders** — the column orders every
+tool must accept inputs in and return gradients and embeddings in.
+
+A model's **own** ordering lives in its toolkit's `standalone/` directory, beside the rest of
+that model's files, and is mapped onto proto's order with
+`standalone_helpers.vocabulary.gather_indices(target, source, *, offset=0)`. Argument order
+carries the direction, so one call covers the proto-to-native permutation, its inverse, and an
+embedding-row gather, and there is no separately written inverse to get backwards.
+
+Those native orders are deliberately *not* shared between toolkits even when they coincide —
+AlphaFold2, OpenFold/ESMFold and ProteinMPNN all happen to use `ARNDCQEGHILKMFPSTWYV` today,
+but each is fixed by its own upstream. One shared constant would assert they must always agree,
+so an upstream reordering one of them would silently corrupt the others.
+
 Two families of backend consume it:
 
 - **Masked-LM / STE** (esm2, ablang, codonfm, proteinmpnn, minerva, glm2): a boolean `use_ste`
