@@ -604,7 +604,7 @@ def chain_residue_ids(structure: Structure) -> dict[str, list[tuple[int, str]]]:
     gemmi_struct = structure.gemmi_struct
     gemmi_struct.setup_entities()
     return {
-        chain.name: [(residue.seqid.num, residue.seqid.icode.strip()) for residue in chain.get_polymer()]
+        chain.name: [(residue.seqid.num, residue.seqid.icode.strip()) for residue in chain.get_polymer()]  # type: ignore[misc]
         for chain in gemmi_struct[0]
         if chain.get_polymer()
     }
