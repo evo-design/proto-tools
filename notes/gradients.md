@@ -1,208 +1,96 @@
 # Gradient tools
 
-Every gradient tool differentiates a backend objective with respect to a *relaxed* sequence
-state: a real-valued `(L, V)` matrix standing in for a discrete sequence, where `V` is the
-tool's vocabulary size. This note is the canonical reference for the input and
-gradient-coordinate contract they share, and for the places a backend is allowed to differ.
+Proto's gradient tools evaluate a model objective and return its gradient with respect to a continuous representation of a sequence. Instead of a string of discrete tokens, the input is a matrix of shape `(L, V)`, with one row per sequence position and one column per token in Proto's interface vocabulary for that sequence type. A model's own tokenizer may be much larger; backends map between the two.
 
-## The contract
+This page explains how to prepare those inputs, interpret the returned gradients, and work with the shared input types.
 
-A gradient input carries one `temperature` and one or more relaxed matrices. `temperature`
-fixes both how the matrices are read and which space the returned gradient lives in:
+## Logits, probabilities, and temperature
 
-| `temperature` | `logits` means | Backend applies | Returned gradient |
+The `temperature` field determines how a gradient tool interprets its input matrix:
+
+| `temperature` | Input values | What the model uses | Returned gradient |
 |---|---|---|---|
-| positive float (default `1.0`) | unnormalized logits | `softmax(logits / T)` | logit-space |
-| `None` | a probability distribution | nothing; used verbatim | probability-space |
+| Positive number (default `1.0`) | Logits | `softmax(logits / temperature)` | With respect to the supplied logits |
+| `None` | Probabilities | The supplied distribution, unchanged | With respect to the supplied probabilities |
 
-The field is named `logits` in both modes. Each tool's README states what it means there.
+The field is called `logits` in both cases for API compatibility. `temperature` is part of the tool **Input**, rather than its Config, and must be a positive, finite number or `None`.
 
-Backends take the gradient with respect to the raw incoming matrix in both cases. It is
-"logit-space" only because a softmax sits in the graph; remove the softmax and the same
-derivative is with respect to the probabilities themselves.
+For most gradient-based sequence optimization, use the default. You can update logits freely between iterations, and softmax will always turn them into a normalized distribution. Lower temperatures concentrate probability on the highest-scoring tokens; higher temperatures make the distribution more uniform.
 
-`temperature` lives on the **Input**, not the Config: it describes the state being passed in,
-not how the model runs. It must be positive and finite, or `None`.
+Set `temperature=None` when you need the model to evaluate an existing probability distribution *without changing it*. Each active row must contain finite, nonnegative values that sum to 1, within an absolute tolerance of `1e-6`. The returned gradient is then with respect to those probabilities. Directly updating probabilities with ordinary gradient descent may produce invalid distributions, so this mode is generally intended for evaluation or algorithms that explicitly maintain the probability constraints.
 
-## Probability-mode validation
-
-With `temperature=None`, every **active** row of every matrix must be:
-
-- finite (guaranteed for all rows by the matrix type itself),
-- nonnegative, and
-- summing to `1.0` within an absolute tolerance of `1e-6`.
-
-**Inactive rows** — positions that are not design variables — are exempt from the simplex check
-and must instead be exactly zero, in *both* temperature modes.
-
-Which rows are active comes from an optional per-matrix `allowed_mask`: an `(L, V)` boolean grid
-returned by `GradientInput.allowed_tokens()`, where `None` means every column is permitted
-everywhere. A row that is entirely `False` is inactive. A row with some `True` entries is active
-and must additionally leave its non-permitted columns at zero.
-
-Only the mixed protein/DNA models override the hook today. They derive the mask from their
-template string: columns 0-19 for an uppercase protein token, 20-23 for a lowercase DNA token,
-and no permitted column for `+`/`-` strand markers or ambiguous symbols. Every other tool
-inherits the unrestricted case.
-
-`allowed_tokens()` is an internal validation hook, not a wire field. There is deliberately no
-public `allowed_mask` input yet: a user-facing masking API should be supported consistently
-across every applicable backend rather than tool by tool, and only the mixed models have a
-masking seam today. Forbidden tokens are expressed in the meantime by passing exact zeros with
-`temperature=None`, or through a tool's own field, such as AlphaFold2's `excluded_amino_acids`.
-
-**Infinite logits are never transmitted.** Matrix construction rejects non-finite values, so a
-`-inf` column is not a way to forbid a token.
-
-## Starting from a probability distribution
-
-A gradient input's own `from_probabilities()` is the recommended interface:
+For example, ESM2 supports both forms:
 
 ```python
-inputs = ESM2GradientInput.from_probabilities(P, temperature=0.5)
+# Optimize logits: softmax is applied by the backend.
+inputs = ESM2GradientInput(logits=my_logits, temperature=1.0)
+
+# Evaluate an existing probability distribution without applying softmax again.
+inputs = ESM2GradientInput(logits=my_probabilities, temperature=None)
 ```
 
-It converts the matrix and stores the matching `temperature` in one call, so the two cannot
-disagree. `SequenceLogits.from_probabilities(P, temperature=T)` is the numerical primitive
-underneath, returning `T * log(P)`, which `softmax(logits / T)` inverts exactly. Pairing that
-primitive with a *different* `temperature` on the input silently reshapes the distribution —
-`P` raised to the power `T_build / T_use` and renormalized — with no error, which is the whole
-reason the tool-level factory exists.
+## Starting from probabilities
 
-It follows the three input shapes. The base takes one `(L, V)` distribution plus the tool's
-remaining fields; `BatchedNucleotideGradientInput` takes `(B, L, 4)`;
-`AbLangGradientInput` takes `heavy_chain=` / `light_chain=`; and
-`MixedSequenceGradientInput` converts only each row's permitted modality block, since a valid
-mixed row must hold exact zeros outside it and `log(0)` is not finite.
-
-The factory is only needed to optimize in logit space. To have a backend consume probabilities
-as they are, pass them straight to the constructor with `temperature=None` — no conversion is
-involved and there is nothing to mismatch.
-
-It requires **strictly positive** probabilities. An exact zero maps to an infinite logit, so it
-is refused rather than quietly floored — there is no epsilon substitution, because silently
-changing the supplied distribution is worse than failing. The error names the two intents an
-exact zero can carry:
-
-- a zero that should stay zero: pass the distribution directly with `temperature=None`, which
-  preserves it exactly;
-- a token that should be forbidden for the whole run: that belongs in a masked-softmax
-  interface, which does not exist yet.
-
-## Class hierarchy
-
-```
-SequenceLogits                     (L, V) RootModel; shape, rectangularity, finiteness, VOCAB
-├── ProteinSequenceLogits          V=20, ACDEFGHIKLMNPQRSTVWY
-├── NucleotideSequenceLogits       V=4,  A,C,G,T
-├── CodonSequenceLogits            V=64, lexicographic DNA codons
-└── MixedSequenceLogits            V=24, ACDEFGHIKLMNPQRSTVWYacgt
-
-AntibodyLogits                     composite; exposes iter_sequence_logits() for its chains
-                                   heavy_chain / light_chain
-
-GradientInput                      temperature, sequence_logits(), allowed_tokens(), validation
-├── ProteinGradientInput           + logits: ProteinSequenceLogits
-│   ├── ESM2GradientInput, ProteinMPNNGradientInput,
-│   └── ESMFoldGradientInput, AlphaFold2GradientInput
-├── BatchedNucleotideGradientInput + logits: list[NucleotideSequenceLogits]  ((B, L, 4))
-│   └── MalinoisGradientInput, ParadeGradientInput
-├── CodonFMGradientInput           + logits: CodonSequenceLogits
-├── MixedSequenceGradientInput     + sequence template, logits: MixedSequenceLogits
-└── AbLangGradientInput            + antibody: AntibodyLogits
-```
-
-A `SequenceLogits` is a Pydantic `RootModel` over `list[list[float]]`: it parses from and
-serializes to ordinary nested lists, so the JSON request shape is exactly what it was before
-the type existed. It supports `len()`, iteration and indexing over position rows; `.root` is
-the plain nested list to put in a worker payload.
-
-`GradientInput.sequence_logits()` returns every matrix on an input keyed by a dotted path
-(`"logits"`, `"antibody.heavy_chain"`, `"logits[0]"`). That is how shared validation and the
-cross-backend tests find the relaxed state without knowing a tool's field layout.
-
-Vocabulary subclasses live beside the vocabulary they wrap — `CodonSequenceLogits` in the
-CodonFM toolkit, `MixedSequenceLogits` in `mixed_data_models.py` — so there is one definition
-of each column order.
-
-## Backend relaxation
-
-`standalone_helpers.relaxation.relaxed_probs()` is the shared conversion from a transported
-matrix to the probabilities a model consumes:
+If you have a probability distribution but want to optimize **logits**, use the input class's `from_probabilities()` factory:
 
 ```python
-probs   = logits if temperature is None else softmax(logits / temperature)
-relaxed = (1 - soft) * one_hot(argmax(probs)) + soft * probs
-# hard > 0 mixes in a straight-through estimator
+inputs = ESM2GradientInput.from_probabilities(
+    my_probabilities,
+    temperature=0.5,
+)
+
+# Other required tool inputs can be supplied in the same call.
+inputs = ProteinMPNNGradientInput.from_probabilities(
+    my_probabilities,
+    temperature=0.5,
+    structure=my_structure,
+)
 ```
 
-`resolve_temperature()` coerces the transported value, returning `None` for probability mode
-and rejecting non-positive or non-finite temperatures.
+The factory computes `logits = temperature * log(probabilities)` and sets the matching temperature on the request. Applying `softmax(logits / temperature)` then recovers the original distribution, up to floating-point precision. Specifying both together avoids accidentally constructing logits at one temperature and evaluating them at another.
 
-### Vocabulary ordering
+For ordinary sequence inputs, the factory accepts only **strictly positive** probabilities. An exact zero would require an infinite logit, and Proto does not transmit infinite logits. Mixed protein/DNA inputs are the exception: the conversion operates within each permitted modality, preserving the required zeros in other columns. It also does not silently replace zeros with small positive values, because that would change the supplied distribution.
 
-`standalone_helpers/vocabulary.py` holds **proto's interface orders** — the column orders every
-tool must accept inputs in and return gradients and embeddings in.
+If you need to preserve exact zeros, pass a valid distribution with `temperature=None` instead. If you need to *permanently forbid* tokens during optimization, use a constraint supported by the particular tool (for example, AlphaFold2's `excluded_amino_acids`). A common, user-facing masked-softmax input is not yet available.
 
-A model's **own** ordering lives in its toolkit's `standalone/` directory, beside the rest of
-that model's files, and is mapped onto proto's order with
-`standalone_helpers.vocabulary.gather_indices(target, source, *, offset=0)`. Argument order
-carries the direction, so one call covers the proto-to-native permutation, its inverse, and an
-embedding-row gather, and there is no separately written inverse to get backwards.
+The same factory pattern supports other input layouts: batched nucleotide tools accept a distribution per batch item, AbLang accepts `heavy_chain` and/or `light_chain` distributions, and mixed protein/DNA tools handle the allowed vocabulary at each position when converting probabilities.
 
-Those native orders are deliberately *not* shared between toolkits even when they coincide —
-AlphaFold2, OpenFold/ESMFold and ProteinMPNN all happen to use `ARNDCQEGHILKMFPSTWYV` today,
-but each is fixed by its own upstream. One shared constant would assert they must always agree,
-so an upstream reordering one of them would silently corrupt the others.
+## Shared sequence types
 
-Two families of backend consume it:
+`SequenceLogits` is a Pydantic `RootModel` that validates matrix shape and finite values. Its vocabulary-specific subclasses define the number and ordering of columns:
 
-- **Masked-LM / STE** (esm2, ablang, codonfm, proteinmpnn, minerva, glm2): a boolean `use_ste`
-  config switches between soft blended embeddings and a hard forward pass with soft-probability
-  gradients. They call the softmax at `soft=1, hard=0`.
-- **ColabDesign soft/hard** (esmfold, parade, malinois, alphafold2): float `soft` and `hard`
-  configs interpolate continuously. `hard=1.0` is the same straight-through surrogate that
-  `use_ste=True` selects in the other family; `soft` has no masked-LM analogue.
+| Type | Columns | Vocabulary |
+|---|---:|---|
+| `ProteinSequenceLogits` | 20 | `ACDEFGHIKLMNPQRSTVWY` |
+| `NucleotideSequenceLogits` | 4 | `ACGT` |
+| `CodonSequenceLogits` | 64 | DNA codons in lexicographic order |
+| `MixedSequenceLogits` | 24 | `ACDEFGHIKLMNPQRSTVWYacgt` |
 
-Both families are genuine, not an accident: keep the distinction explicit rather than forcing
-one vocabulary onto the other.
+Callers can still supply ordinary nested lists. Pydantic parses them into the appropriate sequence type, and serialization produces the same nested-list JSON format. In Python, `.root` exposes the underlying matrix; `SequenceLogits` also supports indexing, iteration, `len()`, and equality against a plain nested list.
 
-### AlphaFold2
+`GradientInput` owns temperature and the shared validation rules. Tool-specific input classes extend it with their required fields. AbLang, for example, holds an `AntibodyLogits` object containing separate heavy- and light-chain matrices; batched nucleotide tools hold a list of matrices. `GradientInput.sequence_logits()` exposes these matrices by field path so shared validation and tests can handle them consistently.
 
-AlphaFold2 does not relax its own input. `temperature`, `soft` and `hard` are written into
-ColabDesign's `opt` dict and `soft_seq()` performs the blend, including the Germinal fork's
-`alpha` scaling and persistent bias.
+### Mixed protein/DNA inputs
 
-Probability mode is still reachable without patching ColabDesign: `soft_seq()` blends its
-softmax branch against the raw input, so `opt["soft"] = 0` makes the supplied distribution
-reach AlphaFold verbatim, and `aux["grad"]["seq"]` is then the probability-space derivative.
-The worker sets `soft=0, hard=0` and pins `temp` to keep the unused softmax branch finite.
+Mixed-model tools additionally restrict which columns are valid at each position, based on the sequence template. Uppercase protein positions use the 20 amino acid columns, lowercase DNA positions use the four nucleotide columns, and strand markers or ambiguous positions can represent inactive context.
 
-Because the bias terms feed only that unused branch, `soft`, `hard`,
-`excluded_amino_acids` and `bias_redesign` have no effect in probability mode. They are **refused** when combined with
-`temperature=None` rather than silently ignored.
+With `temperature=None`, active rows must sum to 1 and have zero probability in all disallowed columns. Inactive rows are instead required to be **all zeros**, in either temperature mode. The restrictions come from the internal `GradientInput.allowed_tokens()` hook, not from a public `allowed_mask` field.
 
-## Output
+## Backend behavior
 
-`GradientOutput` carries `gradient`, `loss`, `metrics` and `vocab`. The gradient matches the
-input's shape and column order; `vocab` is the shared column ordering for both.
+Backends share the same temperature and gradient-coordinate contract, but retain two established ways of relaxing discrete sequences:
 
-`gradient` is `None` when a tool runs with `compute_gradient=False`, which every backend
-supports for forward-only scoring. The loss and metrics are identical in both modes.
+- **ESM2, AbLang, CodonFM, ProteinMPNN, Minerva, and GLM2** use `use_ste` to choose between a soft representation and a hard one-hot forward pass with straight-through surrogate gradients.
+- **ESMFold, Parade, Malinois, and AlphaFold2** use ColabDesign-style `soft` and `hard` blending parameters. Setting `hard=1.0` uses the straight-through estimator; the extra `soft` parameter supports intermediate representations.
 
-AbLang is the one tool whose input holds several matrices and whose output holds one: the
-chains are concatenated heavy-then-light into a single `(Lh + Ll, 20)` tensor, which is what
-AbLang actually differentiates. Split the gradient back apart at `len(antibody.heavy_chain)`.
+Shared relaxation helpers handle the standard softmax and straight-through operations. Backends also map Proto's public vocabulary order to their own native token order; those native orders remain defined with each toolkit rather than assumed to be identical across models.
 
-Workers may return the gradient either as nested lists or as a compressed-array dict;
-`decompress_result` normalizes that before the Output model sees it.
+AlphaFold2 performs its relaxation inside ColabDesign. In probability mode, the backend arranges for the supplied distribution to pass through unchanged. Options that would have no effect in that mode—including `soft`, `hard`, `excluded_amino_acids`, and `bias_redesign`—are rejected instead of silently ignored.
 
-## Tests
+## Outputs and testing
 
-`tests/tool_infra_tests/test_gradient_contract.py` holds the cross-backend contract tests. They
-are parametrized over every registered tool whose input inherits `GradientInput`, so a new
-gradient backend is covered as soon as it is registered, and they assert that no `*-gradient`
-tool sits outside the hierarchy. They are pure validation: CPU-only and environment-free.
+A `GradientOutput` contains `loss`, `metrics`, `vocab`, and `gradient`. The gradient uses the input's shape and Proto vocabulary order. When `compute_gradient=False`, `gradient` is `None` and the tool performs forward-only scoring without changing the loss or metrics.
 
-Numerical agreement is checked per backend against finite differences; see
-`tests/masked_models_tests/_mixed_checks.py` for the reference pattern.
+AbLang is a special case: it combines heavy- and light-chain inputs and returns one `(Lh + Ll, 20)` gradient matrix, with the heavy-chain rows first. Split the result at the heavy-chain length to recover each chain's gradient.
+
+Shared contract tests live in `tests/tool_infra_tests/test_gradient_contract.py`. They cover registered gradient tools, input validation, and the common interface. Backend-specific tests check numerical gradient agreement, including finite-difference comparisons where appropriate.
