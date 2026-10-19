@@ -21,9 +21,11 @@ CANONICAL_VOCAB: list[str] = AMINO_ACIDS_LIST
 
 # ColabDesign autoconverts to the AlphaFold alphabet for ProteinMPNN scoring, with a trailing
 # unknown symbol the relaxed state does not cover.
-ALPHAFOLD_VOCAB: list[str] = list("ARNDCQEGHILKMFPSTWYVX")
-ALPHAFOLD_AA_VOCAB: list[str] = ALPHAFOLD_VOCAB[:20]
-CANONICAL_TO_ALPHAFOLD_INDICES: list[int] = gather_indices(ALPHAFOLD_AA_VOCAB, CANONICAL_VOCAB, label="proteinmpnn")
+PROTEINMPNN_AMINO_ACIDS_WITH_X: list[str] = list("ARNDCQEGHILKMFPSTWYVX")
+PROTEINMPNN_AMINO_ACIDS: list[str] = PROTEINMPNN_AMINO_ACIDS_WITH_X[:20]
+CANONICAL_TO_PROTEINMPNN_INDICES: list[int] = gather_indices(
+    PROTEINMPNN_AMINO_ACIDS, CANONICAL_VOCAB, label="proteinmpnn"
+)
 
 # Maps model_choice to ColabDesign's (model_name, weights) parameters.
 # v_48_002/010/020/030 are the same architecture trained at different noise levels;
@@ -197,7 +199,7 @@ class ProteinMPNNModel:
         return {
             "logits": output["logits"] if return_logits else None,
             "metrics": log_likelihood_metrics(-neg_avg_ll, effective_length),
-            "vocab": ALPHAFOLD_VOCAB,
+            "vocab": PROTEINMPNN_AMINO_ACIDS_WITH_X,
         }
 
     def compute_gradient(
@@ -258,7 +260,7 @@ class ProteinMPNNModel:
         base_inputs = copy_dict(self.model._inputs)
         base_inputs.pop("S", None)
         raw_logits = jnp.asarray(logits_list, dtype=jnp.float32)
-        canonical_to_af = jnp.asarray(CANONICAL_TO_ALPHAFOLD_INDICES, dtype=jnp.int32)
+        canonical_to_af = jnp.asarray(CANONICAL_TO_PROTEINMPNN_INDICES, dtype=jnp.int32)
 
         def _loss_fn(logits: Any) -> Any:
             x = jax.nn.softmax(logits / temperature, axis=-1) if temperature is not None else logits

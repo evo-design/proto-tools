@@ -26,7 +26,7 @@ from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient import (
     ProteinMPNNGradientOutput,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
-    ALPHAFOLD_VOCAB,
+    PROTEINMPNN_AMINO_ACIDS_WITH_X,
 )
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
@@ -96,7 +96,7 @@ def test_proteinmpnn_sample_backbone_noise_uses_model_constructor(monkeypatch, t
                 "seq": np.array(["AGSVL"]),
                 "score": np.array([0.0]),
                 "seqid": np.array([1.0]),
-                "logits": np.zeros((1, 5, len(ALPHAFOLD_VOCAB))),
+                "logits": np.zeros((1, 5, len(PROTEINMPNN_AMINO_ACIDS_WITH_X))),
             }
 
     fake_colabdesign = ModuleType("colabdesign")
@@ -252,7 +252,7 @@ def test_proteinmpnn_score(pdb_structure: Structure):
 
     validate_output(output)
     assert output.tool_id == "proteinmpnn-score"
-    assert output.vocab == ALPHAFOLD_VOCAB
+    assert output.vocab == PROTEINMPNN_AMINO_ACIDS_WITH_X
 
     assert len(output.scores) == 2
     assert all(isinstance(score, InverseFoldingScoringMetrics) for score in output.scores)
@@ -288,7 +288,7 @@ def test_proteinmpnn_score_fields(pdb_structure: Structure):
     # Validate logits shape
     logits_arr = np.array(score.logits)
     assert logits_arr.ndim == 2
-    assert logits_arr.shape == (seq_len, len(ALPHAFOLD_VOCAB))
+    assert logits_arr.shape == (seq_len, len(PROTEINMPNN_AMINO_ACIDS_WITH_X))
 
     # log_likelihood = avg_log_likelihood * seq_len
     assert np.isclose(score.log_likelihood, score.avg_log_likelihood * seq_len, rtol=1e-5)

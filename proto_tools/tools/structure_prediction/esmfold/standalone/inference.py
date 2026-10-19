@@ -24,8 +24,9 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 
 # ESMFold PAE head maximum: 31 bins at 1.025 A spacing, used to normalize PAE loss to [0, 1].
 PAE_MAXIMUM = 31.75
-# OpenFold's own residue order, the ground truth for ESMFold's structure module.
-OPENFOLD_AMINO_ACIDS = list("ARNDCQEGHILKMFPSTWYV")
+# ESMFold's own residue order, matching transformers' openfold_utils.residue_constants.restypes.
+# The structure module's embedding reserves index 0 for padding, so residue i sits at i + 1.
+ESMFOLD_AMINO_ACIDS: list[str] = list("ARNDCQEGHILKMFPSTWYV")
 
 
 class ESMFoldModel:
@@ -338,7 +339,7 @@ class ESMFoldModel:
             aa_embeddings = self.model.embedding(aa)
             # OpenFold reserves index 0, so the residue table starts at 1.
             af2_ids = torch.tensor(
-                gather_indices(AMINO_ACIDS_LIST, OPENFOLD_AMINO_ACIDS, offset=1, label="esmfold/openfold"),
+                gather_indices(AMINO_ACIDS_LIST, ESMFOLD_AMINO_ACIDS, offset=1, label="esmfold"),
                 device=self.device,
             )
             relaxed_aa_embeddings = relaxed.to(aa_embeddings.dtype) @ self.model.embedding(af2_ids)
@@ -611,8 +612,8 @@ def _decode_logits(logits: torch.Tensor) -> str:
 
 def _sequence_to_aatype(sequence: str, device: str | torch.device) -> torch.Tensor:
     """Convert a protein sequence to OpenFold/ESMFold residue indices."""
-    mapping = {aa: idx for idx, aa in enumerate(OPENFOLD_AMINO_ACIDS)}
-    x_index = len(OPENFOLD_AMINO_ACIDS)
+    mapping = {aa: idx for idx, aa in enumerate(ESMFOLD_AMINO_ACIDS)}
+    x_index = len(ESMFOLD_AMINO_ACIDS)
     return torch.tensor([mapping.get(aa, x_index) for aa in sequence], device=device, dtype=torch.long)
 
 
