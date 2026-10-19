@@ -513,6 +513,7 @@ class CalibyRunner:
         *,
         primary_path: str,
         conformer_paths: list[str],
+        batch_size: int,
         return_local_energies: bool,
         model_checkpoint: str,
         device: str,
@@ -523,6 +524,7 @@ class CalibyRunner:
             primary_path (str): Path to the structure whose sequence is scored.
             conformer_paths (list[str]): Paths to the other ensemble members; empty runs
                 single-structure scoring.
+            batch_size (int): Conformers per forward pass; ensemble scoring only.
             return_local_energies (bool): Also return the local conditional energy matrix.
             model_checkpoint (str): Design checkpoint name or ``.ckpt`` path.
             device (str): Torch device string.
@@ -539,7 +541,11 @@ class CalibyRunner:
         with _staged_inputs(primary_path, conformer_paths) as (staged_primary, staged_conformers):
             if staged_conformers:
                 pdb_to_conformers = {_ENSEMBLE_KEY: [str(staged_primary), *(str(path) for path in staged_conformers)]}
-                results = self.model.score_ensemble(pdb_to_conformers, num_workers=0)
+                results = self.model.score_ensemble(
+                    pdb_to_conformers,
+                    num_workers=0,
+                    sampling_overrides={"batch_size": batch_size},
+                )
             else:
                 results = self.model.score([str(staged_primary)], num_workers=0)
 
@@ -651,6 +657,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _runner.score(
             primary_path=input_dict["primary_path"],
             conformer_paths=input_dict["conformer_paths"],
+            batch_size=input_dict["batch_size"],
             return_local_energies=input_dict["return_local_energies"],
             model_checkpoint=input_dict["model_checkpoint"],
             device=input_dict["device"],

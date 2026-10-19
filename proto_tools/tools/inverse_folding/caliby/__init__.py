@@ -14,6 +14,7 @@ from proto_tools.tools.inverse_folding.caliby.caliby_sample import (
     CalibySampleInput,
     CalibySampleOutput,
     CalibyStructureInput,
+    ResidueIdentitySelection,
     run_caliby_sample,
 )
 from proto_tools.tools.inverse_folding.caliby.caliby_score import (
@@ -41,6 +42,7 @@ __all__ = [
     "CalibyScoreStructureInput",
     "CalibyScoringMetrics",
     "CalibyStructureInput",
+    "ResidueIdentitySelection",
     "run_caliby_pack",
     "run_caliby_sample",
     "run_caliby_score",

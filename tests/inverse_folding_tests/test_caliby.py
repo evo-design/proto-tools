@@ -374,6 +374,18 @@ def test_pinned_residues_resolve_to_structure_residue_numbers(pdb_structure):
 # Integration tests (GPU required, run with --integration or --all)
 # ============================================================================
 @pytest.mark.uses_gpu
+def test_caliby_score_batch_size_does_not_change_the_ensemble_energy(pdb_structure):
+    """batch_size only chunks conformers through the model; the aggregate must be unchanged."""
+    ensemble = CalibyScoreStructureInput(structure=pdb_structure, conformers=[pdb_structure, pdb_structure])
+    energies = []
+    for batch_size in (1, 4):
+        output = run_caliby_score(CalibyScoreInput(inputs=[ensemble]), CalibyScoreConfig(batch_size=batch_size))
+        assert output.success, f"Failed to score with batch_size={batch_size}: {output}"
+        energies.append(float(output.scores[0]["potts_energy"]))
+    assert energies[0] == pytest.approx(energies[1], rel=1e-5)
+
+
+@pytest.mark.uses_gpu
 def test_caliby_sample_pins_supplied_residue_identities(pdb_structure):
     """A pinned identity appears in the design even where the structure lacks it."""
     inp = CalibySampleInput(
