@@ -5,7 +5,8 @@ tool environment by ``test_relaxation_formula_runs_in_env`` because the base pro
 torch.
 
 These need no model weights and no GPU — the formula is pure arithmetic, so the checks cover
-the forward values of every documented blend plus the backward route through autograd. Plain
+the forward values of every documented blend, the backward route through autograd, and the
+shared ``REFERENCE`` table that also pins the JAX definition in ``_relaxation_jax_env_checks``. Plain
 asserts, one line of status per check, non-zero exit on any failure (which ``run_in_env``
 surfaces as ``RuntimeError``).
 """
@@ -17,17 +18,30 @@ from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
+from _relaxation_reference import LOGITS, REFERENCE, TEMPERATURE
+from _relaxation_reference import UPSTREAM as UPSTREAM_ROWS
 from standalone_helpers.relaxation import relaxed_sequence
 
-#  A deliberately asymmetric state so a wrong branch cannot coincide with a right one.
-LOGITS = [[2.0, 0.5, -1.0, 0.25], [-0.75, 1.5, 0.0, 3.0], [0.1, 0.1, 0.1, 0.1]]
-TEMPERATURE = 0.7
-#  Non-constant on purpose: the softmax Jacobian annihilates a constant upstream vector.
-UPSTREAM = torch.tensor([[1.0, -2.0, 0.5, 0.25], [0.0, 1.0, 1.0, -1.0], [2.0, 0.0, -1.0, 0.5]], dtype=torch.float64)
+UPSTREAM = torch.tensor(UPSTREAM_ROWS, dtype=torch.float64)
 
 
 def _state(requires_grad: bool = False) -> torch.Tensor:
     return torch.tensor(LOGITS, dtype=torch.float64, requires_grad=requires_grad)
+
+
+def check_matches_the_shared_reference_table() -> None:
+    """Forward values and gradients must equal the table the JAX definition is pinned to."""
+    for (soft, hard), expected in REFERENCE.items():
+        state = _state(requires_grad=True)
+
+        value = relaxed_sequence(state, temperature=TEMPERATURE, soft=soft, hard=hard)
+        value.backward(UPSTREAM.clone())
+
+        for field, actual in (("forward", value), ("gradient", state.grad)):
+            reference = torch.tensor(expected[field], dtype=torch.float64)
+            assert torch.allclose(actual, reference, atol=1e-12), (
+                f"soft={soft} hard={hard} {field}: {actual} != {reference}"
+            )
 
 
 def check_default_is_a_plain_softmax() -> None:
@@ -211,6 +225,7 @@ def check_probability_mode_backward_is_the_identity() -> None:
 
 
 CHECKS: tuple[Callable[[], None], ...] = (
+    check_matches_the_shared_reference_table,
     check_default_is_a_plain_softmax,
     check_soft_zero_passes_the_raw_matrix_through,
     check_hard_one_forwards_a_one_hot,

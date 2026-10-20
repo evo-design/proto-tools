@@ -80,7 +80,7 @@ With `temperature=None`, active rows must sum to 1 and have zero probability in 
 
 Backends share the same temperature and gradient-coordinate contract, and relax a discrete sequence the same way:
 
-- **ESM2, AbLang, CodonFM, Minerva, GLM2, ESMFold, Parade, and Malinois** use the shared `soft` and `hard` blend coefficients from `RelaxationConfig`. ProteinMPNN still exposes the older `use_ste` boolean and is being migrated.
+- **Every torch backend** — ESM2, AbLang, CodonFM, Minerva, GLM2, ESMFold, Parade, and Malinois — calls `standalone_helpers.relaxation.relaxed_sequence`. **ProteinMPNN** runs in a JAX environment with no torch, so it calls `relaxed_sequence_jax`, the twin of the same formula.
 - **AlphaFold2** performs the same blend inside ColabDesign, which is where the convention comes from: `soft=0` selects the raw input matrix and `hard=1.0` is the straight-through estimator.
 
 Shared relaxation helpers handle the standard softmax and straight-through operations. Backends also map Proto's public vocabulary order to their own native token order; those native orders remain defined with each toolkit rather than assumed to be identical across models.

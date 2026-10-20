@@ -12,7 +12,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 from standalone_helpers import get_logger, log_likelihood_metrics
-from standalone_helpers.relaxation import resolve_temperature
+from standalone_helpers.relaxation import relaxed_sequence_jax, resolve_temperature
 from standalone_helpers.vocabulary import AMINO_ACIDS_LIST, gather_indices
 
 logger = get_logger(__name__)
@@ -210,7 +210,8 @@ class ProteinMPNNModel:
         logits_list: list[list[float]],
         *,
         temperature: float | None = None,
-        use_ste: bool = True,
+        soft: float = 1.0,
+        hard: float = 0.0,
         fixed_positions: dict[str, list[int]] | None = None,
         seed: int | None = None,
         device: str = "cuda",
@@ -264,13 +265,14 @@ class ProteinMPNNModel:
         canonical_to_af = jnp.asarray(CANONICAL_TO_PROTEINMPNN_INDICES, dtype=jnp.int32)
 
         def _loss_fn(logits: Any) -> Any:
-            x = jax.nn.softmax(logits / temperature, axis=-1) if temperature is not None else logits
-            aa_idx = jnp.argmax(x, axis=-1)
-            hard_canonical = jax.nn.one_hot(aa_idx, len(CANONICAL_VOCAB))
-            context_canonical = hard_canonical + (x - jax.lax.stop_gradient(x)) if use_ste else x
+            context_canonical = relaxed_sequence_jax(logits, temperature=temperature, soft=soft, hard=hard)
+            # The NLL labels are the decoded sequence, not the blend, so they stay a hard one-hot
+            # at every (soft, hard). Softmax is monotonic, so argmax(logits) picks the same token
+            # as argmax(softmax(logits / temperature)) and the probability mode needs no branch.
+            labels_canonical = jax.nn.one_hot(jnp.argmax(logits, axis=-1), len(CANONICAL_VOCAB))
 
             context_af = context_canonical[:, canonical_to_af]
-            labels_af = hard_canonical[:, canonical_to_af]
+            labels_af = labels_canonical[:, canonical_to_af]
 
             output = self.model._score(**base_inputs, key=key, S=context_af)
             log_probs = jax.nn.log_softmax(output["logits"], axis=-1)[..., :20]
@@ -436,7 +438,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             chain_ids=input_dict["chain_ids"],
             logits_list=input_dict["logits"],
             temperature=resolve_temperature(input_dict["temperature"]),
-            use_ste=input_dict["use_ste"],
+            soft=float(input_dict["soft"]),
+            hard=float(input_dict["hard"]),
             fixed_positions=input_dict.get("fixed_positions"),
             seed=input_dict["seed"],
             device=input_dict["device"],

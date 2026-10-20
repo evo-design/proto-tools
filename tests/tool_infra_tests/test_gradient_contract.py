@@ -352,6 +352,24 @@ def test_relaxation_formula_runs_in_env() -> None:
     assert "ALL CHECKS PASSED" in output, output
 
 
+@pytest.mark.integration
+def test_relaxation_formula_runs_in_jax_env() -> None:
+    """The JAX twin of the blend is checked inside proteinmpnn's environment, which has no torch.
+
+    ``_relaxation_jax_env_checks.py`` asserts the same formula and the same ``REFERENCE`` table
+    as the torch suite above, so the two definitions cannot drift apart. It needs no model
+    weights and no GPU. A non-zero exit surfaces here as ``RuntimeError``.
+    """
+    from pathlib import Path as _Path
+
+    from proto_tools.utils import run_in_env
+
+    checks = _Path(__file__).resolve().parent / "_relaxation_jax_env_checks.py"
+    output = run_in_env("proteinmpnn", script=str(checks), timeout=900)
+
+    assert "ALL CHECKS PASSED" in output, output
+
+
 def test_relaxation_config_defaults_to_a_plain_softmax() -> None:
     """The shared defaults select ``softmax(logits / temperature)`` with no blending."""
     config = RelaxationConfig()

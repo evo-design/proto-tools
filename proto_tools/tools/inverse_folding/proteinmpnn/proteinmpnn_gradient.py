@@ -8,11 +8,11 @@ from pydantic import Field, model_validator
 from proto_tools.entities.structures import ChainSelection, ResidueSelection, Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    BaseConfig,
     ConfigField,
     GradientOutput,
     InputField,
     ProteinGradientInput,
+    RelaxationConfig,
     ToolInstance,
     one_hot_protein_logits,
 )
@@ -101,12 +101,13 @@ class ProteinMPNNGradientOutput(GradientOutput):
     )
 
 
-class ProteinMPNNGradientConfig(BaseConfig):
+class ProteinMPNNGradientConfig(RelaxationConfig):
     """Configuration for relaxed ProteinMPNN perplexity gradients.
 
     Attributes:
         model_choice (ProteinMPNNModelChoice): ProteinMPNN weight variant.
-        use_ste (bool): Use hard one-hot forward pass with soft-probability gradients.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Return gradients when true; run forward scoring only when false.
         device (str): Device for ProteinMPNN execution.
     """
@@ -117,11 +118,6 @@ class ProteinMPNNGradientConfig(BaseConfig):
         description="Weights: proteinmpnn (=v_48_020), v_48_{002,010,030} noise variants, abmpnn, soluble",
         reload_on_change=True,
         examples=["proteinmpnn", "v_48_010", "abmpnn", "soluble"],
-    )
-    use_ste: bool = ConfigField(
-        title="Straight-Through Estimator",
-        default=True,
-        description="Hard one-hot forward pass with soft-probability gradients.",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
@@ -179,7 +175,8 @@ def run_proteinmpnn_gradient(
                 "chain_ids": chain_ids,
                 "logits": inputs.logits.root,
                 "temperature": inputs.temperature,
-                "use_ste": config.use_ste,
+                "soft": config.soft,
+                "hard": config.hard,
                 "compute_gradient": config.compute_gradient,
                 "fixed_positions": (
                     inputs.fixed_positions.to_residue_numbers(inputs.structure)

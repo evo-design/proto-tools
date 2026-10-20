@@ -2,9 +2,10 @@
 
 Shared continuous relaxation of a sequence state for gradient backends.
 
-Not re-exported from the package ``__init__``: standalones import
-``from standalone_helpers.relaxation import relaxed_sequence`` directly, so torch-less
-environments can still import the package.
+One definition per array library, kept to the same formula: :func:`relaxed_sequence` for torch
+backends and :func:`relaxed_sequence_jax` for JAX ones. Neither is re-exported from the package
+``__init__`` and each imports its library lazily, so an environment that has only one of them
+can still import the package.
 """
 
 import math
@@ -50,6 +51,35 @@ def relaxed_sequence(logits: Any, *, temperature: float | None, soft: float = 1.
     if hard > 0.0:
         discrete = F.one_hot(probs.argmax(dim=-1), num_classes=probs.shape[-1]).to(probs.dtype)
         straight_through = discrete - probs.detach() + probs
+        blended = (1.0 - hard) * blended + hard * straight_through
+    return blended
+
+
+def relaxed_sequence_jax(logits: Any, *, temperature: float | None, soft: float = 1.0, hard: float = 0.0) -> Any:
+    """JAX twin of :func:`relaxed_sequence`, for backends whose environment has no torch.
+
+    Same formula, same arguments, same meaning for ``soft`` and ``hard``; see
+    :func:`relaxed_sequence` for the derivation. Shared numerical checks pin the two definitions
+    to one reference table so they cannot drift apart.
+
+    Args:
+        logits (Any): Sequence state whose last axis spans the vocabulary.
+        temperature (float | None): Positive softmax temperature, or ``None`` to treat ``logits``
+            as probabilities already.
+        soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Straight-through coefficient; 1 forwards a one-hot.
+
+    Returns:
+        Any: Relaxed representation with the same shape as ``logits``.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    probs = logits if temperature is None else jax.nn.softmax(logits / temperature, axis=-1)
+    blended = probs if soft == 1.0 else (1.0 - soft) * logits + soft * probs
+    if hard > 0.0:
+        discrete = jax.nn.one_hot(jnp.argmax(probs, axis=-1), probs.shape[-1], dtype=probs.dtype)
+        straight_through = discrete - jax.lax.stop_gradient(probs) + probs
         blended = (1.0 - hard) * blended + hard * straight_through
     return blended
 

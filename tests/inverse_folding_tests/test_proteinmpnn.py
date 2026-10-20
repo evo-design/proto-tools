@@ -326,14 +326,15 @@ def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
             chains_to_redesign=["A"],
             fixed_positions={"A": [1]},
         ),
-        ProteinMPNNGradientConfig(use_ste=False, device="cpu"),
+        ProteinMPNNGradientConfig(hard=1.0, device="cpu"),
     )
 
     assert captured["toolkit"] == "proteinmpnn"
     assert captured["payload"]["operation"] == "compute_gradient"
     assert captured["payload"]["chain_ids"] == ["A"]
     assert captured["payload"]["fixed_positions"] == {"A": [1]}
-    assert captured["payload"]["use_ste"] is False
+    assert captured["payload"]["soft"] == 1.0
+    assert captured["payload"]["hard"] == 1.0
     assert captured["payload"]["compute_gradient"] is True
     assert result.gradient == [[0.0] * 20] * 5
 
