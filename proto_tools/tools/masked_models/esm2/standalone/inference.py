@@ -13,7 +13,7 @@ from standalone_helpers import (
     serialize_output,
     set_torch_seed,
 )
-from standalone_helpers.relaxation import resolve_temperature
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 from tqdm import tqdm
 
 logger = get_logger(__name__)
@@ -566,7 +566,8 @@ class ESM2Model:
         logits_list: list[list[float]],
         *,
         temperature: float | None = None,
-        use_ste: bool = False,
+        soft: float = 1.0,
+        hard: float = 0.0,
         seed: int | None = None,
         backprop: bool = True,
         batch_size: int | None = None,
@@ -578,7 +579,8 @@ class ESM2Model:
         Args:
             logits_list: Input logits, shape ``(L, 20)`` in canonical amino-acid order.
             temperature: Optional softmax temperature; ``None`` uses logits as-is.
-            use_ste: Use hard one-hot residues in the forward pass with soft gradients.
+            soft: Blend from the raw input matrix (0) to softmax probabilities (1).
+            hard: Straight-through coefficient; 1 forwards a hard one-hot.
             seed: Random seed for deterministic worker behavior.
             backprop: If False, skip backward and return ``gradient=None``.
             batch_size: AA positions per forward pass. Defaults to 32.
@@ -617,13 +619,13 @@ class ESM2Model:
             seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
             sequence_length = int(seq_dist.shape[0])
 
-            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
-            residue_aa_idx = x.argmax(dim=-1).detach()
+            # Targets come from P, not the blend: they select this step's MLM target tokens,
+            # which must not move with soft/hard.
+            probs = relaxed_sequence(seq_dist, temperature=temperature)
+            residue_aa_idx = probs.argmax(dim=-1).detach()
             residue_token_ids = self.amino_acid_token_ids[residue_aa_idx].detach()
 
-            if use_ste:
-                hard = F.one_hot(residue_aa_idx, num_classes=len(AMINO_ACIDS_LIST)).float()
-                x = hard + (x - x.detach())
+            x = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
 
             residue_embeddings = x @ embed_layer.weight[self.amino_acid_token_ids]
             special_ids = torch.tensor([cls_token_id, eos_token_id], device=self.device)
@@ -828,7 +830,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model.compute_gradient(
             logits_list=input_dict["logits"],
             temperature=resolve_temperature(input_dict["temperature"]),
-            use_ste=input_dict["use_ste"],
+            soft=input_dict["soft"],
+            hard=input_dict["hard"],
             seed=input_dict["seed"],
             backprop=input_dict.get("compute_gradient", True),
             batch_size=input_dict.get("batch_size"),

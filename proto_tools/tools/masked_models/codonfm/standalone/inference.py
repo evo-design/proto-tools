@@ -30,7 +30,7 @@ from standalone_helpers import (
     serialize_output,
     set_torch_seed,
 )
-from standalone_helpers.relaxation import resolve_temperature
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 
 # The vendored CodonFM source lives under ``src/`` next to this file.
 sys.path.insert(0, str(Path(__file__).parent))
@@ -319,7 +319,8 @@ class CodonFMModel:
         logits_list: list[list[float]],
         *,
         temperature: float | None = None,
-        use_ste: bool = False,
+        soft: float = 1.0,
+        hard: float = 0.0,
         backprop: bool = True,
         batch_size: int,
         device: str,
@@ -336,8 +337,8 @@ class CodonFMModel:
         Args:
             logits_list: Relaxed codon logits, shape ``(L, 64)``.
             temperature: Optional softmax temperature; ``None`` uses the logits as-is.
-            use_ste: Straight-Through Estimator — hard one-hot codons in the forward pass with
-                gradients flowing through the soft probabilities.
+            soft: Blend from the raw input matrix (0) to softmax probabilities (1).
+            hard: Straight-through coefficient; 1 forwards a hard one-hot.
             backprop: If ``False``, skip the backward pass and return ``gradient=None``.
             batch_size: Codon positions per forward pass.
             device: Execution device.
@@ -373,13 +374,13 @@ class CodonFMModel:
             seq_dist = torch.tensor(logits_list, device=dev, dtype=torch.float32, requires_grad=backprop)
             sequence_length = int(seq_dist.shape[0])
 
-            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
-            codon_idx = x.argmax(dim=-1).detach()
+            # Targets come from P, not the blend: they select this step's MLM target tokens,
+            # which must not move with soft/hard.
+            probs = relaxed_sequence(seq_dist, temperature=temperature)
+            codon_idx = probs.argmax(dim=-1).detach()
             residue_token_ids = codon_token_ids[codon_idx].detach()
 
-            if use_ste:
-                hard = F.one_hot(codon_idx, num_classes=n_codons_vocab).float()
-                x = hard + (x - x.detach())
+            x = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
 
             codon_weight = weight[codon_token_ids]
             residue_embeddings = x @ codon_weight
@@ -657,7 +658,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     batch_size = input_dict.get("batch_size", 1)
     if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
         raise ValueError("codonfm: batch_size must be a positive integer")
-    for name in ("use_ste", "compute_gradient"):
+    for name in ("compute_gradient",):
         if name in input_dict and not isinstance(input_dict[name], bool):
             raise ValueError(f"codonfm: {name} must be a boolean")
     _validate_request(input_dict, operation)
@@ -693,7 +694,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _MODEL.compute_gradient(
             input_dict["logits"],
             temperature=resolve_temperature(input_dict.get("temperature")),
-            use_ste=input_dict.get("use_ste", False),
+            soft=input_dict["soft"],
+            hard=input_dict["hard"],
             backprop=input_dict.get("compute_gradient", True),
             batch_size=batch_size,
             device=device,

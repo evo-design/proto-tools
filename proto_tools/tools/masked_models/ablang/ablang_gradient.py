@@ -10,11 +10,11 @@ from proto_tools.entities.antibody import AntibodyLogits
 from proto_tools.tools.masked_models.ablang.ablang_embeddings import _resolve_model_choice
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    BaseConfig,
     ConfigField,
     GradientInput,
     GradientOutput,
     ProteinSequenceLogits,
+    RelaxationConfig,
     ToolInstance,
     one_hot_protein_logits,
 )
@@ -94,13 +94,12 @@ class AbLangGradientOutput(GradientOutput):
     )
 
 
-class AbLangGradientConfig(BaseConfig):
+class AbLangGradientConfig(RelaxationConfig):
     """Configuration for the AbLang masked PLL gradient tool.
 
     Attributes:
-        use_ste (bool): Straight-Through Estimator: hard one-hot in the forward pass with
-            gradients flowing through soft probabilities. When ``False``, uses soft blended
-            embeddings directly.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Run backward pass and return gradient. Set ``False`` for
             forward-only log-likelihood scoring (e.g. MCMC proposal ranking).
         batch_size (int | None): AA positions per forward pass for batched PLL. ``None`` auto-
@@ -108,11 +107,6 @@ class AbLangGradientConfig(BaseConfig):
         device (str): Device to run the model on.
     """
 
-    use_ste: bool = ConfigField(
-        title="Straight-Through Estimator",
-        default=False,
-        description="Hard one-hot forward pass with soft-probability gradients",
-    )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
         default=True,
@@ -178,7 +172,8 @@ def run_ablang_gradient(
         "operation": "compute_gradient",
         "logits": logits,
         "temperature": inputs.temperature,
-        "use_ste": config.use_ste,
+        "soft": config.soft,
+        "hard": config.hard,
         "compute_gradient": config.compute_gradient,
         "batch_size": config.batch_size,
         "model_choice": model_choice,

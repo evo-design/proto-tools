@@ -336,15 +336,27 @@ class MixedMLMRuntime:
             if state.shape != allowed.shape or not torch.isfinite(state).all():
                 raise ValueError("Gradient input must be a finite token-aligned L x 24 matrix")
             if temperature is None:
-                x = state * allowed
+                probs = state * allowed
             else:
                 # Fixed context rows need a finite softmax denominator, then contribute zero.
                 softmax_allowed = allowed | ~allowed.any(dim=1, keepdim=True)
-                x = F.softmax((state / temperature).masked_fill(~softmax_allowed, -torch.inf), dim=-1) * allowed
-            hard_indices = x.argmax(dim=-1).detach()
-            if payload.get("use_ste", False):
-                hard = F.one_hot(hard_indices, num_classes=len(MIXED_VOCAB)).float() * allowed
-                x = hard + x - x.detach()
+                probs = F.softmax((state / temperature).masked_fill(~softmax_allowed, -torch.inf), dim=-1) * allowed
+            # Targets come from P, not the blend: they select this step's MLM target tokens,
+            # which must not move with soft/hard.
+            hard_indices = probs.argmax(dim=-1).detach()
+
+            # The shared relaxed_sequence() formula, re-derived here because P is normalized
+            # within each position's modality block. Every term is masked, so the raw-input
+            # branch cannot put weight on a column this position forbids.
+            soft = float(payload.get("soft", 1.0))
+            hard = float(payload.get("hard", 0.0))
+            x = probs
+            if soft != 1.0:
+                x = ((1.0 - soft) * state + soft * probs) * allowed
+            if hard > 0.0:
+                discrete = F.one_hot(hard_indices, num_classes=len(MIXED_VOCAB)).float() * allowed
+                straight_through = discrete - probs.detach() + probs
+                x = ((1.0 - hard) * x + hard * straight_through) * allowed
             ids[0, positions] = vocab_ids[hard_indices[positions]]
             fixed_embeddings = embed_layer(ids).detach()
             relaxed = x.to(embed_layer.weight.dtype) @ embed_layer.weight[vocab_ids]

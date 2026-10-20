@@ -28,7 +28,8 @@ class GLM2GradientConfig(GLM2Config, MixedGradientConfig):
     Attributes:
         model_checkpoint (Literal['tattabio/gLM2_150M', 'tattabio/gLM2_650M']): Public model checkpoint.
         batch_size (int): Individually masked variants per forward and backward pass.
-        use_ste (bool): Hard forward tokens with soft-probability gradients.
+        soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Compute the gradient, or evaluate only the masked PLL loss.
     """
 

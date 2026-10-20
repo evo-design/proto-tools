@@ -22,6 +22,7 @@ from proto_tools.utils.gradient_models import (
     GradientOutput,
     GradientValue,
     ProteinGradientInput,
+    RelaxationConfig,
 )
 from proto_tools.utils.http_session import build_http_session, request_with_retry, user_agent_for
 from proto_tools.utils.interaction_models import (
@@ -121,6 +122,7 @@ __all__ = [
     "GradientOutput",
     "GradientValue",
     "ProteinGradientInput",
+    "RelaxationConfig",
     # Relaxed sequence state
     "PROBABILITY_SUM_TOLERANCE",
     "NucleotideSequenceLogits",

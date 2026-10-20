@@ -28,7 +28,8 @@ class MinervaGradientConfig(MinervaConfig, MixedGradientConfig):
     Attributes:
         model_checkpoint (Literal['gbrixi/minerva-mlm', 'gbrixi/minerva-mlm-8k']): Public model checkpoint.
         batch_size (int): Individually masked variants per forward and backward pass.
-        use_ste (bool): Hard forward tokens with soft-probability gradients.
+        soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Compute the gradient, or evaluate only the masked PLL loss.
     """
 

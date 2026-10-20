@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from standalone_helpers import get_logger, log_likelihood_metrics, serialize_output
-from standalone_helpers.relaxation import resolve_temperature
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 from standalone_helpers.vocabulary import AMINO_ACIDS_LIST
 
 logger = get_logger(__name__)
@@ -670,7 +670,8 @@ class AbLangModel:
         logits_list: list[list[float]],
         *,
         temperature: float | None = None,
-        use_ste: bool = False,
+        soft: float = 1.0,
+        hard: float = 0.0,
         chain_break_position: int | None = None,
         seed: int | None = None,
         backprop: bool = True,
@@ -683,7 +684,8 @@ class AbLangModel:
         Args:
             logits_list (list[list[float]]): Input logits, shape (L, 20).
             temperature (float | None): Softmax temperature; ``None`` uses logits as-is.
-            use_ste (bool): Straight-Through Estimator (hard forward, soft backward).
+            soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
+            hard (float): Straight-through coefficient; 1 forwards a hard one-hot.
             chain_break_position (int | None): VH/VL split for ``<VH>|<VL>`` paired layout.
             seed (int | None): Random seed.
             backprop (bool): If False, skip backward and return ``gradient=None``.
@@ -706,13 +708,14 @@ class AbLangModel:
             seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
             sequence_length = int(seq_dist.shape[0])
 
-            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist  # (L, 20)
-            mapped = x @ self._canonical_amino_acid_to_vocab_matrix()  # (L, V)
-            residue_token_ids = mapped.argmax(dim=-1).detach()  # (L,)
+            # Targets come from P, not the blend: they select this step's MLM target tokens,
+            # which must not move with soft/hard.
+            to_vocab = self._canonical_amino_acid_to_vocab_matrix()
+            probs = relaxed_sequence(seq_dist, temperature=temperature)  # (L, 20)
+            residue_token_ids = (probs @ to_vocab).argmax(dim=-1).detach()  # (L,)
 
-            if use_ste:
-                hard = F.one_hot(residue_token_ids, num_classes=mapped.size(-1)).float()
-                mapped = hard + (mapped - mapped.detach())  # hard forward, soft backward
+            x = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)  # (L, 20)
+            mapped = x @ to_vocab  # (L, V)
 
             # Soft embeddings: (L, V) @ (V, D) → (L, D)
             if self._is_ablang1:
@@ -884,7 +887,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model.compute_gradient(
             logits_list=input_dict["logits"],
             temperature=resolve_temperature(input_dict["temperature"]),
-            use_ste=input_dict["use_ste"],
+            soft=input_dict["soft"],
+            hard=input_dict["hard"],
             chain_break_position=input_dict["chain_break_position"],
             seed=input_dict["seed"],
             backprop=input_dict.get("compute_gradient", True),

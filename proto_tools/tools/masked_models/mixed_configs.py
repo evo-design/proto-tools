@@ -9,7 +9,7 @@ from standalone_helpers.mixed_sequence import STRAND_TOKENS, tokenize_mixed_sequ
 from standalone_helpers.vocabulary import AMBIGUOUS_PROTEIN_TOKENS, DNA_TOKENS, PROTEIN_TOKENS
 
 from proto_tools.transforms.masking import MaskingInput, MaskingStrategy
-from proto_tools.utils import AminoAcid, BaseConfig, ConfigField
+from proto_tools.utils import AminoAcid, BaseConfig, ConfigField, RelaxationConfig
 from proto_tools.utils.base_config import _marked_preprocessed
 from proto_tools.utils.sequence import normalize_excluded_amino_acids
 
@@ -240,19 +240,15 @@ class MixedSampleConfig(MixedModelConfig):
         return inputs.model_copy(update={"sequences": masked, "mask_modalities": modalities})
 
 
-class MixedGradientConfig(MixedModelConfig):
+class MixedGradientConfig(MixedModelConfig, RelaxationConfig):
     """Differentiable masked pseudo-log-likelihood options.
 
     Attributes:
-        use_ste (bool): Use hard forward tokens with a soft backward derivative.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Compute a backward pass, or return only the objective.
     """
 
-    use_ste: bool = ConfigField(
-        default=False,
-        title="Straight-Through Estimator",
-        description="Use hard one-hot forward tokens with soft-probability gradients",
-    )
     compute_gradient: bool = ConfigField(
         default=True,
         title="Compute Gradient",

@@ -16,7 +16,7 @@ from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseConfig, ConfigField, GradientInput, GradientOutput, ToolInstance
+from proto_tools.utils import ConfigField, GradientInput, GradientOutput, RelaxationConfig, ToolInstance
 from proto_tools.utils.tool_io import InputField
 
 # Encodon caps sequences at (2048 - 2) codons (CLS/SEP); the differentiable state is per-codon.
@@ -72,14 +72,13 @@ class CodonFMGradientOutput(GradientOutput):
     )
 
 
-class CodonFMGradientConfig(BaseConfig):
+class CodonFMGradientConfig(RelaxationConfig):
     """Configuration for the CodonFM masked-PLL gradient tool.
 
     Attributes:
         model_checkpoint (CodonFMCheckpoint): Encodon weights variant.
-        use_ste (bool): Straight-Through Estimator: hard one-hot codons in the forward pass with
-            gradients flowing through soft probabilities. When ``False``, uses soft blended
-            codon embeddings directly.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Run backward pass and return gradient. Set ``False`` for
             forward-only masked-log-likelihood scoring.
         batch_size (int): Codon positions per forward pass for batched masked-PLL.
@@ -91,11 +90,6 @@ class CodonFMGradientConfig(BaseConfig):
         default="encodon_80m",
         description="Encodon checkpoint: encodon_80m | encodon_600m | encodon_1b | encodon_1b_cdwt.",
         reload_on_change=True,
-    )
-    use_ste: bool = ConfigField(
-        title="Straight-Through Estimator",
-        default=False,
-        description="Hard one-hot forward pass with soft-probability gradients.",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
@@ -157,7 +151,8 @@ def run_codonfm_gradient(
             "operation": "gradient",
             "logits": inputs.logits.root,
             "temperature": inputs.temperature,
-            "use_ste": config.use_ste,
+            "soft": config.soft,
+            "hard": config.hard,
             "compute_gradient": config.compute_gradient,
             "batch_size": config.batch_size,
             "safetensors_url": safetensors_url,

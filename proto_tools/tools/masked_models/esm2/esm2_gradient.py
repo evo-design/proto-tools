@@ -9,10 +9,10 @@ from typing_extensions import Self
 from proto_tools.tools.masked_models.esm2.esm2_sample import ESM2_MODEL_CHECKPOINTS
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
-    BaseConfig,
     ConfigField,
     GradientOutput,
     ProteinGradientInput,
+    RelaxationConfig,
     ToolInstance,
     one_hot_protein_logits,
 )
@@ -65,14 +65,13 @@ class ESM2GradientOutput(GradientOutput):
     )
 
 
-class ESM2GradientConfig(BaseConfig):
+class ESM2GradientConfig(RelaxationConfig):
     """Configuration for the ESM2 masked PLL gradient tool.
 
     Attributes:
         model_checkpoint (ESM2_MODEL_CHECKPOINTS): ESM2 weights variant.
-        use_ste (bool): Straight-Through Estimator: hard one-hot in the forward pass with
-            gradients flowing through soft probabilities. When ``False``, uses soft blended
-            embeddings directly.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Run backward pass and return gradient. Set ``False`` for
             forward-only log-likelihood scoring.
         batch_size (int | None): AA positions per forward pass for batched PLL. ``None``
@@ -85,11 +84,6 @@ class ESM2GradientConfig(BaseConfig):
         default="esm2_t33_650M_UR50D",
         description="ESM2 weights variant; trade off speed vs scoring fidelity",
         reload_on_change=True,
-    )
-    use_ste: bool = ConfigField(
-        title="Straight-Through Estimator",
-        default=False,
-        description="Hard one-hot forward pass with soft-probability gradients",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
@@ -151,7 +145,8 @@ def run_esm2_gradient(
             "operation": "compute_gradient",
             "logits": inputs.logits.root,
             "temperature": inputs.temperature,
-            "use_ste": config.use_ste,
+            "soft": config.soft,
+            "hard": config.hard,
             "compute_gradient": config.compute_gradient,
             "batch_size": config.batch_size,
             "model_checkpoint": config.model_checkpoint,

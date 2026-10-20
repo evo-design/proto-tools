@@ -80,7 +80,7 @@ With `temperature=None`, active rows must sum to 1 and have zero probability in 
 
 Backends share the same temperature and gradient-coordinate contract, but retain two established ways of relaxing discrete sequences:
 
-- **ESM2, AbLang, CodonFM, ProteinMPNN, Minerva, and GLM2** use `use_ste` to choose between a soft representation and a hard one-hot forward pass with straight-through surrogate gradients.
+- **ESM2, AbLang, CodonFM, Minerva, and GLM2** use the shared `soft` and `hard` blend coefficients. ProteinMPNN still exposes the older `use_ste` boolean and is being migrated.
 - **ESMFold, Parade, Malinois, and AlphaFold2** use ColabDesign-style `soft` and `hard` blending parameters. Setting `hard=1.0` uses the straight-through estimator; the extra `soft` parameter supports intermediate representations.
 
 Shared relaxation helpers handle the standard softmax and straight-through operations. Backends also map Proto's public vocabulary order to their own native token order; those native orders remain defined with each toolkit rather than assumed to be identical across models.
