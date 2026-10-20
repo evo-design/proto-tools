@@ -370,6 +370,25 @@ def test_relaxation_formula_runs_in_jax_env() -> None:
     assert "ALL CHECKS PASSED" in output, output
 
 
+@pytest.mark.integration
+def test_alphafold2_relaxation_matches_the_contract_in_env() -> None:
+    """AlphaFold2 relaxes inside ColabDesign, so its own blend is checked against the contract.
+
+    ``_alphafold2_relaxation_env_checks.py`` compares ``soft_seq`` on both backends — upstream
+    ColabDesign and the Germinal fork, whose alpha scaling and bias feed the softmax branch —
+    against the shared formula, and ties the no-preprocessing case to ``relaxed_sequence_jax``.
+    It needs no model weights and no GPU. A non-zero exit surfaces here as ``RuntimeError``.
+    """
+    from pathlib import Path as _Path
+
+    from proto_tools.utils import run_in_env
+
+    checks = _Path(__file__).resolve().parent / "_alphafold2_relaxation_env_checks.py"
+    output = run_in_env("alphafold2", script=str(checks), timeout=900)
+
+    assert "ALL CHECKS PASSED" in output, output
+
+
 def test_relaxation_config_defaults_to_a_plain_softmax() -> None:
     """The shared defaults select ``softmax(logits / temperature)`` with no blending."""
     config = RelaxationConfig()
