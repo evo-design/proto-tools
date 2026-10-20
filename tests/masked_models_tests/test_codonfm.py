@@ -316,14 +316,15 @@ def test_codonfm_gradient_dispatch_contract(monkeypatch) -> None:
 
     result = run_codonfm_gradient(
         CodonFMGradientInput(logits=[[0.0] * 64] * 3, temperature=0.6),
-        CodonFMGradientConfig(model_checkpoint="encodon_80m", use_ste=True, batch_size=2, device="cpu"),
+        CodonFMGradientConfig(model_checkpoint="encodon_80m", hard=1.0, batch_size=2, device="cpu"),
     )
 
     assert captured["toolkit"] == "codonfm"
     assert captured["payload"]["operation"] == "gradient"
     assert captured["payload"]["logits"] == [[0.0] * 64] * 3
     assert captured["payload"]["temperature"] == 0.6
-    assert captured["payload"]["use_ste"] is True
+    assert captured["payload"]["soft"] == 1.0
+    assert captured["payload"]["hard"] == 1.0
     assert captured["payload"]["compute_gradient"] is True
     assert captured["payload"]["batch_size"] == 2
     assert captured["payload"]["device"] == "cpu"

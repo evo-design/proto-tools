@@ -25,7 +25,8 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 # ESMFold PAE head maximum: 31 bins at 1.025 A spacing, used to normalize PAE loss to [0, 1].
 PAE_MAXIMUM = 31.75
 # ESMFold's own residue order, matching transformers' openfold_utils.residue_constants.restypes.
-# The structure module's embedding reserves index 0 for padding, so residue i sits at i + 1.
+# The structure module's embedding is indexed 0-based, the same basis as _sequence_to_aatype:
+# its padding_idx=0 only zeroes that row's gradient and does not shift the residues.
 ESMFOLD_AMINO_ACIDS: list[str] = list("ARNDCQEGHILKMFPSTWYV")
 
 

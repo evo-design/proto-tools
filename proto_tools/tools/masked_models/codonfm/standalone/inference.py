@@ -694,8 +694,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _MODEL.compute_gradient(
             input_dict["logits"],
             temperature=resolve_temperature(input_dict.get("temperature")),
-            soft=input_dict["soft"],
-            hard=input_dict["hard"],
+            soft=float(input_dict.get("soft", 1.0)),
+            hard=float(input_dict.get("hard", 0.0)),
             backprop=input_dict.get("compute_gradient", True),
             batch_size=batch_size,
             device=device,

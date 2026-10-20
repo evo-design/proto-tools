@@ -177,7 +177,7 @@ def check_ste_uses_hard_context_and_soft_backward() -> None:
             logits=state.tolist(),
             temperature=temperature,
             batch_size=batch_size,
-            use_ste=True,
+            hard=1.0,
         )
         score = _dispatch(runtime, "score", sequences=[_LOCUS], batch_size=2)["scores"][0]
         _close(result["loss"], -score["avg_log_likelihood"])

@@ -82,7 +82,8 @@ def gather_indices(
 
     Raises:
         ValueError: If ``target_vocab`` is empty, a target symbol is absent from ``source_vocab``,
-            or a ``Sequence`` source repeats a symbol.
+            or a ``Sequence`` source repeats one of the target symbols. A repeat outside
+            ``target_vocab`` is ignored.
     """
     if not target_vocab:
         raise ValueError(f"{label}: target_vocab must contain at least one symbol")

@@ -3,7 +3,7 @@
 Shared continuous relaxation of a sequence state for gradient backends.
 
 Not re-exported from the package ``__init__``: standalones import
-``from standalone_helpers.relaxation import relaxed_probs`` directly, so torch-less
+``from standalone_helpers.relaxation import relaxed_sequence`` directly, so torch-less
 environments can still import the package.
 """
 
@@ -23,9 +23,10 @@ def relaxed_probs(logits: Any, *, temperature: float | None, soft: float = 1.0, 
     the gradient taken w.r.t. the input leaf is logit-space; ``None`` reads it as a probability
     distribution and passes it through, making that gradient probability-space.
 
-    ``soft`` and ``hard`` are the ColabDesign-style blend: ``soft`` interpolates from the hard
-    argmax one-hot (0) to the relaxed probabilities (1), and ``hard`` mixes in a
-    straight-through estimator with a hard forward pass and soft backward derivative.
+    ``soft`` here interpolates from a hard argmax one-hot (0) to the relaxed probabilities (1),
+    and ``hard`` mixes in a straight-through estimator. Note this is **not** ColabDesign's
+    convention, whose ``soft`` interpolates from the *raw input matrix* instead; see
+    :func:`relaxed_sequence`, which implements that and is replacing this function.
 
     Args:
         logits (Any): Sequence state tensor whose last axis spans the vocabulary.

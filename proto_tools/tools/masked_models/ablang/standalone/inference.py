@@ -887,8 +887,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model.compute_gradient(
             logits_list=input_dict["logits"],
             temperature=resolve_temperature(input_dict["temperature"]),
-            soft=input_dict["soft"],
-            hard=input_dict["hard"],
+            soft=float(input_dict.get("soft", 1.0)),
+            hard=float(input_dict.get("hard", 0.0)),
             chain_break_position=input_dict["chain_break_position"],
             seed=input_dict["seed"],
             backprop=input_dict.get("compute_gradient", True),

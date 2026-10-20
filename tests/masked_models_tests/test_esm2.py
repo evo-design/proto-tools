@@ -73,14 +73,15 @@ def test_esm2_gradient_dispatch_contract(monkeypatch):
 
     run_esm2_gradient(
         ESM2GradientInput(logits=[[0.0] * 20] * 3, temperature=0.6),
-        ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", use_ste=True, batch_size=2, device="cpu"),
+        ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", hard=1.0, batch_size=2, device="cpu"),
     )
 
     assert captured["toolkit"] == "esm2"
     assert captured["payload"]["operation"] == "compute_gradient"
     assert captured["payload"]["logits"] == [[0.0] * 20] * 3
     assert captured["payload"]["temperature"] == 0.6
-    assert captured["payload"]["use_ste"] is True
+    assert captured["payload"]["soft"] == 1.0
+    assert captured["payload"]["hard"] == 1.0
     assert captured["payload"]["compute_gradient"] is True
     assert captured["payload"]["batch_size"] == 2
     assert captured["payload"]["model_checkpoint"] == "esm2_t6_8M_UR50D"
@@ -198,7 +199,7 @@ def test_esm2_score_and_gradient_agree_on_pll():
     )
     grad_result = run_esm2_gradient(
         ESM2GradientInput(logits=one_hot, temperature=0.6),
-        ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", use_ste=True, batch_size=2, compute_gradient=False),
+        ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", hard=1.0, batch_size=2, compute_gradient=False),
     )
 
     assert -grad_result.loss == pytest.approx(score_result.scores[0].avg_log_likelihood, rel=1e-5)

@@ -112,7 +112,8 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["chain_break_position"] == 1
     assert captured["payload"]["model_choice"] == "ablang2-paired"
     assert captured["payload"]["temperature"] == 1.0  # shared default
-    assert captured["payload"]["use_ste"] is False
+    assert captured["payload"]["soft"] == 1.0
+    assert captured["payload"]["hard"] == 0.0
     assert captured["payload"]["compute_gradient"] is True  # default
     assert captured["payload"]["batch_size"] is None  # default auto
 
@@ -183,7 +184,7 @@ _UNIT_LOGITS = [
 @pytest.mark.parametrize("paired", [True, False], ids=["paired", "single"])
 def test_compute_gradient_dispatch(paired: bool) -> None:
     """Validate compute_gradient with temperature and STE on both chain modes via real dispatch."""
-    temperature, use_ste = 0.6, True
+    temperature, hard = 0.6, 1.0
     if paired:
         antibody = AntibodyLogits(heavy_chain=_UNIT_LOGITS[:2], light_chain=_UNIT_LOGITS[2:])
         expected_len = len(_UNIT_LOGITS)
@@ -193,7 +194,7 @@ def test_compute_gradient_dispatch(paired: bool) -> None:
 
     result = run_ablang_gradient(
         AbLangGradientInput(antibody=antibody, temperature=temperature),
-        AbLangGradientConfig(use_ste=use_ste),
+        AbLangGradientConfig(hard=hard),
     )
     validate_output(result)
 
@@ -245,7 +246,8 @@ def test_dispatch_routes_gradient_to_expected_checkpoint(
             "operation": "compute_gradient",
             "logits": [[0.0] * 20],
             "temperature": None,
-            "use_ste": False,
+            "soft": 1.0,
+            "hard": 0.0,
             "model_choice": model_choice,
             "chain_break_position": 1 if model_choice == "ablang2-paired" else None,
             "seed": None,
@@ -334,7 +336,7 @@ def test_ablang_score_and_gradient_agree_on_pll():
     one_hot = [[10.0 if aa_order[j] == aa else 0.0 for j in range(20)] for aa in sequence]
     grad_result = run_ablang_gradient(
         AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=one_hot), temperature=0.6),
-        AbLangGradientConfig(use_ste=True, compute_gradient=False),
+        AbLangGradientConfig(hard=1.0, compute_gradient=False),
     )
     grad_pll = grad_result.metrics["avg_log_likelihood"]
 

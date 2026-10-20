@@ -22,6 +22,8 @@ from standalone_helpers.relaxation import relaxed_sequence
 #  A deliberately asymmetric state so a wrong branch cannot coincide with a right one.
 LOGITS = [[2.0, 0.5, -1.0, 0.25], [-0.75, 1.5, 0.0, 3.0], [0.1, 0.1, 0.1, 0.1]]
 TEMPERATURE = 0.7
+#  Non-constant on purpose: the softmax Jacobian annihilates a constant upstream vector.
+UPSTREAM = torch.tensor([[1.0, -2.0, 0.5, 0.25], [0.0, 1.0, 1.0, -1.0], [2.0, 0.0, -1.0, 0.5]], dtype=torch.float64)
 
 
 def _state(requires_grad: bool = False) -> torch.Tensor:
@@ -71,6 +73,15 @@ def check_hard_one_supersedes_soft() -> None:
     for value in values[1:]:
         assert torch.allclose(value, values[0], atol=1e-12), "hard=1 forward depends on soft"
 
+    # The docstring claims the surrogate gradient is soft-independent too, so check it.
+    gradients = []
+    for soft in (0.0, 0.5, 1.0):
+        state = _state(requires_grad=True)
+        relaxed_sequence(state, temperature=TEMPERATURE, soft=soft, hard=1.0).backward(UPSTREAM.clone())
+        gradients.append(state.grad)
+    for gradient in gradients[1:]:
+        assert torch.allclose(gradient, gradients[0], atol=1e-12), "hard=1 gradient depends on soft"
+
 
 def check_intermediate_blends_match_the_formula() -> None:
     """Every (soft, hard) pair must equal the documented two-step blend."""
@@ -99,7 +110,7 @@ def check_probability_mode_skips_the_softmax() -> None:
 def check_default_backward_is_the_softmax_jacobian() -> None:
     """The default path's gradient must match the analytic softmax Jacobian-vector product."""
     state = _state(requires_grad=True)
-    upstream = torch.tensor([[1.0, -2.0, 0.5, 0.25], [0.0, 1.0, 1.0, -1.0], [2.0, 0.0, -1.0, 0.5]], dtype=torch.float64)
+    upstream = UPSTREAM.clone()
 
     relaxed_sequence(state, temperature=TEMPERATURE).backward(upstream)
 
@@ -110,16 +121,22 @@ def check_default_backward_is_the_softmax_jacobian() -> None:
 
 
 def check_straight_through_routes_gradient_through_probabilities() -> None:
-    """hard=1 forwards a one-hot but must backpropagate the softmax derivative, not zero."""
+    """hard=1 forwards a one-hot but must backpropagate the softmax derivative, not zero.
+
+    The upstream vector must be non-constant. The softmax Jacobian annihilates a constant one
+    (``upstream - sum(P * upstream)`` is identically zero when every entry is equal), so a
+    constant upstream would make this assert that the gradient *is* zero — which a dead STE
+    satisfies trivially.
+    """
     state = _state(requires_grad=True)
-    upstream = torch.ones(3, 4, dtype=torch.float64)
+    upstream = UPSTREAM.clone()
 
     relaxed_sequence(state, temperature=TEMPERATURE, hard=1.0).backward(upstream)
 
-    assert state.grad is not None and torch.isfinite(state.grad).all(), "STE produced no finite gradient"
     probs = F.softmax(_state() / TEMPERATURE, dim=-1)
     weighted = (probs * upstream).sum(dim=-1, keepdim=True)
     expected = probs * (upstream - weighted) / TEMPERATURE
+    assert expected.abs().max() > 1e-3, "upstream is degenerate; this check could not detect a dead STE"
     assert torch.allclose(state.grad, expected, atol=1e-10), f"{state.grad} != {expected}"
 
 
