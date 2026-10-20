@@ -30,6 +30,7 @@ from standalone_helpers import (
     serialize_output,
     set_torch_seed,
 )
+from standalone_helpers.relaxation import resolve_temperature
 
 # The vendored CodonFM source lives under ``src/`` next to this file.
 sys.path.insert(0, str(Path(__file__).parent))
@@ -691,7 +692,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "gradient":
         return _MODEL.compute_gradient(
             input_dict["logits"],
-            temperature=input_dict.get("temperature"),
+            temperature=resolve_temperature(input_dict.get("temperature")),
             use_ste=input_dict.get("use_ste", False),
             backprop=input_dict.get("compute_gradient", True),
             batch_size=batch_size,

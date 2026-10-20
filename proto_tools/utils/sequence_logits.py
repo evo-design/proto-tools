@@ -245,10 +245,10 @@ def iter_sequence_logits(model: BaseModel) -> Iterator[tuple[str, SequenceLogits
         value = getattr(model, name, None)
         if isinstance(value, SequenceLogits):
             yield name, value
-        elif callable(getattr(value, "iter_sequence_logits", None)):
+        elif callable(nested := getattr(value, "iter_sequence_logits", None)):
             # A composite field declares its own matrices, so nested models opt in rather than
             # every BaseModel being walked.
-            for path, matrix in value.iter_sequence_logits():
+            for path, matrix in nested():
                 yield f"{name}.{path}", matrix
         elif isinstance(value, list):
             for index, item in enumerate(value):

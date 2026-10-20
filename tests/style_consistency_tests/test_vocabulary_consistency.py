@@ -21,7 +21,6 @@ import pytest
 from standalone_helpers import vocabulary as worker_vocabulary
 
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
-    CODONFM_CODON_VOCAB,
     CodonSequenceLogits,
 )
 from proto_tools.tools.masked_models.mixed_data_models import MixedSequenceLogits
@@ -59,14 +58,18 @@ def test_parent_and_worker_vocabularies_match(name: str, parent_order: list[str]
 @pytest.mark.parametrize(
     "matrix_type, expected",
     [
-        (ProteinSequenceLogits, list(PROTEIN_AMINO_ACIDS)),
-        (NucleotideSequenceLogits, list(DNA_NUCLEOTIDES)),
-        (CodonSequenceLogits, CODONFM_CODON_VOCAB),
-        (MixedSequenceLogits, worker_vocabulary.MIXED_VOCAB),
+        (ProteinSequenceLogits, list("ACDEFGHIKLMNPQRSTVWY")),
+        (NucleotideSequenceLogits, list("ACGT")),
+        (CodonSequenceLogits, [a + b + c for a in "ACGT" for b in "ACGT" for c in "ACGT"]),
+        (MixedSequenceLogits, list("ACDEFGHIKLMNPQRSTVWYacgt")),
     ],
 )
-def test_sequence_logits_vocab_matches_its_source(matrix_type: type, expected: list[str]) -> None:
-    """Each relaxed-state type's ``VOCAB`` is its declared order, not a separate copy."""
+def test_sequence_logits_vocab_is_the_documented_order(matrix_type: type, expected: list[str]) -> None:
+    """Each relaxed-state type exposes exactly the column order its contract advertises.
+
+    Compared against literal expectations rather than the constants the types are built from,
+    which would restate the source instead of pinning it.
+    """
     assert list(matrix_type.VOCAB) == expected
 
 

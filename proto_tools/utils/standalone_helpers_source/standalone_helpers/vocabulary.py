@@ -2,9 +2,8 @@
 
 Index mapping between proto's column order and a model's own vocabulary order.
 
-Not re-exported from the package ``__init__``: standalones and the parent import
-``from standalone_helpers.vocabulary import gather_indices`` directly, matching
-``mixed_sequence`` and ``relaxation``.
+Re-exported from the package ``__init__``; standalones may also import the submodule
+directly as ``from standalone_helpers.vocabulary import gather_indices``.
 """
 
 from collections.abc import Mapping, Sequence
@@ -91,8 +90,11 @@ def gather_indices(
     if isinstance(source_vocab, Mapping):
         lookup: Mapping[str, int] = source_vocab
     else:
+        wanted = set(target_vocab)
         positions: dict[str, int] = {}
         for index, symbol in enumerate(source_vocab):
+            if symbol not in wanted:
+                continue
             if symbol in positions:
                 raise ValueError(
                     f"{label}: source_vocab repeats {symbol!r} at positions {positions[symbol]} and {index}; "

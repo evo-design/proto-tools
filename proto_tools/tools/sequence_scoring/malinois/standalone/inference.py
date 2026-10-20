@@ -17,11 +17,12 @@ import malinois_scoring
 import torch
 from standalone_helpers import get_logger, move_model_to_device, resolve_weights_dir, serialize_output, set_torch_seed
 from standalone_helpers.relaxation import relaxed_probs, resolve_temperature
+from standalone_helpers.vocabulary import DNA_NUCLEOTIDES
 
 logger = get_logger(__name__)
 
 CELL_TYPE_INDEX = {"K562": 0, "HepG2": 1, "SKNSH": 2}
-DNA_VOCAB = ["A", "C", "G", "T"]
+DNA_VOCAB = list(DNA_NUCLEOTIDES)
 DEFAULT_ARTIFACT_FILENAME = "MODELS-malinois_artifacts__20211113_021200__287348.tar.gz"
 DEFAULT_ARTIFACT_MD5 = "375142a714e7df73c463b46113a65210"
 LOCK_TIMEOUT_SECONDS = 600

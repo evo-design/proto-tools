@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from standalone_helpers import AMINO_ACIDS_LIST, get_jax_memory_stats, get_logger, resolve_jax_device, serialize_output
+from standalone_helpers.relaxation import resolve_temperature
 from standalone_helpers.vocabulary import gather_indices
 
 logger = get_logger(__name__)
@@ -875,7 +876,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "compute_gradient":
         return _model.compute_binder_gradient(
             logits=input_dict["logits"],
-            temperature=input_dict["temperature"],
+            temperature=resolve_temperature(input_dict["temperature"]),
             soft=input_dict.get("soft", 1.0),
             hard=input_dict.get("hard", 0.0),
             target_pdb=input_dict["target_pdb"],

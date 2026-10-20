@@ -42,7 +42,7 @@ class AbLangGradientInput(GradientInput):
     )
 
     @classmethod
-    def from_probabilities(  # type: ignore[override] -- chains are named, not a single matrix
+    def from_probabilities(  # type: ignore[override]  # chains are named, not a single matrix
         cls,
         *,
         heavy_chain: Sequence[Sequence[float]] | None = None,

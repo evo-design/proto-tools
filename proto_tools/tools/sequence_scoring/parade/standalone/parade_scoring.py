@@ -12,12 +12,13 @@ import utrdata_cl as utrdata
 from pl_regressor import RNARegressor
 from standalone_helpers import get_logger
 from standalone_helpers.relaxation import relaxed_probs
+from standalone_helpers.vocabulary import DNA_NUCLEOTIDES
 from torch.utils.data import DataLoader
 from utrdata_cl import CELLTYPE_CODES_UTR3, CELLTYPE_CODES_UTR5
 
 logger = get_logger(__name__)
 
-DNA_VOCAB = ["A", "C", "G", "T"]
+DNA_VOCAB = list(DNA_NUCLEOTIDES)
 
 # PARADE regression heads emit several columns; these indices select the scalar the
 # published tutorials read back (see the upstream ``predict.py``).

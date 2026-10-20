@@ -12,6 +12,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 from standalone_helpers import get_logger, log_likelihood_metrics
+from standalone_helpers.relaxation import resolve_temperature
 from standalone_helpers.vocabulary import AMINO_ACIDS_LIST, gather_indices
 
 logger = get_logger(__name__)
@@ -434,7 +435,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             pdb_path=pdb_path,
             chain_ids=input_dict["chain_ids"],
             logits_list=input_dict["logits"],
-            temperature=input_dict["temperature"],
+            temperature=resolve_temperature(input_dict["temperature"]),
             use_ste=input_dict["use_ste"],
             fixed_positions=input_dict.get("fixed_positions"),
             seed=input_dict["seed"],

@@ -253,6 +253,8 @@ class MixedSequenceGradientInput(GradientInput):
             ValueError: If ``sequence`` is missing, or a row is not a valid modality-restricted
                 distribution with strictly positive permitted entries.
         """
+        if not math.isfinite(temperature) or temperature <= 0.0:
+            raise ValueError(f"temperature must be positive and finite, got {temperature!r}")
         if "sequence" not in fields:
             raise ValueError("mixed gradient from_probabilities requires the sequence template")
         mask = mixed_allowed_mask(fields["sequence"], len(probabilities))

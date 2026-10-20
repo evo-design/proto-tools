@@ -10,6 +10,7 @@ from .compression import compress_array
 from .device import move_model_to_device
 from .mixed_sequence import DNA_TOKENS, MIXED_VOCAB, PROTEIN_TOKENS, UPSTREAM_STRAND_TOKENS, tokenize_mixed_sequence
 from .proto_logging import get_logger
+from .relaxation import resolve_temperature
 from .scoring import log_likelihood_metrics
 from .seeding import set_torch_seed
 from .serialization import serialize_output
@@ -311,7 +312,7 @@ class MixedMLMRuntime:
 
         tokens = tokenize_mixed_sequence(payload["sequence"])
         backprop = payload.get("compute_gradient", True)
-        temperature = payload.get("temperature", 1.0)
+        temperature = resolve_temperature(payload.get("temperature", 1.0))
         batch_size = payload.get("batch_size", 1)
         self.adapter.reset_rotary_cache()
         embed_layer = self.adapter.embedding_layer

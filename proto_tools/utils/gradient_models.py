@@ -134,7 +134,8 @@ class GradientInput(BaseToolInput):
             Self: Input satisfying ``softmax(logits / temperature) == probabilities``.
         """
         matrix = cls.relaxed_state_type().from_probabilities(probabilities, temperature=temperature)
-        return cls(logits=matrix, temperature=temperature, **fields)
+        # ``logits`` is declared by the subclass, not by GradientInput itself.
+        return cls(**{"logits": matrix, "temperature": temperature, **fields})
 
     @model_validator(mode="after")
     def validate_relaxed_state(self) -> Self:
@@ -181,7 +182,7 @@ class BatchedNucleotideGradientInput(GradientInput):
     )
 
     @classmethod
-    def from_probabilities(  # type: ignore[override] -- a batch takes (B, L, V), not (L, V)
+    def from_probabilities(  # type: ignore[override]  # a batch takes (B, L, V), not (L, V)
         cls,
         probabilities: Sequence[Sequence[Sequence[float]]],
         *,

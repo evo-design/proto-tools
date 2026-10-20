@@ -167,14 +167,15 @@ def test_temperature_rejects_nonpositive_and_nonfinite(spec: Any, temperature: f
 
 
 @pytest.mark.parametrize("spec", _GRADIENT_SPECS, ids=lambda spec: spec.key)
-def test_relaxed_state_is_discoverable_and_vocab_aligned(spec: Any) -> None:
-    """Each tool exposes at least one relaxed matrix, rectangular over its own vocabulary."""
+def test_relaxed_state_is_discoverable(spec: Any) -> None:
+    """Each tool exposes at least one relaxed matrix through the shared discovery interface.
+
+    Shape and rectangularity are guaranteed by ``SequenceLogits.validate_matrix`` at
+    construction, so asserting them here would only restate the type.
+    """
     matrices = _example(spec).sequence_logits()
+
     assert matrices, f"{spec.key!r} exposes no SequenceLogits via sequence_logits()."
-    for path, matrix in matrices.items():
-        length, width = matrix.shape
-        assert length > 0 and width == len(matrix.vocab), f"{spec.key!r}.{path} has shape {matrix.shape}."
-        assert all(len(row) == width for row in matrix), f"{spec.key!r}.{path} is not rectangular."
 
 
 @pytest.mark.parametrize("spec", _GRADIENT_SPECS, ids=lambda spec: spec.key)
@@ -222,6 +223,10 @@ def test_probability_mode_rejects_invalid_distributions(spec: Any, corruption: s
         # 1e-3 is three orders of magnitude outside the 1e-6 tolerance.
         rows[target][column] += 1e-3
     else:
+        # Move the same mass onto another permitted column so the row still sums to 1.0 and the
+        # case isolates the nonnegativity rule rather than tripping the simplex check.
+        other = next(index for index, value in enumerate(rows[target]) if value > 0.0 and index != column)
+        rows[target][other] += 2 * rows[target][column]
         rows[target][column] = -rows[target][column]
     _set_path(payload, path, rows)
 

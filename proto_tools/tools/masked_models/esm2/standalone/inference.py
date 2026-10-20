@@ -13,6 +13,7 @@ from standalone_helpers import (
     serialize_output,
     set_torch_seed,
 )
+from standalone_helpers.relaxation import resolve_temperature
 from tqdm import tqdm
 
 logger = get_logger(__name__)
@@ -826,7 +827,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "compute_gradient":
         return _model.compute_gradient(
             logits_list=input_dict["logits"],
-            temperature=input_dict["temperature"],
+            temperature=resolve_temperature(input_dict["temperature"]),
             use_ste=input_dict["use_ste"],
             seed=input_dict["seed"],
             backprop=input_dict.get("compute_gradient", True),
