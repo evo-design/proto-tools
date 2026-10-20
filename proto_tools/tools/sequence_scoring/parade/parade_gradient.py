@@ -19,11 +19,11 @@ from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     DNA_NUCLEOTIDES,
-    BaseConfig,
     BatchedNucleotideGradientInput,
     ConfigField,
     GradientOutput,
     NucleotideSequenceLogits,
+    RelaxationConfig,
     ToolInstance,
 )
 from proto_tools.utils.device import RemoteDevice
@@ -104,7 +104,7 @@ class ParadeGradientInput(BatchedNucleotideGradientInput):
     """
 
 
-class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
+class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, RelaxationConfig):
     """Configuration for differentiable PARADE UTR-activity objectives.
 
     Attributes:
@@ -116,8 +116,8 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
             ``.ckpt`` path or an ``https`` download link (a schemeless ``host.tld/path`` is
             accepted). Works on ``device="cpu"``, ``device="cuda"``, and ``device="modal"``.
             Rejected on ``device="proto"``. Leave empty to use the pinned per-target checkpoint.
-        soft (float): Blend hard argmax one-hot (0) to softmax probabilities (1).
-        hard (float): Straight-through hard-forward coefficient.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Run backward pass and return gradient.
     """
 
@@ -144,20 +144,6 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
         description="Your own .ckpt path or https link, used instead of the pinned checkpoint.",
         reload_on_change=True,
         repr=False,
-    )
-    soft: float = ConfigField(
-        title="Soft Mixing",
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description="Blend hard argmax one-hot (0) to softmax probabilities (1).",
-    )
-    hard: float = ConfigField(
-        title="Hard Mixing",
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="Straight-through hard-forward coefficient.",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",

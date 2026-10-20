@@ -15,7 +15,7 @@ from typing import Any
 
 import torch
 from standalone_helpers import AMINO_ACIDS_LIST, get_logger, move_model_to_device, release_cuda_memory, serialize_output
-from standalone_helpers.relaxation import relaxed_probs, resolve_temperature
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 from standalone_helpers.vocabulary import gather_indices
 
 logger = get_logger(__name__)
@@ -189,7 +189,7 @@ class ESMFoldModel:
 
             # Differentiable path; tensors must be saved for backward.
             with torch.inference_mode(False), torch.set_grad_enabled(compute_gradient), _allow_tf32():
-                relaxed = relaxed_probs(logits, temperature=temperature, soft=soft, hard=hard)
+                relaxed = relaxed_sequence(logits, temperature=temperature, soft=soft, hard=hard)
                 outputs = self._run_relaxed_forward(
                     complex_data,
                     relaxed=relaxed,

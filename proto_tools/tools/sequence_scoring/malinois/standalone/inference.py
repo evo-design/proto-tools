@@ -16,7 +16,7 @@ from typing import Any, cast
 import malinois_scoring
 import torch
 from standalone_helpers import get_logger, move_model_to_device, resolve_weights_dir, serialize_output, set_torch_seed
-from standalone_helpers.relaxation import relaxed_probs, resolve_temperature
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 from standalone_helpers.vocabulary import DNA_NUCLEOTIDES
 
 logger = get_logger(__name__)
@@ -293,7 +293,7 @@ class MalinoisModel:
             if logits.ndim != 3:
                 raise ValueError(f"malinois: logits must have rank 3 (B, L, 4), got rank {logits.ndim}")
 
-            relaxed = relaxed_probs(logits, temperature=temperature, soft=soft, hard=hard)
+            relaxed = relaxed_sequence(logits, temperature=temperature, soft=soft, hard=hard)
             insert = relaxed.transpose(1, 2)
             prepped = self.flank_builder(insert)
             predictions = self.model(prepped)

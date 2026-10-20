@@ -11,7 +11,7 @@ import torch
 import utrdata_cl as utrdata
 from pl_regressor import RNARegressor
 from standalone_helpers import get_logger
-from standalone_helpers.relaxation import relaxed_probs
+from standalone_helpers.relaxation import relaxed_sequence
 from standalone_helpers.vocabulary import DNA_NUCLEOTIDES
 from torch.utils.data import DataLoader
 from utrdata_cl import CELLTYPE_CODES_UTR3, CELLTYPE_CODES_UTR5
@@ -204,7 +204,7 @@ def compute_gradient(
         if logits.ndim != 3:
             raise ValueError(f"parade: logits must have rank 3 (B, L, 4), got rank {logits.ndim}")
 
-        relaxed = relaxed_probs(logits, temperature=temperature, soft=soft, hard=hard)
+        relaxed = relaxed_sequence(logits, temperature=temperature, soft=soft, hard=hard)
         batch_size = int(relaxed.shape[0])
 
         # PARADE conditions on a single cell type per forward pass (via the condition

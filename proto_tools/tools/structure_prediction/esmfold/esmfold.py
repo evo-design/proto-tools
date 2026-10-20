@@ -40,6 +40,7 @@ from proto_tools.utils import (
     GradientOutput,
     InputField,
     ProteinGradientInput,
+    RelaxationConfig,
     ToolInstance,
     return_invalid_protein_chars,
 )
@@ -341,7 +342,7 @@ class ESMFoldGradientInput(ProteinGradientInput):
         return self
 
 
-class ESMFoldGradientConfig(ESMFoldConfig):
+class ESMFoldGradientConfig(ESMFoldConfig, RelaxationConfig):
     """Configuration for one differentiable ESMFold confidence pass.
 
     Attributes:
@@ -351,8 +352,8 @@ class ESMFoldGradientConfig(ESMFoldConfig):
         max_batch_residues (int): Maximum residues per ESMFold inference batch.
         num_recycles (int): Structure module recycling iterations.
         loss_weights (dict[str, float]): Weights for pLDDT, pTM, and pAE losses.
-        soft (float): Soft probability blend for relaxed target sequence.
-        hard (float): Straight-through hard-forward blend for relaxed target sequence.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Whether to return the gradient with respect to logits.
     """
 
@@ -360,20 +361,6 @@ class ESMFoldGradientConfig(ESMFoldConfig):
         default_factory=lambda: {"plddt": 1.0},
         title="Loss Weights",
         description="ESMFold confidence loss weights. Valid keys: plddt, ptm, pae.",
-    )
-    soft: float = ConfigField(
-        title="Soft Mixing",
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description="Blend hard argmax one-hot (0) to softmax probabilities (1).",
-    )
-    hard: float = ConfigField(
-        title="Hard Mixing",
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="Straight-through hard-forward coefficient.",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",

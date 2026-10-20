@@ -19,6 +19,7 @@ from proto_tools.utils import (
     GradientOutput,
     InputField,
     NucleotideSequenceLogits,
+    RelaxationConfig,
     ToolInstance,
     return_invalid_nucleotide_chars,
 )
@@ -355,7 +356,7 @@ class MalinoisGradientInput(BatchedNucleotideGradientInput):
     """
 
 
-class MalinoisGradientConfig(BaseConfig):
+class MalinoisGradientConfig(RelaxationConfig):
     """Configuration for differentiable Malinois activity objectives.
 
     Attributes:
@@ -366,8 +367,8 @@ class MalinoisGradientConfig(BaseConfig):
         artifact_url (str): URL used to provision the Malinois artifact.
         artifact_md5 (str): Expected checksum for the downloaded artifact.
         malinois_dir (str): Optional extracted Malinois artifact directory.
-        soft (float): Blend hard argmax one-hot (0) to softmax probabilities (1).
-        hard (float): Straight-through hard-forward coefficient.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Run backward pass and return gradient.
         device (str): Device used for inference and backpropagation.
     """
@@ -413,20 +414,6 @@ class MalinoisGradientConfig(BaseConfig):
         default=DEFAULT_MALINOIS_DIR,
         description="Optional local Malinois metadata directory; empty uses the managed cache extraction.",
         reload_on_change=True,
-    )
-    soft: float = ConfigField(
-        title="Soft Mixing",
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description="Blend hard argmax one-hot (0) to softmax probabilities (1).",
-    )
-    hard: float = ConfigField(
-        title="Hard Mixing",
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="Straight-through hard-forward coefficient.",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
