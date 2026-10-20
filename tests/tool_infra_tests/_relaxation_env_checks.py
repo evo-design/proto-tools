@@ -133,6 +133,44 @@ def check_soft_zero_backward_is_the_identity() -> None:
     assert torch.allclose(state.grad, upstream, atol=1e-12), f"{state.grad} != {upstream}"
 
 
+def check_migration_is_a_no_op_at_default_controls() -> None:
+    """relaxed_sequence must equal the retired relaxed_probs wherever soft == 1.
+
+    ESMFold, Parade and Malinois still call ``relaxed_probs``. Their migration is only safe if
+    the two agree at every control combination those tools can currently be in with ``soft=1``,
+    which is the default and the only value any registered example uses.
+    """
+    from standalone_helpers.relaxation import relaxed_probs
+
+    for temperature in (0.5, 1.0, 2.0, None):
+        for hard in (0.0, 0.25, 1.0):
+            state = _state()
+            old = relaxed_probs(state, temperature=temperature, soft=1.0, hard=hard)
+            new = relaxed_sequence(state, temperature=temperature, soft=1.0, hard=hard)
+
+            assert torch.allclose(old, new, atol=1e-12), f"T={temperature} hard={hard}: {old} != {new}"
+
+
+def check_conventions_diverge_only_below_soft_one() -> None:
+    """Below soft=1 the two conventions must differ, and the old one must kill the gradient.
+
+    The retired convention blends toward ``one_hot(argmax(P))``, which is constant with respect
+    to the input, so at ``soft=0`` it forwards a one-hot *and* backpropagates zeros — an
+    optimizer silently stops learning. The new convention blends toward the raw matrix and
+    keeps a derivative. This is the behavior change the migration intends.
+    """
+    from standalone_helpers.relaxation import relaxed_probs
+
+    old_state, new_state = _state(requires_grad=True), _state(requires_grad=True)
+    upstream = torch.ones(3, 4, dtype=torch.float64)
+
+    relaxed_probs(old_state, temperature=TEMPERATURE, soft=0.0, hard=0.0).backward(upstream)
+    relaxed_sequence(new_state, temperature=TEMPERATURE, soft=0.0, hard=0.0).backward(upstream)
+
+    assert torch.count_nonzero(old_state.grad) == 0, f"old convention unexpectedly has a gradient: {old_state.grad}"
+    assert torch.allclose(new_state.grad, upstream, atol=1e-12), f"{new_state.grad} != {upstream}"
+
+
 CHECKS: tuple[Callable[[], None], ...] = (
     check_default_is_a_plain_softmax,
     check_soft_zero_passes_the_raw_matrix_through,
@@ -143,6 +181,8 @@ CHECKS: tuple[Callable[[], None], ...] = (
     check_default_backward_is_the_softmax_jacobian,
     check_straight_through_routes_gradient_through_probabilities,
     check_soft_zero_backward_is_the_identity,
+    check_migration_is_a_no_op_at_default_controls,
+    check_conventions_diverge_only_below_soft_one,
 )
 
 
