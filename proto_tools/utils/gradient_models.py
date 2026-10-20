@@ -13,6 +13,7 @@ from typing import Any
 from pydantic import Field, model_validator
 from typing_extensions import Self
 
+from proto_tools.utils.base_config import BaseConfig, ConfigField
 from proto_tools.utils.sequence_logits import (
     NucleotideSequenceLogits,
     ProteinSequenceLogits,
@@ -22,6 +23,36 @@ from proto_tools.utils.sequence_logits import (
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
 GradientValue = list[list[float]] | list[list[list[float]]] | None
+
+
+class RelaxationConfig(BaseConfig):
+    """Blend coefficients controlling how a relaxed sequence reaches the model.
+
+    These are scalars, not tensors: they weight the terms of
+    :func:`standalone_helpers.relaxation.relaxed_sequence`. ``temperature`` lives on the Input
+    because it describes the supplied numbers; relaxation is a property of the run.
+
+    Attributes:
+        soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Straight-through coefficient; 1 forwards a hard one-hot to the model.
+    """
+
+    soft: float = ConfigField(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        allow_inf_nan=False,
+        title="Soft Mixing",
+        description="Blend the raw input matrix (0) toward softmax probabilities (1).",
+    )
+    hard: float = ConfigField(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        allow_inf_nan=False,
+        title="Hard Mixing",
+        description="Straight-through coefficient; 1 forwards a hard one-hot to the model.",
+    )
 
 
 class GradientInput(BaseToolInput):
@@ -272,6 +303,7 @@ class GradientOutput(BaseToolOutput):
 
 __all__ = [
     "BatchedNucleotideGradientInput",
+    "RelaxationConfig",
     "GradientInput",
     "GradientOutput",
     "GradientValue",

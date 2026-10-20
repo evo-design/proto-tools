@@ -31,6 +31,7 @@ from proto_tools.utils.gradient_models import (
     BatchedNucleotideGradientInput,
     GradientInput,
     GradientOutput,
+    RelaxationConfig,
 )
 from proto_tools.utils.sequence_logits import (
     ProteinSequenceLogits,
@@ -327,6 +328,33 @@ def test_from_probabilities_sets_a_consistent_temperature(spec: Any, temperature
             assert [actual[column] / renormalized for column in active] == pytest.approx(
                 [expected[column] for column in active], abs=1e-9
             ), f"{spec.key} {path} did not round-trip"
+
+
+# ── Relaxation controls ──────────────────────────────────────────────────────
+
+
+def test_relaxation_config_defaults_to_a_plain_softmax() -> None:
+    """The shared defaults select ``softmax(logits / temperature)`` with no blending."""
+    config = RelaxationConfig()
+
+    assert (config.soft, config.hard) == (1.0, 0.0)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"soft": 1.5},
+        {"soft": -0.1},
+        {"hard": 1.5},
+        {"hard": -0.1},
+        {"soft": float("nan")},
+        {"hard": float("inf")},
+    ],
+)
+def test_relaxation_config_rejects_out_of_range_blends(overrides: dict[str, float]) -> None:
+    """``soft`` and ``hard`` are blend weights, so only finite values in [0, 1] are meaningful."""
+    with pytest.raises(ValidationError):
+        RelaxationConfig(**overrides)
 
 
 # ── SequenceLogits ───────────────────────────────────────────────────────────

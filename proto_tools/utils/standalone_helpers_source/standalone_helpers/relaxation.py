@@ -48,6 +48,45 @@ def relaxed_probs(logits: Any, *, temperature: float | None, soft: float = 1.0, 
     return relaxed
 
 
+def relaxed_sequence(logits: Any, *, temperature: float | None, soft: float = 1.0, hard: float = 0.0) -> Any:
+    """Relax a ``... x L x V`` sequence state into the representation a model consumes.
+
+    One definition for every gradient backend::
+
+        P = softmax(logits / temperature)  # or logits itself when temperature is None
+        D_ste = one_hot(argmax(P)) - detach(P) + P
+        U = (1 - soft) * logits + soft * P
+        M = (1 - hard) * U + hard * D_ste
+
+    ``soft`` interpolates from the **raw input matrix** (0) to the softmax probabilities (1);
+    ``hard`` mixes in a straight-through estimator whose forward value is a one-hot and whose
+    gradient flows through ``P``. ``hard=1`` supersedes ``soft``: for a fixed ``P`` both the
+    forward value and the surrogate gradient are independent of it.
+
+    Note the ``(1 - soft)`` branch is the caller's own matrix, not an argmax one-hot. Feeding
+    raw, unnormalized values to a model is differentiable but outside its training distribution.
+
+    Args:
+        logits (Any): Sequence state whose last axis spans the vocabulary.
+        temperature (float | None): Positive softmax temperature, or ``None`` to treat ``logits``
+            as probabilities already.
+        soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Straight-through coefficient; 1 forwards a one-hot.
+
+    Returns:
+        Any: Relaxed representation with the same shape as ``logits``.
+    """
+    import torch.nn.functional as F
+
+    probs = logits if temperature is None else F.softmax(logits / temperature, dim=-1)
+    blended = probs if soft == 1.0 else (1.0 - soft) * logits + soft * probs
+    if hard > 0.0:
+        discrete = F.one_hot(probs.argmax(dim=-1), num_classes=probs.shape[-1]).to(probs.dtype)
+        straight_through = discrete - probs.detach() + probs
+        blended = (1.0 - hard) * blended + hard * straight_through
+    return blended
+
+
 def resolve_temperature(value: Any) -> float | None:
     """Coerce a transported temperature to a positive float, or ``None`` for probability mode.
 
