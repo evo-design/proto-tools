@@ -21,11 +21,11 @@ from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import AlphaFo
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     AminoAcid,
-    BaseConfig,
     ConfigField,
     GradientOutput,
     InputField,
     ProteinGradientInput,
+    RelaxationConfig,
     ToolInstance,
     one_hot_protein_logits,
 )
@@ -120,7 +120,7 @@ class AlphaFold2GradientInput(ProteinGradientInput):
         return self
 
 
-class AlphaFold2GradientConfig(BaseConfig):
+class AlphaFold2GradientConfig(RelaxationConfig):
     """Configuration for AlphaFold2/ColabDesign binder design (forward or backward).
 
     Binder protocol only — designs a binder against a frozen target structure.
@@ -144,9 +144,8 @@ class AlphaFold2GradientConfig(BaseConfig):
         rm_target_seq (bool): Mask target template sequence in ``prep_inputs``.
         rm_target_sc (bool): Mask target template side chains in ``prep_inputs``.
         rm_template_ic (bool): Mask inter-chain template contacts in ``prep_inputs``.
-        soft (float): ColabDesign softmax blending (0=raw logits, 1=full softmax).
-            Passed per-step by the gradient optimizer.
-        hard (float): ColabDesign hard-sequence blending (0=relaxed, 1=straight-through argmax).
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         backend (Literal["base", "germinal"]): ``"base"`` (upstream ColabDesign) or ``"germinal"``
             (Germinal fork with alpha, bias, framework contacts, extension losses).
         starting_binder_seq (str | None): Optional one-letter AA string used to seed
@@ -231,20 +230,6 @@ class AlphaFold2GradientConfig(BaseConfig):
         title="Mask Inter-chain Contacts",
         default=True,
         description="Mask inter-chain template contacts in ColabDesign prep_inputs.",
-    )
-    soft: float = ConfigField(
-        title="Soft Mixing",
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description="ColabDesign soft mixing coefficient (0=hard logits, 1=full softmax blend).",
-    )
-    hard: float = ConfigField(
-        title="Hard Mixing",
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="ColabDesign hard mixing coefficient (0=relaxed, 1=straight-through argmax).",
     )
     backend: Literal["base", "germinal"] = ConfigField(
         title="Backend",

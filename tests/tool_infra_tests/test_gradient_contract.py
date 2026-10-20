@@ -389,6 +389,24 @@ def test_alphafold2_relaxation_matches_the_contract_in_env() -> None:
     assert "ALL CHECKS PASSED" in output, output
 
 
+@pytest.mark.parametrize("spec", _GRADIENT_SPECS, ids=lambda spec: spec.key)
+def test_gradient_config_inherits_the_shared_relaxation_controls(spec: Any) -> None:
+    """Every gradient tool must take ``soft`` and ``hard`` from one place.
+
+    Re-declaring the fields keeps the names while letting the bounds, defaults and documented
+    meaning drift per tool, which is the failure this whole contract exists to prevent.
+    """
+    assert issubclass(spec.config_model, RelaxationConfig), (
+        f"{spec.key}: {spec.config_model.__name__} must inherit RelaxationConfig"
+    )
+
+    for field in ("soft", "hard"):
+        own = spec.config_model.model_fields[field]
+        shared = RelaxationConfig.model_fields[field]
+        assert own.default == shared.default, f"{spec.key}: {field} default differs from the shared config"
+        assert own.description == shared.description, f"{spec.key}: {field} re-declares its own description"
+
+
 def test_relaxation_config_defaults_to_a_plain_softmax() -> None:
     """The shared defaults select ``softmax(logits / temperature)`` with no blending."""
     config = RelaxationConfig()
