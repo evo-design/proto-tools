@@ -333,6 +333,25 @@ def test_from_probabilities_sets_a_consistent_temperature(spec: Any, temperature
 # ── Relaxation controls ──────────────────────────────────────────────────────
 
 
+@pytest.mark.integration
+def test_relaxation_formula_runs_in_env() -> None:
+    """The relaxed_sequence blend and its gradients are checked inside a built tool env.
+
+    ``standalone_helpers.relaxation`` imports torch, which the base process does not have, so
+    ``_relaxation_env_checks.py`` runs the numerical suite in esm2's environment. It needs no
+    model weights and no GPU — the formula is pure arithmetic. A non-zero exit surfaces here as
+    ``RuntimeError``.
+    """
+    from pathlib import Path as _Path
+
+    from proto_tools.utils import run_in_env
+
+    checks = _Path(__file__).resolve().parent / "_relaxation_env_checks.py"
+    output = run_in_env("esm2", script=str(checks), timeout=900)
+
+    assert "ALL CHECKS PASSED" in output, output
+
+
 def test_relaxation_config_defaults_to_a_plain_softmax() -> None:
     """The shared defaults select ``softmax(logits / temperature)`` with no blending."""
     config = RelaxationConfig()
