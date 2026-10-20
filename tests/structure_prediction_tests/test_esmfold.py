@@ -168,6 +168,34 @@ def test_esmfold_gradient_smoke():
 
 @pytest.mark.slow
 @pytest.mark.uses_gpu
+def test_esmfold_relaxed_one_hot_matches_discrete_prediction():
+    """A saturated one-hot must fold the same structure as the discrete sequence.
+
+    The relaxed path replaces the target chain's residue embeddings with
+    ``relaxed @ self.model.embedding(af2_ids)``, while non-target chains and the aatype path use
+    ``self.model.embedding(aa)``. Both index the same table, so they must share one basis. An
+    offset on either side shifts every residue identity by one — 'A' picking up 'R''s embedding,
+    'V' landing on 'X' — which folds a different sequence while pLDDT stays plausible, because
+    the dominant ``esm_s`` signal comes from a separately mapped table.
+
+    Measured: with the basis mismatch, avg_plddt was 0.555 against 0.727 discrete (23.7% off).
+    """
+    sequence = "MKTAYIAKQRQISFVK"
+
+    discrete = run_esmfold(ESMFoldInput(complexes=[sequence]), ESMFoldConfig(num_recycles=1))
+    relaxed = run_esmfold_gradient(
+        ESMFoldGradientInput(logits=one_hot_protein_logits(sequence, sharpness=20.0), chains=[sequence]),
+        ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}, compute_gradient=False),
+    )
+
+    # Saturated softmax is 0.99999996 rather than exactly one-hot, so allow a little slack.
+    assert relaxed.structure.metrics["avg_plddt"] == pytest.approx(
+        discrete.structures[0].metrics["avg_plddt"], rel=0.01
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.uses_gpu
 def test_esmfold_gradient_probability_mode_matches_logit_mode():
     """temperature=None on softmax(L) evaluates the same relaxed sequence as temperature=1.0 on L."""
     logits = one_hot_protein_logits("MKTL", sharpness=2.0)

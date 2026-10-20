@@ -127,3 +127,36 @@ def test_toolkits_do_not_retype_a_canonical_alphabet(source_path: Path) -> None:
         + ", ".join(f"{literal!r} (owned by {owner})" for literal, owner in offenders.items())
         + ". Import the canonical constant instead; see notes/gradients.md."
     )
+
+
+# ── ESMFold residue-embedding basis ──────────────────────────────────────────
+
+_ESMFOLD_STANDALONE = _TOOLS_DIR / "structure_prediction" / "esmfold" / "standalone" / "inference.py"
+
+
+def test_esmfold_relaxed_embedding_uses_no_index_offset() -> None:
+    """ESMFold's relaxed and discrete paths must index ``self.model.embedding`` on one basis.
+
+    ``_sequence_to_aatype`` maps residues 0-based, and ``self.model.embedding`` expects that
+    basis — upstream's ``+1`` belongs to ``af2_to_esm``, whose row 0 is ``<pad>``, and is handled
+    separately by ``esm_ids``. An ``offset`` on the relaxed gather shifts every residue identity
+    by one and folds a different sequence with no error raised.
+
+    GPU coverage lives in ``test_esmfold_relaxed_one_hot_matches_discrete_prediction``; this
+    guard runs in CI.
+    """
+    source = _ESMFOLD_STANDALONE.read_text(encoding="utf-8")
+    offending = [
+        node
+        for node in ast.walk(ast.parse(source, filename=str(_ESMFOLD_STANDALONE)))
+        if isinstance(node, ast.Call)
+        and getattr(node.func, "id", None) == "gather_indices"
+        and any(keyword.arg == "offset" for keyword in node.keywords)
+    ]
+
+    assert not offending, (
+        "esmfold/standalone/inference.py passes offset= to gather_indices. "
+        "self.model.embedding is 0-based, the same basis as _sequence_to_aatype; an offset there "
+        "shifts every residue identity by one. If an offset is genuinely needed for a different "
+        "table, map it separately rather than through the residue-embedding gather."
+    )

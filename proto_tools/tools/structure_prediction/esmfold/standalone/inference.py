@@ -337,9 +337,11 @@ class ESMFoldModel:
         s_z_0 = s_s_0.new_zeros(batch_size, seq_len, seq_len, cfg.trunk.pairwise_state_dim)
         if self.model.config.esmfold_config.embed_aa:
             aa_embeddings = self.model.embedding(aa)
-            # OpenFold reserves index 0, so the residue table starts at 1.
+            # self.model.embedding takes 0-based restype indices, the same basis as the discrete
+            # aatype above. Upstream's +1 shift belongs to af2_to_esm (row 0 is <pad>), a
+            # different table handled separately by esm_ids.
             af2_ids = torch.tensor(
-                gather_indices(AMINO_ACIDS_LIST, ESMFOLD_AMINO_ACIDS, offset=1, label="esmfold"),
+                gather_indices(AMINO_ACIDS_LIST, ESMFOLD_AMINO_ACIDS, label="esmfold"),
                 device=self.device,
             )
             relaxed_aa_embeddings = relaxed.to(aa_embeddings.dtype) @ self.model.embedding(af2_ids)
