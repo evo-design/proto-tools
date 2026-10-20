@@ -170,9 +170,9 @@ class NetMHCpanBinding(BaseModel):
 
     ``rank_el`` is the quantity to compare across alleles: raw scores sit on different
     per-allele background distributions, whereas %rank is a percentile against random
-    peptides. The binding-affinity fields are populated only when
-    ``include_binding_affinity`` is set, because netMHCpan's ``-BA`` flag *adds* them
-    alongside the eluted-ligand columns rather than replacing them.
+    peptides. The binding-affinity, pathogen and neoepitope fields are populated only when
+    the matching config flag is set, because netMHCpan's ``-BA``, ``-pathogen`` and ``-neo``
+    flags *add* columns alongside the eluted-ligand ones rather than replacing them.
 
     Attributes:
         allele (str): Allele this prediction is for, in netMHCpan's accepted spelling.
@@ -186,6 +186,10 @@ class NetMHCpanBinding(BaseModel):
         score_ba (float | None): Raw binding-affinity score, when -BA was requested.
         rank_ba (float | None): Binding-affinity %rank, when -BA was requested.
         affinity_nm (float | None): Predicted affinity in nM, when -BA was requested.
+        score_pathogen (float | None): Pathogen-epitope score, when -pathogen was requested.
+        rank_pathogen (float | None): Pathogen-epitope %rank, when -pathogen was requested.
+        score_neo (float | None): Neoepitope score, when -neo was requested.
+        rank_neo (float | None): Neoepitope %rank, when -neo was requested.
     """
 
     allele: str = Field(title="Allele", description="MHC allele, in netMHCpan's accepted spelling.")
@@ -207,6 +211,18 @@ class NetMHCpanBinding(BaseModel):
     )
     affinity_nm: float | None = Field(
         default=None, title="Affinity (nM)", description="Predicted binding affinity in nM; set only with -BA."
+    )
+    score_pathogen: float | None = Field(
+        default=None, title="Pathogen Score", description="Raw pathogen-epitope score; set only with -pathogen."
+    )
+    rank_pathogen: float | None = Field(
+        default=None, title="Pathogen %Rank", description="Pathogen-epitope %rank; set only with -pathogen."
+    )
+    score_neo: float | None = Field(
+        default=None, title="Neoepitope Score", description="Raw neoepitope score; set only with -neo."
+    )
+    rank_neo: float | None = Field(
+        default=None, title="Neoepitope %Rank", description="Neoepitope %rank; set only with -neo."
     )
 
 
@@ -276,6 +292,24 @@ _SHARED_METRIC_SPEC: dict[str, MetricSpec] = {
         "unit": "nM",
         "better_values_are": "context-dependent",
     },
+    "best_rank_pathogen": {
+        "description": "Lowest pathogen-epitope %rank over all pairs.",
+        "availability": "only when include_pathogen is set",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "percent",
+        "better_values_are": "context-dependent",
+    },
+    "best_rank_neo": {
+        "description": "Lowest neoepitope %rank over all pairs.",
+        "availability": "only when include_neoepitope is set",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "percent",
+        "better_values_are": "context-dependent",
+    },
 }
 
 
@@ -287,7 +321,8 @@ class NetMHCpanMetrics(Metrics):
     the sensible objective for a sampler.
 
     ``best_rank_ba`` and ``best_affinity_nm`` are present only when the run requested
-    binding affinity; otherwise they are absent rather than zero.
+    binding affinity, and ``best_rank_pathogen`` / ``best_rank_neo`` only when it requested
+    those heads; otherwise they are absent rather than zero.
 
     Attributes:
         primary_metric (str | None): Headline metric used to rank results.
@@ -378,15 +413,20 @@ def binding_from_record(record: dict[str, str], strong_rank: float, weak_rank: f
         score_ba=_optional_float(record, "Score_BA"),
         rank_ba=_optional_float(record, "%Rank_BA"),
         affinity_nm=_optional_float(record, "Aff(nM)"),
+        score_pathogen=_optional_float(record, "Score_Pathogen"),
+        rank_pathogen=_optional_float(record, "%Rank_Pathogen"),
+        score_neo=_optional_float(record, "Score_Neo"),
+        rank_neo=_optional_float(record, "%Rank_Neo"),
     )
 
 
 def summarize(bindings: list[NetMHCpanBinding], weak_rank: float) -> dict[str, float | int]:
     """Build the shared summary metric values for one item's predictions.
 
-    The two binding-affinity metrics are included only when the predictions carry BA
-    values, which happens when ``include_binding_affinity`` was set. Omitting the keys
-    entirely leaves those metrics genuinely absent rather than reported as zero.
+    The binding-affinity, pathogen and neoepitope metrics are included only when the
+    predictions carry the matching values, which happens when the corresponding config flag
+    was set. Omitting the keys entirely leaves those metrics genuinely absent rather than
+    reported as zero.
 
     Args:
         bindings (list[NetMHCpanBinding]): Every peptide-allele prediction for one item.
@@ -412,6 +452,12 @@ def summarize(bindings: list[NetMHCpanBinding], weak_rank: float) -> dict[str, f
     affinities = [binding.affinity_nm for binding in bindings if binding.affinity_nm is not None]
     if affinities:
         metrics["best_affinity_nm"] = min(affinities)
+    ranks_pathogen = [binding.rank_pathogen for binding in bindings if binding.rank_pathogen is not None]
+    if ranks_pathogen:
+        metrics["best_rank_pathogen"] = min(ranks_pathogen)
+    ranks_neo = [binding.rank_neo for binding in bindings if binding.rank_neo is not None]
+    if ranks_neo:
+        metrics["best_rank_neo"] = min(ranks_neo)
     return metrics
 
 
@@ -424,6 +470,10 @@ class NetMHCpanConfig(BaseConfig):
             the netMHCpan default allele.
         include_binding_affinity (bool): Also predict binding affinity (``-BA``), adding
             BA score, BA %rank and nM affinity alongside the eluted-ligand columns.
+        include_pathogen (bool): Also report the pathogen-epitope head (``-pathogen``),
+            fine-tuned on IEDB epitopes.
+        include_neoepitope (bool): Also report the neoepitope head (``-neo``), fine-tuned
+            on CEDAR neoepitopes.
         strong_rank (float): %rank at or below which a peptide is a strong binder.
         weak_rank (float): %rank at or below which a peptide is a weak binder.
         netmhcpan_dir (str | None): Path to a local netMHCpan install root.
@@ -438,6 +488,16 @@ class NetMHCpanConfig(BaseConfig):
         default=False,
         title="Include Binding Affinity",
         description="Also predict affinity (-BA): adds BA score, BA %rank and nM affinity.",
+    )
+    include_pathogen: bool = ConfigField(
+        default=False,
+        title="Include Pathogen Epitope",
+        description="Also report the IEDB-finetuned pathogen head (-pathogen): score and %rank.",
+    )
+    include_neoepitope: bool = ConfigField(
+        default=False,
+        title="Include Neoepitope",
+        description="Also report the CEDAR-finetuned neoepitope head (-neo): score and %rank.",
     )
     strong_rank: float = ConfigField(
         default=0.5,
