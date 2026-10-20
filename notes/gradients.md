@@ -78,12 +78,9 @@ With `temperature=None`, active rows must sum to 1 and have zero probability in 
 
 ## Backend behavior
 
-Backends share the same temperature and gradient-coordinate contract, and relax a discrete sequence the same way:
+Every gradient tool relaxes its input the same way, through the shared `soft` and `hard` controls of `RelaxationConfig`. The defaults are `soft=1.0` and `hard=0.0`, a plain `softmax(logits / temperature)`; `hard=1.0` is the straight-through estimator, and `soft` below 1.0 blends the raw input matrix in. `notes/gradient-relaxation.md` is the reference for the formula, the implementations behind it, and the numerical checks.
 
-- **Every torch backend** — ESM2, AbLang, CodonFM, Minerva, GLM2, ESMFold, Parade, and Malinois — calls `standalone_helpers.relaxation.relaxed_sequence`. **ProteinMPNN** runs in a JAX environment with no torch, so it calls `relaxed_sequence_jax`, the twin of the same formula.
-- **AlphaFold2** performs the same blend inside ColabDesign, which is where the convention comes from: `soft=0` selects the raw input matrix and `hard=1.0` is the straight-through estimator.
-
-Shared relaxation helpers handle the standard softmax and straight-through operations. Backends also map Proto's public vocabulary order to their own native token order; those native orders remain defined with each toolkit rather than assumed to be identical across models.
+Backends also map Proto's public vocabulary order to their own native token order; those native orders remain defined with each toolkit rather than assumed to be identical across models.
 
 AlphaFold2 performs its relaxation inside ColabDesign. In probability mode, the backend arranges for the supplied distribution to pass through unchanged. Options that would have no effect in that mode—including `soft`, `hard`, `excluded_amino_acids`, and `bias_redesign`—are rejected instead of silently ignored.
 

@@ -383,16 +383,29 @@ def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-def test_proteinmpnn_gradient_end_to_end():
-    """ProteinMPNN gradient returns finite non-zero gradients for a small backbone."""
+@pytest.mark.parametrize(
+    ("soft", "hard"),
+    [(1.0, 0.0), (1.0, 1.0), (0.0, 0.0), (0.5, 0.5)],
+    ids=["default", "straight_through", "raw_input", "blended"],
+)
+def test_proteinmpnn_gradient_end_to_end(soft: float, hard: float):
+    """ProteinMPNN gradient returns finite non-zero gradients at every relaxation setting.
+
+    The raw-input and intermediate blends are covered because they must be functional, not
+    because they are recommended: feeding unnormalized values to the model is outside its
+    training distribution.
+    """
+    # Non-uniform, so argmax has no ties and the raw-input branch is not an all-zero state.
+    logits = np.random.default_rng(0).normal(size=(5, 20)).tolist()
+
     result = run_proteinmpnn_gradient(
         ProteinMPNNGradientInput(
-            logits=[[0.0] * 20] * 5,
+            logits=logits,
             structure=_small_structure(),
             chains_to_redesign=["A"],
             temperature=0.7,
         ),
-        ProteinMPNNGradientConfig(seed=42),
+        ProteinMPNNGradientConfig(seed=42, soft=soft, hard=hard),
     )
 
     validate_output(result)
