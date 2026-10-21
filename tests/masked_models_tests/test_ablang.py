@@ -117,7 +117,6 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["items"] == [
         {"logits": heavy + light, "chain_break_position": len(heavy), "model_choice": "ablang2-paired"}
     ]
-    assert [item["model_choice"] for item in captured["payload"]["items"]] == ["ablang2-paired"]
     assert captured["payload"]["temperature"] == 1.0  # shared default
     assert captured["payload"]["soft"] == 1.0
     assert captured["payload"]["hard"] == 0.0
@@ -129,7 +128,6 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["items"] == [
         {"logits": heavy, "chain_break_position": None, "model_choice": "ablang1-heavy"}
     ]
-    assert [item["model_choice"] for item in captured["payload"]["items"]] == ["ablang1-heavy"]
     assert captured["payload"]["temperature"] == 0.6
 
     # Light only
@@ -137,7 +135,6 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["items"] == [
         {"logits": light, "chain_break_position": None, "model_choice": "ablang1-light"}
     ]
-    assert [item["model_choice"] for item in captured["payload"]["items"]] == ["ablang1-light"]
 
 
 def test_ablang_forward_mode_dispatch_contract(monkeypatch):
