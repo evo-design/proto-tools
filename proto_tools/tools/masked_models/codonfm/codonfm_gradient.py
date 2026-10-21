@@ -137,7 +137,6 @@ def example_input() -> CodonFMGradientInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
-    stochastic=True,
     iterable_input_fields=["inputs"],
     iterable_output_field="results",
     max_chunk_size=8,
