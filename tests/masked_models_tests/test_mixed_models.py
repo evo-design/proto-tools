@@ -23,7 +23,7 @@ from proto_tools.tools.masked_models.mixed_data_models import (
 )
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.transforms.masking import MaskingStrategy
-from proto_tools.utils import ToolInstance
+from proto_tools.utils import GradientResult, ToolInstance
 from proto_tools.utils.interaction_models import SequenceInteractionsOutput
 
 _LOCUS = "+MA+ac-X"
@@ -318,11 +318,14 @@ def test_mixed_dispatch_decompresses_nested_matrices(monkeypatch):
 
 
 def test_mixed_gradient_export_preserves_values(tmp_path):
-    output = MixedGradientOutput(gradient=[[0.0] * 24] * len(_TOKENS), loss=1.0, vocab=MIXED_VOCAB)
+    output = MixedGradientOutput(
+        results=[GradientResult(gradient=[[0.0] * 24] * len(_TOKENS), loss=1.0)], vocab=MIXED_VOCAB
+    )
     output._export_output(tmp_path / "gradient.v1", "json")
     restored = MixedGradientOutput.model_validate_json((tmp_path / "gradient.v1.json").read_text())
-    for field in ("gradient", "loss", "metrics", "vocab"):
-        assert getattr(restored, field) == getattr(output, field)
+    assert restored.vocab == output.vocab
+    for field in ("gradient", "loss", "metrics"):
+        assert getattr(restored.results[0], field) == getattr(output.results[0], field)
 
 
 # ── Numerical runtime checks with a tiny differentiable model ────────────────

@@ -585,8 +585,10 @@ def test_parade_gradient_output_accepts_empty_metrics() -> None:
     """A valid forward-only/empty metrics payload does not recurse during output validation."""
     from proto_tools.tools.sequence_scoring.parade import ParadeGradientOutput
 
-    output = ParadeGradientOutput(gradient=None, loss=0.0, metrics={}, vocab=["A", "C", "G", "T"])
-    assert output.sample_metrics == []
+    output = ParadeGradientOutput.from_batch(
+        {"gradient": None, "loss": 0.0, "metrics": {}, "vocab": ["A", "C", "G", "T"]}
+    )
+    assert output.results == []
     output.model_dump()
 
 
@@ -686,11 +688,11 @@ def test_parade_gradient_run_dispatches_loss_terms(monkeypatch) -> None:
     assert payload["checkpoint_url"].endswith("model-utr5-deltas-epoch%3D9-step%3D840.ckpt")
     assert payload["loss_terms"][0]["cell_type"] == "c2"
     assert payload["loss_terms"][1]["direction"] == "min"
-    assert result.gradient is not None
-    assert len(result.gradient[0]) == 50
-    assert len(result.sample_metrics) == 1
-    assert result.sample_metrics[0]["loss"] == 0.25
-    assert result.sample_metrics[0]["c2"] == 2.5
+    assert result.results[0].gradient is not None
+    assert len(result.results) == 1
+    assert len(result.results[0].gradient) == 50
+    assert result.results[0].loss == 0.25
+    assert result.results[0].metrics["c2"] == 2.5
     assert result.vocab == ["A", "C", "G", "T"]
     assert_metrics_in_spec(result)
 
@@ -751,9 +753,9 @@ def test_parade_gradient_probability_mode_matches_logit_mode() -> None:
         ParadeGradientInput(logits=[_softmax_rows(logits)], temperature=None), config
     )
 
-    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=1e-5)
-    assert probability_mode.gradient is not None
-    assert all(math.isfinite(v) for matrix in probability_mode.gradient for row in matrix for v in row)
+    assert probability_mode.results[0].loss == pytest.approx(logit_mode.results[0].loss, rel=1e-5)
+    assert probability_mode.results[0].gradient is not None
+    assert all(math.isfinite(v) for row in probability_mode.results[0].gradient for v in row)
 
 
 @pytest.mark.uses_gpu
@@ -781,10 +783,10 @@ def test_parade_gradient_real_gpu_utr3() -> None:
         ),
     )
 
-    assert result.gradient is not None
-    assert len(result.gradient[0]) == 240
-    assert math.isfinite(result.loss)
-    assert math.isfinite(result.sample_metrics[0]["c13"])
+    assert result.results[0].gradient is not None
+    assert len(result.results[0].gradient) == 240
+    assert math.isfinite(result.results[0].loss)
+    assert math.isfinite(result.results[0].metrics["c13"])
 
 
 @pytest.mark.uses_gpu
@@ -833,12 +835,11 @@ def test_parade_gradient_real_gpu() -> None:
         ),
     )
 
-    assert result.gradient is not None
-    assert len(result.gradient) == 2
-    assert all(len(matrix) == 50 for matrix in result.gradient)
-    assert any(value != 0.0 for matrix in result.gradient for row in matrix for value in row)
-    assert math.isfinite(result.loss)
-    assert len(result.sample_metrics) == 2
+    assert result.results[0].gradient is not None
+    assert len(result.results) == 2
+    assert all(len(item.gradient) == 50 for item in result.results)
+    assert any(value != 0.0 for item in result.results for row in item.gradient for value in row)
+    assert all(math.isfinite(item.loss) for item in result.results)
 
 
 @pytest.mark.uses_gpu
@@ -882,8 +883,8 @@ def test_parade_one_hot_relaxed_input_matches_discrete_activity() -> None:
     )
 
     expected = discrete.results[0].scores["c2"]
-    assert relaxed.sample_metrics[0]["c2"] == pytest.approx(expected, rel=1e-4, abs=1e-4), (
-        f"relaxed one-hot activity {relaxed.sample_metrics[0]['c2']} != discrete {expected}"
+    assert relaxed.results[0].metrics["c2"] == pytest.approx(expected, rel=1e-4, abs=1e-4), (
+        f"relaxed one-hot activity {relaxed.results[0].metrics['c2']} != discrete {expected}"
     )
 
 

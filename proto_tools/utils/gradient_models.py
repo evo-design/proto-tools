@@ -6,11 +6,11 @@ Shared input and output contracts for relaxed-sequence gradient tools.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 from typing_extensions import Self
 
 from proto_tools.utils.base_config import BaseConfig, ConfigField
@@ -245,40 +245,95 @@ class BatchedNucleotideGradientInput(GradientInput):
         return self
 
 
-class GradientOutput(BaseToolOutput):
-    """Gradient of a backend objective with respect to the relaxed sequence state.
+class GradientResult(BaseModel):
+    """One evaluated item: its gradient, its objective, and its own metrics.
 
-    The gradient shares the input's shape and column order. Its coordinate space follows the
-    input's ``temperature``: logit-space for a positive float, probability-space for ``None``.
+    Everything a gradient tool produces per item lives here, so a batch split across workers
+    reassembles into exactly one of these per input. Only the vocabulary stays at the top level,
+    because the alphabet is a property of the tool rather than of an item.
 
     Attributes:
-        gradient (GradientValue): Gradient tensor matching the input logits
-            shape, or ``None`` when a tool runs in forward-only mode.
-        loss (float): Backend-local scalar objective value.
-        metrics (dict[str, Any]): Auxiliary metrics reported alongside the
-            scalar objective.
-        vocab (list[str]): Column ordering for both the input logits and the
-            returned gradient.
+        gradient (GradientValue): Gradient for this item, matching its input shape and column
+            order, or ``None`` when the tool runs in forward-only mode.
+        loss (float): This item's own objective value; no batch mean or total.
+        metrics (dict[str, Any]): Metrics for this item alone.
     """
 
     gradient: GradientValue = Field(
         default=None,
         title="Gradient",
-        description="Gradient of the loss with respect to the input logits; matches input shape and column order",
+        description="Gradient of this item's loss w.r.t. its input logits; matches its shape and column order",
     )
     loss: float = Field(
         title="Loss",
-        description="Scalar objective for this sequence; lower is better (typically a positive negative log-likelihood)",
+        description="This item's objective; lower is better (typically a positive negative log-likelihood)",
     )
     metrics: dict[str, Any] = Field(
         default_factory=dict,
         title="Auxiliary Metrics",
-        description="Auxiliary metrics reported alongside the scalar objective value.",
+        description="Metrics reported for this item alongside its objective value.",
+    )
+
+
+class GradientOutput(BaseToolOutput):
+    """Gradients of a backend objective with respect to one or more relaxed sequence states.
+
+    Each gradient shares its item's shape and column order. The coordinate space follows the
+    input's ``temperature``: logit-space for a positive float, probability-space for ``None``.
+
+    ``results`` holds one entry per input item, in the order the items were supplied, however the
+    batch was split across devices or remote chunks.
+
+    Attributes:
+        results (list[GradientResult]): One result per input item, in input order.
+        vocab (list[str]): Column ordering for both the input logits and the returned gradients.
+    """
+
+    results: list[GradientResult] = Field(
+        title="Results",
+        description="One result per input item, in input order, each carrying its own gradient, loss and metrics",
     )
     vocab: list[str] = Field(
         title="Vocabulary",
         description="Symbols defining the column ordering for both the input logits and the returned gradient.",
     )
+
+    @classmethod
+    def result_type(cls) -> type[GradientResult]:
+        """Return the per-item result model this output declares.
+
+        Returns:
+            type[GradientResult]: Element type of ``results``.
+
+        Raises:
+            TypeError: If ``results`` does not declare a ``GradientResult`` element.
+        """
+        annotation = cls.model_fields["results"].annotation
+        (element,) = get_args(annotation) or (None,)
+        if isinstance(element, type) and issubclass(element, GradientResult):
+            return element
+        raise TypeError(f"{cls.__name__}.results does not declare a GradientResult element")
+
+    @classmethod
+    def from_single(cls, payload: Mapping[str, Any], *, result_fields: Sequence[str] = ()) -> Self:
+        """Build a one-item output from a worker payload shaped for a single evaluation.
+
+        A backend that still evaluates one item per dispatch returns ``gradient``/``loss``/
+        ``metrics`` at the top level; this lifts them into a single ``results`` entry and leaves
+        the rest of the payload as call-level fields.
+
+        Args:
+            payload (Mapping[str, Any]): Worker payload for one evaluated item.
+            result_fields (Sequence[str]): Extra per-item keys to move into the result, such as
+                ``"structure"`` for a tool that predicts one.
+
+        Returns:
+            Self: Output holding exactly one result.
+        """
+        per_item = (*("gradient", "loss", "metrics"), *result_fields)
+        item = {key: payload[key] for key in per_item if key in payload}
+        call_level = {key: value for key, value in payload.items() if key not in item}
+        return cls(results=[cls.result_type()(**item)], **call_level)
 
     @property
     def output_format_options(self) -> list[str]:
@@ -297,7 +352,7 @@ class GradientOutput(BaseToolOutput):
         # Suffix-additive so dotted names (e.g. "step_v1.5") aren't truncated.
         base = Path(export_path)
         json_path = base.parent / f"{base.name}.json"
-        payload = self.model_dump(include={"gradient", "loss", "metrics", "vocab"})
+        payload = self.model_dump(include={"results", "vocab"})
         json_path.write_text(json.dumps(payload, indent=2))
 
 
@@ -306,6 +361,7 @@ __all__ = [
     "RelaxationConfig",
     "GradientInput",
     "GradientOutput",
+    "GradientResult",
     "GradientValue",
     "ProteinGradientInput",
 ]

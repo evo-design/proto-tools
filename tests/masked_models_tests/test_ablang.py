@@ -161,9 +161,9 @@ def test_ablang_forward_mode_dispatch_contract(monkeypatch):
     )
 
     assert captured["payload"]["compute_gradient"] is False
-    assert result.gradient is None
-    assert result.loss == 0.5
-    assert result.metrics["avg_log_likelihood"] == -0.5
+    assert result.results[0].gradient is None
+    assert result.results[0].loss == 0.5
+    assert result.results[0].metrics["avg_log_likelihood"] == -0.5
 
 
 # ── Gradient dispatch tests (subprocess venv, GPU-only) ──────────────────────
@@ -198,16 +198,18 @@ def test_compute_gradient_dispatch(paired: bool) -> None:
     )
     validate_output(result)
 
-    assert result.gradient is not None
-    assert len(result.gradient) == expected_len
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert result.loss > 0
-    assert math.isfinite(result.loss)
-    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
-    assert result.metrics["log_likelihood"] == pytest.approx(-result.loss * expected_len, rel=1e-6)
-    assert result.metrics["perplexity"] == pytest.approx(math.exp(result.loss), rel=1e-6)
-    assert result.metrics["sequence_length"] == expected_len
+    assert result.results[0].gradient is not None
+    assert len(result.results[0].gradient) == expected_len
+    assert all(len(row) == 20 for row in result.results[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].gradient for v in row)
+    assert result.results[0].loss > 0
+    assert math.isfinite(result.results[0].loss)
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-result.results[0].loss, rel=1e-6)
+    assert result.results[0].metrics["log_likelihood"] == pytest.approx(
+        -result.results[0].loss * expected_len, rel=1e-6
+    )
+    assert result.results[0].metrics["perplexity"] == pytest.approx(math.exp(result.results[0].loss), rel=1e-6)
+    assert result.results[0].metrics["sequence_length"] == expected_len
     assert result.vocab == _CANONICAL_VOCAB
 
 
@@ -338,7 +340,7 @@ def test_ablang_score_and_gradient_agree_on_pll():
         AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=one_hot), temperature=0.6),
         AbLangGradientConfig(hard=1.0, compute_gradient=False),
     )
-    grad_pll = grad_result.metrics["avg_log_likelihood"]
+    grad_pll = grad_result.results[0].metrics["avg_log_likelihood"]
 
     assert score_pll == pytest.approx(grad_pll, rel=1e-3)
 
@@ -566,16 +568,16 @@ def test_ablang_gradient_single_chain():
     validate_output(result)
 
     assert result.tool_id == "ablang-gradient"
-    assert len(result.gradient) == seq_len
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert any(v != 0.0 for row in result.gradient for v in row)
-    assert math.isfinite(result.loss) and result.loss > 0
+    assert len(result.results[0].gradient) == seq_len
+    assert all(len(row) == 20 for row in result.results[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].gradient for v in row)
+    assert any(v != 0.0 for row in result.results[0].gradient for v in row)
+    assert math.isfinite(result.results[0].loss) and result.results[0].loss > 0
     assert result.vocab == _CANONICAL_VOCAB
-    assert result.metrics["sequence_length"] == seq_len
-    assert result.metrics["model_choice"] == "ablang1-heavy"
-    assert result.metrics["objective"] == "masked_pll"
-    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
+    assert result.results[0].metrics["sequence_length"] == seq_len
+    assert result.results[0].metrics["model_choice"] == "ablang1-heavy"
+    assert result.results[0].metrics["objective"] == "masked_pll"
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-result.results[0].loss, rel=1e-6)
 
 
 @pytest.mark.uses_gpu
@@ -593,14 +595,14 @@ def test_ablang_gradient_paired_chains():
     validate_output(result)
 
     assert result.tool_id == "ablang-gradient"
-    assert len(result.gradient) == heavy_len + light_len
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert any(v != 0.0 for row in result.gradient for v in row)
+    assert len(result.results[0].gradient) == heavy_len + light_len
+    assert all(len(row) == 20 for row in result.results[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].gradient for v in row)
+    assert any(v != 0.0 for row in result.results[0].gradient for v in row)
     assert result.vocab == _CANONICAL_VOCAB
-    assert result.metrics["sequence_length"] == heavy_len + light_len
-    assert result.metrics["model_choice"] == "ablang2-paired"
-    assert result.metrics["objective"] == "masked_pll"
+    assert result.results[0].metrics["sequence_length"] == heavy_len + light_len
+    assert result.results[0].metrics["model_choice"] == "ablang2-paired"
+    assert result.results[0].metrics["objective"] == "masked_pll"
 
 
 @pytest.mark.uses_gpu
@@ -621,11 +623,13 @@ def test_ablang_gradient_forward_mode_matches_backward_loss():
     validate_output(backward)
     validate_output(forward)
 
-    assert backward.gradient is not None
-    assert forward.gradient is None
-    assert forward.loss == pytest.approx(backward.loss, rel=1e-5)
-    assert forward.metrics["log_likelihood"] == pytest.approx(backward.metrics["log_likelihood"], rel=1e-5)
-    assert forward.metrics["sequence_length"] == backward.metrics["sequence_length"]
+    assert backward.results[0].gradient is not None
+    assert forward.results[0].gradient is None
+    assert forward.results[0].loss == pytest.approx(backward.results[0].loss, rel=1e-5)
+    assert forward.results[0].metrics["log_likelihood"] == pytest.approx(
+        backward.results[0].metrics["log_likelihood"], rel=1e-5
+    )
+    assert forward.results[0].metrics["sequence_length"] == backward.results[0].metrics["sequence_length"]
 
 
 @pytest.mark.uses_gpu
@@ -640,14 +644,16 @@ def test_ablang_gradient_descent_reduces_loss():
     )
 
     lr = 10.0
-    stepped_logits = [[initial_logits[i][j] - lr * result_0.gradient[i][j] for j in range(20)] for i in range(seq_len)]
+    stepped_logits = [
+        [initial_logits[i][j] - lr * result_0.results[0].gradient[i][j] for j in range(20)] for i in range(seq_len)
+    ]
 
     result_1 = run_ablang_gradient(
         AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=stepped_logits), temperature=0.7),
         AbLangGradientConfig(seed=42),
     )
 
-    assert result_1.loss < result_0.loss
+    assert result_1.results[0].loss < result_0.results[0].loss
 
 
 @pytest.mark.uses_gpu
@@ -666,8 +672,8 @@ def test_ablang_gradient_batch_size_equivalence(batch_size: int) -> None:
         AbLangGradientConfig(seed=42, batch_size=batch_size),
     )
 
-    assert result.loss == pytest.approx(ref.loss, rel=1e-4, abs=1e-6)
-    for row_r, row_ref in zip(result.gradient, ref.gradient, strict=True):
+    assert result.results[0].loss == pytest.approx(ref.results[0].loss, rel=1e-4, abs=1e-6)
+    for row_r, row_ref in zip(result.results[0].gradient, ref.results[0].gradient, strict=True):
         for v_r, v_ref in zip(row_r, row_ref, strict=True):
             assert v_r == pytest.approx(v_ref, rel=1e-4, abs=1e-6)
 

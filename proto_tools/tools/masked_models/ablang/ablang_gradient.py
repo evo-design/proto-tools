@@ -188,4 +188,4 @@ def run_ablang_gradient(
         instance=instance,
         config=config,
     )
-    return AbLangGradientOutput(**result)
+    return AbLangGradientOutput.from_single(result)

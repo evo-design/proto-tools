@@ -67,4 +67,4 @@ def run_minerva_gradient(
         MinervaGradientOutput: Token-aligned gradient output.
     """
     logger.debug("Using local worker for Minerva gradient: %s", config.model_checkpoint)
-    return MinervaGradientOutput(**dispatch_masked_model("minerva", "gradient", inputs, config, instance))
+    return MinervaGradientOutput.from_single(dispatch_masked_model("minerva", "gradient", inputs, config, instance))

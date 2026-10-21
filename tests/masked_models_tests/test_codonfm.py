@@ -328,7 +328,7 @@ def test_codonfm_gradient_dispatch_contract(monkeypatch) -> None:
     assert captured["payload"]["compute_gradient"] is True
     assert captured["payload"]["batch_size"] == 2
     assert captured["payload"]["device"] == "cpu"
-    assert result.gradient is not None and len(result.gradient) == 3
+    assert result.results[0].gradient is not None and len(result.results[0].gradient) == 3
     assert result.vocab == CODONFM_CODON_VOCAB
 
 
@@ -356,9 +356,9 @@ def test_codonfm_gradient_forward_mode_dispatch_contract(monkeypatch) -> None:
     )
 
     assert captured["payload"]["compute_gradient"] is False
-    assert result.gradient is None
-    assert result.loss == 0.5
-    assert result.metrics["avg_log_likelihood"] == -0.5
+    assert result.results[0].gradient is None
+    assert result.results[0].loss == 0.5
+    assert result.results[0].metrics["avg_log_likelihood"] == -0.5
 
 
 def test_codonfm_sample_dispatch_contract(monkeypatch) -> None:
@@ -560,9 +560,11 @@ def test_codonfm_gradient_probability_mode_matches_logit_mode() -> None:
     logit_mode = run_codonfm_gradient(CodonFMGradientInput(logits=logits, temperature=1.0), config)
     probability_mode = run_codonfm_gradient(CodonFMGradientInput(logits=probabilities, temperature=None), config)
 
-    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=1e-5)
-    assert logit_mode.gradient is not None and probability_mode.gradient is not None
-    for probs, g_prob, g_logit in zip(probabilities, probability_mode.gradient, logit_mode.gradient, strict=True):
+    assert probability_mode.results[0].loss == pytest.approx(logit_mode.results[0].loss, rel=1e-5)
+    assert logit_mode.results[0].gradient is not None and probability_mode.results[0].gradient is not None
+    for probs, g_prob, g_logit in zip(
+        probabilities, probability_mode.results[0].gradient, logit_mode.results[0].gradient, strict=True
+    ):
         weighted = sum(p * g for p, g in zip(probs, g_prob, strict=True))
         expected = [p * (g - weighted) for p, g in zip(probs, g_prob, strict=True)]
         assert g_logit == pytest.approx(expected, rel=1e-3, abs=1e-6)
@@ -580,13 +582,13 @@ def test_codonfm_gradient_real_gpu() -> None:
     )
     validate_output(result)
     assert result.tool_id == "codonfm-gradient"
-    assert result.gradient is not None
-    assert len(result.gradient) == len(_CDS) // 3
-    assert all(len(row) == 64 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert any(v != 0.0 for row in result.gradient for v in row)
-    assert result.loss > 0
-    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
+    assert result.results[0].gradient is not None
+    assert len(result.results[0].gradient) == len(_CDS) // 3
+    assert all(len(row) == 64 for row in result.results[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].gradient for v in row)
+    assert any(v != 0.0 for row in result.results[0].gradient for v in row)
+    assert result.results[0].loss > 0
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-result.results[0].loss, rel=1e-6)
     assert result.vocab == CODONFM_CODON_VOCAB
 
 
@@ -686,8 +688,8 @@ def test_codonfm_gradient_forward_mode_matches_backward_loss() -> None:
             model_checkpoint="encodon_80m", batch_size=4, seed=42, compute_gradient=False, device="cuda"
         ),
     )
-    assert backward.gradient is not None and forward.gradient is None
-    assert forward.loss == pytest.approx(backward.loss, rel=1e-6)
+    assert backward.results[0].gradient is not None and forward.results[0].gradient is None
+    assert forward.results[0].loss == pytest.approx(backward.results[0].loss, rel=1e-6)
 
 
 @pytest.mark.benchmark("codonfm-fitness")

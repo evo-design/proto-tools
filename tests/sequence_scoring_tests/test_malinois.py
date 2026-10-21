@@ -142,12 +142,11 @@ def test_malinois_gradient_dispatches_loss_terms(monkeypatch) -> None:
     assert payload["loss_terms"][0]["direction"] == "max"
     assert payload["loss_terms"][0]["weight"] == 2.0
     assert payload["loss_terms"][1]["direction"] == "min"
-    assert result.gradient is not None
-    assert len(result.gradient) == 1
-    assert len(result.gradient[0]) == 200
-    assert len(result.sample_metrics) == 1
-    assert result.sample_metrics[0]["loss"] == 0.25
-    assert result.sample_metrics[0]["K562"] == 5.0
+    assert result.results[0].gradient is not None
+    assert len(result.results) == 1
+    assert len(result.results[0].gradient) == 200
+    assert result.results[0].loss == 0.25
+    assert result.results[0].metrics["K562"] == 5.0
     assert_metrics_in_spec(result)
     assert result.vocab == ["A", "C", "G", "T"]
 
@@ -192,9 +191,9 @@ def test_malinois_gradient_probability_mode_matches_logit_mode() -> None:
         MalinoisGradientInput(logits=[_softmax_rows(logits)], temperature=None), config
     )
 
-    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=1e-5)
-    assert probability_mode.gradient is not None
-    assert all(math.isfinite(v) for matrix in probability_mode.gradient for row in matrix for v in row)
+    assert probability_mode.results[0].loss == pytest.approx(logit_mode.results[0].loss, rel=1e-5)
+    assert probability_mode.results[0].gradient is not None
+    assert all(math.isfinite(v) for row in probability_mode.results[0].gradient for v in row)
 
 
 @pytest.mark.uses_gpu
@@ -245,20 +244,16 @@ def test_malinois_real_gpu_gradient() -> None:
         ),
     )
 
-    assert result.gradient is not None
-    assert len(result.gradient) == 2
-    assert all(len(matrix) == 200 for matrix in result.gradient)
-    assert all(len(row) == 4 for matrix in result.gradient for row in matrix)
-    assert all(math.isfinite(value) for matrix in result.gradient for row in matrix for value in row)
-    assert any(value != 0.0 for matrix in result.gradient for row in matrix for value in row)
-    assert math.isfinite(result.loss)
-    assert len(result.sample_metrics) == 2
-    assert all(math.isfinite(sample["loss"]) for sample in result.sample_metrics)
-    assert all(set(sample) == {"loss", "K562", "HepG2", "SKNSH"} for sample in result.sample_metrics)
-    assert len(result.metrics["losses"]) == 2
-    assert len(result.metrics["raw_scores"]) == 2
-    assert all(set(raw_scores) == {"K562", "HepG2", "SKNSH"} for raw_scores in result.metrics["raw_scores"])
-    for term_metrics in result.metrics["loss_terms"]:
+    assert result.results[0].gradient is not None
+    assert len(result.results) == 2
+    assert all(len(item.gradient) == 200 for item in result.results)
+    assert all(len(row) == 4 for item in result.results for row in item.gradient)
+    assert all(math.isfinite(value) for item in result.results for row in item.gradient for value in row)
+    assert any(value != 0.0 for item in result.results for row in item.gradient for value in row)
+    assert all(math.isfinite(item.loss) for item in result.results)
+    assert all({"K562", "HepG2", "SKNSH"} <= set(item.metrics) for item in result.results)
+    for item in result.results:
+        term_metrics = item.metrics["loss_terms"]
         assert [(term["cell_type"], term["direction"]) for term in term_metrics] == [
             ("K562", "max"),
             ("HepG2", "min"),
@@ -307,8 +302,8 @@ def test_malinois_one_hot_relaxed_input_matches_discrete_scores() -> None:
     )
 
     expected = discrete.results[0].scores["K562"]
-    assert relaxed.sample_metrics[0]["K562"] == pytest.approx(expected, rel=1e-4, abs=1e-4), (
-        f"relaxed one-hot score {relaxed.sample_metrics[0]['K562']} != discrete {expected}"
+    assert relaxed.results[0].metrics["K562"] == pytest.approx(expected, rel=1e-4, abs=1e-4), (
+        f"relaxed one-hot score {relaxed.results[0].metrics['K562']} != discrete {expected}"
     )
 
 
@@ -347,14 +342,15 @@ def test_malinois_real_gpu_batched_gradient_matches_batch_size_one_calls() -> No
             for logits in logits_batch
         ]
 
-    assert batched.gradient is not None
-    assert len(batched.gradient) == 2
+    assert batched.results[0].gradient is not None
+    assert len(batched.results) == 2
     for idx, single in enumerate(singles):
         assert single.gradient is not None
-        assert batched.sample_metrics[idx]["loss"] == pytest.approx(single.sample_metrics[0]["loss"], abs=1e-6)
-        assert batched.metrics["losses"][idx] == pytest.approx(single.metrics["losses"][0], abs=1e-6)
-        assert batched.metrics["raw_scores"][idx] == pytest.approx(single.metrics["raw_scores"][0], abs=1e-6)
-        np.testing.assert_allclose(np.asarray(batched.gradient[idx]), np.asarray(single.gradient[0]), atol=1e-6)
+        assert batched.results[idx].loss == pytest.approx(single.results[0].loss, abs=1e-6)
+        assert batched.results[idx].metrics["K562"] == pytest.approx(single.results[0].metrics["K562"], abs=1e-6)
+        np.testing.assert_allclose(
+            np.asarray(batched.results[idx].gradient), np.asarray(single.results[0].gradient), atol=1e-6
+        )
 
 
 @pytest.mark.benchmark("malinois-score")
@@ -433,6 +429,6 @@ def test_malinois_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     assert len(result.gradient) == 256
     assert all(len(matrix) == 200 for matrix in result.gradient)
     assert all(len(row) == 4 for matrix in result.gradient for row in matrix)
-    assert len(result.sample_metrics) == 256
-    assert all(set(sample) == {"loss", "K562", "HepG2", "SKNSH"} for sample in result.sample_metrics)
+    assert len(result.results) == 256
+    assert all({"K562", "HepG2", "SKNSH"} <= set(item.metrics) for item in result.results)
     assert result.vocab == ["A", "C", "G", "T"]

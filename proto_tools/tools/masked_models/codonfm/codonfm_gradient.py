@@ -182,4 +182,4 @@ def run_codonfm_gradient(
         raise ValueError("CodonFM returned a gradient when compute_gradient=False")
     result["loss"] = loss
     result["metadata"] = {"model_checkpoint": config.model_checkpoint}
-    return CodonFMGradientOutput(**result)
+    return CodonFMGradientOutput.from_single(result)

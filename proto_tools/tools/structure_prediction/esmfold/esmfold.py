@@ -28,6 +28,7 @@ from proto_tools.tools.structure_prediction.esmfold.helpers import (
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     Complex,
+    StructureGradientResult,
     StructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
@@ -386,32 +387,29 @@ class ESMFoldGradientOutput(GradientOutput):
     """Differentiable ESMFold confidence output.
 
     Attributes:
-        gradient (list[list[float]] | None): Gradient matrix matching the input logits shape.
-        loss (float): Scalar weighted confidence objective value.
-        metrics (dict[str, Any]): Confidence metrics and per-term unweighted losses.
+        results (list[StructureGradientResult]): One per input item, each carrying that item's
+            gradient, weighted confidence objective, confidence metrics, and folded structure.
         vocab (list[str]): Amino-acid column ordering for logits and gradient.
-        structure (Structure): Predicted ESMFold complex structure.
     """
 
-    gradient: list[list[float]] | None = Field(
-        default=None,
-        title="Gradient",
-        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
-    )
-    structure: Structure = Field(
-        title="Predicted Structure",
-        description="Predicted ESMFold complex structure.",
+    results: list[StructureGradientResult] = Field(
+        title="Results",
+        description="One result per input item, in input order, each with its own folded structure",
     )
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Write gradient JSON plus a PDB sidecar."""
+        """Write one PDB sidecar per result alongside the gradient JSON."""
         if file_format != "json":
             raise ValueError(f"Unsupported format: {file_format}")
+        # Suffix-additive so dotted names (e.g. "step_v1.5") aren't truncated.
         base = Path(export_path)
-        pdb_path = base.parent / f"{base.name}.pdb"
         json_path = base.parent / f"{base.name}.json"
-        self.structure.write_pdb(pdb_path)
-        payload = self.model_dump(include={"gradient", "loss", "metrics", "vocab"}) | {"structure_pdb": pdb_path.name}
+        sidecars: list[str] = []
+        for index, result in enumerate(self.results):
+            pdb_path = base.parent / f"{base.name}_{index:04d}.pdb"
+            result.structure.write_pdb(pdb_path)
+            sidecars.append(pdb_path.name)
+        payload = self.model_dump(include={"results", "vocab"}) | {"structure_pdbs": sidecars}
         json_path.write_text(json.dumps(payload, indent=2))
 
 
@@ -672,19 +670,23 @@ def run_esmfold_gradient(
     pdb_output = _relabel_chains(output_data["pdb"], prepared_complex["seq_lengths"])
     metrics = output_data["metrics"]
     return ESMFoldGradientOutput(
-        gradient=output_data["gradient"],
-        loss=output_data["loss"],
-        metrics=metrics,
+        results=[
+            StructureGradientResult(
+                gradient=output_data["gradient"],
+                loss=output_data["loss"],
+                metrics=metrics,
+                structure=Structure(
+                    structure=pdb_output,
+                    b_factor_type=BFactorType.NORMALIZED_PLDDT,
+                    metrics=ESMFoldMetrics(
+                        avg_plddt=metrics["avg_plddt"],
+                        ptm=metrics.get("ptm"),
+                        avg_pae=metrics.get("avg_pae"),
+                        pae=metrics.get("pae"),
+                    ),
+                    source="esmfold-gradient",
+                ),
+            )
+        ],
         vocab=list(PROTEIN_AMINO_ACIDS),
-        structure=Structure(
-            structure=pdb_output,
-            b_factor_type=BFactorType.NORMALIZED_PLDDT,
-            metrics=ESMFoldMetrics(
-                avg_plddt=metrics["avg_plddt"],
-                ptm=metrics.get("ptm"),
-                avg_pae=metrics.get("avg_pae"),
-                pae=metrics.get("pae"),
-            ),
-            source="esmfold-gradient",
-        ),
     )

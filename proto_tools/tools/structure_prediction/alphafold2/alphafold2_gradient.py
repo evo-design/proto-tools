@@ -18,6 +18,7 @@ from typing_extensions import Self
 
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import AlphaFold2Metrics
+from proto_tools.tools.structure_prediction.shared_data_models import StructureGradientResult
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     AminoAcid,
@@ -307,40 +308,35 @@ class AlphaFold2GradientConfig(RelaxationConfig):
 
 
 class AlphaFold2GradientOutput(GradientOutput):
-    """Binder-design output: loss, metrics, Structure, and optionally the gradient.
+    """Binder-design output: one result per item, each with its objective, metrics and structure.
 
     Attributes:
-        gradient (list[list[float]] | None): Gradient matrix matching the input logits shape,
-            or ``None`` when ``compute_gradient=False``.
-        loss (float): Scalar objective value.
-        metrics (dict[str, Any]): Scalar auxiliary metrics (avg_plddt, ptm, iptm, avg_pae,
-            plus per-loss values for every weighted ColabDesign loss term).
-        vocab (list[str]): Amino-acid column ordering.
-        structure (Structure): Predicted target+binder complex from the forward pass.
+        results (list[StructureGradientResult]): One per input item, each carrying that item's
+            gradient, objective, auxiliary metrics (avg_plddt, ptm, iptm, avg_pae, plus per-loss
+            values for every weighted ColabDesign term), and predicted target+binder complex.
             B-factors are at the raw 0-100 PDB scale; ``b_factor_type=PLDDT`` means
             ``Structure.per_residue_plddt`` normalizes them to ``[0, 1]``.
+        vocab (list[str]): Amino-acid column ordering.
     """
 
-    gradient: list[list[float]] | None = Field(
-        default=None,
-        title="Gradient",
-        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
-    )
-    structure: Structure = Field(
-        title="Predicted Structure",
-        description="Predicted target+binder complex with per-residue pLDDT in B-factors.",
+    results: list[StructureGradientResult] = Field(
+        title="Results",
+        description="One result per input item, in input order, each with its own predicted complex",
     )
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Write the gradient bundle as JSON alongside the structure as a PDB sidecar."""
+        """Write one PDB sidecar per result alongside the gradient JSON."""
         if file_format != "json":
             raise ValueError(f"Unsupported format: {file_format}")
         # Suffix-additive so dotted names (e.g. "step_v1.5") aren't truncated.
         base = Path(export_path)
-        pdb_path = base.parent / f"{base.name}.pdb"
         json_path = base.parent / f"{base.name}.json"
-        self.structure.write_pdb(pdb_path)
-        payload = self.model_dump(include={"gradient", "loss", "metrics", "vocab"}) | {"structure_pdb": pdb_path.name}
+        sidecars: list[str] = []
+        for index, result in enumerate(self.results):
+            pdb_path = base.parent / f"{base.name}_{index:04d}.pdb"
+            result.structure.write_pdb(pdb_path)
+            sidecars.append(pdb_path.name)
+        payload = self.model_dump(include={"results", "vocab"}) | {"structure_pdbs": sidecars}
         json_path.write_text(json.dumps(payload, indent=2))
 
 
@@ -471,20 +467,24 @@ def run_alphafold2_gradient(
 
     metrics = result["metrics"]
     return AlphaFold2GradientOutput(
-        gradient=result["gradient"],
-        loss=result["loss"],
-        metrics=metrics,
+        results=[
+            StructureGradientResult(
+                gradient=result["gradient"],
+                loss=result["loss"],
+                metrics=metrics,
+                structure=Structure(
+                    structure=result["pdb"],
+                    b_factor_type=BFactorType.PLDDT,
+                    metrics=AlphaFold2Metrics(
+                        avg_plddt=metrics["avg_plddt"],
+                        ptm=metrics["ptm"],
+                        iptm=metrics.get("iptm"),
+                        avg_pae=metrics["avg_pae"],
+                        pae=metrics.get("pae"),
+                    ),
+                    source="alphafold2-gradient",
+                ),
+            )
+        ],
         vocab=result["vocab"],
-        structure=Structure(
-            structure=result["pdb"],
-            b_factor_type=BFactorType.PLDDT,
-            metrics=AlphaFold2Metrics(
-                avg_plddt=metrics["avg_plddt"],
-                ptm=metrics["ptm"],
-                iptm=metrics.get("iptm"),
-                avg_pae=metrics["avg_pae"],
-                pae=metrics.get("pae"),
-            ),
-            source="alphafold2-gradient",
-        ),
     )

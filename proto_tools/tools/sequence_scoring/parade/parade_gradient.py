@@ -1,10 +1,11 @@
 """Differentiable PARADE UTR activity objectives for gradient-based design."""
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     _CUSTOM_CHECKPOINT_REJECTED,
@@ -22,6 +23,7 @@ from proto_tools.utils import (
     BatchedNucleotideGradientInput,
     ConfigField,
     GradientOutput,
+    GradientResult,
     NucleotideSequenceLogits,
     RelaxationConfig,
     ToolInstance,
@@ -269,38 +271,36 @@ class ParadeGradientOutput(GradientOutput):
     """Differentiable PARADE UTR-activity output.
 
     Attributes:
-        gradient (ParadeGradientValue): Gradient tensor matching input UTR logits, or
-            ``None`` when ``compute_gradient=False``.
-        loss (float): Sum of per-sample weighted scalar objective values. Per-sample
-            values are available in ``sample_metrics``.
-        sample_metrics (list[ParadeGradientSampleMetrics]): Per-sample metric containers
-            with scalar loss and raw per-cell activity.
-        metrics (dict[str, Any]): Auxiliary metadata bundle from the standalone worker,
-            including raw scores, objective-term metadata, and relaxation parameters.
+        results (list[GradientResult]): One per input UTR, in input order, each holding that
+            sample's own gradient, weighted sigmoid objective, and raw per-cell activity.
         vocab (list[str]): DNA column ordering for logits and gradient.
     """
 
-    loss: float = Field(
-        title="Loss",
-        description="Sum of per-sample weighted PARADE sigmoid objective values.",
-    )
-    gradient: ParadeGradientValue = Field(
-        default=None,
-        title="Gradient",
-        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
-    )
-    sample_metrics: list[ParadeGradientSampleMetrics] = Field(
-        default_factory=list,
-        title="Sample Metrics",
-        description="Per-sample PARADE objective metrics.",
-    )
+    @classmethod
+    def from_batch(cls, payload: Mapping[str, Any]) -> "ParadeGradientOutput":
+        """Unbatch one worker payload into per-sample results.
 
-    @model_validator(mode="after")
-    def populate_sample_metrics(self) -> "ParadeGradientOutput":
-        """Populate metric containers from the standalone metrics payload."""
-        if not self.sample_metrics:
-            object.__setattr__(self, "sample_metrics", _build_gradient_sample_metrics(self.metrics))
-        return self
+        The worker evaluates the batch in one vectorized pass and reports a stacked ``(B, L, 4)``
+        gradient with per-sample losses and raw scores, so this splits them back into one result
+        per input UTR.
+
+        Args:
+            payload (Mapping[str, Any]): Worker payload for the whole batch.
+
+        Returns:
+            ParadeGradientOutput: One result per sample, in input order.
+        """
+        sample_metrics = _build_gradient_sample_metrics(payload["metrics"])
+        gradients = payload.get("gradient") or [None] * len(sample_metrics)
+        results = [
+            GradientResult(
+                gradient=gradients[index],
+                loss=float(metrics.loss),
+                metrics=metrics.model_dump(),
+            )
+            for index, metrics in enumerate(sample_metrics)
+        ]
+        return cls(results=results, vocab=payload["vocab"])
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         """Export the gradient bundle as JSON."""
@@ -308,7 +308,7 @@ class ParadeGradientOutput(GradientOutput):
             raise ValueError(f"Unsupported format: {file_format}")
         base = Path(export_path)
         json_path = base.parent / f"{base.name}.json"
-        payload = self.model_dump(include={"gradient", "loss", "sample_metrics", "metrics", "vocab"})
+        payload = self.model_dump(include={"results", "vocab"})
         json_path.write_text(json.dumps(payload, indent=2))
 
 
@@ -374,4 +374,4 @@ def run_parade_gradient(
         instance=instance,
         config=config,
     )
-    return ParadeGradientOutput(**result)
+    return ParadeGradientOutput.from_batch(result)

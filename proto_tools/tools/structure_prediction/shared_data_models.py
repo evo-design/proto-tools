@@ -30,12 +30,29 @@ from proto_tools.utils import (
     BaseToolInput,
     BaseToolOutput,
     ConfigField,
+    GradientResult,
     InputField,
     detect_sequence_type,
     format_sequence_for_error,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class StructureGradientResult(GradientResult):
+    """One evaluated item whose backend also predicted a structure.
+
+    The structure belongs to the item, not the call, so it lives inside the result: a batch split
+    across workers reassembles one structure per input rather than whichever one finished last.
+
+    Attributes:
+        structure (Structure): Structure predicted while evaluating this item.
+    """
+
+    structure: Structure = Field(
+        title="Predicted Structure",
+        description="Structure predicted for this item during its forward pass.",
+    )
 
 
 class ComplexMSAs(BaseModel):

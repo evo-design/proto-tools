@@ -157,4 +157,4 @@ def run_esm2_gradient(
         instance=instance,
         config=config,
     )
-    return ESM2GradientOutput(**result)
+    return ESM2GradientOutput.from_single(result)

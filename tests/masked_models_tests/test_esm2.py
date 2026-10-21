@@ -111,9 +111,9 @@ def test_esm2_gradient_forward_mode_dispatch_contract(monkeypatch):
     )
 
     assert captured["payload"]["compute_gradient"] is False
-    assert result.gradient is None
-    assert result.loss == 0.5
-    assert result.metrics["avg_log_likelihood"] == -0.5
+    assert result.results[0].gradient is None
+    assert result.results[0].loss == 0.5
+    assert result.results[0].metrics["avg_log_likelihood"] == -0.5
 
 
 # ---------------------------------------------------------------------------
@@ -134,14 +134,14 @@ def test_esm2_gradient_single_sequence():
     validate_output(result)
 
     assert result.tool_id == "esm2-gradient"
-    assert result.gradient is not None
-    assert len(result.gradient) == seq_len
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert any(v != 0.0 for row in result.gradient for v in row)
-    assert result.loss > 0
-    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
-    assert result.metrics["perplexity"] == pytest.approx(math.exp(result.loss), rel=1e-6)
+    assert result.results[0].gradient is not None
+    assert len(result.results[0].gradient) == seq_len
+    assert all(len(row) == 20 for row in result.results[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].gradient for v in row)
+    assert any(v != 0.0 for row in result.results[0].gradient for v in row)
+    assert result.results[0].loss > 0
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-result.results[0].loss, rel=1e-6)
+    assert result.results[0].metrics["perplexity"] == pytest.approx(math.exp(result.results[0].loss), rel=1e-6)
     assert result.vocab == AMINO_ACIDS_LIST
 
 
@@ -160,9 +160,11 @@ def test_esm2_gradient_probability_mode_matches_logit_mode():
     logit_mode = run_esm2_gradient(ESM2GradientInput(logits=logits, temperature=1.0), config)
     probability_mode = run_esm2_gradient(ESM2GradientInput(logits=probabilities, temperature=None), config)
 
-    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=1e-5)
-    assert logit_mode.gradient is not None and probability_mode.gradient is not None
-    for probs, g_prob, g_logit in zip(probabilities, probability_mode.gradient, logit_mode.gradient, strict=True):
+    assert probability_mode.results[0].loss == pytest.approx(logit_mode.results[0].loss, rel=1e-5)
+    assert logit_mode.results[0].gradient is not None and probability_mode.results[0].gradient is not None
+    for probs, g_prob, g_logit in zip(
+        probabilities, probability_mode.results[0].gradient, logit_mode.results[0].gradient, strict=True
+    ):
         weighted = sum(p * g for p, g in zip(probs, g_prob, strict=True))
         expected = [p * (g - weighted) for p, g in zip(probs, g_prob, strict=True)]
         assert g_logit == pytest.approx(expected, rel=1e-3, abs=1e-6)
@@ -181,10 +183,12 @@ def test_esm2_gradient_forward_mode_matches_backward_loss():
         ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", batch_size=2, seed=42, compute_gradient=False),
     )
 
-    assert backward.gradient is not None
-    assert forward.gradient is None
-    assert forward.loss == pytest.approx(backward.loss, rel=1e-6)
-    assert forward.metrics["avg_log_likelihood"] == pytest.approx(backward.metrics["avg_log_likelihood"], rel=1e-6)
+    assert backward.results[0].gradient is not None
+    assert forward.results[0].gradient is None
+    assert forward.results[0].loss == pytest.approx(backward.results[0].loss, rel=1e-6)
+    assert forward.results[0].metrics["avg_log_likelihood"] == pytest.approx(
+        backward.results[0].metrics["avg_log_likelihood"], rel=1e-6
+    )
 
 
 @pytest.mark.uses_gpu
@@ -202,7 +206,7 @@ def test_esm2_score_and_gradient_agree_on_pll():
         ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", hard=1.0, batch_size=2, compute_gradient=False),
     )
 
-    assert -grad_result.loss == pytest.approx(score_result.scores[0].avg_log_likelihood, rel=1e-5)
+    assert -grad_result.results[0].loss == pytest.approx(score_result.scores[0].avg_log_likelihood, rel=1e-5)
 
 
 def test_esm2_scoring_input_normalizes_single_string():

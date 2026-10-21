@@ -146,9 +146,9 @@ def test_esmfold_gradient_dispatch_builds_output():
     assert payload["operation"] == "compute_gradient"
     assert payload["loss_weights"] == {"plddt": 2.0, "ptm": 0.5}
     assert payload["target_chain_indices"] == [0]
-    assert output.gradient is not None and len(output.gradient) == 4
-    assert output.loss == pytest.approx(1.5)
-    assert output.structure.metrics["avg_plddt"] == pytest.approx(0.8)
+    assert output.results[0].gradient is not None and len(output.results[0].gradient) == 4
+    assert output.results[0].loss == pytest.approx(1.5)
+    assert output.results[0].structure.metrics["avg_plddt"] == pytest.approx(0.8)
 
 
 @pytest.mark.slow
@@ -160,10 +160,10 @@ def test_esmfold_gradient_smoke():
         ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
     )
 
-    assert output.gradient is not None
-    assert len(output.gradient) == 4
-    assert all(len(row) == 20 for row in output.gradient)
-    assert output.loss == pytest.approx(output.metrics["loss_plddt"])
+    assert output.results[0].gradient is not None
+    assert len(output.results[0].gradient) == 4
+    assert all(len(row) == 20 for row in output.results[0].gradient)
+    assert output.results[0].loss == pytest.approx(output.results[0].metrics["loss_plddt"])
 
 
 @pytest.mark.slow
@@ -189,7 +189,7 @@ def test_esmfold_relaxed_one_hot_matches_discrete_prediction():
     )
 
     # Saturated softmax is 0.99999996 rather than exactly one-hot, so allow a little slack.
-    assert relaxed.structure.metrics["avg_plddt"] == pytest.approx(
+    assert relaxed.results[0].structure.metrics["avg_plddt"] == pytest.approx(
         discrete.structures[0].metrics["avg_plddt"], rel=0.01
     )
 
@@ -207,9 +207,9 @@ def test_esmfold_gradient_probability_mode_matches_logit_mode():
         ESMFoldGradientInput(logits=probabilities, chains=["MKTL"], temperature=None), config
     )
 
-    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=1e-4)
-    assert probability_mode.gradient is not None
-    assert all(math.isfinite(v) for row in probability_mode.gradient for v in row)
+    assert probability_mode.results[0].loss == pytest.approx(logit_mode.results[0].loss, rel=1e-4)
+    assert probability_mode.results[0].gradient is not None
+    assert all(math.isfinite(v) for row in probability_mode.results[0].gradient for v in row)
 
 
 @pytest.mark.benchmark("esmfold-prediction")

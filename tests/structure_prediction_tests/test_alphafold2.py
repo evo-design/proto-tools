@@ -180,11 +180,11 @@ def test_gradient_probability_mode_folds_the_same_binder():
         config,
     )
 
-    assert probability_mode.loss == pytest.approx(logit_mode.loss, rel=0.1)
-    assert probability_mode.gradient is not None
-    assert len(probability_mode.gradient) == len(logits)
-    assert all(len(row) == 20 for row in probability_mode.gradient)
-    assert all(math.isfinite(v) for row in probability_mode.gradient for v in row)
+    assert probability_mode.results[0].loss == pytest.approx(logit_mode.results[0].loss, rel=0.1)
+    assert probability_mode.results[0].gradient is not None
+    assert len(probability_mode.results[0].gradient) == len(logits)
+    assert all(len(row) == 20 for row in probability_mode.results[0].gradient)
+    assert all(math.isfinite(v) for row in probability_mode.results[0].gradient for v in row)
 
 
 def test_gradient_input_requires_target_pdb():
@@ -304,14 +304,14 @@ def test_gradient_dispatch_contract(monkeypatch):
     assert payload["soft"] == 1.0
     assert payload["recycle_mode"] == "last"
     assert payload["starting_binder_seq"] is None
-    assert result.gradient == [[0.1] * 20] * 2
-    assert result.loss == 1.25
-    assert result.structure.source == "alphafold2-gradient"
-    assert result.structure.b_factor_type.value == "pLDDT"
-    assert is_valid_structure(result.structure.structure)
+    assert result.results[0].gradient == [[0.1] * 20] * 2
+    assert result.results[0].loss == 1.25
+    assert result.results[0].structure.source == "alphafold2-gradient"
+    assert result.results[0].structure.b_factor_type.value == "pLDDT"
+    assert is_valid_structure(result.results[0].structure.structure)
     # per_residue_plddt must be normalized to [0, 1] for downstream consumers
     # (proto-language's pLDDT-weighted semigreedy uses `1 - plddt` for sampling).
-    plddt = result.structure.per_residue_plddt
+    plddt = result.results[0].structure.per_residue_plddt
     assert plddt is not None
     assert all(0.0 <= v <= 1.0 for v in plddt)
 
@@ -399,10 +399,10 @@ def test_forward_mode_dispatch_contract(monkeypatch):
 
     assert captured["payload"]["compute_gradient"] is False
     assert captured["payload"]["hard"] == 1.0
-    assert result.gradient is None
-    assert result.loss == 0.75
-    assert result.structure.source == "alphafold2-gradient"
-    assert result.structure.per_residue_plddt is not None
+    assert result.results[0].gradient is None
+    assert result.results[0].loss == 0.75
+    assert result.results[0].structure.source == "alphafold2-gradient"
+    assert result.results[0].structure.per_residue_plddt is not None
 
 
 def test_prediction_dispatch_contract(monkeypatch):
@@ -563,24 +563,24 @@ def test_forward_vs_gradient_consistency():
     )
     validate_output(grad)
     assert grad.tool_id == "alphafold2-gradient"
-    assert len(grad.gradient) == 5
-    assert all(len(row) == 20 for row in grad.gradient)
-    assert all(math.isfinite(v) for row in grad.gradient for v in row)
-    assert any(v != 0.0 for row in grad.gradient for v in row)
-    assert math.isfinite(grad.loss) and grad.loss != 0.0
+    assert len(grad.results[0].gradient) == 5
+    assert all(len(row) == 20 for row in grad.results[0].gradient)
+    assert all(math.isfinite(v) for row in grad.results[0].gradient for v in row)
+    assert any(v != 0.0 for row in grad.results[0].gradient for v in row)
+    assert math.isfinite(grad.results[0].loss) and grad.results[0].loss != 0.0
     assert grad.vocab == _CANONICAL_VOCAB
-    assert 0 <= grad.metrics["avg_plddt"] <= 1.0
+    assert 0 <= grad.results[0].metrics["avg_plddt"] <= 1.0
     # Structure must be populated with per-residue pLDDT normalized to [0, 1]
     # for proto-language's pLDDT-weighted semigreedy (1 - plddt sampling).
-    assert grad.structure.source == "alphafold2-gradient"
-    assert is_valid_structure(grad.structure.structure)
-    plddt = grad.structure.per_residue_plddt
+    assert grad.results[0].structure.source == "alphafold2-gradient"
+    assert is_valid_structure(grad.results[0].structure.structure)
+    plddt = grad.results[0].structure.per_residue_plddt
     assert plddt is not None and all(0.0 <= v <= 1.0 for v in plddt)
 
-    assert fwd.gradient is None
-    assert math.isclose(grad.loss, fwd.loss, rel_tol=0.1)
-    assert math.isclose(grad.metrics["avg_plddt"], fwd.metrics["avg_plddt"], rel_tol=0.1)
-    assert math.isclose(grad.metrics["ptm"], fwd.metrics["ptm"], rel_tol=0.1)
+    assert fwd.results[0].gradient is None
+    assert math.isclose(grad.results[0].loss, fwd.results[0].loss, rel_tol=0.1)
+    assert math.isclose(grad.results[0].metrics["avg_plddt"], fwd.results[0].metrics["avg_plddt"], rel_tol=0.1)
+    assert math.isclose(grad.results[0].metrics["ptm"], fwd.results[0].metrics["ptm"], rel_tol=0.1)
 
 
 @pytest.mark.uses_gpu
@@ -596,7 +596,7 @@ def test_gradient_recycle_mode_threads_through():
         AlphaFold2GradientConfig(num_recycles=2, recycle_mode="first", loss_weights={"plddt": 1.0}),
     )
     validate_output(result)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
+    assert all(math.isfinite(v) for row in result.results[0].gradient for v in row)
 
 
 @pytest.mark.uses_gpu
@@ -621,11 +621,11 @@ def test_gradient_responds_to_loss_weights_and_logits():
         AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
     )
     # Different loss weights change the gradient; different logits change loss and gradient.
-    assert r_plddt.gradient != r_con.gradient
-    assert r_plddt.loss != r_shifted.loss
-    assert r_plddt.gradient != r_shifted.gradient
-    assert all(math.isfinite(v) for row in r_plddt.gradient for v in row)
-    assert all(math.isfinite(v) for row in r_con.gradient for v in row)
+    assert r_plddt.results[0].gradient != r_con.results[0].gradient
+    assert r_plddt.results[0].loss != r_shifted.results[0].loss
+    assert r_plddt.results[0].gradient != r_shifted.results[0].gradient
+    assert all(math.isfinite(v) for row in r_plddt.results[0].gradient for v in row)
+    assert all(math.isfinite(v) for row in r_con.results[0].gradient for v in row)
 
 
 @pytest.mark.uses_gpu

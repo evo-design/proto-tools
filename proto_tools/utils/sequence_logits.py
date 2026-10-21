@@ -229,9 +229,9 @@ class NucleotideSequenceLogits(SequenceLogits):
 def iter_sequence_logits(model: BaseModel) -> Iterator[tuple[str, SequenceLogits]]:
     """Yield ``(path, matrix)`` for every relaxed matrix reachable from a model's fields.
 
-    Walks direct :class:`SequenceLogits` fields, lists of them, and nested models that expose
-    their own ``iter_sequence_logits()``. Other nested models are not traversed, so an input
-    carrying a ``Structure`` or similar is not walked needlessly.
+    Walks direct :class:`SequenceLogits` fields, lists of them, nested models that expose their
+    own ``iter_sequence_logits()``, and lists of such models. Other nested models are not
+    traversed, so an input carrying a ``Structure`` or similar is not walked needlessly.
 
     Args:
         model (BaseModel): Model whose fields to inspect.
@@ -254,6 +254,10 @@ def iter_sequence_logits(model: BaseModel) -> Iterator[tuple[str, SequenceLogits
             for index, item in enumerate(value):
                 if isinstance(item, SequenceLogits):
                     yield f"{name}[{index}]", item
+                elif callable(item_nested := getattr(item, "iter_sequence_logits", None)):
+                    # A list of per-item bundles: each one declares its own matrices.
+                    for path, matrix in item_nested():
+                        yield f"{name}[{index}].{path}", matrix
 
 
 __all__ = [

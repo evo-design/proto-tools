@@ -399,7 +399,7 @@ class MixedGradientOutput(GradientOutput):
         """Export the gradient, loss, metrics, and vocabulary as JSON."""
         if file_format != "json":
             raise ValueError(f"Unsupported format: {file_format}")
-        payload = self.model_dump(include={"gradient", "loss", "metrics", "vocab"}, mode="json")
+        payload = self.model_dump(include={"results", "vocab"}, mode="json")
         Path(str(export_path) + ".json").write_text(json.dumps(payload))
 
 

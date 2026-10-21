@@ -191,4 +191,4 @@ def run_proteinmpnn_gradient(
             instance=instance,
             config=config,
         )
-    return ProteinMPNNGradientOutput(**result)
+    return ProteinMPNNGradientOutput.from_single(result)

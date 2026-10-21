@@ -67,4 +67,4 @@ def run_glm2_gradient(
         GLM2GradientOutput: Token-aligned gradient output.
     """
     logger.debug("Using local worker for gLM2 gradient: %s", config.model_checkpoint)
-    return GLM2GradientOutput(**dispatch_masked_model("glm2", "gradient", inputs, config, instance))
+    return GLM2GradientOutput.from_single(dispatch_masked_model("glm2", "gradient", inputs, config, instance))

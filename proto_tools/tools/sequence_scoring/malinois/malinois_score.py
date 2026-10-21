@@ -2,7 +2,7 @@
 
 import csv
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
@@ -17,6 +17,7 @@ from proto_tools.utils import (
     BatchedNucleotideGradientInput,
     ConfigField,
     GradientOutput,
+    GradientResult,
     InputField,
     NucleotideSequenceLogits,
     RelaxationConfig,
@@ -533,35 +534,36 @@ class MalinoisGradientOutput(GradientOutput):
     """Differentiable Malinois activity output.
 
     Attributes:
-        gradient (MalinoisGradientValue): Gradient tensor matching input DNA
-            logits, or ``None`` when ``compute_gradient=False``.
-        loss (float): Sum of per-sample weighted scalar objective values.
-            Per-sample values are available in ``sample_metrics``.
-        sample_metrics (list[MalinoisGradientSampleMetrics]): Per-sample metric
-            containers with scalar loss and raw cell-type scores.
-        metrics (dict[str, Any]): Auxiliary metadata bundle from the standalone
-            worker, including raw scores, objective-term metadata, and runtime
-            relaxation parameters.
+        results (list[GradientResult]): One per input sequence, in input order, each holding that
+            sample's own gradient, weighted objective, and raw cell-type scores.
         vocab (list[str]): DNA column ordering for logits and gradient.
     """
 
-    gradient: MalinoisGradientValue = Field(
-        default=None,
-        title="Gradient",
-        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
-    )
-    sample_metrics: list[MalinoisGradientSampleMetrics] = Field(
-        default_factory=list,
-        title="Sample Metrics",
-        description="Per-sample Malinois objective metrics.",
-    )
+    @classmethod
+    def from_batch(cls, payload: Mapping[str, Any]) -> "MalinoisGradientOutput":
+        """Unbatch one worker payload into per-sample results.
 
-    @model_validator(mode="after")
-    def populate_sample_metrics(self) -> "MalinoisGradientOutput":
-        """Populate metric containers from the standalone metrics payload."""
-        if not self.sample_metrics:
-            self.sample_metrics = _build_gradient_sample_metrics(self.metrics)
-        return self
+        The worker evaluates the batch in one vectorized pass and reports a stacked ``(B, L, 4)``
+        gradient with per-sample losses and raw scores, so this splits them back into one result
+        per input sequence.
+
+        Args:
+            payload (Mapping[str, Any]): Worker payload for the whole batch.
+
+        Returns:
+            MalinoisGradientOutput: One result per sample, in input order.
+        """
+        sample_metrics = _build_gradient_sample_metrics(payload["metrics"])
+        gradients = payload.get("gradient") or [None] * len(sample_metrics)
+        results = [
+            GradientResult(
+                gradient=gradients[index],
+                loss=float(metrics.loss),
+                metrics=metrics.model_dump(),
+            )
+            for index, metrics in enumerate(sample_metrics)
+        ]
+        return cls(results=results, vocab=payload["vocab"])
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         """Export the gradient bundle as JSON."""
@@ -569,7 +571,7 @@ class MalinoisGradientOutput(GradientOutput):
             raise ValueError(f"Unsupported format: {file_format}")
         base = Path(export_path)
         json_path = base.parent / f"{base.name}.json"
-        payload = self.model_dump(include={"gradient", "loss", "sample_metrics", "metrics", "vocab"})
+        payload = self.model_dump(include={"results", "vocab"})
         json_path.write_text(json.dumps(payload, indent=2))
 
 
@@ -703,4 +705,4 @@ def run_malinois_gradient(
         instance=instance,
         config=config,
     )
-    return MalinoisGradientOutput(**result)
+    return MalinoisGradientOutput.from_batch(result)
