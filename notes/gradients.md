@@ -2,7 +2,7 @@
 
 Proto's gradient tools evaluate a model objective and return its gradient with respect to a continuous representation of a sequence. Instead of a string of discrete tokens, the input is a matrix of shape `(L, V)`, with one row per sequence position and one column per token in Proto's interface vocabulary for that sequence type. A model's own tokenizer may be much larger; backends map between the two.
 
-This page explains how to prepare those inputs, interpret the returned gradients, and work with the shared input types.
+This page explains how to prepare those inputs, interpret the returned gradients, work with the shared input types, and control how a continuous state is relaxed before it reaches a model.
 
 ## Logits, probabilities, and temperature
 
@@ -76,13 +76,47 @@ Mixed-model tools additionally restrict which columns are valid at each position
 
 With `temperature=None`, active rows must sum to 1 and have zero probability in all disallowed columns. Inactive rows are instead required to be **all zeros**, in either temperature mode. The restrictions come from the internal `GradientInput.allowed_tokens()` hook, not from a public `allowed_mask` field.
 
-## Backend behavior
+## Relaxation: the `soft` and `hard` controls
 
-Every gradient tool relaxes its input the same way, through the shared `soft` and `hard` controls of `RelaxationConfig`. The defaults are `soft=1.0` and `hard=0.0`, a plain `softmax(logits / temperature)`; `hard=1.0` is the straight-through estimator, and `soft` below 1.0 blends the raw input matrix in. `notes/gradient-relaxation.md` is the reference for the formula, the implementations behind it, and the numerical checks.
+Every gradient tool turns the supplied matrix into the representation its model consumes through the same two coefficients. They live on `RelaxationConfig`, which every gradient config inherits. With `X` the supplied matrix, `T` the temperature, and `preprocess` whatever a model applies to logits before its own softmax (the identity for all but AlphaFold2):
+
+```
+P     = softmax(preprocess(X) / T)       # or X itself when temperature is None
+D_ste = stop_gradient(one_hot(argmax(P)) - P) + P
+U     = (1 - soft) * X + soft * P
+M     = (1 - hard) * U + hard * D_ste
+```
+
+`M` is what reaches the model. The defaults — `temperature=1.0`, `soft=1.0`, `hard=0.0` — reduce it to a plain `softmax(X / T)`.
+
+- **`soft`** interpolates from the raw input matrix (0) to the softmax probabilities (1). The `(1 - soft)` branch is the caller's own matrix, not an argmax one-hot, so it keeps a derivative: at `soft=0` the gradient is the upstream vector itself.
+- **`hard`** mixes in a straight-through estimator, whose forward value is a one-hot and whose gradient flows through `P`. At `hard=1` both the forward value and the surrogate gradient are independent of `soft`.
+
+Differentiating `M` gives an identity route scaled by `(1 - hard) * (1 - soft)` plus a softmax route scaled by `(1 - hard) * soft + hard`, so no documented setting leaves a zero gradient. A relaxation that forwarded a constant would let an optimizer run without ever moving, and nothing would raise, so a check pins that too.
+
+Use the default for ordinary optimization: it is the only setting whose forward value is a probability distribution and whose gradient is smooth. Set `hard=1.0` when the forward pass should see the discrete sequence the design will become. Lowering `soft` below 1.0 feeds raw, unnormalized values to a model trained on distributions — well defined and differentiable, but outside the training distribution of every model here. Whether any of these settings produces better designs is an experimental question this repository does not answer.
+
+With `temperature=None` the supplied matrix is already `P`, so `U` mixes `X` with itself and the straight-through term adds `X - stop_gradient(X)`: the forward value is `X` wherever `hard < 1`, and the gradient is the upstream vector at every setting.
+
+### What does not move with the blend
+
+- **Masked-model targets.** ESM2, AbLang, CodonFM, Minerva, and GLM2 take each site's target from `P`, so the objective does not shift with `soft` or `hard`.
+- **ProteinMPNN's negative-log-likelihood labels.** They are the decoded sequence — a hard one-hot at every setting. Softmax is monotonic, so they come from `argmax(X)` directly and need no branch for probability mode.
+
+### Implementations
+
+| Where | What |
+|---|---|
+| `standalone_helpers.relaxation.relaxed_sequence` | The torch definition; every torch backend calls it. |
+| `standalone_helpers.relaxation.relaxed_sequence_jax` | The JAX twin, for environments with no torch (ProteinMPNN). |
+| `standalone_helpers.mixed_mlm` | Re-derives the blend for mixed protein/DNA models, whose `P` is normalized within each position's modality block. Every term is masked, so the raw-input branch cannot weight a forbidden column. |
+| ColabDesign's `soft_seq` | AlphaFold2 relaxes inside ColabDesign, on both the upstream and Germinal backends. `preprocess` is Germinal's `alpha` scaling and any `bias_redesign`, which therefore move `P` but not the raw-input branch. |
+
+Each exists for a reason an import cannot remove — a missing array library, a modality-masked softmax, an upstream that owns its own reparameterization — so what keeps them one contract is that each is checked against the formula above, with the torch and JAX definitions additionally pinned to one shared table of forward values and gradients. Both helpers import their array library lazily and are not re-exported from the package `__init__`, so an environment with only one of torch and JAX can still import `standalone_helpers`.
+
+AlphaFold2 expresses probability mode as `soft=0` inside ColabDesign, whose `soft_seq` always softmaxes, and rejects the options that would then have no effect — `soft`, `hard`, `excluded_amino_acids`, and `bias_redesign` — instead of ignoring them silently.
 
 Backends also map Proto's public vocabulary order to their own native token order; those native orders remain defined with each toolkit rather than assumed to be identical across models.
-
-AlphaFold2 performs its relaxation inside ColabDesign. In probability mode, the backend arranges for the supplied distribution to pass through unchanged. Options that would have no effect in that mode—including `soft`, `hard`, `excluded_amino_acids`, and `bias_redesign`—are rejected instead of silently ignored.
 
 ## Outputs and testing
 
@@ -90,4 +124,13 @@ A `GradientOutput` contains `loss`, `metrics`, `vocab`, and `gradient`. The grad
 
 AbLang is a special case: it combines heavy- and light-chain inputs and returns one `(Lh + Ll, 20)` gradient matrix, with the heavy-chain rows first. Split the result at the heavy-chain length to recover each chain's gradient.
 
-Shared contract tests live in `tests/tool_infra_tests/test_gradient_contract.py`. They cover registered gradient tools, input validation, and the common interface. Backend-specific tests check numerical gradient agreement, including finite-difference comparisons where appropriate.
+Shared contract tests live in `tests/tool_infra_tests/test_gradient_contract.py`. They cover registered gradient tools, input validation, the common interface, and the relaxation controls, and they launch the numerical suites below through `run_in_env`. Backend-specific tests check numerical gradient agreement, including finite-difference comparisons where appropriate.
+
+| File | Covers |
+|---|---|
+| `_relaxation_env_checks.py` | The torch definition: forward values and gradients across the blend grid, the straight-through route, probability mode, and the shared reference table. Runs in esm2's environment. |
+| `_relaxation_jax_env_checks.py` | The JAX twin, against the same formula and the same reference table. Runs in proteinmpnn's environment. |
+| `_alphafold2_relaxation_env_checks.py` | ColabDesign's `soft_seq` on both backends, with and without alpha scaling and bias. Runs in alphafold2's environment. |
+| `_relaxation_reference.py` | The shared table itself, imported by the check scripts as a sibling module. |
+
+Those suites need no model weights and no GPU — the formula is pure arithmetic — but they do need a built tool environment, so they are marked `integration`.
