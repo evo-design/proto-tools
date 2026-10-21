@@ -1010,5 +1010,5 @@ def test_parade_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     validate_output(result)
     assert_metrics_in_spec(result)
     assert result.tool_id == "parade-gradient"
-    assert result.gradient is not None
-    assert len(result.gradient) == 256
+    assert len(result.results) == 256
+    assert all(item.gradient is not None for item in result.results)

@@ -284,10 +284,11 @@ def test_esmfold_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     result = benchmark_twice(request, "esmfold", run_batch)
 
     assert result.tool_id == "esmfold-gradient"
-    assert result.gradient is not None
-    assert len(result.gradient) == 200
-    assert all(len(row) == 20 for row in result.gradient)
-    assert is_valid_structure(result.structure.structure_cif)
+    (item,) = result.results
+    assert item.gradient is not None
+    assert len(item.gradient) == 200
+    assert all(len(row) == 20 for row in item.gradient)
+    assert is_valid_structure(item.structure.structure_cif)
 
 
 def test_relabel_chains_rejects_multi_char_ids():

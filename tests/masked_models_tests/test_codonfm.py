@@ -772,7 +772,8 @@ def test_codonfm_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     result = benchmark_twice(request, "codonfm", lambda: run_codonfm_gradient(inputs, config))
     validate_output(result)
     assert result.tool_id == "codonfm-gradient"
-    assert result.gradient is not None and len(result.gradient) == 100
+    (item,) = result.results
+    assert item.gradient is not None and len(item.gradient) == 100
 
 
 @pytest.mark.benchmark("codonfm-sample")

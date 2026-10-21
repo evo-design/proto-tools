@@ -746,9 +746,11 @@ def test_alphafold2_gradient_benchmark(request: pytest.FixtureRequest) -> None:
 
     validate_output(result)
     assert result.tool_id == "alphafold2-gradient"
-    assert len(result.gradient) == len(binder_seq)
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert math.isfinite(result.loss)
-    assert result.structure.source == "alphafold2-gradient"
-    assert is_valid_structure(result.structure.structure)
+    (item,) = result.results
+    assert item.gradient is not None
+    assert len(item.gradient) == len(binder_seq)
+    assert all(len(row) == 20 for row in item.gradient)
+    assert all(math.isfinite(v) for row in item.gradient for v in row)
+    assert math.isfinite(item.loss)
+    assert item.structure.source == "alphafold2-gradient"
+    assert is_valid_structure(item.structure.structure)

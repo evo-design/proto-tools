@@ -266,10 +266,11 @@ def test_esm2_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     validate_output(result)
 
     assert result.tool_id == "esm2-gradient"
-    assert result.gradient is not None
-    assert len(result.gradient) == 500
-    assert all(len(row) == 20 for row in result.gradient)
-    assert result.loss > 0
+    (item,) = result.results
+    assert item.gradient is not None
+    assert len(item.gradient) == 500
+    assert all(len(row) == 20 for row in item.gradient)
+    assert item.loss > 0
 
 
 # ── Embedding tests ───────────────────────────────────────────────────────────
