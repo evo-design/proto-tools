@@ -286,8 +286,11 @@ def _build_from_probabilities(spec: Any, temperature: float) -> tuple[Any, dict[
         chains = {path.split(".", 1)[1]: rows for path, rows in targets.items()}
         built = spec.input_model.from_probabilities(temperature=temperature, **chains, **fields)
     else:
-        fields.pop("logits")
-        built = spec.input_model.from_probabilities(targets["logits"], temperature=temperature, **fields)
+        field = spec.input_model.relaxed_field()
+        fields.pop(field)
+        # One example item, whether the field holds a matrix or a one-item list of them.
+        target = next(iter(targets.values()))
+        built = spec.input_model.from_probabilities(target, temperature=temperature, **fields)
     return built, targets
 
 
@@ -321,6 +324,83 @@ def test_from_probabilities_sets_a_consistent_temperature(spec: Any, temperature
             assert [actual[column] / renormalized for column in active] == pytest.approx(
                 [expected[column] for column in active], abs=1e-9
             ), f"{spec.key} {path} did not round-trip"
+
+
+# ── Iterable fanout ──────────────────────────────────────────────────────────
+
+_ITERABLE_GRADIENT_SPECS = [spec for spec in _GRADIENT_SPECS if spec.iterable_input_fields]
+
+
+@pytest.mark.parametrize("spec", _ITERABLE_GRADIENT_SPECS, ids=lambda spec: spec.key)
+def test_iterable_gradient_tool_declares_the_whole_trio(spec: Any) -> None:
+    """Fanout needs all three declarations, and ToolPool asserts the output field at run time."""
+    assert spec.iterable_input_fields == ["inputs"], f"{spec.key}: {spec.iterable_input_fields}"
+    assert spec.iterable_output_field == "results", f"{spec.key}: {spec.iterable_output_field}"
+    assert isinstance(spec.max_chunk_size, int) and spec.max_chunk_size >= 1, (
+        f"{spec.key}: max_chunk_size must be an explicit positive cap, got {spec.max_chunk_size!r}"
+    )
+
+
+@pytest.mark.parametrize("spec", _ITERABLE_GRADIENT_SPECS, ids=lambda spec: spec.key)
+def test_single_item_normalizes_and_empty_is_rejected(spec: Any) -> None:
+    """One item may be passed bare; a list keeps its length; an empty list is refused."""
+    matrix = next(iter(_example(spec).sequence_logits().values())).root
+
+    assert len(spec.input_model(inputs=matrix).inputs) == 1
+    assert len(spec.input_model(inputs=[matrix, matrix]).inputs) == 2
+    with pytest.raises(ValidationError, match="at least one item"):
+        spec.input_model(inputs=[])
+
+
+def test_gradient_batch_fans_out_across_pool_slots(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A batch split across two pool workers returns one result per item, in input order.
+
+    Goes through the ``@tool`` wrapper so the real partitioning, dispatch and stitching run; only
+    the worker call is faked. Each item carries a distinguishing value that comes back as its
+    loss, so a reordered or duplicated reassembly fails rather than merely looking plausible.
+    """
+    from proto_tools.tools.masked_models.esm2 import ESM2GradientConfig, ESM2GradientInput, run_esm2_gradient
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance
+    from proto_tools.utils.tool_pool import ToolPool
+
+    # esm2-gradient is a GPU tool, so the pool needs GPU slots to have anything to fan out over.
+    DeviceManager.reset_instance()
+    ToolInstance.clear_all()
+
+    item_count = 6
+    items = [[[float(index)] * 20] * 4 for index in range(item_count)]
+    partitions: list[int] = []
+
+    def fake_dispatch(toolkit: str, payload: dict[str, Any], *, instance: Any = None, config: Any = None) -> Any:
+        chunk = payload["items"]
+        partitions.append(len(chunk))
+        return {
+            "results": [
+                {"gradient": item, "loss": item[0][0], "metrics": {"sequence_length": len(item)}} for item in chunk
+            ],
+            "vocab": list(ProteinSequenceLogits.VOCAB),
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.masked_models.esm2.esm2_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    try:
+        with ToolPool(gpus=["cuda:0", "cuda:1"]):
+            output = run_esm2_gradient(ESM2GradientInput(inputs=items), ESM2GradientConfig(device="cuda"))
+    finally:
+        DeviceManager.reset_instance()
+        ToolInstance.clear_all()
+
+    assert len(output.results) == item_count, "one result per item"
+    assert [result.loss for result in output.results] == [float(index) for index in range(item_count)], (
+        "results must come back in input order"
+    )
+    assert len(partitions) > 1, f"the batch was not split across workers: {partitions}"
+    assert sum(partitions) == item_count, f"items were duplicated or dropped: {partitions}"
+    assert output.vocab == list(ProteinSequenceLogits.VOCAB)
 
 
 # ── Relaxation controls ──────────────────────────────────────────────────────

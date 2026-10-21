@@ -171,16 +171,24 @@ In probability mode, the adapter selects the raw-input branch internally so vali
 
 A gradient tool returns a `GradientOutput` with:
 
-- `loss`: the scalar model objective being evaluated;
-- `metrics`: additional model-specific scores;
-- `vocab`: the public token order associated with the output;
-- `gradient`: derivatives with respect to the supplied sequence matrix, in the same shape and vocabulary order.
+- `results`: one `GradientResult` per input item, in the order the items were supplied;
+- `vocab`: the public token order associated with the output, shared by every item.
+
+Each `results[i]` carries that item alone:
+
+- `loss`: the objective that was differentiated for item `i` — never a batch mean or total;
+- `metrics`: additional model-specific scores for that item;
+- `gradient`: derivatives with respect to that item's sequence matrix, in the same shape and vocabulary order.
+
+ESMFold and AlphaFold2 attach the structure they predicted for an item to that item's result. A
+single-item call still returns a one-element `results` list, so a caller never has to branch on
+how many candidates it sent.
 
 With positive temperature, the gradient is with respect to **logits**. With `temperature=None`, it is with respect to **probabilities**. In a hard-STE mode, it is a **surrogate gradient**: the forward pass evaluates one-hot inputs, but the backward pass follows the differentiable probability pathway.
 
 Setting `compute_gradient=False` runs forward-only scoring and returns `gradient=None`.
 
-AbLang returns a single matrix for paired heavy and light chains. The rows are concatenated heavy-first, then light; split at the heavy-chain length to recover each chain's gradient.
+AbLang returns a single matrix per item for paired heavy and light chains. The rows are concatenated heavy-first, then light; split at the heavy-chain length to recover each chain's gradient.
 
 ### How the objective relates to the relaxation
 

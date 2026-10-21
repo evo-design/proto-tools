@@ -3,17 +3,20 @@
 import logging
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.tools.masked_models.esm2.esm2_sample import ESM2_MODEL_CHECKPOINTS
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
+    GradientInput,
     GradientOutput,
-    ProteinGradientInput,
+    InputField,
+    ProteinSequenceLogits,
     RelaxationConfig,
     ToolInstance,
+    coerce_to_item_list,
     one_hot_protein_logits,
 )
 from proto_tools.utils.device import RemoteDevice
@@ -23,27 +26,40 @@ logger = logging.getLogger(__name__)
 ESM2_MAX_SEQ_LENGTH = 1022
 
 
-class ESM2GradientInput(ProteinGradientInput):
-    """Input for the ESM2 gradient tool.
+class ESM2GradientInput(GradientInput):
+    """Input for the ESM2 gradient tool: one or many relaxed protein states.
 
     Attributes:
-        logits (ProteinSequenceLogits): Relaxed protein sequence state with shape
-            ``(L, 20)`` in canonical amino-acid order ``ACDEFGHIKLMNPQRSTVWY``.
-            ``L`` must be ≤ 1022 (ESM-2's positional-encoding cap); over-length
-            inputs raise ``ValueError``.
-        temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
-            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
-            gradient; ``None`` reads them as probabilities and returns a probability-space
-            gradient.
+        inputs (list[ProteinSequenceLogits]): One relaxed state per candidate, each ``(L, 20)``
+            in canonical amino-acid order ``ACDEFGHIKLMNPQRSTVWY``. A single state may be passed
+            on its own and is normalized to a one-item list. Every ``L`` must be ≤ 1022 (ESM-2's
+            positional-encoding cap); over-length inputs raise ``ValueError``.
+        temperature (float | None): Softmax temperature, shared by every item. The default
+            ``1.0`` reads each state as unnormalized and applies ``softmax(logits / T)``,
+            returning logit-space gradients; ``None`` reads them as probabilities and returns
+            probability-space gradients.
     """
+
+    inputs: list[ProteinSequenceLogits] = InputField(
+        title="Relaxed Sequences",
+        description="One relaxed (L, 20) protein state per candidate; a single state is accepted on its own",
+    )
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def normalize_items(cls, value: Any) -> Any:
+        """Accept one relaxed state as well as a list of them."""
+        return coerce_to_item_list(value)
 
     @model_validator(mode="after")
     def validate_sequence_length(self) -> Self:
-        """Reject inputs beyond ESM-2's positional-encoding cap."""
-        if len(self.logits) > ESM2_MAX_SEQ_LENGTH:
-            raise ValueError(
-                f"esm2: supports sequences up to {ESM2_MAX_SEQ_LENGTH} residues; input has length {len(self.logits)}."
-            )
+        """Reject any item beyond ESM-2's positional-encoding cap."""
+        for index, matrix in enumerate(self.inputs):
+            if len(matrix) > ESM2_MAX_SEQ_LENGTH:
+                raise ValueError(
+                    f"esm2: supports sequences up to {ESM2_MAX_SEQ_LENGTH} residues; "
+                    f"inputs[{index}] has length {len(matrix)}."
+                )
         return self
 
 
@@ -116,7 +132,7 @@ class ESM2GradientConfig(RelaxationConfig):
 
 def example_input() -> ESM2GradientInput:
     """Minimal valid input for testing and examples."""
-    return ESM2GradientInput(logits=one_hot_protein_logits("MKTL", sharpness=2.0))
+    return ESM2GradientInput(inputs=one_hot_protein_logits("MKTL", sharpness=2.0))
 
 
 @tool(
@@ -131,6 +147,9 @@ def example_input() -> ESM2GradientInput:
     example_input=example_input,
     cacheable=False,
     stochastic=True,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=8,
 )
 def run_esm2_gradient(
     inputs: ESM2GradientInput,
@@ -138,12 +157,12 @@ def run_esm2_gradient(
     instance: Any = None,
 ) -> ESM2GradientOutput:
     """Compute ESM2 masked PLL gradient with respect to relaxed protein logits."""
-    logger.debug("Using local worker for ESM2 gradient: %s", config.model_checkpoint)
+    logger.debug("Using local worker for ESM2 gradient: %s (%d item(s))", config.model_checkpoint, len(inputs.inputs))
     result = ToolInstance.dispatch(
         "esm2",
         {
             "operation": "compute_gradient",
-            "logits": inputs.logits.root,
+            "items": [matrix.root for matrix in inputs.inputs],
             "temperature": inputs.temperature,
             "soft": config.soft,
             "hard": config.hard,
@@ -157,4 +176,4 @@ def run_esm2_gradient(
         instance=instance,
         config=config,
     )
-    return ESM2GradientOutput.from_single(result)
+    return ESM2GradientOutput(**result)

@@ -25,6 +25,35 @@ from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 GradientValue = list[list[float]] | list[list[list[float]]] | None
 
 
+def coerce_to_item_list(value: Any) -> Any:
+    """Wrap one supplied gradient item in a list, leaving a list of items alone.
+
+    A caller evaluating a single candidate should not have to type a list, and a caller
+    evaluating many should not have to wrap each one. One matrix is recognized by its rows being
+    numbers; a list whose first element is itself a matrix, a model or a mapping is already a
+    collection of items. Ambiguity is not guessed at: anything else is handed to Pydantic as-is
+    so it reports the real type error.
+
+    Args:
+        value (Any): Whatever was supplied for the ``inputs`` field.
+
+    Returns:
+        Any: A list of items, or the value unchanged when it is not recognizable.
+
+    Raises:
+        ValueError: If an empty list was supplied; there is nothing to evaluate.
+    """
+    if isinstance(value, SequenceLogits | BaseModel | Mapping):
+        return [value]
+    if isinstance(value, list):
+        if not value:
+            raise ValueError("inputs must contain at least one item")
+        first = value[0]
+        if isinstance(first, list | tuple) and first and isinstance(first[0], int | float):
+            return [value]  # one (L, V) matrix supplied directly
+    return value
+
+
 class RelaxationConfig(BaseConfig):
     """Blend coefficients controlling how a relaxed sequence reaches the model.
 
@@ -117,7 +146,16 @@ class GradientInput(BaseToolInput):
         return None
 
     @classmethod
-    def relaxed_state_type(cls, field: str = "logits") -> type[SequenceLogits]:
+    def relaxed_field(cls) -> str:
+        """Return the name of the field holding this tool's relaxed state.
+
+        Returns:
+            str: ``"inputs"`` for a tool that takes a list of items, else ``"logits"``.
+        """
+        return "inputs" if "inputs" in cls.model_fields else "logits"
+
+    @classmethod
+    def relaxed_state_type(cls, field: str | None = None) -> type[SequenceLogits]:
         """Return the :class:`SequenceLogits` subclass a field holds.
 
         Args:
@@ -129,10 +167,15 @@ class GradientInput(BaseToolInput):
         Raises:
             TypeError: If the field is absent or is not a single ``SequenceLogits``.
         """
+        field = field or cls.relaxed_field()
         info = cls.model_fields.get(field)
         annotation = info.annotation if info is not None else None
         if isinstance(annotation, type) and issubclass(annotation, SequenceLogits):
             return annotation
+        # A list of items: the element type carries the vocabulary.
+        (element,) = get_args(annotation) or (None,)
+        if isinstance(element, type) and issubclass(element, SequenceLogits):
+            return element
         raise TypeError(f"{cls.__name__} has no single {field!r} matrix, so it needs its own from_probabilities()")
 
     @classmethod
@@ -165,8 +208,11 @@ class GradientInput(BaseToolInput):
             Self: Input satisfying ``softmax(logits / temperature) == probabilities``.
         """
         matrix = cls.relaxed_state_type().from_probabilities(probabilities, temperature=temperature)
-        # ``logits`` is declared by the subclass, not by GradientInput itself.
-        return cls(**{"logits": matrix, "temperature": temperature, **fields})
+        # The relaxed field is declared by the subclass, not by GradientInput itself, and a
+        # list-shaped one takes the matrix as its single item.
+        field = cls.relaxed_field()
+        value = [matrix] if field == "inputs" else matrix
+        return cls(**{field: value, "temperature": temperature, **fields})
 
     @model_validator(mode="after")
     def validate_relaxed_state(self) -> Self:
@@ -362,6 +408,7 @@ __all__ = [
     "GradientInput",
     "GradientOutput",
     "GradientResult",
+    "coerce_to_item_list",
     "GradientValue",
     "ProteinGradientInput",
 ]
