@@ -320,7 +320,11 @@ class MixedSequenceGradientInput(GradientInput):
                 converted[column] = temperature * math.log(row[column])
             rows.append(converted)
         sequence = fields.pop("sequence")
-        return cls(inputs=[{"sequence": sequence, "logits": rows}], temperature=temperature, **fields)
+        return cls(
+            inputs=[MixedSequenceGradientItem(sequence=sequence, logits=MixedSequenceLogits(rows))],
+            temperature=temperature,
+            **fields,
+        )
 
 
 class MixedSequenceEmbedding(SequenceEmbedding):

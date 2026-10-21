@@ -883,18 +883,27 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             excluded_amino_acids=input_dict["excluded_amino_acids"],
         )
     if operation == "compute_gradient":
-        return _model.compute_gradient(
-            logits_list=input_dict["logits"],
-            temperature=resolve_temperature(input_dict["temperature"]),
-            soft=float(input_dict.get("soft", 1.0)),
-            hard=float(input_dict.get("hard", 0.0)),
-            chain_break_position=input_dict["chain_break_position"],
-            seed=input_dict["seed"],
-            backprop=input_dict.get("compute_gradient", True),
-            batch_size=input_dict.get("batch_size"),
-            device=input_dict["device"],
-            verbose=input_dict["verbose"],
-        )
+        # One chunk of independent antibodies: the variant is fixed for the whole chunk, so the
+        # model loads once and each item is evaluated in turn, one result per item in order.
+        results = [
+            _model.compute_gradient(
+                logits_list=item["logits"],
+                temperature=resolve_temperature(input_dict["temperature"]),
+                soft=float(input_dict.get("soft", 1.0)),
+                hard=float(input_dict.get("hard", 0.0)),
+                chain_break_position=item["chain_break_position"],
+                seed=input_dict["seed"],
+                backprop=input_dict.get("compute_gradient", True),
+                batch_size=input_dict.get("batch_size"),
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
+            )
+            for item in input_dict["items"]
+        ]
+        return {
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
     raise ValueError(
         f"ablang: unknown operation {operation!r}; valid: ['embeddings', 'score', 'sample', 'compute_gradient']"
     )

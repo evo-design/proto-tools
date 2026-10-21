@@ -289,9 +289,10 @@ def _build_from_probabilities(spec: Any, temperature: float) -> tuple[Any, dict[
     if issubclass(spec.input_model, BatchedNucleotideGradientInput):
         fields.pop("inputs")
         built = spec.input_model.from_probabilities(list(targets.values()), temperature=temperature, **fields)
-    elif "antibody" in spec.input_model.model_fields:
-        fields.pop("antibody")
-        chains = {path.split(".", 1)[1]: rows for path, rows in targets.items()}
+    elif all(path.endswith(("heavy_chain", "light_chain")) for path in targets):
+        # A chain-named bundle: the factory takes the chains by keyword, not one matrix.
+        fields.pop(spec.input_model.relaxed_field())
+        chains = {path.rsplit(".", 1)[1]: rows for path, rows in targets.items()}
         built = spec.input_model.from_probabilities(temperature=temperature, **chains, **fields)
     else:
         field = spec.input_model.relaxed_field()

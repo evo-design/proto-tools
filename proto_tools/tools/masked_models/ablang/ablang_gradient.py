@@ -4,6 +4,8 @@ import logging
 from collections.abc import Sequence
 from typing import Any
 
+from pydantic import field_validator
+
 from proto_tools.entities.antibody import AntibodyLogits
 from proto_tools.tools.masked_models.ablang.ablang_embeddings import _resolve_model_choice
 from proto_tools.tools.tool_registry import tool
@@ -14,6 +16,7 @@ from proto_tools.utils import (
     ProteinSequenceLogits,
     RelaxationConfig,
     ToolInstance,
+    coerce_to_item_list,
     one_hot_protein_logits,
 )
 from proto_tools.utils.tool_io import InputField
@@ -25,19 +28,26 @@ class AbLangGradientInput(GradientInput):
     """Input for the AbLang gradient tool.
 
     Attributes:
-        antibody (AntibodyLogits): Antibody with relaxed sequence distributions, one matrix
-            per chain. The model variant is selected automatically from which chains are
-            provided, and the returned gradient concatenates them heavy-then-light.
-        temperature (float | None): Softmax temperature. The default ``1.0`` reads each chain
-            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
-            gradient; ``None`` reads them as probabilities and returns a probability-space
-            gradient.
+        inputs (list[AntibodyLogits]): One antibody per candidate, each with relaxed sequence
+            distributions and one matrix per chain. A single antibody may be passed on its own.
+            The model variant is selected from which chains an antibody provides, and its
+            returned gradient concatenates them heavy-then-light.
+        temperature (float | None): Softmax temperature shared by every candidate. The default
+            ``1.0`` reads each chain as unnormalized and applies ``softmax(logits / T)``,
+            returning logit-space gradients; ``None`` reads them as probabilities and returns
+            probability-space gradients.
     """
 
-    antibody: AntibodyLogits = InputField(
-        title="Antibody Logits",
-        description="Antibody with relaxed sequence distributions over amino acids.",
+    inputs: list[AntibodyLogits] = InputField(
+        title="Antibodies",
+        description="One antibody per candidate, each with relaxed per-chain distributions; one is accepted alone",
     )
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def normalize_items(cls, value: Any) -> Any:
+        """Accept one antibody as well as a list of them."""
+        return coerce_to_item_list(value)
 
     @classmethod
     def from_probabilities(  # type: ignore[override]  # chains are named, not a single matrix
@@ -64,10 +74,12 @@ class AbLangGradientInput(GradientInput):
         """
         convert = ProteinSequenceLogits.from_probabilities
         return cls(
-            antibody=AntibodyLogits(
-                heavy_chain=None if heavy_chain is None else convert(heavy_chain, temperature=temperature),
-                light_chain=None if light_chain is None else convert(light_chain, temperature=temperature),
-            ),
+            inputs=[
+                AntibodyLogits(
+                    heavy_chain=None if heavy_chain is None else convert(heavy_chain, temperature=temperature),
+                    light_chain=None if light_chain is None else convert(light_chain, temperature=temperature),
+                )
+            ],
             temperature=temperature,
             **fields,
         )
@@ -121,7 +133,7 @@ class AbLangGradientConfig(RelaxationConfig):
 def example_input() -> AbLangGradientInput:
     """Minimal valid input for testing and examples."""
     heavy = ProteinSequenceLogits(one_hot_protein_logits("EVQLVESG", sharpness=2.0))
-    return AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy))
+    return AbLangGradientInput(inputs=[AntibodyLogits(heavy_chain=heavy)])
 
 
 @tool(
@@ -135,6 +147,9 @@ def example_input() -> AbLangGradientInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=8,
     stochastic=True,
 )
 def run_ablang_gradient(
@@ -143,32 +158,38 @@ def run_ablang_gradient(
     instance: Any = None,
 ) -> AbLangGradientOutput:
     """Compute AbLang masked PLL gradient with respect to relaxed antibody logits."""
-    ab = inputs.antibody
-    model_choice = _resolve_model_choice([ab])
+    model_choice = _resolve_model_choice(inputs.inputs)
 
-    chain_break_position: int | None = None
-    if ab.heavy_chain is not None and ab.light_chain is not None:
-        logits = ab.heavy_chain.root + ab.light_chain.root
-        chain_break_position = len(ab.heavy_chain)
-    elif ab.heavy_chain is not None:
-        logits = ab.heavy_chain.root
-    else:
-        logits = ab.light_chain.root  # type: ignore[union-attr]
+    items: list[dict[str, Any]] = []
+    for antibody in inputs.inputs:
+        # AbLang scores one matrix per antibody; a paired antibody is concatenated heavy-first and
+        # the break position tells the worker where to split it again.
+        if antibody.heavy_chain is not None and antibody.light_chain is not None:
+            items.append(
+                {
+                    "logits": antibody.heavy_chain.root + antibody.light_chain.root,
+                    "chain_break_position": len(antibody.heavy_chain),
+                }
+            )
+        elif antibody.heavy_chain is not None:
+            items.append({"logits": antibody.heavy_chain.root, "chain_break_position": None})
+        else:
+            items.append({"logits": antibody.light_chain.root, "chain_break_position": None})  # type: ignore[union-attr]
 
     logger.debug(
-        "Using local worker for AbLang gradient (model_choice=%s)",
+        "Using local worker for AbLang gradient (model_choice=%s, %d item(s))",
         model_choice,
+        len(items),
     )
     payload = {
         "operation": "compute_gradient",
-        "logits": logits,
+        "items": items,
         "temperature": inputs.temperature,
         "soft": config.soft,
         "hard": config.hard,
         "compute_gradient": config.compute_gradient,
         "batch_size": config.batch_size,
         "model_choice": model_choice,
-        "chain_break_position": chain_break_position,
         "seed": config.seed,
         "device": config.device,
         "verbose": config.verbose,
@@ -179,4 +200,4 @@ def run_ablang_gradient(
         instance=instance,
         config=config,
     )
-    return AbLangGradientOutput.from_single(result)
+    return AbLangGradientOutput(**result)
