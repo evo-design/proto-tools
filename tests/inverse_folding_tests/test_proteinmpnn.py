@@ -265,6 +265,42 @@ def test_proteinmpnn_score(pdb_structure: Structure):
     assert output.scores[0].perplexity < output.scores[1].perplexity
 
 
+def test_proteinmpnn_score_logits_land_in_proto_columns() -> None:
+    """The native-to-proto permutation moves each residue's value to its own proto column.
+
+    ColabDesign scores in AlphaFold order — the 20 residues sorted by three-letter code — with a
+    trailing unknown column. That order is derived here from an external table rather than read
+    from the toolkit, so transposing two residues in the toolkit's own alphabet fails this test
+    instead of moving the expectation with it. Every value is distinguishable, so a swap surfaces
+    as a wrong residue rather than a plausible-looking matrix.
+    """
+    from Bio.Data.IUPACData import protein_letters_1to3
+
+    from proto_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
+        PROTEINMPNN_TO_CANONICAL_INDICES,
+    )
+
+    native_order = [*sorted(_CANONICAL_AA, key=lambda residue: protein_letters_1to3[residue].upper()), "X"]
+    assert native_order == PROTEINMPNN_AMINO_ACIDS_WITH_X, (
+        f"the toolkit's alphabet {''.join(PROTEINMPNN_AMINO_ACIDS_WITH_X)} is not AlphaFold's "
+        f"three-letter-code order {''.join(native_order)}"
+    )
+
+    # Column j of the model's output carries the value j, so a column's value names its origin.
+    native = np.tile(np.arange(len(native_order), dtype=float), (3, 1))
+
+    proto_ordered = native[..., PROTEINMPNN_TO_CANONICAL_INDICES]
+
+    assert proto_ordered.shape == (3, len(_CANONICAL_AA))
+    for column, residue in enumerate(_CANONICAL_AA):
+        expected_native_column = native_order.index(residue)
+        assert proto_ordered[0, column] == expected_native_column, (
+            f"proto column {column} ({residue}) carries native column {proto_ordered[0, column]:.0f}, "
+            f"expected {expected_native_column}"
+        )
+    assert float(native_order.index("X")) not in set(proto_ordered[0]), "the unknown column reached the output"
+
+
 @pytest.mark.uses_gpu
 def test_proteinmpnn_score_fields(pdb_structure: Structure):
     """All scoring fields and their mathematical relationships are correct."""
