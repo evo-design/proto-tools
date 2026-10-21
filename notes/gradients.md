@@ -77,7 +77,7 @@ For example, consider a position with three possible tokens and logits `[2, 1, 0
 
 These numbers illustrate the shared blending formula without model-specific scaling or masking.
 
-When `hard=1`, the result no longer depends on `soft`: the entire forward representation is one-hot, and its backward path uses the STE. This reproduces the former `use_ste=True` behavior when the same probabilities and preprocessing are used. The old `use_ste=False` corresponds to `soft=1, hard=0`.
+When `hard=1`, the result no longer depends on `soft`: the entire forward representation is one-hot, and its backward path uses the STE.
 
 ### Why keep raw and blended modes?
 
@@ -202,14 +202,3 @@ The common numerical behavior is implemented in several places because the model
 The PyTorch and JAX helpers are checked against the same table of expected forward values and gradients. ColabDesign is checked against the same mathematical contract, including its preprocessing. Tests also cover the STE backward path, intermediate blends, probability mode, and shared configuration defaults.
 
 The registry-wide contract checks live in `tests/tool_infra_tests/test_gradient_contract.py`. The framework-specific checks—`_relaxation_env_checks.py`, `_relaxation_jax_env_checks.py`, and `_alphafold2_relaxation_env_checks.py`—run in their respective tool environments through `run_in_env`. These checks do not require model weights or a GPU, although they do require the corresponding environments to be built.
-
-## 8. Compatibility note
-
-The unified interface replaces the previous `use_ste` option:
-
-| Previous setting | Equivalent unified setting |
-| --- | --- |
-| `use_ste=False` | `soft=1.0, hard=0.0` |
-| `use_ste=True` | `soft=1.0, hard=1.0` |
-
-All gradient tools now default to `soft=1.0, hard=0.0`. In particular, **ProteinMPNN's default changed**: it previously used a hard STE representation by default. Set `hard=1.0` to request the former behavior.
