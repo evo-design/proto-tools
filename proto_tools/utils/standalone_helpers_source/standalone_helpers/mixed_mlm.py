@@ -341,13 +341,10 @@ class MixedMLMRuntime:
                 # Fixed context rows need a finite softmax denominator, then contribute zero.
                 softmax_allowed = allowed | ~allowed.any(dim=1, keepdim=True)
                 probs = F.softmax((state / temperature).masked_fill(~softmax_allowed, -torch.inf), dim=-1) * allowed
-            # Targets come from P, not the blend: they select this step's MLM target tokens,
-            # which must not move with soft/hard.
+            # Targets come from P, not the blend, so they do not move with soft/hard.
             hard_indices = probs.argmax(dim=-1).detach()
 
-            # The shared relaxed_sequence() formula, re-derived here because P is normalized
-            # within each position's modality block. Every term is masked, so the raw-input
-            # branch cannot put weight on a column this position forbids.
+            # The shared relaxed_sequence() formula, re-derived with masking because P is per-modality.
             soft = float(payload.get("soft", 1.0))
             hard = float(payload.get("hard", 0.0))
             x = probs

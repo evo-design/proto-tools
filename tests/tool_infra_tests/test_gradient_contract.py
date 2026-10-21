@@ -218,8 +218,7 @@ def test_probability_mode_rejects_invalid_distributions(spec: Any, corruption: s
         # 1e-3 is three orders of magnitude outside the 1e-6 tolerance.
         rows[target][column] += 1e-3
     else:
-        # Move the same mass onto another permitted column so the row still sums to 1.0 and the
-        # case isolates the nonnegativity rule rather than tripping the simplex check.
+        # Keep the row summing to 1.0, so the case tests nonnegativity rather than the simplex rule.
         other = next(index for index, value in enumerate(rows[target]) if value > 0.0 and index != column)
         rows[target][other] += 2 * rows[target][column]
         rows[target][column] = -rows[target][column]

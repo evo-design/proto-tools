@@ -13,14 +13,10 @@ from .proto_logging import get_logger
 logger = get_logger(__name__)
 
 # ── Proto's interface vocabulary orders ─────────────────────────────────────
-# These are the column orders every tool must accept inputs in and return gradients and
-# embeddings in. The parent's matching source is ``proto_tools/utils/sequence.py``, and a
-# consistency test pins the two together.
-#
-# A model's own native ordering does NOT belong here: it is that model's ground truth and lives
-# beside its other files in the toolkit's ``standalone/`` directory, mapped onto the orders
-# below with ``gather_indices``. Those orderings are fixed by separate upstreams and only
-# coincide by accident, so sharing one constant between models would couple them wrongly.
+# The column orders every tool accepts inputs in and returns gradients and embeddings in.
+# A consistency test pins these to the parent's copy in ``proto_tools/utils/sequence.py``.
+# A model's own native order belongs in its toolkit's ``standalone/`` directory instead, mapped
+# onto these with ``gather_indices``: those orders coincide only by accident.
 
 AMINO_ACIDS_LIST: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
 """Canonical 20 standard amino acids in alphabetical order; proto's protein column order."""

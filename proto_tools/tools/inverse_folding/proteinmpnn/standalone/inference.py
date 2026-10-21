@@ -20,8 +20,7 @@ logger = get_logger(__name__)
 DEFAULT_TEMPERATURE = 1.0
 CANONICAL_VOCAB: list[str] = AMINO_ACIDS_LIST
 
-# ColabDesign autoconverts to the AlphaFold alphabet for ProteinMPNN scoring, with a trailing
-# unknown symbol the relaxed state does not cover.
+# ColabDesign scores in the AlphaFold alphabet, whose trailing unknown symbol the relaxed state omits.
 PROTEINMPNN_AMINO_ACIDS_WITH_X: list[str] = list("ARNDCQEGHILKMFPSTWYVX")
 PROTEINMPNN_AMINO_ACIDS: list[str] = PROTEINMPNN_AMINO_ACIDS_WITH_X[:20]
 CANONICAL_TO_PROTEINMPNN_INDICES: list[int] = gather_indices(
@@ -266,9 +265,7 @@ class ProteinMPNNModel:
 
         def _loss_fn(logits: Any) -> Any:
             context_canonical = relaxed_sequence_jax(logits, temperature=temperature, soft=soft, hard=hard)
-            # The NLL labels are the decoded sequence, not the blend, so they stay a hard one-hot
-            # at every (soft, hard). Softmax is monotonic, so argmax(logits) picks the same token
-            # as argmax(softmax(logits / temperature)) and the probability mode needs no branch.
+            # NLL labels are the decoded sequence, not the blend; softmax is monotonic, so argmax(logits) suffices.
             labels_canonical = jax.nn.one_hot(jnp.argmax(logits, axis=-1), len(CANONICAL_VOCAB))
 
             context_af = context_canonical[:, canonical_to_af]

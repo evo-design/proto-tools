@@ -619,8 +619,7 @@ class ESM2Model:
             seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
             sequence_length = int(seq_dist.shape[0])
 
-            # Targets come from P, not the blend: they select this step's MLM target tokens,
-            # which must not move with soft/hard.
+            # Targets come from P, not the blend, so they do not move with soft/hard.
             probs = relaxed_sequence(seq_dist, temperature=temperature)
             residue_aa_idx = probs.argmax(dim=-1).detach()
             residue_token_ids = self.amino_acid_token_ids[residue_aa_idx].detach()

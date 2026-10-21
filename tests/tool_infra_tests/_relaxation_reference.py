@@ -16,8 +16,7 @@ TEMPERATURE = 0.7
 #  Non-constant on purpose: the softmax Jacobian annihilates a constant upstream vector.
 UPSTREAM = [[1.0, -2.0, 0.5, 0.25], [0.0, 1.0, 1.0, -1.0], [2.0, 0.0, -1.0, 0.5]]
 
-#  Forward values and gradients of the documented blend at ``LOGITS``, ``TEMPERATURE`` and
-#  ``UPSTREAM``, shared with the torch checks so one definition cannot drift from the other.
+#  Forward values and gradients of the documented blend, shared so neither definition can drift.
 REFERENCE: dict[tuple[float, float], dict[str, list[list[float]]]] = {
     (1.0, 0.0): {
         "forward": [

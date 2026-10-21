@@ -25,8 +25,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 # ESMFold PAE head maximum: 31 bins at 1.025 A spacing, used to normalize PAE loss to [0, 1].
 PAE_MAXIMUM = 31.75
 # ESMFold's own residue order, matching transformers' openfold_utils.residue_constants.restypes.
-# The structure module's embedding is indexed 0-based, the same basis as _sequence_to_aatype:
-# its padding_idx=0 only zeroes that row's gradient and does not shift the residues.
+# Its embedding is 0-based, the same basis as _sequence_to_aatype; padding_idx=0 shifts nothing.
 ESMFOLD_AMINO_ACIDS: list[str] = list("ARNDCQEGHILKMFPSTWYV")
 
 
@@ -338,9 +337,7 @@ class ESMFoldModel:
         s_z_0 = s_s_0.new_zeros(batch_size, seq_len, seq_len, cfg.trunk.pairwise_state_dim)
         if self.model.config.esmfold_config.embed_aa:
             aa_embeddings = self.model.embedding(aa)
-            # self.model.embedding takes 0-based restype indices, the same basis as the discrete
-            # aatype above. Upstream's +1 shift belongs to af2_to_esm (row 0 is <pad>), a
-            # different table handled separately by esm_ids.
+            # embedding takes 0-based restype indices; the +1 shift belongs to af2_to_esm, handled by esm_ids.
             af2_ids = torch.tensor(
                 gather_indices(AMINO_ACIDS_LIST, ESMFOLD_AMINO_ACIDS, label="esmfold"),
                 device=self.device,

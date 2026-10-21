@@ -86,16 +86,13 @@ def test_mixed_vocab_blocks_are_protein_then_dna() -> None:
 
 # ── No third copy ────────────────────────────────────────────────────────────
 
-# Only proto's own interface order is guarded. A model's native ordering is declared in its
-# toolkit's ``standalone/`` directory on purpose: those orders are fixed by separate upstreams
-# and coincide only by accident, so one shared constant would couple the models wrongly.
+# Only proto's interface order is guarded; a model's native order belongs in its own standalone directory.
 _CANONICAL_ALPHABETS = {
     "ACDEFGHIKLMNPQRSTVWY": "standalone_helpers.vocabulary.AMINO_ACIDS_LIST",
 }
 
 
-# Vendored upstream code we don't fork, and mock toolkits whose alphabet is an arbitrary symbol
-# set for a fake model rather than a biological vocabulary.
+# Vendored upstream code we don't fork, plus mock toolkits whose alphabet is not a biological vocabulary.
 _EXEMPT_PARTS = ("__pycache__", "src", "testing")
 
 

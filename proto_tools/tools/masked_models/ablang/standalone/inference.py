@@ -708,8 +708,7 @@ class AbLangModel:
             seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
             sequence_length = int(seq_dist.shape[0])
 
-            # Targets come from P, not the blend: they select this step's MLM target tokens,
-            # which must not move with soft/hard.
+            # Targets come from P, not the blend, so they do not move with soft/hard.
             to_vocab = self._canonical_amino_acid_to_vocab_matrix()
             probs = relaxed_sequence(seq_dist, temperature=temperature)  # (L, 20)
             residue_token_ids = (probs @ to_vocab).argmax(dim=-1).detach()  # (L,)

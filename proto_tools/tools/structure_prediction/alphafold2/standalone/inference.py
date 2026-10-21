@@ -34,12 +34,10 @@ from standalone_helpers.vocabulary import gather_indices
 
 logger = get_logger(__name__)
 
-# AlphaFold2's own residue order (3-letter codes sorted alphabetically: ALA, ARG, ASN, ...).
-# Differs from proto's AMINO_ACIDS_LIST, which is sorted by one-letter code.
+# AlphaFold2's own residue order: 3-letter codes alphabetically, not proto's one-letter sort.
 ALPHAFOLD2_AMINO_ACIDS: list[str] = list("ARNDCQEGHILKMFPSTWYV")
 
-# Gather proto-ordered columns into AF2 order, and the returned gradient back. The two differ
-# only in argument order, so the inverse cannot be written backwards.
+# Proto columns into AF2 order, and the gradient back; only the argument order differs.
 PROTO_TO_AF2 = gather_indices(ALPHAFOLD2_AMINO_ACIDS, AMINO_ACIDS_LIST, label="alphafold2")
 AF2_TO_PROTO = gather_indices(AMINO_ACIDS_LIST, ALPHAFOLD2_AMINO_ACIDS, label="alphafold2")
 
@@ -654,11 +652,8 @@ class AlphaFold2Model:
         opt = af_model.opt
         opt["num_recycles"] = num_recycles
         if temperature is None:
-            # soft_seq() always softmaxes, so probability mode is expressed as soft=0: its
-            # blend between the softmax branch and the raw input then selects the input, so the
-            # supplied distribution reaches AlphaFold verbatim. "temp" only feeds the unused
-            # softmax branch, and is pinned to keep that denominator finite.
-            opt["temp"] = 1.0
+            # Probability mode is expressed as soft=0, whose blend selects soft_seq()'s raw-input branch.
+            opt["temp"] = 1.0  # unused in that branch; pinned to keep the softmax denominator finite
             opt["soft"] = 0.0
             opt["hard"] = 0.0
         else:

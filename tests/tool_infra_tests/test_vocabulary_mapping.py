@@ -19,8 +19,7 @@ from __future__ import annotations
 import pytest
 from standalone_helpers.vocabulary import AMINO_ACIDS_LIST, gather_indices
 
-# Stands in for any model's native ordering. A real one lives in that model's standalone
-# directory, not here: this exercises the mapping, not a particular model's vocabulary.
+# Stands in for any model's native ordering; this exercises the mapping, not a real vocabulary.
 NATIVE_ORDER = list("ARNDCQEGHILKMFPSTWYV")
 
 
