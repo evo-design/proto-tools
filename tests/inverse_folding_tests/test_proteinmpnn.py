@@ -419,6 +419,29 @@ def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
+def test_proteinmpnn_gradient_forward_only_returns_loss_without_a_gradient() -> None:
+    """compute_gradient=False returns the loss, metrics and vocabulary with gradient=None."""
+    logits = np.random.default_rng(0).normal(size=(5, 20)).tolist()
+
+    result = run_proteinmpnn_gradient(
+        ProteinMPNNGradientInput(
+            logits=logits,
+            structure=_small_structure(),
+            chains_to_redesign=["A"],
+            temperature=0.7,
+        ),
+        ProteinMPNNGradientConfig(seed=42, compute_gradient=False),
+    )
+
+    validate_output(result)
+    assert result.gradient is None
+    assert result.loss > 0.0
+    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
+    assert result.vocab == list(_CANONICAL_AA)
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
 @pytest.mark.parametrize(
     ("soft", "hard"),
     [(1.0, 0.0), (1.0, 1.0), (0.0, 0.0), (0.5, 0.5)],

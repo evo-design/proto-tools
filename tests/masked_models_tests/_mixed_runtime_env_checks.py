@@ -333,6 +333,19 @@ def check_sampling_is_independent_of_mask_mapping_order() -> None:
         )
 
 
+def check_forward_only_returns_loss_without_a_gradient() -> None:
+    """compute_gradient=False must return the same loss and vocabulary with gradient=None."""
+    state = torch.tensor(one_hot_mixed_logits(_LOCUS, sharpness=0.7))
+    payload = {"sequence": _LOCUS, "logits": state.tolist(), "temperature": 0.8, "batch_size": 2, "hard": 1.0}
+
+    with_gradient = _dispatch(_make_runtime(), "gradient", **payload)
+    forward_only = _dispatch(_make_runtime(), "gradient", compute_gradient=False, **payload)
+
+    assert forward_only["gradient"] is None, f"forward-only returned a gradient: {forward_only['gradient']}"
+    assert forward_only["vocab"] == list(MIXED_VOCAB), f"forward-only reported {forward_only['vocab'][:4]}"
+    _close(forward_only["loss"], with_gradient["loss"])
+
+
 def check_gradient_is_unchanged_by_a_shuffled_native_vocabulary() -> None:
     """A shuffled tokenizer order must not move the returned gradient's columns.
 
@@ -362,6 +375,7 @@ def check_gradient_is_unchanged_by_a_shuffled_native_vocabulary() -> None:
 
 
 CHECKS = [
+    check_forward_only_returns_loss_without_a_gradient,
     check_gradient_is_unchanged_by_a_shuffled_native_vocabulary,
     check_score_matches_full_vocab_reference_and_gradient,
     check_relaxed_gradient_matches_finite_difference,
