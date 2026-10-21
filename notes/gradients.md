@@ -8,6 +8,8 @@ This guide explains what goes into a gradient tool, how Proto turns that input i
 
 A relaxed sequence is a matrix of shape `(L, V)`, where `L` is the sequence length and `V` is the size of Proto's vocabulary for that model. A protein sequence, for example, uses an `(L, 20)` matrix. Each row contains one value for every possible amino acid at that position.
 
+A call carries one or many such candidates, and returns one result per candidate in the order they were supplied. Tools whose model needs more than a matrix per candidate — a backbone, a template, a complex — take each candidate as a bundle holding its matrix together with that context, so candidates in one call may differ in all of it.
+
 The `temperature` field determines how the tool interprets those values:
 
 | `temperature` | Input represents | Probability calculation | Returned gradient |
@@ -17,16 +19,19 @@ The `temperature` field determines how the tool interprets those values:
 
 Here, `preprocess(X)` is normally just `X`. AlphaFold2 is an exception: ColabDesign can scale the logits and add bias before softmax.
 
-The input field remains named `logits` in either mode for compatibility. `temperature` belongs to the tool's **Input**; the `soft` and `hard` controls discussed below belong to its **Config**.
+A tool takes its candidates in `inputs`, one entry per sequence it should evaluate. A single candidate may be passed on its own and is normalized to a one-item list, so a caller never has to wrap one. `temperature` belongs to the tool's **Input** and is shared by every candidate; the `soft` and `hard` controls discussed below belong to its **Config**.
 
 For most gradient-based optimization, use a positive temperature. Logits can be updated without constraints, and softmax converts them into a valid probability distribution. Lower temperatures favor the highest-scoring token at each position; higher temperatures spread the probability more evenly.
 
 ```python
 # Start from unnormalized amino acid scores.
-inputs = ESM2GradientInput(logits=my_logits, temperature=1.0)
+request = ESM2GradientInput(inputs=my_logits, temperature=1.0)
+
+# Several candidates in one call, evaluated independently.
+request = ESM2GradientInput(inputs=[my_logits, other_logits], temperature=1.0)
 
 # Or provide normalized probabilities directly.
-inputs = ESM2GradientInput(logits=my_probabilities, temperature=None)
+request = ESM2GradientInput(inputs=my_probabilities, temperature=None)
 ```
 
 **A note on terminology:** The probability matrix `P` is not always exactly what the predictive model receives. Proto can further blend it with raw logits or a hard one-hot sequence, depending on `soft` and `hard`.
@@ -92,7 +97,7 @@ Set `temperature=None` when your input already contains probabilities and you do
 To pass the distribution through unchanged, use the ordinary relaxation settings (`soft=1, hard=0`):
 
 ```python
-inputs = ESM2GradientInput(logits=my_probabilities, temperature=None)
+request = ESM2GradientInput(inputs=my_probabilities, temperature=None)
 # Ordinary default config: soft=1.0, hard=0.0
 ```
 
@@ -111,18 +116,21 @@ Because unconstrained gradient updates can make probabilities negative or cause 
 If you have probabilities and want to optimize **logits**, use the gradient input class's `from_probabilities()` factory:
 
 ```python
-inputs = ESM2GradientInput.from_probabilities(
+request = ESM2GradientInput.from_probabilities(
     my_probabilities,
     temperature=0.5,
 )
 
-# Extra required inputs can be supplied in the same call.
-inputs = ProteinMPNNGradientInput.from_probabilities(
+# A candidate's own context is supplied in the same call and packed into its item.
+request = ProteinMPNNGradientInput.from_probabilities(
     my_probabilities,
     temperature=0.5,
     structure=my_structure,
 )
 ```
+
+The factory builds a single candidate. To optimize several at once, convert each distribution and
+pass the matrices as `inputs`.
 
 For strictly positive probabilities, the factory calculates:
 
