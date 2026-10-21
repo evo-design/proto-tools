@@ -913,6 +913,7 @@ from proto_tools.tools.structure_prediction import (
     ESMFoldConfig,
     ESMFoldGradientConfig,
     ESMFoldGradientInput,
+    ESMFoldGradientItem,
     ESMFoldGradientOutput,
     ESMFoldInput,
     ESMFoldOutput,
@@ -1387,6 +1388,7 @@ __all__ = [
     "ESMFoldOutput",
     "run_esmfold_gradient",
     "ESMFoldGradientInput",
+    "ESMFoldGradientItem",
     "ESMFoldGradientConfig",
     "ESMFoldGradientOutput",
     # Structure prediction - ESMFold2

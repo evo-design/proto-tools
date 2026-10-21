@@ -8,10 +8,11 @@ using ESMFold from Meta AI.
 
 import json
 import logging
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.utils.progress import progress_bar
@@ -38,11 +39,14 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     PROTEIN_AMINO_ACIDS,
     ConfigField,
+    GradientInput,
     GradientOutput,
     InputField,
-    ProteinGradientInput,
+    ProteinSequenceLogits,
     RelaxationConfig,
+    SequenceLogits,
     ToolInstance,
+    coerce_to_item_list,
     return_invalid_protein_chars,
 )
 from proto_tools.utils.tool_io import Metrics, MetricSpec
@@ -279,12 +283,14 @@ class ESMFoldConfig(StructurePredictionConfig):
         return inputs
 
 
-class ESMFoldGradientInput(ProteinGradientInput):
-    """Input for differentiable ESMFold confidence scoring.
+class ESMFoldGradientItem(BaseModel):
+    """One candidate: a relaxed target state and the complex it is folded within.
+
+    The complex belongs to the candidate, so a batch may fold different complexes and each item's
+    target indices are validated against its own chains.
 
     Attributes:
         logits (ProteinSequenceLogits): Relaxed target-chain state in proto amino-acid order.
-        temperature (float | None): Inherited — softmax temperature, or None for probabilities.
         chains (list[str]): Complete complex chain sequences. Entries listed in
             ``target_chain_indices`` are replaced by the hard decode of ``logits``
             before folding, but their lengths must match ``len(logits)``.
@@ -294,16 +300,28 @@ class ESMFoldGradientInput(ProteinGradientInput):
             shared logits tensor.
     """
 
-    chains: list[str] = InputField(
+    logits: ProteinSequenceLogits = Field(
+        title="Logits",
+        description="Relaxed (L, 20) target-chain state in proto amino-acid order.",
+    )
+    chains: list[str] = Field(
         title="Chains",
         description="Complete protein-chain sequences for the ESMFold complex.",
         examples=[["EVQLV"]],
     )
-    target_chain_indices: list[int] = InputField(
+    target_chain_indices: list[int] = Field(
         default=[0],
         title="Target Chain Indices",
         description="Zero-based chain indices that receive the relaxed input logits.",
     )
+
+    def iter_sequence_logits(self) -> Iterator[tuple[str, SequenceLogits]]:
+        """Expose this item's relaxed state to the shared validation hooks.
+
+        Yields:
+            tuple[str, SequenceLogits]: The field name and this item's matrix.
+        """
+        yield "logits", self.logits
 
     @field_validator("chains")
     @classmethod
@@ -341,6 +359,64 @@ class ESMFoldGradientInput(ProteinGradientInput):
                 f"got {[len(self.chains[idx]) for idx in mismatched]}"
             )
         return self
+
+
+class ESMFoldGradientInput(GradientInput):
+    """One or many relaxed candidates, each folded within its own complex.
+
+    Attributes:
+        inputs (list[ESMFoldGradientItem]): One target-state-and-complex bundle per candidate. A
+            single bundle may be passed on its own.
+        temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
+            reads each state as unnormalized and applies ``softmax(logits / T)``, returning
+            logit-space gradients; ``None`` reads them as probabilities and returns
+            probability-space gradients.
+    """
+
+    inputs: list[ESMFoldGradientItem] = InputField(
+        title="Relaxed Candidates",
+        description="One relaxed target state with its complex per candidate; a single bundle is accepted alone",
+    )
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def normalize_items(cls, value: Any) -> Any:
+        """Accept one candidate as well as a list of them."""
+        return coerce_to_item_list(value)
+
+    @classmethod
+    def from_probabilities(
+        cls,
+        probabilities: Sequence[Sequence[float]],
+        *,
+        temperature: float = 1.0,
+        **fields: Any,
+    ) -> Self:
+        """Build a one-candidate input whose logits reproduce ``probabilities``.
+
+        The complex belongs to the item, so ``chains`` and ``target_chain_indices`` are taken by
+        keyword here and packed into it alongside the converted matrix.
+
+        Args:
+            probabilities (Sequence[Sequence[float]]): ``(L, 20)`` strictly positive rows.
+            temperature (float): Positive, finite temperature stored on the input.
+            fields (Any): The item's remaining fields; must include ``chains``.
+
+        Returns:
+            Self: Input satisfying ``softmax(logits / temperature) == probabilities``.
+
+        Raises:
+            ValueError: If ``chains`` is missing.
+        """
+        if "chains" not in fields:
+            raise ValueError("esmfold gradient from_probabilities requires the complex chains")
+        item_fields = {name: fields.pop(name) for name in list(fields) if name in ESMFoldGradientItem.model_fields}
+        matrix = ProteinSequenceLogits.from_probabilities(probabilities, temperature=temperature)
+        return cls(
+            inputs=[ESMFoldGradientItem(logits=matrix, **item_fields)],
+            temperature=temperature,
+            **fields,
+        )
 
 
 class ESMFoldGradientConfig(ESMFoldConfig, RelaxationConfig):
@@ -425,7 +501,9 @@ def example_gradient_input() -> ESMFoldGradientInput:
     """Minimal valid input for gradient tool testing and examples."""
     from proto_tools.utils import one_hot_protein_logits
 
-    return ESMFoldGradientInput(logits=one_hot_protein_logits("MKTL", sharpness=2.0), chains=["MKTL"])
+    return ESMFoldGradientInput(
+        inputs=ESMFoldGradientItem(logits=one_hot_protein_logits("MKTL", sharpness=2.0), chains=["MKTL"])
+    )
 
 
 @tool(
@@ -625,6 +703,9 @@ def run_esmfold(
     uses_gpu=True,
     example_input=example_gradient_input,
     cacheable=False,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=2,
 )
 def run_esmfold_gradient(
     inputs: ESMFoldGradientInput,
@@ -639,17 +720,25 @@ def run_esmfold_gradient(
     pass returns ``d(loss) / d(logits)``.
     """
     complex_input = ESMFoldInput(
-        complexes=[Complex(chains=[Chain(sequence=chain, entity_type="protein") for chain in inputs.chains])]
+        complexes=[
+            Complex(chains=[Chain(sequence=chain, entity_type="protein") for chain in item.chains])
+            for item in inputs.inputs
+        ]
     )
-    prepared_complex = complex_input.prepare_complexes(chain_linker=config.chain_linker)[0]
+    prepared = complex_input.prepare_complexes(chain_linker=config.chain_linker)
 
     output_data = ToolInstance.dispatch(
         "esmfold",
         {
             "operation": "compute_gradient",
-            "complex_data": prepared_complex,
-            "logits": inputs.logits.root,
-            "target_chain_indices": inputs.target_chain_indices,
+            "items": [
+                {
+                    "complex_data": prepared_complex,
+                    "logits": item.logits.root,
+                    "target_chain_indices": item.target_chain_indices,
+                }
+                for item, prepared_complex in zip(inputs.inputs, prepared, strict=True)
+            ],
             "temperature": inputs.temperature,
             "soft": config.soft,
             "hard": config.hard,
@@ -666,13 +755,14 @@ def run_esmfold_gradient(
         config=config,
     )
 
-    pdb_output = _relabel_chains(output_data["pdb"], prepared_complex["seq_lengths"])
-    metrics = output_data["metrics"]
-    return ESMFoldGradientOutput(
-        results=[
+    results = []
+    for result, prepared_complex in zip(output_data["results"], prepared, strict=True):
+        metrics = result["metrics"]
+        pdb_output = _relabel_chains(result["pdb"], prepared_complex["seq_lengths"])
+        results.append(
             StructureGradientResult(
-                gradient=output_data["gradient"],
-                loss=output_data["loss"],
+                gradient=result["gradient"],
+                loss=result["loss"],
                 metrics=metrics,
                 structure=Structure(
                     structure=pdb_output,
@@ -686,6 +776,5 @@ def run_esmfold_gradient(
                     source="esmfold-gradient",
                 ),
             )
-        ],
-        vocab=list(PROTEIN_AMINO_ACIDS),
-    )
+        )
+    return ESMFoldGradientOutput(results=results, vocab=list(PROTEIN_AMINO_ACIDS))

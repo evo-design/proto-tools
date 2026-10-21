@@ -670,22 +670,31 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
         return {"results": results}
     if operation == "compute_gradient":
-        return _model.compute_gradient(
-            complex_data=input_dict["complex_data"],
-            logits_list=input_dict["logits"],
-            target_chain_indices=input_dict["target_chain_indices"],
-            residue_idx_offset=input_dict["residue_idx_offset"],
-            chain_linker=input_dict["chain_linker"],
-            temperature=resolve_temperature(input_dict["temperature"]),
-            soft=input_dict["soft"],
-            hard=input_dict["hard"],
-            loss_weights=input_dict["loss_weights"],
-            compute_gradient=input_dict["compute_gradient"],
-            device=input_dict["device"],
-            verbose=input_dict["verbose"],
-            include_pae_matrix=input_dict["include_pae_matrix"],
-            num_recycles=input_dict["num_recycles"],
-        )
+        # One chunk of independent complexes: the weights load once and each item is folded in
+        # turn, so the reply holds one result per item — its own structure included — in order.
+        results = [
+            _model.compute_gradient(
+                complex_data=item["complex_data"],
+                logits_list=item["logits"],
+                target_chain_indices=item["target_chain_indices"],
+                residue_idx_offset=input_dict["residue_idx_offset"],
+                chain_linker=input_dict["chain_linker"],
+                temperature=resolve_temperature(input_dict["temperature"]),
+                soft=input_dict["soft"],
+                hard=input_dict["hard"],
+                loss_weights=input_dict["loss_weights"],
+                compute_gradient=input_dict["compute_gradient"],
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
+                include_pae_matrix=input_dict["include_pae_matrix"],
+                num_recycles=input_dict["num_recycles"],
+            )
+            for item in input_dict["items"]
+        ]
+        return {
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics", "pdb")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
     raise ValueError(f"esmfold: unknown operation {operation!r}; valid: ['predict', 'compute_gradient']")
 
 
