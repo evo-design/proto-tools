@@ -293,14 +293,10 @@ class ParadeGradientOutput(GradientOutput):
         """
         sample_metrics = _build_gradient_sample_metrics(payload["metrics"])
         gradients = payload.get("gradient") or [None] * len(sample_metrics)
-        results = [
-            GradientResult(
-                gradient=gradients[index],
-                loss=float(metrics.loss),
-                metrics=metrics.model_dump(),
-            )
-            for index, metrics in enumerate(sample_metrics)
-        ]
+        results = []
+        for index, metrics in enumerate(sample_metrics):
+            values = metrics.model_dump()
+            results.append(GradientResult(gradient=gradients[index], loss=float(values["loss"]), metrics=values))
         return cls(results=results, vocab=payload["vocab"])
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:

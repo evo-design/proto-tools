@@ -126,7 +126,7 @@ class ESM2GradientConfig(RelaxationConfig):
 
 def example_input() -> ESM2GradientInput:
     """Minimal valid input for testing and examples."""
-    return ESM2GradientInput(inputs=one_hot_protein_logits("MKTL", sharpness=2.0))
+    return ESM2GradientInput(inputs=[ProteinSequenceLogits(one_hot_protein_logits("MKTL", sharpness=2.0))])
 
 
 @tool(

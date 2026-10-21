@@ -319,7 +319,7 @@ class AlphaFold2GradientOutput(GradientOutput):
         vocab (list[str]): Amino-acid column ordering.
     """
 
-    results: list[StructureGradientResult] = Field(
+    results: list[StructureGradientResult] = Field(  # type: ignore[assignment]  # narrows the element type
         title="Results",
         description="One result per input item, in input order, each with its own predicted complex",
     )

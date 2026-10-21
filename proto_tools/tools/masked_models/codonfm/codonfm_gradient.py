@@ -123,7 +123,7 @@ class CodonFMGradientConfig(RelaxationConfig):
 
 def example_input() -> CodonFMGradientInput:
     """Minimal valid input for testing and examples."""
-    return CodonFMGradientInput(inputs=one_hot_codon_logits("ATGGTGAGCAAG", sharpness=2.0))
+    return CodonFMGradientInput(inputs=[CodonSequenceLogits(one_hot_codon_logits("ATGGTGAGCAAG", sharpness=2.0))])
 
 
 @tool(
