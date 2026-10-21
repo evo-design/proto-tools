@@ -41,14 +41,18 @@ def test_malinois_gradient_input_validates_dna_logits() -> None:
     """Malinois gradient input requires a B x L x 4 DNA logit tensor."""
     from proto_tools.tools.sequence_scoring.malinois import MalinoisGradientInput
 
-    inputs = MalinoisGradientInput(logits=[[[0.0] * 4] * 200])
+    inputs = MalinoisGradientInput(inputs=[[[0.0] * 4] * 200])
 
-    assert len(inputs.logits) == 1
-    assert len(inputs.logits[0]) == 200
+    assert len(inputs.inputs) == 1
+    assert len(inputs.inputs[0]) == 200
     with pytest.raises(ValidationError, match="must have 4 columns"):
-        MalinoisGradientInput(logits=[[[0.0] * 3]])
-    with pytest.raises(ValidationError):
-        MalinoisGradientInput(logits=[[0.0] * 4] * 200)
+        MalinoisGradientInput(inputs=[[[0.0] * 3]])
+    # A bare (L, 4) matrix is one item, not an error.
+    bare = MalinoisGradientInput(inputs=[[0.0] * 4] * 200)
+    assert len(bare.inputs) == 1
+    assert len(bare.inputs[0]) == 200
+    with pytest.raises(ValidationError, match="at least one item"):
+        MalinoisGradientInput(inputs=[])
 
 
 def test_malinois_run_dispatches_and_maps_scores(monkeypatch) -> None:
@@ -120,7 +124,7 @@ def test_malinois_gradient_dispatches_loss_terms(monkeypatch) -> None:
     monkeypatch.setattr(malinois_score.ToolInstance, "dispatch", staticmethod(fake_dispatch))
 
     result = run_malinois_gradient(
-        MalinoisGradientInput(logits=[[[0.0] * 4] * 200], temperature=0.7),
+        MalinoisGradientInput(inputs=[[[0.0] * 4] * 200], temperature=0.7),
         MalinoisGradientConfig(
             loss_terms=[
                 MalinoisGradientLossTerm(cell_type="K562", direction="max", weight=2.0),
@@ -160,7 +164,7 @@ def test_malinois_gradient_rejects_wrong_sequence_length() -> None:
     )
 
     with pytest.raises(ValueError, match="logits must have length 200"):
-        run_malinois_gradient(MalinoisGradientInput(logits=[[[0.0] * 4] * 199]), MalinoisGradientConfig())
+        run_malinois_gradient(MalinoisGradientInput(inputs=[[[0.0] * 4] * 199]), MalinoisGradientConfig())
 
 
 def _softmax_rows(logits):
@@ -186,9 +190,9 @@ def test_malinois_gradient_probability_mode_matches_logit_mode() -> None:
     logits = [[0.1, 0.2, 0.3, 0.4]] * 200
     config = MalinoisGradientConfig(device="cuda")
 
-    logit_mode = run_malinois_gradient(MalinoisGradientInput(logits=[logits], temperature=1.0), config)
+    logit_mode = run_malinois_gradient(MalinoisGradientInput(inputs=[logits], temperature=1.0), config)
     probability_mode = run_malinois_gradient(
-        MalinoisGradientInput(logits=[_softmax_rows(logits)], temperature=None), config
+        MalinoisGradientInput(inputs=[_softmax_rows(logits)], temperature=None), config
     )
 
     assert probability_mode.results[0].loss == pytest.approx(logit_mode.results[0].loss, rel=1e-5)
@@ -233,7 +237,7 @@ def test_malinois_real_gpu_gradient() -> None:
     )
 
     result = run_malinois_gradient(
-        MalinoisGradientInput(logits=[[[0.0] * 4] * 200, [[0.1, 0.2, 0.3, 0.4]] * 200], temperature=1.0),
+        MalinoisGradientInput(inputs=[[[0.0] * 4] * 200, [[0.1, 0.2, 0.3, 0.4]] * 200], temperature=1.0),
         MalinoisGradientConfig(
             loss_terms=[
                 MalinoisGradientLossTerm(cell_type="K562", direction="max"),
@@ -293,7 +297,7 @@ def test_malinois_one_hot_relaxed_input_matches_discrete_scores() -> None:
         MalinoisScoreConfig(cell_types=["K562"], device="cuda"),
     )
     relaxed = run_malinois_gradient(
-        MalinoisGradientInput(logits=[one_hot], temperature=None),
+        MalinoisGradientInput(inputs=[one_hot], temperature=None),
         MalinoisGradientConfig(
             loss_terms=[MalinoisGradientLossTerm(cell_type="K562", direction="max")],
             compute_gradient=False,
@@ -336,9 +340,9 @@ def test_malinois_real_gpu_batched_gradient_matches_batch_size_one_calls() -> No
         device="cuda",
     )
     with ToolInstance.persist_tool("malinois") as instance:
-        batched = run_malinois_gradient(MalinoisGradientInput(logits=logits_batch), config, instance=instance)
+        batched = run_malinois_gradient(MalinoisGradientInput(inputs=logits_batch), config, instance=instance)
         singles = [
-            run_malinois_gradient(MalinoisGradientInput(logits=[logits]), config, instance=instance)
+            run_malinois_gradient(MalinoisGradientInput(inputs=[logits]), config, instance=instance)
             for logits in logits_batch
         ]
 
@@ -405,7 +409,7 @@ def test_malinois_gradient_benchmark(request: pytest.FixtureRequest) -> None:
         [[1.0 if column == base_index[base] else 0.0 for column in range(len(DNA_NUCLEOTIDES))] for base in sequence]
         for sequence in sequences
     ]
-    inputs = MalinoisGradientInput(logits=logits, temperature=1.0)
+    inputs = MalinoisGradientInput(inputs=logits, temperature=1.0)
     config = MalinoisGradientConfig(
         loss_terms=[
             MalinoisGradientLossTerm(cell_type="K562", direction="max"),

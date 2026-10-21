@@ -279,7 +279,7 @@ def _build_from_probabilities(spec: Any, temperature: float) -> tuple[Any, dict[
     }
 
     if issubclass(spec.input_model, BatchedNucleotideGradientInput):
-        fields.pop("logits")
+        fields.pop("inputs")
         built = spec.input_model.from_probabilities(list(targets.values()), temperature=temperature, **fields)
     elif "antibody" in spec.input_model.model_fields:
         fields.pop("antibody")

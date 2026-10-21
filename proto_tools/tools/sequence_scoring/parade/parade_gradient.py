@@ -314,7 +314,7 @@ class ParadeGradientOutput(GradientOutput):
 
 def example_gradient_input() -> Any:
     """Minimal valid input for differentiable PARADE examples."""
-    return ParadeGradientInput(logits=[NucleotideSequenceLogits([[0.0] * len(DNA_NUCLEOTIDES)] * 50)])
+    return ParadeGradientInput(inputs=[NucleotideSequenceLogits([[0.0] * len(DNA_NUCLEOTIDES)] * 50)])
 
 
 @tool(
@@ -329,6 +329,9 @@ def example_gradient_input() -> Any:
     uses_gpu=True,
     example_input=example_gradient_input,
     cacheable=False,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_parade_gradient(
     inputs: ParadeGradientInput,
@@ -356,7 +359,7 @@ def run_parade_gradient(
         "parade",
         {
             "operation": "gradient",
-            "logits": [item.root for item in inputs.logits],
+            "logits": [item.root for item in inputs.inputs],
             "temperature": inputs.temperature,
             "construct_type": config.construct_type,
             "loss_terms": [term.model_dump() for term in config.loss_terms],

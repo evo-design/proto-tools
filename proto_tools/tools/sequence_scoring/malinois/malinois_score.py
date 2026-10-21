@@ -582,7 +582,7 @@ def example_input() -> Any:
 
 def example_gradient_input() -> Any:
     """Minimal valid input for differentiable Malinois examples."""
-    return MalinoisGradientInput(logits=[NucleotideSequenceLogits([[0.0] * len(DNA_NUCLEOTIDES)] * 200)])
+    return MalinoisGradientInput(inputs=[NucleotideSequenceLogits([[0.0] * len(DNA_NUCLEOTIDES)] * 200)])
 
 
 @tool(
@@ -672,6 +672,9 @@ def run_malinois_score(
     uses_gpu=True,
     example_input=example_gradient_input,
     cacheable=False,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_malinois_gradient(
     inputs: MalinoisGradientInput,
@@ -679,7 +682,7 @@ def run_malinois_gradient(
     instance: Any = None,
 ) -> MalinoisGradientOutput:
     """Compute Malinois activity gradients with respect to relaxed DNA logits."""
-    invalid_lengths = [len(matrix) for matrix in inputs.logits if len(matrix) != config.seq_length]
+    invalid_lengths = [len(matrix) for matrix in inputs.inputs if len(matrix) != config.seq_length]
     if invalid_lengths:
         raise ValueError(f"Malinois gradient logits must have length {config.seq_length}; got {invalid_lengths[0]}")
 
@@ -687,7 +690,7 @@ def run_malinois_gradient(
         "malinois",
         {
             "operation": "compute_gradient",
-            "logits": [item.root for item in inputs.logits],
+            "logits": [item.root for item in inputs.inputs],
             "temperature": inputs.temperature,
             "loss_terms": [term.model_dump() for term in config.loss_terms],
             "seq_length": config.seq_length,

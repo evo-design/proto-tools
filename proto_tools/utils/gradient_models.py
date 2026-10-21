@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, get_args
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.utils.base_config import BaseConfig, ConfigField
@@ -247,16 +247,23 @@ class BatchedNucleotideGradientInput(GradientInput):
 
     Attributes:
         temperature (float | None): Inherited softmax temperature; see :class:`GradientInput`.
-        logits (list[NucleotideSequenceLogits]): Relaxed ``(B, L, 4)`` state in ``A,C,G,T``
-            order. Use ``B=1`` for a single design candidate.
+        inputs (list[NucleotideSequenceLogits]): One relaxed ``(L, 4)`` state per candidate in
+            ``A,C,G,T`` order. A single state may be passed on its own. The backend evaluates the
+            batch in one vectorized pass, so every item must share one length.
     """
 
-    logits: list[NucleotideSequenceLogits] = InputField(
-        title="Logits",
-        description="Batched relaxed DNA state with shape (B, L, 4) in A,C,G,T order.",
+    inputs: list[NucleotideSequenceLogits] = InputField(
+        title="Relaxed Sequences",
+        description="One relaxed (L, 4) DNA state per candidate in A,C,G,T order; a single state is accepted alone",
         min_length=1,
         examples=[[[[0.0] * 4] * 50]],
     )
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def normalize_items(cls, value: Any) -> Any:
+        """Accept one relaxed state as well as a list of them."""
+        return coerce_to_item_list(value)
 
     @classmethod
     def from_probabilities(  # type: ignore[override]  # a batch takes (B, L, V), not (L, V)
@@ -280,12 +287,12 @@ class BatchedNucleotideGradientInput(GradientInput):
         matrices = [
             NucleotideSequenceLogits.from_probabilities(item, temperature=temperature) for item in probabilities
         ]
-        return cls(logits=matrices, temperature=temperature, **fields)
+        return cls(inputs=matrices, temperature=temperature, **fields)
 
     @model_validator(mode="after")
     def validate_batch_lengths(self) -> Self:
         """Require every batch item to share one sequence length."""
-        lengths = sorted({len(item) for item in self.logits})
+        lengths = sorted({len(item) for item in self.inputs})
         if len(lengths) > 1:
             raise ValueError(f"all batched logits must have the same sequence length; got {lengths}")
         return self

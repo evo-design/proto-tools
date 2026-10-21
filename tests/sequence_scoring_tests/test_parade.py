@@ -301,7 +301,7 @@ def test_parade_config_cross_field_assignments_are_atomic() -> None:
     from proto_tools.tools.sequence_scoring.parade import ParadeGradientInput, run_parade_gradient
 
     with pytest.raises(ValidationError, match="cannot be empty"):
-        run_parade_gradient(ParadeGradientInput(logits=[[[0.0] * 4] * 50]), gradient)
+        run_parade_gradient(ParadeGradientInput(inputs=[[[0.0] * 4] * 50]), gradient)
 
 
 def test_parade_activity_config_rejects_offpanel_and_duplicate_cells() -> None:
@@ -547,13 +547,17 @@ def test_parade_gradient_input_validates_logits() -> None:
     """PARADE gradient input requires a B x L x 4 logit tensor."""
     from proto_tools.tools.sequence_scoring.parade import ParadeGradientInput
 
-    inputs = ParadeGradientInput(logits=[[[0.0] * 4] * 50])
-    assert len(inputs.logits) == 1
-    assert len(inputs.logits[0]) == 50
+    inputs = ParadeGradientInput(inputs=[[[0.0] * 4] * 50])
+    assert len(inputs.inputs) == 1
+    assert len(inputs.inputs[0]) == 50
     with pytest.raises(ValidationError, match="must have 4 columns"):
-        ParadeGradientInput(logits=[[[0.0] * 3]])
-    with pytest.raises(ValidationError):
-        ParadeGradientInput(logits=[[0.0] * 4] * 50)
+        ParadeGradientInput(inputs=[[[0.0] * 3]])
+    # A bare (L, 4) matrix is one item, not an error.
+    bare = ParadeGradientInput(inputs=[[0.0] * 4] * 50)
+    assert len(bare.inputs) == 1
+    assert len(bare.inputs[0]) == 50
+    with pytest.raises(ValidationError, match="at least one item"):
+        ParadeGradientInput(inputs=[])
 
 
 def test_parade_gradient_rejects_nonfinite_values() -> None:
@@ -566,9 +570,9 @@ def test_parade_gradient_rejects_nonfinite_values() -> None:
 
     for value in (math.nan, math.inf, -math.inf):
         with pytest.raises(ValidationError, match="finite number"):
-            ParadeGradientInput(logits=[[[value, 0.0, 0.0, 0.0]]])
+            ParadeGradientInput(inputs=[[[value, 0.0, 0.0, 0.0]]])
         with pytest.raises(ValidationError, match="finite number"):
-            ParadeGradientInput(logits=[[[0.0, 0.0, 0.0, 0.0]]], temperature=value)
+            ParadeGradientInput(inputs=[[[0.0, 0.0, 0.0, 0.0]]], temperature=value)
         with pytest.raises(ValidationError, match="finite number"):
             ParadeGradientConfig(loss_terms=[ParadeGradientLossTerm(sigmoid_center=value)])
 
@@ -621,8 +625,8 @@ def test_parade_run_boundaries_revalidate_mutated_inputs(monkeypatch) -> None:
     with pytest.raises(ValidationError, match="Invalid nucleotide"):
         run_parade_activity(sequences, ParadeActivityConfig())
 
-    gradient = ParadeGradientInput(logits=[[[0.0] * 4]])
-    gradient.logits[0][0][0] = math.nan
+    gradient = ParadeGradientInput(inputs=[[[0.0] * 4]])
+    gradient.inputs[0][0][0] = math.nan
     with pytest.raises(ValidationError, match="finite"):
         run_parade_gradient(gradient, ParadeGradientConfig())
 
@@ -665,7 +669,7 @@ def test_parade_gradient_run_dispatches_loss_terms(monkeypatch) -> None:
     monkeypatch.setattr(parade_gradient.ToolInstance, "dispatch", staticmethod(fake_dispatch))
 
     result = run_parade_gradient(
-        ParadeGradientInput(logits=[[[0.0] * 4] * 50], temperature=0.7),
+        ParadeGradientInput(inputs=[[[0.0] * 4] * 50], temperature=0.7),
         ParadeGradientConfig(
             construct_type="utr5",
             loss_terms=[
@@ -748,9 +752,9 @@ def test_parade_gradient_probability_mode_matches_logit_mode() -> None:
     logits = [[0.1, 0.2, 0.3, 0.4]] * 50
     config = ParadeGradientConfig(device="cuda")
 
-    logit_mode = run_parade_gradient(ParadeGradientInput(logits=[logits], temperature=1.0), config)
+    logit_mode = run_parade_gradient(ParadeGradientInput(inputs=[logits], temperature=1.0), config)
     probability_mode = run_parade_gradient(
-        ParadeGradientInput(logits=[_softmax_rows(logits)], temperature=None), config
+        ParadeGradientInput(inputs=[_softmax_rows(logits)], temperature=None), config
     )
 
     assert probability_mode.results[0].loss == pytest.approx(logit_mode.results[0].loss, rel=1e-5)
@@ -772,7 +776,7 @@ def test_parade_gradient_real_gpu_utr3() -> None:
     )
 
     result = run_parade_gradient(
-        ParadeGradientInput(logits=[[[0.0] * 4] * 240], temperature=1.0),  # 240 nt
+        ParadeGradientInput(inputs=[[[0.0] * 4] * 240], temperature=1.0),  # 240 nt
         ParadeGradientConfig(
             construct_type="utr3",
             loss_terms=[
@@ -824,7 +828,7 @@ def test_parade_gradient_real_gpu() -> None:
     )
 
     result = run_parade_gradient(
-        ParadeGradientInput(logits=[[[0.0] * 4] * 50, [[0.1, 0.2, 0.3, 0.4]] * 50], temperature=1.0),
+        ParadeGradientInput(inputs=[[[0.0] * 4] * 50, [[0.1, 0.2, 0.3, 0.4]] * 50], temperature=1.0),
         ParadeGradientConfig(
             construct_type="utr5",
             loss_terms=[
@@ -873,7 +877,7 @@ def test_parade_one_hot_relaxed_input_matches_discrete_activity() -> None:
         ParadeActivityConfig(construct_type="utr5", device="cuda"),
     )
     relaxed = run_parade_gradient(
-        ParadeGradientInput(logits=[one_hot], temperature=None),
+        ParadeGradientInput(inputs=[one_hot], temperature=None),
         ParadeGradientConfig(
             construct_type="utr5",
             loss_terms=[ParadeGradientLossTerm(cell_type="c2", direction="max")],
@@ -987,7 +991,7 @@ def test_parade_gradient_benchmark(request: pytest.FixtureRequest) -> None:
         [[1.0 if column == base_index[base] else 0.0 for column in range(len(DNA_NUCLEOTIDES))] for base in sequence]
         for sequence in sequences
     ]
-    inputs = ParadeGradientInput(logits=logits, temperature=1.0)
+    inputs = ParadeGradientInput(inputs=logits, temperature=1.0)
     config = ParadeGradientConfig(
         construct_type="utr5",
         loss_terms=[
