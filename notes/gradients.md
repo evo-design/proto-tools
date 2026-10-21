@@ -180,10 +180,6 @@ Each `results[i]` carries that item alone:
 - `metrics`: additional model-specific scores for that item;
 - `gradient`: derivatives with respect to that item's sequence matrix, in the same shape and vocabulary order.
 
-ESMFold and AlphaFold2 attach the structure they predicted for an item to that item's result. A
-single-item call still returns a one-element `results` list, so a caller never has to branch on
-how many candidates it sent.
-
 With positive temperature, the gradient is with respect to **logits**. With `temperature=None`, it is with respect to **probabilities**. In a hard-STE mode, it is a **surrogate gradient**: the forward pass evaluates one-hot inputs, but the backward pass follows the differentiable probability pathway.
 
 Setting `compute_gradient=False` runs forward-only scoring and returns `gradient=None`.
