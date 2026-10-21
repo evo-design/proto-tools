@@ -518,6 +518,44 @@ def test_mixed_batch_survives_pool_partitioning(monkeypatch: pytest.MonkeyPatch)
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
+def test_gradient_matches_finite_difference() -> None:
+    """The returned gradient must be the derivative of the loss the tool reports.
+
+    A consistency test between batched and singleton runs cannot see a uniform scale error,
+    because it is present in both. Only a derivative check can: the objective is the *mean*
+    negative log-likelihood over masked positions, so differentiating the sum instead would
+    inflate every gradient by the number of positions.
+    """
+    sequence = VH_SEQ[:12]
+    base = one_hot_protein_logits(sequence, sharpness=2.0)
+    row, column, epsilon = 3, 7, 0.05
+
+    def evaluate(matrix: list[list[float]], *, with_gradient: bool) -> tuple[float, list[list[float]] | None]:
+        output = run_ablang_gradient(
+            AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=matrix)),
+            AbLangGradientConfig(compute_gradient=with_gradient),
+        )
+        return output.results[0].loss, output.results[0].gradient
+
+    _, gradient = evaluate(base, with_gradient=True)
+    plus = [list(matrix_row) for matrix_row in base]
+    plus[row][column] += epsilon
+    minus = [list(matrix_row) for matrix_row in base]
+    minus[row][column] -= epsilon
+    loss_plus, _ = evaluate(plus, with_gradient=False)
+    loss_minus, _ = evaluate(minus, with_gradient=False)
+
+    central_difference = (loss_plus - loss_minus) / (2 * epsilon)
+    assert gradient is not None
+    assert gradient[row][column] == pytest.approx(central_difference, rel=0.02, abs=1e-5), (
+        f"gradient {gradient[row][column]:.6e} does not match d(loss)/d(logit) "
+        f"{central_difference:.6e}; a ratio near {len(sequence)} means the summed loss was "
+        "differentiated while the mean was reported"
+    )
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
 def test_mixed_batch_matches_individual_evaluations() -> None:
     """A mixed batch must give each antibody the same result as evaluating it alone.
 

@@ -811,11 +811,14 @@ class AbLangModel:
                 chunk_idx = torch.arange(chunk_len, device=self.device)
                 pred = chunk_logits[chunk_idx, chunk_aa_pos, :]  # (C, V)
                 labels = token_ids[0, aa_positions[start:end]]  # (C,)
-                loss = F.cross_entropy(pred, labels, reduction="sum")
-                total_loss_val += loss.item()
+                loss_sum = F.cross_entropy(pred, labels, reduction="sum")
+                total_loss_val += loss_sum.item()
 
                 if backprop:
-                    loss.backward()
+                    # The reported objective is the mean over masked positions, so the backward
+                    # pass carries that same normalization; differentiating the sum would scale
+                    # every gradient by the number of positions.
+                    (loss_sum / n_aa).backward()
                     ie_grad += ie_chunk.grad
 
         mean_nll = total_loss_val / n_aa
