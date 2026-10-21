@@ -9,6 +9,7 @@ from proto_tools.tools.masked_models.mixed_configs import MixedGradientConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
     MixedGradientOutput,
     MixedSequenceGradientInput,
+    MixedSequenceGradientItem,
     one_hot_mixed_logits,
 )
 from proto_tools.tools.tool_registry import tool
@@ -36,7 +37,11 @@ class GLM2GradientConfig(GLM2Config, MixedGradientConfig):
 
 def example_input() -> GLM2GradientInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return GLM2GradientInput(sequence="+MKTL+acgt", logits=one_hot_mixed_logits("+MKTL+acgt", sharpness=2.0))
+    return GLM2GradientInput(
+        inputs=[
+            MixedSequenceGradientItem(sequence="+MKTL+acgt", logits=one_hot_mixed_logits("+MKTL+acgt", sharpness=2.0))
+        ]
+    )
 
 
 @tool(
@@ -50,6 +55,9 @@ def example_input() -> GLM2GradientInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=4,
 )
 def run_glm2_gradient(
     inputs: GLM2GradientInput,
@@ -67,4 +75,4 @@ def run_glm2_gradient(
         GLM2GradientOutput: Token-aligned gradient output.
     """
     logger.debug("Using local worker for gLM2 gradient: %s", config.model_checkpoint)
-    return GLM2GradientOutput.from_single(dispatch_masked_model("glm2", "gradient", inputs, config, instance))
+    return GLM2GradientOutput(**dispatch_masked_model("glm2", "gradient", inputs, config, instance))

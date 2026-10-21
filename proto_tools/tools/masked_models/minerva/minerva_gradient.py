@@ -9,6 +9,7 @@ from proto_tools.tools.masked_models.mixed_configs import MixedGradientConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
     MixedGradientOutput,
     MixedSequenceGradientInput,
+    MixedSequenceGradientItem,
     one_hot_mixed_logits,
 )
 from proto_tools.tools.tool_registry import tool
@@ -36,7 +37,11 @@ class MinervaGradientConfig(MinervaConfig, MixedGradientConfig):
 
 def example_input() -> MinervaGradientInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return MinervaGradientInput(sequence="+MKTL+acgt", logits=one_hot_mixed_logits("+MKTL+acgt", sharpness=2.0))
+    return MinervaGradientInput(
+        inputs=[
+            MixedSequenceGradientItem(sequence="+MKTL+acgt", logits=one_hot_mixed_logits("+MKTL+acgt", sharpness=2.0))
+        ]
+    )
 
 
 @tool(
@@ -50,6 +55,9 @@ def example_input() -> MinervaGradientInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=4,
 )
 def run_minerva_gradient(
     inputs: MinervaGradientInput,
@@ -67,4 +75,4 @@ def run_minerva_gradient(
         MinervaGradientOutput: Token-aligned gradient output.
     """
     logger.debug("Using local worker for Minerva gradient: %s", config.model_checkpoint)
-    return MinervaGradientOutput.from_single(dispatch_masked_model("minerva", "gradient", inputs, config, instance))
+    return MinervaGradientOutput(**dispatch_masked_model("minerva", "gradient", inputs, config, instance))

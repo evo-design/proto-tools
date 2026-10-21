@@ -133,7 +133,9 @@ class MixedMLMRuntime:
         batch_size = payload.get("batch_size", 1)
         if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
             raise ValueError("batch_size must be a positive integer")
-        sequences = [payload["sequence"]] if operation == "gradient" else payload["sequences"]
+        sequences = (
+            [item["sequence"] for item in payload["inputs"]] if operation == "gradient" else payload["sequences"]
+        )
         if not isinstance(sequences, list) or not sequences:
             raise ValueError("At least one prepared sequence is required")
         tokens = [tokenize_mixed_sequence(sequence, allow_masks=operation == "sample") for sequence in sequences]
@@ -162,7 +164,16 @@ class MixedMLMRuntime:
         if operation == "sample":
             return self.sample(tokens, mappings, payload)
         if operation == "gradient":
-            return self.gradient(payload)
+            # One chunk of independent candidates: the checkpoint is already loaded, so each item
+            # is evaluated in turn and the reply holds one result per item, in order.
+            results = [
+                self.gradient({**payload, "sequence": item["sequence"], "logits": item["logits"]})
+                for item in payload["inputs"]
+            ]
+            return {
+                "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
+                "vocab": list(MIXED_VOCAB),
+            }
         return self.interactions(tokens, payload)
 
     def embeddings(

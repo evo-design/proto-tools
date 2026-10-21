@@ -84,20 +84,23 @@ def test_mixed_preprocess_warns_once_per_sequence_missing_leading_marker(caplog)
 
 
 @pytest.mark.parametrize(
-    ("input_class", "field", "extra"),
+    ("build", "read"),
     [
-        (MixedSequenceInput, "sequences", {}),
-        (MixedSequenceSampleInput, "sequences", {}),
-        (MixedSequenceGradientInput, "sequence", {"logits": one_hot_mixed_logits(_LOCUS)}),
+        (lambda spelling: MixedSequenceInput(sequences=spelling), lambda model: model.sequences[0]),
+        (lambda spelling: MixedSequenceSampleInput(sequences=spelling), lambda model: model.sequences[0]),
+        (
+            lambda spelling: MixedSequenceGradientInput(
+                inputs={"sequence": spelling, "logits": one_hot_mixed_logits(_LOCUS)}
+            ),
+            lambda model: model.inputs[0].sequence,
+        ),
     ],
+    ids=["sequence-input", "sample-input", "gradient-input"],
 )
 @pytest.mark.parametrize("spelling", [_LONG_LOCUS, "<+>MA+ac<->X", "+MA<+>ac-X"])
-def test_mixed_inputs_normalize_long_and_mixed_marker_spellings(input_class, field, extra, spelling):
-    long_form = input_class(**{field: spelling}, **extra)
-    short_form = input_class(**{field: _LOCUS}, **extra)
-    assert getattr(long_form, field) == getattr(short_form, field)
-    stored = getattr(long_form, field)
-    assert (stored if isinstance(stored, str) else stored[0]) == _LOCUS
+def test_mixed_inputs_normalize_long_and_mixed_marker_spellings(build, read, spelling):
+    """Every marker spelling stores the same canonical template, wherever the template lives."""
+    assert read(build(spelling)) == read(build(_LOCUS)) == _LOCUS
     assert tokenize_mixed_sequence(_LOCUS) == _TOKENS
 
 
@@ -163,7 +166,10 @@ def test_mixed_sequence_one_hot_alignment_and_probability_mode():
             assert sum(row) == 1.0
         else:
             assert not any(row)
-    assert MixedSequenceGradientInput(sequence=_LOCUS, logits=rows, temperature=None).logits == rows
+    assert (
+        MixedSequenceGradientInput(inputs={"sequence": _LOCUS, "logits": rows}, temperature=None).inputs[0].logits
+        == rows
+    )
 
 
 @pytest.mark.parametrize("sharpness", [math.nan, math.inf, -math.inf])
@@ -175,17 +181,17 @@ def test_mixed_one_hot_rejects_nonfinite_sharpness(sharpness):
 def test_mixed_gradient_rejects_alignment_fixed_context_and_nonfinite_values():
     rows = one_hot_mixed_logits(_LOCUS)
     with pytest.raises(ValidationError, match=r"one row per model token"):
-        MixedSequenceGradientInput(sequence=_LOCUS, logits=rows[:-1])
+        MixedSequenceGradientInput(inputs={"sequence": _LOCUS, "logits": rows[:-1]})
     rows[0][0] = 1.0
     with pytest.raises(ValidationError, match=r"Fixed context row 1"):
-        MixedSequenceGradientInput(sequence=_LOCUS, logits=rows)
+        MixedSequenceGradientInput(inputs={"sequence": _LOCUS, "logits": rows})
     with pytest.raises(ValidationError, match=r"must have 24 columns"):
-        MixedSequenceGradientInput(sequence="+A", logits=[[0.0] * 24, [0.0] * 23])
+        MixedSequenceGradientInput(inputs={"sequence": "+A", "logits": [[0.0] * 24, [0.0] * 23]})
     for row in [[math.nan] * 24, [math.inf] * 24]:
         with pytest.raises(ValidationError, match=r"only finite numbers"):
-            MixedSequenceGradientInput(sequence="+A", logits=[[0.0] * 24, row])
+            MixedSequenceGradientInput(inputs={"sequence": "+A", "logits": [[0.0] * 24, row]})
     with pytest.raises(ValidationError, match=r"at least one canonical"):
-        MixedSequenceGradientInput(sequence="<+>X", logits=[[0.0] * 24] * 2)
+        MixedSequenceGradientInput(inputs={"sequence": "<+>X", "logits": [[0.0] * 24] * 2})
 
 
 @pytest.mark.parametrize(
@@ -199,7 +205,7 @@ def test_mixed_gradient_rejects_alignment_fixed_context_and_nonfinite_values():
 )
 def test_mixed_gradient_probability_mode_rejects_wrong_domains(row, expected):
     with pytest.raises(ValidationError, match=expected):
-        MixedSequenceGradientInput(sequence="+A", logits=[[0.0] * 24, row], temperature=None)
+        MixedSequenceGradientInput(inputs={"sequence": "+A", "logits": [[0.0] * 24, row]}, temperature=None)
 
 
 # ── Checkpoint-specific limits ──────────────────────────────────────────────

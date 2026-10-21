@@ -63,7 +63,10 @@ def check_embeddings_score_gradient(toolkit, checkpoint):
     assert score.perplexity == pytest.approx(math.exp(-score.avg_log_likelihood))
     assert np.asarray(score.logits).shape == (8, 24)
     np.testing.assert_array_equal(np.asarray(score.logits)[[0, 3, 6, 7]], 0.0)
-    inputs = {"sequence": LOCUS, "logits": one_hot_mixed_logits(LOCUS, sharpness=1.0), "temperature": None}
+    inputs = {
+        "inputs": {"sequence": LOCUS, "logits": one_hot_mixed_logits(LOCUS, sharpness=1.0)},
+        "temperature": None,
+    }
     backward = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2)
     forward = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2, compute_gradient=False)
     gradient = np.asarray(backward.results[0].gradient)
@@ -110,7 +113,7 @@ def check_gradient_finite_difference(toolkit, checkpoint):
     """Compare a real model's relaxed masked-PLL derivative with a central difference."""
     sequence = "<+>M<+>a"
     logits = np.asarray(one_hot_mixed_logits(sequence, sharpness=2.0))
-    inputs = {"sequence": sequence, "logits": logits.tolist(), "temperature": 0.9}
+    inputs = {"inputs": {"sequence": sequence, "logits": logits.tolist()}, "temperature": 0.9}
     result = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2)
     epsilon = 0.02
     losses = []
@@ -122,7 +125,7 @@ def check_gradient_finite_difference(toolkit, checkpoint):
                 toolkit,
                 "gradient",
                 checkpoint,
-                {**inputs, "logits": perturbed.tolist()},
+                {**inputs, "inputs": {"sequence": sequence, "logits": perturbed.tolist()}},
                 batch_size=2,
                 compute_gradient=False,
             )
@@ -213,7 +216,7 @@ def benchmark_operation(request, toolkit, checkpoint, operation):
         inputs = {"sequences": [sequence[:-1] + base for base in "acgt"]}
     settings = {"batch_size": 4}
     if operation == "gradient":
-        inputs = {"sequence": sequence, "logits": one_hot_mixed_logits(sequence, sharpness=2.0)}
+        inputs = {"inputs": {"sequence": sequence, "logits": one_hot_mixed_logits(sequence, sharpness=2.0)}}
     if operation == "sample":
         settings["seed"] = 0
     result = benchmark_twice(request, toolkit, lambda: call_model(toolkit, operation, checkpoint, inputs, **settings))

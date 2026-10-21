@@ -80,13 +80,21 @@ def _set_path(payload: dict[str, Any], path: str, value: Any) -> None:
     Args:
         payload (dict[str, Any]): Dumped input payload to mutate in place.
         path (str): Path as keyed by ``GradientInput.sequence_logits``, e.g. ``"logits"``,
-            ``"antibody.heavy_chain"``, or ``"logits[0]"``.
+            ``"antibody.heavy_chain"``, ``"logits[0]"``, or ``"inputs[2].logits"``.
         value (Any): Replacement value.
     """
+
+    def resolve(cursor: Any, segment: str) -> Any:
+        """Step into one path segment, which may carry a list index."""
+        if segment.endswith("]"):
+            name, _, index = segment[:-1].partition("[")
+            return cursor[name][int(index)]
+        return cursor[segment]
+
     *parents, leaf = path.split(".")
     cursor: Any = payload
     for part in parents:
-        cursor = cursor[part]
+        cursor = resolve(cursor, part)
     if leaf.endswith("]"):
         name, _, index = leaf[:-1].partition("[")
         cursor[name][int(index)] = value
@@ -290,7 +298,10 @@ def _build_from_probabilities(spec: Any, temperature: float) -> tuple[Any, dict[
         fields.pop(field)
         # One example item, whether the field holds a matrix or a one-item list of them.
         target = next(iter(targets.values()))
-        built = spec.input_model.from_probabilities(target, temperature=temperature, **fields)
+        # A bundled item carries its own context, which the factory still takes by keyword.
+        items = getattr(example, "inputs", None)
+        context = {"sequence": items[0].sequence} if items and hasattr(items[0], "sequence") else {}
+        built = spec.input_model.from_probabilities(target, temperature=temperature, **context, **fields)
     return built, targets
 
 
@@ -343,11 +354,17 @@ def test_iterable_gradient_tool_declares_the_whole_trio(spec: Any) -> None:
 
 @pytest.mark.parametrize("spec", _ITERABLE_GRADIENT_SPECS, ids=lambda spec: spec.key)
 def test_single_item_normalizes_and_empty_is_rejected(spec: Any) -> None:
-    """One item may be passed bare; a list keeps its length; an empty list is refused."""
-    matrix = next(iter(_example(spec).sequence_logits().values())).root
+    """One item may be passed bare; a list keeps its length; an empty list is refused.
 
-    assert len(spec.input_model(inputs=matrix).inputs) == 1
-    assert len(spec.input_model(inputs=[matrix, matrix]).inputs) == 2
+    Built from the tool's own example item, so it covers a bare matrix and a bundle carrying its
+    own context alike.
+    """
+    example = _example(spec)
+    item = example.inputs[0]
+    other = example.model_dump()["inputs"][0]
+
+    assert len(spec.input_model(inputs=item).inputs) == 1, "a single item must normalize to a one-item list"
+    assert len(spec.input_model(inputs=[item, other]).inputs) == 2
     with pytest.raises(ValidationError, match="at least one item"):
         spec.input_model(inputs=[])
 

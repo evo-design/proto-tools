@@ -2,11 +2,12 @@
 
 import json
 import math
-from collections.abc import Sequence
+import re
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from standalone_helpers.mixed_sequence import one_hot_mixed_logits, tokenize_mixed_sequence
 from standalone_helpers.vocabulary import (
     AMBIGUOUS_PROTEIN_TOKENS,
@@ -30,6 +31,7 @@ from proto_tools.utils import (
     GradientOutput,
     InputField,
     SequenceLogits,
+    coerce_to_item_list,
 )
 
 MixedModality = Literal["protein", "dna"]
@@ -179,23 +181,22 @@ class MixedSequenceLogits(SequenceLogits):
     VOCAB: ClassVar[Sequence[str]] = tuple(MIXED_VOCAB)
 
 
-class MixedSequenceGradientInput(GradientInput):
-    """Relaxed biological tokens aligned to a fixed mixed-sequence template.
+class MixedSequenceGradientItem(BaseModel):
+    """One candidate: a relaxed state together with the template that fixes its modalities.
+
+    The template belongs to the item, not the call, so a batch may mix protein-heavy and
+    DNA-heavy candidates and each one's mask is derived from its own sequence.
 
     Attributes:
         sequence (str): Fully specified template fixing modality and ``+``/``-`` strand markers.
         logits (MixedSequenceLogits): One 24-column row per model token in
             ``ACDEFGHIKLMNPQRSTVWYacgt`` order. Fixed context rows must be zero.
-        temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
-            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
-            gradient; ``None`` reads them as modality-restricted probabilities and returns a
-            probability-space gradient.
     """
 
-    sequence: str = InputField(
+    sequence: str = Field(
         title="Sequence", description="Prepared template fixing each token's modality and strand markers"
     )
-    logits: MixedSequenceLogits = InputField(
+    logits: MixedSequenceLogits = Field(
         title="Logits",
         description="Token-aligned (L, 24) state in ACDEFGHIKLMNPQRSTVWYacgt order; fixed rows are zero",
     )
@@ -206,24 +207,67 @@ class MixedSequenceGradientInput(GradientInput):
         """Validate tokens and store one-character strand markers."""
         return "".join(tokenize_mixed_sequence(sequence))
 
-    def allowed_tokens(self, path: str, logits: SequenceLogits) -> list[list[bool]]:  # noqa: ARG002 — path is part of the hook signature
-        """Restrict each position to its template token's modality.
+    def iter_sequence_logits(self) -> Iterator[tuple[str, SequenceLogits]]:
+        """Expose this item's relaxed state to the shared validation hooks.
 
-        Strand markers and ambiguous symbols are fixed context: they permit no column, so the
-        shared validator requires their rows to be zero in both temperature modes.
+        Yields:
+            tuple[str, SequenceLogits]: The field name and this item's matrix.
+        """
+        yield "logits", self.logits
+
+    def allowed_mask(self) -> list[list[bool]]:
+        """Return the permitted columns per position, from this item's own template.
+
+        Returns:
+            list[list[bool]]: Protein tokens take columns 0-19, DNA tokens 20-23, strand markers
+                and ambiguous symbols none, which marks them as fixed context.
+        """
+        return mixed_allowed_mask(self.sequence, len(self.logits))
+
+
+class MixedSequenceGradientInput(GradientInput):
+    """One or many relaxed candidates, each aligned to its own mixed-sequence template.
+
+    Attributes:
+        inputs (list[MixedSequenceGradientItem]): One template-and-state pair per candidate. A
+            single item may be passed on its own.
+        temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
+            reads each state as unnormalized and applies ``softmax(logits / T)``, returning
+            logit-space gradients; ``None`` reads them as modality-restricted probabilities and
+            returns probability-space gradients.
+    """
+
+    inputs: list[MixedSequenceGradientItem] = InputField(
+        title="Relaxed Candidates",
+        description="One template-and-state pair per candidate; a single pair is accepted on its own",
+    )
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def normalize_items(cls, value: Any) -> Any:
+        """Accept one candidate as well as a list of them."""
+        return coerce_to_item_list(value)
+
+    def allowed_tokens(self, path: str, logits: SequenceLogits) -> list[list[bool]]:  # noqa: ARG002 — sized from the item
+        """Restrict each position to its own item's template modality.
+
+        The path names which item the matrix came from, so a batch never masks one candidate
+        with another's template.
 
         Args:
-            path (str): Field path of the matrix being validated.
+            path (str): Field path of the matrix, as ``inputs[i].logits``.
             logits (SequenceLogits): The token-aligned relaxed state.
 
         Returns:
-            list[list[bool]]: Per-token permitted columns — protein tokens take columns 0-19,
-                DNA tokens take 20-23, everything else takes none.
+            list[list[bool]]: Per-token permitted columns for that item.
 
         Raises:
-            ValueError: If the state is not token-aligned, or fixes every position.
+            ValueError: If the path does not name an item, or the state is not token-aligned.
         """
-        return mixed_allowed_mask(self.sequence, len(logits))
+        match = re.fullmatch(r"inputs\[(\d+)\]\.logits", path)
+        if match is None:
+            raise ValueError(f"mixed gradient input cannot mask an unexpected relaxed field {path!r}")
+        return self.inputs[int(match.group(1))].allowed_mask()
 
     @classmethod
     def from_probabilities(
@@ -275,7 +319,8 @@ class MixedSequenceGradientInput(GradientInput):
                     )
                 converted[column] = temperature * math.log(row[column])
             rows.append(converted)
-        return cls(logits=rows, temperature=temperature, **fields)
+        sequence = fields.pop("sequence")
+        return cls(inputs=[{"sequence": sequence, "logits": rows}], temperature=temperature, **fields)
 
 
 class MixedSequenceEmbedding(SequenceEmbedding):
