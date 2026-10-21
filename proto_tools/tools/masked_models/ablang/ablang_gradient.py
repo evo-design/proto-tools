@@ -1,7 +1,8 @@
 """AbLang masked pseudo-log-likelihood gradient tool."""
 
 import logging
-from collections.abc import Sequence
+import math
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from pydantic import field_validator
@@ -52,6 +53,7 @@ class AbLangGradientInput(GradientInput):
     @classmethod
     def from_probabilities(  # type: ignore[override]  # chains are named, not a single matrix
         cls,
+        candidates: Sequence[Mapping[str, Any]] | None = None,
         *,
         heavy_chain: Sequence[Sequence[float]] | None = None,
         light_chain: Sequence[Sequence[float]] | None = None,
@@ -60,10 +62,15 @@ class AbLangGradientInput(GradientInput):
     ) -> "AbLangGradientInput":
         """Build an input whose chain logits reproduce the given distributions.
 
-        At least one chain must be supplied, and both are converted at the same temperature the
-        input stores, so the two cannot disagree.
+        An antibody's chains are named rather than stacked into one matrix, so a single candidate
+        is given by keyword and several are given as mappings of the same keywords. Every chain of
+        every candidate is converted at the one shared temperature the input stores, so no two can
+        disagree. At least one chain is required per candidate.
 
         Args:
+            candidates (Sequence[Mapping[str, Any]] | None): One mapping per candidate, each with
+                ``heavy_chain`` and/or ``light_chain`` probabilities. ``None`` takes the single
+                candidate named by keyword instead.
             heavy_chain (Sequence[Sequence[float]] | None): ``(Lh, 20)`` strictly positive rows.
             light_chain (Sequence[Sequence[float]] | None): ``(Ll, 20)`` strictly positive rows.
             temperature (float): Positive, finite temperature stored on the input.
@@ -71,18 +78,35 @@ class AbLangGradientInput(GradientInput):
 
         Returns:
             AbLangGradientInput: Input satisfying ``softmax(chain / temperature) == chain probs``.
+
+        Raises:
+            ValueError: If the temperature is not positive and finite, if ``candidates`` is empty,
+                or if it is combined with a chain given by keyword.
         """
+        if not math.isfinite(temperature) or temperature <= 0.0:
+            raise ValueError(f"temperature must be positive and finite, got {temperature!r}")
+        if candidates is None:
+            specs: list[Mapping[str, Any]] = [{"heavy_chain": heavy_chain, "light_chain": light_chain}]
+        elif heavy_chain is not None or light_chain is not None:
+            raise ValueError("pass chains either as candidates or by keyword, not both")
+        elif not candidates:
+            raise ValueError("candidates must contain at least one antibody")
+        else:
+            specs = list(candidates)
+
         convert = ProteinSequenceLogits.from_probabilities
-        return cls(
-            inputs=[
-                AntibodyLogits(
-                    heavy_chain=None if heavy_chain is None else convert(heavy_chain, temperature=temperature),
-                    light_chain=None if light_chain is None else convert(light_chain, temperature=temperature),
-                )
-            ],
-            temperature=temperature,
-            **fields,
-        )
+        antibodies = [
+            AntibodyLogits(
+                heavy_chain=(
+                    None if spec.get("heavy_chain") is None else convert(spec["heavy_chain"], temperature=temperature)
+                ),
+                light_chain=(
+                    None if spec.get("light_chain") is None else convert(spec["light_chain"], temperature=temperature)
+                ),
+            )
+            for spec in specs
+        ]
+        return cls(inputs=antibodies, temperature=temperature, **fields)
 
 
 class AbLangGradientOutput(GradientOutput):

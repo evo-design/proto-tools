@@ -123,40 +123,33 @@ class ProteinMPNNGradientInput(GradientInput):
         return coerce_to_item_list(value)
 
     @classmethod
-    def from_probabilities(
+    def build_candidate(
         cls,
         probabilities: Sequence[Sequence[float]],
         *,
         temperature: float = 1.0,
         **fields: Any,
-    ) -> "ProteinMPNNGradientInput":
-        """Build a one-candidate input whose logits reproduce ``probabilities``.
+    ) -> "ProteinMPNNGradientCandidate":
+        """Build one candidate pairing the converted matrix with the backbone it is scored against.
 
-        The backbone and any selections belong to the item, so they are taken by keyword here and
-        packed into it alongside the converted matrix.
+        The backbone and any selections belong to the candidate, so they arrive here either shared
+        across the call or named in this candidate's own mapping.
 
         Args:
             probabilities (Sequence[Sequence[float]]): ``(L, 20)`` strictly positive rows.
-            temperature (float): Positive, finite temperature stored on the input.
-            fields (Any): The item's remaining fields; must include ``structure``.
+            temperature (float): Positive, finite temperature the matrix is converted at.
+            fields (Any): This candidate's remaining fields; must include ``structure``.
 
         Returns:
-            ProteinMPNNGradientInput: Input satisfying ``softmax(logits / temperature) == probabilities``.
+            ProteinMPNNGradientCandidate: Candidate whose logits reproduce ``probabilities``.
 
         Raises:
             ValueError: If ``structure`` is missing.
         """
         if "structure" not in fields:
             raise ValueError("proteinmpnn gradient from_probabilities requires the backbone structure")
-        item_fields = {
-            name: fields.pop(name) for name in list(fields) if name in ProteinMPNNGradientCandidate.model_fields
-        }
         matrix = ProteinSequenceLogits.from_probabilities(probabilities, temperature=temperature)
-        return cls(
-            inputs=[ProteinMPNNGradientCandidate(logits=matrix, **item_fields)],
-            temperature=temperature,
-            **fields,
-        )
+        return ProteinMPNNGradientCandidate(logits=matrix, **fields)
 
 
 class ProteinMPNNGradientOutput(GradientOutput):

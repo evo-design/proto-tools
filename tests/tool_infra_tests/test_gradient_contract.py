@@ -131,9 +131,9 @@ def test_every_gradient_tool_uses_the_shared_input() -> None:
     gradient_keys = {spec.key for spec in ToolRegistry.list_all() if spec.key.endswith("-gradient")}
     sharing_the_input = {spec.key for spec in _GRADIENT_SPECS}
 
-    assert gradient_keys == sharing_the_input, (
-        f"these gradient tools do not inherit the shared GradientInput: {sorted(gradient_keys - sharing_the_input)}"
-    )
+    assert (
+        gradient_keys == sharing_the_input
+    ), f"these gradient tools do not inherit the shared GradientInput: {sorted(gradient_keys - sharing_the_input)}"
 
 
 # ── Shared input contract ────────────────────────────────────────────────────
@@ -252,12 +252,23 @@ def test_logit_mode_does_not_apply_probability_rules(spec: Any) -> None:
 # ── from_probabilities on the tool input ─────────────────────────────────────
 
 
-def _positive_probabilities(matrix: SequenceLogits, allowed: list[list[bool]] | None) -> list[list[float]]:
-    """Build rows biased toward the first permitted column, strictly positive where permitted.
+def _positive_probabilities(
+    matrix: SequenceLogits, allowed: list[list[bool]] | None, favor: int = 0
+) -> list[list[float]]:
+    """Build rows biased toward one permitted column, strictly positive where permitted.
 
     ``from_probabilities`` refuses exact zeros, so every permitted column gets some mass. A row
     with no permitted column is fixed context and carries no state, so it stays all-zero — the
     only valid value for it in either temperature mode.
+
+    Args:
+        matrix (SequenceLogits): Matrix whose shape to mirror.
+        allowed (list[list[bool]] | None): Per-position permitted columns, or ``None``.
+        favor (int): Which permitted column carries the extra mass, so callers can build several
+            distributions that differ from each other.
+
+    Returns:
+        list[list[float]]: ``(L, V)`` rows, each a distribution over its permitted columns.
     """
     _, width = matrix.shape
     rows: list[list[float]] = []
@@ -266,7 +277,7 @@ def _positive_probabilities(matrix: SequenceLogits, allowed: list[list[bool]] | 
         permitted = [column for column, ok in enumerate(mask) if ok]
         row = [0.0] * width
         for rank, column in enumerate(permitted):
-            row[column] = 2.0 if rank == 0 else 1.0
+            row[column] = 2.0 if rank == favor % len(permitted) else 1.0
         total = sum(row)
         rows.append(row if total == 0.0 else [value / total for value in row])
     return rows
@@ -370,9 +381,9 @@ def test_iterable_gradient_tool_declares_the_whole_trio(spec: Any) -> None:
     """Fanout needs all three declarations, and ToolPool asserts the output field at run time."""
     assert spec.iterable_input_fields == ["inputs"], f"{spec.key}: {spec.iterable_input_fields}"
     assert spec.iterable_output_field == "results", f"{spec.key}: {spec.iterable_output_field}"
-    assert isinstance(spec.max_chunk_size, int) and spec.max_chunk_size >= 1, (
-        f"{spec.key}: max_chunk_size must be an explicit positive cap, got {spec.max_chunk_size!r}"
-    )
+    assert (
+        isinstance(spec.max_chunk_size, int) and spec.max_chunk_size >= 1
+    ), f"{spec.key}: max_chunk_size must be an explicit positive cap, got {spec.max_chunk_size!r}"
 
 
 @pytest.mark.parametrize("spec", _ITERABLE_GRADIENT_SPECS, ids=lambda spec: spec.key)
@@ -435,9 +446,9 @@ def test_gradient_batch_fans_out_across_pool_slots(monkeypatch: pytest.MonkeyPat
         ToolInstance.clear_all()
 
     assert len(output.results) == item_count, "one result per item"
-    assert [result.loss for result in output.results] == [float(index) for index in range(item_count)], (
-        "results must come back in input order"
-    )
+    assert [result.loss for result in output.results] == [
+        float(index) for index in range(item_count)
+    ], "results must come back in input order"
     assert len(partitions) > 1, f"the batch was not split across workers: {partitions}"
     assert sum(partitions) == item_count, f"items were duplicated or dropped: {partitions}"
     assert output.vocab == list(ProteinSequenceLogits.VOCAB)
@@ -509,9 +520,9 @@ def test_gradient_config_inherits_the_shared_relaxation_controls(spec: Any) -> N
     Re-declaring the fields keeps the names while letting the bounds, defaults and documented
     meaning drift per tool, which is the failure this whole contract exists to prevent.
     """
-    assert issubclass(spec.config_model, RelaxationConfig), (
-        f"{spec.key}: {spec.config_model.__name__} must inherit RelaxationConfig"
-    )
+    assert issubclass(
+        spec.config_model, RelaxationConfig
+    ), f"{spec.key}: {spec.config_model.__name__} must inherit RelaxationConfig"
 
     for field in ("soft", "hard"):
         own = spec.config_model.model_fields[field]
@@ -634,3 +645,147 @@ def test_validate_fixed_rows_requires_zeros_in_both_modes() -> None:
     ProteinSequenceLogits([[0.0] * 20]).validate_fixed_rows(allowed=permitted)
     with pytest.raises(ValueError, match="Fixed context row 1"):
         ProteinSequenceLogits([[0.0] * 19 + [0.5]]).validate_fixed_rows(allowed=permitted)
+
+
+# ── from_probabilities with several candidates ───────────────────────────────
+
+
+def _candidate_matrices(candidate: Any, names: set[str]) -> dict[str, SequenceLogits]:
+    """Return a built candidate's relaxed matrices, keyed the way its targets are.
+
+    Args:
+        candidate (Any): One entry of a built input's ``inputs``.
+        names (set[str]): Target keys; ``{""}`` for a candidate that is itself a bare matrix.
+
+    Returns:
+        dict[str, SequenceLogits]: The candidate's matrices under those keys.
+    """
+    if isinstance(candidate, SequenceLogits):
+        return dict.fromkeys(names, candidate)
+    return {name: getattr(candidate, name) for name in names}
+
+
+def _build_many_from_probabilities(
+    spec: Any, temperature: float, count: int
+) -> tuple[Any, list[dict[str, list[list[float]]]]]:
+    """Build one input holding ``count`` distinct candidates through ``from_probabilities``.
+
+    Each candidate is described by one object carrying its own matrix together with its own
+    context, never by parallel arrays, and every matrix is converted at the one shared
+    temperature.
+
+    Args:
+        spec (Any): The registered tool spec to build for.
+        temperature (float): The single temperature every candidate converts at.
+        count (int): How many candidates to build.
+
+    Returns:
+        tuple[Any, list[dict[str, list[list[float]]]]]: The built input, and the distribution each
+            candidate was built from, in input order.
+    """
+    example = _example(spec)
+    fields = example.model_dump(exclude_none=True)
+    fields.pop("temperature", None)
+    fields.pop("inputs")
+    first = example.inputs[0]
+
+    specs: list[Any] = []
+    targets: list[dict[str, list[list[float]]]] = []
+    for index in range(count):
+        if isinstance(first, SequenceLogits):
+            # The candidate is the matrix itself, so the list holds bare matrices.
+            rows = _positive_probabilities(first, example.allowed_tokens("inputs[0]", first), favor=index)
+            specs.append(rows)
+            targets.append({"": rows})
+            continue
+        matrices = dict(first.iter_sequence_logits())
+        chains = {
+            name: _positive_probabilities(matrix, example.allowed_tokens(f"inputs[0].{name}", matrix), favor=index)
+            for name, matrix in matrices.items()
+        }
+        context = {name: getattr(first, name) for name in type(first).model_fields if name not in matrices}
+        if len(chains) > 1 or "logits" not in chains:
+            # Chains are named rather than stacked, so the candidate names each one.
+            specs.append({**chains, **context})
+        else:
+            specs.append({"probabilities": chains["logits"], **context})
+        targets.append(chains)
+
+    return spec.input_model.from_probabilities(specs, temperature=temperature, **fields), targets
+
+
+@pytest.mark.parametrize("spec", _ITERABLE_GRADIENT_SPECS, ids=lambda spec: spec.key)
+@pytest.mark.parametrize("temperature", [0.5, 2.5])
+def test_from_probabilities_converts_every_candidate_at_the_shared_temperature(spec: Any, temperature: float) -> None:
+    """Every candidate reconstructs its own distribution under the one temperature given.
+
+    The candidates are deliberately different from one another, so a factory that converted only
+    the first and reused it, or that reassembled them out of order, fails here rather than
+    looking plausible.
+    """
+    built, targets = _build_many_from_probabilities(spec, temperature, count=3)
+
+    assert len(built.inputs) == len(targets) == 3, f"{spec.key}: {len(built.inputs)} candidates"
+    assert built.temperature == temperature
+    for index, (candidate, expected) in enumerate(zip(built.inputs, targets, strict=True)):
+        for name, matrix in _candidate_matrices(candidate, set(expected)).items():
+            rows = expected[name]
+            for position, (logits, target) in enumerate(zip(matrix.root, rows, strict=True)):
+                permitted = [column for column, value in enumerate(target) if value > 0.0]
+                if not permitted:
+                    # Fixed context, and outside every modality block: no state to reproduce.
+                    assert not any(logits), f"{spec.key} candidate {index} row {position} must stay zero"
+                    continue
+                scaled = [logits[column] / temperature for column in permitted]
+                peak = max(scaled)
+                weights = [math.exp(value - peak) for value in scaled]
+                total = sum(weights)
+                assert [weight / total for weight in weights] == pytest.approx(
+                    [target[column] for column in permitted], abs=1e-9
+                ), f"{spec.key} candidate {index} {name} row {position} did not round-trip"
+                assert all(
+                    logits[column] == 0.0 for column in range(len(target)) if column not in permitted
+                ), f"{spec.key} candidate {index} {name} row {position} put mass outside its permitted columns"
+
+
+@pytest.mark.parametrize("spec", _ITERABLE_GRADIENT_SPECS, ids=lambda spec: spec.key)
+def test_from_probabilities_still_builds_one_candidate_from_one_distribution(spec: Any) -> None:
+    """The single-candidate call is unchanged: one distribution still yields exactly one item."""
+    built, targets = _build_from_probabilities(spec, 0.75)
+
+    assert len(built.inputs) == 1, f"{spec.key}: one distribution built {len(built.inputs)} candidates"
+    assert built.temperature == 0.75
+    assert set(built.sequence_logits()) == set(targets)
+
+
+def test_from_probabilities_rejects_malformed_candidate_lists() -> None:
+    """A list of candidates must be non-empty, and each entry must carry its own distribution."""
+    esm2 = ToolRegistry.get("esm2-gradient").input_model
+    rows = [[1.0 / 20] * 20]
+
+    with pytest.raises(ValueError, match="at least one candidate"):
+        esm2.from_probabilities([])
+    with pytest.raises(ValueError, match="must supply its own 'probabilities'"):
+        esm2.from_probabilities([{"logits": rows}])
+    with pytest.raises(TypeError, match="take no context fields"):
+        esm2.from_probabilities([{"probabilities": rows, "structure": "irrelevant"}])
+
+
+def test_from_probabilities_requires_each_candidate_to_bring_its_context() -> None:
+    """A bundled candidate without its context is refused, however many candidates there are."""
+    proteinmpnn = ToolRegistry.get("proteinmpnn-gradient").input_model
+    rows = [[1.0 / 20] * 20]
+
+    with pytest.raises(ValueError, match="requires the backbone structure"):
+        proteinmpnn.from_probabilities([{"probabilities": rows}, {"probabilities": rows}])
+
+
+def test_ablang_from_probabilities_refuses_mixing_the_two_candidate_forms() -> None:
+    """Chains come either as candidate mappings or as keywords, never as both at once."""
+    ablang = ToolRegistry.get("ablang-gradient").input_model
+    rows = [[1.0 / 20] * 20]
+
+    with pytest.raises(ValueError, match="either as candidates or by keyword"):
+        ablang.from_probabilities([{"heavy_chain": rows}], heavy_chain=rows)
+    with pytest.raises(ValueError, match="at least one antibody"):
+        ablang.from_probabilities([])

@@ -385,38 +385,33 @@ class ESMFoldGradientInput(GradientInput):
         return coerce_to_item_list(value)
 
     @classmethod
-    def from_probabilities(
+    def build_candidate(
         cls,
         probabilities: Sequence[Sequence[float]],
         *,
         temperature: float = 1.0,
         **fields: Any,
-    ) -> Self:
-        """Build a one-candidate input whose logits reproduce ``probabilities``.
+    ) -> ESMFoldGradientCandidate:
+        """Build one candidate pairing the converted matrix with the complex it folds within.
 
-        The complex belongs to the item, so ``chains`` and ``target_chain_indices`` are taken by
-        keyword here and packed into it alongside the converted matrix.
+        The complex belongs to the candidate, so ``chains`` and ``target_chain_indices`` arrive
+        here either shared across the call or named in this candidate's own mapping.
 
         Args:
             probabilities (Sequence[Sequence[float]]): ``(L, 20)`` strictly positive rows.
-            temperature (float): Positive, finite temperature stored on the input.
-            fields (Any): The item's remaining fields; must include ``chains``.
+            temperature (float): Positive, finite temperature the matrix is converted at.
+            fields (Any): This candidate's remaining fields; must include ``chains``.
 
         Returns:
-            Self: Input satisfying ``softmax(logits / temperature) == probabilities``.
+            ESMFoldGradientCandidate: Candidate whose logits reproduce ``probabilities``.
 
         Raises:
             ValueError: If ``chains`` is missing.
         """
         if "chains" not in fields:
             raise ValueError("esmfold gradient from_probabilities requires the complex chains")
-        item_fields = {name: fields.pop(name) for name in list(fields) if name in ESMFoldGradientCandidate.model_fields}
         matrix = ProteinSequenceLogits.from_probabilities(probabilities, temperature=temperature)
-        return cls(
-            inputs=[ESMFoldGradientCandidate(logits=matrix, **item_fields)],
-            temperature=temperature,
-            **fields,
-        )
+        return ESMFoldGradientCandidate(logits=matrix, **fields)
 
 
 class ESMFoldGradientConfig(ESMFoldConfig, RelaxationConfig):

@@ -253,7 +253,11 @@ class MixedSequenceGradientInput(GradientInput):
         """Accept one candidate as well as a list of them."""
         return coerce_to_item_list(value)
 
-    def allowed_tokens(self, path: str, logits: SequenceLogits) -> list[list[bool]]:  # noqa: ARG002 — sized from the item
+    def allowed_tokens(
+        self,
+        path: str,
+        logits: SequenceLogits,  # noqa: ARG002 — sized from the item
+    ) -> list[list[bool]]:
         """Restrict each position to its own item's template modality.
 
         The path names which item the matrix came from, so a batch never masks one candidate
@@ -275,28 +279,32 @@ class MixedSequenceGradientInput(GradientInput):
         return self.inputs[int(match.group(1))].allowed_mask()
 
     @classmethod
-    def from_probabilities(
+    def build_candidate(
         cls,
         probabilities: Sequence[Sequence[float]],
         *,
         temperature: float = 1.0,
         **fields: Any,
-    ) -> "MixedSequenceGradientInput":
-        """Build an input whose logits reproduce modality-restricted ``probabilities``.
+    ) -> "MixedSequenceGradientCandidate":
+        """Build one candidate whose logits reproduce modality-restricted ``probabilities``.
 
         Each row must be a distribution over its own modality block, with exact zeros outside
         it — which plain logits cannot express, since ``log(0)`` is not finite. The backend
         normalizes within the permitted block, so only the permitted columns need converting
         and the rest are left at zero, where the modality mask discards them anyway.
 
+        The template belongs to the candidate, so ``sequence`` arrives here either shared across
+        the call or named in this candidate's own mapping, and the mask comes from that template.
+
         Args:
             probabilities (Sequence[Sequence[float]]): ``(L, 24)`` token-aligned rows, strictly
                 positive within each row's modality block and zero outside it.
-            temperature (float): Positive, finite temperature stored on the input.
-            fields (Any): Remaining input fields; must include ``sequence``.
+            temperature (float): Positive, finite temperature the matrix is converted at.
+            fields (Any): This candidate's remaining fields; must include ``sequence``.
 
         Returns:
-            MixedSequenceGradientInput: Input reproducing ``probabilities`` within each modality.
+            MixedSequenceGradientCandidate: Candidate reproducing ``probabilities`` within each
+                modality block.
 
         Raises:
             ValueError: If ``sequence`` is missing, or a row is not a valid modality-restricted
@@ -324,11 +332,8 @@ class MixedSequenceGradientInput(GradientInput):
                     )
                 converted[column] = temperature * math.log(row[column])
             rows.append(converted)
-        sequence = fields.pop("sequence")
-        return cls(
-            inputs=[MixedSequenceGradientCandidate(sequence=sequence, logits=MixedSequenceLogits(rows))],
-            temperature=temperature,
-            **fields,
+        return MixedSequenceGradientCandidate(
+            sequence=fields.pop("sequence"), logits=MixedSequenceLogits(rows), **fields
         )
 
 

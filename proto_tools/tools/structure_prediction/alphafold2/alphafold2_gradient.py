@@ -161,40 +161,33 @@ class AlphaFold2GradientInput(GradientInput):
         return coerce_to_item_list(value)
 
     @classmethod
-    def from_probabilities(
+    def build_candidate(
         cls,
         probabilities: Sequence[Sequence[float]],
         *,
         temperature: float = 1.0,
         **fields: Any,
-    ) -> Self:
-        """Build a one-candidate input whose binder logits reproduce ``probabilities``.
+    ) -> AlphaFold2GradientCandidate:
+        """Build one candidate pairing the converted binder matrix with its target template.
 
-        The target template belongs to the item, so it and its selections are taken by keyword
-        here and packed into the item alongside the converted matrix.
+        The template belongs to the candidate, so it and its selections arrive here either shared
+        across the call or named in this candidate's own mapping.
 
         Args:
             probabilities (Sequence[Sequence[float]]): ``(L, 20)`` strictly positive rows.
-            temperature (float): Positive, finite temperature stored on the input.
-            fields (Any): The item's remaining fields; must include ``target_pdb``.
+            temperature (float): Positive, finite temperature the matrix is converted at.
+            fields (Any): This candidate's remaining fields; must include ``target_pdb``.
 
         Returns:
-            Self: Input satisfying ``softmax(logits / temperature) == probabilities``.
+            AlphaFold2GradientCandidate: Candidate whose logits reproduce ``probabilities``.
 
         Raises:
             ValueError: If ``target_pdb`` is missing.
         """
         if "target_pdb" not in fields:
             raise ValueError("alphafold2 gradient from_probabilities requires the target template")
-        item_fields = {
-            name: fields.pop(name) for name in list(fields) if name in AlphaFold2GradientCandidate.model_fields
-        }
         matrix = ProteinSequenceLogits.from_probabilities(probabilities, temperature=temperature)
-        return cls(
-            inputs=[AlphaFold2GradientCandidate(logits=matrix, **item_fields)],
-            temperature=temperature,
-            **fields,
-        )
+        return AlphaFold2GradientCandidate(logits=matrix, **fields)
 
 
 class AlphaFold2GradientConfig(RelaxationConfig):

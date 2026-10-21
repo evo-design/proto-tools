@@ -6,6 +6,7 @@ Shared input and output contracts for relaxed-sequence gradient tools.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, get_args
@@ -178,9 +179,81 @@ class GradientInput(BaseToolInput):
         raise TypeError(f"{cls.__name__} has no single {field!r} matrix, so it needs its own from_probabilities()")
 
     @classmethod
+    def candidate_type(cls) -> type | None:
+        """Return the per-candidate type a list-shaped input holds, or ``None``.
+
+        Returns:
+            type | None: The element type of ``inputs``, or ``None`` for an input that declares a
+                single ``logits`` matrix instead.
+        """
+        if cls.relaxed_field() != "inputs":
+            return None
+        (element,) = get_args(cls.model_fields["inputs"].annotation) or (None,)
+        return element if isinstance(element, type) else None
+
+    @classmethod
+    def candidate_specs(cls, probabilities: Any) -> list[dict[str, Any]]:
+        """Normalize the factory's first argument into one spec per candidate.
+
+        One ``(L, V)`` matrix describes a single candidate. A list describes several, each entry
+        either a bare matrix or a mapping holding that candidate's ``probabilities`` alongside its
+        own context, which keeps matrices and context together instead of in parallel arrays.
+
+        Args:
+            probabilities (Any): One matrix, or a list of matrices or candidate mappings.
+
+        Returns:
+            list[dict[str, Any]]: One mapping per candidate, each carrying ``probabilities``.
+
+        Raises:
+            ValueError: If an empty list was supplied, or a mapping omits ``probabilities``.
+        """
+        if isinstance(probabilities, Mapping):
+            probabilities = [probabilities]
+        if not isinstance(probabilities, Sequence) or isinstance(probabilities, str | bytes):
+            raise ValueError(f"probabilities must be a matrix or a list of candidates, got {type(probabilities)}")
+        if not probabilities:
+            raise ValueError("probabilities must contain at least one candidate")
+        first = probabilities[0]
+        if isinstance(first, Mapping):
+            specs = [dict(spec) for spec in probabilities]
+            for index, spec in enumerate(specs):
+                if "probabilities" not in spec:
+                    raise ValueError(f"candidate {index} must supply its own 'probabilities'")
+            return specs
+        # Depth tells one matrix from a list of them: a matrix's rows hold numbers.
+        if isinstance(first, Sequence) and first and isinstance(first[0], Sequence):
+            return [{"probabilities": matrix} for matrix in probabilities]
+        return [{"probabilities": probabilities}]
+
+    @classmethod
+    def build_candidate(
+        cls, probabilities: Sequence[Sequence[float]], *, temperature: float = 1.0, **fields: Any
+    ) -> Any:
+        """Build one candidate from its probabilities and its own context.
+
+        The base implementation covers an input whose candidates are bare matrices. A tool whose
+        candidates bundle context overrides this, converts the matrix, and packs the bundle.
+
+        Args:
+            probabilities (Sequence[Sequence[float]]): ``(L, V)`` strictly positive rows.
+            temperature (float): Positive, finite temperature the matrix is converted at.
+            fields (Any): This candidate's own context fields, if it takes any.
+
+        Returns:
+            Any: The candidate, ready to place in ``inputs``.
+
+        Raises:
+            TypeError: If context fields are supplied for a candidate that is a bare matrix.
+        """
+        if fields:
+            raise TypeError(f"{cls.__name__} candidates take no context fields, got {sorted(fields)}")
+        return cls.relaxed_state_type().from_probabilities(probabilities, temperature=temperature)
+
+    @classmethod
     def from_probabilities(
         cls,
-        probabilities: Sequence[Sequence[float]],
+        probabilities: Any,
         *,
         temperature: float = 1.0,
         **fields: Any,
@@ -194,24 +267,52 @@ class GradientInput(BaseToolInput):
         passing a different ``temperature`` to the constructor silently reshapes the
         distribution.
 
+        One matrix builds one candidate. A list builds several, each entry either a bare matrix or
+        a mapping carrying that candidate's ``probabilities`` with its own context; every matrix is
+        converted at the one shared ``temperature``. Context passed by keyword applies to every
+        candidate, and a mapping's own entry overrides it.
+
         Only needed to optimize in logit space. To have a backend consume probabilities as they
         are, pass them straight to the constructor with ``temperature=None``.
 
         Args:
-            probabilities (Sequence[Sequence[float]]): ``(L, V)`` rows, each a strictly positive
-                probability distribution.
+            probabilities (Any): One ``(L, V)`` matrix of strictly positive rows, or a list of
+                matrices or candidate mappings.
             temperature (float): Positive, finite temperature stored on the input.
-            fields (Any): The tool's remaining input fields, such as a structure or template.
+            fields (Any): The tool's remaining input fields, and any candidate context shared by
+                every candidate, such as a structure or template.
 
         Returns:
             Self: Input satisfying ``softmax(logits / temperature) == probabilities``.
+
+        Raises:
+            ValueError: If the temperature is not positive and finite, or several candidates are
+                supplied to a tool that holds a single matrix.
         """
-        matrix = cls.relaxed_state_type().from_probabilities(probabilities, temperature=temperature)
-        # The relaxed field is declared by the subclass, not by GradientInput itself, and a
-        # list-shaped one takes the matrix as its single item.
+        if not math.isfinite(temperature) or temperature <= 0.0:
+            raise ValueError(f"temperature must be positive and finite, got {temperature!r}")
+        specs = cls.candidate_specs(probabilities)
         field = cls.relaxed_field()
-        value = [matrix] if field == "inputs" else matrix
-        return cls(**{field: value, "temperature": temperature, **fields})
+        if field != "inputs":
+            if len(specs) > 1:
+                raise ValueError(f"{cls.__name__} holds a single matrix, so it takes one candidate")
+            matrix = cls.relaxed_state_type().from_probabilities(specs[0]["probabilities"], temperature=temperature)
+            return cls(**{field: matrix, "temperature": temperature, **fields})
+
+        # Context names belong to the candidate; everything else is an input-level field.
+        candidate = cls.candidate_type()
+        candidate_fields = getattr(candidate, "model_fields", {})
+        shared = {name: fields.pop(name) for name in list(fields) if name in candidate_fields}
+        candidates = [
+            cls.build_candidate(
+                spec.pop("probabilities"),
+                temperature=temperature,
+                **{**shared, **spec},
+            )
+            for spec in specs
+        ]
+        # Only a subclass declares 'inputs'; this branch runs for exactly those.
+        return cls(inputs=candidates, temperature=temperature, **fields)  # type: ignore[call-arg]
 
     @model_validator(mode="after")
     def validate_relaxed_state(self) -> Self:
@@ -263,30 +364,6 @@ class BatchedNucleotideGradientInput(GradientInput):
     def normalize_items(cls, value: Any) -> Any:
         """Accept one relaxed state as well as a list of them."""
         return coerce_to_item_list(value)
-
-    @classmethod
-    def from_probabilities(  # type: ignore[override]  # a batch takes (B, L, V), not (L, V)
-        cls,
-        probabilities: Sequence[Sequence[Sequence[float]]],
-        *,
-        temperature: float = 1.0,
-        **fields: Any,
-    ) -> Self:
-        """Build a batched input whose logits reproduce ``probabilities`` under its temperature.
-
-        Args:
-            probabilities (Sequence[Sequence[Sequence[float]]]): ``(B, L, 4)`` rows, each row a
-                strictly positive probability distribution.
-            temperature (float): Positive, finite temperature stored on the input.
-            fields (Any): The tool's remaining input fields.
-
-        Returns:
-            Self: Input satisfying ``softmax(logits / temperature) == probabilities``.
-        """
-        matrices = [
-            NucleotideSequenceLogits.from_probabilities(item, temperature=temperature) for item in probabilities
-        ]
-        return cls(inputs=matrices, temperature=temperature, **fields)
 
     @model_validator(mode="after")
     def validate_batch_lengths(self) -> Self:
