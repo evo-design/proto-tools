@@ -184,8 +184,6 @@ With positive temperature, the gradient is with respect to **logits**. With `tem
 
 Setting `compute_gradient=False` runs forward-only scoring and returns `gradient=None`.
 
-AbLang returns a single matrix per item for paired heavy and light chains. The rows are concatenated heavy-first, then light; split at the heavy-chain length to recover each chain's gradient.
-
 ### How the objective relates to the relaxation
 
 The relaxation controls change the input representation evaluated by the model. They do not change the rule used to choose training or scoring targets. The masked models (ESM2, AbLang, CodonFM, Minerva, and GLM2) derive their targets from `P`. ProteinMPNN uses decoded sequence identities for its negative-log-likelihood labels.
