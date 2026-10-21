@@ -523,6 +523,25 @@ def test_codonfm_score_real_gpu() -> None:
         assert row.llr == pytest.approx(row.ref_log_likelihood - row.alt_log_likelihood, rel=1e-5)
 
 
+@pytest.mark.integration
+def test_codonfm_tokenizer_covers_the_canonical_codon_order() -> None:
+    """The real tokenizer must map every canonical codon by name, with no weights involved.
+
+    The worker keys its column basis off ``DNA_CODONS`` and looks each codon up in the
+    tokenizer's encoder, so proto-ordered gradients depend on that lookup covering all 64. The
+    check runs in codonfm's env because the tokenizer package lives there; ``Tokenizer()`` takes
+    no checkpoint, so it costs seconds.
+    """
+    from pathlib import Path as _Path
+
+    from proto_tools.utils import run_in_env
+
+    check = _Path(__file__).resolve().parent / "_codonfm_vocabulary_env_check.py"
+    output = run_in_env("codonfm", script=str(check), timeout=900)
+
+    assert "ALL CHECKS PASSED" in output, output
+
+
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 def test_codonfm_gradient_probability_mode_matches_logit_mode() -> None:
