@@ -123,7 +123,7 @@ class ProteinMPNNGradientInput(GradientInput):
         return coerce_to_item_list(value)
 
     @classmethod
-    def from_probabilities(  # type: ignore[override]  # an item bundles its backbone with the matrix
+    def from_probabilities(
         cls,
         probabilities: Sequence[Sequence[float]],
         *,
