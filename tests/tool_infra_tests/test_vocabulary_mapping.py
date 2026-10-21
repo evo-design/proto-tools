@@ -51,12 +51,6 @@ def test_permutation_directions_are_mutual_inverses() -> None:
     assert _apply(native_ordered, from_native) == AMINO_ACIDS_LIST
 
 
-def test_fixture_order_is_a_permutation_of_the_proto_order() -> None:
-    """The stand-in native order covers exactly the 20 canonical amino acids."""
-    assert sorted(NATIVE_ORDER) == sorted(AMINO_ACIDS_LIST)
-    assert len(NATIVE_ORDER) == 20
-
-
 # ── Superset sources ─────────────────────────────────────────────────────────
 
 

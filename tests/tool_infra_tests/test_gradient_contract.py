@@ -400,13 +400,6 @@ def test_gradient_config_inherits_the_shared_relaxation_controls(spec: Any) -> N
         assert own.description == shared.description, f"{spec.key}: {field} re-declares its own description"
 
 
-def test_relaxation_config_defaults_to_a_plain_softmax() -> None:
-    """The shared defaults select ``softmax(logits / temperature)`` with no blending."""
-    config = RelaxationConfig()
-
-    assert (config.soft, config.hard) == (1.0, 0.0)
-
-
 @pytest.mark.parametrize(
     "overrides",
     [

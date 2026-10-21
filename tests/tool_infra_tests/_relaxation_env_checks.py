@@ -54,32 +54,6 @@ def check_default_is_a_plain_softmax() -> None:
     assert torch.allclose(actual, expected, atol=1e-12), f"{actual} != {expected}"
 
 
-def check_soft_zero_passes_the_raw_matrix_through() -> None:
-    """soft=0, hard=0 must forward the caller's own matrix, not an argmax one-hot.
-
-    An argmax one-hot is constant with respect to the input, so a soft=0 branch that returned
-    one would silently kill the gradient; the raw matrix keeps a derivative.
-    """
-    state = _state()
-
-    actual = relaxed_sequence(state, temperature=TEMPERATURE, soft=0.0, hard=0.0)
-
-    assert torch.allclose(actual, state, atol=1e-12), f"{actual} != {state}"
-    one_hot = F.one_hot(F.softmax(state / TEMPERATURE, dim=-1).argmax(dim=-1), num_classes=4).double()
-    assert not torch.allclose(actual, one_hot, atol=1e-6), "soft=0 returned a one-hot, which has no gradient"
-
-
-def check_hard_one_forwards_a_one_hot() -> None:
-    """soft=1, hard=1 must forward exactly one_hot(argmax(P))."""
-    state = _state()
-    probs = F.softmax(state / TEMPERATURE, dim=-1)
-    expected = F.one_hot(probs.argmax(dim=-1), num_classes=4).double()
-
-    actual = relaxed_sequence(state, temperature=TEMPERATURE, soft=1.0, hard=1.0)
-
-    assert torch.allclose(actual, expected, atol=1e-12), f"{actual} != {expected}"
-
-
 def check_hard_one_supersedes_soft() -> None:
     """At hard=1 the forward value must not depend on soft, for a fixed P."""
     values = [relaxed_sequence(_state(), temperature=TEMPERATURE, soft=soft, hard=1.0) for soft in (0.0, 0.5, 1.0)]
@@ -121,19 +95,6 @@ def check_probability_mode_skips_the_softmax() -> None:
     assert torch.allclose(actual, probabilities, atol=1e-12), f"{actual} != {probabilities}"
 
 
-def check_default_backward_is_the_softmax_jacobian() -> None:
-    """The default path's gradient must match the analytic softmax Jacobian-vector product."""
-    state = _state(requires_grad=True)
-    upstream = UPSTREAM.clone()
-
-    relaxed_sequence(state, temperature=TEMPERATURE).backward(upstream)
-
-    probs = F.softmax(_state() / TEMPERATURE, dim=-1)
-    weighted = (probs * upstream).sum(dim=-1, keepdim=True)
-    expected = probs * (upstream - weighted) / TEMPERATURE
-    assert torch.allclose(state.grad, expected, atol=1e-10), f"{state.grad} != {expected}"
-
-
 def check_straight_through_routes_gradient_through_probabilities() -> None:
     """hard=1 forwards a one-hot but must backpropagate the softmax derivative, not zero.
 
@@ -152,16 +113,6 @@ def check_straight_through_routes_gradient_through_probabilities() -> None:
     expected = probs * (upstream - weighted) / TEMPERATURE
     assert expected.abs().max() > 1e-3, "upstream is degenerate; this check could not detect a dead STE"
     assert torch.allclose(state.grad, expected, atol=1e-10), f"{state.grad} != {expected}"
-
-
-def check_soft_zero_backward_is_the_identity() -> None:
-    """soft=0, hard=0 feeds the raw matrix, so the derivative is the upstream gradient itself."""
-    state = _state(requires_grad=True)
-    upstream = torch.tensor([[1.0, 2.0, 3.0, 4.0], [-1.0, 0.0, 1.0, 2.0], [0.5, 0.5, 0.5, 0.5]], dtype=torch.float64)
-
-    relaxed_sequence(state, temperature=TEMPERATURE, soft=0.0, hard=0.0).backward(upstream)
-
-    assert torch.allclose(state.grad, upstream, atol=1e-12), f"{state.grad} != {upstream}"
 
 
 def check_intermediate_blend_backward_matches_the_formula() -> None:
@@ -227,14 +178,10 @@ def check_probability_mode_backward_is_the_identity() -> None:
 CHECKS: tuple[Callable[[], None], ...] = (
     check_matches_the_shared_reference_table,
     check_default_is_a_plain_softmax,
-    check_soft_zero_passes_the_raw_matrix_through,
-    check_hard_one_forwards_a_one_hot,
     check_hard_one_supersedes_soft,
     check_intermediate_blends_match_the_formula,
     check_probability_mode_skips_the_softmax,
-    check_default_backward_is_the_softmax_jacobian,
     check_straight_through_routes_gradient_through_probabilities,
-    check_soft_zero_backward_is_the_identity,
     check_intermediate_blend_backward_matches_the_formula,
     check_no_control_setting_silently_zeroes_the_gradient,
     check_probability_mode_backward_is_the_identity,

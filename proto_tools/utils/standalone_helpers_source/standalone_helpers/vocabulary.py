@@ -13,7 +13,7 @@ from .proto_logging import get_logger
 logger = get_logger(__name__)
 
 # ── Proto's interface vocabulary orders ─────────────────────────────────────
-# The column orders every tool accepts inputs in and returns gradients and embeddings in.
+# The column orders every tool accepts inputs in and returns gradients in.
 # A consistency test pins these to the parent's copy in ``proto_tools/utils/sequence.py``.
 # A model's own native order belongs in its toolkit's ``standalone/`` directory instead, mapped
 # onto these with ``gather_indices``: those orders coincide only by accident.
