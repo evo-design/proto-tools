@@ -613,19 +613,22 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
             if position >= len(mutation["sequence"]) // 3:
                 raise ValueError("codonfm: worker codon_position is out of range")
     elif operation == "gradient":
-        logits = input_dict.get("logits")
-        if not isinstance(logits, list) or not logits or len(logits) > 2046:
-            raise ValueError("codonfm: gradient requires 1 to 2046 logits rows")
-        if any(
-            not isinstance(row, list)
-            or len(row) != 64
-            or any(
-                isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
-                for value in row
-            )
-            for row in logits
-        ):
-            raise ValueError("codonfm: gradient logits must be a finite L x 64 numeric matrix")
+        items = input_dict.get("items")
+        if not isinstance(items, list) or not items:
+            raise ValueError("codonfm: gradient requires at least one item")
+        for item in items:
+            if not isinstance(item, list) or not item or len(item) > 2046:
+                raise ValueError("codonfm: gradient requires 1 to 2046 logits rows per item")
+            if any(
+                not isinstance(row, list)
+                or len(row) != 64
+                or any(
+                    isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+                    for value in row
+                )
+                for row in item
+            ):
+                raise ValueError("codonfm: gradient logits must be a finite L x 64 numeric matrix")
 
     if operation == "sample":
         value = input_dict.get("temperature", 1.0)
@@ -696,16 +699,25 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             )
         }
     if operation == "gradient":
-        return _MODEL.compute_gradient(
-            input_dict["logits"],
-            temperature=resolve_temperature(input_dict.get("temperature")),
-            soft=float(input_dict.get("soft", 1.0)),
-            hard=float(input_dict.get("hard", 0.0)),
-            backprop=input_dict.get("compute_gradient", True),
-            batch_size=batch_size,
-            device=device,
-            verbose=verbose,
-        )
+        # One chunk of independent candidates: the checkpoint loads once and each item is
+        # evaluated in turn, so the reply holds one result per item, in the order received.
+        results = [
+            _MODEL.compute_gradient(
+                item,
+                temperature=resolve_temperature(input_dict.get("temperature")),
+                soft=float(input_dict.get("soft", 1.0)),
+                hard=float(input_dict.get("hard", 0.0)),
+                backprop=input_dict.get("compute_gradient", True),
+                batch_size=batch_size,
+                device=device,
+                verbose=verbose,
+            )
+            for item in input_dict["items"]
+        ]
+        return {
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
     raise AssertionError("unreachable")
 
 

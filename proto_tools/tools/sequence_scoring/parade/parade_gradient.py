@@ -97,12 +97,13 @@ class ParadeGradientInput(BatchedNucleotideGradientInput):
     """Input for differentiable PARADE UTR optimization.
 
     Attributes:
-        logits (list[NucleotideSequenceLogits]): Batched relaxed UTR state with shape
-            ``(B, L, 4)`` in ``A,C,G,T`` order. Use ``B=1`` for a single design candidate.
-        temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
-            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
-            gradient; ``None`` reads them as probabilities and returns a probability-space
-            gradient.
+        inputs (list[NucleotideSequenceLogits]): One relaxed ``(L, 4)`` UTR state per
+            candidate in ``A,C,G,T`` order; a single state may be passed on its own. Every item
+            must share one length, because the backend evaluates them in one vectorized pass.
+        temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
+            reads each state as unnormalized and applies ``softmax(logits / T)``, returning
+            logit-space gradients; ``None`` reads them as probabilities and returns
+            probability-space gradients.
     """
 
 

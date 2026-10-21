@@ -159,7 +159,8 @@ class GradientInput(BaseToolInput):
         """Return the :class:`SequenceLogits` subclass a field holds.
 
         Args:
-            field (str): Name of the relaxed-state field.
+            field (str | None): Name of the relaxed-state field, or ``None`` to use this
+                class's own relaxed field.
 
         Returns:
             type[SequenceLogits]: The vocabulary-specific matrix type declared for that field.

@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import model_validator
 
 from proto_tools.entities.structures import ChainSelection, ResidueSelection, Structure
 from proto_tools.tools.tool_registry import tool
@@ -87,18 +87,12 @@ class ProteinMPNNGradientOutput(GradientOutput):
     """ProteinMPNN mean-NLL output; gradient is optional in forward-only mode.
 
     Attributes:
-        gradient (list[list[float]] | None): Gradient w.r.t. input logits. None
-            when ``compute_gradient=False``.
-        loss (float): Mean negative log-likelihood over ProteinMPNN-scored positions.
-        metrics (dict[str, Any]): Log-likelihood, perplexity, sequence length, and objective details.
+        results (list[GradientResult]): One per input item, each holding its gradient w.r.t.
+            the supplied logits (``None`` in forward-only mode), its mean negative log-likelihood
+            over ProteinMPNN-scored positions, and its log-likelihood, perplexity, sequence
+            length and objective details.
         vocab (list[str]): Canonical amino-acid column ordering for logits and gradients.
     """
-
-    gradient: list[list[float]] | None = Field(
-        default=None,
-        title="Gradient",
-        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
-    )
 
 
 class ProteinMPNNGradientConfig(RelaxationConfig):

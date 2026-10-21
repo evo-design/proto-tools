@@ -4,8 +4,6 @@ import logging
 from collections.abc import Sequence
 from typing import Any
 
-from pydantic import Field
-
 from proto_tools.entities.antibody import AntibodyLogits
 from proto_tools.tools.masked_models.ablang.ablang_embeddings import _resolve_model_choice
 from proto_tools.tools.tool_registry import tool
@@ -79,19 +77,12 @@ class AbLangGradientOutput(GradientOutput):
     """AbLang masked PLL output; gradient is optional in forward-only mode.
 
     Attributes:
-        gradient (list[list[float]] | None): Gradient w.r.t. input logits, or ``None``
-            when ``compute_gradient=False`` (forward-only scoring).
-        loss (float): Mean negative log-likelihood over AA positions.
-        metrics (dict[str, Any]): ``log_likelihood``, ``avg_log_likelihood``, ``perplexity``,
-            ``sequence_length``, ``model_choice``, ``objective``.
+        results (list[GradientResult]): One per input antibody, each holding its gradient
+            w.r.t. the supplied logits (``None`` in forward-only mode), its mean negative
+            log-likelihood over AA positions, and its ``log_likelihood``,
+            ``avg_log_likelihood``, ``perplexity`` and chain-length metrics.
         vocab (list[str]): Amino-acid column ordering for the input logits.
     """
-
-    gradient: list[list[float]] | None = Field(
-        default=None,
-        title="Gradient",
-        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
-    )
 
 
 class AbLangGradientConfig(RelaxationConfig):

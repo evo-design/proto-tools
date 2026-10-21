@@ -20,6 +20,7 @@ from proto_tools.tools.structure_prediction import (
     run_alphafold2,
     run_alphafold2_gradient,
 )
+from proto_tools.tools.structure_prediction.shared_data_models import StructureGradientResult
 from proto_tools.utils import one_hot_protein_logits
 from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from proto_tools.utils.tool_instance import ToolInstance
@@ -318,17 +319,29 @@ def test_gradient_dispatch_contract(monkeypatch):
 
 @pytest.mark.parametrize("name", ["step", "step_v1.5"])
 def test_gradient_export_writes_pdb_sidecar(tmp_path, name):
+    """Each result gets its own indexed sidecar, so a batch cannot overwrite one structure."""
     AlphaFold2GradientOutput(
-        gradient=[[0.1] * 20] * 2,
-        loss=1.25,
-        metrics={"avg_plddt": 0.8},
+        results=[
+            StructureGradientResult(
+                gradient=[[0.1] * 20] * 2,
+                loss=1.25,
+                metrics={"avg_plddt": 0.8},
+                structure=Structure(structure=_EXAMPLE_PDB, b_factor_type=BFactorType.PLDDT),
+            ),
+            StructureGradientResult(
+                gradient=[[0.2] * 20] * 2,
+                loss=2.5,
+                metrics={"avg_plddt": 0.6},
+                structure=Structure(structure=_EXAMPLE_PDB, b_factor_type=BFactorType.PLDDT),
+            ),
+        ],
         vocab=_CANONICAL_VOCAB,
-        structure=Structure(structure=_EXAMPLE_PDB, b_factor_type=BFactorType.PLDDT),
     ).export(name, export_path=tmp_path)
 
     payload = json.loads((tmp_path / f"{name}.json").read_text())
-    assert payload["structure_pdb"] == f"{name}.pdb"
-    assert is_valid_structure((tmp_path / f"{name}.pdb").read_text())
+    assert payload["structure_pdbs"] == [f"{name}_0000.pdb", f"{name}_0001.pdb"]
+    for sidecar in payload["structure_pdbs"]:
+        assert is_valid_structure((tmp_path / sidecar).read_text())
 
 
 def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):

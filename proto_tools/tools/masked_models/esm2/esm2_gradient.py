@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.tools.masked_models.esm2.esm2_sample import ESM2_MODEL_CHECKPOINTS
@@ -67,18 +67,12 @@ class ESM2GradientOutput(GradientOutput):
     """ESM2 masked PLL output; gradient is optional in forward-only mode.
 
     Attributes:
-        gradient (list[list[float]] | None): Gradient w.r.t. input logits, or ``None``
-            when ``compute_gradient=False``.
-        loss (float): Mean negative log-likelihood over AA positions.
-        metrics (dict[str, Any]): Log-likelihood, perplexity, sequence length, and objective details.
+        results (list[GradientResult]): One per input item, in input order, each holding that
+            item's gradient w.r.t. its logits (``None`` in forward-only mode), its mean negative
+            log-likelihood over AA positions, and its log-likelihood, perplexity, sequence length
+            and objective details.
         vocab (list[str]): Amino-acid column ordering for the input logits.
     """
-
-    gradient: list[list[float]] | None = Field(
-        default=None,
-        title="Gradient",
-        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
-    )
 
 
 class ESM2GradientConfig(RelaxationConfig):

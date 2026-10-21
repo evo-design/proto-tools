@@ -3,7 +3,7 @@
 import math
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
@@ -16,7 +16,14 @@ from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField, GradientInput, GradientOutput, RelaxationConfig, ToolInstance
+from proto_tools.utils import (
+    ConfigField,
+    GradientInput,
+    GradientOutput,
+    RelaxationConfig,
+    ToolInstance,
+    coerce_to_item_list,
+)
 from proto_tools.utils.tool_io import InputField
 
 # Encodon caps sequences at (2048 - 2) codons (CLS/SEP); the differentiable state is per-codon.
@@ -27,30 +34,39 @@ class CodonFMGradientInput(GradientInput):
     """Input for the CodonFM gradient tool.
 
     Attributes:
-        logits (CodonSequenceLogits): Relaxed coding-sequence state with shape ``(L, 64)`` in
-            lexicographic DNA codon order (``AAA, AAC, AAG, AAT, ...``; see
-            :data:`CODONFM_CODON_VOCAB`). ``L`` must be ≤ 2046 (Encodon's positional cap minus
-            the CLS/SEP tokens); over-length inputs raise ``ValueError``. Each row's argmax codon
-            is used as that position's masked-language-model target.
+        inputs (list[CodonSequenceLogits]): One relaxed coding-sequence state per candidate, each
+            ``(L, 64)`` in lexicographic DNA codon order (``AAA, AAC, AAG, AAT, ...``; see
+            :data:`CODONFM_CODON_VOCAB`). A single state may be passed on its own. Every ``L``
+            must be ≤ 2046 (Encodon's positional cap minus the CLS/SEP tokens); over-length
+            inputs raise ``ValueError``. Each row's argmax codon is that position's
+            masked-language-model target.
         temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
             as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
             gradient; ``None`` reads them as probabilities and returns a probability-space
             gradient.
     """
 
-    logits: CodonSequenceLogits = InputField(
-        title="Logits",
-        description="Relaxed coding-sequence state with shape (L, 64) in lexicographic codon order.",
-        examples=[[[0.0] * CODONFM_NUM_CODONS, [0.0] * CODONFM_NUM_CODONS]],
+    inputs: list[CodonSequenceLogits] = InputField(
+        title="Relaxed Sequences",
+        description="One relaxed (L, 64) coding-sequence state per candidate, in lexicographic codon order",
+        examples=[[[[0.0] * CODONFM_NUM_CODONS, [0.0] * CODONFM_NUM_CODONS]]],
     )
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def normalize_items(cls, value: Any) -> Any:
+        """Accept one relaxed state as well as a list of them."""
+        return coerce_to_item_list(value)
 
     @model_validator(mode="after")
     def validate_codon_count(self) -> Self:
-        """Reject inputs beyond Encodon's positional cap."""
-        if len(self.logits) > CODONFM_MAX_CODONS:
-            raise ValueError(
-                f"codonfm: supports sequences up to {CODONFM_MAX_CODONS} codons; input has length {len(self.logits)}."
-            )
+        """Reject any item beyond Encodon's positional cap."""
+        for index, matrix in enumerate(self.inputs):
+            if len(matrix) > CODONFM_MAX_CODONS:
+                raise ValueError(
+                    f"codonfm: supports sequences up to {CODONFM_MAX_CODONS} codons; "
+                    f"inputs[{index}] has length {len(matrix)}."
+                )
         return self
 
 
@@ -58,18 +74,12 @@ class CodonFMGradientOutput(GradientOutput):
     """CodonFM masked-PLL output; gradient is optional in forward-only mode.
 
     Attributes:
-        gradient (list[list[float]] | None): Gradient w.r.t. the input codon logits, or ``None``
-            when ``compute_gradient=False``.
-        loss (float): Mean masked negative log-likelihood over codon positions.
-        metrics (dict[str, Any]): Log-likelihood, perplexity, sequence length, and objective details.
+        results (list[GradientResult]): One per input item, in input order, each holding that
+            item's gradient w.r.t. its codon logits (``None`` in forward-only mode), its mean
+            masked negative log-likelihood over codon positions, and its log-likelihood,
+            perplexity, sequence length and objective details.
         vocab (list[str]): Codon column ordering for the input logits and returned gradient.
     """
-
-    gradient: list[list[float]] | None = Field(
-        default=None,
-        title="Gradient",
-        description="Gradient w.r.t. the input codon logits. None when compute_gradient=False.",
-    )
 
 
 class CodonFMGradientConfig(RelaxationConfig):
@@ -113,7 +123,7 @@ class CodonFMGradientConfig(RelaxationConfig):
 
 def example_input() -> CodonFMGradientInput:
     """Minimal valid input for testing and examples."""
-    return CodonFMGradientInput(logits=one_hot_codon_logits("ATGGTGAGCAAG", sharpness=2.0))
+    return CodonFMGradientInput(inputs=one_hot_codon_logits("ATGGTGAGCAAG", sharpness=2.0))
 
 
 @tool(
@@ -128,6 +138,9 @@ def example_input() -> CodonFMGradientInput:
     example_input=example_input,
     cacheable=False,
     stochastic=True,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=8,
 )
 def run_codonfm_gradient(
     inputs: CodonFMGradientInput,
@@ -149,7 +162,7 @@ def run_codonfm_gradient(
         "codonfm",
         {
             "operation": "gradient",
-            "logits": inputs.logits.root,
+            "items": [matrix.root for matrix in inputs.inputs],
             "temperature": inputs.temperature,
             "soft": config.soft,
             "hard": config.hard,
@@ -166,20 +179,24 @@ def run_codonfm_gradient(
         instance=instance,
         config=config,
     )
-    loss = float(result["loss"])
-    if not math.isfinite(loss):
-        raise ValueError("CodonFM returned a non-finite gradient loss")
     if result.get("vocab") != CODONFM_CODON_VOCAB:
         raise ValueError("CodonFM returned an unexpected codon vocabulary")
-    gradient = result.get("gradient")
-    if config.compute_gradient:
-        if not isinstance(gradient, list) or len(gradient) != len(inputs.logits):
-            raise ValueError("CodonFM returned a gradient with an unexpected length")
-        for idx, row in enumerate(gradient):
-            if len(row) != CODONFM_NUM_CODONS or not all(math.isfinite(float(value)) for value in row):
-                raise ValueError(f"CodonFM returned an invalid gradient row at index {idx}")
-    elif gradient is not None:
-        raise ValueError("CodonFM returned a gradient when compute_gradient=False")
-    result["loss"] = loss
+    items = result["results"]
+    if len(items) != len(inputs.inputs):
+        raise ValueError(f"CodonFM returned {len(items)} results for {len(inputs.inputs)} item(s)")
+    for index, (item, matrix) in enumerate(zip(items, inputs.inputs, strict=True)):
+        loss = float(item["loss"])
+        if not math.isfinite(loss):
+            raise ValueError(f"CodonFM returned a non-finite gradient loss for item {index}")
+        item["loss"] = loss
+        gradient = item.get("gradient")
+        if config.compute_gradient:
+            if not isinstance(gradient, list) or len(gradient) != len(matrix):
+                raise ValueError(f"CodonFM returned a gradient with an unexpected length for item {index}")
+            for row_index, row in enumerate(gradient):
+                if len(row) != CODONFM_NUM_CODONS or not all(math.isfinite(float(value)) for value in row):
+                    raise ValueError(f"CodonFM returned an invalid gradient row at item {index}, row {row_index}")
+        elif gradient is not None:
+            raise ValueError("CodonFM returned a gradient when compute_gradient=False")
     result["metadata"] = {"model_checkpoint": config.model_checkpoint}
-    return CodonFMGradientOutput.from_single(result)
+    return CodonFMGradientOutput(**result)

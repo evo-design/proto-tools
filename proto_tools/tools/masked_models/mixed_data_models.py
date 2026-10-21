@@ -389,9 +389,9 @@ class MixedGradientOutput(GradientOutput):
     """Token-aligned masked-PLL gradient with fixed-context rows preserved.
 
     Attributes:
-        gradient (GradientValue): Derivative of masked NLL with respect to the input state.
-        loss (float): Mean masked negative log-likelihood.
-        metrics (dict[str, Any]): Masked PLL metrics and checkpoint metadata.
+        results (list[GradientResult]): One per input item, each holding its derivative of the
+            masked NLL with respect to its input state (``None`` in forward-only mode), its mean
+            masked negative log-likelihood, and its masked-PLL metrics and checkpoint metadata.
         vocab (list[str]): Protein/DNA column order shared by input and gradient.
     """
 
