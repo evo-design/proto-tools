@@ -887,6 +887,7 @@ from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
     AlphaFold2GradientConfig,
     AlphaFold2GradientInput,
+    AlphaFold2GradientItem,
     AlphaFold2GradientOutput,
     AlphaFold2Input,
     AlphaFold2Output,
@@ -1359,6 +1360,7 @@ __all__ = [
     # Structure prediction - AlphaFold2 Gradient
     "run_alphafold2_gradient",
     "AlphaFold2GradientInput",
+    "AlphaFold2GradientItem",
     "AlphaFold2GradientConfig",
     "AlphaFold2GradientOutput",
     # Structure prediction - AlphaFold3

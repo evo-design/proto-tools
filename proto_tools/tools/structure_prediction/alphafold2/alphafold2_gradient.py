@@ -10,10 +10,12 @@ and returns the gradient w.r.t. logits; ``False`` runs forward only with
 
 import json
 import logging
+from collections.abc import Iterator, Sequence
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.entities.structures import BFactorType, Structure
@@ -23,11 +25,14 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     AminoAcid,
     ConfigField,
+    GradientInput,
     GradientOutput,
     InputField,
-    ProteinGradientInput,
+    ProteinSequenceLogits,
     RelaxationConfig,
+    SequenceLogits,
     ToolInstance,
+    coerce_to_item_list,
     one_hot_protein_logits,
 )
 from proto_tools.utils.sequence import normalize_excluded_amino_acids
@@ -57,15 +62,14 @@ _VALID_LOSS_KEYS = frozenset(
 _BINDER_FIXTURE_PDB = Path(__file__).resolve().parent / "example_input_fixture.pdb"
 
 
-class AlphaFold2GradientInput(ProteinGradientInput):
-    """Input for AlphaFold2 binder-design (forward scoring or gradient).
+class AlphaFold2GradientItem(BaseModel):
+    """One candidate: a relaxed binder state with the target it is designed against.
 
-    Extends ProteinGradientInput with target-template structural data required
-    for binder redesign against a frozen target.
+    The target template and its selections belong to the candidate, so a batch may design against
+    different targets and each item's chains validate against its own PDB.
 
     Attributes:
-        logits (ProteinSequenceLogits): Inherited — relaxed binder state (L x 20).
-        temperature (float | None): Inherited — softmax temperature, or None for probabilities.
+        logits (ProteinSequenceLogits): Relaxed binder state (L x 20) in proto amino-acid order.
         target_pdb (Structure): Target+binder template PDB. Accepts a file path,
             raw PDB/CIF content string, ``Structure`` object, or a dict in the
             shape produced by ``Structure.model_dump(mode='json')``.
@@ -76,30 +80,42 @@ class AlphaFold2GradientInput(ProteinGradientInput):
             for loss focus (e.g. CDR loops). Germinal backend only.
     """
 
-    target_pdb: Structure = InputField(
+    logits: ProteinSequenceLogits = Field(
+        title="Logits",
+        description="Relaxed (L, 20) binder state in proto amino-acid order.",
+    )
+    target_pdb: Structure = Field(
         title="Target PDB",
         description="Target+binder template PDB.",
     )
-    target_chain: str = InputField(
+    target_chain: str = Field(
         default="A",
         title="Target Chain",
         description="Chain ID(s) of the frozen target in the PDB.",
     )
-    target_hotspot: str | None = InputField(
+    target_hotspot: str | None = Field(
         default=None,
         title="Target Hotspot",
         description="Comma-separated hotspot residue indices on the target (e.g. '10,25,42').",
     )
-    binder_chain: str | None = InputField(
+    binder_chain: str | None = Field(
         default=None,
         title="Binder Chain",
         description="Binder template chain to redesign; None (default) designs the binder de novo.",
     )
-    design_positions: list[int] | None = InputField(
+    design_positions: list[int] | None = Field(
         default=None,
         title="Design Positions",
         description="Zero-based binder residue indices for loss focus (e.g. CDR loops).",
     )
+
+    def iter_sequence_logits(self) -> Iterator[tuple[str, SequenceLogits]]:
+        """Expose this item's relaxed state to the shared validation hooks.
+
+        Yields:
+            tuple[str, SequenceLogits]: The field name and this item's matrix.
+        """
+        yield "logits", self.logits
 
     @model_validator(mode="after")
     def validate_chains_present(self) -> Self:
@@ -119,6 +135,64 @@ class AlphaFold2GradientInput(ProteinGradientInput):
                 "template redesign supply a PDB containing that chain."
             )
         return self
+
+
+class AlphaFold2GradientInput(GradientInput):
+    """One or many relaxed binders, each designed against its own target.
+
+    Attributes:
+        inputs (list[AlphaFold2GradientItem]): One binder-and-target bundle per candidate. A
+            single bundle may be passed on its own.
+        temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
+            reads each state as unnormalized and applies ``softmax(logits / T)``, returning
+            logit-space gradients; ``None`` reads them as probabilities and returns
+            probability-space gradients.
+    """
+
+    inputs: list[AlphaFold2GradientItem] = InputField(
+        title="Relaxed Candidates",
+        description="One relaxed binder with its target template per candidate; a single bundle is accepted alone",
+    )
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def normalize_items(cls, value: Any) -> Any:
+        """Accept one candidate as well as a list of them."""
+        return coerce_to_item_list(value)
+
+    @classmethod
+    def from_probabilities(
+        cls,
+        probabilities: Sequence[Sequence[float]],
+        *,
+        temperature: float = 1.0,
+        **fields: Any,
+    ) -> Self:
+        """Build a one-candidate input whose binder logits reproduce ``probabilities``.
+
+        The target template belongs to the item, so it and its selections are taken by keyword
+        here and packed into the item alongside the converted matrix.
+
+        Args:
+            probabilities (Sequence[Sequence[float]]): ``(L, 20)`` strictly positive rows.
+            temperature (float): Positive, finite temperature stored on the input.
+            fields (Any): The item's remaining fields; must include ``target_pdb``.
+
+        Returns:
+            Self: Input satisfying ``softmax(logits / temperature) == probabilities``.
+
+        Raises:
+            ValueError: If ``target_pdb`` is missing.
+        """
+        if "target_pdb" not in fields:
+            raise ValueError("alphafold2 gradient from_probabilities requires the target template")
+        item_fields = {name: fields.pop(name) for name in list(fields) if name in AlphaFold2GradientItem.model_fields}
+        matrix = ProteinSequenceLogits.from_probabilities(probabilities, temperature=temperature)
+        return cls(
+            inputs=[AlphaFold2GradientItem(logits=matrix, **item_fields)],
+            temperature=temperature,
+            **fields,
+        )
 
 
 class AlphaFold2GradientConfig(RelaxationConfig):
@@ -378,9 +452,13 @@ def _reject_unused_softmax_knobs(inputs: AlphaFold2GradientInput, config: AlphaF
 def example_input() -> AlphaFold2GradientInput:
     """Minimal valid input — short VHH-like binder with biased logits and PD-L1 template."""
     return AlphaFold2GradientInput(
-        logits=one_hot_protein_logits("EVQLVESG", sharpness=2.0),
-        target_pdb=Structure.from_file(_BINDER_FIXTURE_PDB),
-        binder_chain="B",
+        inputs=[
+            AlphaFold2GradientItem(
+                logits=ProteinSequenceLogits(one_hot_protein_logits("EVQLVESG", sharpness=2.0)),
+                target_pdb=Structure.from_file(_BINDER_FIXTURE_PDB),
+                binder_chain="B",
+            )
+        ]
     )
 
 
@@ -400,6 +478,9 @@ def example_input() -> AlphaFold2GradientInput:
     pin_visible_devices=True,
     example_input=example_input,
     cacheable=False,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=2,
     stochastic=True,
 )
 def run_alphafold2_gradient(
@@ -418,22 +499,28 @@ def run_alphafold2_gradient(
         config.model_num,
         config.compute_gradient,
     )
-    # Materialize the target Structure to a tempfile on the local filesystem so
-    # the standalone (ColabDesign) can read it as a path. Auto-cleans on exit.
-    with inputs.target_pdb.temp_file() as target_pdb_path:
+    # Each candidate's target Structure is materialized to its own tempfile so the standalone
+    # (ColabDesign) can read it as a path; ExitStack keeps them all alive for the dispatch.
+    with ExitStack() as stack:
+        items = [
+            {
+                "logits": item.logits.root,
+                "target_pdb": str(stack.enter_context(item.target_pdb.temp_file())),
+                "target_chain": item.target_chain,
+                "target_hotspot": item.target_hotspot,
+                "binder_chain": item.binder_chain,
+                "design_positions": item.design_positions,
+            }
+            for item in inputs.inputs
+        ]
         result = ToolInstance.dispatch(
             "alphafold2",
             {
                 "operation": "compute_gradient",
-                "logits": inputs.logits.root,
+                "items": items,
                 "temperature": inputs.temperature,
                 "soft": config.soft,
                 "hard": config.hard,
-                "target_pdb": str(target_pdb_path),
-                "target_chain": inputs.target_chain,
-                "target_hotspot": inputs.target_hotspot,
-                "binder_chain": inputs.binder_chain,
-                "design_positions": inputs.design_positions,
                 "bias_redesign": config.bias_redesign,
                 # ColabDesign's prep_inputs(rm_aa=...) expects a comma-separated string.
                 "excluded_amino_acids": (
@@ -465,15 +552,16 @@ def run_alphafold2_gradient(
             config=config,
         )
 
-    metrics = result["metrics"]
-    return AlphaFold2GradientOutput(
-        results=[
+    results = []
+    for item_result in result["results"]:
+        metrics = item_result["metrics"]
+        results.append(
             StructureGradientResult(
-                gradient=result["gradient"],
-                loss=result["loss"],
+                gradient=item_result["gradient"],
+                loss=item_result["loss"],
                 metrics=metrics,
                 structure=Structure(
-                    structure=result["pdb"],
+                    structure=item_result["pdb"],
                     b_factor_type=BFactorType.PLDDT,
                     metrics=AlphaFold2Metrics(
                         avg_plddt=metrics["avg_plddt"],
@@ -485,6 +573,5 @@ def run_alphafold2_gradient(
                     source="alphafold2-gradient",
                 ),
             )
-        ],
-        vocab=result["vocab"],
-    )
+        )
+    return AlphaFold2GradientOutput(results=results, vocab=result["vocab"])

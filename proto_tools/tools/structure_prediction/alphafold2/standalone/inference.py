@@ -886,40 +886,49 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             include_pae_matrix=input_dict["include_pae_matrix"],
         )
     if operation == "compute_gradient":
-        return _model.compute_binder_gradient(
-            logits=input_dict["logits"],
-            temperature=resolve_temperature(input_dict["temperature"]),
-            soft=input_dict.get("soft", 1.0),
-            hard=input_dict.get("hard", 0.0),
-            target_pdb=input_dict["target_pdb"],
-            target_chain=input_dict["target_chain"],
-            target_hotspot=input_dict.get("target_hotspot"),
-            binder_chain=input_dict.get("binder_chain"),
-            design_positions=input_dict.get("design_positions"),
-            bias_redesign=input_dict.get("bias_redesign"),
-            excluded_amino_acids=input_dict.get("excluded_amino_acids"),
-            num_recycles=input_dict["num_recycles"],
-            recycle_mode=input_dict.get("recycle_mode", "last"),
-            model_num=input_dict["model_num"],
-            sample_models=input_dict.get("sample_models", False),
-            use_multimer=input_dict.get("use_multimer", True),
-            rm_target_seq=input_dict.get("rm_target_seq", True),
-            rm_target_sc=input_dict.get("rm_target_sc", False),
-            rm_template_ic=input_dict.get("rm_template_ic", True),
-            starting_binder_seq=input_dict.get("starting_binder_seq"),
-            loss_weights=input_dict.get("loss_weights"),
-            intra_contact_num=input_dict.get("intra_contact_num", 2),
-            intra_contact_cutoff=input_dict.get("intra_contact_cutoff", 14.0),
-            inter_contact_num=input_dict.get("inter_contact_num", 1),
-            inter_contact_cutoff=input_dict.get("inter_contact_cutoff", 21.6875),
-            framework_contact_offset=input_dict.get("framework_contact_offset", 1.0),
-            seed=input_dict["seed"],
-            backend=input_dict.get("backend", "base"),
-            compute_gradient=input_dict.get("compute_gradient", True),
-            device=input_dict["device"],
-            verbose=input_dict["verbose"],
-            include_pae_matrix=input_dict["include_pae_matrix"],
-        )
+        # One chunk of independent candidates, each with its own target template. prep_inputs
+        # re-runs per item and af_model state is rebuilt with it, so nothing carries over.
+        results = [
+            _model.compute_binder_gradient(
+                logits=item["logits"],
+                temperature=resolve_temperature(input_dict["temperature"]),
+                soft=input_dict.get("soft", 1.0),
+                hard=input_dict.get("hard", 0.0),
+                target_pdb=item["target_pdb"],
+                target_chain=item["target_chain"],
+                target_hotspot=item.get("target_hotspot"),
+                binder_chain=item.get("binder_chain"),
+                design_positions=item.get("design_positions"),
+                bias_redesign=input_dict.get("bias_redesign"),
+                excluded_amino_acids=input_dict.get("excluded_amino_acids"),
+                num_recycles=input_dict["num_recycles"],
+                recycle_mode=input_dict.get("recycle_mode", "last"),
+                model_num=input_dict["model_num"],
+                sample_models=input_dict.get("sample_models", False),
+                use_multimer=input_dict.get("use_multimer", True),
+                rm_target_seq=input_dict.get("rm_target_seq", True),
+                rm_target_sc=input_dict.get("rm_target_sc", False),
+                rm_template_ic=input_dict.get("rm_template_ic", True),
+                starting_binder_seq=input_dict.get("starting_binder_seq"),
+                loss_weights=input_dict.get("loss_weights"),
+                intra_contact_num=input_dict.get("intra_contact_num", 2),
+                intra_contact_cutoff=input_dict.get("intra_contact_cutoff", 14.0),
+                inter_contact_num=input_dict.get("inter_contact_num", 1),
+                inter_contact_cutoff=input_dict.get("inter_contact_cutoff", 21.6875),
+                framework_contact_offset=input_dict.get("framework_contact_offset", 1.0),
+                seed=input_dict["seed"],
+                backend=input_dict.get("backend", "base"),
+                compute_gradient=input_dict.get("compute_gradient", True),
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
+                include_pae_matrix=input_dict["include_pae_matrix"],
+            )
+            for item in input_dict["items"]
+        ]
+        return {
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics", "pdb")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
     raise ValueError(f"alphafold2: unknown operation {operation!r}; valid: ['predict', 'compute_gradient']")
 
 

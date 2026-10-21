@@ -9,6 +9,7 @@ from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import (
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient import (
     AlphaFold2GradientConfig,
     AlphaFold2GradientInput,
+    AlphaFold2GradientItem,
     AlphaFold2GradientOutput,
     run_alphafold2_gradient,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "AlphaFold2Output",
     "run_alphafold2",
     "AlphaFold2GradientInput",
+    "AlphaFold2GradientItem",
     "AlphaFold2GradientConfig",
     "AlphaFold2GradientOutput",
     "run_alphafold2_gradient",
