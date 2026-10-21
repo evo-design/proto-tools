@@ -1,37 +1,114 @@
-# Gradient tools
+# How gradient tools work in Proto
 
-Proto's gradient tools evaluate a model objective and return its gradient with respect to a continuous representation of a sequence. Instead of a string of discrete tokens, the input is a matrix of shape `(L, V)`, with one row per sequence position and one column per token in Proto's interface vocabulary for that sequence type. A model's own tokenizer may be much larger; backends map between the two.
+Proto's gradient tools let you optimize a biological sequence using derivatives from a predictive model. Instead of supplying only a discrete amino acid or nucleotide sequence, you supply a continuous matrix with one row per position and one column per possible token. The tool evaluates its objective and returns a loss and, when requested, a gradient that can be used to update the sequence.
 
-This page explains how to prepare those inputs, interpret the returned gradients, work with the shared input types, and control how a continuous state is relaxed before it reaches a model.
+This guide explains what goes into a gradient tool, how Proto turns that input into something the model can evaluate, and how to interpret the result. The same conventions apply across the gradient tools, with a few model-specific details described below.
 
-## Logits, probabilities, and temperature
+## 1. Sequence inputs and temperature
 
-The `temperature` field determines how a gradient tool interprets its input matrix:
+A relaxed sequence is a matrix of shape `(L, V)`, where `L` is the sequence length and `V` is the size of Proto's vocabulary for that model. A protein sequence, for example, uses an `(L, 20)` matrix. Each row contains one value for every possible amino acid at that position.
 
-| `temperature` | Input values | What the model uses | Returned gradient |
-|---|---|---|---|
-| Positive number (default `1.0`) | Logits | `softmax(logits / temperature)` | With respect to the supplied logits |
-| `None` | Probabilities | The supplied distribution, unchanged | With respect to the supplied probabilities |
+The `temperature` field determines how the tool interprets those values:
 
-The field is called `logits` in both cases for API compatibility. `temperature` is part of the tool **Input**, rather than its Config, and must be a positive, finite number or `None`.
+| `temperature` | Input represents | Probability calculation | Returned gradient |
+| --- | --- | --- | --- |
+| Positive float (default `1.0`) | Unnormalized logits | `P = softmax(preprocess(X) / temperature)` | With respect to the supplied logits `X` |
+| `None` | An existing probability distribution | No new softmax; `P = X` | With respect to the supplied probabilities `X` |
 
-For most gradient-based sequence optimization, use the default. You can update logits freely between iterations, and softmax will always turn them into a normalized distribution. Lower temperatures concentrate probability on the highest-scoring tokens; higher temperatures make the distribution more uniform.
+Here, `preprocess(X)` is normally just `X`. AlphaFold2 is an exception: ColabDesign can scale the logits and add bias before softmax.
 
-Set `temperature=None` when you need the model to evaluate an existing probability distribution *without changing it*. Each active row must contain finite, nonnegative values that sum to 1, within an absolute tolerance of `1e-6`. The returned gradient is then with respect to those probabilities. Directly updating probabilities with ordinary gradient descent may produce invalid distributions, so this mode is generally intended for evaluation or algorithms that explicitly maintain the probability constraints.
+The input field remains named `logits` in either mode for compatibility. `temperature` belongs to the tool's **Input**; the `soft` and `hard` controls discussed below belong to its **Config**.
 
-For example, ESM2 supports both forms:
+For most gradient-based optimization, use a positive temperature. Logits can be updated without constraints, and softmax converts them into a valid probability distribution. Lower temperatures favor the highest-scoring token at each position; higher temperatures spread the probability more evenly.
 
 ```python
-# Optimize logits: softmax is applied by the backend.
+# Start from unnormalized amino acid scores.
 inputs = ESM2GradientInput(logits=my_logits, temperature=1.0)
 
-# Evaluate an existing probability distribution without applying softmax again.
+# Or provide normalized probabilities directly.
 inputs = ESM2GradientInput(logits=my_probabilities, temperature=None)
 ```
 
-## Starting from probabilities
+**A note on terminology:** The probability matrix `P` is not always exactly what the predictive model receives. Proto can further blend it with raw logits or a hard one-hot sequence, depending on `soft` and `hard`.
 
-If you have a probability distribution but want to optimize **logits**, use the input class's `from_probabilities()` factory:
+## 2. How `soft` and `hard` change the model input
+
+Every gradient tool exposes two relaxation controls through its config:
+
+- **`soft`** blends the raw input matrix with its softmax probabilities. At `soft=0`, the blend uses raw values; at `soft=1`, it uses probabilities.
+- **`hard`** blends in a one-hot sequence using a straight-through estimator (STE). At `hard=1`, the model evaluates a hard sequence, while backpropagation follows a differentiable surrogate.
+
+Both controls are finite numbers between `0` and `1`. Their shared defaults are **`soft=1.0` and `hard=0.0`**. The default `temperature` is `1.0`.
+
+### The calculation
+
+Let `X` be the original input matrix, and let `P` be its probability representation. Proto constructs the following values:
+
+```text
+P     = softmax(preprocess(X) / temperature)
+D     = one_hot(argmax(P))
+D_ste = stop_gradient(D - P) + P
+
+U     = (1 - soft) * X + soft * P
+M     = (1 - hard) * U + hard * D_ste
+```
+
+`M` is the relaxed sequence representation passed to the model's input-processing pathway. In the forward pass, `D_ste` has the same values as `D`: exactly one selected token at each position. In the backward pass, its gradient follows `P` rather than the nondifferentiable `argmax` operation.
+
+The settings correspond to these modes:
+
+| `soft` | `hard` | Representation the model sees | How gradients flow back |
+| ---: | ---: | --- | --- |
+| `1` | `0` | Softmax probabilities `P` | Through softmax |
+| `1` | `1` | Hard one-hot `D` | Through the STE surrogate |
+| `0` | `0` | Raw input `X` | Directly through the input |
+| `0.5` | `0` | `0.5 X + 0.5 P` | Through both raw and softmax branches |
+| `1` | `0.5` | `0.5 P + 0.5 D` | Through softmax and the STE surrogate |
+
+For example, consider a position with three possible tokens and logits `[2, 1, 0]`. At temperature `1`, softmax produces approximately `[0.665, 0.245, 0.090]` and the hard one-hot sequence is `[1, 0, 0]`.
+
+| Mode | Example values passed forward |
+| --- | --- |
+| Raw (`soft=0, hard=0`) | `[2, 1, 0]` |
+| Soft (`soft=1, hard=0`) | `[0.665, 0.245, 0.090]` |
+| Hard STE (`soft=1, hard=1`) | `[1, 0, 0]` |
+| Half raw, half soft (`soft=0.5, hard=0`) | `[1.333, 0.622, 0.045]` |
+| Half soft, half hard (`soft=1, hard=0.5`) | `[0.833, 0.122, 0.045]` |
+
+These numbers illustrate the shared blending formula without model-specific scaling or masking.
+
+When `hard=1`, the result no longer depends on `soft`: the entire forward representation is one-hot, and its backward path uses the STE. This reproduces the former `use_ste=True` behavior when the same probabilities and preprocessing are used. The old `use_ste=False` corresponds to `soft=1, hard=0`.
+
+### Why keep raw and blended modes?
+
+Raw and intermediate representations give an optimizer more freedom than a normalized probability matrix. ColabDesign uses this kind of progression during sequence design. But raw values can be outside the inputs on which other predictive models were trained. Proto supports these modes mathematically; that does **not** establish that they improve sequence design or produce better-calibrated predictions.
+
+The shared implementation preserves a gradient path for each mode. That does not guarantee that every objective produces a nonzero gradient: a gradient can still be zero because of the model, the loss, or local saturation.
+
+## 3. Using existing probabilities (`temperature=None`)
+
+Set `temperature=None` when your input already contains probabilities and you don't want Proto to apply softmax again. Every active row must contain finite, nonnegative values that sum to `1.0` within an absolute tolerance of `1e-6`. The gradient is then expressed in **probability coordinates**, rather than logit coordinates.
+
+To pass the distribution through unchanged, use the ordinary relaxation settings (`soft=1, hard=0`):
+
+```python
+inputs = ESM2GradientInput(logits=my_probabilities, temperature=None)
+# Ordinary default config: soft=1.0, hard=0.0
+```
+
+There is an important distinction between **skipping softmax** and **skipping all relaxation**. In the generic formula, when `temperature=None`, `P=X` and the first blend reduces to `U=X`. If `hard` is greater than zero, however, the forward pass also mixes in the one-hot representation:
+
+```text
+M = (1 - hard) * X + hard * one_hot(argmax(X))  # forward values
+```
+
+The STE supplies a surrogate backward path. Therefore, `temperature=None` by itself does **not** imply that explicitly enabled hardening leaves the model input unchanged. Use `hard=0` when preserving the supplied distribution is the goal. AlphaFold2 handles this mode specially: its adapter bypasses ColabDesign's softmax branch and rejects incompatible relaxation options instead of silently ignoring them.
+
+Because unconstrained gradient updates can make probabilities negative or cause rows to stop summing to one, direct probability optimization requires a method that maintains the simplex constraints.
+
+## 4. Starting with probabilities but optimizing logits
+
+If you have probabilities and want to optimize **logits**, use the gradient input class's `from_probabilities()` factory:
 
 ```python
 inputs = ESM2GradientInput.from_probabilities(
@@ -39,7 +116,7 @@ inputs = ESM2GradientInput.from_probabilities(
     temperature=0.5,
 )
 
-# Other required tool inputs can be supplied in the same call.
+# Extra required inputs can be supplied in the same call.
 inputs = ProteinMPNNGradientInput.from_probabilities(
     my_probabilities,
     temperature=0.5,
@@ -47,90 +124,92 @@ inputs = ProteinMPNNGradientInput.from_probabilities(
 )
 ```
 
-The factory computes `logits = temperature * log(probabilities)` and sets the matching temperature on the request. Applying `softmax(logits / temperature)` then recovers the original distribution, up to floating-point precision. Specifying both together avoids accidentally constructing logits at one temperature and evaluating them at another.
+For strictly positive probabilities, the factory calculates:
 
-For ordinary sequence inputs, the factory accepts only **strictly positive** probabilities. An exact zero would require an infinite logit, and Proto does not transmit infinite logits. Mixed protein/DNA inputs are the exception: the conversion operates within each permitted modality, preserving the required zeros in other columns. It also does not silently replace zeros with small positive values, because that would change the supplied distribution.
+```text
+logits = temperature * log(probabilities)
+```
 
-If you need to preserve exact zeros, pass a valid distribution with `temperature=None` instead. If you need to *permanently forbid* tokens during optimization, use a constraint supported by the particular tool (for example, AlphaFold2's `excluded_amino_acids`). A common, user-facing masked-softmax input is not yet available.
+It sets the matching temperature on the constructed input, so `softmax(logits / temperature)` reconstructs the original distribution (up to floating-point precision). This avoids accidentally converting at one temperature and evaluating at another.
 
-The same factory pattern supports other input layouts: batched nucleotide tools accept a distribution per batch item, AbLang accepts `heavy_chain` and/or `light_chain` distributions, and mixed protein/DNA tools handle the allowed vocabulary at each position when converting probabilities.
+The factory rejects exact zeros in ordinary sequence distributions rather than silently replacing them with small positive values. Exact zeros would require infinite logits, which Proto does not accept. To preserve zeros, supply the distribution directly with `temperature=None`. Permanently excluding tokens during logit optimization requires a model-supported constraint; Proto does not yet expose a universal public `allowed_mask`.
 
-## Shared sequence types
+Mixed protein/DNA models are a special case: their factories convert probabilities within each position's permitted vocabulary block, preserving zeros outside that block. AbLang supports separate heavy- and light-chain distributions, and batched nucleotide tools accept a distribution for each batch item.
 
-`SequenceLogits` is a Pydantic `RootModel` that validates matrix shape and finite values. Its vocabulary-specific subclasses define the number and ordering of columns:
+**AlphaFold2 caveat:** Its effective `P` can also depend on ColabDesign's logit scaling and bias. The formula above guarantees reconstruction for an ordinary softmax on the supplied logits, not necessarily for an additional model-specific preprocessing step.
 
-| Type | Columns | Vocabulary |
-|---|---:|---|
+## 5. Sequence types and vocabulary ordering
+
+`SequenceLogits` is a Pydantic `RootModel` that validates matrix shape and finite values. Subclasses define the vocabulary and number of columns:
+
+| Type | Columns | Order |
+| --- | ---: | --- |
 | `ProteinSequenceLogits` | 20 | `ACDEFGHIKLMNPQRSTVWY` |
 | `NucleotideSequenceLogits` | 4 | `ACGT` |
-| `CodonSequenceLogits` | 64 | DNA codons in lexicographic order |
+| `CodonSequenceLogits` | 64 | DNA codons, lexicographic order |
 | `MixedSequenceLogits` | 24 | `ACDEFGHIKLMNPQRSTVWYacgt` |
 
-Callers can still supply ordinary nested lists. Pydantic parses them into the appropriate sequence type, and serialization produces the same nested-list JSON format. In Python, `.root` exposes the underlying matrix; `SequenceLogits` also supports indexing, iteration, `len()`, and equality against a plain nested list.
+Callers can still send ordinary nested lists. Pydantic converts them into the appropriate types without changing the JSON request format. In Python, `.root` exposes the underlying list of rows.
 
-`GradientInput` owns temperature and the shared validation rules. Tool-specific input classes extend it with their required fields. AbLang, for example, holds an `AntibodyLogits` object containing separate heavy- and light-chain matrices; batched nucleotide tools hold a list of matrices. `GradientInput.sequence_logits()` exposes these matrices by field path so shared validation and tests can handle them consistently.
+`GradientInput` provides the shared temperature and validation rules. Tool-specific input classes add fields such as ProteinMPNN's structure or AbLang's paired heavy and light chains. `GradientInput.sequence_logits()` identifies the relaxed matrices in these different input shapes, allowing common validation and tests.
 
-### Mixed protein/DNA inputs
+### Mixed protein/DNA models
 
-Mixed-model tools additionally restrict which columns are valid at each position, based on the sequence template. Uppercase protein positions use the 20 amino acid columns, lowercase DNA positions use the four nucleotide columns, and strand markers or ambiguous positions can represent inactive context.
+Minerva and GLM2 combine protein and DNA positions in one `(L, 24)` matrix. Their sequence templates determine the permitted columns at each position: protein positions use the first 20 columns, DNA positions use the last four, and certain template positions are inactive context.
 
-With `temperature=None`, active rows must sum to 1 and have zero probability in all disallowed columns. Inactive rows are instead required to be **all zeros**, in either temperature mode. The restrictions come from the internal `GradientInput.allowed_tokens()` hook, not from a public `allowed_mask` field.
+The models normalize `P` within each position's allowed vocabulary, and mask **all** terms in the relaxation calculation. Thus, even in raw mode, values in forbidden columns cannot contribute to the model input. Inactive context rows must be exactly zero in either temperature mode. In probability mode, active rows must sum to one and assign zero weight to forbidden columns.
 
-## Relaxation: the `soft` and `hard` controls
+These constraints come from an internal `allowed_tokens()` validation hook, not a user-facing `allowed_mask` field.
 
-Every gradient tool turns the supplied matrix into the representation its model consumes through the same two coefficients. They live on `RelaxationConfig`, which every gradient config inherits. With `X` the supplied matrix, `T` the temperature, and `preprocess` whatever a model applies to logits before its own softmax (the identity for all but AlphaFold2):
+### AlphaFold2 / ColabDesign
 
-```
-P     = softmax(preprocess(X) / T)       # or X itself when temperature is None
-D_ste = stop_gradient(one_hot(argmax(P)) - P) + P
-U     = (1 - soft) * X + soft * P
-M     = (1 - hard) * U + hard * D_ste
-```
+AlphaFold2 uses ColabDesign's own `soft_seq()` implementation rather than the shared helper. The meaning of `soft` and `hard` is the same, but the distribution `P` may be computed from scaled and biased logits. For example, the Germinal backend can use `softmax((2 * X + bias) / T)`; the raw branch still uses the original `X`.
 
-`M` is what reaches the model. The defaults — `temperature=1.0`, `soft=1.0`, `hard=0.0` — reduce it to a plain `softmax(X / T)`.
+In probability mode, the adapter selects the raw-input branch internally so validated probabilities pass through unchanged. It rejects settings that would otherwise be ignored, including incompatible relaxation and bias/exclusion options.
 
-- **`soft`** interpolates from the raw input matrix (0) to the softmax probabilities (1). The `(1 - soft)` branch is the caller's own matrix, not an argmax one-hot, so it keeps a derivative: at `soft=0` the gradient is the upstream vector itself.
-- **`hard`** mixes in a straight-through estimator, whose forward value is a one-hot and whose gradient flows through `P`. At `hard=1` both the forward value and the surrogate gradient are independent of `soft`.
+## 6. What the tool returns
 
-Differentiating `M` gives an identity route scaled by `(1 - hard) * (1 - soft)` plus a softmax route scaled by `(1 - hard) * soft + hard`, so no documented setting leaves a zero gradient. A relaxation that forwarded a constant would let an optimizer run without ever moving, and nothing would raise, so a check pins that too.
+A gradient tool returns a `GradientOutput` with:
 
-Use the default for ordinary optimization: it is the only setting whose forward value is a probability distribution and whose gradient is smooth. Set `hard=1.0` when the forward pass should see the discrete sequence the design will become. Lowering `soft` below 1.0 feeds raw, unnormalized values to a model trained on distributions — well defined and differentiable, but outside the training distribution of every model here. Whether any of these settings produces better designs is an experimental question this repository does not answer.
+- `loss`: the scalar model objective being evaluated;
+- `metrics`: additional model-specific scores;
+- `vocab`: the public token order associated with the output;
+- `gradient`: derivatives with respect to the supplied sequence matrix, in the same shape and vocabulary order.
 
-With `temperature=None` the supplied matrix is already `P`, so `U` mixes `X` with itself and the straight-through term adds `X - stop_gradient(X)`: the forward value is `X` wherever `hard < 1`, and the gradient is the upstream vector at every setting.
+With positive temperature, the gradient is with respect to **logits**. With `temperature=None`, it is with respect to **probabilities**. In a hard-STE mode, it is a **surrogate gradient**: the forward pass evaluates one-hot inputs, but the backward pass follows the differentiable probability pathway.
 
-### What does not move with the blend
+Setting `compute_gradient=False` runs forward-only scoring and returns `gradient=None`.
 
-- **Masked-model targets.** ESM2, AbLang, CodonFM, Minerva, and GLM2 take each site's target from `P`, so the objective does not shift with `soft` or `hard`.
-- **ProteinMPNN's negative-log-likelihood labels.** They are the decoded sequence — a hard one-hot at every setting. Softmax is monotonic, so they come from `argmax(X)` directly and need no branch for probability mode.
+AbLang returns a single matrix for paired heavy and light chains. The rows are concatenated heavy-first, then light; split at the heavy-chain length to recover each chain's gradient.
 
-### Implementations
+### How the objective relates to the relaxation
 
-| Where | What |
-|---|---|
-| `standalone_helpers.relaxation.relaxed_sequence` | The torch definition; every torch backend calls it. |
-| `standalone_helpers.relaxation.relaxed_sequence_jax` | The JAX twin, for environments with no torch (ProteinMPNN). |
-| `standalone_helpers.mixed_mlm` | Re-derives the blend for mixed protein/DNA models, whose `P` is normalized within each position's modality block. Every term is masked, so the raw-input branch cannot weight a forbidden column. |
-| ColabDesign's `soft_seq` | AlphaFold2 relaxes inside ColabDesign, on both the upstream and Germinal backends. `preprocess` is Germinal's `alpha` scaling and any `bias_redesign`, which therefore move `P` but not the raw-input branch. |
+The relaxation controls change the input representation evaluated by the model. They do not change the rule used to choose training or scoring targets. The masked models (ESM2, AbLang, CodonFM, Minerva, and GLM2) derive their targets from `P`. ProteinMPNN uses decoded sequence identities for its negative-log-likelihood labels.
 
-Each exists for a reason an import cannot remove — a missing array library, a modality-masked softmax, an upstream that owns its own reparameterization — so what keeps them one contract is that each is checked against the formula above, with the torch and JAX definitions additionally pinned to one shared table of forward values and gradients. Both helpers import their array library lazily and are not re-exported from the package `__init__`, so an environment with only one of torch and JAX can still import `standalone_helpers`.
+That **does not** mean the reported loss is unchanged when you adjust `soft` or `hard`: changing the model input can change its predictions and therefore its loss and gradient. It only means the target-selection rule is unchanged for fixed sequence logits.
 
-AlphaFold2 expresses probability mode as `soft=0` inside ColabDesign, whose `soft_seq` always softmaxes, and rejects the options that would then have no effect — `soft`, `hard`, `excluded_amino_acids`, and `bias_redesign` — instead of ignoring them silently.
+## 7. Implementation and tests
 
-Backends also map Proto's public vocabulary order to their own native token order; those native orders remain defined with each toolkit rather than assumed to be identical across models.
+The common numerical behavior is implemented in several places because the model environments and frameworks differ:
 
-## Outputs and testing
+| Implementation | Role |
+| --- | --- |
+| `standalone_helpers.relaxation.relaxed_sequence` | Shared PyTorch relaxation |
+| `standalone_helpers.relaxation.relaxed_sequence_jax` | Equivalent JAX relaxation, used by ProteinMPNN |
+| `standalone_helpers.mixed_mlm` | Modality-masked version for mixed protein/DNA inputs |
+| ColabDesign's `soft_seq()` | AlphaFold2's upstream implementation of the same blending convention |
 
-A `GradientOutput` contains `loss`, `metrics`, `vocab`, and `gradient`. The gradient uses the input's shape and Proto vocabulary order. When `compute_gradient=False`, `gradient` is `None` and the tool performs forward-only scoring without changing the loss or metrics.
+The PyTorch and JAX helpers are checked against the same table of expected forward values and gradients. ColabDesign is checked against the same mathematical contract, including its preprocessing. Tests also cover the STE backward path, intermediate blends, probability mode, and shared configuration defaults.
 
-AbLang is a special case: it combines heavy- and light-chain inputs and returns one `(Lh + Ll, 20)` gradient matrix, with the heavy-chain rows first. Split the result at the heavy-chain length to recover each chain's gradient.
+The registry-wide contract checks live in `tests/tool_infra_tests/test_gradient_contract.py`. The framework-specific checks—`_relaxation_env_checks.py`, `_relaxation_jax_env_checks.py`, and `_alphafold2_relaxation_env_checks.py`—run in their respective tool environments through `run_in_env`. These checks do not require model weights or a GPU, although they do require the corresponding environments to be built.
 
-Shared contract tests live in `tests/tool_infra_tests/test_gradient_contract.py`. They cover registered gradient tools, input validation, the common interface, and the relaxation controls, and they launch the numerical suites below through `run_in_env`. Backend-specific tests check numerical gradient agreement, including finite-difference comparisons where appropriate.
+## 8. Compatibility note
 
-| File | Covers |
-|---|---|
-| `_relaxation_env_checks.py` | The torch definition: forward values and gradients across the blend grid, the straight-through route, probability mode, and the shared reference table. Runs in esm2's environment. |
-| `_relaxation_jax_env_checks.py` | The JAX twin, against the same formula and the same reference table. Runs in proteinmpnn's environment. |
-| `_alphafold2_relaxation_env_checks.py` | ColabDesign's `soft_seq` on both backends, with and without alpha scaling and bias. Runs in alphafold2's environment. |
-| `_relaxation_reference.py` | The shared table itself, imported by the check scripts as a sibling module. |
+The unified interface replaces the previous `use_ste` option:
 
-Those suites need no model weights and no GPU — the formula is pure arithmetic — but they do need a built tool environment, so they are marked `integration`.
+| Previous setting | Equivalent unified setting |
+| --- | --- |
+| `use_ste=False` | `soft=1.0, hard=0.0` |
+| `use_ste=True` | `soft=1.0, hard=1.0` |
+
+All gradient tools now default to `soft=1.0, hard=0.0`. In particular, **ProteinMPNN's default changed**: it previously used a hard STE representation by default. Set `hard=1.0` to request the former behavior.
