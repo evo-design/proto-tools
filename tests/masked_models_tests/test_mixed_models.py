@@ -10,7 +10,7 @@ from standalone_helpers.compression import compress_array
 from standalone_helpers.mixed_sequence import tokenize_mixed_sequence
 
 from proto_tools.tools.masked_models.execution import dispatch_masked_model
-from proto_tools.tools.masked_models.glm2 import GLM2EmbeddingsConfig
+from proto_tools.tools.masked_models.glm2 import GLM2EmbeddingsConfig, GLM2GradientConfig
 from proto_tools.tools.masked_models.minerva import MinervaEmbeddingsConfig, MinervaInteractionsConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
     MIXED_VOCAB,
@@ -70,6 +70,32 @@ def test_mixed_parser_rejects_empty_elements_and_reverse_strand_dna(sequence, me
 def test_mixed_parser_accepts_window_edges_and_masked_reverse_strand_sites(sequence):
     # Windows cut from a longer locus may start mid-element or end on a marker.
     assert "".join(tokenize_mixed_sequence(sequence, allow_masks=True)) == sequence
+
+
+def test_mixed_preprocess_reads_templates_from_gradient_items(caplog):
+    """The config hook must find the templates on the gradient input's items.
+
+    ``preprocess`` runs on every dispatch before the model loads, and it reaches the templates by
+    looking at the input's shape. The gradient input carries one template per item rather than a
+    list of sequences, so a hook that only knows the list shape raises ``AttributeError`` before
+    any work starts — on the real tool, not just in a test that drives the worker directly.
+    """
+    bad, good = "MA+ac-X", _LOCUS
+    inputs = MixedSequenceGradientInput(
+        inputs=[
+            {"sequence": bad, "logits": one_hot_mixed_logits(bad)},
+            {"sequence": good, "logits": one_hot_mixed_logits(good)},
+        ]
+    )
+
+    with caplog.at_level(logging.WARNING, logger="proto_tools.tools.masked_models.mixed_configs"):
+        result = GLM2GradientConfig(device="cpu").preprocess(inputs)
+
+    assert result is inputs
+    warnings = [record.getMessage() for record in caplog.records if "strand marker" in record.getMessage()]
+    assert warnings == [
+        "Sequence 0 does not start with a strand marker (+ or -). Generally this means the input was malformed.",
+    ], "the hook must inspect each item's own template"
 
 
 def test_mixed_preprocess_warns_once_per_sequence_missing_leading_marker(caplog):

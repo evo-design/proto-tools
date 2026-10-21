@@ -815,9 +815,6 @@ class AbLangModel:
                 total_loss_val += loss_sum.item()
 
                 if backprop:
-                    # The reported objective is the mean over masked positions, so the backward
-                    # pass carries that same normalization; differentiating the sum would scale
-                    # every gradient by the number of positions.
                     (loss_sum / n_aa).backward()
                     ie_grad += ie_chunk.grad
 

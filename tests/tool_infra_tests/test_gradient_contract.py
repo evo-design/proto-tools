@@ -343,6 +343,23 @@ def test_from_probabilities_sets_a_consistent_temperature(spec: Any, temperature
             ), f"{spec.key} {path} did not round-trip"
 
 
+@pytest.mark.parametrize("spec", _GRADIENT_SPECS, ids=lambda spec: spec.key)
+def test_config_preprocess_understands_the_input_shape(spec: Any) -> None:
+    """Every gradient tool's config hook must accept its own input.
+
+    ``BaseConfig.preprocess`` runs on each dispatch before any model loads, and the hooks reach
+    into the input to validate it — context limits, strand markers, ignored MSAs. A hook that
+    reads a field the input no longer carries raises there, which no test driving the worker
+    directly can see, because none of those paths cross the hook.
+    """
+    example = _example(spec)
+
+    result = spec.config_model().preprocess(example)
+
+    returned = result[0] if isinstance(result, tuple) else result
+    assert isinstance(returned, type(example)), f"{spec.key}: preprocess returned {type(returned).__name__}"
+
+
 # ── Iterable fanout ──────────────────────────────────────────────────────────
 
 _ITERABLE_GRADIENT_SPECS = [spec for spec in _GRADIENT_SPECS if spec.iterable_input_fields]
