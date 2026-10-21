@@ -5,9 +5,9 @@ Runs in an isolated venv with JAX and ColabDesign. Supports two backends:
 - ``"base"``: upstream sokrypton/ColabDesign (pip-installed, used for prediction
   and generic gradient computation).
 - ``"germinal"``: SantiagoMille/germinal ColabDesign fork (installed to
-  data/colabdesign_germinal, loaded via sys.path swap). Adds alpha=2.0 logit
-  scaling, persistent bias_redesign, framework contact penalties in
-  ``_loss_binder``, and ``soft_seq()`` with full JAX autograd chain rule.
+  data/colabdesign_germinal, loaded via sys.path swap). Adds persistent
+  bias_redesign, framework contact penalties in ``_loss_binder``, and
+  ``soft_seq()`` with full JAX autograd chain rule.
   Antibody-language-model gradients remain external to this tool.
 
 Extension loss callbacks (rg, i_ptm, helix, beta_strand, NC) are registered
@@ -48,6 +48,30 @@ logger.addHandler(_handler)
 logger.setLevel(logging.DEBUG)
 
 _params_dir: str | None = None
+
+
+def _relaxation_opt(*, temperature: float | None, soft: float, hard: float) -> dict[str, float]:
+    """Build the ColabDesign ``opt`` entries that drive ``soft_seq``.
+
+    ``alpha`` scales the logits before the softmax, so ColabDesign's default of 2.0 would make
+    ``temperature`` mean half what the shared gradient contract says and would stop
+    ``from_probabilities`` reconstructing the supplied distribution. It is pinned to 1.0, which
+    costs no expressiveness: ``alpha=a`` with temperature ``T`` is ``alpha=1`` at ``T / a``.
+
+    Probability mode is expressed as ``soft=0``, which selects ``soft_seq``'s raw-input branch;
+    ``temp`` then feeds only the unused softmax branch and is pinned to keep it finite.
+
+    Args:
+        temperature (float | None): Positive softmax temperature, or ``None`` for probability mode.
+        soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Straight-through coefficient.
+
+    Returns:
+        dict[str, float]: ``temp``, ``soft``, ``hard`` and ``alpha`` for ``af_model.opt``.
+    """
+    if temperature is None:
+        return {"temp": 1.0, "soft": 0.0, "hard": 0.0, "alpha": 1.0}
+    return {"temp": temperature, "soft": soft, "hard": hard, "alpha": 1.0}
 
 
 def _resolve_params_dir() -> str:
@@ -387,7 +411,7 @@ class AlphaFold2Model:
             device: JAX device string ("cuda", "cpu", "cuda:0", etc.).
             backend: Which ColabDesign package to use:
                 ``"base"`` — upstream sokrypton/ColabDesign (default for prediction).
-                ``"germinal"`` — Germinal fork with alpha=2.0, bias, and framework contacts.
+                ``"germinal"`` — Germinal fork with bias and framework contacts.
             verbose: Log loading details.
         """
         if self._loaded and self._backend == backend:
@@ -636,9 +660,10 @@ class AlphaFold2Model:
     ) -> dict[str, Any]:
         """Run one binder-design AF2 pass and return loss, metrics, Structure, and optionally gradient.
 
-        Germinal's ``soft_seq()`` handles alpha=2.0 scaling and persistent bias
-        internally. When ``backprop=True``, JAX autograd chain-rules through the
-        full expression and the returned gradient is exact ``∂loss/∂logits``.
+        ``soft_seq()`` applies the relaxation and any persistent bias internally; see
+        :func:`_relaxation_opt` for the options proto pins. When ``backprop=True``, JAX autograd
+        chain-rules through the full expression and the returned gradient is exact
+        ``∂loss/∂logits``.
         ``temperature=None`` consumes ``logits`` as probabilities instead, so that
         gradient is probability-space; see the ``opt`` assignment below.
         When ``backprop=False``, the forward pass runs through ``model["fn"]``
@@ -651,15 +676,7 @@ class AlphaFold2Model:
 
         opt = af_model.opt
         opt["num_recycles"] = num_recycles
-        if temperature is None:
-            # Probability mode is expressed as soft=0, whose blend selects soft_seq()'s raw-input branch.
-            opt["temp"] = 1.0  # unused in that branch; pinned to keep the softmax denominator finite
-            opt["soft"] = 0.0
-            opt["hard"] = 0.0
-        else:
-            opt["temp"] = temperature
-            opt["soft"] = soft
-            opt["hard"] = hard
+        opt.update(_relaxation_opt(temperature=temperature, soft=soft, hard=hard))
         if seed is not None:
             af_model.set_seed(seed)
         if loss_weights:
@@ -742,7 +759,7 @@ class AlphaFold2Model:
         When ``backend="germinal"``, uses Germinal's ColabDesign fork for the full setup:
         - ``prep_inputs()`` handles position resolution, bias initialization,
           template masking, and framework contact configuration.
-        - ``soft_seq()`` applies alpha=2.0 scaling and persistent bias.
+        - ``soft_seq()`` applies the relaxation and persistent bias.
         - Extension losses (rg, i_ptm, helix, beta_strand, NC) are registered
           as callbacks based on ``loss_weights``.
         """

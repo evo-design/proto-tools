@@ -25,6 +25,7 @@ jax.config.update("jax_enable_x64", True)
 
 import jax.numpy as jnp  # noqa: E402
 from _relaxation_reference import LOGITS, TEMPERATURE, UPSTREAM  # noqa: E402
+from inference import _relaxation_opt  # noqa: E402  # the tool's own opt builder
 from standalone_helpers.relaxation import relaxed_sequence_jax  # noqa: E402
 
 BLEND_GRID = tuple((soft, hard) for soft in (0.0, 0.25, 0.5, 1.0) for hard in (0.0, 0.5, 1.0))
@@ -75,6 +76,16 @@ def _value_and_gradient(fn: Callable[[Any], Any], state: Any) -> Any:
     return value, vjp(jnp.asarray(UPSTREAM))[0]
 
 
+def _pseudo_with_opt(soft_seq: Any, state: Any, *, opt: dict[str, float], bias: Any = None) -> Any:
+    """``soft_seq``'s pseudo sequence and gradient under an ``opt`` the tool itself built."""
+    return _value_and_gradient(partial(_apply_soft_seq, soft_seq=soft_seq, bias=bias, opt=opt), state)
+
+
+def _apply_soft_seq(state: Any, *, soft_seq: Any, bias: Any, opt: dict[str, float]) -> Any:
+    """Call ``soft_seq`` with its arguments bound, so no closure captures a loop variable."""
+    return soft_seq(state, bias, opt)["pseudo"]
+
+
 def _pseudo_and_gradient(soft_seq: Any, state: Any, *, alpha: float, bias: Any, soft: float, hard: float) -> Any:
     """``soft_seq``'s pseudo sequence and the vjp of the shared upstream cotangent."""
     opt = {"alpha": alpha, "temp": TEMPERATURE, "soft": soft, "hard": hard}
@@ -110,25 +121,83 @@ def check_germinal_backend_matches_the_contract() -> None:
     _check_backend("germinal")
 
 
-def check_matches_the_shared_helper_without_preprocessing() -> None:
-    """With alpha=1 and no bias, ColabDesign must agree with relaxed_sequence_jax exactly.
+def check_the_tools_own_opt_matches_the_shared_helper() -> None:
+    """The opt the tool builds must drive soft_seq to the same values as relaxed_sequence_jax.
 
-    This is the tie between AlphaFold2 and the helper every other backend calls: the two
-    implementations are independent, so agreement here is what makes the contract one contract.
+    This is the tie between AlphaFold2 and the helper every other backend calls, and it runs
+    through ``_relaxation_opt`` rather than a hand-built dict: ColabDesign defaults ``alpha`` to
+    2.0 on both backends, which would halve the effective temperature and silently break
+    ``from_probabilities``. Checking the formula alone would not notice.
+    """
+    for backend in ("base", "germinal"):
+        soft_seq = _load_soft_seq(backend)
+        state = jnp.asarray(LOGITS)
+
+        for soft, hard in BLEND_GRID:
+            opt = _relaxation_opt(temperature=TEMPERATURE, soft=soft, hard=hard)
+            assert opt["alpha"] == 1.0, f"{backend}: the tool left alpha at {opt['alpha']}"
+            value, gradient = _pseudo_with_opt(soft_seq, state, opt=opt)
+
+            shared = partial(relaxed_sequence_jax, temperature=TEMPERATURE, soft=soft, hard=hard)
+            expected_value, expected_gradient = _value_and_gradient(shared, state)
+            label = f"{backend} soft={soft} hard={hard}"
+            assert jnp.allclose(value, expected_value, atol=1e-12), f"{label} forward: {value} != {expected_value}"
+            assert jnp.allclose(gradient, expected_gradient, atol=1e-10), (
+                f"{label} gradient: {gradient} != {expected_gradient}"
+            )
+
+
+def check_probability_mode_opt_selects_the_raw_input_branch() -> None:
+    """The opt the tool builds for temperature=None must forward the distribution unchanged."""
+    soft_seq = _load_soft_seq("base")
+    probabilities = jnp.asarray([[0.7, 0.2, 0.05, 0.05], [0.1, 0.1, 0.1, 0.7], [0.25, 0.25, 0.25, 0.25]])
+
+    opt = _relaxation_opt(temperature=None, soft=1.0, hard=1.0)
+    value, gradient = _pseudo_with_opt(soft_seq, probabilities, opt=opt)
+
+    assert opt["soft"] == 0.0 and opt["hard"] == 0.0, f"probability mode left blending on: {opt}"
+    assert jnp.allclose(value, probabilities, atol=1e-12), f"{value} != {probabilities}"
+    assert jnp.allclose(gradient, jnp.asarray(UPSTREAM), atol=1e-12), f"{gradient} != {UPSTREAM}"
+
+
+def check_from_probabilities_round_trips_through_soft_seq() -> None:
+    """Logits built by from_probabilities must come back out of soft_seq as the same distribution.
+
+    The factory sets ``logits = temperature * log(p)``, so ``softmax(logits / temperature)`` is
+    ``p`` again — but only when ColabDesign scales the logits by 1. At its default ``alpha=2``
+    the model would see ``softmax(2 log p)``, which is ``p**2`` renormalized: a silent distortion
+    that grows with how peaked ``p`` is.
     """
     soft_seq = _load_soft_seq("base")
-    state = jnp.asarray(LOGITS)
+    probabilities = jnp.asarray([[0.7, 0.2, 0.05, 0.05], [0.1, 0.1, 0.1, 0.7], [0.25, 0.25, 0.25, 0.25]])
+    logits = TEMPERATURE * jnp.log(probabilities)
 
-    for soft, hard in BLEND_GRID:
-        value, gradient = _pseudo_and_gradient(soft_seq, state, alpha=1.0, bias=None, soft=soft, hard=hard)
+    opt = _relaxation_opt(temperature=TEMPERATURE, soft=1.0, hard=0.0)
+    value, _ = _pseudo_with_opt(soft_seq, logits, opt=opt)
 
-        shared = partial(relaxed_sequence_jax, temperature=TEMPERATURE, soft=soft, hard=hard)
-        expected_value, expected_gradient = _value_and_gradient(shared, state)
-        label = f"soft={soft} hard={hard}"
-        assert jnp.allclose(value, expected_value, atol=1e-12), f"{label} forward: {value} != {expected_value}"
-        assert jnp.allclose(gradient, expected_gradient, atol=1e-10), (
-            f"{label} gradient: {gradient} != {expected_gradient}"
-        )
+    assert jnp.allclose(value, probabilities, atol=1e-6), f"{value} != {probabilities}"
+    squared = probabilities**2 / (probabilities**2).sum(axis=-1, keepdims=True)
+    assert not jnp.allclose(value, squared, atol=1e-6), "soft_seq squared the distribution; alpha is not 1"
+
+
+def check_a_bias_shifts_the_reconstructed_distribution_predictably() -> None:
+    """With a bias active, from_probabilities reconstructs p weighted by exp(bias / temperature).
+
+    A bias is meant to move the distribution — that is what ``excluded_amino_acids`` and
+    ``bias_redesign`` are for — so reconstruction is exact only without one. Pinning the exact
+    relationship keeps that documented rather than assumed.
+    """
+    soft_seq = _load_soft_seq("base")
+    probabilities = jnp.asarray([[0.7, 0.2, 0.05, 0.05], [0.1, 0.1, 0.1, 0.7], [0.25, 0.25, 0.25, 0.25]])
+    logits = TEMPERATURE * jnp.log(probabilities)
+    bias = jnp.asarray(BIAS)
+
+    opt = _relaxation_opt(temperature=TEMPERATURE, soft=1.0, hard=0.0)
+    value, _ = _pseudo_with_opt(soft_seq, logits, opt=opt, bias=bias)
+
+    weighted = probabilities * jnp.exp(bias / TEMPERATURE)
+    expected = weighted / weighted.sum(axis=-1, keepdims=True)
+    assert jnp.allclose(value, expected, atol=1e-6), f"{value} != {expected}"
 
 
 def check_probability_mode_passes_the_distribution_through() -> None:
@@ -151,7 +220,10 @@ def check_probability_mode_passes_the_distribution_through() -> None:
 CHECKS: tuple[Callable[[], None], ...] = (
     check_base_backend_matches_the_contract,
     check_germinal_backend_matches_the_contract,
-    check_matches_the_shared_helper_without_preprocessing,
+    check_the_tools_own_opt_matches_the_shared_helper,
+    check_probability_mode_opt_selects_the_raw_input_branch,
+    check_from_probabilities_round_trips_through_soft_seq,
+    check_a_bias_shifts_the_reconstructed_distribution_predictably,
     check_probability_mode_passes_the_distribution_through,
 )
 
