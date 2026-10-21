@@ -21,7 +21,6 @@ from proto_tools.utils.gradient_models import (
     GradientInput,
     GradientOutput,
     GradientResult,
-    GradientValue,
     ProteinGradientInput,
     RelaxationConfig,
     coerce_to_item_list,
@@ -124,7 +123,6 @@ __all__ = [
     "GradientOutput",
     "GradientResult",
     "coerce_to_item_list",
-    "GradientValue",
     "ProteinGradientInput",
     "RelaxationConfig",
     # Relaxed sequence state

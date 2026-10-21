@@ -22,8 +22,6 @@ from proto_tools.utils.sequence_logits import (
 )
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
 
-GradientValue = list[list[float]] | list[list[list[float]]] | None
-
 
 def coerce_to_item_list(value: Any) -> Any:
     """Wrap one supplied gradient item in a list, leaving a list of items alone.
@@ -307,13 +305,13 @@ class GradientResult(BaseModel):
     because the alphabet is a property of the tool rather than of an item.
 
     Attributes:
-        gradient (GradientValue): Gradient for this item, matching its input shape and column
-            order, or ``None`` when the tool runs in forward-only mode.
+        gradient (list[list[float]] | None): Gradient for this item, an ``(L, V)`` matrix
+            matching its input shape and column order, or ``None`` in forward-only mode.
         loss (float): This item's own objective value; no batch mean or total.
         metrics (dict[str, Any]): Metrics for this item alone.
     """
 
-    gradient: GradientValue = Field(
+    gradient: list[list[float]] | None = Field(
         default=None,
         title="Gradient",
         description="Gradient of this item's loss w.r.t. its input logits; matches its shape and column order",
@@ -417,6 +415,5 @@ __all__ = [
     "GradientOutput",
     "GradientResult",
     "coerce_to_item_list",
-    "GradientValue",
     "ProteinGradientInput",
 ]

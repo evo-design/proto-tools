@@ -38,7 +38,6 @@ MALINOIS_CELL_TYPES = ("K562", "HepG2", "SKNSH")
 MalinoisCellType = Literal["K562", "HepG2", "SKNSH"]
 MalinoisObjectiveDirection = Literal["max", "min"]
 MalinoisLogits = list[list[list[float]]]
-MalinoisGradientValue = list[list[list[float]]] | None
 
 
 class MalinoisActivityMetrics(Metrics):
