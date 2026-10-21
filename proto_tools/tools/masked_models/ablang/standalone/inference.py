@@ -843,18 +843,36 @@ class AbLangModel:
 _model: AbLangModel | None = None
 
 
-def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
-    """Entry point for both persistent-worker and one-shot execution."""
+def _ensure_model(model_choice: str) -> AbLangModel:
+    """Return the worker's model for ``model_choice``, swapping checkpoints only when it changes.
+
+    AbLang picks its checkpoint from the chains an antibody carries, so one dispatch may need
+    more than one. Swapping unloads the previous checkpoint first, keeping a single one resident.
+
+    Args:
+        model_choice (str): One of ``ablang1-heavy``, ``ablang1-light``, ``ablang2-paired``.
+
+    Returns:
+        AbLangModel: The wrapper for that checkpoint, loaded on first use by the operation.
+    """
     global _model
-    operation = input_dict["operation"]
-    model_choice = input_dict["model_choice"]
     if _model is None or _model.model_choice != model_choice:
         if _model is not None and _model._loaded:
             _model.unload()
         _model = AbLangModel(model_choice=model_choice)
+    return _model
+
+
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
+    """Entry point for both persistent-worker and one-shot execution."""
+    operation = input_dict["operation"]
+    if operation != "compute_gradient":
+        # Every operation but the gradient takes one checkpoint for the whole call; the gradient
+        # carries one per item and resolves them below, grouped.
+        model = _ensure_model(input_dict["model_choice"])
 
     if operation == "embeddings":
-        return _model.embeddings(
+        return model.embeddings(
             sequences=input_dict["sequences"],
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
@@ -862,7 +880,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
         )
     if operation == "score":
-        return _model.score(
+        return model.score(
             sequences=input_dict["sequences"],
             scoring_mode=input_dict["scoring_mode"],
             batch_size=input_dict["batch_size"],
@@ -871,7 +889,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
         )
     if operation == "sample":
-        return _model.sample(
+        return model.sample(
             sequences=input_dict["sequences"],
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
@@ -883,26 +901,39 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             excluded_amino_acids=input_dict["excluded_amino_acids"],
         )
     if operation == "compute_gradient":
-        # One chunk of independent antibodies: the variant is fixed for the whole chunk, so the
-        # model loads once and each item is evaluated in turn, one result per item in order.
-        results = [
-            _model.compute_gradient(
-                logits_list=item["logits"],
-                temperature=resolve_temperature(input_dict["temperature"]),
-                soft=float(input_dict.get("soft", 1.0)),
-                hard=float(input_dict.get("hard", 0.0)),
-                chain_break_position=item["chain_break_position"],
-                seed=input_dict["seed"],
-                backprop=input_dict.get("compute_gradient", True),
-                batch_size=input_dict.get("batch_size"),
-                device=input_dict["device"],
-                verbose=input_dict["verbose"],
-            )
-            for item in input_dict["items"]
-        ]
+        # Each antibody names the checkpoint its chains require, so a mixed chunk is grouped by
+        # checkpoint and evaluated one group at a time: a variant is loaded once however the
+        # items are interleaved, and only one stays resident. Results are written back by
+        # original position, so the reply is in input order whatever order the groups ran in.
+        items = input_dict["items"]
+        groups: dict[str, list[int]] = {}
+        for index, item in enumerate(items):
+            groups.setdefault(item["model_choice"], []).append(index)
+
+        results: list[dict[str, Any] | None] = [None] * len(items)
+        for model_choice, indices in groups.items():
+            model = _ensure_model(model_choice)
+            for index in indices:
+                item = items[index]
+                results[index] = model.compute_gradient(
+                    logits_list=item["logits"],
+                    temperature=resolve_temperature(input_dict["temperature"]),
+                    soft=float(input_dict.get("soft", 1.0)),
+                    hard=float(input_dict.get("hard", 0.0)),
+                    chain_break_position=item["chain_break_position"],
+                    seed=input_dict["seed"],
+                    backprop=input_dict.get("compute_gradient", True),
+                    batch_size=input_dict.get("batch_size"),
+                    device=input_dict["device"],
+                    verbose=input_dict["verbose"],
+                )
+
+        completed = [result for result in results if result is not None]
+        if len(completed) != len(items):
+            raise RuntimeError(f"ablang: produced {len(completed)} results for {len(items)} item(s)")
         return {
-            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
-            "vocab": results[0]["vocab"],
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in completed],
+            "vocab": completed[0]["vocab"],
         }
     raise ValueError(
         f"ablang: unknown operation {operation!r}; valid: ['embeddings', 'score', 'sample', 'compute_gradient']"

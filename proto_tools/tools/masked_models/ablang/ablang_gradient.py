@@ -158,28 +158,31 @@ def run_ablang_gradient(
     instance: Any = None,
 ) -> AbLangGradientOutput:
     """Compute AbLang masked PLL gradient with respect to relaxed antibody logits."""
-    model_choice = _resolve_model_choice(inputs.inputs)
-
     items: list[dict[str, Any]] = []
     for antibody in inputs.inputs:
-        # AbLang scores one matrix per antibody; a paired antibody is concatenated heavy-first and
-        # the break position tells the worker where to split it again.
+        # AbLang's checkpoint follows the chains an antibody carries, so each candidate names its
+        # own and the worker groups a mixed chunk by checkpoint. AbLang also scores one matrix per
+        # antibody, so a paired one is concatenated heavy-first and the break position tells the
+        # worker where to split it again.
         if antibody.heavy_chain is not None and antibody.light_chain is not None:
-            items.append(
-                {
-                    "logits": antibody.heavy_chain.root + antibody.light_chain.root,
-                    "chain_break_position": len(antibody.heavy_chain),
-                }
-            )
+            logits = antibody.heavy_chain.root + antibody.light_chain.root
+            chain_break_position: int | None = len(antibody.heavy_chain)
         elif antibody.heavy_chain is not None:
-            items.append({"logits": antibody.heavy_chain.root, "chain_break_position": None})
+            logits, chain_break_position = antibody.heavy_chain.root, None
         else:
-            items.append({"logits": antibody.light_chain.root, "chain_break_position": None})  # type: ignore[union-attr]
+            logits, chain_break_position = antibody.light_chain.root, None  # type: ignore[union-attr]
+        items.append(
+            {
+                "logits": logits,
+                "chain_break_position": chain_break_position,
+                "model_choice": _resolve_model_choice([antibody]),
+            }
+        )
 
     logger.debug(
-        "Using local worker for AbLang gradient (model_choice=%s, %d item(s))",
-        model_choice,
+        "Using local worker for AbLang gradient (%d item(s), checkpoints=%s)",
         len(items),
+        sorted({item["model_choice"] for item in items}),
     )
     payload = {
         "operation": "compute_gradient",
@@ -189,7 +192,6 @@ def run_ablang_gradient(
         "hard": config.hard,
         "compute_gradient": config.compute_gradient,
         "batch_size": config.batch_size,
-        "model_choice": model_choice,
         "seed": config.seed,
         "device": config.device,
         "verbose": config.verbose,
