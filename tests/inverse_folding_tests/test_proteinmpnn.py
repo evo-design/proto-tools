@@ -15,7 +15,7 @@ from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNGradientConfig,
     ProteinMPNNGradientInput,
-    ProteinMPNNGradientItem,
+    ProteinMPNNGradientCandidate,
     ProteinMPNNSampleConfig,
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
@@ -362,7 +362,7 @@ def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
 
     result = run_proteinmpnn_gradient(
         ProteinMPNNGradientInput(
-            inputs=ProteinMPNNGradientItem(
+            inputs=ProteinMPNNGradientCandidate(
                 logits=[[0.0] * 20] * 5,
                 structure=_small_structure(),
                 chains_to_redesign=["A"],
@@ -433,7 +433,7 @@ def test_proteinmpnn_gradient_forward_only_returns_loss_without_a_gradient() -> 
 
     result = run_proteinmpnn_gradient(
         ProteinMPNNGradientInput(
-            inputs=ProteinMPNNGradientItem(
+            inputs=ProteinMPNNGradientCandidate(
                 logits=logits,
                 structure=_small_structure(),
                 chains_to_redesign=["A"],
@@ -469,7 +469,7 @@ def test_proteinmpnn_gradient_end_to_end(soft: float, hard: float):
 
     result = run_proteinmpnn_gradient(
         ProteinMPNNGradientInput(
-            inputs=ProteinMPNNGradientItem(
+            inputs=ProteinMPNNGradientCandidate(
                 logits=logits,
                 structure=_small_structure(),
                 chains_to_redesign=["A"],
@@ -719,7 +719,7 @@ def test_proteinmpnn_gradient_benchmark(request: pytest.FixtureRequest, pdb_stru
     target_len = len(pdb_structure.get_chain_sequence("A"))
     sequence = random_protein_sequences(n=1, length=target_len, seed=7)[0]
     inputs = ProteinMPNNGradientInput(
-        inputs=ProteinMPNNGradientItem(
+        inputs=ProteinMPNNGradientCandidate(
             logits=one_hot_protein_logits(sequence, sharpness=2.0),
             structure=pdb_structure,
             chains_to_redesign=["A"],

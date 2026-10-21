@@ -3,7 +3,7 @@
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient import (
     ProteinMPNNGradientConfig,
     ProteinMPNNGradientInput,
-    ProteinMPNNGradientItem,
+    ProteinMPNNGradientCandidate,
     ProteinMPNNGradientOutput,
     run_proteinmpnn_gradient,
 )
@@ -36,7 +36,7 @@ __all__ = [
     "ProteinMPNNDesignSet",
     "ProteinMPNNGradientConfig",
     "ProteinMPNNGradientInput",
-    "ProteinMPNNGradientItem",
+    "ProteinMPNNGradientCandidate",
     "ProteinMPNNGradientOutput",
     "ProteinMPNNSampleConfig",
     "ProteinMPNNSampleInput",

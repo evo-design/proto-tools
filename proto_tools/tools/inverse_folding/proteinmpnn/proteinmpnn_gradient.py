@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 ProteinMPNNModelChoice = Literal["proteinmpnn", "v_48_002", "v_48_010", "v_48_030", "abmpnn", "soluble"]
 
 
-class ProteinMPNNGradientItem(BaseModel):
+class ProteinMPNNGradientCandidate(BaseModel):
     """One candidate: a relaxed sequence with the backbone and selections it is scored against.
 
     The structure and its selections belong to the candidate, so a batch may score different
@@ -83,7 +83,7 @@ class ProteinMPNNGradientItem(BaseModel):
         yield "logits", self.logits
 
     @model_validator(mode="after")
-    def validate_selections(self) -> "ProteinMPNNGradientItem":
+    def validate_selections(self) -> "ProteinMPNNGradientCandidate":
         """Validate chain and residue selections against the backbone."""
         if self.chains_to_redesign is not None:
             self.chains_to_redesign.validate_against(self.structure, label="chains_to_redesign")
@@ -103,7 +103,7 @@ class ProteinMPNNGradientInput(GradientInput):
     """One or many relaxed candidates, each with its own backbone.
 
     Attributes:
-        inputs (list[ProteinMPNNGradientItem]): One sequence-and-backbone bundle per candidate. A
+        inputs (list[ProteinMPNNGradientCandidate]): One sequence-and-backbone bundle per candidate. A
             single bundle may be passed on its own.
         temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
             reads each state as unnormalized and applies ``softmax(logits / T)``, returning
@@ -111,7 +111,7 @@ class ProteinMPNNGradientInput(GradientInput):
             probability-space gradients.
     """
 
-    inputs: list[ProteinMPNNGradientItem] = InputField(
+    inputs: list[ProteinMPNNGradientCandidate] = InputField(
         title="Relaxed Candidates",
         description="One relaxed sequence with its backbone per candidate; a single bundle is accepted alone",
     )
@@ -148,10 +148,12 @@ class ProteinMPNNGradientInput(GradientInput):
         """
         if "structure" not in fields:
             raise ValueError("proteinmpnn gradient from_probabilities requires the backbone structure")
-        item_fields = {name: fields.pop(name) for name in list(fields) if name in ProteinMPNNGradientItem.model_fields}
+        item_fields = {
+            name: fields.pop(name) for name in list(fields) if name in ProteinMPNNGradientCandidate.model_fields
+        }
         matrix = ProteinSequenceLogits.from_probabilities(probabilities, temperature=temperature)
         return cls(
-            inputs=[ProteinMPNNGradientItem(logits=matrix, **item_fields)],
+            inputs=[ProteinMPNNGradientCandidate(logits=matrix, **item_fields)],
             temperature=temperature,
             **fields,
         )
@@ -207,7 +209,7 @@ def example_input() -> ProteinMPNNGradientInput:
     pair = scoring_example_input().sequence_structure_pairs[0]
     return ProteinMPNNGradientInput(
         inputs=[
-            ProteinMPNNGradientItem(
+            ProteinMPNNGradientCandidate(
                 logits=ProteinSequenceLogits(one_hot_protein_logits(pair.sequence, sharpness=2.0)),
                 structure=pair.structure,
             )

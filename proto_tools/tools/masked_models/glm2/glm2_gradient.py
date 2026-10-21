@@ -9,7 +9,7 @@ from proto_tools.tools.masked_models.mixed_configs import MixedGradientConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
     MixedGradientOutput,
     MixedSequenceGradientInput,
-    MixedSequenceGradientItem,
+    MixedSequenceGradientCandidate,
     one_hot_mixed_logits,
 )
 from proto_tools.tools.tool_registry import tool
@@ -39,7 +39,9 @@ def example_input() -> GLM2GradientInput:
     """Return a short prepared locus for examples and infrastructure checks."""
     return GLM2GradientInput(
         inputs=[
-            MixedSequenceGradientItem(sequence="+MKTL+acgt", logits=one_hot_mixed_logits("+MKTL+acgt", sharpness=2.0))
+            MixedSequenceGradientCandidate(
+                sequence="+MKTL+acgt", logits=one_hot_mixed_logits("+MKTL+acgt", sharpness=2.0)
+            )
         ]
     )
 

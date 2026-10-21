@@ -283,7 +283,7 @@ class ESMFoldConfig(StructurePredictionConfig):
         return inputs
 
 
-class ESMFoldGradientItem(BaseModel):
+class ESMFoldGradientCandidate(BaseModel):
     """One candidate: a relaxed target state and the complex it is folded within.
 
     The complex belongs to the candidate, so a batch may fold different complexes and each item's
@@ -365,7 +365,7 @@ class ESMFoldGradientInput(GradientInput):
     """One or many relaxed candidates, each folded within its own complex.
 
     Attributes:
-        inputs (list[ESMFoldGradientItem]): One target-state-and-complex bundle per candidate. A
+        inputs (list[ESMFoldGradientCandidate]): One target-state-and-complex bundle per candidate. A
             single bundle may be passed on its own.
         temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
             reads each state as unnormalized and applies ``softmax(logits / T)``, returning
@@ -373,7 +373,7 @@ class ESMFoldGradientInput(GradientInput):
             probability-space gradients.
     """
 
-    inputs: list[ESMFoldGradientItem] = InputField(
+    inputs: list[ESMFoldGradientCandidate] = InputField(
         title="Relaxed Candidates",
         description="One relaxed target state with its complex per candidate; a single bundle is accepted alone",
     )
@@ -410,10 +410,10 @@ class ESMFoldGradientInput(GradientInput):
         """
         if "chains" not in fields:
             raise ValueError("esmfold gradient from_probabilities requires the complex chains")
-        item_fields = {name: fields.pop(name) for name in list(fields) if name in ESMFoldGradientItem.model_fields}
+        item_fields = {name: fields.pop(name) for name in list(fields) if name in ESMFoldGradientCandidate.model_fields}
         matrix = ProteinSequenceLogits.from_probabilities(probabilities, temperature=temperature)
         return cls(
-            inputs=[ESMFoldGradientItem(logits=matrix, **item_fields)],
+            inputs=[ESMFoldGradientCandidate(logits=matrix, **item_fields)],
             temperature=temperature,
             **fields,
         )
@@ -503,7 +503,7 @@ def example_gradient_input() -> ESMFoldGradientInput:
 
     return ESMFoldGradientInput(
         inputs=[
-            ESMFoldGradientItem(
+            ESMFoldGradientCandidate(
                 logits=ProteinSequenceLogits(one_hot_protein_logits("MKTL", sharpness=2.0)), chains=["MKTL"]
             )
         ]

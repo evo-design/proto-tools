@@ -17,7 +17,7 @@ from proto_tools.tools.structure_prediction import (
     ESMFoldConfig,
     ESMFoldGradientConfig,
     ESMFoldGradientInput,
-    ESMFoldGradientItem,
+    ESMFoldGradientCandidate,
     ESMFoldInput,
     run_esmfold,
     run_esmfold_gradient,
@@ -114,12 +114,12 @@ def test_esmfold_gradient_input_validation():
     """Gradient input validates target-chain/logit shape before dispatch."""
     logits = one_hot_protein_logits("MKTL", sharpness=2.0)
     ok = ESMFoldGradientInput(
-        inputs=ESMFoldGradientItem(logits=logits, chains=["AAAA", "MKTL"], target_chain_indices=[1])
+        inputs=ESMFoldGradientCandidate(logits=logits, chains=["AAAA", "MKTL"], target_chain_indices=[1])
     )
     assert ok.inputs[0].target_chain_indices == [1]
 
     with pytest.raises(ValueError, match="must have length"):
-        ESMFoldGradientInput(inputs=ESMFoldGradientItem(logits=logits, chains=["MKT"], target_chain_indices=[0]))
+        ESMFoldGradientInput(inputs=ESMFoldGradientCandidate(logits=logits, chains=["MKT"], target_chain_indices=[0]))
 
 
 def test_esmfold_gradient_dispatch_builds_output():
@@ -146,7 +146,7 @@ def test_esmfold_gradient_dispatch_builds_output():
         mock_dispatch.return_value = dispatch_result
         output = run_esmfold_gradient(
             ESMFoldGradientInput(
-                inputs=ESMFoldGradientItem(logits=one_hot_protein_logits("MKTL", sharpness=2.0), chains=["MKTL"])
+                inputs=ESMFoldGradientCandidate(logits=one_hot_protein_logits("MKTL", sharpness=2.0), chains=["MKTL"])
             ),
             ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 2.0, "ptm": 0.5}),
         )
@@ -166,7 +166,7 @@ def test_esmfold_gradient_smoke():
     """Real ESMFold gradient returns finite logits-gradient on a tiny peptide."""
     output = run_esmfold_gradient(
         ESMFoldGradientInput(
-            inputs=ESMFoldGradientItem(logits=one_hot_protein_logits("MKTL", sharpness=2.0), chains=["MKTL"])
+            inputs=ESMFoldGradientCandidate(logits=one_hot_protein_logits("MKTL", sharpness=2.0), chains=["MKTL"])
         ),
         ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
     )
@@ -196,7 +196,7 @@ def test_esmfold_relaxed_one_hot_matches_discrete_prediction():
     discrete = run_esmfold(ESMFoldInput(complexes=[sequence]), ESMFoldConfig(num_recycles=1))
     relaxed = run_esmfold_gradient(
         ESMFoldGradientInput(
-            inputs=ESMFoldGradientItem(logits=one_hot_protein_logits(sequence, sharpness=20.0), chains=[sequence])
+            inputs=ESMFoldGradientCandidate(logits=one_hot_protein_logits(sequence, sharpness=20.0), chains=[sequence])
         ),
         ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}, compute_gradient=False),
     )
@@ -216,10 +216,10 @@ def test_esmfold_gradient_probability_mode_matches_logit_mode():
     config = ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0})
 
     logit_mode = run_esmfold_gradient(
-        ESMFoldGradientInput(inputs=ESMFoldGradientItem(logits=logits, chains=["MKTL"])), config
+        ESMFoldGradientInput(inputs=ESMFoldGradientCandidate(logits=logits, chains=["MKTL"])), config
     )
     probability_mode = run_esmfold_gradient(
-        ESMFoldGradientInput(inputs=ESMFoldGradientItem(logits=probabilities, chains=["MKTL"]), temperature=None),
+        ESMFoldGradientInput(inputs=ESMFoldGradientCandidate(logits=probabilities, chains=["MKTL"]), temperature=None),
         config,
     )
 
@@ -271,7 +271,7 @@ def test_esmfold_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     """
     sequence = random_protein_sequences(n=1, length=200, seed=0)[0]
     inputs = ESMFoldGradientInput(
-        inputs=ESMFoldGradientItem(logits=one_hot_protein_logits(sequence, sharpness=2.0), chains=[sequence])
+        inputs=ESMFoldGradientCandidate(logits=one_hot_protein_logits(sequence, sharpness=2.0), chains=[sequence])
     )
     config = ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0})
 

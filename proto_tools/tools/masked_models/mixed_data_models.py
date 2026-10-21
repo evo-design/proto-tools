@@ -181,20 +181,25 @@ class MixedSequenceLogits(SequenceLogits):
     VOCAB: ClassVar[Sequence[str]] = tuple(MIXED_VOCAB)
 
 
-class MixedSequenceGradientItem(BaseModel):
+class MixedSequenceGradientCandidate(BaseModel):
     """One candidate: a relaxed state together with the template that fixes its modalities.
 
-    The template belongs to the item, not the call, so a batch may mix protein-heavy and
+    The template belongs to the candidate, not the call, so a batch may mix protein-heavy and
     DNA-heavy candidates and each one's mask is derived from its own sequence.
 
     Attributes:
-        sequence (str): Fully specified template fixing modality and ``+``/``-`` strand markers.
+        sequence (str): Template fixing each position's modality, with one token per ``logits``
+            row -- strand markers included, since each occupies a row of its own. ``<+>`` and
+            ``<->`` are accepted and stored as ``+``/``-``. An uppercase letter marks a protein
+            position (columns 0-19), lowercase marks DNA (columns 20-23), and a marker or ``X``
+            fixes the position, so its row must be zero.
         logits (MixedSequenceLogits): One 24-column row per model token in
             ``ACDEFGHIKLMNPQRSTVWYacgt`` order. Fixed context rows must be zero.
     """
 
     sequence: str = Field(
-        title="Sequence", description="Prepared template fixing each token's modality and strand markers"
+        title="Sequence",
+        description="Template fixing each position's modality; one token per logits row, markers included",
     )
     logits: MixedSequenceLogits = Field(
         title="Logits",
@@ -229,7 +234,7 @@ class MixedSequenceGradientInput(GradientInput):
     """One or many relaxed candidates, each aligned to its own mixed-sequence template.
 
     Attributes:
-        inputs (list[MixedSequenceGradientItem]): One template-and-state pair per candidate. A
+        inputs (list[MixedSequenceGradientCandidate]): One template-and-state pair per candidate. A
             single item may be passed on its own.
         temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
             reads each state as unnormalized and applies ``softmax(logits / T)``, returning
@@ -237,7 +242,7 @@ class MixedSequenceGradientInput(GradientInput):
             returns probability-space gradients.
     """
 
-    inputs: list[MixedSequenceGradientItem] = InputField(
+    inputs: list[MixedSequenceGradientCandidate] = InputField(
         title="Relaxed Candidates",
         description="One template-and-state pair per candidate; a single pair is accepted on its own",
     )
@@ -321,7 +326,7 @@ class MixedSequenceGradientInput(GradientInput):
             rows.append(converted)
         sequence = fields.pop("sequence")
         return cls(
-            inputs=[MixedSequenceGradientItem(sequence=sequence, logits=MixedSequenceLogits(rows))],
+            inputs=[MixedSequenceGradientCandidate(sequence=sequence, logits=MixedSequenceLogits(rows))],
             temperature=temperature,
             **fields,
         )

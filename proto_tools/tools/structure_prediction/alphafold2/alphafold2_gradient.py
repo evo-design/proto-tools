@@ -62,7 +62,7 @@ _VALID_LOSS_KEYS = frozenset(
 _BINDER_FIXTURE_PDB = Path(__file__).resolve().parent / "example_input_fixture.pdb"
 
 
-class AlphaFold2GradientItem(BaseModel):
+class AlphaFold2GradientCandidate(BaseModel):
     """One candidate: a relaxed binder state with the target it is designed against.
 
     The target template and its selections belong to the candidate, so a batch may design against
@@ -141,7 +141,7 @@ class AlphaFold2GradientInput(GradientInput):
     """One or many relaxed binders, each designed against its own target.
 
     Attributes:
-        inputs (list[AlphaFold2GradientItem]): One binder-and-target bundle per candidate. A
+        inputs (list[AlphaFold2GradientCandidate]): One binder-and-target bundle per candidate. A
             single bundle may be passed on its own.
         temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
             reads each state as unnormalized and applies ``softmax(logits / T)``, returning
@@ -149,7 +149,7 @@ class AlphaFold2GradientInput(GradientInput):
             probability-space gradients.
     """
 
-    inputs: list[AlphaFold2GradientItem] = InputField(
+    inputs: list[AlphaFold2GradientCandidate] = InputField(
         title="Relaxed Candidates",
         description="One relaxed binder with its target template per candidate; a single bundle is accepted alone",
     )
@@ -186,10 +186,12 @@ class AlphaFold2GradientInput(GradientInput):
         """
         if "target_pdb" not in fields:
             raise ValueError("alphafold2 gradient from_probabilities requires the target template")
-        item_fields = {name: fields.pop(name) for name in list(fields) if name in AlphaFold2GradientItem.model_fields}
+        item_fields = {
+            name: fields.pop(name) for name in list(fields) if name in AlphaFold2GradientCandidate.model_fields
+        }
         matrix = ProteinSequenceLogits.from_probabilities(probabilities, temperature=temperature)
         return cls(
-            inputs=[AlphaFold2GradientItem(logits=matrix, **item_fields)],
+            inputs=[AlphaFold2GradientCandidate(logits=matrix, **item_fields)],
             temperature=temperature,
             **fields,
         )
@@ -453,7 +455,7 @@ def example_input() -> AlphaFold2GradientInput:
     """Minimal valid input — short VHH-like binder with biased logits and PD-L1 template."""
     return AlphaFold2GradientInput(
         inputs=[
-            AlphaFold2GradientItem(
+            AlphaFold2GradientCandidate(
                 logits=ProteinSequenceLogits(one_hot_protein_logits("EVQLVESG", sharpness=2.0)),
                 target_pdb=Structure.from_file(_BINDER_FIXTURE_PDB),
                 binder_chain="B",

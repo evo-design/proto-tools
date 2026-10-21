@@ -128,8 +128,26 @@ request = ProteinMPNNGradientInput.from_probabilities(
 )
 ```
 
-The factory builds a single candidate. To optimize several at once, convert each distribution and
-pass the matrices as `inputs`.
+The factory builds a **single** candidate, since it converts one matrix. For several at once, call
+the numerical primitive per distribution and pass the results as `inputs`, repeating the same
+temperature on the input:
+
+```python
+request = ESM2GradientInput(
+    inputs=[ProteinSequenceLogits.from_probabilities(p, temperature=0.5) for p in my_distributions],
+    temperature=0.5,
+)
+```
+
+That repetition is the whole point of the factory. Its job is less the arithmetic than binding the
+conversion temperature to the reading temperature so the two cannot disagree: convert at `0.5`,
+read at `1.0`, and nothing raises — the model sees `softmax(0.5 * log p)`, a flatter distribution
+than the one you meant, and the optimization chases the wrong target. Building the list by hand
+hands that guarantee back to you.
+
+For a tool whose candidates carry context, such as the ProteinMPNN example above, the factory takes
+that context by keyword and requires it, packing it into the one candidate it builds. Several such
+candidates means constructing each `...GradientCandidate` yourself, with its own context.
 
 For strictly positive probabilities, the factory calculates:
 
@@ -181,7 +199,7 @@ A gradient tool returns a `GradientOutput` with:
 - `results`: one `GradientResult` per input item, in the order the items were supplied;
 - `vocab`: the public token order associated with the output, shared by every item.
 
-Each `results[i]` carries that item alone:
+Each `results[i]` carries:
 
 - `loss`: the objective that was differentiated for item `i` — never a batch mean or total;
 - `metrics`: additional model-specific scores for that item;

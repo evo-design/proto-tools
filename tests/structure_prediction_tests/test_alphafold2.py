@@ -14,7 +14,7 @@ from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
     AlphaFold2GradientConfig,
     AlphaFold2GradientInput,
-    AlphaFold2GradientItem,
+    AlphaFold2GradientCandidate,
     AlphaFold2GradientOutput,
     AlphaFold2Input,
     Complex,
@@ -80,12 +80,13 @@ def test_config_rejects_model_num_and_ensemble_together():
 
 def test_gradient_input_requires_20_columns():
     AlphaFold2GradientInput(
-        inputs=AlphaFold2GradientItem(logits=[[0.0] * 20, [1.0] * 20], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH),
+        inputs=AlphaFold2GradientCandidate(logits=[[0.0] * 20, [1.0] * 20], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH),
         temperature=0.75,
     )
     with pytest.raises(ValidationError, match="20 columns"):
         AlphaFold2GradientInput(
-            inputs=AlphaFold2GradientItem(logits=[[0.0] * 19], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH), temperature=1.0
+            inputs=AlphaFold2GradientCandidate(logits=[[0.0] * 19], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH),
+            temperature=1.0,
         )
 
 
@@ -107,7 +108,7 @@ def test_gradient_config_rejects_bad_loss_weights():
 def test_gradient_probability_mode_rejects_softmax_only_knobs(overrides, ignored):
     """temperature=None drives ColabDesign at soft=0, so softmax-only knobs are refused."""
     inputs = AlphaFold2GradientInput(
-        inputs=AlphaFold2GradientItem(
+        inputs=AlphaFold2GradientCandidate(
             logits=[[1.0 / 20] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="B"
         ),
         temperature=None,
@@ -140,7 +141,7 @@ def test_gradient_probability_mode_accepts_default_config(monkeypatch):
     )
     run_alphafold2_gradient(
         AlphaFold2GradientInput(
-            inputs=AlphaFold2GradientItem(
+            inputs=AlphaFold2GradientCandidate(
                 logits=[[1.0 / 20] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="B"
             ),
             temperature=None,
@@ -179,13 +180,13 @@ def test_gradient_probability_mode_folds_the_same_binder():
 
     logit_mode = run_alphafold2_gradient(
         AlphaFold2GradientInput(
-            inputs=AlphaFold2GradientItem(logits=logits, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="B")
+            inputs=AlphaFold2GradientCandidate(logits=logits, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="B")
         ),
         config,
     )
     probability_mode = run_alphafold2_gradient(
         AlphaFold2GradientInput(
-            inputs=AlphaFold2GradientItem(
+            inputs=AlphaFold2GradientCandidate(
                 logits=probabilities, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="B"
             ),
             temperature=None,
@@ -202,7 +203,7 @@ def test_gradient_probability_mode_folds_the_same_binder():
 
 def test_gradient_input_requires_target_pdb():
     with pytest.raises(ValidationError, match="target_pdb"):
-        AlphaFold2GradientInput(inputs=AlphaFold2GradientItem(logits=[[0.0] * 20]), temperature=1.0)
+        AlphaFold2GradientInput(inputs=AlphaFold2GradientCandidate(logits=[[0.0] * 20]), temperature=1.0)
 
 
 def _load_af2_standalone():
@@ -225,7 +226,7 @@ def _load_af2_standalone():
 def test_binder_input_allows_denovo_none_binder_chain():
     """binder_chain=None is accepted, signalling de-novo design (no template)."""
     inp = AlphaFold2GradientInput(
-        inputs=AlphaFold2GradientItem(
+        inputs=AlphaFold2GradientCandidate(
             logits=[[0.0] * 20, [1.0] * 20], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain=None
         )
     )
@@ -236,7 +237,7 @@ def test_binder_chain_absent_from_target_raises():
     """Absent binder_chain fails fast with a clear error, not ColabDesign's 'Found 0 models'."""
     with pytest.raises(ValidationError, match=r"binder_chain='H' is not a polymer chain"):
         AlphaFold2GradientInput(
-            inputs=AlphaFold2GradientItem(
+            inputs=AlphaFold2GradientCandidate(
                 logits=[[0.0] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="H"
             )
         )
@@ -246,7 +247,7 @@ def test_target_chain_absent_from_target_raises():
     """target_chain absent from target_pdb fails fast with an actionable error."""
     with pytest.raises(ValidationError, match=r"target_chain='Z' is not a polymer chain"):
         AlphaFold2GradientInput(
-            inputs=AlphaFold2GradientItem(
+            inputs=AlphaFold2GradientCandidate(
                 logits=[[0.0] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, target_chain="Z"
             )
         )
@@ -305,7 +306,7 @@ def test_gradient_dispatch_contract(monkeypatch):
     )
 
     inputs = AlphaFold2GradientInput(
-        inputs=AlphaFold2GradientItem(
+        inputs=AlphaFold2GradientCandidate(
             logits=[[0.0] * 20, [1.0] * 20],
             target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
             target_chain="A",
@@ -396,7 +397,7 @@ def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
 
     run_alphafold2_gradient(
         AlphaFold2GradientInput(
-            inputs=AlphaFold2GradientItem(
+            inputs=AlphaFold2GradientCandidate(
                 logits=[[0.0] * 20] * 3, target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH), binder_chain="B"
             ),
             temperature=1.0,
@@ -439,7 +440,7 @@ def test_forward_mode_dispatch_contract(monkeypatch):
 
     result = run_alphafold2_gradient(
         AlphaFold2GradientInput(
-            inputs=AlphaFold2GradientItem(
+            inputs=AlphaFold2GradientCandidate(
                 logits=[[0.0] * 20] * 2, target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH), binder_chain="B"
             )
         ),
@@ -505,9 +506,9 @@ def test_heteromultimer_msa_dispatch_payload(monkeypatch):
     )
 
     payload = captured[0]
-    assert payload["msa_a3m_content"] is None, (
-        "Heteromultimer path must NOT pack a single combined A3M — per_chain_msas_a3m carries the work"
-    )
+    assert (
+        payload["msa_a3m_content"] is None
+    ), "Heteromultimer path must NOT pack a single combined A3M — per_chain_msas_a3m carries the work"
     assert payload["is_paired"] is True
     per_chain_a3m = payload["per_chain_msas_a3m"]
     assert per_chain_a3m is not None and len(per_chain_a3m) == 2, "two-chain complex → two A3Ms"
@@ -581,9 +582,9 @@ def test_homooligomer_uses_single_a3m_dispatch_path(monkeypatch):
 
     payload = captured[0]
     assert payload["per_chain_msas_a3m"] is None, "homo-oligomer must NOT use per-chain path"
-    assert payload["msa_a3m_content"] is not None and seq in payload["msa_a3m_content"], (
-        "homo-oligomer should pass chain 0's MSA as a single A3M for ColabDesign to expand"
-    )
+    assert (
+        payload["msa_a3m_content"] is not None and seq in payload["msa_a3m_content"]
+    ), "homo-oligomer should pass chain 0's MSA as a single A3M for ColabDesign to expand"
 
 
 # -- GPU integration tests -----------------------------------------------------
@@ -603,7 +604,7 @@ def test_forward_vs_gradient_consistency():
         "binder_chain": "B",
     }
     inputs = AlphaFold2GradientInput(
-        inputs=AlphaFold2GradientItem(logits=[[0.0] * 20] * 5, **target_kwargs), temperature=1.0
+        inputs=AlphaFold2GradientCandidate(logits=[[0.0] * 20] * 5, **target_kwargs), temperature=1.0
     )
     grad = run_alphafold2_gradient(
         inputs, AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}, seed=42)
@@ -644,7 +645,7 @@ def test_gradient_recycle_mode_threads_through():
     }
     result = run_alphafold2_gradient(
         AlphaFold2GradientInput(
-            inputs=AlphaFold2GradientItem(logits=[[0.0] * 20] * 5, **target_kwargs), temperature=1.0
+            inputs=AlphaFold2GradientCandidate(logits=[[0.0] * 20] * 5, **target_kwargs), temperature=1.0
         ),
         AlphaFold2GradientConfig(num_recycles=2, recycle_mode="first", loss_weights={"plddt": 1.0}),
     )
@@ -662,16 +663,16 @@ def test_gradient_responds_to_loss_weights_and_logits():
         "binder_chain": "B",
     }
     r_plddt = run_alphafold2_gradient(
-        AlphaFold2GradientInput(inputs=AlphaFold2GradientItem(logits=logits, **target_kwargs), temperature=1.0),
+        AlphaFold2GradientInput(inputs=AlphaFold2GradientCandidate(logits=logits, **target_kwargs), temperature=1.0),
         AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
     )
     r_con = run_alphafold2_gradient(
-        AlphaFold2GradientInput(inputs=AlphaFold2GradientItem(logits=logits, **target_kwargs), temperature=1.0),
+        AlphaFold2GradientInput(inputs=AlphaFold2GradientCandidate(logits=logits, **target_kwargs), temperature=1.0),
         AlphaFold2GradientConfig(num_recycles=1, loss_weights={"con": 1.0}),
     )
     r_shifted = run_alphafold2_gradient(
         AlphaFold2GradientInput(
-            inputs=AlphaFold2GradientItem(logits=[[5.0] + [0.0] * 19] * 5, **target_kwargs), temperature=1.0
+            inputs=AlphaFold2GradientCandidate(logits=[[5.0] + [0.0] * 19] * 5, **target_kwargs), temperature=1.0
         ),
         AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
     )
@@ -726,7 +727,7 @@ def test_alphafold2_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark alphafold2-gradient: 5 repeated redesign passes of the PD-L1 nanobody (chain B, 118 aa) vs the target (cold + warm)."""
     binder_seq = Structure.from_file(_GRADIENT_EXAMPLE_PDB_PATH).get_chain_sequence("B")
     inputs = AlphaFold2GradientInput(
-        inputs=AlphaFold2GradientItem(
+        inputs=AlphaFold2GradientCandidate(
             logits=one_hot_protein_logits(binder_seq, sharpness=2.0),
             target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
             target_chain="A",
