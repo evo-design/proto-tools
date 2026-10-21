@@ -7,9 +7,9 @@ from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import (
     run_alphafold2,
 )
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient import (
+    AlphaFold2GradientCandidate,
     AlphaFold2GradientConfig,
     AlphaFold2GradientInput,
-    AlphaFold2GradientCandidate,
     AlphaFold2GradientOutput,
     run_alphafold2_gradient,
 )

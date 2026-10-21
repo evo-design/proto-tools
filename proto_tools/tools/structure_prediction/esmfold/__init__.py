@@ -2,9 +2,9 @@
 
 from proto_tools.tools.structure_prediction.esmfold.esmfold import (
     ESMFoldConfig,
+    ESMFoldGradientCandidate,
     ESMFoldGradientConfig,
     ESMFoldGradientInput,
-    ESMFoldGradientCandidate,
     ESMFoldGradientOutput,
     ESMFoldInput,
     ESMFoldOutput,

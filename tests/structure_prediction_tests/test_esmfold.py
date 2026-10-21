@@ -15,9 +15,9 @@ from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.structure_prediction import (
     Complex,
     ESMFoldConfig,
+    ESMFoldGradientCandidate,
     ESMFoldGradientConfig,
     ESMFoldGradientInput,
-    ESMFoldGradientCandidate,
     ESMFoldInput,
     run_esmfold,
     run_esmfold_gradient,

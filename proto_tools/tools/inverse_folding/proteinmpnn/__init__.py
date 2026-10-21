@@ -1,9 +1,9 @@
 """ProteinMPNN backbone-conditioned sequence design."""
 
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient import (
+    ProteinMPNNGradientCandidate,
     ProteinMPNNGradientConfig,
     ProteinMPNNGradientInput,
-    ProteinMPNNGradientCandidate,
     ProteinMPNNGradientOutput,
     run_proteinmpnn_gradient,
 )

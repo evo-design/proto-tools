@@ -12,9 +12,9 @@ from pydantic import ValidationError
 from proto_tools.entities.structures import BFactorType, Structure, is_valid_structure
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
+    AlphaFold2GradientCandidate,
     AlphaFold2GradientConfig,
     AlphaFold2GradientInput,
-    AlphaFold2GradientCandidate,
     AlphaFold2GradientOutput,
     AlphaFold2Input,
     Complex,
@@ -506,9 +506,9 @@ def test_heteromultimer_msa_dispatch_payload(monkeypatch):
     )
 
     payload = captured[0]
-    assert (
-        payload["msa_a3m_content"] is None
-    ), "Heteromultimer path must NOT pack a single combined A3M — per_chain_msas_a3m carries the work"
+    assert payload["msa_a3m_content"] is None, (
+        "Heteromultimer path must NOT pack a single combined A3M — per_chain_msas_a3m carries the work"
+    )
     assert payload["is_paired"] is True
     per_chain_a3m = payload["per_chain_msas_a3m"]
     assert per_chain_a3m is not None and len(per_chain_a3m) == 2, "two-chain complex → two A3Ms"
@@ -582,9 +582,9 @@ def test_homooligomer_uses_single_a3m_dispatch_path(monkeypatch):
 
     payload = captured[0]
     assert payload["per_chain_msas_a3m"] is None, "homo-oligomer must NOT use per-chain path"
-    assert (
-        payload["msa_a3m_content"] is not None and seq in payload["msa_a3m_content"]
-    ), "homo-oligomer should pass chain 0's MSA as a single A3M for ColabDesign to expand"
+    assert payload["msa_a3m_content"] is not None and seq in payload["msa_a3m_content"], (
+        "homo-oligomer should pass chain 0's MSA as a single A3M for ColabDesign to expand"
+    )
 
 
 # -- GPU integration tests -----------------------------------------------------

@@ -13,9 +13,9 @@ import pytest
 
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.proteinmpnn import (
+    ProteinMPNNGradientCandidate,
     ProteinMPNNGradientConfig,
     ProteinMPNNGradientInput,
-    ProteinMPNNGradientCandidate,
     ProteinMPNNSampleConfig,
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,

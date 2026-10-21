@@ -887,9 +887,9 @@ from proto_tools.tools.structure_dynamics import BioEmuConfig, BioEmuInput, BioE
 # Structure prediction tools
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
+    AlphaFold2GradientCandidate,
     AlphaFold2GradientConfig,
     AlphaFold2GradientInput,
-    AlphaFold2GradientCandidate,
     AlphaFold2GradientOutput,
     AlphaFold2Input,
     AlphaFold2Output,
@@ -914,9 +914,9 @@ from proto_tools.tools.structure_prediction import (
     ESMFold2Metrics,
     ESMFold2Output,
     ESMFoldConfig,
+    ESMFoldGradientCandidate,
     ESMFoldGradientConfig,
     ESMFoldGradientInput,
-    ESMFoldGradientCandidate,
     ESMFoldGradientOutput,
     ESMFoldInput,
     ESMFoldOutput,

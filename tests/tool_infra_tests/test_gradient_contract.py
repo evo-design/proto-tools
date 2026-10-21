@@ -131,9 +131,9 @@ def test_every_gradient_tool_uses_the_shared_input() -> None:
     gradient_keys = {spec.key for spec in ToolRegistry.list_all() if spec.key.endswith("-gradient")}
     sharing_the_input = {spec.key for spec in _GRADIENT_SPECS}
 
-    assert (
-        gradient_keys == sharing_the_input
-    ), f"these gradient tools do not inherit the shared GradientInput: {sorted(gradient_keys - sharing_the_input)}"
+    assert gradient_keys == sharing_the_input, (
+        f"these gradient tools do not inherit the shared GradientInput: {sorted(gradient_keys - sharing_the_input)}"
+    )
 
 
 # ── Shared input contract ────────────────────────────────────────────────────
@@ -381,9 +381,9 @@ def test_iterable_gradient_tool_declares_the_whole_trio(spec: Any) -> None:
     """Fanout needs all three declarations, and ToolPool asserts the output field at run time."""
     assert spec.iterable_input_fields == ["inputs"], f"{spec.key}: {spec.iterable_input_fields}"
     assert spec.iterable_output_field == "results", f"{spec.key}: {spec.iterable_output_field}"
-    assert (
-        isinstance(spec.max_chunk_size, int) and spec.max_chunk_size >= 1
-    ), f"{spec.key}: max_chunk_size must be an explicit positive cap, got {spec.max_chunk_size!r}"
+    assert isinstance(spec.max_chunk_size, int) and spec.max_chunk_size >= 1, (
+        f"{spec.key}: max_chunk_size must be an explicit positive cap, got {spec.max_chunk_size!r}"
+    )
 
 
 @pytest.mark.parametrize("spec", _ITERABLE_GRADIENT_SPECS, ids=lambda spec: spec.key)
@@ -416,6 +416,8 @@ def test_gradient_batch_fans_out_across_pool_slots(monkeypatch: pytest.MonkeyPat
     from proto_tools.utils.tool_pool import ToolPool
 
     # esm2-gradient is a GPU tool, so the pool needs GPU slots to have anything to fan out over.
+    # The worker call is faked, so the slots only have to exist on paper and this runs anywhere.
+    monkeypatch.setattr("proto_tools.utils.tool_pool.number_of_visible_gpus", lambda: 2)
     DeviceManager.reset_instance()
     ToolInstance.clear_all()
 
@@ -439,16 +441,16 @@ def test_gradient_batch_fans_out_across_pool_slots(monkeypatch: pytest.MonkeyPat
     )
 
     try:
-        with ToolPool(gpus=["cuda:0", "cuda:1"]):
+        with ToolPool(gpus=2):
             output = run_esm2_gradient(ESM2GradientInput(inputs=items), ESM2GradientConfig(device="cuda"))
     finally:
         DeviceManager.reset_instance()
         ToolInstance.clear_all()
 
     assert len(output.results) == item_count, "one result per item"
-    assert [result.loss for result in output.results] == [
-        float(index) for index in range(item_count)
-    ], "results must come back in input order"
+    assert [result.loss for result in output.results] == [float(index) for index in range(item_count)], (
+        "results must come back in input order"
+    )
     assert len(partitions) > 1, f"the batch was not split across workers: {partitions}"
     assert sum(partitions) == item_count, f"items were duplicated or dropped: {partitions}"
     assert output.vocab == list(ProteinSequenceLogits.VOCAB)
@@ -520,9 +522,9 @@ def test_gradient_config_inherits_the_shared_relaxation_controls(spec: Any) -> N
     Re-declaring the fields keeps the names while letting the bounds, defaults and documented
     meaning drift per tool, which is the failure this whole contract exists to prevent.
     """
-    assert issubclass(
-        spec.config_model, RelaxationConfig
-    ), f"{spec.key}: {spec.config_model.__name__} must inherit RelaxationConfig"
+    assert issubclass(spec.config_model, RelaxationConfig), (
+        f"{spec.key}: {spec.config_model.__name__} must inherit RelaxationConfig"
+    )
 
     for field in ("soft", "hard"):
         own = spec.config_model.model_fields[field]
@@ -743,9 +745,9 @@ def test_from_probabilities_converts_every_candidate_at_the_shared_temperature(s
                 assert [weight / total for weight in weights] == pytest.approx(
                     [target[column] for column in permitted], abs=1e-9
                 ), f"{spec.key} candidate {index} {name} row {position} did not round-trip"
-                assert all(
-                    logits[column] == 0.0 for column in range(len(target)) if column not in permitted
-                ), f"{spec.key} candidate {index} {name} row {position} put mass outside its permitted columns"
+                assert all(logits[column] == 0.0 for column in range(len(target)) if column not in permitted), (
+                    f"{spec.key} candidate {index} {name} row {position} put mass outside its permitted columns"
+                )
 
 
 @pytest.mark.parametrize("spec", _ITERABLE_GRADIENT_SPECS, ids=lambda spec: spec.key)

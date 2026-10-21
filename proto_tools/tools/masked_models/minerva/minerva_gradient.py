@@ -8,8 +8,8 @@ from proto_tools.tools.masked_models.minerva.config import MinervaConfig
 from proto_tools.tools.masked_models.mixed_configs import MixedGradientConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
     MixedGradientOutput,
-    MixedSequenceGradientInput,
     MixedSequenceGradientCandidate,
+    MixedSequenceGradientInput,
     one_hot_mixed_logits,
 )
 from proto_tools.tools.tool_registry import tool

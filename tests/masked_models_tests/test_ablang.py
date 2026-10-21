@@ -406,6 +406,10 @@ def test_mixed_batch_gives_the_same_results_on_one_worker_and_two(monkeypatch: p
     from proto_tools.utils.tool_instance import ToolInstance as _ToolInstance
     from proto_tools.utils.tool_pool import ToolPool
 
+    # The worker call is faked, so the GPU slots only have to exist on paper: this test is
+    # about partitioning, not device management, and so must run on CPU-only CI too.
+    monkeypatch.setattr("proto_tools.utils.tool_pool.number_of_visible_gpus", lambda: 2)
+
     partition_sizes: list[int] = []
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
@@ -435,12 +439,12 @@ def test_mixed_batch_gives_the_same_results_on_one_worker_and_two(monkeypatch: p
     expected_losses = [0.0, 1.0, 2.0, 3.0]
     expected_choices = ["ablang1-heavy", "ablang1-light", "ablang2-paired", "ablang1-heavy"]
 
-    def run_with(gpus: list[str]) -> tuple[list[float], list[str]]:
-        """Run the same mixed batch under a given pool layout."""
+    def run_with(slots: int) -> tuple[list[float], list[str]]:
+        """Run the same mixed batch under a given number of pool slots."""
         DeviceManager.reset_instance()
         _ToolInstance.clear_all()
         try:
-            with ToolPool(gpus=gpus):
+            with ToolPool(gpus=slots):
                 output = run_ablang_gradient(
                     AbLangGradientInput(inputs=antibodies),
                     AbLangGradientConfig(compute_gradient=False, device="cuda"),
@@ -451,11 +455,11 @@ def test_mixed_batch_gives_the_same_results_on_one_worker_and_two(monkeypatch: p
         return [result.loss for result in output.results], [result.metrics["model_choice"] for result in output.results]
 
     partition_sizes.clear()
-    one_worker = run_with(["cuda:0"])
+    one_worker = run_with(1)
     assert partition_sizes == [4], f"one slot should see the whole batch; got {partition_sizes}"
 
     partition_sizes.clear()
-    two_workers = run_with(["cuda:0", "cuda:1"])
+    two_workers = run_with(2)
     assert len(partition_sizes) > 1, f"two slots should split the batch; got {partition_sizes}"
     assert sum(partition_sizes) == len(antibodies)
 
