@@ -121,7 +121,6 @@ request = ESM2GradientInput.from_probabilities(
     temperature=0.5,
 )
 
-# A candidate's own context is supplied in the same call and packed into its item.
 request = ProteinMPNNGradientInput.from_probabilities(
     my_probabilities,
     temperature=0.5,

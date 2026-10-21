@@ -37,7 +37,6 @@ DEFAULT_MALINOIS_ARTIFACT_MD5 = "375142a714e7df73c463b46113a65210"
 MALINOIS_CELL_TYPES = ("K562", "HepG2", "SKNSH")
 MalinoisCellType = Literal["K562", "HepG2", "SKNSH"]
 MalinoisObjectiveDirection = Literal["max", "min"]
-MalinoisLogits = list[list[list[float]]]
 
 
 class MalinoisActivityMetrics(Metrics):

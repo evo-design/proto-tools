@@ -32,7 +32,6 @@ from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 ParadeObjectiveDirection = Literal["max", "min"]
-ParadeLogits = list[list[list[float]]]
 
 
 class ParadeGradientLossTerm(BaseModel):
