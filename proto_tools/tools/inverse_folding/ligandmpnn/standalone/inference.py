@@ -16,6 +16,7 @@ from typing import Any, cast
 import numpy as np
 import torch
 from standalone_helpers import get_logger, log_likelihood_metrics, move_model_to_device, serialize_output
+from standalone_helpers.vocabulary import AMINO_ACIDS_LIST, gather_indices
 
 logger = get_logger(__name__)
 
@@ -309,6 +310,7 @@ class LigandMPNNModel:
         )
 
         vocab, token_ids = _sequence_tokens(sequence)
+        canonical_columns = gather_indices(AMINO_ACIDS_LIST, vocab, label="ligandmpnn")
         parsed_len = int(network_input["input_features"]["S"].shape[1])
         if len(token_ids) != parsed_len:
             raise ValueError(f"Sequence length {len(sequence)} does not match structure ({parsed_len} residues).")
@@ -330,9 +332,9 @@ class LigandMPNNModel:
 
         self.unload()
         return {
-            "logits": output["decoder_features"]["logits"][0] if return_logits else None,
+            "logits": output["decoder_features"]["logits"][0][..., canonical_columns] if return_logits else None,
             "metrics": log_likelihood_metrics(avg_log_likelihood, effective_length),
-            "vocab": vocab,
+            "vocab": AMINO_ACIDS_LIST,
         }
 
     def load(self, device: str = "cuda", verbose: bool = False, model_type: str = "ligand_mpnn") -> None:
@@ -797,14 +799,17 @@ class LegacyCompatibleLigandMPNNModel:
         avg_log_likelihood = float(np.mean(np.log(np.maximum(selected_masked, 1e-12))))
         logits = None
         if return_logits:
-            logits = np.log(np.maximum(probs_2d.detach().cpu().numpy(), 1e-12)).tolist()
+            native_vocab = [data_utils.restype_int_to_str[idx] for idx in range(len(data_utils.restype_int_to_str))]
+            canonical_columns = gather_indices(AMINO_ACIDS_LIST, native_vocab, label="ligandmpnn")
+            probabilities = probs_2d.detach().cpu().numpy()[:, canonical_columns]
+            logits = np.log(np.maximum(probabilities, 1e-12)).tolist()
         return {
             "logits": logits,
             "metrics": {
                 **log_likelihood_metrics(avg_log_likelihood, int(selected_masked.size)),
                 "mean_current_probability": float(np.mean(selected_masked)),
             },
-            "vocab": [data_utils.restype_int_to_str[idx] for idx in range(len(data_utils.restype_int_to_str))],
+            "vocab": AMINO_ACIDS_LIST,
         }
 
     def _args(

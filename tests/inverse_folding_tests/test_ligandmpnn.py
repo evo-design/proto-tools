@@ -186,7 +186,7 @@ def test_ligandmpnn_score_dispatch_contract(monkeypatch):
     captured = {}
     structure = ligandmpnn_example_input().inputs[0].structure
     sequence = structure.get_chain_sequence("A")
-    vocab = list("ACDEFGHIKLMNPQRSTVWYX")
+    vocab = list("ACDEFGHIKLMNPQRSTVWY")  # what the worker returns: proto order, no unknown column
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["toolkit"] = toolkit

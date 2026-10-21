@@ -252,7 +252,7 @@ def test_proteinmpnn_score(pdb_structure: Structure):
 
     validate_output(output)
     assert output.tool_id == "proteinmpnn-score"
-    assert output.vocab == PROTEINMPNN_AMINO_ACIDS_WITH_X
+    assert output.vocab == list(_CANONICAL_AA)
 
     assert len(output.scores) == 2
     assert all(isinstance(score, InverseFoldingScoringMetrics) for score in output.scores)
@@ -288,7 +288,7 @@ def test_proteinmpnn_score_fields(pdb_structure: Structure):
     # Validate logits shape
     logits_arr = np.array(score.logits)
     assert logits_arr.ndim == 2
-    assert logits_arr.shape == (seq_len, len(PROTEINMPNN_AMINO_ACIDS_WITH_X))
+    assert logits_arr.shape == (seq_len, len(_CANONICAL_AA))
 
     # log_likelihood = avg_log_likelihood * seq_len
     assert np.isclose(score.log_likelihood, score.avg_log_likelihood * seq_len, rtol=1e-5)

@@ -21,6 +21,7 @@ import pytest
 from standalone_helpers import vocabulary as worker_vocabulary
 
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
+    CODONFM_CODON_VOCAB,
     CodonSequenceLogits,
 )
 from proto_tools.tools.masked_models.mixed_data_models import MixedSequenceLogits
@@ -41,6 +42,7 @@ _WORKER_VOCABULARY = Path(worker_vocabulary.__file__).resolve()
         ("amino acids", list(PROTEIN_AMINO_ACIDS), worker_vocabulary.AMINO_ACIDS_LIST),
         ("DNA", list(DNA_NUCLEOTIDES), list(worker_vocabulary.DNA_NUCLEOTIDES)),
         ("RNA", list(RNA_NUCLEOTIDES), list(worker_vocabulary.RNA_NUCLEOTIDES)),
+        ("DNA codons", CODONFM_CODON_VOCAB, worker_vocabulary.DNA_CODONS),
     ],
 )
 def test_parent_and_worker_vocabularies_match(name: str, parent_order: list[str], worker_order: list[str]) -> None:

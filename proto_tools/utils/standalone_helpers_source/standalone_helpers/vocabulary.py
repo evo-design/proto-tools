@@ -27,6 +27,9 @@ DNA_NUCLEOTIDES: str = "ACGT"
 RNA_NUCLEOTIDES: str = "ACGU"
 """Standard RNA nucleotides."""
 
+DNA_CODONS: list[str] = [first + second + third for first in "ACGT" for second in "ACGT" for third in "ACGT"]
+"""All 64 DNA codons in lexicographic order; proto's codon column order."""
+
 PROTEIN_TOKENS: str = "".join(AMINO_ACIDS_LIST)
 """Uppercase protein tokens in the mixed protein/DNA vocabulary."""
 

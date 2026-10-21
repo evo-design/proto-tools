@@ -31,6 +31,7 @@ from standalone_helpers import (
     set_torch_seed,
 )
 from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
+from standalone_helpers.vocabulary import DNA_CODONS
 
 # The vendored CodonFM source lives under ``src/`` next to this file.
 sys.path.insert(0, str(Path(__file__).parent))
@@ -352,8 +353,13 @@ class CodonFMModel:
         from src.data.metadata import MetadataFields
         from tqdm import tqdm
 
-        codons = list(self.tokenizer.codons)
+        # Proto's column order, not the tokenizer's: codon_token_ids below carries the mapping,
+        # so every gather keyed off it is proto-ordered on both the input and the gradient side.
+        codons = list(DNA_CODONS)
         n_codons_vocab = len(codons)
+        missing = [codon for codon in codons if codon not in self.tokenizer.encoder]
+        if missing:
+            raise ValueError(f"codonfm: tokenizer is missing codons {missing}")
         if not logits_list:
             raise ValueError("codonfm: compute_gradient requires at least one codon position")
         if any(len(row) != n_codons_vocab for row in logits_list):

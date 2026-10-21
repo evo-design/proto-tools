@@ -20,11 +20,13 @@ logger = get_logger(__name__)
 DEFAULT_TEMPERATURE = 1.0
 CANONICAL_VOCAB: list[str] = AMINO_ACIDS_LIST
 
-# ColabDesign scores in the AlphaFold alphabet, whose trailing unknown symbol the relaxed state omits.
 PROTEINMPNN_AMINO_ACIDS_WITH_X: list[str] = list("ARNDCQEGHILKMFPSTWYVX")
 PROTEINMPNN_AMINO_ACIDS: list[str] = PROTEINMPNN_AMINO_ACIDS_WITH_X[:20]
 CANONICAL_TO_PROTEINMPNN_INDICES: list[int] = gather_indices(
     PROTEINMPNN_AMINO_ACIDS, CANONICAL_VOCAB, label="proteinmpnn"
+)
+PROTEINMPNN_TO_CANONICAL_INDICES: list[int] = gather_indices(
+    CANONICAL_VOCAB, PROTEINMPNN_AMINO_ACIDS_WITH_X, label="proteinmpnn"
 )
 
 # Maps model_choice to ColabDesign's (model_name, weights) parameters.
@@ -127,7 +129,7 @@ class ProteinMPNNModel:
             "seq": sequences["seq"],
             "score": sequences["score"],
             "seqid": sequences["seqid"],
-            "logits": sequences["logits"] if return_logits else None,
+            "logits": sequences["logits"][..., PROTEINMPNN_TO_CANONICAL_INDICES] if return_logits else None,
         }
 
     def score(
@@ -197,9 +199,9 @@ class ProteinMPNNModel:
 
         self.unload()
         return {
-            "logits": output["logits"] if return_logits else None,
+            "logits": output["logits"][..., PROTEINMPNN_TO_CANONICAL_INDICES] if return_logits else None,
             "metrics": log_likelihood_metrics(-neg_avg_ll, effective_length),
-            "vocab": PROTEINMPNN_AMINO_ACIDS_WITH_X,
+            "vocab": CANONICAL_VOCAB,
         }
 
     def compute_gradient(
