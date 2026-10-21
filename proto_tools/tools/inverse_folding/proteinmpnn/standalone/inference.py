@@ -401,8 +401,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = ProteinMPNNModel()
 
-    pdb_path = input_dict["pdb_path"]
     operation = input_dict["operation"]
+    # The gradient operation carries one backbone per item; sample and score take a single one.
+    pdb_path = input_dict.get("pdb_path", "")
     model_choice = input_dict["model_choice"]
     if operation == "sample":
         return _model.sample(
@@ -432,20 +433,29 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
         )
     if operation == "compute_gradient":
-        return _model.compute_gradient(
-            pdb_path=pdb_path,
-            chain_ids=input_dict["chain_ids"],
-            logits_list=input_dict["logits"],
-            temperature=resolve_temperature(input_dict["temperature"]),
-            soft=float(input_dict["soft"]),
-            hard=float(input_dict["hard"]),
-            fixed_positions=input_dict.get("fixed_positions"),
-            seed=input_dict["seed"],
-            device=input_dict["device"],
-            model_choice=model_choice,
-            verbose=input_dict["verbose"],
-            backprop=input_dict.get("compute_gradient", True),
-        )
+        # One chunk of independent candidates, each with its own backbone: the weights load once
+        # and prep_inputs re-runs per item, so the reply holds one result per item, in order.
+        results = [
+            _model.compute_gradient(
+                pdb_path=item["pdb_path"],
+                chain_ids=item["chain_ids"],
+                logits_list=item["logits"],
+                temperature=resolve_temperature(input_dict["temperature"]),
+                soft=float(input_dict["soft"]),
+                hard=float(input_dict["hard"]),
+                fixed_positions=item.get("fixed_positions"),
+                seed=input_dict["seed"],
+                device=input_dict["device"],
+                model_choice=model_choice,
+                verbose=input_dict["verbose"],
+                backprop=input_dict.get("compute_gradient", True),
+            )
+            for item in input_dict["items"]
+        ]
+        return {
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
     raise ValueError(f"proteinmpnn: unknown operation {operation!r}; valid: ['sample', 'score', 'compute_gradient']")
 
 

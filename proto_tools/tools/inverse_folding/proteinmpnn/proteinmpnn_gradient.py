@@ -1,19 +1,24 @@
 """ProteinMPNN structure-conditioned perplexity gradient tool."""
 
 import logging
+from collections.abc import Iterator, Sequence
+from contextlib import ExitStack
 from typing import Any, Literal
 
-from pydantic import model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from proto_tools.entities.structures import ChainSelection, ResidueSelection, Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
+    GradientInput,
     GradientOutput,
     InputField,
-    ProteinGradientInput,
+    ProteinSequenceLogits,
     RelaxationConfig,
+    SequenceLogits,
     ToolInstance,
+    coerce_to_item_list,
     one_hot_protein_logits,
 )
 
@@ -22,16 +27,15 @@ logger = logging.getLogger(__name__)
 ProteinMPNNModelChoice = Literal["proteinmpnn", "v_48_002", "v_48_010", "v_48_030", "abmpnn", "soluble"]
 
 
-class ProteinMPNNGradientInput(ProteinGradientInput):
-    """Input for relaxed ProteinMPNN perplexity gradients.
+class ProteinMPNNGradientItem(BaseModel):
+    """One candidate: a relaxed sequence with the backbone and selections it is scored against.
+
+    The structure and its selections belong to the candidate, so a batch may score different
+    backbones and each item's chains are validated against its own.
 
     Attributes:
         logits (ProteinSequenceLogits): Relaxed sequence state, shape ``L x 20`` in
             canonical amino-acid order ``ACDEFGHIKLMNPQRSTVWY``.
-        temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
-            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
-            gradient; ``None`` reads them as probabilities and returns a probability-space
-            gradient.
         structure (Structure): Backbone structure to condition ProteinMPNN on.
         chains_to_redesign (ChainSelection | None): Chains to score/design. If
             ``None``, all chains in ``structure`` are used.
@@ -39,16 +43,20 @@ class ProteinMPNNGradientInput(ProteinGradientInput):
             from the perplexity objective.
     """
 
-    structure: Structure = InputField(
+    logits: ProteinSequenceLogits = Field(
+        title="Logits",
+        description="Relaxed (L, 20) sequence state in canonical amino-acid order.",
+    )
+    structure: Structure = Field(
         title="Input Structure",
         description="Backbone structure for ProteinMPNN conditioning.",
     )
-    chains_to_redesign: ChainSelection | None = InputField(
+    chains_to_redesign: ChainSelection | None = Field(
         default=None,
         title="Chains to Redesign",
         description="Structure chains to score. Defaults to all chains in the structure.",
     )
-    fixed_positions: ResidueSelection | None = InputField(
+    fixed_positions: ResidueSelection | None = Field(
         default=None,
         title="Fixed Positions",
         description="Per-chain 1-indexed residue positions excluded from the ProteinMPNN objective.",
@@ -66,8 +74,16 @@ class ProteinMPNNGradientInput(ProteinGradientInput):
         data["chains_to_redesign"] = data.pop("chain_ids")
         return data
 
+    def iter_sequence_logits(self) -> Iterator[tuple[str, SequenceLogits]]:
+        """Expose this item's relaxed state to the shared validation hooks.
+
+        Yields:
+            tuple[str, SequenceLogits]: The field name and this item's matrix.
+        """
+        yield "logits", self.logits
+
     @model_validator(mode="after")
-    def validate_selections(self) -> "ProteinMPNNGradientInput":
+    def validate_selections(self) -> "ProteinMPNNGradientItem":
         """Validate chain and residue selections against the backbone."""
         if self.chains_to_redesign is not None:
             self.chains_to_redesign.validate_against(self.structure, label="chains_to_redesign")
@@ -81,6 +97,64 @@ class ProteinMPNNGradientInput(ProteinGradientInput):
         if self.chains_to_redesign is not None:
             return list(self.chains_to_redesign.chains)
         return self.structure.get_chain_ids()
+
+
+class ProteinMPNNGradientInput(GradientInput):
+    """One or many relaxed candidates, each with its own backbone.
+
+    Attributes:
+        inputs (list[ProteinMPNNGradientItem]): One sequence-and-backbone bundle per candidate. A
+            single bundle may be passed on its own.
+        temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
+            reads each state as unnormalized and applies ``softmax(logits / T)``, returning
+            logit-space gradients; ``None`` reads them as probabilities and returns
+            probability-space gradients.
+    """
+
+    inputs: list[ProteinMPNNGradientItem] = InputField(
+        title="Relaxed Candidates",
+        description="One relaxed sequence with its backbone per candidate; a single bundle is accepted alone",
+    )
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def normalize_items(cls, value: Any) -> Any:
+        """Accept one candidate as well as a list of them."""
+        return coerce_to_item_list(value)
+
+    @classmethod
+    def from_probabilities(  # type: ignore[override]  # an item bundles its backbone with the matrix
+        cls,
+        probabilities: Sequence[Sequence[float]],
+        *,
+        temperature: float = 1.0,
+        **fields: Any,
+    ) -> "ProteinMPNNGradientInput":
+        """Build a one-candidate input whose logits reproduce ``probabilities``.
+
+        The backbone and any selections belong to the item, so they are taken by keyword here and
+        packed into it alongside the converted matrix.
+
+        Args:
+            probabilities (Sequence[Sequence[float]]): ``(L, 20)`` strictly positive rows.
+            temperature (float): Positive, finite temperature stored on the input.
+            fields (Any): The item's remaining fields; must include ``structure``.
+
+        Returns:
+            ProteinMPNNGradientInput: Input satisfying ``softmax(logits / temperature) == probabilities``.
+
+        Raises:
+            ValueError: If ``structure`` is missing.
+        """
+        if "structure" not in fields:
+            raise ValueError("proteinmpnn gradient from_probabilities requires the backbone structure")
+        item_fields = {name: fields.pop(name) for name in list(fields) if name in ProteinMPNNGradientItem.model_fields}
+        matrix = ProteinSequenceLogits.from_probabilities(probabilities, temperature=temperature)
+        return cls(
+            inputs=[ProteinMPNNGradientItem(logits=matrix, **item_fields)],
+            temperature=temperature,
+            **fields,
+        )
 
 
 class ProteinMPNNGradientOutput(GradientOutput):
@@ -132,8 +206,12 @@ def example_input() -> ProteinMPNNGradientInput:
 
     pair = scoring_example_input().sequence_structure_pairs[0]
     return ProteinMPNNGradientInput(
-        logits=one_hot_protein_logits(pair.sequence, sharpness=2.0),
-        structure=pair.structure,
+        inputs=[
+            ProteinMPNNGradientItem(
+                logits=ProteinSequenceLogits(one_hot_protein_logits(pair.sequence, sharpness=2.0)),
+                structure=pair.structure,
+            )
+        ]
     )
 
 
@@ -149,6 +227,9 @@ def example_input() -> ProteinMPNNGradientInput:
     pin_visible_devices=True,
     example_input=example_input,
     cacheable=False,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=4,
     stochastic=True,
 )
 def run_proteinmpnn_gradient(
@@ -157,26 +238,35 @@ def run_proteinmpnn_gradient(
     instance: Any = None,
 ) -> ProteinMPNNGradientOutput:
     """Compute ProteinMPNN mean-NLL gradient with respect to relaxed sequence logits."""
-    chain_ids = inputs.chain_ids_to_redesign
     seed = config.seed if config.seed is not None else config.get_random_int()
-    logger.debug("Using local worker for ProteinMPNN gradient: %s", config.model_choice)
-    with inputs.structure.temp_file() as pdb_path:
+    logger.debug(
+        "Using local worker for ProteinMPNN gradient: %s (%d item(s))", config.model_choice, len(inputs.inputs)
+    )
+    # Each candidate carries its own backbone, so every item needs its own temporary PDB for the
+    # duration of the dispatch; ExitStack keeps them all alive until the worker has replied.
+    with ExitStack() as stack:
+        items = [
+            {
+                "pdb_path": str(stack.enter_context(item.structure.temp_file())),
+                "chain_ids": item.chain_ids_to_redesign,
+                "logits": item.logits.root,
+                "fixed_positions": (
+                    item.fixed_positions.to_residue_numbers(item.structure)
+                    if item.fixed_positions is not None
+                    else None
+                ),
+            }
+            for item in inputs.inputs
+        ]
         result = ToolInstance.dispatch(
             "proteinmpnn",
             {
                 "operation": "compute_gradient",
-                "pdb_path": str(pdb_path),
-                "chain_ids": chain_ids,
-                "logits": inputs.logits.root,
+                "items": items,
                 "temperature": inputs.temperature,
                 "soft": config.soft,
                 "hard": config.hard,
                 "compute_gradient": config.compute_gradient,
-                "fixed_positions": (
-                    inputs.fixed_positions.to_residue_numbers(inputs.structure)
-                    if inputs.fixed_positions is not None
-                    else None
-                ),
                 "model_choice": config.model_choice,
                 "seed": seed,
                 "device": config.device,
@@ -185,4 +275,4 @@ def run_proteinmpnn_gradient(
             instance=instance,
             config=config,
         )
-    return ProteinMPNNGradientOutput.from_single(result)
+    return ProteinMPNNGradientOutput(**result)

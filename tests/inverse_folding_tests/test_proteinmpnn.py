@@ -15,6 +15,7 @@ from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.proteinmpnn import (
     ProteinMPNNGradientConfig,
     ProteinMPNNGradientInput,
+    ProteinMPNNGradientItem,
     ProteinMPNNSampleConfig,
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
@@ -342,11 +343,15 @@ def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["toolkit"] = toolkit
         captured["payload"] = payload
-        n = len(payload["logits"])
         return {
-            "gradient": [[0.0] * 20] * n,
-            "loss": 0.5,
-            "metrics": {"avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
+            "results": [
+                {
+                    "gradient": [[0.0] * 20] * len(item["logits"]),
+                    "loss": 0.5,
+                    "metrics": {"avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
+                }
+                for item in payload["items"]
+            ],
             "vocab": list(_CANONICAL_AA),
         }
 
@@ -357,18 +362,21 @@ def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
 
     result = run_proteinmpnn_gradient(
         ProteinMPNNGradientInput(
-            logits=[[0.0] * 20] * 5,
-            structure=_small_structure(),
-            chains_to_redesign=["A"],
-            fixed_positions={"A": [1]},
+            inputs=ProteinMPNNGradientItem(
+                logits=[[0.0] * 20] * 5,
+                structure=_small_structure(),
+                chains_to_redesign=["A"],
+                fixed_positions={"A": [1]},
+            ),
         ),
         ProteinMPNNGradientConfig(hard=1.0, device="cpu"),
     )
 
     assert captured["toolkit"] == "proteinmpnn"
     assert captured["payload"]["operation"] == "compute_gradient"
-    assert captured["payload"]["chain_ids"] == ["A"]
-    assert captured["payload"]["fixed_positions"] == {"A": [1]}
+    (item,) = captured["payload"]["items"]
+    assert item["chain_ids"] == ["A"]
+    assert item["fixed_positions"] == {"A": [1]}
     assert captured["payload"]["soft"] == 1.0
     assert captured["payload"]["hard"] == 1.0
     assert captured["payload"]["compute_gradient"] is True
@@ -425,9 +433,11 @@ def test_proteinmpnn_gradient_forward_only_returns_loss_without_a_gradient() -> 
 
     result = run_proteinmpnn_gradient(
         ProteinMPNNGradientInput(
-            logits=logits,
-            structure=_small_structure(),
-            chains_to_redesign=["A"],
+            inputs=ProteinMPNNGradientItem(
+                logits=logits,
+                structure=_small_structure(),
+                chains_to_redesign=["A"],
+            ),
             temperature=0.7,
         ),
         ProteinMPNNGradientConfig(seed=42, compute_gradient=False),
@@ -459,9 +469,11 @@ def test_proteinmpnn_gradient_end_to_end(soft: float, hard: float):
 
     result = run_proteinmpnn_gradient(
         ProteinMPNNGradientInput(
-            logits=logits,
-            structure=_small_structure(),
-            chains_to_redesign=["A"],
+            inputs=ProteinMPNNGradientItem(
+                logits=logits,
+                structure=_small_structure(),
+                chains_to_redesign=["A"],
+            ),
             temperature=0.7,
         ),
         ProteinMPNNGradientConfig(seed=42, soft=soft, hard=hard),
@@ -707,9 +719,11 @@ def test_proteinmpnn_gradient_benchmark(request: pytest.FixtureRequest, pdb_stru
     target_len = len(pdb_structure.get_chain_sequence("A"))
     sequence = random_protein_sequences(n=1, length=target_len, seed=7)[0]
     inputs = ProteinMPNNGradientInput(
-        logits=one_hot_protein_logits(sequence, sharpness=2.0),
-        structure=pdb_structure,
-        chains_to_redesign=["A"],
+        inputs=ProteinMPNNGradientItem(
+            logits=one_hot_protein_logits(sequence, sharpness=2.0),
+            structure=pdb_structure,
+            chains_to_redesign=["A"],
+        ),
         temperature=0.7,
     )
     config = ProteinMPNNGradientConfig(seed=42)

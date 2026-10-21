@@ -299,9 +299,14 @@ def _build_from_probabilities(spec: Any, temperature: float) -> tuple[Any, dict[
         fields.pop(field)
         # One example item, whether the field holds a matrix or a one-item list of them.
         target = next(iter(targets.values()))
-        # A bundled item carries its own context, which the factory still takes by keyword.
+        # A bundled item carries its own context — a template, a backbone — which the factory
+        # still takes by keyword, so pass everything on the item that is not a relaxed matrix.
         items = getattr(example, "inputs", None)
-        context = {"sequence": items[0].sequence} if items and hasattr(items[0], "sequence") else {}
+        context: dict[str, Any] = {}
+        if items and callable(getattr(items[0], "iter_sequence_logits", None)):
+            first = items[0]
+            matrices = {name for name, _ in first.iter_sequence_logits()}
+            context = {name: getattr(first, name) for name in type(first).model_fields if name not in matrices}
         built = spec.input_model.from_probabilities(target, temperature=temperature, **context, **fields)
     return built, targets
 
