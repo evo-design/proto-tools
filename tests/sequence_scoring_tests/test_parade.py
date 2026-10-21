@@ -843,6 +843,52 @@ def test_parade_gradient_real_gpu() -> None:
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
+def test_parade_one_hot_relaxed_input_matches_discrete_activity() -> None:
+    """A one-hot relaxed input must score the same as the discrete sequence it encodes.
+
+    The relaxed and discrete paths reach the model through different code — a featurized
+    probability matrix versus a tokenized string — so agreement here is what rules out a
+    transposed nucleotide column or an off-by-one in the relaxed encoding. ``temperature=None``
+    is what makes the comparison exact: a softmax over one-hot *logits* would not be one-hot.
+    """
+    _skip_if_no_gpu()
+
+    from proto_tools.tools.sequence_scoring.parade import (
+        ParadeActivityConfig,
+        ParadeActivityInput,
+        ParadeGradientConfig,
+        ParadeGradientInput,
+        ParadeGradientLossTerm,
+        run_parade_activity,
+        run_parade_gradient,
+    )
+    from proto_tools.utils.sequence import DNA_NUCLEOTIDES
+
+    sequence = "ACGTTGCAAGGCTTACGATCGATTACGGCATTCAGGATCCGTAACGTTAC"
+    one_hot = [[1.0 if base == nucleotide else 0.0 for nucleotide in DNA_NUCLEOTIDES] for base in sequence]
+
+    discrete = run_parade_activity(
+        ParadeActivityInput(sequences=[sequence]),
+        ParadeActivityConfig(construct_type="utr5", device="cuda"),
+    )
+    relaxed = run_parade_gradient(
+        ParadeGradientInput(logits=[one_hot], temperature=None),
+        ParadeGradientConfig(
+            construct_type="utr5",
+            loss_terms=[ParadeGradientLossTerm(cell_type="c2", direction="max")],
+            compute_gradient=False,
+            device="cuda",
+        ),
+    )
+
+    expected = discrete.results[0].scores["c2"]
+    assert relaxed.sample_metrics[0]["c2"] == pytest.approx(expected, rel=1e-4, abs=1e-4), (
+        f"relaxed one-hot activity {relaxed.sample_metrics[0]['c2']} != discrete {expected}"
+    )
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
 def test_parade_mixed_length_grouping_preserves_order() -> None:
     """Interleaved-length input is grouped per length and reassembled in original order.
 

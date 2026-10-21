@@ -269,6 +269,51 @@ def test_malinois_real_gpu_gradient() -> None:
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
+def test_malinois_one_hot_relaxed_input_matches_discrete_scores() -> None:
+    """A one-hot relaxed input must score the same as the discrete sequence it encodes.
+
+    The relaxed path feeds a probability matrix through the MPRA flank builder while the scoring
+    path tokenizes a string, so agreement rules out a transposed nucleotide column or an
+    off-by-one in the relaxed encoding. ``temperature=None`` makes the comparison exact: a
+    softmax over one-hot *logits* would not be one-hot.
+    """
+    _skip_if_no_malinois_gpu()
+
+    from proto_tools.tools.sequence_scoring.malinois import (
+        MalinoisGradientConfig,
+        MalinoisGradientInput,
+        MalinoisGradientLossTerm,
+        MalinoisScoreConfig,
+        MalinoisScoreInput,
+        run_malinois_gradient,
+        run_malinois_score,
+    )
+    from proto_tools.utils.sequence import DNA_NUCLEOTIDES
+
+    sequence = ("ACGTTGCAAGGCTTACGATCGATTACGGCATTCAGGATCCGTAACGTTAC" * 4)[:200]
+    one_hot = [[1.0 if base == nucleotide else 0.0 for nucleotide in DNA_NUCLEOTIDES] for base in sequence]
+
+    discrete = run_malinois_score(
+        MalinoisScoreInput(sequences=[sequence]),
+        MalinoisScoreConfig(cell_types=["K562"], device="cuda"),
+    )
+    relaxed = run_malinois_gradient(
+        MalinoisGradientInput(logits=[one_hot], temperature=None),
+        MalinoisGradientConfig(
+            loss_terms=[MalinoisGradientLossTerm(cell_type="K562", direction="max")],
+            compute_gradient=False,
+            device="cuda",
+        ),
+    )
+
+    expected = discrete.results[0].scores["K562"]
+    assert relaxed.sample_metrics[0]["K562"] == pytest.approx(expected, rel=1e-4, abs=1e-4), (
+        f"relaxed one-hot score {relaxed.sample_metrics[0]['K562']} != discrete {expected}"
+    )
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
 def test_malinois_real_gpu_batched_gradient_matches_batch_size_one_calls() -> None:
     """Batched gradient results match separate B=1 calls for the same logits."""
     _skip_if_no_malinois_gpu()

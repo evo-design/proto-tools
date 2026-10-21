@@ -357,6 +357,8 @@ def check_gradient_is_unchanged_by_a_shuffled_native_vocabulary() -> None:
         np.asarray(shuffled["gradient"]), np.asarray(reference["gradient"]), rtol=1e-6, atol=1e-9
     )
     _assert_gradient_respects_alphabets(np.asarray(shuffled["gradient"]))
+    for label, result in (("reference", reference), ("shuffled", shuffled)):
+        assert result["vocab"] == list(MIXED_VOCAB), f"{label} reported {result['vocab'][:4]}"
 
 
 CHECKS = [
