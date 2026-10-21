@@ -1,6 +1,6 @@
 code:
   spdx: Custom (DTU Health Tech Academic Software License)
-  url: https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/
+  url: https://services.healthtech.dtu.dk/services/NetMHCpan-4.2/
   text: 'ACADEMIC SOFTWARE LICENSE AGREEMENT FOR END-USERS AT PUBLICLY FUNDED ACADEMIC,
     EDUCATION OR RESEARCH INSTITUTIONS FOR THE USE OF netMHCpan. Entered into between
     DTU Health Tech, Technical University of Denmark ("HEALTH") and the LICENSEE by
@@ -20,9 +20,9 @@ code:
     from health-software@dtu.dk. Section 7 (Software Protection) additionally forbids
     creating derivative works, decompiling or reverse engineering, redistributing,
     selling, renting, leasing, sublicensing or otherwise transferring rights to the
-    software, removing proprietary notices, and publishing any benchmark results to a
-    third party without HEALTH''s prior written consent. Section 10 requires that any
-    reference to the software "will cite one or more publications as set forth in the
+    software, removing proprietary notices, and publishing any results of benchmark tests
+    run on the Product to a third party without HEALTH''s prior written consent. Section 10
+    requires that any reference to the software "will cite one or more publications as set forth in the
     manual and in agreement with common scientific practice" (the clause is scoped to
     "the software for crystallographic computations", an evident template artifact in
     DTU''s agreement text), and bars using the name of the Licensed Software or of
@@ -32,18 +32,17 @@ code:
     law (Section 12), and on termination the LICENSEE must destroy all full and partial
     copies (Section 11). Full terms are displayed on the download request form reached
     from the Downloads tab of the canonical URL above, and ship as
-    netMHCpan-4.1_license.txt with the download.'
+    netMHCpan-4.2_license.txt with the download.'
 commercial_use: 'no'
 redistribution: false
 attribution_required: true
 weights:
   spdx: Custom (DTU Health Tech Academic Software License)
-  url: https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/data.tar.gz
+  url: https://services.healthtech.dtu.dk/services/NetMHCpan-4.2/
   access: request
-  text: 'The networks and threshold tables ship as a separate data.tar.gz, which is itself an
-    ungated download and is fetched automatically. They are usable only with the netMHCpan
-    software, which is obtained by request from DTU Health Tech after agreeing to the academic
-    license terms, so the toolkit as a whole is gated on that request.'
+  text: 'The networks and threshold tables are bundled in the software archive, so they are
+    covered by the same gated academic license as the software and are obtained by the same
+    request to DTU Health Tech after agreeing to its terms.'
 notes: 'netMHCpan is proprietary precompiled software from DTU Health Tech, free only for
   publicly funded academic, education or research institutions and gated behind per-user
   registration; a commercial license must be obtained from health-software@dtu.dk. DTU''s
@@ -54,7 +53,7 @@ notes: 'netMHCpan is proprietary precompiled software from DTU Health Tech, free
   registered local_only and can never run on a remote or hosted worker. Modification of the
   source code is prohibited without DTU''s written consent, which is why the wrapper invokes
   the platform binary directly rather than editing the shipped tcsh launcher. Publishing
-  benchmark results to a third party requires prior written consent, so the tests assert
-  structural and relational properties rather than committing score tables. Cite Reynisson
-  et al. (2020).'
-last_updated: '2026-10-18'
+  results of benchmark tests run on the software to a third party requires prior written
+  consent, so the tests assert structural and relational properties rather than committing
+  score tables. Cite Nilsson et al. (2025).'
+last_updated: '2026-10-21'

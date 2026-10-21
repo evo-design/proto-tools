@@ -67,6 +67,10 @@ class NetMHCpanPeptidesConfig(NetMHCpanConfig):
             the netMHCpan default allele.
         include_binding_affinity (bool): Also predict binding affinity (``-BA``), adding
             BA score, BA %rank and nM affinity alongside the eluted-ligand columns.
+        include_pathogen (bool): Also report the pathogen-epitope head (``-pathogen``),
+            fine-tuned on IEDB epitopes.
+        include_neoepitope (bool): Also report the neoepitope head (``-neo``), fine-tuned
+            on CEDAR neoepitopes.
         strong_rank (float): %rank at or below which a peptide is a strong binder.
         weak_rank (float): %rank at or below which a peptide is a weak binder.
         netmhcpan_dir (str | None): Path to a local netMHCpan install root.
@@ -146,6 +150,10 @@ class NetMHCpanPeptidesOutput(BaseToolOutput):
             "score_ba",
             "rank_ba",
             "affinity_nm",
+            "score_pathogen",
+            "rank_pathogen",
+            "score_neo",
+            "rank_neo",
         ]
         with path.open("w", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=columns)
@@ -218,6 +226,8 @@ def run_netmhcpan_peptides(
         "peptides": inputs.peptides,
         "alleles": config.alleles,
         "include_binding_affinity": config.include_binding_affinity,
+        "include_pathogen": config.include_pathogen,
+        "include_neoepitope": config.include_neoepitope,
         "strong_rank": config.strong_rank,
         "weak_rank": config.weak_rank,
         "netmhcpan_dir": config.netmhcpan_dir,
@@ -258,6 +268,8 @@ def run_netmhcpan_peptides(
             "num_peptides": len(inputs.peptides),
             "alleles": config.alleles,
             "include_binding_affinity": config.include_binding_affinity,
+            "include_pathogen": config.include_pathogen,
+            "include_neoepitope": config.include_neoepitope,
             "netmhcpan_version": output_data["version"],
         },
     )
