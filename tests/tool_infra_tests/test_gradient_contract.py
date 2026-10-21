@@ -6,8 +6,7 @@ These run against each registered ``*-gradient`` tool that inherits the shared
 ``GradientInput``, so a new gradient backend is covered the moment it is registered.
 Coverage:
 
-- Every gradient tool inherits the shared input (with a shrinking allowlist of
-  tools still on their pre-standardization classes).
+- Every gradient tool inherits the shared input.
 - ``temperature`` defaults to ``1.0`` and rejects non-positive / non-finite values.
 - The relaxed state is discoverable, round-trips through nested lists, and keeps
   its vocabulary aligned with the output.
@@ -37,12 +36,6 @@ from proto_tools.utils.sequence_logits import (
     ProteinSequenceLogits,
     SequenceLogits,
 )
-
-# Gradient tools still carrying their own pre-standardization input classes.
-# This set must be empty before the gradient-standardization work merges; each
-# migration removes one entry, and the completeness test below fails loudly if a
-# tool is migrated (or added) without updating it.
-_UNMIGRATED_GRADIENT_TOOLS: frozenset[str] = frozenset()
 
 
 def _gradient_specs() -> list[Any]:
@@ -121,16 +114,17 @@ def _example(spec: Any) -> GradientInput:
 
 
 def test_every_gradient_tool_uses_the_shared_input() -> None:
-    """Every registered ``*-gradient`` tool inherits ``GradientInput``, bar the known holdouts."""
-    gradient_keys = {spec.key for spec in ToolRegistry.list_all() if spec.key.endswith("-gradient")}
-    migrated = {spec.key for spec in _GRADIENT_SPECS}
-    unmigrated = gradient_keys - migrated
+    """Every registered ``*-gradient`` tool must inherit ``GradientInput``.
 
-    assert unmigrated == set(_UNMIGRATED_GRADIENT_TOOLS), (
-        "Gradient tools not inheriting the shared GradientInput changed.\n"
-        f"  expected holdouts: {sorted(_UNMIGRATED_GRADIENT_TOOLS)}\n"
-        f"  actual holdouts:   {sorted(unmigrated)}\n"
-        "Update _UNMIGRATED_GRADIENT_TOOLS when migrating a tool, and empty it before merge."
+    A tool that declares its own input class keeps the field names while opting out of the
+    shared temperature and probability-mode validation, so the contract tests below silently
+    skip it.
+    """
+    gradient_keys = {spec.key for spec in ToolRegistry.list_all() if spec.key.endswith("-gradient")}
+    sharing_the_input = {spec.key for spec in _GRADIENT_SPECS}
+
+    assert gradient_keys == sharing_the_input, (
+        f"these gradient tools do not inherit the shared GradientInput: {sorted(gradient_keys - sharing_the_input)}"
     )
 
 

@@ -66,7 +66,7 @@ def check_soft_zero_passes_the_raw_matrix_through() -> None:
 
     assert torch.allclose(actual, state, atol=1e-12), f"{actual} != {state}"
     one_hot = F.one_hot(F.softmax(state / TEMPERATURE, dim=-1).argmax(dim=-1), num_classes=4).double()
-    assert not torch.allclose(actual, one_hot, atol=1e-6), "soft=0 returned a one-hot, the old convention"
+    assert not torch.allclose(actual, one_hot, atol=1e-6), "soft=0 returned a one-hot, which has no gradient"
 
 
 def check_hard_one_forwards_a_one_hot() -> None:
