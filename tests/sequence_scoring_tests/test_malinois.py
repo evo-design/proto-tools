@@ -349,7 +349,7 @@ def test_malinois_real_gpu_batched_gradient_matches_batch_size_one_calls() -> No
     assert batched.results[0].gradient is not None
     assert len(batched.results) == 2
     for idx, single in enumerate(singles):
-        assert single.gradient is not None
+        assert single.results[0].gradient is not None
         assert batched.results[idx].loss == pytest.approx(single.results[0].loss, abs=1e-6)
         assert batched.results[idx].metrics["K562"] == pytest.approx(single.results[0].metrics["K562"], abs=1e-6)
         np.testing.assert_allclose(
@@ -429,10 +429,10 @@ def test_malinois_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     assert_metrics_in_spec(result)
 
     assert result.tool_id == "malinois-gradient"
-    assert result.gradient is not None
-    assert len(result.gradient) == 256
-    assert all(len(matrix) == 200 for matrix in result.gradient)
-    assert all(len(row) == 4 for matrix in result.gradient for row in matrix)
+    assert all(item.gradient is not None for item in result.results)
+    assert len(result.results) == 256
+    assert all(len(item.gradient) == 200 for item in result.results)
+    assert all(len(row) == 4 for item in result.results for row in item.gradient)
     assert len(result.results) == 256
     assert all({"K562", "HepG2", "SKNSH"} <= set(item.metrics) for item in result.results)
     assert result.vocab == ["A", "C", "G", "T"]
