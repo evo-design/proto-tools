@@ -502,7 +502,11 @@ def example_gradient_input() -> ESMFoldGradientInput:
     from proto_tools.utils import one_hot_protein_logits
 
     return ESMFoldGradientInput(
-        inputs=ESMFoldGradientItem(logits=one_hot_protein_logits("MKTL", sharpness=2.0), chains=["MKTL"])
+        inputs=[
+            ESMFoldGradientItem(
+                logits=ProteinSequenceLogits(one_hot_protein_logits("MKTL", sharpness=2.0)), chains=["MKTL"]
+            )
+        ]
     )
 
 
