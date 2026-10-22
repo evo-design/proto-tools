@@ -46,8 +46,7 @@ class MixedModelConfig(BaseConfig):
 
     def preprocess(self, inputs: Any) -> Any:
         """Check context limits before loading weights and warn on a missing leading strand marker."""
-        # Scoring, embedding and sampling take a list of templates; the gradient takes one
-        # per item, each alongside its own relaxed state.
+        # Scoring, embedding and sampling take a list of templates; the gradient takes one per item.
         sequences = (
             list(inputs.sequences) if hasattr(inputs, "sequences") else [item.sequence for item in inputs.inputs]
         )

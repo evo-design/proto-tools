@@ -886,8 +886,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             include_pae_matrix=input_dict["include_pae_matrix"],
         )
     if operation == "compute_gradient":
-        # One chunk of independent candidates, each with its own target template. prep_inputs
-        # re-runs per item and af_model state is rebuilt with it, so nothing carries over.
+        # One chunk of independent candidates: prep_inputs re-runs per item, so no state carries over.
         results = [
             _model.compute_binder_gradient(
                 logits=item["logits"],

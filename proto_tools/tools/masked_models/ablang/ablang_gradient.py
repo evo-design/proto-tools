@@ -183,10 +183,7 @@ def run_ablang_gradient(
     """Compute AbLang masked PLL gradient with respect to relaxed antibody logits."""
     items: list[dict[str, Any]] = []
     for antibody in inputs.inputs:
-        # AbLang's checkpoint follows the chains an antibody carries, so each candidate names its
-        # own and the worker groups a mixed chunk by checkpoint. AbLang also scores one matrix per
-        # antibody, so a paired one is concatenated heavy-first and the break position tells the
-        # worker where to split it again.
+        # Each antibody names its checkpoint; a paired one concatenates heavy-first at chain_break_position.
         if antibody.heavy_chain is not None and antibody.light_chain is not None:
             logits = antibody.heavy_chain.root + antibody.light_chain.root
             chain_break_position: int | None = len(antibody.heavy_chain)

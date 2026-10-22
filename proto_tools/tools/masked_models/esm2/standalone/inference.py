@@ -826,8 +826,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             seed=input_dict["seed"],
         )
     if operation == "compute_gradient":
-        # One chunk of independent candidates: the model loads once and each item is evaluated
-        # in turn, so the reply holds exactly one result per item, in the order received.
+        # One chunk of independent candidates: the model loads once and items are evaluated in turn.
         results = [
             _model.compute_gradient(
                 logits_list=item,

@@ -699,8 +699,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             )
         }
     if operation == "gradient":
-        # One chunk of independent candidates: the checkpoint loads once and each item is
-        # evaluated in turn, so the reply holds one result per item, in the order received.
+        # One chunk of independent candidates: the checkpoint loads once and items are evaluated in turn.
         results = [
             _MODEL.compute_gradient(
                 item,

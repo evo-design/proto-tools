@@ -442,8 +442,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
         )
     if operation == "compute_gradient":
-        # One chunk of independent candidates, each with its own backbone: the weights load once
-        # and prep_inputs re-runs per item, so the reply holds one result per item, in order.
+        # One chunk of independent candidates: the weights load once and prep_inputs re-runs per item.
         results = [
             _model.compute_gradient(
                 pdb_path=item["pdb_path"],

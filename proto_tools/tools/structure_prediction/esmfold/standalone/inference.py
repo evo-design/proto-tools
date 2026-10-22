@@ -670,8 +670,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
         return {"results": results}
     if operation == "compute_gradient":
-        # One chunk of independent complexes: the weights load once and each item is folded in
-        # turn, so the reply holds one result per item — its own structure included — in order.
+        # One chunk of independent complexes: the weights load once and each item is folded in turn.
         results = [
             _model.compute_gradient(
                 complex_data=item["complex_data"],

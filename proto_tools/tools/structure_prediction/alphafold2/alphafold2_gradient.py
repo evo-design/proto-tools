@@ -494,8 +494,7 @@ def run_alphafold2_gradient(
         config.model_num,
         config.compute_gradient,
     )
-    # Each candidate's target Structure is materialized to its own tempfile so the standalone
-    # (ColabDesign) can read it as a path; ExitStack keeps them all alive for the dispatch.
+    # ExitStack keeps every candidate's target tempfile alive for the dispatch; ColabDesign reads paths.
     with ExitStack() as stack:
         items = [
             {

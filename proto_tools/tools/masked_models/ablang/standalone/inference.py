@@ -867,8 +867,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     operation = input_dict["operation"]
     if operation != "compute_gradient":
-        # Every operation but the gradient takes one checkpoint for the whole call; the gradient
-        # carries one per item and resolves them below, grouped.
+        # Only the gradient carries a checkpoint per item; it resolves them below, grouped.
         model = _ensure_model(input_dict["model_choice"])
 
     if operation == "embeddings":
@@ -901,10 +900,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             excluded_amino_acids=input_dict["excluded_amino_acids"],
         )
     if operation == "compute_gradient":
-        # Each antibody names the checkpoint its chains require, so a mixed chunk is grouped by
-        # checkpoint and evaluated one group at a time: a variant is loaded once however the
-        # items are interleaved, and only one stays resident. Results are written back by
-        # original position, so the reply is in input order whatever order the groups ran in.
+        # Grouped by checkpoint so each variant loads once; results are written back by original position.
         items = input_dict["items"]
         groups: dict[str, list[int]] = {}
         for index, item in enumerate(items):

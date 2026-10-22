@@ -310,8 +310,7 @@ def _build_from_probabilities(spec: Any, temperature: float) -> tuple[Any, dict[
         fields.pop(field)
         # One example item, whether the field holds a matrix or a one-item list of them.
         target = next(iter(targets.values()))
-        # A bundled item carries its own context — a template, a backbone — which the factory
-        # still takes by keyword, so pass everything on the item that is not a relaxed matrix.
+        # A bundled item's context is passed by keyword, so send every non-matrix field on the item.
         items = getattr(example, "inputs", None)
         context: dict[str, Any] = {}
         if items and callable(getattr(items[0], "iter_sequence_logits", None)):
@@ -415,8 +414,7 @@ def test_gradient_batch_fans_out_across_pool_slots(monkeypatch: pytest.MonkeyPat
     from proto_tools.utils.tool_instance import ToolInstance
     from proto_tools.utils.tool_pool import ToolPool
 
-    # esm2-gradient is a GPU tool, so the pool needs GPU slots to have anything to fan out over.
-    # The worker call is faked, so the slots only have to exist on paper and this runs anywhere.
+    # esm2-gradient is a GPU tool, so the pool needs slots; the faked worker lets them be fictional.
     monkeypatch.setattr("proto_tools.utils.tool_pool.number_of_visible_gpus", lambda: 2)
     DeviceManager.reset_instance()
     ToolInstance.clear_all()

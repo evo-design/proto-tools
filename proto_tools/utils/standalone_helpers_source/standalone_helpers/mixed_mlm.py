@@ -164,8 +164,7 @@ class MixedMLMRuntime:
         if operation == "sample":
             return self.sample(tokens, mappings, payload)
         if operation == "gradient":
-            # One chunk of independent candidates: the checkpoint is already loaded, so each item
-            # is evaluated in turn and the reply holds one result per item, in order.
+            # One chunk of independent candidates, evaluated in turn against the loaded checkpoint.
             results = [
                 self.gradient({**payload, "sequence": item["sequence"], "logits": item["logits"]})
                 for item in payload["inputs"]

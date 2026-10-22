@@ -237,8 +237,7 @@ def run_proteinmpnn_gradient(
     logger.debug(
         "Using local worker for ProteinMPNN gradient: %s (%d item(s))", config.model_choice, len(inputs.inputs)
     )
-    # Each candidate carries its own backbone, so every item needs its own temporary PDB for the
-    # duration of the dispatch; ExitStack keeps them all alive until the worker has replied.
+    # ExitStack keeps every candidate's temporary backbone PDB alive until the worker replies.
     with ExitStack() as stack:
         items = [
             {

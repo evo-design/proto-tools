@@ -406,8 +406,7 @@ def test_mixed_batch_gives_the_same_results_on_one_worker_and_two(monkeypatch: p
     from proto_tools.utils.tool_instance import ToolInstance as _ToolInstance
     from proto_tools.utils.tool_pool import ToolPool
 
-    # The worker call is faked, so the GPU slots only have to exist on paper: this test is
-    # about partitioning, not device management, and so must run on CPU-only CI too.
+    # The worker call is faked, so the GPU slots only have to exist on paper.
     monkeypatch.setattr("proto_tools.utils.tool_pool.number_of_visible_gpus", lambda: 2)
 
     partition_sizes: list[int] = []
