@@ -8,7 +8,8 @@ from typing import Any
 
 import numpy as np
 import torch
-from standalone_helpers import get_logger, move_model_to_device, serialize_output
+from standalone_helpers import get_logger, move_model_to_device, serialize_output, set_torch_seed
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 
 logger = get_logger(__name__)
 
@@ -226,6 +227,107 @@ class SpliceTransformerModel:
 _model: SpliceTransformerModel | None = None
 
 
+def _compute_gradient(model: "SpliceTransformerModel", input_dict: dict[str, Any]) -> dict[str, Any]:
+    """Weighted channel-and-position objective gradients for a relaxed target region.
+
+    The model's own ``_step`` runs under ``torch.no_grad()`` and detaches, so this builds its own
+    forward. ``_post_decorate`` is also replayed out of place here: upstream writes the softmax and
+    sigmoid back into the output tensor, which autograd cannot differentiate through.
+
+    Args:
+        model: The lazy-loaded model wrapper.
+        input_dict: Dispatch payload with items, loss terms, and relaxation settings.
+
+    Returns:
+        dict[str, Any]: One result per item plus the shared vocabulary.
+
+    Raises:
+        ValueError: If a matrix is malformed or a term's span leaves the target window.
+        RuntimeError: If an expected gradient is missing after the backward pass.
+    """
+    device = input_dict["device"]
+    backprop = bool(input_dict.get("compute_gradient", True))
+    temperature = resolve_temperature(input_dict["temperature"])
+    soft = float(input_dict.get("soft", 1.0))
+    hard = float(input_dict.get("hard", 0.0))
+    loss_terms = input_dict["loss_terms"]
+
+    if not model._loaded:
+        model.load(device)
+    elif model.device != device:
+        model.to_device(device)
+
+    results: list[dict[str, Any]] = []
+    for item in input_dict["items"]:
+        logits_list = item["logits"]
+        if not logits_list or any(len(row) != 4 for row in logits_list):
+            raise ValueError("splice-transformer: compute_gradient expects L x 4 logits in A,C,G,T order")
+        target_length = len(logits_list)
+
+        with torch.set_grad_enabled(backprop):
+            seq_dist = torch.tensor(logits_list, device=model.device, dtype=torch.float32, requires_grad=backprop)
+            relaxed = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
+
+            left = torch.tensor(model._one_hot_encode(item["left_context"]), device=model.device, dtype=torch.float32)
+            right = torch.tensor(model._one_hot_encode(item["right_context"]), device=model.device, dtype=torch.float32)
+            # (length, 4) stacked, then channels-first (batch, 4, length) as the model expects.
+            encoded = torch.cat((left, relaxed, right), dim=0).t().unsqueeze(0)
+
+            raw = model.model(encoded)
+            # Out-of-place equivalent of _post_decorate: softmax the splice classes, sigmoid the tissues.
+            classes = torch.nn.functional.softmax(raw[:, :3, :], dim=1)
+            tissues = torch.sigmoid(raw[:, 3:, :])
+            prediction = torch.cat((classes, tissues), dim=1)
+
+            total = torch.zeros((), device=model.device, dtype=torch.float32)
+            term_metrics: list[dict[str, Any]] = []
+            for term in loss_terms:
+                channel = int(term["channel_index"])
+                start = 1 if term["position_start"] is None else int(term["position_start"])
+                end = target_length if term["position_end"] is None else int(term["position_end"])
+                if start > target_length or end > target_length:
+                    raise ValueError(
+                        f"splice-transformer: term span {start}..{end} leaves the "
+                        f"{target_length}-position target window"
+                    )
+                probability = prediction[0, channel, start - 1 : end].float().mean()
+                signed = -probability if term["direction"] == "max" else probability
+                weighted = float(term["weight"]) * signed
+                total = total + weighted
+                term_metrics.append(
+                    {
+                        "channel": term["channel"],
+                        "position_start": start,
+                        "position_end": end,
+                        "direction": term["direction"],
+                        "weight": float(term["weight"]),
+                        "mean_probability": float(probability.item()),
+                        "weighted_score": float(weighted.item()),
+                    }
+                )
+
+            gradient_value: list[list[float]] | None = None
+            if backprop:
+                total.backward()
+                if seq_dist.grad is None:
+                    raise RuntimeError("splice-transformer: missing relaxed-state gradient after backward")
+                gradient_value = seq_dist.grad.detach().cpu().tolist()
+
+        results.append(
+            {
+                "gradient": gradient_value,
+                "loss": float(total.item()),
+                "metrics": {
+                    "loss": float(total.item()),
+                    "target_length": target_length,
+                    "loss_terms": term_metrics,
+                },
+            }
+        )
+
+    return {"results": results, "vocab": ["A", "C", "G", "T"]}
+
+
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
@@ -243,7 +345,10 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
         )
         return {"prediction": prediction}
-    raise ValueError(f"splice-transformer: unknown operation {operation!r}; valid: ['predict']")
+    if operation == "compute_gradient":
+        set_torch_seed(input_dict.get("seed"))
+        return _compute_gradient(_model, input_dict)
+    raise ValueError(f"splice-transformer: unknown operation {operation!r}; valid: ['predict', 'compute_gradient']")
 
 
 def to_device(device: str) -> dict[str, Any]:
