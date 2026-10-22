@@ -37,6 +37,21 @@ The averaged embedding is a learned numerical representation of a protein, suita
 - **`repr_layer` selects which internal model layer the embedding is taken from.** The default `-1` uses the final layer; other values select earlier layers.
 - **Per-position scores are large.** Enabling `return_logits` adds an array of size (sequence length by 20) per sequence, which dominates runtime and memory for long inputs. Leave it set to `False` unless you need the per-position scores.
 
+### ESM C Gradient (`esmc-gradient`)
+
+Scores a relaxed amino-acid distribution under ESM C's masked pseudo-log-likelihood and returns the derivative of that score with respect to the distribution. Each position is masked in turn and predicted from its bidirectional context, so the objective is the mean negative log-likelihood over all residues; the backward pass reaches the input distribution through the embedding table.
+
+#### Applications
+
+This is the differentiable form of ESM C naturalness, intended as an objective inside a sequence-design loop: an optimizer holds a relaxed distribution over amino acids, asks for the gradient, and steps the distribution toward sequences ESM C considers more plausible. Setting `compute_gradient=False` turns it into a forward-only naturalness score, which is the cheaper call when ranking candidates rather than optimizing them (for example, scoring MCMC proposals).
+
+#### Usage Tips
+
+- **`temperature` chooses the gradient space.** The default `1.0` reads the input as unnormalized logits and applies `softmax(logits / T)`, returning logit-space gradients. `None` reads the input as a probability distribution and returns probability-space gradients — use it only with a method that keeps rows on the simplex.
+- **`soft` and `hard` control the relaxation.** `soft=1.0, hard=0.0` (the default) feeds pure softmax probabilities. Raising `hard` toward 1 forwards a one-hot while keeping a differentiable backward path (a straight-through estimator), which matters when the model should see discrete residues.
+- **`batch_size` trades memory for speed.** It sets how many masked positions share a forward pass; lower it if a long sequence runs out of GPU memory, raise it for throughput.
+- **One call can score many candidates.** Pass a list to `inputs` and the batch is distributed across available devices, returning one result per candidate in input order.
+
 ### ESM C SAE Features (`esmc-sae-features`)
 
 Runs each sequence through the ESM C backbone once with SAEs attached to the requested layers, and returns the active codebook features at each residue, ordered by descending magnitude. Start and end tokens are stripped so positions align with the input sequence: `feature_indices[0]` holds the features for residue 1, and the `position` column of an exported CSV is 1-indexed, matching the rest of proto-tools.

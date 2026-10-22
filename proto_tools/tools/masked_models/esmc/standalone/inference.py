@@ -15,7 +15,14 @@ import sys
 from typing import Any, Literal
 
 import torch
-from standalone_helpers import AMINO_ACIDS_LIST, get_logger, serialize_output
+from standalone_helpers import (
+    AMINO_ACIDS_LIST,
+    get_logger,
+    log_likelihood_metrics,
+    serialize_output,
+    set_torch_seed,
+)
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 from tqdm import tqdm
 
 logger = get_logger(__name__)
@@ -141,6 +148,157 @@ class ESMCModel:
     # ============================================================================
     # Helper Functions
     # ============================================================================
+    def compute_gradient(
+        self,
+        logits_list: list[list[float]],
+        *,
+        temperature: float | None = None,
+        soft: float = 1.0,
+        hard: float = 0.0,
+        seed: int | None = None,
+        backprop: bool = True,
+        batch_size: int | None = None,
+        device: str = "cuda",
+        verbose: bool = False,
+    ) -> dict[str, Any]:
+        """Chunked masked PLL gradient for relaxed ESM C protein sequences.
+
+        Args:
+            logits_list: Input logits, shape ``(L, 20)`` in canonical amino-acid order.
+            temperature: Optional softmax temperature; ``None`` uses logits as-is.
+            soft: Blend from the raw input matrix (0) to softmax probabilities (1).
+            hard: Straight-through coefficient; 1 forwards a hard one-hot.
+            seed: Random seed for deterministic worker behavior.
+            backprop: If False, skip backward and return ``gradient=None``.
+            batch_size: AA positions per forward pass. Defaults to 32.
+            device: Device to run on.
+            verbose: Emit a progress bar over position chunks.
+
+        Returns:
+            dict[str, Any]: Gradient (or ``None``), mean NLL, metrics, and the vocabulary.
+
+        Raises:
+            ValueError: If the matrix is empty or not ``(L, 20)``.
+            RuntimeError: If an expected input-embedding gradient is missing.
+        """
+        if not logits_list:
+            raise ValueError("esmc: compute_gradient requires at least one residue")
+        if any(len(row) != len(AMINO_ACIDS_LIST) for row in logits_list):
+            raise ValueError(f"esmc: compute_gradient expects L x {len(AMINO_ACIDS_LIST)} logits")
+
+        if not self._loaded:
+            self.load(device, verbose)
+        elif self.device != device:
+            self.to_device(device)
+
+        set_torch_seed(seed)
+
+        if batch_size is None:
+            batch_size = 32
+
+        # ESMC wraps EsmcForMaskedLM, whose .esmc backbone owns the embedding the hook substitutes.
+        native = self.model.model
+        embed_layer = native.esmc.get_input_embeddings()
+        cls_token_id = int(self.tokenizer.cls_token_id)
+        eos_token_id = int(self.tokenizer.eos_token_id)
+        mask_token_id = int(self.tokenizer.mask_token_id)
+
+        with torch.set_grad_enabled(backprop):
+            seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
+            sequence_length = int(seq_dist.shape[0])
+
+            # Targets come from P, not the blend, so they do not move with soft/hard.
+            probs = relaxed_sequence(seq_dist, temperature=temperature)
+            residue_aa_idx = probs.argmax(dim=-1).detach()
+            residue_token_ids = self.amino_acid_token_ids[residue_aa_idx].detach()
+
+            x = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
+
+            # ESM C checkpoints load in bfloat16, so the relaxed matrix meets the table in its dtype.
+            weight = embed_layer.weight
+            residue_embeddings = x.to(weight.dtype) @ weight[self.amino_acid_token_ids]
+            special_ids = torch.tensor([cls_token_id, eos_token_id], device=self.device)
+            special_embeddings = weight[special_ids]
+
+            input_embeddings = torch.cat(
+                (special_embeddings[0:1], residue_embeddings, special_embeddings[1:2]),
+                dim=0,
+            ).unsqueeze(0)
+            token_ids = torch.cat((special_ids[0:1], residue_token_ids, special_ids[1:2]), dim=0).unsqueeze(0)
+            attention_mask = torch.ones_like(token_ids)
+
+            aa_positions = torch.arange(1, sequence_length + 1, device=self.device)
+            seq_len = input_embeddings.shape[1]
+            pos_idx = torch.arange(seq_len, device=self.device)
+            mask_emb = weight[mask_token_id].detach()
+
+            # Accumulated in fp32: summing per-chunk bf16 gradients would shed precision.
+            ie_grad = torch.zeros_like(input_embeddings, dtype=torch.float32) if backprop else None
+            total_loss_val = 0.0
+            for start in tqdm(
+                range(0, sequence_length, batch_size),
+                desc="ESM C gradient",
+                unit="batch",
+                disable=not verbose,
+            ):
+                end = min(start + batch_size, sequence_length)
+                chunk_aa_pos = aa_positions[start:end]
+                chunk_len = end - start
+
+                chunk_masked = pos_idx.unsqueeze(0) == chunk_aa_pos.unsqueeze(1)
+                ie_chunk = input_embeddings.detach().requires_grad_(True) if backprop else input_embeddings
+                chunk_input = torch.where(
+                    chunk_masked.unsqueeze(-1),
+                    mask_emb.view(1, 1, -1).expand(chunk_len, seq_len, -1),
+                    ie_chunk.expand(chunk_len, -1, -1),
+                )
+                chunk_idx = torch.arange(chunk_len, device=self.device)
+                chunk_token_ids = token_ids.expand(chunk_len, -1).clone()
+                chunk_token_ids[chunk_idx, chunk_aa_pos] = mask_token_id
+
+                handle = embed_layer.register_forward_hook(lambda _m, _i, _o, ci=chunk_input: ci)
+                try:
+                    outputs = native(
+                        input_ids=chunk_token_ids,
+                        attention_mask=attention_mask.expand(chunk_len, -1),
+                        return_dict=True,
+                    )
+                finally:
+                    handle.remove()
+                pred = outputs.logits[chunk_idx, chunk_aa_pos, :]
+                labels = token_ids[0, chunk_aa_pos]
+                loss_sum = torch.nn.functional.cross_entropy(pred, labels, reduction="sum")
+                total_loss_val += loss_sum.item()
+
+                if backprop:
+                    (loss_sum / sequence_length).backward()
+                    ie_chunk_grad = ie_chunk.grad
+                    if ie_chunk_grad is None:
+                        raise RuntimeError("esmc: missing input-embedding gradient")
+                    if ie_grad is None:
+                        raise RuntimeError("esmc: missing accumulated input-embedding gradient")
+                    ie_grad = ie_grad + ie_chunk_grad.float()
+
+        mean_nll = total_loss_val / sequence_length
+        gradient_value: list[list[float]] | None = None
+        if backprop:
+            if ie_grad is None:
+                raise RuntimeError("esmc: missing accumulated input-embedding gradient")
+            (x_grad,) = torch.autograd.grad(input_embeddings, seq_dist, grad_outputs=ie_grad.to(input_embeddings.dtype))
+            gradient_value = x_grad.detach().cpu().tolist()
+
+        return {
+            "gradient": gradient_value,
+            "loss": mean_nll,
+            "metrics": {
+                **log_likelihood_metrics(-mean_nll, sequence_length),
+                "sequence_length": sequence_length,
+                "model_checkpoint": self.model_checkpoint,
+                "objective": "masked_pll",
+            },
+            "vocab": AMINO_ACIDS_LIST,
+        }
+
     def load(self, device: str, verbose: bool = False) -> None:
         """Load ESM C model and tokenizer to device."""
         from esm.models.esmc import ESMC
@@ -446,6 +604,29 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
             repr_layer=input_dict["repr_layer"],
         )
+
+    if operation == "compute_gradient":
+        if _model is None or _model.model_checkpoint != input_dict["model_checkpoint"]:
+            _model = ESMCModel(model_checkpoint=input_dict["model_checkpoint"])
+        # One chunk of independent candidates: the model loads once and items are evaluated in turn.
+        results = [
+            _model.compute_gradient(
+                logits_list=item,
+                temperature=resolve_temperature(input_dict["temperature"]),
+                soft=float(input_dict.get("soft", 1.0)),
+                hard=float(input_dict.get("hard", 0.0)),
+                seed=input_dict["seed"],
+                backprop=input_dict.get("compute_gradient", True),
+                batch_size=input_dict.get("batch_size"),
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
+            )
+            for item in input_dict["items"]
+        ]
+        return {
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
 
     if operation == "sae_features":
         layers = tuple(input_dict["layers"])
