@@ -182,6 +182,72 @@ def _featurize_logits(relaxed: Any, construct_type: str, cell: str) -> Any:
     return torch.cat([seq_ch, positional_ch, condition_ch], dim=1)
 
 
+def compute_stability_gradient(
+    model: Any,
+    *,
+    logits_list: list[list[list[float]]],
+    temperature: float | None,
+    direction: str,
+    soft: float,
+    hard: float,
+    compute_gradient: bool,
+    device: str,
+) -> dict[str, Any]:
+    """Compute a differentiable PARADE stability loss and optional gradient.
+
+    The stability checkpoint predicts one RNA/gDNA log-ratio per sequence (higher is more
+    stable), so the objective is that scalar with its sign fixed by ``direction``. Its
+    featurization is simpler than the activity model's: ``StabilityData`` is built with
+    ``features=("sequence",)``, meaning four sequence channels and no positional or condition
+    channels, so the relaxed matrix only needs transposing to ``(B, 4, L)``.
+
+    Args:
+        model: Loaded stability checkpoint.
+        logits_list: Relaxed states, shape ``(B, L, 4)`` in ``A,C,G,T`` order.
+        temperature: Optional softmax temperature; ``None`` uses the rows as probabilities.
+        direction: ``"max"`` minimizes ``-log_ratio``; ``"min"`` minimizes ``+log_ratio``.
+        soft: Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard: Straight-through coefficient; 1 forwards a hard one-hot.
+        compute_gradient: If False, skip backward and return ``gradient=None``.
+        device: Device to run on.
+
+    Returns:
+        dict[str, Any]: Per-sample losses, gradients, and log-ratio metrics.
+
+    Raises:
+        ValueError: If the logits are not rank 3 or the direction is invalid.
+        RuntimeError: If an expected gradient is missing after the backward pass.
+    """
+    if direction not in ("max", "min"):
+        raise ValueError(f"parade: invalid direction {direction!r}; expected 'max' or 'min'")
+
+    with torch.set_grad_enabled(compute_gradient):
+        logits = torch.tensor(logits_list, device=device, dtype=torch.float32, requires_grad=compute_gradient)
+        if logits.ndim != 3:
+            raise ValueError(f"parade: logits must have rank 3 (B, L, 4), got rank {logits.ndim}")
+
+        relaxed = relaxed_sequence(logits, temperature=temperature, soft=soft, hard=hard)
+        batch_size = int(relaxed.shape[0])
+
+        # Sequence channels only, matching StabilityData(features=("sequence",)).
+        log_ratio = model(relaxed.transpose(1, 2))[:, _STABILITY_LOG_RATIO_INDEX]
+        sample_losses = -log_ratio if direction == "max" else log_ratio
+
+        gradients: list[list[list[float]]] | None = None
+        if compute_gradient:
+            sample_losses.sum().backward()
+            if logits.grad is None:
+                raise RuntimeError("parade: missing relaxed-state gradient after backward")
+            gradients = logits.grad.detach().cpu().tolist()
+
+        return {
+            "losses": [float(value) for value in sample_losses.detach().cpu().tolist()],
+            "log_ratios": [float(value) for value in log_ratio.detach().cpu().tolist()],
+            "gradients": gradients,
+            "lengths": [int(relaxed.shape[1])] * batch_size,
+        }
+
+
 def compute_gradient(
     model: Any,
     *,
