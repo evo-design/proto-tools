@@ -19,8 +19,12 @@ from standalone_helpers import (
     serialize_output,
     set_torch_seed,
 )
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 
 logger = get_logger(__name__)
+
+# Upstream trims this many bases from each end of its per-base output.
+PUFFIN_PADDING = 325
 
 TARGETI_FORWARD = {
     "FANTOM_CAGE": 0,
@@ -201,6 +205,132 @@ def _interpret(state: PuffinModel, input_dict: dict[str, Any]) -> dict[str, Any]
     return {"results": results}
 
 
+def _channel_indices(model: Any, track_names: list[str]) -> list[int]:
+    """Map Puffin's named tracks onto model output channels using upstream's own maps.
+
+    A trailing ``+``/``-`` selects the forward or reverse-strand head, which upstream keeps in
+    separate dictionaries keyed by the bare signal name.
+
+    Args:
+        model: The loaded upstream ``Puffin`` module.
+        track_names: Track names in the order the tool reports channels.
+
+    Returns:
+        list[int]: One output-channel index per name, in the same order.
+
+    Raises:
+        ValueError: If a name has no strand suffix or is absent from upstream's maps.
+    """
+    indices: list[int] = []
+    for name in track_names:
+        if name.endswith("+"):
+            table, key = model.targeti_map, name[:-1]
+        elif name.endswith("-"):
+            table, key = model.targeti_rev_map, name[:-1]
+        else:
+            raise ValueError(f"puffin: track {name!r} must end with '+' or '-' to select a strand")
+        if key not in table:
+            raise ValueError(f"puffin: track {name!r} is not in upstream's map; have {sorted(table)}")
+        indices.append(int(table[key]))
+    return indices
+
+
+def _compute_gradient(state: PuffinModel, input_dict: dict[str, Any]) -> dict[str, Any]:
+    """Weighted track-and-position objective gradients for relaxed Puffin inputs.
+
+    Puffin scores every base of its input, so the whole relaxed matrix is differentiated. The
+    model's own ``predict`` is not reusable here: it takes a string, detaches, and returns a
+    DataFrame, so this runs the module's tensor forward directly and trims the same padding.
+
+    Args:
+        state: The lazy-loaded model holder.
+        input_dict: Dispatch payload with items, loss terms, track names, and relaxation settings.
+
+    Returns:
+        dict[str, Any]: One result per item plus the shared vocabulary.
+
+    Raises:
+        ValueError: If a matrix is malformed or a term's position span leaves the output window.
+        RuntimeError: If an expected gradient is missing after the backward pass.
+    """
+    import torch
+
+    device = input_dict["device"]
+    verbose = bool(input_dict.get("verbose", False))
+    backprop = bool(input_dict.get("compute_gradient", True))
+    temperature = resolve_temperature(input_dict["temperature"])
+    soft = float(input_dict.get("soft", 1.0))
+    hard = float(input_dict.get("hard", 0.0))
+    loss_terms = input_dict["loss_terms"]
+
+    model = state.load(device, verbose=verbose)
+    channels = _channel_indices(model, list(input_dict["track_names"]))
+    track_channel = dict(zip(input_dict["track_names"], channels, strict=True))
+
+    results: list[dict[str, Any]] = []
+    for item in input_dict["items"]:
+        if not item or any(len(row) != 4 for row in item):
+            raise ValueError("puffin: compute_gradient expects L x 4 logits in A,C,G,T order")
+        length = len(item)
+        output_length = length - 2 * PUFFIN_PADDING
+        if output_length < 1:
+            raise ValueError(f"puffin: compute_gradient needs at least {2 * PUFFIN_PADDING + 1} bp, got {length}")
+
+        with torch.set_grad_enabled(backprop):
+            seq_dist = torch.tensor(item, device=state.device, dtype=torch.float32, requires_grad=backprop)
+            relaxed = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
+            # Channels-first (batch, 4, length), the layout upstream's forward expects.
+            prediction = model(relaxed.t().unsqueeze(0))
+            scored = prediction[0, :, PUFFIN_PADDING:-PUFFIN_PADDING]
+
+            total = torch.zeros((), device=state.device, dtype=torch.float32)
+            term_metrics: list[dict[str, Any]] = []
+            for term in loss_terms:
+                name = term["track"]
+                start = 1 if term["position_start"] is None else int(term["position_start"])
+                end = output_length if term["position_end"] is None else int(term["position_end"])
+                if start > output_length or end > output_length:
+                    raise ValueError(
+                        f"puffin: term span {start}..{end} leaves the {output_length}-position output window"
+                    )
+                signal = scored[track_channel[name], start - 1 : end].float().mean()
+                signed = -signal if term["direction"] == "max" else signal
+                weighted = float(term["weight"]) * signed
+                total = total + weighted
+                term_metrics.append(
+                    {
+                        "track": name,
+                        "position_start": start,
+                        "position_end": end,
+                        "direction": term["direction"],
+                        "weight": float(term["weight"]),
+                        "mean_signal": float(signal.item()),
+                        "weighted_score": float(weighted.item()),
+                    }
+                )
+
+            gradient_value: list[list[float]] | None = None
+            if backprop:
+                total.backward()
+                if seq_dist.grad is None:
+                    raise RuntimeError("puffin: missing relaxed-state gradient after backward")
+                gradient_value = seq_dist.grad.detach().cpu().tolist()
+
+        results.append(
+            {
+                "gradient": gradient_value,
+                "loss": float(total.item()),
+                "metrics": {
+                    "loss": float(total.item()),
+                    "output_length": output_length,
+                    "loss_terms": term_metrics,
+                },
+            }
+        )
+
+    return {"results": results, "vocab": ["A", "C", "G", "T"]}
+
+
 # ============================================================================
 # Dispatch
 # ============================================================================
@@ -219,7 +349,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _predict(_state, input_dict)
     if operation == "interpret":
         return _interpret(_state, input_dict)
-    raise ValueError(f"puffin: unknown operation {operation!r}; valid: ['predict', 'interpret']")
+    if operation == "compute_gradient":
+        return _compute_gradient(_state, input_dict)
+    raise ValueError(f"puffin: unknown operation {operation!r}; valid: ['predict', 'interpret', 'compute_gradient']")
 
 
 def to_device(device: str) -> dict[str, Any]:

@@ -49,6 +49,22 @@ Use this tool to ask which motif drives a transcription start site, how a varian
 - **`reverse_strand` selects which strand head to interpret.** Defaults to forward; run it twice on the same input to analyze divergent or antisense promoters.
 - **Motif dicts use strand-suffixed keys.** Access `motif_activations["TATA+"]` and `motif_activations["TATA-"]`, never the bare motif name. `MOTIF_NAMES` lists the 9 motif stems.
 
+### Puffin Gradient (`puffin-gradient`)
+
+Scores a weighted objective over Puffin's predicted transcription-initiation signal and returns its derivative with respect to a relaxed distribution over the input bases. Each objective term names an output track and strand, a span of output positions, a direction, and a weight; the terms are signed so the summed objective is always minimized.
+
+#### Applications
+
+This is the differentiable form of Puffin prediction, intended as an objective inside a promoter-design loop: an optimizer holds a relaxed distribution over the sequence, asks for the gradient, and steps it toward sequences with the initiation profile the terms describe — concentrating initiation at a position, raising one assay's signal, or suppressing the opposite strand. Setting `compute_gradient=False` turns it into a forward-only objective score for ranking candidates.
+
+#### Usage Tips
+
+- **The whole input is relaxed.** Unlike the fixed-context genomic models, Puffin scores every base of a variable-length input, so a candidate is just an `(L, 4)` matrix and the returned gradient covers all `L` positions.
+- **Inputs need at least 651 bp.** Puffin trims 325 bp from each end, so the scored output span is `L - 650` positions and anything shorter scores nothing.
+- **Position spans are 1-indexed, inclusive, and relative to the output span** — not to the input. Leaving `position_start`/`position_end` unset covers the whole output window.
+- **Tracks are named with a strand suffix.** `FANTOM_CAGE+` and `FANTOM_CAGE-` select the forward and reverse heads, which are distinct model channels; the ten names match `TRACK_NAMES`.
+- **`direction` fixes the sign, `weight` the balance.** `"max"` minimizes negative signal, `"min"` minimizes signal. Combine opposing terms to express strand or assay specificity.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>

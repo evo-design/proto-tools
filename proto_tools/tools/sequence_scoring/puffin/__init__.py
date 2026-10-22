@@ -1,5 +1,13 @@
 """Puffin transcription initiation prediction and interpretation."""
 
+from proto_tools.tools.sequence_scoring.puffin.puffin_gradient import (
+    PuffinGradientConfig,
+    PuffinGradientInput,
+    PuffinGradientLossTerm,
+    PuffinGradientOutput,
+    PuffinGradientSampleMetrics,
+    run_puffin_gradient,
+)
 from proto_tools.tools.sequence_scoring.puffin.puffin_interpretation import (
     MOTIF_NAMES,
     TARGET_SIGNALS,
@@ -22,6 +30,12 @@ from proto_tools.tools.sequence_scoring.puffin.puffin_prediction import (
 )
 
 __all__ = [
+    "PuffinGradientConfig",
+    "PuffinGradientInput",
+    "PuffinGradientLossTerm",
+    "PuffinGradientOutput",
+    "PuffinGradientSampleMetrics",
+    "run_puffin_gradient",
     # Puffin Interpretation
     "MOTIF_NAMES",
     "PuffinInterpretationConfig",
