@@ -41,6 +41,22 @@ This tool is appropriate for analyses that relate noncoding DNA sequence to pred
 - **`batch_size` controls how many sequences are processed together on the GPU and defaults to 1.** Larger values increase throughput when many sequences are scored in one call, subject to the available GPU memory.
 - **The output covers a 114,688 base-pair central window, narrower than the input context.** The 896 output bins span the central portion of the input, and the per-result `output_start` and `output_end` coordinates report exactly which part of the source sequence the bins cover. A feature of interest must fall within this central window to receive a prediction.
 
+### Enformer Gradient (`enformer-gradient`)
+
+Scores a weighted objective over Enformer's predicted track activity and returns its derivative with respect to a relaxed distribution over selected positions. Each objective term names an output track and a span of 32 bp output bins, a direction, and a weight; the terms are signed so the summed objective is always minimized.
+
+#### Applications
+
+This is the differentiable form of Enformer prediction, intended as an objective inside a regulatory-sequence design loop: an optimizer holds a relaxed distribution over the bases it is allowed to change, asks for the gradient, and steps those bases toward sequences with the activity profile the terms describe — raising a track over an enhancer window, or raising one cell type while suppressing another. Setting `compute_gradient=False` turns it into a forward-only objective score for ranking candidates.
+
+#### Usage Tips
+
+- **Each candidate carries the whole context and only the designed positions.** Enformer reads a fixed 196,608 bp window, but a design problem usually varies a small part of it. A candidate bundles the full context `sequence`, the 1-indexed `positions` whose bases are relaxed, and a `(len(positions), 4)` `logits` matrix aligned to them, so the returned gradient covers only those positions while the surrounding context still reaches the model.
+- **Bin spans are 1-indexed and inclusive** over the 896 output bins, each covering 128 bp. A term's score is the mean activity across its span, so widening the span smooths the objective.
+- **`direction` fixes the sign, `weight` the balance.** `"max"` minimizes negative activity, `"min"` minimizes activity. Combine opposing terms to express specificity.
+- **`max_chunk_size` is 1.** A forward pass over a 196,608 bp context plus its backward pass is already large, so candidates are dispatched one at a time and fan out across devices rather than batching within a worker.
+- **`species` picks the output head.** Human exposes 5,313 tracks, mouse 1,643; a term's `track` indexes the selected head.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
