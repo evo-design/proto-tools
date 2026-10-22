@@ -28,10 +28,10 @@
     ]
   },
   {
-    "pseudo_log_likelihood": -3.2055675983428955,
-    "log_likelihood": -381.46254420280457,
-    "avg_log_likelihood": -3.2055675983428955,
-    "perplexity": 24.66949840976545,
+    "pseudo_log_likelihood": -3.2055673599243164,
+    "log_likelihood": -381.46251583099365,
+    "avg_log_likelihood": -3.2055673599243164,
+    "perplexity": 24.669492528099394,
     "vocab": [
       "A",
       "C",
