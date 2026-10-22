@@ -215,6 +215,7 @@ class ProteinMPNNModel:
         hard: float = 0.0,
         fixed_positions: dict[str, list[int]] | None = None,
         seed: int | None = None,
+        seed_index: int = 0,
         device: str = "cuda",
         model_choice: str = "proteinmpnn",
         verbose: bool = False,
@@ -226,6 +227,12 @@ class ProteinMPNNModel:
         ``ACDEFGHIKLMNPQRSTVWY``. ColabDesign's ProteinMPNN wrapper scores in
         AlphaFold order internally, so this method maps both the relaxed context
         and returned gradient at the boundary.
+
+        ``_score`` draws its autoregressive decoding order from the key it is given, so every
+        candidate needs its own: sharing one key scores a whole batch in a single order, and
+        identical candidates then come back identical. ``seed_index`` folds the candidate's
+        position into the key, leaving index 0 on the base key so a lone candidate and the first
+        of a batch agree.
         """
         if not logits_list:
             raise ValueError("proteinmpnn: compute_gradient requires at least one residue")
@@ -242,6 +249,8 @@ class ProteinMPNNModel:
             raise ValueError(
                 "proteinmpnn: compute_gradient requires an explicit int seed (jax.random.PRNGKey rejects None)"
             )
+        if seed_index:
+            key = jax.random.fold_in(key, seed_index)
 
         self._ensure_loaded(device, model_choice, verbose, backbone_noise=0.0)
 
@@ -445,12 +454,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 hard=float(input_dict["hard"]),
                 fixed_positions=item.get("fixed_positions"),
                 seed=input_dict["seed"],
+                seed_index=index,
                 device=input_dict["device"],
                 model_choice=model_choice,
                 verbose=input_dict["verbose"],
                 backprop=input_dict.get("compute_gradient", True),
             )
-            for item in input_dict["items"]
+            for index, item in enumerate(input_dict["items"])
         ]
         return {
             "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
