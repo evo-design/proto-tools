@@ -15,6 +15,8 @@ from typing import Any
 
 import torch
 from standalone_helpers import AMINO_ACIDS_LIST, get_logger, move_model_to_device, release_cuda_memory, serialize_output
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
+from standalone_helpers.vocabulary import gather_indices
 
 logger = get_logger(__name__)
 # Suppress transformers logging
@@ -22,7 +24,9 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 
 # ESMFold PAE head maximum: 31 bins at 1.025 A spacing, used to normalize PAE loss to [0, 1].
 PAE_MAXIMUM = 31.75
-OPENFOLD_AMINO_ACIDS = list("ARNDCQEGHILKMFPSTWYV")
+# ESMFold's own residue order, matching transformers' openfold_utils.residue_constants.restypes.
+# Its embedding is 0-based, the same basis as _sequence_to_aatype; padding_idx=0 shifts nothing.
+ESMFOLD_AMINO_ACIDS: list[str] = list("ARNDCQEGHILKMFPSTWYV")
 
 
 class ESMFoldModel:
@@ -112,7 +116,7 @@ class ESMFoldModel:
         target_chain_indices: list[int],
         residue_idx_offset: int,
         chain_linker: str,
-        temperature: float = 1.0,
+        temperature: float | None = 1.0,
         soft: float = 1.0,
         hard: float = 0.0,
         loss_weights: dict[str, float] | None = None,
@@ -184,10 +188,10 @@ class ESMFoldModel:
 
             # Differentiable path; tensors must be saved for backward.
             with torch.inference_mode(False), torch.set_grad_enabled(compute_gradient), _allow_tf32():
-                relaxed_probs = _relaxed_amino_acid_probs(logits, temperature=temperature, soft=soft, hard=hard)
+                relaxed = relaxed_sequence(logits, temperature=temperature, soft=soft, hard=hard)
                 outputs = self._run_relaxed_forward(
                     complex_data,
-                    relaxed_probs=relaxed_probs,
+                    relaxed=relaxed,
                     target_chain_indices=target_chain_indices,
                     residue_idx_offset=residue_idx_offset,
                     chain_linker=chain_linker,
@@ -245,7 +249,7 @@ class ESMFoldModel:
         self,
         complex_data: dict[str, Any],
         *,
-        relaxed_probs: torch.Tensor,
+        relaxed: torch.Tensor,
         target_chain_indices: list[int],
         residue_idx_offset: int,
         chain_linker: str,
@@ -266,7 +270,7 @@ class ESMFoldModel:
             aa=aa,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            relaxed_probs=relaxed_probs,
+            relaxed=relaxed,
             target_spans=target_spans,
             num_recycles=num_recycles,
         )
@@ -281,7 +285,7 @@ class ESMFoldModel:
         aa: torch.Tensor,
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
-        relaxed_probs: torch.Tensor,
+        relaxed: torch.Tensor,
         target_spans: list[tuple[int, int]],
         num_recycles: int,
     ) -> dict[str, torch.Tensor | None]:
@@ -305,12 +309,10 @@ class ESMFoldModel:
         esm_attention_mask = esmaa != self.model.esm_dict_padding_idx
         token_embeddings = self.model.esm.embeddings.word_embeddings(esmaa)
         esm_ids = torch.tensor(
-            [self.model.config.vocab_list.index(aa_symbol) for aa_symbol in AMINO_ACIDS_LIST],
+            gather_indices(AMINO_ACIDS_LIST, self.model.config.vocab_list, label="esmfold/esm"),
             device=self.device,
         )
-        relaxed_esm_embeddings = relaxed_probs.to(token_embeddings.dtype) @ self.model.esm.embeddings.word_embeddings(
-            esm_ids
-        )
+        relaxed_esm_embeddings = relaxed.to(token_embeddings.dtype) @ self.model.esm.embeddings.word_embeddings(esm_ids)
         for start, end in target_spans:
             token_embeddings[0, start + 1 : end + 1] = relaxed_esm_embeddings
 
@@ -335,11 +337,12 @@ class ESMFoldModel:
         s_z_0 = s_s_0.new_zeros(batch_size, seq_len, seq_len, cfg.trunk.pairwise_state_dim)
         if self.model.config.esmfold_config.embed_aa:
             aa_embeddings = self.model.embedding(aa)
+            # embedding takes 0-based restype indices; the +1 shift belongs to af2_to_esm, handled by esm_ids.
             af2_ids = torch.tensor(
-                [OPENFOLD_AMINO_ACIDS.index(aa_symbol) + 1 for aa_symbol in AMINO_ACIDS_LIST],
+                gather_indices(AMINO_ACIDS_LIST, ESMFOLD_AMINO_ACIDS, label="esmfold"),
                 device=self.device,
             )
-            relaxed_aa_embeddings = relaxed_probs.to(aa_embeddings.dtype) @ self.model.embedding(af2_ids)
+            relaxed_aa_embeddings = relaxed.to(aa_embeddings.dtype) @ self.model.embedding(af2_ids)
             for start, end in target_spans:
                 aa_embeddings[0, start:end] = relaxed_aa_embeddings
             s_s_0 = s_s_0 + aa_embeddings
@@ -607,29 +610,10 @@ def _decode_logits(logits: torch.Tensor) -> str:
     return "".join(AMINO_ACIDS_LIST[int(index)] for index in indices)
 
 
-def _relaxed_amino_acid_probs(
-    logits: torch.Tensor,
-    *,
-    temperature: float,
-    soft: float,
-    hard: float,
-) -> torch.Tensor:
-    """Convert logits to relaxed amino-acid probabilities with optional STE."""
-    import torch.nn.functional as F
-
-    probs = F.softmax(logits / temperature, dim=-1)
-    hard_probs = F.one_hot(probs.argmax(dim=-1), num_classes=len(AMINO_ACIDS_LIST)).to(probs.dtype)
-    relaxed = (1.0 - soft) * hard_probs + soft * probs
-    if hard > 0.0:
-        straight_through = hard_probs + probs - probs.detach()
-        relaxed = hard * straight_through + (1.0 - hard) * relaxed
-    return relaxed
-
-
 def _sequence_to_aatype(sequence: str, device: str | torch.device) -> torch.Tensor:
     """Convert a protein sequence to OpenFold/ESMFold residue indices."""
-    mapping = {aa: idx for idx, aa in enumerate(OPENFOLD_AMINO_ACIDS)}
-    x_index = len(OPENFOLD_AMINO_ACIDS)
+    mapping = {aa: idx for idx, aa in enumerate(ESMFOLD_AMINO_ACIDS)}
+    x_index = len(ESMFOLD_AMINO_ACIDS)
     return torch.tensor([mapping.get(aa, x_index) for aa in sequence], device=device, dtype=torch.long)
 
 
@@ -686,22 +670,30 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
         return {"results": results}
     if operation == "compute_gradient":
-        return _model.compute_gradient(
-            complex_data=input_dict["complex_data"],
-            logits_list=input_dict["logits"],
-            target_chain_indices=input_dict["target_chain_indices"],
-            residue_idx_offset=input_dict["residue_idx_offset"],
-            chain_linker=input_dict["chain_linker"],
-            temperature=input_dict["temperature"],
-            soft=input_dict["soft"],
-            hard=input_dict["hard"],
-            loss_weights=input_dict["loss_weights"],
-            compute_gradient=input_dict["compute_gradient"],
-            device=input_dict["device"],
-            verbose=input_dict["verbose"],
-            include_pae_matrix=input_dict["include_pae_matrix"],
-            num_recycles=input_dict["num_recycles"],
-        )
+        # One chunk of independent complexes: the weights load once and each item is folded in turn.
+        results = [
+            _model.compute_gradient(
+                complex_data=item["complex_data"],
+                logits_list=item["logits"],
+                target_chain_indices=item["target_chain_indices"],
+                residue_idx_offset=input_dict["residue_idx_offset"],
+                chain_linker=input_dict["chain_linker"],
+                temperature=resolve_temperature(input_dict["temperature"]),
+                soft=input_dict["soft"],
+                hard=input_dict["hard"],
+                loss_weights=input_dict["loss_weights"],
+                compute_gradient=input_dict["compute_gradient"],
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
+                include_pae_matrix=input_dict["include_pae_matrix"],
+                num_recycles=input_dict["num_recycles"],
+            )
+            for item in input_dict["items"]
+        ]
+        return {
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics", "pdb")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
     raise ValueError(f"esmfold: unknown operation {operation!r}; valid: ['predict', 'compute_gradient']")
 
 

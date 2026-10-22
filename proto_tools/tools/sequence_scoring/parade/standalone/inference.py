@@ -24,6 +24,7 @@ from standalone_helpers import (
     serialize_output,
     set_torch_seed,
 )
+from standalone_helpers.relaxation import resolve_temperature
 
 logger = get_logger(__name__)
 
@@ -318,7 +319,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "gradient":
         return _model.compute_gradient(
             logits_list=input_dict["logits"],
-            temperature=float(input_dict["temperature"]),
+            temperature=resolve_temperature(input_dict["temperature"]),
             construct_type=input_dict["construct_type"],
             loss_terms=input_dict["loss_terms"],
             soft=float(input_dict.get("soft", 1.0)),

@@ -155,7 +155,8 @@ def run_proteinmpnn_score(
 
             - ``log_likelihood``, ``avg_log_likelihood``, ``perplexity`` (access via
               attribute ``score.perplexity`` or mapping ``score["perplexity"]``)
-            - ``logits``: Per-position logits tensor (seq_len, 21) if
+            - ``logits``: Per-position logits tensor (seq_len, 20) in proto's amino-acid
+              order if
               ``return_logits=True``, otherwise ``None``
             - ``vocab``: List of 21 amino acid characters (AlphaFold ordering) if
               ``return_logits=True``, otherwise ``None``

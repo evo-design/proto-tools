@@ -5,9 +5,9 @@ Runs in an isolated venv with JAX and ColabDesign. Supports two backends:
 - ``"base"``: upstream sokrypton/ColabDesign (pip-installed, used for prediction
   and generic gradient computation).
 - ``"germinal"``: SantiagoMille/germinal ColabDesign fork (installed to
-  data/colabdesign_germinal, loaded via sys.path swap). Adds alpha=2.0 logit
-  scaling, persistent bias_redesign, framework contact penalties in
-  ``_loss_binder``, and ``soft_seq()`` with full JAX autograd chain rule.
+  data/colabdesign_germinal, loaded via sys.path swap). Adds persistent
+  bias_redesign, framework contact penalties in ``_loss_binder``, and
+  ``soft_seq()`` with full JAX autograd chain rule.
   Antibody-language-model gradients remain external to this tool.
 
 Extension loss callbacks (rg, i_ptm, helix, beta_strand, NC) are registered
@@ -29,14 +29,17 @@ from pathlib import Path
 from typing import Any
 
 from standalone_helpers import AMINO_ACIDS_LIST, get_jax_memory_stats, get_logger, resolve_jax_device, serialize_output
+from standalone_helpers.relaxation import resolve_temperature
+from standalone_helpers.vocabulary import gather_indices
 
 logger = get_logger(__name__)
 
-# AlphaFold restypes order (3-letter codes sorted alphabetically: ALA, ARG, ASN, ...).
-# Differs from AMINO_ACIDS_LIST which is sorted by 1-letter code (A, C, D, ...).
-AF2_RESTYPES = list("ARNDCQEGHILKMFPSTWYV")
-PROTO_TO_AF2 = [AMINO_ACIDS_LIST.index(aa) for aa in AF2_RESTYPES]
-AF2_TO_PROTO = [AF2_RESTYPES.index(aa) for aa in AMINO_ACIDS_LIST]
+# AlphaFold2's own residue order: 3-letter codes alphabetically, not proto's one-letter sort.
+ALPHAFOLD2_AMINO_ACIDS: list[str] = list("ARNDCQEGHILKMFPSTWYV")
+
+# Proto columns into AF2 order, and the gradient back; only the argument order differs.
+PROTO_TO_AF2 = gather_indices(ALPHAFOLD2_AMINO_ACIDS, AMINO_ACIDS_LIST, label="alphafold2")
+AF2_TO_PROTO = gather_indices(AMINO_ACIDS_LIST, ALPHAFOLD2_AMINO_ACIDS, label="alphafold2")
 
 # Configure stderr handler so debug output is captured by persistent worker
 _handler = logging.StreamHandler(sys.stderr)
@@ -45,6 +48,30 @@ logger.addHandler(_handler)
 logger.setLevel(logging.DEBUG)
 
 _params_dir: str | None = None
+
+
+def _relaxation_opt(*, temperature: float | None, soft: float, hard: float) -> dict[str, float]:
+    """Build the ColabDesign ``opt`` entries that drive ``soft_seq``.
+
+    ``alpha`` scales the logits before the softmax, so ColabDesign's default of 2.0 would make
+    ``temperature`` mean half what the shared gradient contract says and would stop
+    ``from_probabilities`` reconstructing the supplied distribution. It is pinned to 1.0, which
+    costs no expressiveness: ``alpha=a`` with temperature ``T`` is ``alpha=1`` at ``T / a``.
+
+    Probability mode is expressed as ``soft=0``, which selects ``soft_seq``'s raw-input branch;
+    ``temp`` then feeds only the unused softmax branch and is pinned to keep it finite.
+
+    Args:
+        temperature (float | None): Positive softmax temperature, or ``None`` for probability mode.
+        soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Straight-through coefficient.
+
+    Returns:
+        dict[str, float]: ``temp``, ``soft``, ``hard`` and ``alpha`` for ``af_model.opt``.
+    """
+    if temperature is None:
+        return {"temp": 1.0, "soft": 0.0, "hard": 0.0, "alpha": 1.0}
+    return {"temp": temperature, "soft": soft, "hard": hard, "alpha": 1.0}
 
 
 def _resolve_params_dir() -> str:
@@ -384,7 +411,7 @@ class AlphaFold2Model:
             device: JAX device string ("cuda", "cpu", "cuda:0", etc.).
             backend: Which ColabDesign package to use:
                 ``"base"`` — upstream sokrypton/ColabDesign (default for prediction).
-                ``"germinal"`` — Germinal fork with alpha=2.0, bias, and framework contacts.
+                ``"germinal"`` — Germinal fork with bias and framework contacts.
             verbose: Log loading details.
         """
         if self._loaded and self._backend == backend:
@@ -620,7 +647,7 @@ class AlphaFold2Model:
         af_model: Any,
         *,
         logits: list[list[float]],
-        temperature: float,
+        temperature: float | None,
         soft: float,
         hard: float,
         num_recycles: int,
@@ -633,9 +660,12 @@ class AlphaFold2Model:
     ) -> dict[str, Any]:
         """Run one binder-design AF2 pass and return loss, metrics, Structure, and optionally gradient.
 
-        Germinal's ``soft_seq()`` handles alpha=2.0 scaling and persistent bias
-        internally. When ``backprop=True``, JAX autograd chain-rules through the
-        full expression and the returned gradient is exact ``∂loss/∂logits``.
+        ``soft_seq()`` applies the relaxation and any persistent bias internally; see
+        :func:`_relaxation_opt` for the options proto pins. When ``backprop=True``, JAX autograd
+        chain-rules through the full expression and the returned gradient is exact
+        ``∂loss/∂logits``.
+        ``temperature=None`` consumes ``logits`` as probabilities instead, so that
+        gradient is probability-space; see the ``opt`` assignment below.
         When ``backprop=False``, the forward pass runs through ``model["fn"]``
         (no grad_fn) and ``gradient`` is ``None`` in the returned dict.
         """
@@ -646,9 +676,7 @@ class AlphaFold2Model:
 
         opt = af_model.opt
         opt["num_recycles"] = num_recycles
-        opt["temp"] = temperature
-        opt["soft"] = soft
-        opt["hard"] = hard
+        opt.update(_relaxation_opt(temperature=temperature, soft=soft, hard=hard))
         if seed is not None:
             af_model.set_seed(seed)
         if loss_weights:
@@ -694,7 +722,7 @@ class AlphaFold2Model:
         self,
         *,
         logits: list[list[float]],
-        temperature: float = 1.0,
+        temperature: float | None = 1.0,
         soft: float = 1.0,
         hard: float = 0.0,
         target_pdb: str,
@@ -731,7 +759,7 @@ class AlphaFold2Model:
         When ``backend="germinal"``, uses Germinal's ColabDesign fork for the full setup:
         - ``prep_inputs()`` handles position resolution, bias initialization,
           template masking, and framework contact configuration.
-        - ``soft_seq()`` applies alpha=2.0 scaling and persistent bias.
+        - ``soft_seq()`` applies the relaxation and persistent bias.
         - Extension losses (rg, i_ptm, helix, beta_strand, NC) are registered
           as callbacks based on ``loss_weights``.
         """
@@ -858,40 +886,48 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             include_pae_matrix=input_dict["include_pae_matrix"],
         )
     if operation == "compute_gradient":
-        return _model.compute_binder_gradient(
-            logits=input_dict["logits"],
-            temperature=input_dict["temperature"],
-            soft=input_dict.get("soft", 1.0),
-            hard=input_dict.get("hard", 0.0),
-            target_pdb=input_dict["target_pdb"],
-            target_chain=input_dict["target_chain"],
-            target_hotspot=input_dict.get("target_hotspot"),
-            binder_chain=input_dict.get("binder_chain"),
-            design_positions=input_dict.get("design_positions"),
-            bias_redesign=input_dict.get("bias_redesign"),
-            excluded_amino_acids=input_dict.get("excluded_amino_acids"),
-            num_recycles=input_dict["num_recycles"],
-            recycle_mode=input_dict.get("recycle_mode", "last"),
-            model_num=input_dict["model_num"],
-            sample_models=input_dict.get("sample_models", False),
-            use_multimer=input_dict.get("use_multimer", True),
-            rm_target_seq=input_dict.get("rm_target_seq", True),
-            rm_target_sc=input_dict.get("rm_target_sc", False),
-            rm_template_ic=input_dict.get("rm_template_ic", True),
-            starting_binder_seq=input_dict.get("starting_binder_seq"),
-            loss_weights=input_dict.get("loss_weights"),
-            intra_contact_num=input_dict.get("intra_contact_num", 2),
-            intra_contact_cutoff=input_dict.get("intra_contact_cutoff", 14.0),
-            inter_contact_num=input_dict.get("inter_contact_num", 1),
-            inter_contact_cutoff=input_dict.get("inter_contact_cutoff", 21.6875),
-            framework_contact_offset=input_dict.get("framework_contact_offset", 1.0),
-            seed=input_dict["seed"],
-            backend=input_dict.get("backend", "base"),
-            compute_gradient=input_dict.get("compute_gradient", True),
-            device=input_dict["device"],
-            verbose=input_dict["verbose"],
-            include_pae_matrix=input_dict["include_pae_matrix"],
-        )
+        # One chunk of independent candidates: prep_inputs re-runs per item, so no state carries over.
+        results = [
+            _model.compute_binder_gradient(
+                logits=item["logits"],
+                temperature=resolve_temperature(input_dict["temperature"]),
+                soft=input_dict.get("soft", 1.0),
+                hard=input_dict.get("hard", 0.0),
+                target_pdb=item["target_pdb"],
+                target_chain=item["target_chain"],
+                target_hotspot=item.get("target_hotspot"),
+                binder_chain=item.get("binder_chain"),
+                design_positions=item.get("design_positions"),
+                bias_redesign=input_dict.get("bias_redesign"),
+                excluded_amino_acids=input_dict.get("excluded_amino_acids"),
+                num_recycles=input_dict["num_recycles"],
+                recycle_mode=input_dict.get("recycle_mode", "last"),
+                model_num=input_dict["model_num"],
+                sample_models=input_dict.get("sample_models", False),
+                use_multimer=input_dict.get("use_multimer", True),
+                rm_target_seq=input_dict.get("rm_target_seq", True),
+                rm_target_sc=input_dict.get("rm_target_sc", False),
+                rm_template_ic=input_dict.get("rm_template_ic", True),
+                starting_binder_seq=input_dict.get("starting_binder_seq"),
+                loss_weights=input_dict.get("loss_weights"),
+                intra_contact_num=input_dict.get("intra_contact_num", 2),
+                intra_contact_cutoff=input_dict.get("intra_contact_cutoff", 14.0),
+                inter_contact_num=input_dict.get("inter_contact_num", 1),
+                inter_contact_cutoff=input_dict.get("inter_contact_cutoff", 21.6875),
+                framework_contact_offset=input_dict.get("framework_contact_offset", 1.0),
+                seed=input_dict["seed"],
+                backend=input_dict.get("backend", "base"),
+                compute_gradient=input_dict.get("compute_gradient", True),
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
+                include_pae_matrix=input_dict["include_pae_matrix"],
+            )
+            for item in input_dict["items"]
+        ]
+        return {
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics", "pdb")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
     raise ValueError(f"alphafold2: unknown operation {operation!r}; valid: ['predict', 'compute_gradient']")
 
 

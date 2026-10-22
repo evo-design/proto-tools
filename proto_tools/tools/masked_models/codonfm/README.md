@@ -57,7 +57,7 @@ The CLS embedding is a codon-aware sequence descriptor for downstream supervised
 
 ### CodonFM Gradient (`codonfm-gradient`)
 
-Computes the gradient of the mean masked negative log-likelihood with respect to a relaxed `(L, 64)` distribution over all 64 DNA codons, including the three standard stop codons (lexicographic order `AAA, AAC, AAG, AAT, …`). Each row's current argmax codon is the masked-language-model target. The Encodon weights are frozen; the relaxed distribution passes through Encodon's embedding layer and normalization, each codon position is masked in turn, and a per-chunk backward pass accumulates the gradient. An optional Straight-Through Estimator runs the forward on hard one-hot codons while routing gradients through the soft probabilities.
+Computes the gradient of the mean masked negative log-likelihood with respect to a relaxed `(L, 64)` distribution over all 64 DNA codons, including the three standard stop codons (lexicographic order `AAA, AAC, AAG, AAT, …`). Each row's current argmax codon is the masked-language-model target. The Encodon weights are frozen; the relaxed distribution passes through Encodon's embedding layer and normalization, each codon position is masked in turn, and a per-chunk backward pass accumulates the gradient.
 
 #### Applications
 
@@ -65,8 +65,9 @@ This exposes Encodon as a differentiable, codon-level naturalness prior for cont
 
 #### Usage Tips
 
-- **`temperature` converts the raw input into a per-position distribution.** The default `1.0` applies `softmax(logits / T)`; set it to `None` only when every row is already a non-negative probability distribution summing to 1.
-- **`use_ste` enables the Straight-Through Estimator** for stronger guidance toward discrete codons while keeping a usable gradient.
+- **`temperature`** controls how the input logits are converted into codon probabilities using `softmax(logits / temperature)`. Lower temperatures make the distribution more concentrated around the most likely codon at each position, while higher temperatures produce more uniform distributions. The default is `1.0`, and the returned gradient is calculated with respect to the input logits.
+- **Advanced option:** `temperature=None` skips softmax and treats the input as probabilities rather than logits. Most users should leave the default in place. In this case, each row must contain nonnegative values that sum to 1, and the returned gradient is calculated with respect to those probabilities. This is generally less convenient for gradient-based optimization because updating probabilities directly can cause them to become negative or no longer sum to 1. Optimizing logits avoids this issue, since softmax always produces a valid probability distribution. However, working directly with probabilities can be useful when using an optimizer designed for probability distributions or when exact zero probabilities are needed to exclude particular tokens.
+- **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator — the forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, which is differentiable but outside the model's training distribution.
 - **`compute_gradient=False` runs forward-only.** The `gradient` field is `None` but `loss` and `metrics` are still populated. This is a masked pseudo-log-likelihood objective; it is distinct from the visible-token objective returned by `codonfm-fitness`.
 
 ### CodonFM Sampling (`codonfm-sample`)

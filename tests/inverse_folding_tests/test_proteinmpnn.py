@@ -13,6 +13,7 @@ import pytest
 
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.proteinmpnn import (
+    ProteinMPNNGradientCandidate,
     ProteinMPNNGradientConfig,
     ProteinMPNNGradientInput,
     ProteinMPNNSampleConfig,
@@ -26,7 +27,7 @@ from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient import (
     ProteinMPNNGradientOutput,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
-    ALPHAFOLD_VOCAB,
+    PROTEINMPNN_AMINO_ACIDS_WITH_X,
 )
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
@@ -96,7 +97,7 @@ def test_proteinmpnn_sample_backbone_noise_uses_model_constructor(monkeypatch, t
                 "seq": np.array(["AGSVL"]),
                 "score": np.array([0.0]),
                 "seqid": np.array([1.0]),
-                "logits": np.zeros((1, 5, len(ALPHAFOLD_VOCAB))),
+                "logits": np.zeros((1, 5, len(PROTEINMPNN_AMINO_ACIDS_WITH_X))),
             }
 
     fake_colabdesign = ModuleType("colabdesign")
@@ -252,7 +253,7 @@ def test_proteinmpnn_score(pdb_structure: Structure):
 
     validate_output(output)
     assert output.tool_id == "proteinmpnn-score"
-    assert output.vocab == ALPHAFOLD_VOCAB
+    assert output.vocab == list(_CANONICAL_AA)
 
     assert len(output.scores) == 2
     assert all(isinstance(score, InverseFoldingScoringMetrics) for score in output.scores)
@@ -263,6 +264,42 @@ def test_proteinmpnn_score(pdb_structure: Structure):
 
     # Original sequence should have lower perplexity than the modified one
     assert output.scores[0].perplexity < output.scores[1].perplexity
+
+
+def test_proteinmpnn_score_logits_land_in_proto_columns() -> None:
+    """The native-to-proto permutation moves each residue's value to its own proto column.
+
+    ColabDesign scores in AlphaFold order — the 20 residues sorted by three-letter code — with a
+    trailing unknown column. That order is derived here from an external table rather than read
+    from the toolkit, so transposing two residues in the toolkit's own alphabet fails this test
+    instead of moving the expectation with it. Every value is distinguishable, so a swap surfaces
+    as a wrong residue rather than a plausible-looking matrix.
+    """
+    from Bio.Data.IUPACData import protein_letters_1to3
+
+    from proto_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
+        PROTEINMPNN_TO_CANONICAL_INDICES,
+    )
+
+    native_order = [*sorted(_CANONICAL_AA, key=lambda residue: protein_letters_1to3[residue].upper()), "X"]
+    assert native_order == PROTEINMPNN_AMINO_ACIDS_WITH_X, (
+        f"the toolkit's alphabet {''.join(PROTEINMPNN_AMINO_ACIDS_WITH_X)} is not AlphaFold's "
+        f"three-letter-code order {''.join(native_order)}"
+    )
+
+    # Column j of the model's output carries the value j, so a column's value names its origin.
+    native = np.tile(np.arange(len(native_order), dtype=float), (3, 1))
+
+    proto_ordered = native[..., PROTEINMPNN_TO_CANONICAL_INDICES]
+
+    assert proto_ordered.shape == (3, len(_CANONICAL_AA))
+    for column, residue in enumerate(_CANONICAL_AA):
+        expected_native_column = native_order.index(residue)
+        assert proto_ordered[0, column] == expected_native_column, (
+            f"proto column {column} ({residue}) carries native column {proto_ordered[0, column]:.0f}, "
+            f"expected {expected_native_column}"
+        )
+    assert float(native_order.index("X")) not in set(proto_ordered[0]), "the unknown column reached the output"
 
 
 @pytest.mark.uses_gpu
@@ -288,7 +325,7 @@ def test_proteinmpnn_score_fields(pdb_structure: Structure):
     # Validate logits shape
     logits_arr = np.array(score.logits)
     assert logits_arr.ndim == 2
-    assert logits_arr.shape == (seq_len, len(ALPHAFOLD_VOCAB))
+    assert logits_arr.shape == (seq_len, len(_CANONICAL_AA))
 
     # log_likelihood = avg_log_likelihood * seq_len
     assert np.isclose(score.log_likelihood, score.avg_log_likelihood * seq_len, rtol=1e-5)
@@ -306,11 +343,15 @@ def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["toolkit"] = toolkit
         captured["payload"] = payload
-        n = len(payload["logits"])
         return {
-            "gradient": [[0.0] * 20] * n,
-            "loss": 0.5,
-            "metrics": {"avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
+            "results": [
+                {
+                    "gradient": [[0.0] * 20] * len(item["logits"]),
+                    "loss": 0.5,
+                    "metrics": {"avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
+                }
+                for item in payload["items"]
+            ],
             "vocab": list(_CANONICAL_AA),
         }
 
@@ -321,21 +362,25 @@ def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
 
     result = run_proteinmpnn_gradient(
         ProteinMPNNGradientInput(
-            logits=[[0.0] * 20] * 5,
-            structure=_small_structure(),
-            chains_to_redesign=["A"],
-            fixed_positions={"A": [1]},
+            inputs=ProteinMPNNGradientCandidate(
+                logits=[[0.0] * 20] * 5,
+                structure=_small_structure(),
+                chains_to_redesign=["A"],
+                fixed_positions={"A": [1]},
+            ),
         ),
-        ProteinMPNNGradientConfig(use_ste=False, device="cpu"),
+        ProteinMPNNGradientConfig(hard=1.0, device="cpu"),
     )
 
     assert captured["toolkit"] == "proteinmpnn"
     assert captured["payload"]["operation"] == "compute_gradient"
-    assert captured["payload"]["chain_ids"] == ["A"]
-    assert captured["payload"]["fixed_positions"] == {"A": [1]}
-    assert captured["payload"]["use_ste"] is False
+    (item,) = captured["payload"]["items"]
+    assert item["chain_ids"] == ["A"]
+    assert item["fixed_positions"] == {"A": [1]}
+    assert captured["payload"]["soft"] == 1.0
+    assert captured["payload"]["hard"] == 1.0
     assert captured["payload"]["compute_gradient"] is True
-    assert result.gradient == [[0.0] * 20] * 5
+    assert result.results[0].gradient == [[0.0] * 20] * 5
 
 
 def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):
@@ -382,28 +427,68 @@ def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-def test_proteinmpnn_gradient_end_to_end():
-    """ProteinMPNN gradient returns finite non-zero gradients for a small backbone."""
+def test_proteinmpnn_gradient_forward_only_returns_loss_without_a_gradient() -> None:
+    """compute_gradient=False returns the loss, metrics and vocabulary with gradient=None."""
+    logits = np.random.default_rng(0).normal(size=(5, 20)).tolist()
+
     result = run_proteinmpnn_gradient(
         ProteinMPNNGradientInput(
-            logits=[[0.0] * 20] * 5,
-            structure=_small_structure(),
-            chains_to_redesign=["A"],
+            inputs=ProteinMPNNGradientCandidate(
+                logits=logits,
+                structure=_small_structure(),
+                chains_to_redesign=["A"],
+            ),
             temperature=0.7,
         ),
-        ProteinMPNNGradientConfig(seed=42),
+        ProteinMPNNGradientConfig(seed=42, compute_gradient=False),
+    )
+
+    validate_output(result)
+    assert result.results[0].gradient is None
+    assert result.results[0].loss > 0.0
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-result.results[0].loss, rel=1e-6)
+    assert result.vocab == list(_CANONICAL_AA)
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    ("soft", "hard"),
+    [(1.0, 0.0), (1.0, 1.0), (0.0, 0.0), (0.5, 0.5)],
+    ids=["default", "straight_through", "raw_input", "blended"],
+)
+def test_proteinmpnn_gradient_end_to_end(soft: float, hard: float):
+    """ProteinMPNN gradient returns finite non-zero gradients at every relaxation setting.
+
+    The raw-input and intermediate blends are covered because they must be functional, not
+    because they are recommended: feeding unnormalized values to the model is outside its
+    training distribution.
+    """
+    # Non-uniform, so argmax has no ties and the raw-input branch is not an all-zero state.
+    logits = np.random.default_rng(0).normal(size=(5, 20)).tolist()
+
+    result = run_proteinmpnn_gradient(
+        ProteinMPNNGradientInput(
+            inputs=ProteinMPNNGradientCandidate(
+                logits=logits,
+                structure=_small_structure(),
+                chains_to_redesign=["A"],
+            ),
+            temperature=0.7,
+        ),
+        ProteinMPNNGradientConfig(seed=42, soft=soft, hard=hard),
     )
 
     validate_output(result)
     assert result.tool_id == "proteinmpnn-gradient"
-    assert result.gradient is not None
-    assert len(result.gradient) == 5
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(np.isfinite(v) for row in result.gradient for v in row)
-    assert any(v != 0.0 for row in result.gradient for v in row)
-    assert result.loss > 0.0
-    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
-    assert result.metrics["perplexity"] == pytest.approx(np.exp(result.loss), rel=1e-6)
+    assert result.results[0].gradient is not None
+    assert len(result.results[0].gradient) == 5
+    assert all(len(row) == 20 for row in result.results[0].gradient)
+    assert all(np.isfinite(v) for row in result.results[0].gradient for v in row)
+    assert any(v != 0.0 for row in result.results[0].gradient for v in row)
+    assert result.results[0].loss > 0.0
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-result.results[0].loss, rel=1e-6)
+    assert result.results[0].metrics["perplexity"] == pytest.approx(np.exp(result.results[0].loss), rel=1e-6)
     assert result.vocab == list(_CANONICAL_AA)
 
 
@@ -634,9 +719,11 @@ def test_proteinmpnn_gradient_benchmark(request: pytest.FixtureRequest, pdb_stru
     target_len = len(pdb_structure.get_chain_sequence("A"))
     sequence = random_protein_sequences(n=1, length=target_len, seed=7)[0]
     inputs = ProteinMPNNGradientInput(
-        logits=one_hot_protein_logits(sequence, sharpness=2.0),
-        structure=pdb_structure,
-        chains_to_redesign=["A"],
+        inputs=ProteinMPNNGradientCandidate(
+            logits=one_hot_protein_logits(sequence, sharpness=2.0),
+            structure=pdb_structure,
+            chains_to_redesign=["A"],
+        ),
         temperature=0.7,
     )
     config = ProteinMPNNGradientConfig(seed=42)
@@ -651,8 +738,8 @@ def test_proteinmpnn_gradient_benchmark(request: pytest.FixtureRequest, pdb_stru
 
     validate_output(result)
     assert result.tool_id == "proteinmpnn-gradient"
-    assert result.gradient is not None
-    assert len(result.gradient) == target_len
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(np.isfinite(v) for row in result.gradient for v in row)
-    assert result.loss > 0.0
+    assert result.results[0].gradient is not None
+    assert len(result.results[0].gradient) == target_len
+    assert all(len(row) == 20 for row in result.results[0].gradient)
+    assert all(np.isfinite(v) for row in result.results[0].gradient for v in row)
+    assert result.results[0].loss > 0.0

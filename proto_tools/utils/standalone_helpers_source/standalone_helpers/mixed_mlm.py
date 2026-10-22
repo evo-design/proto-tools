@@ -10,6 +10,7 @@ from .compression import compress_array
 from .device import move_model_to_device
 from .mixed_sequence import DNA_TOKENS, MIXED_VOCAB, PROTEIN_TOKENS, UPSTREAM_STRAND_TOKENS, tokenize_mixed_sequence
 from .proto_logging import get_logger
+from .relaxation import resolve_temperature
 from .scoring import log_likelihood_metrics
 from .seeding import set_torch_seed
 from .serialization import serialize_output
@@ -132,7 +133,9 @@ class MixedMLMRuntime:
         batch_size = payload.get("batch_size", 1)
         if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
             raise ValueError("batch_size must be a positive integer")
-        sequences = [payload["sequence"]] if operation == "gradient" else payload["sequences"]
+        sequences = (
+            [item["sequence"] for item in payload["inputs"]] if operation == "gradient" else payload["sequences"]
+        )
         if not isinstance(sequences, list) or not sequences:
             raise ValueError("At least one prepared sequence is required")
         tokens = [tokenize_mixed_sequence(sequence, allow_masks=operation == "sample") for sequence in sequences]
@@ -161,7 +164,15 @@ class MixedMLMRuntime:
         if operation == "sample":
             return self.sample(tokens, mappings, payload)
         if operation == "gradient":
-            return self.gradient(payload)
+            # One chunk of independent candidates, evaluated in turn against the loaded checkpoint.
+            results = [
+                self.gradient({**payload, "sequence": item["sequence"], "logits": item["logits"]})
+                for item in payload["inputs"]
+            ]
+            return {
+                "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
+                "vocab": list(MIXED_VOCAB),
+            }
         return self.interactions(tokens, payload)
 
     def embeddings(
@@ -311,7 +322,7 @@ class MixedMLMRuntime:
 
         tokens = tokenize_mixed_sequence(payload["sequence"])
         backprop = payload.get("compute_gradient", True)
-        temperature = payload.get("temperature", 1.0)
+        temperature = resolve_temperature(payload.get("temperature", 1.0))
         batch_size = payload.get("batch_size", 1)
         self.adapter.reset_rotary_cache()
         embed_layer = self.adapter.embedding_layer
@@ -335,15 +346,24 @@ class MixedMLMRuntime:
             if state.shape != allowed.shape or not torch.isfinite(state).all():
                 raise ValueError("Gradient input must be a finite token-aligned L x 24 matrix")
             if temperature is None:
-                x = state * allowed
+                probs = state * allowed
             else:
                 # Fixed context rows need a finite softmax denominator, then contribute zero.
                 softmax_allowed = allowed | ~allowed.any(dim=1, keepdim=True)
-                x = F.softmax((state / temperature).masked_fill(~softmax_allowed, -torch.inf), dim=-1) * allowed
-            hard_indices = x.argmax(dim=-1).detach()
-            if payload.get("use_ste", False):
-                hard = F.one_hot(hard_indices, num_classes=len(MIXED_VOCAB)).float() * allowed
-                x = hard + x - x.detach()
+                probs = F.softmax((state / temperature).masked_fill(~softmax_allowed, -torch.inf), dim=-1) * allowed
+            # Targets come from P, not the blend, so they do not move with soft/hard.
+            hard_indices = probs.argmax(dim=-1).detach()
+
+            # The shared relaxed_sequence() formula, re-derived with masking because P is per-modality.
+            soft = float(payload.get("soft", 1.0))
+            hard = float(payload.get("hard", 0.0))
+            x = probs
+            if soft != 1.0:
+                x = ((1.0 - soft) * state + soft * probs) * allowed
+            if hard > 0.0:
+                discrete = F.one_hot(hard_indices, num_classes=len(MIXED_VOCAB)).float() * allowed
+                straight_through = discrete - probs.detach() + probs
+                x = ((1.0 - hard) * x + hard * straight_through) * allowed
             ids[0, positions] = vocab_ids[hard_indices[positions]]
             fixed_embeddings = embed_layer(ids).detach()
             relaxed = x.to(embed_layer.weight.dtype) @ embed_layer.weight[vocab_ids]

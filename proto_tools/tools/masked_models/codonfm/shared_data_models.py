@@ -10,13 +10,14 @@ import hashlib
 import math
 import urllib.parse
 from itertools import product
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import field_validator
 
 from proto_tools.transforms.masking import MASK_TOKEN, validate_whole_token_masks
 from proto_tools.utils import BaseConfig, BaseToolInput, ConfigField, InputField
 from proto_tools.utils.sequence import return_invalid_nucleotide_chars
+from proto_tools.utils.sequence_logits import SequenceLogits
 
 # The four publicly released Encodon checkpoints (public HuggingFace repos under the NVIDIA Open
 # Model License, which governs use but does not gate download). Each repo ships
@@ -56,6 +57,12 @@ CODONFM_MAX_NT = (CODONFM_MAX_TOKENS - 2) * 3
 # (CLS/SEP/UNK/PAD/MASK) are excluded — only concrete DNA codons are design variables.
 CODONFM_CODON_VOCAB: list[str] = ["".join(codon) for codon in product("ACGT", repeat=3)]
 CODONFM_NUM_CODONS = len(CODONFM_CODON_VOCAB)
+
+
+class CodonSequenceLogits(SequenceLogits):
+    """A relaxed ``(L, 64)`` coding-sequence state in lexicographic DNA codon order."""
+
+    VOCAB: ClassVar[tuple[str, ...]] = tuple(CODONFM_CODON_VOCAB)
 
 
 def one_hot_codon_logits(sequence: str, *, sharpness: float = 20.0) -> list[list[float]]:

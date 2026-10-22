@@ -41,14 +41,18 @@ def test_malinois_gradient_input_validates_dna_logits() -> None:
     """Malinois gradient input requires a B x L x 4 DNA logit tensor."""
     from proto_tools.tools.sequence_scoring.malinois import MalinoisGradientInput
 
-    inputs = MalinoisGradientInput(logits=[[[0.0] * 4] * 200])
+    inputs = MalinoisGradientInput(inputs=[[[0.0] * 4] * 200])
 
-    assert len(inputs.logits) == 1
-    assert len(inputs.logits[0]) == 200
+    assert len(inputs.inputs) == 1
+    assert len(inputs.inputs[0]) == 200
     with pytest.raises(ValidationError, match="must have 4 columns"):
-        MalinoisGradientInput(logits=[[[0.0] * 3]])
-    with pytest.raises(ValidationError):
-        MalinoisGradientInput(logits=[[0.0] * 4] * 200)
+        MalinoisGradientInput(inputs=[[[0.0] * 3]])
+    # A bare (L, 4) matrix is one item, not an error.
+    bare = MalinoisGradientInput(inputs=[[0.0] * 4] * 200)
+    assert len(bare.inputs) == 1
+    assert len(bare.inputs[0]) == 200
+    with pytest.raises(ValidationError, match="at least one item"):
+        MalinoisGradientInput(inputs=[])
 
 
 def test_malinois_run_dispatches_and_maps_scores(monkeypatch) -> None:
@@ -120,7 +124,7 @@ def test_malinois_gradient_dispatches_loss_terms(monkeypatch) -> None:
     monkeypatch.setattr(malinois_score.ToolInstance, "dispatch", staticmethod(fake_dispatch))
 
     result = run_malinois_gradient(
-        MalinoisGradientInput(logits=[[[0.0] * 4] * 200], temperature=0.7),
+        MalinoisGradientInput(inputs=[[[0.0] * 4] * 200], temperature=0.7),
         MalinoisGradientConfig(
             loss_terms=[
                 MalinoisGradientLossTerm(cell_type="K562", direction="max", weight=2.0),
@@ -142,12 +146,11 @@ def test_malinois_gradient_dispatches_loss_terms(monkeypatch) -> None:
     assert payload["loss_terms"][0]["direction"] == "max"
     assert payload["loss_terms"][0]["weight"] == 2.0
     assert payload["loss_terms"][1]["direction"] == "min"
-    assert result.gradient is not None
-    assert len(result.gradient) == 1
-    assert len(result.gradient[0]) == 200
-    assert len(result.sample_metrics) == 1
-    assert result.sample_metrics[0]["loss"] == 0.25
-    assert result.sample_metrics[0]["K562"] == 5.0
+    assert result.results[0].gradient is not None
+    assert len(result.results) == 1
+    assert len(result.results[0].gradient) == 200
+    assert result.results[0].loss == 0.25
+    assert result.results[0].metrics["K562"] == 5.0
     assert_metrics_in_spec(result)
     assert result.vocab == ["A", "C", "G", "T"]
 
@@ -161,7 +164,40 @@ def test_malinois_gradient_rejects_wrong_sequence_length() -> None:
     )
 
     with pytest.raises(ValueError, match="logits must have length 200"):
-        run_malinois_gradient(MalinoisGradientInput(logits=[[[0.0] * 4] * 199]), MalinoisGradientConfig())
+        run_malinois_gradient(MalinoisGradientInput(inputs=[[[0.0] * 4] * 199]), MalinoisGradientConfig())
+
+
+def _softmax_rows(logits):
+    """Softmax each row of a logits matrix."""
+    rows = []
+    for row in logits:
+        peak = max(row)
+        exponentiated = [math.exp(value - peak) for value in row]
+        total = sum(exponentiated)
+        rows.append([value / total for value in exponentiated])
+    return rows
+
+
+@pytest.mark.uses_gpu
+def test_malinois_gradient_probability_mode_matches_logit_mode() -> None:
+    """temperature=None on softmax(L) evaluates the same relaxed sequence as temperature=1.0 on L."""
+    from proto_tools.tools.sequence_scoring.malinois import (
+        MalinoisGradientConfig,
+        MalinoisGradientInput,
+        run_malinois_gradient,
+    )
+
+    logits = [[0.1, 0.2, 0.3, 0.4]] * 200
+    config = MalinoisGradientConfig(device="cuda")
+
+    logit_mode = run_malinois_gradient(MalinoisGradientInput(inputs=[logits], temperature=1.0), config)
+    probability_mode = run_malinois_gradient(
+        MalinoisGradientInput(inputs=[_softmax_rows(logits)], temperature=None), config
+    )
+
+    assert probability_mode.results[0].loss == pytest.approx(logit_mode.results[0].loss, rel=1e-5)
+    assert probability_mode.results[0].gradient is not None
+    assert all(math.isfinite(v) for row in probability_mode.results[0].gradient for v in row)
 
 
 @pytest.mark.uses_gpu
@@ -201,7 +237,7 @@ def test_malinois_real_gpu_gradient() -> None:
     )
 
     result = run_malinois_gradient(
-        MalinoisGradientInput(logits=[[[0.0] * 4] * 200, [[0.1, 0.2, 0.3, 0.4]] * 200], temperature=1.0),
+        MalinoisGradientInput(inputs=[[[0.0] * 4] * 200, [[0.1, 0.2, 0.3, 0.4]] * 200], temperature=1.0),
         MalinoisGradientConfig(
             loss_terms=[
                 MalinoisGradientLossTerm(cell_type="K562", direction="max"),
@@ -212,26 +248,67 @@ def test_malinois_real_gpu_gradient() -> None:
         ),
     )
 
-    assert result.gradient is not None
-    assert len(result.gradient) == 2
-    assert all(len(matrix) == 200 for matrix in result.gradient)
-    assert all(len(row) == 4 for matrix in result.gradient for row in matrix)
-    assert all(math.isfinite(value) for matrix in result.gradient for row in matrix for value in row)
-    assert any(value != 0.0 for matrix in result.gradient for row in matrix for value in row)
-    assert math.isfinite(result.loss)
-    assert len(result.sample_metrics) == 2
-    assert all(math.isfinite(sample["loss"]) for sample in result.sample_metrics)
-    assert all(set(sample) == {"loss", "K562", "HepG2", "SKNSH"} for sample in result.sample_metrics)
-    assert len(result.metrics["losses"]) == 2
-    assert len(result.metrics["raw_scores"]) == 2
-    assert all(set(raw_scores) == {"K562", "HepG2", "SKNSH"} for raw_scores in result.metrics["raw_scores"])
-    for term_metrics in result.metrics["loss_terms"]:
+    assert result.results[0].gradient is not None
+    assert len(result.results) == 2
+    assert all(len(item.gradient) == 200 for item in result.results)
+    assert all(len(row) == 4 for item in result.results for row in item.gradient)
+    assert all(math.isfinite(value) for item in result.results for row in item.gradient for value in row)
+    assert any(value != 0.0 for item in result.results for row in item.gradient for value in row)
+    assert all(math.isfinite(item.loss) for item in result.results)
+    assert all({"K562", "HepG2", "SKNSH"} <= set(item.metrics) for item in result.results)
+    for item in result.results:
+        term_metrics = item.metrics["loss_terms"]
         assert [(term["cell_type"], term["direction"]) for term in term_metrics] == [
             ("K562", "max"),
             ("HepG2", "min"),
             ("SKNSH", "min"),
         ]
     assert result.vocab == ["A", "C", "G", "T"]
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_malinois_one_hot_relaxed_input_matches_discrete_scores() -> None:
+    """A one-hot relaxed input must score the same as the discrete sequence it encodes.
+
+    The relaxed path feeds a probability matrix through the MPRA flank builder while the scoring
+    path tokenizes a string, so agreement rules out a transposed nucleotide column or an
+    off-by-one in the relaxed encoding. ``temperature=None`` makes the comparison exact: a
+    softmax over one-hot *logits* would not be one-hot.
+    """
+    _skip_if_no_malinois_gpu()
+
+    from proto_tools.tools.sequence_scoring.malinois import (
+        MalinoisGradientConfig,
+        MalinoisGradientInput,
+        MalinoisGradientLossTerm,
+        MalinoisScoreConfig,
+        MalinoisScoreInput,
+        run_malinois_gradient,
+        run_malinois_score,
+    )
+    from proto_tools.utils.sequence import DNA_NUCLEOTIDES
+
+    sequence = ("ACGTTGCAAGGCTTACGATCGATTACGGCATTCAGGATCCGTAACGTTAC" * 4)[:200]
+    one_hot = [[1.0 if base == nucleotide else 0.0 for nucleotide in DNA_NUCLEOTIDES] for base in sequence]
+
+    discrete = run_malinois_score(
+        MalinoisScoreInput(sequences=[sequence]),
+        MalinoisScoreConfig(cell_types=["K562"], device="cuda"),
+    )
+    relaxed = run_malinois_gradient(
+        MalinoisGradientInput(inputs=[one_hot], temperature=None),
+        MalinoisGradientConfig(
+            loss_terms=[MalinoisGradientLossTerm(cell_type="K562", direction="max")],
+            compute_gradient=False,
+            device="cuda",
+        ),
+    )
+
+    expected = discrete.results[0].scores["K562"]
+    assert relaxed.results[0].metrics["K562"] == pytest.approx(expected, rel=1e-4, abs=1e-4), (
+        f"relaxed one-hot score {relaxed.results[0].metrics['K562']} != discrete {expected}"
+    )
 
 
 @pytest.mark.uses_gpu
@@ -263,20 +340,21 @@ def test_malinois_real_gpu_batched_gradient_matches_batch_size_one_calls() -> No
         device="cuda",
     )
     with ToolInstance.persist_tool("malinois") as instance:
-        batched = run_malinois_gradient(MalinoisGradientInput(logits=logits_batch), config, instance=instance)
+        batched = run_malinois_gradient(MalinoisGradientInput(inputs=logits_batch), config, instance=instance)
         singles = [
-            run_malinois_gradient(MalinoisGradientInput(logits=[logits]), config, instance=instance)
+            run_malinois_gradient(MalinoisGradientInput(inputs=[logits]), config, instance=instance)
             for logits in logits_batch
         ]
 
-    assert batched.gradient is not None
-    assert len(batched.gradient) == 2
+    assert batched.results[0].gradient is not None
+    assert len(batched.results) == 2
     for idx, single in enumerate(singles):
-        assert single.gradient is not None
-        assert batched.sample_metrics[idx]["loss"] == pytest.approx(single.sample_metrics[0]["loss"], abs=1e-6)
-        assert batched.metrics["losses"][idx] == pytest.approx(single.metrics["losses"][0], abs=1e-6)
-        assert batched.metrics["raw_scores"][idx] == pytest.approx(single.metrics["raw_scores"][0], abs=1e-6)
-        np.testing.assert_allclose(np.asarray(batched.gradient[idx]), np.asarray(single.gradient[0]), atol=1e-6)
+        assert single.results[0].gradient is not None
+        assert batched.results[idx].loss == pytest.approx(single.results[0].loss, abs=1e-6)
+        assert batched.results[idx].metrics["K562"] == pytest.approx(single.results[0].metrics["K562"], abs=1e-6)
+        np.testing.assert_allclose(
+            np.asarray(batched.results[idx].gradient), np.asarray(single.results[0].gradient), atol=1e-6
+        )
 
 
 @pytest.mark.benchmark("malinois-score")
@@ -331,7 +409,7 @@ def test_malinois_gradient_benchmark(request: pytest.FixtureRequest) -> None:
         [[1.0 if column == base_index[base] else 0.0 for column in range(len(DNA_NUCLEOTIDES))] for base in sequence]
         for sequence in sequences
     ]
-    inputs = MalinoisGradientInput(logits=logits, temperature=1.0)
+    inputs = MalinoisGradientInput(inputs=logits, temperature=1.0)
     config = MalinoisGradientConfig(
         loss_terms=[
             MalinoisGradientLossTerm(cell_type="K562", direction="max"),
@@ -351,10 +429,10 @@ def test_malinois_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     assert_metrics_in_spec(result)
 
     assert result.tool_id == "malinois-gradient"
-    assert result.gradient is not None
-    assert len(result.gradient) == 256
-    assert all(len(matrix) == 200 for matrix in result.gradient)
-    assert all(len(row) == 4 for matrix in result.gradient for row in matrix)
-    assert len(result.sample_metrics) == 256
-    assert all(set(sample) == {"loss", "K562", "HepG2", "SKNSH"} for sample in result.sample_metrics)
+    assert all(item.gradient is not None for item in result.results)
+    assert len(result.results) == 256
+    assert all(len(item.gradient) == 200 for item in result.results)
+    assert all(len(row) == 4 for item in result.results for row in item.gradient)
+    assert len(result.results) == 256
+    assert all({"K562", "HepG2", "SKNSH"} <= set(item.metrics) for item in result.results)
     assert result.vocab == ["A", "C", "G", "T"]

@@ -182,11 +182,31 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert "reference_backend_path" not in payload
 
 
+@pytest.mark.integration
+def test_ligandmpnn_native_vocabularies_map_to_proto_columns() -> None:
+    """Both scoring paths' runtime token orders must gather onto proto's 20 columns.
+
+    Neither order is a constant in this repo — one comes from Foundry's token encoding, the
+    other from the downloaded script's ``restype_int_to_str`` — so the check runs in the toolkit
+    env and drives the real mapping with distinguishable values. No model weights are loaded.
+    """
+    from pathlib import Path as _Path
+
+    from proto_tools.utils import run_in_env
+
+    check = _Path(__file__).resolve().parent / "_ligandmpnn_vocabulary_env_check.py"
+    output = run_in_env("ligandmpnn", script=str(check), timeout=900)
+
+    assert "ALL CHECKS PASSED" in output, output
+    # The Foundry encoding is always available, so its absence means the check did not really run.
+    assert "PASS foundry" in output, output
+
+
 def test_ligandmpnn_score_dispatch_contract(monkeypatch):
     captured = {}
     structure = ligandmpnn_example_input().inputs[0].structure
     sequence = structure.get_chain_sequence("A")
-    vocab = list("ACDEFGHIKLMNPQRSTVWYX")
+    vocab = list("ACDEFGHIKLMNPQRSTVWY")  # what the worker returns: proto order, no unknown column
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["toolkit"] = toolkit

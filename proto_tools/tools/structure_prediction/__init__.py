@@ -2,6 +2,7 @@
 
 from proto_tools.tools.structure_prediction.alphafold2 import (
     AlphaFold2Config,
+    AlphaFold2GradientCandidate,
     AlphaFold2GradientConfig,
     AlphaFold2GradientInput,
     AlphaFold2GradientOutput,
@@ -31,6 +32,7 @@ from proto_tools.tools.structure_prediction.chai1 import Chai1Config, Chai1Input
 from proto_tools.tools.structure_prediction.dispatch import predict_structures
 from proto_tools.tools.structure_prediction.esmfold import (
     ESMFoldConfig,
+    ESMFoldGradientCandidate,
     ESMFoldGradientConfig,
     ESMFoldGradientInput,
     ESMFoldGradientOutput,
@@ -92,6 +94,7 @@ __all__ = [
     "AlphaFold2Output",
     "run_alphafold2_gradient",
     "AlphaFold2GradientInput",
+    "AlphaFold2GradientCandidate",
     "AlphaFold2GradientConfig",
     "AlphaFold2GradientOutput",
     # AlphaFold3
@@ -121,6 +124,7 @@ __all__ = [
     "ESMFoldOutput",
     "run_esmfold_gradient",
     "ESMFoldGradientInput",
+    "ESMFoldGradientCandidate",
     "ESMFoldGradientConfig",
     "ESMFoldGradientOutput",
     # ESMFold2

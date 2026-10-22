@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from standalone_helpers import get_logger, log_likelihood_metrics, serialize_output
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
+from standalone_helpers.vocabulary import AMINO_ACIDS_LIST
 
 logger = get_logger(__name__)
 
-STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
+STANDARD_AMINO_ACIDS = "".join(AMINO_ACIDS_LIST)
 
 
 # Mirror of setup.sh's URL table — kept in sync by hand (URLs are static).
@@ -668,7 +670,8 @@ class AbLangModel:
         logits_list: list[list[float]],
         *,
         temperature: float | None = None,
-        use_ste: bool = False,
+        soft: float = 1.0,
+        hard: float = 0.0,
         chain_break_position: int | None = None,
         seed: int | None = None,
         backprop: bool = True,
@@ -681,7 +684,8 @@ class AbLangModel:
         Args:
             logits_list (list[list[float]]): Input logits, shape (L, 20).
             temperature (float | None): Softmax temperature; ``None`` uses logits as-is.
-            use_ste (bool): Straight-Through Estimator (hard forward, soft backward).
+            soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
+            hard (float): Straight-through coefficient; 1 forwards a hard one-hot.
             chain_break_position (int | None): VH/VL split for ``<VH>|<VL>`` paired layout.
             seed (int | None): Random seed.
             backprop (bool): If False, skip backward and return ``gradient=None``.
@@ -704,13 +708,13 @@ class AbLangModel:
             seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
             sequence_length = int(seq_dist.shape[0])
 
-            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist  # (L, 20)
-            mapped = x @ self._canonical_amino_acid_to_vocab_matrix()  # (L, V)
-            residue_token_ids = mapped.argmax(dim=-1).detach()  # (L,)
+            # Targets come from P, not the blend, so they do not move with soft/hard.
+            to_vocab = self._canonical_amino_acid_to_vocab_matrix()
+            probs = relaxed_sequence(seq_dist, temperature=temperature)  # (L, 20)
+            residue_token_ids = (probs @ to_vocab).argmax(dim=-1).detach()  # (L,)
 
-            if use_ste:
-                hard = F.one_hot(residue_token_ids, num_classes=mapped.size(-1)).float()
-                mapped = hard + (mapped - mapped.detach())  # hard forward, soft backward
+            x = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)  # (L, 20)
+            mapped = x @ to_vocab  # (L, V)
 
             # Soft embeddings: (L, V) @ (V, D) → (L, D)
             if self._is_ablang1:
@@ -807,11 +811,11 @@ class AbLangModel:
                 chunk_idx = torch.arange(chunk_len, device=self.device)
                 pred = chunk_logits[chunk_idx, chunk_aa_pos, :]  # (C, V)
                 labels = token_ids[0, aa_positions[start:end]]  # (C,)
-                loss = F.cross_entropy(pred, labels, reduction="sum")
-                total_loss_val += loss.item()
+                loss_sum = F.cross_entropy(pred, labels, reduction="sum")
+                total_loss_val += loss_sum.item()
 
                 if backprop:
-                    loss.backward()
+                    (loss_sum / n_aa).backward()
                     ie_grad += ie_chunk.grad
 
         mean_nll = total_loss_val / n_aa
@@ -839,18 +843,35 @@ class AbLangModel:
 _model: AbLangModel | None = None
 
 
-def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
-    """Entry point for both persistent-worker and one-shot execution."""
+def _ensure_model(model_choice: str) -> AbLangModel:
+    """Return the worker's model for ``model_choice``, swapping checkpoints only when it changes.
+
+    AbLang picks its checkpoint from the chains an antibody carries, so one dispatch may need
+    more than one. Swapping unloads the previous checkpoint first, keeping a single one resident.
+
+    Args:
+        model_choice (str): One of ``ablang1-heavy``, ``ablang1-light``, ``ablang2-paired``.
+
+    Returns:
+        AbLangModel: The wrapper for that checkpoint, loaded on first use by the operation.
+    """
     global _model
-    operation = input_dict["operation"]
-    model_choice = input_dict["model_choice"]
     if _model is None or _model.model_choice != model_choice:
         if _model is not None and _model._loaded:
             _model.unload()
         _model = AbLangModel(model_choice=model_choice)
+    return _model
+
+
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
+    """Entry point for both persistent-worker and one-shot execution."""
+    operation = input_dict["operation"]
+    if operation != "compute_gradient":
+        # Only the gradient carries a checkpoint per item; it resolves them below, grouped.
+        model = _ensure_model(input_dict["model_choice"])
 
     if operation == "embeddings":
-        return _model.embeddings(
+        return model.embeddings(
             sequences=input_dict["sequences"],
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
@@ -858,7 +879,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
         )
     if operation == "score":
-        return _model.score(
+        return model.score(
             sequences=input_dict["sequences"],
             scoring_mode=input_dict["scoring_mode"],
             batch_size=input_dict["batch_size"],
@@ -867,7 +888,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
         )
     if operation == "sample":
-        return _model.sample(
+        return model.sample(
             sequences=input_dict["sequences"],
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
@@ -879,17 +900,37 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             excluded_amino_acids=input_dict["excluded_amino_acids"],
         )
     if operation == "compute_gradient":
-        return _model.compute_gradient(
-            logits_list=input_dict["logits"],
-            temperature=input_dict["temperature"],
-            use_ste=input_dict["use_ste"],
-            chain_break_position=input_dict["chain_break_position"],
-            seed=input_dict["seed"],
-            backprop=input_dict.get("compute_gradient", True),
-            batch_size=input_dict.get("batch_size"),
-            device=input_dict["device"],
-            verbose=input_dict["verbose"],
-        )
+        # Grouped by checkpoint so each variant loads once; results are written back by original position.
+        items = input_dict["items"]
+        groups: dict[str, list[int]] = {}
+        for index, item in enumerate(items):
+            groups.setdefault(item["model_choice"], []).append(index)
+
+        results: list[dict[str, Any] | None] = [None] * len(items)
+        for model_choice, indices in groups.items():
+            model = _ensure_model(model_choice)
+            for index in indices:
+                item = items[index]
+                results[index] = model.compute_gradient(
+                    logits_list=item["logits"],
+                    temperature=resolve_temperature(input_dict["temperature"]),
+                    soft=float(input_dict.get("soft", 1.0)),
+                    hard=float(input_dict.get("hard", 0.0)),
+                    chain_break_position=item["chain_break_position"],
+                    seed=input_dict["seed"],
+                    backprop=input_dict.get("compute_gradient", True),
+                    batch_size=input_dict.get("batch_size"),
+                    device=input_dict["device"],
+                    verbose=input_dict["verbose"],
+                )
+
+        completed = [result for result in results if result is not None]
+        if len(completed) != len(items):
+            raise RuntimeError(f"ablang: produced {len(completed)} results for {len(items)} item(s)")
+        return {
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in completed],
+            "vocab": completed[0]["vocab"],
+        }
     raise ValueError(
         f"ablang: unknown operation {operation!r}; valid: ['embeddings', 'score', 'sample', 'compute_gradient']"
     )

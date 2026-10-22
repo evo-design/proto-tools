@@ -2,7 +2,7 @@
 
 import csv
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
@@ -14,9 +14,13 @@ from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
+    BatchedNucleotideGradientInput,
     ConfigField,
     GradientOutput,
+    GradientResult,
     InputField,
+    NucleotideSequenceLogits,
+    RelaxationConfig,
     ToolInstance,
     return_invalid_nucleotide_chars,
 )
@@ -33,8 +37,6 @@ DEFAULT_MALINOIS_ARTIFACT_MD5 = "375142a714e7df73c463b46113a65210"
 MALINOIS_CELL_TYPES = ("K562", "HepG2", "SKNSH")
 MalinoisCellType = Literal["K562", "HepG2", "SKNSH"]
 MalinoisObjectiveDirection = Literal["max", "min"]
-MalinoisLogits = list[list[list[float]]]
-MalinoisGradientValue = list[list[list[float]]] | None
 
 
 class MalinoisActivityMetrics(Metrics):
@@ -340,57 +342,21 @@ class MalinoisGradientLossTerm(BaseModel):
     )
 
 
-class MalinoisGradientInput(BaseToolInput):
+class MalinoisGradientInput(BatchedNucleotideGradientInput):
     """Input for differentiable Malinois sequence optimization.
 
     Attributes:
-        logits (MalinoisLogits): Batched relaxed DNA sequence logits with shape
-            ``(B, L, 4)`` in ``A,C,G,T`` order. Use ``B=1`` for a single
-            design candidate.
-        temperature (float): Softmax temperature used to relax logits.
+        inputs (list[NucleotideSequenceLogits]): One relaxed ``(L, 4)`` DNA state per
+            candidate in ``A,C,G,T`` order; a single state may be passed on its own. Every item
+            must share one length, because the backend evaluates them in one vectorized pass.
+        temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
+            reads each state as unnormalized and applies ``softmax(logits / T)``, returning
+            logit-space gradients; ``None`` reads them as probabilities and returns
+            probability-space gradients.
     """
 
-    logits: MalinoisLogits = InputField(
-        title="Logits",
-        description="Batched relaxed DNA logits with shape (B, L, 4) in A,C,G,T order.",
-        examples=[[[[0.0] * 4] * 200]],
-    )
-    temperature: float = InputField(
-        default=1.0,
-        gt=0.0,
-        title="Temperature",
-        description="Softmax temperature used to convert logits into relaxed nucleotide probabilities.",
-    )
 
-    @field_validator("logits")
-    @classmethod
-    def validate_logits(cls, logits: MalinoisLogits) -> MalinoisLogits:
-        """Ensure logits are a non-empty ``B x L x 4`` tensor."""
-        if not logits:
-            raise ValueError("logits must contain at least one batch item")
-        expected_width = len(DNA_NUCLEOTIDES)
-        seq_length: int | None = None
-        for batch_idx, matrix in enumerate(logits):
-            if not matrix:
-                raise ValueError(f"logits batch {batch_idx} must contain at least one position")
-            if not isinstance(matrix[0], list):
-                raise ValueError("logits must have shape (B, L, 4); use batch size 1 for a single candidate")
-            if seq_length is None:
-                seq_length = len(matrix)
-            elif len(matrix) != seq_length:
-                raise ValueError(
-                    f"all batched logits must have the same sequence length; "
-                    f"batch 0 has {seq_length}, batch {batch_idx} has {len(matrix)}"
-                )
-            for row_idx, row in enumerate(matrix):
-                if len(row) != expected_width:
-                    raise ValueError(
-                        f"logits batch {batch_idx} row {row_idx} must have {expected_width} columns, got {len(row)}"
-                    )
-        return logits
-
-
-class MalinoisGradientConfig(BaseConfig):
+class MalinoisGradientConfig(RelaxationConfig):
     """Configuration for differentiable Malinois activity objectives.
 
     Attributes:
@@ -401,8 +367,8 @@ class MalinoisGradientConfig(BaseConfig):
         artifact_url (str): URL used to provision the Malinois artifact.
         artifact_md5 (str): Expected checksum for the downloaded artifact.
         malinois_dir (str): Optional extracted Malinois artifact directory.
-        soft (float): Blend hard argmax one-hot (0) to softmax probabilities (1).
-        hard (float): Straight-through hard-forward coefficient.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Run backward pass and return gradient.
         device (str): Device used for inference and backpropagation.
     """
@@ -448,20 +414,6 @@ class MalinoisGradientConfig(BaseConfig):
         default=DEFAULT_MALINOIS_DIR,
         description="Optional local Malinois metadata directory; empty uses the managed cache extraction.",
         reload_on_change=True,
-    )
-    soft: float = ConfigField(
-        title="Soft Mixing",
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description="Blend hard argmax one-hot (0) to softmax probabilities (1).",
-    )
-    hard: float = ConfigField(
-        title="Hard Mixing",
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="Straight-through hard-forward coefficient.",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
@@ -581,35 +533,32 @@ class MalinoisGradientOutput(GradientOutput):
     """Differentiable Malinois activity output.
 
     Attributes:
-        gradient (MalinoisGradientValue): Gradient tensor matching input DNA
-            logits, or ``None`` when ``compute_gradient=False``.
-        loss (float): Sum of per-sample weighted scalar objective values.
-            Per-sample values are available in ``sample_metrics``.
-        sample_metrics (list[MalinoisGradientSampleMetrics]): Per-sample metric
-            containers with scalar loss and raw cell-type scores.
-        metrics (dict[str, Any]): Auxiliary metadata bundle from the standalone
-            worker, including raw scores, objective-term metadata, and runtime
-            relaxation parameters.
+        results (list[GradientResult]): One per input sequence, in input order, each holding that
+            sample's own gradient, weighted objective, and raw cell-type scores.
         vocab (list[str]): DNA column ordering for logits and gradient.
     """
 
-    gradient: MalinoisGradientValue = Field(
-        default=None,
-        title="Gradient",
-        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
-    )
-    sample_metrics: list[MalinoisGradientSampleMetrics] = Field(
-        default_factory=list,
-        title="Sample Metrics",
-        description="Per-sample Malinois objective metrics.",
-    )
+    @classmethod
+    def from_batch(cls, payload: Mapping[str, Any]) -> "MalinoisGradientOutput":
+        """Unbatch one worker payload into per-sample results.
 
-    @model_validator(mode="after")
-    def populate_sample_metrics(self) -> "MalinoisGradientOutput":
-        """Populate metric containers from the standalone metrics payload."""
-        if not self.sample_metrics:
-            self.sample_metrics = _build_gradient_sample_metrics(self.metrics)
-        return self
+        The worker evaluates the batch in one vectorized pass and reports a stacked ``(B, L, 4)``
+        gradient with per-sample losses and raw scores, so this splits them back into one result
+        per input sequence.
+
+        Args:
+            payload (Mapping[str, Any]): Worker payload for the whole batch.
+
+        Returns:
+            MalinoisGradientOutput: One result per sample, in input order.
+        """
+        sample_metrics = _build_gradient_sample_metrics(payload["metrics"])
+        gradients = payload.get("gradient") or [None] * len(sample_metrics)
+        results = []
+        for index, metrics in enumerate(sample_metrics):
+            values = metrics.model_dump()
+            results.append(GradientResult(gradient=gradients[index], loss=float(values["loss"]), metrics=values))
+        return cls(results=results, vocab=payload["vocab"])
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         """Export the gradient bundle as JSON."""
@@ -617,7 +566,7 @@ class MalinoisGradientOutput(GradientOutput):
             raise ValueError(f"Unsupported format: {file_format}")
         base = Path(export_path)
         json_path = base.parent / f"{base.name}.json"
-        payload = self.model_dump(include={"gradient", "loss", "sample_metrics", "metrics", "vocab"})
+        payload = self.model_dump(include={"results", "vocab"})
         json_path.write_text(json.dumps(payload, indent=2))
 
 
@@ -628,7 +577,7 @@ def example_input() -> Any:
 
 def example_gradient_input() -> Any:
     """Minimal valid input for differentiable Malinois examples."""
-    return MalinoisGradientInput(logits=[[[0.0] * len(DNA_NUCLEOTIDES)] * 200])
+    return MalinoisGradientInput(inputs=[NucleotideSequenceLogits([[0.0] * len(DNA_NUCLEOTIDES)] * 200)])
 
 
 @tool(
@@ -718,6 +667,9 @@ def run_malinois_score(
     uses_gpu=True,
     example_input=example_gradient_input,
     cacheable=False,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=32,
 )
 def run_malinois_gradient(
     inputs: MalinoisGradientInput,
@@ -725,7 +677,7 @@ def run_malinois_gradient(
     instance: Any = None,
 ) -> MalinoisGradientOutput:
     """Compute Malinois activity gradients with respect to relaxed DNA logits."""
-    invalid_lengths = [len(matrix) for matrix in inputs.logits if len(matrix) != config.seq_length]
+    invalid_lengths = [len(matrix) for matrix in inputs.inputs if len(matrix) != config.seq_length]
     if invalid_lengths:
         raise ValueError(f"Malinois gradient logits must have length {config.seq_length}; got {invalid_lengths[0]}")
 
@@ -733,7 +685,7 @@ def run_malinois_gradient(
         "malinois",
         {
             "operation": "compute_gradient",
-            "logits": inputs.logits,
+            "logits": [item.root for item in inputs.inputs],
             "temperature": inputs.temperature,
             "loss_terms": [term.model_dump() for term in config.loss_terms],
             "seq_length": config.seq_length,
@@ -751,4 +703,4 @@ def run_malinois_gradient(
         instance=instance,
         config=config,
     )
-    return MalinoisGradientOutput(**result)
+    return MalinoisGradientOutput.from_batch(result)

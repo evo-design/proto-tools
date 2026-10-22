@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from proto_tools.entities.structures import BFactorType, Structure, is_valid_structure
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
+    AlphaFold2GradientCandidate,
     AlphaFold2GradientConfig,
     AlphaFold2GradientInput,
     AlphaFold2GradientOutput,
@@ -20,6 +21,7 @@ from proto_tools.tools.structure_prediction import (
     run_alphafold2,
     run_alphafold2_gradient,
 )
+from proto_tools.tools.structure_prediction.shared_data_models import StructureGradientResult
 from proto_tools.utils import one_hot_protein_logits
 from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from proto_tools.utils.tool_instance import ToolInstance
@@ -77,9 +79,15 @@ def test_config_rejects_model_num_and_ensemble_together():
 
 
 def test_gradient_input_requires_20_columns():
-    AlphaFold2GradientInput(logits=[[0.0] * 20, [1.0] * 20], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, temperature=0.75)
+    AlphaFold2GradientInput(
+        inputs=AlphaFold2GradientCandidate(logits=[[0.0] * 20, [1.0] * 20], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH),
+        temperature=0.75,
+    )
     with pytest.raises(ValidationError, match="20 columns"):
-        AlphaFold2GradientInput(logits=[[0.0] * 19], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, temperature=1.0)
+        AlphaFold2GradientInput(
+            inputs=AlphaFold2GradientCandidate(logits=[[0.0] * 19], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH),
+            temperature=1.0,
+        )
 
 
 def test_gradient_config_rejects_bad_loss_weights():
@@ -88,9 +96,114 @@ def test_gradient_config_rejects_bad_loss_weights():
         AlphaFold2GradientConfig(loss_weights={"pldd": 1.0})
 
 
+@pytest.mark.parametrize(
+    "overrides, ignored",
+    [
+        ({"hard": 0.5}, "hard=0.5"),
+        ({"soft": 0.25}, "soft=0.25"),
+        ({"excluded_amino_acids": ["C"]}, "excluded_amino_acids"),
+        ({"bias_redesign": 2.0}, "bias_redesign=2.0"),
+    ],
+)
+def test_gradient_probability_mode_rejects_softmax_only_knobs(overrides, ignored):
+    """temperature=None drives ColabDesign at soft=0, so softmax-only knobs are refused."""
+    inputs = AlphaFold2GradientInput(
+        inputs=AlphaFold2GradientCandidate(
+            logits=[[1.0 / 20] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="B"
+        ),
+        temperature=None,
+    )
+    with pytest.raises(ValueError, match=ignored):
+        run_alphafold2_gradient(inputs, AlphaFold2GradientConfig(**overrides))
+
+
+def test_gradient_probability_mode_accepts_default_config(monkeypatch):
+    """With defaults, temperature=None reaches the worker and asks for soft=0 relaxation."""
+    captured: dict[str, object] = {}
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured["payload"] = payload
+        return {
+            "results": [
+                {
+                    "gradient": [[0.0] * 20] * 2,
+                    "loss": 1.0,
+                    "metrics": {"avg_plddt": 0.5, "ptm": 0.5, "avg_pae": 1.0},
+                    "pdb": _GRADIENT_EXAMPLE_PDB_PATH.read_text(),
+                }
+            ],
+            "vocab": list(PROTEIN_AMINO_ACIDS),
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+    run_alphafold2_gradient(
+        AlphaFold2GradientInput(
+            inputs=AlphaFold2GradientCandidate(
+                logits=[[1.0 / 20] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="B"
+            ),
+            temperature=None,
+        ),
+        AlphaFold2GradientConfig(),
+    )
+    assert captured["payload"]["temperature"] is None
+    assert captured["payload"]["soft"] == 1.0  # the worker maps probability mode to opt soft=0
+
+
+def _softmax_rows(logits):
+    """Softmax each row of a logits matrix."""
+    rows = []
+    for row in logits:
+        peak = max(row)
+        exponentiated = [math.exp(value - peak) for value in row]
+        total = sum(exponentiated)
+        rows.append([value / total for value in exponentiated])
+    return rows
+
+
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_gradient_probability_mode_folds_the_same_binder():
+    """temperature=None must pass the distribution through, not let ColabDesign softmax it again.
+
+    AF2's loss drifts a few percent between identical runs even at a fixed seed, so this
+    compares a *saturated* one-hot distribution against the equivalent saturated logits: both
+    describe the same near-discrete binder. A second softmax would smear that one-hot toward
+    uniform (exp(1) against 19 exp(0) terms) and fold a different binder entirely, well outside
+    the tolerance.
+    """
+    logits = one_hot_protein_logits("EVQLVESG", sharpness=20.0)
+    probabilities = _softmax_rows(logits)
+    config = AlphaFold2GradientConfig(num_recycles=0, model_num=1, seed=42)
+
+    logit_mode = run_alphafold2_gradient(
+        AlphaFold2GradientInput(
+            inputs=AlphaFold2GradientCandidate(logits=logits, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="B")
+        ),
+        config,
+    )
+    probability_mode = run_alphafold2_gradient(
+        AlphaFold2GradientInput(
+            inputs=AlphaFold2GradientCandidate(
+                logits=probabilities, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="B"
+            ),
+            temperature=None,
+        ),
+        config,
+    )
+
+    assert probability_mode.results[0].loss == pytest.approx(logit_mode.results[0].loss, rel=0.1)
+    assert probability_mode.results[0].gradient is not None
+    assert len(probability_mode.results[0].gradient) == len(logits)
+    assert all(len(row) == 20 for row in probability_mode.results[0].gradient)
+    assert all(math.isfinite(v) for row in probability_mode.results[0].gradient for v in row)
+
+
 def test_gradient_input_requires_target_pdb():
     with pytest.raises(ValidationError, match="target_pdb"):
-        AlphaFold2GradientInput(logits=[[0.0] * 20], temperature=1.0)
+        AlphaFold2GradientInput(inputs=AlphaFold2GradientCandidate(logits=[[0.0] * 20]), temperature=1.0)
 
 
 def _load_af2_standalone():
@@ -113,21 +226,31 @@ def _load_af2_standalone():
 def test_binder_input_allows_denovo_none_binder_chain():
     """binder_chain=None is accepted, signalling de-novo design (no template)."""
     inp = AlphaFold2GradientInput(
-        logits=[[0.0] * 20, [1.0] * 20], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain=None
+        inputs=AlphaFold2GradientCandidate(
+            logits=[[0.0] * 20, [1.0] * 20], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain=None
+        )
     )
-    assert inp.binder_chain is None
+    assert inp.inputs[0].binder_chain is None
 
 
 def test_binder_chain_absent_from_target_raises():
     """Absent binder_chain fails fast with a clear error, not ColabDesign's 'Found 0 models'."""
     with pytest.raises(ValidationError, match=r"binder_chain='H' is not a polymer chain"):
-        AlphaFold2GradientInput(logits=[[0.0] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="H")
+        AlphaFold2GradientInput(
+            inputs=AlphaFold2GradientCandidate(
+                logits=[[0.0] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="H"
+            )
+        )
 
 
 def test_target_chain_absent_from_target_raises():
     """target_chain absent from target_pdb fails fast with an actionable error."""
     with pytest.raises(ValidationError, match=r"target_chain='Z' is not a polymer chain"):
-        AlphaFold2GradientInput(logits=[[0.0] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, target_chain="Z")
+        AlphaFold2GradientInput(
+            inputs=AlphaFold2GradientCandidate(
+                logits=[[0.0] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, target_chain="Z"
+            )
+        )
 
 
 def test_binder_template_prep_kwargs_denovo_vs_redesign():
@@ -164,13 +287,17 @@ def test_gradient_dispatch_contract(monkeypatch):
         captured.update(toolkit=toolkit, payload=payload)
         # target_pdb is a tempfile that the wrapper cleans up after dispatch returns;
         # snapshot its content here while it still exists.
-        captured["target_pdb_content"] = Path(payload["target_pdb"]).read_text()
+        captured["target_pdb_content"] = Path(payload["items"][0]["target_pdb"]).read_text()
         return {
-            "gradient": [[0.1] * 20] * 2,
-            "loss": 1.25,
-            "metrics": {"avg_plddt": 0.8, "ptm": 0.7, "iptm": 0.5, "avg_pae": 1.5, "pae": None},
+            "results": [
+                {
+                    "gradient": [[0.1] * 20] * 2,
+                    "loss": 1.25,
+                    "metrics": {"avg_plddt": 0.8, "ptm": 0.7, "iptm": 0.5, "avg_pae": 1.5, "pae": None},
+                    "pdb": _EXAMPLE_PDB,
+                }
+            ],
             "vocab": _CANONICAL_VOCAB,
-            "pdb": _EXAMPLE_PDB,
         }
 
     monkeypatch.setattr(
@@ -179,12 +306,14 @@ def test_gradient_dispatch_contract(monkeypatch):
     )
 
     inputs = AlphaFold2GradientInput(
-        logits=[[0.0] * 20, [1.0] * 20],
+        inputs=AlphaFold2GradientCandidate(
+            logits=[[0.0] * 20, [1.0] * 20],
+            target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
+            target_chain="A",
+            binder_chain="B",
+            design_positions=[0, 1],
+        ),
         temperature=0.8,
-        target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
-        target_chain="A",
-        binder_chain="B",
-        design_positions=[0, 1],
     )
     config = AlphaFold2GradientConfig(
         loss_weights={"plddt": 1.0},
@@ -199,37 +328,49 @@ def test_gradient_dispatch_contract(monkeypatch):
     assert payload["temperature"] == 0.8
     # target_pdb is materialized to a tempfile (path is local-to-runtime, not the
     # caller's input path). The dispatch sees a real PDB-shaped file at that path.
-    assert payload["target_pdb"].endswith(".pdb")
+    assert payload["items"][0]["target_pdb"].endswith(".pdb")
     assert captured["target_pdb_content"].strip().startswith(("ATOM", "HEADER"))
     assert payload["backend"] == "base"
     assert payload["soft"] == 1.0
     assert payload["recycle_mode"] == "last"
     assert payload["starting_binder_seq"] is None
-    assert result.gradient == [[0.1] * 20] * 2
-    assert result.loss == 1.25
-    assert result.structure.source == "alphafold2-gradient"
-    assert result.structure.b_factor_type.value == "pLDDT"
-    assert is_valid_structure(result.structure.structure)
+    assert result.results[0].gradient == [[0.1] * 20] * 2
+    assert result.results[0].loss == 1.25
+    assert result.results[0].structure.source == "alphafold2-gradient"
+    assert result.results[0].structure.b_factor_type.value == "pLDDT"
+    assert is_valid_structure(result.results[0].structure.structure)
     # per_residue_plddt must be normalized to [0, 1] for downstream consumers
     # (proto-language's pLDDT-weighted semigreedy uses `1 - plddt` for sampling).
-    plddt = result.structure.per_residue_plddt
+    plddt = result.results[0].structure.per_residue_plddt
     assert plddt is not None
     assert all(0.0 <= v <= 1.0 for v in plddt)
 
 
 @pytest.mark.parametrize("name", ["step", "step_v1.5"])
 def test_gradient_export_writes_pdb_sidecar(tmp_path, name):
+    """Each result gets its own indexed sidecar, so a batch cannot overwrite one structure."""
     AlphaFold2GradientOutput(
-        gradient=[[0.1] * 20] * 2,
-        loss=1.25,
-        metrics={"avg_plddt": 0.8},
+        results=[
+            StructureGradientResult(
+                gradient=[[0.1] * 20] * 2,
+                loss=1.25,
+                metrics={"avg_plddt": 0.8},
+                structure=Structure(structure=_EXAMPLE_PDB, b_factor_type=BFactorType.PLDDT),
+            ),
+            StructureGradientResult(
+                gradient=[[0.2] * 20] * 2,
+                loss=2.5,
+                metrics={"avg_plddt": 0.6},
+                structure=Structure(structure=_EXAMPLE_PDB, b_factor_type=BFactorType.PLDDT),
+            ),
+        ],
         vocab=_CANONICAL_VOCAB,
-        structure=Structure(structure=_EXAMPLE_PDB, b_factor_type=BFactorType.PLDDT),
     ).export(name, export_path=tmp_path)
 
     payload = json.loads((tmp_path / f"{name}.json").read_text())
-    assert payload["structure_pdb"] == f"{name}.pdb"
-    assert is_valid_structure((tmp_path / f"{name}.pdb").read_text())
+    assert payload["structure_pdbs"] == [f"{name}_0000.pdb", f"{name}_0001.pdb"]
+    for sidecar in payload["structure_pdbs"]:
+        assert is_valid_structure((tmp_path / sidecar).read_text())
 
 
 def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
@@ -238,11 +379,15 @@ def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured.update(payload=payload)
         return {
-            "gradient": [[0.0] * 20] * 3,
-            "loss": 0.0,
-            "metrics": {"avg_plddt": 0.5, "ptm": 0.5, "avg_pae": 1.0, "pae": None},
+            "results": [
+                {
+                    "gradient": [[0.0] * 20] * 3,
+                    "loss": 0.0,
+                    "metrics": {"avg_plddt": 0.5, "ptm": 0.5, "avg_pae": 1.0, "pae": None},
+                    "pdb": _EXAMPLE_PDB,
+                }
+            ],
             "vocab": _CANONICAL_VOCAB,
-            "pdb": _EXAMPLE_PDB,
         }
 
     monkeypatch.setattr(
@@ -252,10 +397,10 @@ def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
 
     run_alphafold2_gradient(
         AlphaFold2GradientInput(
-            logits=[[0.0] * 20] * 3,
+            inputs=AlphaFold2GradientCandidate(
+                logits=[[0.0] * 20] * 3, target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH), binder_chain="B"
+            ),
             temperature=1.0,
-            target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
-            binder_chain="B",
         ),
         AlphaFold2GradientConfig(
             recycle_mode="average",
@@ -277,11 +422,15 @@ def test_forward_mode_dispatch_contract(monkeypatch):
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured.update(payload=payload)
         return {
-            "gradient": None,
-            "loss": 0.75,
-            "metrics": {"avg_plddt": 0.82, "ptm": 0.65, "iptm": 0.55, "avg_pae": 2.1, "pae": None},
+            "results": [
+                {
+                    "gradient": None,
+                    "loss": 0.75,
+                    "metrics": {"avg_plddt": 0.82, "ptm": 0.65, "iptm": 0.55, "avg_pae": 2.1, "pae": None},
+                    "pdb": _EXAMPLE_PDB,
+                }
+            ],
             "vocab": _CANONICAL_VOCAB,
-            "pdb": _EXAMPLE_PDB,
         }
 
     monkeypatch.setattr(
@@ -291,19 +440,19 @@ def test_forward_mode_dispatch_contract(monkeypatch):
 
     result = run_alphafold2_gradient(
         AlphaFold2GradientInput(
-            logits=[[0.0] * 20] * 2,
-            target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
-            binder_chain="B",
+            inputs=AlphaFold2GradientCandidate(
+                logits=[[0.0] * 20] * 2, target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH), binder_chain="B"
+            )
         ),
         AlphaFold2GradientConfig(compute_gradient=False, hard=1.0, device="cpu"),
     )
 
     assert captured["payload"]["compute_gradient"] is False
     assert captured["payload"]["hard"] == 1.0
-    assert result.gradient is None
-    assert result.loss == 0.75
-    assert result.structure.source == "alphafold2-gradient"
-    assert result.structure.per_residue_plddt is not None
+    assert result.results[0].gradient is None
+    assert result.results[0].loss == 0.75
+    assert result.results[0].structure.source == "alphafold2-gradient"
+    assert result.results[0].structure.per_residue_plddt is not None
 
 
 def test_prediction_dispatch_contract(monkeypatch):
@@ -454,7 +603,9 @@ def test_forward_vs_gradient_consistency():
         "target_chain": "A",
         "binder_chain": "B",
     }
-    inputs = AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0, **target_kwargs)
+    inputs = AlphaFold2GradientInput(
+        inputs=AlphaFold2GradientCandidate(logits=[[0.0] * 20] * 5, **target_kwargs), temperature=1.0
+    )
     grad = run_alphafold2_gradient(
         inputs, AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}, seed=42)
     )
@@ -464,24 +615,24 @@ def test_forward_vs_gradient_consistency():
     )
     validate_output(grad)
     assert grad.tool_id == "alphafold2-gradient"
-    assert len(grad.gradient) == 5
-    assert all(len(row) == 20 for row in grad.gradient)
-    assert all(math.isfinite(v) for row in grad.gradient for v in row)
-    assert any(v != 0.0 for row in grad.gradient for v in row)
-    assert math.isfinite(grad.loss) and grad.loss != 0.0
+    assert len(grad.results[0].gradient) == 5
+    assert all(len(row) == 20 for row in grad.results[0].gradient)
+    assert all(math.isfinite(v) for row in grad.results[0].gradient for v in row)
+    assert any(v != 0.0 for row in grad.results[0].gradient for v in row)
+    assert math.isfinite(grad.results[0].loss) and grad.results[0].loss != 0.0
     assert grad.vocab == _CANONICAL_VOCAB
-    assert 0 <= grad.metrics["avg_plddt"] <= 1.0
+    assert 0 <= grad.results[0].metrics["avg_plddt"] <= 1.0
     # Structure must be populated with per-residue pLDDT normalized to [0, 1]
     # for proto-language's pLDDT-weighted semigreedy (1 - plddt sampling).
-    assert grad.structure.source == "alphafold2-gradient"
-    assert is_valid_structure(grad.structure.structure)
-    plddt = grad.structure.per_residue_plddt
+    assert grad.results[0].structure.source == "alphafold2-gradient"
+    assert is_valid_structure(grad.results[0].structure.structure)
+    plddt = grad.results[0].structure.per_residue_plddt
     assert plddt is not None and all(0.0 <= v <= 1.0 for v in plddt)
 
-    assert fwd.gradient is None
-    assert math.isclose(grad.loss, fwd.loss, rel_tol=0.1)
-    assert math.isclose(grad.metrics["avg_plddt"], fwd.metrics["avg_plddt"], rel_tol=0.1)
-    assert math.isclose(grad.metrics["ptm"], fwd.metrics["ptm"], rel_tol=0.1)
+    assert fwd.results[0].gradient is None
+    assert math.isclose(grad.results[0].loss, fwd.results[0].loss, rel_tol=0.1)
+    assert math.isclose(grad.results[0].metrics["avg_plddt"], fwd.results[0].metrics["avg_plddt"], rel_tol=0.1)
+    assert math.isclose(grad.results[0].metrics["ptm"], fwd.results[0].metrics["ptm"], rel_tol=0.1)
 
 
 @pytest.mark.uses_gpu
@@ -493,11 +644,13 @@ def test_gradient_recycle_mode_threads_through():
         "binder_chain": "B",
     }
     result = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0, **target_kwargs),
+        AlphaFold2GradientInput(
+            inputs=AlphaFold2GradientCandidate(logits=[[0.0] * 20] * 5, **target_kwargs), temperature=1.0
+        ),
         AlphaFold2GradientConfig(num_recycles=2, recycle_mode="first", loss_weights={"plddt": 1.0}),
     )
     validate_output(result)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
+    assert all(math.isfinite(v) for row in result.results[0].gradient for v in row)
 
 
 @pytest.mark.uses_gpu
@@ -510,23 +663,25 @@ def test_gradient_responds_to_loss_weights_and_logits():
         "binder_chain": "B",
     }
     r_plddt = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=logits, temperature=1.0, **target_kwargs),
+        AlphaFold2GradientInput(inputs=AlphaFold2GradientCandidate(logits=logits, **target_kwargs), temperature=1.0),
         AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
     )
     r_con = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=logits, temperature=1.0, **target_kwargs),
+        AlphaFold2GradientInput(inputs=AlphaFold2GradientCandidate(logits=logits, **target_kwargs), temperature=1.0),
         AlphaFold2GradientConfig(num_recycles=1, loss_weights={"con": 1.0}),
     )
     r_shifted = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=[[5.0] + [0.0] * 19] * 5, temperature=1.0, **target_kwargs),
+        AlphaFold2GradientInput(
+            inputs=AlphaFold2GradientCandidate(logits=[[5.0] + [0.0] * 19] * 5, **target_kwargs), temperature=1.0
+        ),
         AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
     )
     # Different loss weights change the gradient; different logits change loss and gradient.
-    assert r_plddt.gradient != r_con.gradient
-    assert r_plddt.loss != r_shifted.loss
-    assert r_plddt.gradient != r_shifted.gradient
-    assert all(math.isfinite(v) for row in r_plddt.gradient for v in row)
-    assert all(math.isfinite(v) for row in r_con.gradient for v in row)
+    assert r_plddt.results[0].gradient != r_con.results[0].gradient
+    assert r_plddt.results[0].loss != r_shifted.results[0].loss
+    assert r_plddt.results[0].gradient != r_shifted.results[0].gradient
+    assert all(math.isfinite(v) for row in r_plddt.results[0].gradient for v in row)
+    assert all(math.isfinite(v) for row in r_con.results[0].gradient for v in row)
 
 
 @pytest.mark.uses_gpu
@@ -572,11 +727,13 @@ def test_alphafold2_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark alphafold2-gradient: 5 repeated redesign passes of the PD-L1 nanobody (chain B, 118 aa) vs the target (cold + warm)."""
     binder_seq = Structure.from_file(_GRADIENT_EXAMPLE_PDB_PATH).get_chain_sequence("B")
     inputs = AlphaFold2GradientInput(
-        logits=one_hot_protein_logits(binder_seq, sharpness=2.0),
+        inputs=AlphaFold2GradientCandidate(
+            logits=one_hot_protein_logits(binder_seq, sharpness=2.0),
+            target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
+            target_chain="A",
+            binder_chain="B",
+        ),
         temperature=1.0,
-        target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
-        target_chain="A",
-        binder_chain="B",
     )
     config = AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}, seed=0)
 
@@ -590,9 +747,11 @@ def test_alphafold2_gradient_benchmark(request: pytest.FixtureRequest) -> None:
 
     validate_output(result)
     assert result.tool_id == "alphafold2-gradient"
-    assert len(result.gradient) == len(binder_seq)
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert math.isfinite(result.loss)
-    assert result.structure.source == "alphafold2-gradient"
-    assert is_valid_structure(result.structure.structure)
+    (item,) = result.results
+    assert item.gradient is not None
+    assert len(item.gradient) == len(binder_seq)
+    assert all(len(row) == 20 for row in item.gradient)
+    assert all(math.isfinite(v) for row in item.gradient for v in row)
+    assert math.isfinite(item.loss)
+    assert item.structure.source == "alphafold2-gradient"
+    assert is_valid_structure(item.structure.structure)

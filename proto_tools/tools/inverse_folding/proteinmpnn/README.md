@@ -52,7 +52,7 @@ Use this to rank candidate sequences or point mutations by structural compatibil
 #### Usage Tips
 
 - **Set `fixed_positions` per (sequence, structure) pair to score only part of a chain.** It lives on each input pair as a `{chain: [positions]}` selection, not in the config. Listed positions are skipped when computing log-likelihood and perplexity, so the score reflects just the residues you care about instead of the whole sequence. **NOTE:** Positions are per chain and counted from 1, not 0, to match biological residue selection conventions.
-- **`return_logits` (default `False`) has a size trade-off.** Enabling it returns a per-position `(sequence length x 21)` logit array per sequence for residue-level analysis. That array dominates output size and memory for long sequences or large batches, so leave it off unless you need it.
+- **`return_logits` (default `False`) has a size trade-off.** Enabling it returns a per-position `(sequence length x 20)` logit array per sequence, in the shared amino-acid order `ACDEFGHIKLMNPQRSTVWY` reported as `vocab`. The model scores in its own order and over an extra unknown-residue column; both are handled internally, so a softmax over the returned columns is not the model's full distribution. That array dominates output size and memory for long sequences or large batches, so leave it off unless you need it.
 
 ### ProteinMPNN Gradient (`proteinmpnn-gradient`)
 
@@ -64,9 +64,11 @@ Use this when ProteinMPNN is one term in a larger optimization over a continuous
 
 #### Usage Tips
 
-- **`logits` columns must be in the order `ACDEFGHIKLMNPQRSTVWY`.** The columns are read by position, so a different amino-acid ordering silently produces the wrong gradient. An optional `temperature` runs `softmax(logits / T)` first. Leave it unset to use the logits as they are.
+- **`logits` columns are in the shared amino-acid order `ACDEFGHIKLMNPQRSTVWY`**, which every gradient tool uses and which you can import as `proto_tools.utils.PROTEIN_AMINO_ACIDS`. Columns are read by position, so passing a different ordering silently produces the wrong gradient.
+- **`temperature`** controls how the input logits are converted into amino acid probabilities using `softmax(logits / temperature)`. Lower temperatures make the distribution more concentrated around the most likely amino acid at each position, while higher temperatures produce more uniform distributions. The default is `1.0`, and the returned gradient is calculated with respect to the input logits.
+- **Advanced option:** `temperature=None` skips softmax and treats the input as probabilities rather than logits. Most users should leave the default in place. In this case, each row must contain nonnegative values that sum to 1, and the returned gradient is calculated with respect to those probabilities. This is generally less convenient for gradient-based optimization because updating probabilities directly can cause them to become negative or no longer sum to 1. Optimizing logits avoids this issue, since softmax always produces a valid probability distribution. However, working directly with probabilities can be useful when using an optimizer designed for probability distributions or when exact zero probabilities are needed to exclude particular tokens.
 - **`compute_gradient` (default `True`).** Returns the gradient of the mean negative log-likelihood with respect to `logits`. Set `False` for forward-only scoring (`loss` only, `gradient` is `None`), for example to cheaply rank MCMC proposals.
-- **`use_ste` (default `True`) sets the forward pass.** Straight-through: a hard one-hot in the forward pass with soft-probability gradients in the backward pass. Set `False` for fully soft blended embeddings, smoother but biased.
+- **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator — the forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, which is differentiable but outside the model's training distribution. The negative-log-likelihood labels are the decoded sequence at every setting, so they do not move with `soft` or `hard`.
 - **`fixed_positions` is counted from 1 and is left out of the objective.** Positions you list are excluded from both the loss and its gradient, so set it to optimize only the residues you are designing.
 
 ## Toolkit Notes

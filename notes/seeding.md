@@ -10,6 +10,9 @@ A `@tool()` registration either declares `stochastic=True` or it doesn't. The fl
 2. Skip dedup for iterable inputs.
 3. Use whole-call cache instead of per-item cache.
 
+Dropping the flag does not make a tool cacheable. `cacheable=` is a separate registration argument:
+every gradient tool is `cacheable=False` whether or not it is stochastic.
+
 `seed` lives on `BaseConfig`, so every config accepts a `seed` kwarg. Tools that don't actually sample (BLAST, DSSP, etc.) inherit the field but ignore it in their inference, so passing `seed=42` to them is a no-op.
 
 ### Deterministic tools (no flag)
@@ -34,7 +37,7 @@ Tools whose algorithm explicitly samples (`torch.multinomial`, `torch.randn`, JA
 **Examples (by category):**
 
 - **Language model samplers**: Evo1-sample, Evo2-sample, ProGen2-sample, ProGen3-sample, ESM2-sample, ESM3-sample, AbLang-sample
-- **Gradient / interpretability tools**: ESM2-gradient, AbLang-gradient, ESMFold-gradient, ProteinMPNN-gradient
+- **Gradient tools**: ProteinMPNN-gradient (random decoding order), AlphaFold2-gradient (MSA subsampling)
 - **Inverse folding samplers**: ProteinMPNN-sample, LigandMPNN-sample, ESM-IF1-sample, FaMPNN-sample, FaMPNN-pack
 - **Iterative / diffusion structure predictors**: AlphaFold2-binder, AlphaFold3-prediction, Boltz2-prediction, Chai1-prediction, Protenix-prediction
 - **Deterministic predictors** (no `stochastic` flag): AlphaFold2-prediction. The seed only varies output when the supplied MSA exceeds `num_msa=512` rows (via cluster subsampling), since single-sequence and shallow-MSA inputs are a pure function of sequence + recycle count.
@@ -227,9 +230,16 @@ The "skip dedup, the tool diversifies naturally" behavior above relies on each t
 
 This is an inherent consequence of wrapping third-party samplers, not a gap we expect to close. A good number of stochastic tools do not diversify per item, and there is no general framework-level fix, because the framework cannot reach into an upstream library's sampling loop. Treat per-item diversification and exact reproducibility as best-effort and tool-specific rather than guarantees the framework makes.
 
-### ESMFold
+### Gradient tools
 
-ESMFold has two registered tools in `esmfold.py`. The prediction tool is a single-pass forward pass and does not carry the flag, while the gradient tool reads `config.seed` and is registered with `stochastic=True`. They share a config-class hierarchy (`ESMFoldGradientConfig` extends `ESMFoldConfig`) and both inherit `seed` from `BaseConfig`, though the prediction tool simply ignores the inherited field.
+A gradient tool evaluates a derivative at the state it is given, so identical logits must yield
+identical gradients. Only ProteinMPNN (`set_jax_seed`, random decoding order) and AlphaFold2
+(`af_model.set_seed`, MSA subsampling) carry the flag. The masked-PLL gradients mask every scored
+position in turn and run under `eval()`, so they draw nothing — the `torch.multinomial` calls in
+their toolkits belong to the *sample* tools sharing the same `standalone/inference.py`.
+
+ESMFold's two tools both go unflagged: prediction is a single forward pass, and the gradient path
+sends no seed.
 
 ## Reproducibility caveats
 

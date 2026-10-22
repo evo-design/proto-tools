@@ -14,7 +14,7 @@ from proto_tools.tools.causal_models.evo2 import (
     run_evo2_sample,
     run_evo2_score,
 )
-from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import DNA_NUCLEOTIDES
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.vocabulary import DNA_NUCLEOTIDES
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output

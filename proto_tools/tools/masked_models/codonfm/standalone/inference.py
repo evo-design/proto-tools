@@ -30,6 +30,8 @@ from standalone_helpers import (
     serialize_output,
     set_torch_seed,
 )
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
+from standalone_helpers.vocabulary import DNA_CODONS
 
 # The vendored CodonFM source lives under ``src/`` next to this file.
 sys.path.insert(0, str(Path(__file__).parent))
@@ -318,7 +320,8 @@ class CodonFMModel:
         logits_list: list[list[float]],
         *,
         temperature: float | None = None,
-        use_ste: bool = False,
+        soft: float = 1.0,
+        hard: float = 0.0,
         backprop: bool = True,
         batch_size: int,
         device: str,
@@ -335,8 +338,8 @@ class CodonFMModel:
         Args:
             logits_list: Relaxed codon logits, shape ``(L, 64)``.
             temperature: Optional softmax temperature; ``None`` uses the logits as-is.
-            use_ste: Straight-Through Estimator — hard one-hot codons in the forward pass with
-                gradients flowing through the soft probabilities.
+            soft: Blend from the raw input matrix (0) to softmax probabilities (1).
+            hard: Straight-through coefficient; 1 forwards a hard one-hot.
             backprop: If ``False``, skip the backward pass and return ``gradient=None``.
             batch_size: Codon positions per forward pass.
             device: Execution device.
@@ -350,8 +353,13 @@ class CodonFMModel:
         from src.data.metadata import MetadataFields
         from tqdm import tqdm
 
-        codons = list(self.tokenizer.codons)
+        # Proto's column order, not the tokenizer's: codon_token_ids below carries the mapping,
+        # so every gather keyed off it is proto-ordered on both the input and the gradient side.
+        codons = list(DNA_CODONS)
         n_codons_vocab = len(codons)
+        missing = [codon for codon in codons if codon not in self.tokenizer.encoder]
+        if missing:
+            raise ValueError(f"codonfm: tokenizer is missing codons {missing}")
         if not logits_list:
             raise ValueError("codonfm: compute_gradient requires at least one codon position")
         if any(len(row) != n_codons_vocab for row in logits_list):
@@ -372,13 +380,12 @@ class CodonFMModel:
             seq_dist = torch.tensor(logits_list, device=dev, dtype=torch.float32, requires_grad=backprop)
             sequence_length = int(seq_dist.shape[0])
 
-            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
-            codon_idx = x.argmax(dim=-1).detach()
+            # Targets come from P, not the blend, so they do not move with soft/hard.
+            probs = relaxed_sequence(seq_dist, temperature=temperature)
+            codon_idx = probs.argmax(dim=-1).detach()
             residue_token_ids = codon_token_ids[codon_idx].detach()
 
-            if use_ste:
-                hard = F.one_hot(codon_idx, num_classes=n_codons_vocab).float()
-                x = hard + (x - x.detach())
+            x = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
 
             codon_weight = weight[codon_token_ids]
             residue_embeddings = x @ codon_weight
@@ -606,19 +613,22 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
             if position >= len(mutation["sequence"]) // 3:
                 raise ValueError("codonfm: worker codon_position is out of range")
     elif operation == "gradient":
-        logits = input_dict.get("logits")
-        if not isinstance(logits, list) or not logits or len(logits) > 2046:
-            raise ValueError("codonfm: gradient requires 1 to 2046 logits rows")
-        if any(
-            not isinstance(row, list)
-            or len(row) != 64
-            or any(
-                isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
-                for value in row
-            )
-            for row in logits
-        ):
-            raise ValueError("codonfm: gradient logits must be a finite L x 64 numeric matrix")
+        items = input_dict.get("items")
+        if not isinstance(items, list) or not items:
+            raise ValueError("codonfm: gradient requires at least one item")
+        for item in items:
+            if not isinstance(item, list) or not item or len(item) > 2046:
+                raise ValueError("codonfm: gradient requires 1 to 2046 logits rows per item")
+            if any(
+                not isinstance(row, list)
+                or len(row) != 64
+                or any(
+                    isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+                    for value in row
+                )
+                for row in item
+            ):
+                raise ValueError("codonfm: gradient logits must be a finite L x 64 numeric matrix")
 
     if operation == "sample":
         value = input_dict.get("temperature", 1.0)
@@ -656,7 +666,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     batch_size = input_dict.get("batch_size", 1)
     if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
         raise ValueError("codonfm: batch_size must be a positive integer")
-    for name in ("use_ste", "compute_gradient"):
+    for name in ("compute_gradient",):
         if name in input_dict and not isinstance(input_dict[name], bool):
             raise ValueError(f"codonfm: {name} must be a boolean")
     _validate_request(input_dict, operation)
@@ -689,15 +699,24 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             )
         }
     if operation == "gradient":
-        return _MODEL.compute_gradient(
-            input_dict["logits"],
-            temperature=input_dict.get("temperature"),
-            use_ste=input_dict.get("use_ste", False),
-            backprop=input_dict.get("compute_gradient", True),
-            batch_size=batch_size,
-            device=device,
-            verbose=verbose,
-        )
+        # One chunk of independent candidates: the checkpoint loads once and items are evaluated in turn.
+        results = [
+            _MODEL.compute_gradient(
+                item,
+                temperature=resolve_temperature(input_dict.get("temperature")),
+                soft=float(input_dict.get("soft", 1.0)),
+                hard=float(input_dict.get("hard", 0.0)),
+                backprop=input_dict.get("compute_gradient", True),
+                batch_size=batch_size,
+                device=device,
+                verbose=verbose,
+            )
+            for item in input_dict["items"]
+        ]
+        return {
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
     raise AssertionError("unreachable")
 
 

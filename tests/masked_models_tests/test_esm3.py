@@ -17,7 +17,7 @@ from proto_tools.tools.masked_models.esm3 import (
     run_esm3_sample,
     run_esm3_score,
 )
-from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import AMINO_ACIDS_LIST
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.vocabulary import AMINO_ACIDS_LIST
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output

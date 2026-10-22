@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
+import random
 import re
 import sys
 import traceback
@@ -65,12 +66,28 @@ def _expect(exc: type[BaseException], match: str) -> Iterator[None]:
     raise AssertionError(f"expected {exc.__name__} matching {match!r}")
 
 
-def _make_runtime() -> MixedMLMRuntime:
-    """Build a runtime around a seeded toy MLM with the upstream glm2 vocabulary layout."""
-    vocabulary = (
+def _make_runtime(*, shuffle_seed: int | None = None) -> MixedMLMRuntime:
+    """Build a runtime around a seeded toy MLM with the upstream glm2 vocabulary layout.
+
+    ``shuffle_seed`` permutes the toy tokenizer's order so it no longer opens with proto's
+    columns, and permutes the model's rows to match, leaving the same function of token *names*.
+
+    Args:
+        shuffle_seed (int | None): Seed for the vocabulary permutation, or ``None`` to keep the
+            upstream layout.
+
+    Returns:
+        MixedMLMRuntime: Runtime over a toy MLM with that vocabulary order.
+    """
+    base_order = (
         list(MIXED_VOCAB) + list("XBUZO") + ["<+>", "<->", "<mask>", "<cls>", "<pad>", "<eos>", "<unk>", "<sep>"]
     )
+    vocabulary = list(base_order)
+    if shuffle_seed is not None:
+        random.Random(shuffle_seed).shuffle(vocabulary)
     vocab = {token: index for index, token in enumerate(vocabulary)}
+    # Row i of the shuffled model holds the weights of whichever token now sits at i.
+    row_permutation = [base_order.index(token) for token in vocabulary]
 
     class TinyModel(torch.nn.Module):
         def __init__(self) -> None:
@@ -97,6 +114,12 @@ def _make_runtime() -> MixedMLMRuntime:
             with torch.random.fork_rng(devices=[]):
                 torch.manual_seed(0)
                 model = TinyModel()
+            if shuffle_seed is not None:
+                with torch.no_grad():
+                    index = torch.tensor(row_permutation)
+                    model.embedding.weight.copy_(model.embedding.weight[index])
+                    model.projection.weight.copy_(model.projection.weight[index])
+                    model.projection.bias.copy_(model.projection.bias[index])
             tokenizer = SimpleNamespace(get_vocab=lambda: vocab, mask_token_id=vocab["<mask>"])
             return model, tokenizer
 
@@ -177,7 +200,7 @@ def check_ste_uses_hard_context_and_soft_backward() -> None:
             logits=state.tolist(),
             temperature=temperature,
             batch_size=batch_size,
-            use_ste=True,
+            hard=1.0,
         )
         score = _dispatch(runtime, "score", sequences=[_LOCUS], batch_size=2)["scores"][0]
         _close(result["loss"], -score["avg_log_likelihood"])
@@ -310,7 +333,50 @@ def check_sampling_is_independent_of_mask_mapping_order() -> None:
         )
 
 
+def check_forward_only_returns_loss_without_a_gradient() -> None:
+    """compute_gradient=False must return the same loss and vocabulary with gradient=None."""
+    state = torch.tensor(one_hot_mixed_logits(_LOCUS, sharpness=0.7))
+    payload = {"sequence": _LOCUS, "logits": state.tolist(), "temperature": 0.8, "batch_size": 2, "hard": 1.0}
+
+    with_gradient = _dispatch(_make_runtime(), "gradient", **payload)
+    forward_only = _dispatch(_make_runtime(), "gradient", compute_gradient=False, **payload)
+
+    assert forward_only["gradient"] is None, f"forward-only returned a gradient: {forward_only['gradient']}"
+    assert forward_only["vocab"] == list(MIXED_VOCAB), f"forward-only reported {forward_only['vocab'][:4]}"
+    _close(forward_only["loss"], with_gradient["loss"])
+
+
+def check_gradient_is_unchanged_by_a_shuffled_native_vocabulary() -> None:
+    """A shuffled tokenizer order must not move the returned gradient's columns.
+
+    The toy vocabulary opens with proto's own order, so a runtime that indexed native positions
+    directly would pass every other check here. Shuffling it, and permuting the model's rows to
+    match, keeps the model the same function of token names: the gradient must come back
+    identical, in proto's columns.
+    """
+    state = torch.tensor(one_hot_mixed_logits(_LOCUS, sharpness=0.7))
+    payload = {"sequence": _LOCUS, "logits": state.tolist(), "temperature": 0.8, "batch_size": 2, "hard": 1.0}
+
+    reference = _dispatch(_make_runtime(), "gradient", **payload)
+    shuffled_runtime = _make_runtime(shuffle_seed=11)
+    shuffled = _dispatch(shuffled_runtime, "gradient", **payload)
+
+    shuffled_vocab = shuffled_runtime.adapter.tokenizer.get_vocab()
+    assert [shuffled_vocab[token] for token in MIXED_VOCAB] != list(range(len(MIXED_VOCAB))), (
+        "the shuffle left proto's columns at the head of the native order, so this proves nothing"
+    )
+    _close(shuffled["loss"], reference["loss"])
+    np.testing.assert_allclose(
+        np.asarray(shuffled["gradient"]), np.asarray(reference["gradient"]), rtol=1e-6, atol=1e-9
+    )
+    _assert_gradient_respects_alphabets(np.asarray(shuffled["gradient"]))
+    for label, result in (("reference", reference), ("shuffled", shuffled)):
+        assert result["vocab"] == list(MIXED_VOCAB), f"{label} reported {result['vocab'][:4]}"
+
+
 CHECKS = [
+    check_forward_only_returns_loss_without_a_gradient,
+    check_gradient_is_unchanged_by_a_shuffled_native_vocabulary,
     check_score_matches_full_vocab_reference_and_gradient,
     check_relaxed_gradient_matches_finite_difference,
     check_ste_uses_hard_context_and_soft_backward,

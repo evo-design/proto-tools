@@ -2,6 +2,7 @@
 
 from proto_tools.tools.structure_prediction.esmfold.esmfold import (
     ESMFoldConfig,
+    ESMFoldGradientCandidate,
     ESMFoldGradientConfig,
     ESMFoldGradientInput,
     ESMFoldGradientOutput,
@@ -17,6 +18,7 @@ __all__ = [
     "ESMFoldOutput",
     "run_esmfold",
     "ESMFoldGradientInput",
+    "ESMFoldGradientCandidate",
     "ESMFoldGradientConfig",
     "ESMFoldGradientOutput",
     "run_esmfold_gradient",

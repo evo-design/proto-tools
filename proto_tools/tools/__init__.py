@@ -311,6 +311,7 @@ from proto_tools.tools.inverse_folding import (
     ProteinMPNNDesign,
     ProteinMPNNDesignMetrics,
     ProteinMPNNDesignSet,
+    ProteinMPNNGradientCandidate,
     ProteinMPNNGradientConfig,
     ProteinMPNNGradientInput,
     ProteinMPNNGradientOutput,
@@ -437,6 +438,7 @@ from proto_tools.tools.masked_models import (
     MixedScoringMetrics,
     MixedScoringOutput,
     MixedSequenceEmbedding,
+    MixedSequenceGradientCandidate,
     MixedSequenceGradientInput,
     MixedSequenceInput,
     MixedSequenceSample,
@@ -885,6 +887,7 @@ from proto_tools.tools.structure_dynamics import BioEmuConfig, BioEmuInput, BioE
 # Structure prediction tools
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
+    AlphaFold2GradientCandidate,
     AlphaFold2GradientConfig,
     AlphaFold2GradientInput,
     AlphaFold2GradientOutput,
@@ -911,6 +914,7 @@ from proto_tools.tools.structure_prediction import (
     ESMFold2Metrics,
     ESMFold2Output,
     ESMFoldConfig,
+    ESMFoldGradientCandidate,
     ESMFoldGradientConfig,
     ESMFoldGradientInput,
     ESMFoldGradientOutput,
@@ -1275,6 +1279,7 @@ __all__ = [
     "run_proteinmpnn_gradient",
     "run_proteinmpnn_sample",
     "run_proteinmpnn_score",
+    "ProteinMPNNGradientCandidate",
     "ProteinMPNNGradientInput",
     "ProteinMPNNGradientConfig",
     "ProteinMPNNGradientOutput",
@@ -1358,6 +1363,7 @@ __all__ = [
     # Structure prediction - AlphaFold2 Gradient
     "run_alphafold2_gradient",
     "AlphaFold2GradientInput",
+    "AlphaFold2GradientCandidate",
     "AlphaFold2GradientConfig",
     "AlphaFold2GradientOutput",
     # Structure prediction - AlphaFold3
@@ -1387,6 +1393,7 @@ __all__ = [
     "ESMFoldOutput",
     "run_esmfold_gradient",
     "ESMFoldGradientInput",
+    "ESMFoldGradientCandidate",
     "ESMFoldGradientConfig",
     "ESMFoldGradientOutput",
     # Structure prediction - ESMFold2
@@ -1796,6 +1803,7 @@ __all__ = [
     "MixedScoringMetrics",
     "MixedScoringOutput",
     "MixedSequenceEmbedding",
+    "MixedSequenceGradientCandidate",
     "MixedSequenceGradientInput",
     "MixedSequenceInput",
     "MixedSequenceSample",

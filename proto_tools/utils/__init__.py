@@ -16,7 +16,15 @@ from proto_tools.utils.device import (
 from proto_tools.utils.device_manager import SUPPORTED_DEVICE_PREFIXES, AllocationType, DeviceManager, OffloadStrategy
 from proto_tools.utils.env_runner import run_in_env
 from proto_tools.utils.export_names import build_export_name, sanitize_field
-from proto_tools.utils.gradient_models import GradientInput, GradientOutput, GradientValue
+from proto_tools.utils.gradient_models import (
+    BatchedNucleotideGradientInput,
+    GradientInput,
+    GradientOutput,
+    GradientResult,
+    ProteinGradientInput,
+    RelaxationConfig,
+    coerce_to_item_list,
+)
 from proto_tools.utils.http_session import build_http_session, request_with_retry, user_agent_for
 from proto_tools.utils.interaction_models import (
     SequenceInteractionMap,
@@ -42,6 +50,13 @@ from proto_tools.utils.sequence import (
     return_invalid_protein_chars,
     return_invalid_rna_chars,
     validate_positions_list,
+)
+from proto_tools.utils.sequence_logits import (
+    PROBABILITY_SUM_TOLERANCE,
+    NucleotideSequenceLogits,
+    ProteinSequenceLogits,
+    SequenceLogits,
+    iter_sequence_logits,
 )
 from proto_tools.utils.system_info import (
     capture_parent_env,
@@ -103,9 +118,19 @@ __all__ = [
     "PROTEIN_AMINO_ACIDS",
     "AminoAcid",
     # Gradient models
+    "BatchedNucleotideGradientInput",
     "GradientInput",
     "GradientOutput",
-    "GradientValue",
+    "GradientResult",
+    "coerce_to_item_list",
+    "ProteinGradientInput",
+    "RelaxationConfig",
+    # Relaxed sequence state
+    "PROBABILITY_SUM_TOLERANCE",
+    "NucleotideSequenceLogits",
+    "ProteinSequenceLogits",
+    "SequenceLogits",
+    "iter_sequence_logits",
     # MSA
     "extract_msa_sequences",
     # I/O

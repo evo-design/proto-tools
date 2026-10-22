@@ -8,6 +8,7 @@ from proto_tools.tools.masked_models.minerva.config import MinervaConfig
 from proto_tools.tools.masked_models.mixed_configs import MixedGradientConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
     MixedGradientOutput,
+    MixedSequenceGradientCandidate,
     MixedSequenceGradientInput,
     one_hot_mixed_logits,
 )
@@ -28,14 +29,21 @@ class MinervaGradientConfig(MinervaConfig, MixedGradientConfig):
     Attributes:
         model_checkpoint (Literal['gbrixi/minerva-mlm', 'gbrixi/minerva-mlm-8k']): Public model checkpoint.
         batch_size (int): Individually masked variants per forward and backward pass.
-        use_ste (bool): Hard forward tokens with soft-probability gradients.
+        soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard (float): Straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Compute the gradient, or evaluate only the masked PLL loss.
     """
 
 
 def example_input() -> MinervaGradientInput:
     """Return a short prepared locus for examples and infrastructure checks."""
-    return MinervaGradientInput(sequence="+MKTL+acgt", logits=one_hot_mixed_logits("+MKTL+acgt", sharpness=2.0))
+    return MinervaGradientInput(
+        inputs=[
+            MixedSequenceGradientCandidate(
+                sequence="+MKTL+acgt", logits=one_hot_mixed_logits("+MKTL+acgt", sharpness=2.0)
+            )
+        ]
+    )
 
 
 @tool(
@@ -49,6 +57,9 @@ def example_input() -> MinervaGradientInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=4,
 )
 def run_minerva_gradient(
     inputs: MinervaGradientInput,

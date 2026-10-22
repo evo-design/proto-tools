@@ -64,7 +64,7 @@ ESM2 pseudo-perplexity is a standard fitness proxy when ranking variants, filter
 
 ### ESM2 Gradient (`esm2-gradient`)
 
-Computes the gradient of the mean masked negative log-likelihood with respect to a relaxed `(L, 20)` input distribution over the canonical amino-acid order `ACDEFGHIKLMNPQRSTVWY`. The ESM-2 weights are kept frozen throughout. The relaxed distribution is mixed against ESM-2's per-residue token embeddings to form a soft input. Each amino-acid position is then masked in turn, and a per-chunk backward pass accumulates the gradient. An optional Straight-Through Estimator runs the forward on hard one-hot tokens while still routing gradients through the soft probabilities.
+Computes the gradient of the mean masked negative log-likelihood with respect to a relaxed `(L, 20)` input distribution over the canonical amino-acid order `ACDEFGHIKLMNPQRSTVWY`. The ESM-2 weights are kept frozen throughout. The relaxed distribution is mixed against ESM-2's per-residue token embeddings to form a soft input. Each amino-acid position is then masked in turn, and a per-chunk backward pass accumulates the gradient.
 
 #### Applications
 
@@ -72,8 +72,9 @@ This tool exposes ESM-2 as a differentiable, structure-free protein-language-mod
 
 #### Usage Tips
 
-- **`temperature` controls how the raw input is converted into a distribution.** With a value set, the tool applies `softmax(logits / T)` before the forward pass; leave it `None` (the default) if the input already sums to 1 per position.
-- **`use_ste` enables the Straight-Through Estimator.** The forward then runs on hard one-hot tokens while gradients still route through the soft probabilities, giving stronger guidance toward discrete sequences. Leave it off for smooth optimization over the relaxed simplex.
+- **`temperature`** controls how the input logits are converted into amino acid probabilities using `softmax(logits / temperature)`. Lower temperatures make the distribution more concentrated around the most likely amino acid at each position, while higher temperatures produce more uniform distributions. The default is `1.0`, and the returned gradient is calculated with respect to the input logits.
+- **Advanced option:** `temperature=None` skips softmax and treats the input as probabilities rather than logits. Most users should leave the default in place. In this case, each row must contain nonnegative values that sum to 1, and the returned gradient is calculated with respect to those probabilities. This is generally less convenient for gradient-based optimization because updating probabilities directly can cause them to become negative or no longer sum to 1. Optimizing logits avoids this issue, since softmax always produces a valid probability distribution. However, working directly with probabilities can be useful when using an optimizer designed for probability distributions or when exact zero probabilities are needed to exclude particular tokens.
+- **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator — the forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, which is differentiable but outside the model's training distribution.
 - **`compute_gradient` toggles whether the backward pass runs.** When set to `False`, the `gradient` field is `None`, but `loss` and `metrics` (log-likelihood, perplexity, and so on) are still populated. Useful for ranking MCMC proposals without paying the backward cost.
 
 ## Toolkit Notes

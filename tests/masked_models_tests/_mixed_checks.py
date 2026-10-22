@@ -63,19 +63,22 @@ def check_embeddings_score_gradient(toolkit, checkpoint):
     assert score.perplexity == pytest.approx(math.exp(-score.avg_log_likelihood))
     assert np.asarray(score.logits).shape == (8, 24)
     np.testing.assert_array_equal(np.asarray(score.logits)[[0, 3, 6, 7]], 0.0)
-    inputs = {"sequence": LOCUS, "logits": one_hot_mixed_logits(LOCUS, sharpness=1.0), "temperature": None}
+    inputs = {
+        "inputs": {"sequence": LOCUS, "logits": one_hot_mixed_logits(LOCUS, sharpness=1.0)},
+        "temperature": None,
+    }
     backward = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2)
     forward = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2, compute_gradient=False)
-    gradient = np.asarray(backward.gradient)
+    gradient = np.asarray(backward.results[0].gradient)
     assert gradient.shape == (8, 24)
     assert np.isfinite(gradient).all()
     np.testing.assert_array_equal(gradient[[0, 3, 6, 7]], 0.0)
     np.testing.assert_array_equal(gradient[[1, 2], 20:], 0.0)
     np.testing.assert_array_equal(gradient[[4, 5], :20], 0.0)
     assert np.any(gradient[[1, 2, 4, 5]] != 0.0)
-    assert backward.loss == pytest.approx(-score.avg_log_likelihood, rel=2e-5, abs=2e-5)
-    assert forward.loss == pytest.approx(backward.loss, rel=2e-5, abs=2e-5)
-    assert forward.gradient is None
+    assert backward.results[0].loss == pytest.approx(-score.avg_log_likelihood, rel=2e-5, abs=2e-5)
+    assert forward.results[0].loss == pytest.approx(backward.results[0].loss, rel=2e-5, abs=2e-5)
+    assert forward.results[0].gradient is None
     validate_output(backward)
 
 
@@ -110,7 +113,7 @@ def check_gradient_finite_difference(toolkit, checkpoint):
     """Compare a real model's relaxed masked-PLL derivative with a central difference."""
     sequence = "<+>M<+>a"
     logits = np.asarray(one_hot_mixed_logits(sequence, sharpness=2.0))
-    inputs = {"sequence": sequence, "logits": logits.tolist(), "temperature": 0.9}
+    inputs = {"inputs": {"sequence": sequence, "logits": logits.tolist()}, "temperature": 0.9}
     result = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2)
     epsilon = 0.02
     losses = []
@@ -122,13 +125,15 @@ def check_gradient_finite_difference(toolkit, checkpoint):
                 toolkit,
                 "gradient",
                 checkpoint,
-                {**inputs, "logits": perturbed.tolist()},
+                {**inputs, "inputs": {"sequence": sequence, "logits": perturbed.tolist()}},
                 batch_size=2,
                 compute_gradient=False,
-            ).loss
+            )
+            .results[0]
+            .loss
         )
     derivative = (losses[0] - losses[1]) / (2 * epsilon)
-    assert result.gradient[3][21] == pytest.approx(derivative, rel=0.03, abs=3e-4)
+    assert result.results[0].gradient[3][21] == pytest.approx(derivative, rel=0.03, abs=3e-4)
 
 
 _UPSTREAM_REFERENCE = """
@@ -211,7 +216,7 @@ def benchmark_operation(request, toolkit, checkpoint, operation):
         inputs = {"sequences": [sequence[:-1] + base for base in "acgt"]}
     settings = {"batch_size": 4}
     if operation == "gradient":
-        inputs = {"sequence": sequence, "logits": one_hot_mixed_logits(sequence, sharpness=2.0)}
+        inputs = {"inputs": {"sequence": sequence, "logits": one_hot_mixed_logits(sequence, sharpness=2.0)}}
     if operation == "sample":
         settings["seed"] = 0
     result = benchmark_twice(request, toolkit, lambda: call_model(toolkit, operation, checkpoint, inputs, **settings))

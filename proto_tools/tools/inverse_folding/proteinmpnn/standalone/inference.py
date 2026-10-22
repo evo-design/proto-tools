@@ -12,18 +12,22 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 from standalone_helpers import get_logger, log_likelihood_metrics
+from standalone_helpers.relaxation import relaxed_sequence_jax, resolve_temperature
+from standalone_helpers.vocabulary import AMINO_ACIDS_LIST, gather_indices
 
 logger = get_logger(__name__)
 
 DEFAULT_TEMPERATURE = 1.0
-CANONICAL_VOCAB: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
+CANONICAL_VOCAB: list[str] = AMINO_ACIDS_LIST
 
-# Alphabet ordering for logits interpretation
-ALPHAFOLD_VOCAB: list[str] = list(
-    "ARNDCQEGHILKMFPSTWYVX"
-)  # ColabDesign autoconverts to Alphafold alphabet for ProteinMPNN scoring
-ALPHAFOLD_AA_VOCAB: list[str] = ALPHAFOLD_VOCAB[:20]
-CANONICAL_TO_ALPHAFOLD_INDICES: list[int] = [CANONICAL_VOCAB.index(aa) for aa in ALPHAFOLD_AA_VOCAB]
+PROTEINMPNN_AMINO_ACIDS_WITH_X: list[str] = list("ARNDCQEGHILKMFPSTWYVX")
+PROTEINMPNN_AMINO_ACIDS: list[str] = PROTEINMPNN_AMINO_ACIDS_WITH_X[:20]
+CANONICAL_TO_PROTEINMPNN_INDICES: list[int] = gather_indices(
+    PROTEINMPNN_AMINO_ACIDS, CANONICAL_VOCAB, label="proteinmpnn"
+)
+PROTEINMPNN_TO_CANONICAL_INDICES: list[int] = gather_indices(
+    CANONICAL_VOCAB, PROTEINMPNN_AMINO_ACIDS_WITH_X, label="proteinmpnn"
+)
 
 # Maps model_choice to ColabDesign's (model_name, weights) parameters.
 # v_48_002/010/020/030 are the same architecture trained at different noise levels;
@@ -125,7 +129,7 @@ class ProteinMPNNModel:
             "seq": sequences["seq"],
             "score": sequences["score"],
             "seqid": sequences["seqid"],
-            "logits": sequences["logits"] if return_logits else None,
+            "logits": sequences["logits"][..., PROTEINMPNN_TO_CANONICAL_INDICES] if return_logits else None,
         }
 
     def score(
@@ -195,9 +199,9 @@ class ProteinMPNNModel:
 
         self.unload()
         return {
-            "logits": output["logits"] if return_logits else None,
+            "logits": output["logits"][..., PROTEINMPNN_TO_CANONICAL_INDICES] if return_logits else None,
             "metrics": log_likelihood_metrics(-neg_avg_ll, effective_length),
-            "vocab": ALPHAFOLD_VOCAB,
+            "vocab": CANONICAL_VOCAB,
         }
 
     def compute_gradient(
@@ -207,9 +211,11 @@ class ProteinMPNNModel:
         logits_list: list[list[float]],
         *,
         temperature: float | None = None,
-        use_ste: bool = True,
+        soft: float = 1.0,
+        hard: float = 0.0,
         fixed_positions: dict[str, list[int]] | None = None,
         seed: int | None = None,
+        seed_index: int = 0,
         device: str = "cuda",
         model_choice: str = "proteinmpnn",
         verbose: bool = False,
@@ -221,6 +227,12 @@ class ProteinMPNNModel:
         ``ACDEFGHIKLMNPQRSTVWY``. ColabDesign's ProteinMPNN wrapper scores in
         AlphaFold order internally, so this method maps both the relaxed context
         and returned gradient at the boundary.
+
+        ``_score`` draws its autoregressive decoding order from the key it is given, so every
+        candidate needs its own: sharing one key scores a whole batch in a single order, and
+        identical candidates then come back identical. ``seed_index`` folds the candidate's
+        position into the key, leaving index 0 on the base key so a lone candidate and the first
+        of a batch agree.
         """
         if not logits_list:
             raise ValueError("proteinmpnn: compute_gradient requires at least one residue")
@@ -237,6 +249,8 @@ class ProteinMPNNModel:
             raise ValueError(
                 "proteinmpnn: compute_gradient requires an explicit int seed (jax.random.PRNGKey rejects None)"
             )
+        if seed_index:
+            key = jax.random.fold_in(key, seed_index)
 
         self._ensure_loaded(device, model_choice, verbose, backbone_noise=0.0)
 
@@ -258,16 +272,15 @@ class ProteinMPNNModel:
         base_inputs = copy_dict(self.model._inputs)
         base_inputs.pop("S", None)
         raw_logits = jnp.asarray(logits_list, dtype=jnp.float32)
-        canonical_to_af = jnp.asarray(CANONICAL_TO_ALPHAFOLD_INDICES, dtype=jnp.int32)
+        canonical_to_af = jnp.asarray(CANONICAL_TO_PROTEINMPNN_INDICES, dtype=jnp.int32)
 
         def _loss_fn(logits: Any) -> Any:
-            x = jax.nn.softmax(logits / temperature, axis=-1) if temperature is not None else logits
-            aa_idx = jnp.argmax(x, axis=-1)
-            hard_canonical = jax.nn.one_hot(aa_idx, len(CANONICAL_VOCAB))
-            context_canonical = hard_canonical + (x - jax.lax.stop_gradient(x)) if use_ste else x
+            context_canonical = relaxed_sequence_jax(logits, temperature=temperature, soft=soft, hard=hard)
+            # NLL labels are the decoded sequence, not the blend; softmax is monotonic, so argmax(logits) suffices.
+            labels_canonical = jax.nn.one_hot(jnp.argmax(logits, axis=-1), len(CANONICAL_VOCAB))
 
             context_af = context_canonical[:, canonical_to_af]
-            labels_af = hard_canonical[:, canonical_to_af]
+            labels_af = labels_canonical[:, canonical_to_af]
 
             output = self.model._score(**base_inputs, key=key, S=context_af)
             log_probs = jax.nn.log_softmax(output["logits"], axis=-1)[..., :20]
@@ -397,8 +410,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if _model is None:
         _model = ProteinMPNNModel()
 
-    pdb_path = input_dict["pdb_path"]
     operation = input_dict["operation"]
+    # The gradient operation carries one backbone per item; sample and score take a single one.
+    pdb_path = input_dict.get("pdb_path", "")
     model_choice = input_dict["model_choice"]
     if operation == "sample":
         return _model.sample(
@@ -428,19 +442,29 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
         )
     if operation == "compute_gradient":
-        return _model.compute_gradient(
-            pdb_path=pdb_path,
-            chain_ids=input_dict["chain_ids"],
-            logits_list=input_dict["logits"],
-            temperature=input_dict["temperature"],
-            use_ste=input_dict["use_ste"],
-            fixed_positions=input_dict.get("fixed_positions"),
-            seed=input_dict["seed"],
-            device=input_dict["device"],
-            model_choice=model_choice,
-            verbose=input_dict["verbose"],
-            backprop=input_dict.get("compute_gradient", True),
-        )
+        # One chunk of independent candidates: the weights load once and prep_inputs re-runs per item.
+        results = [
+            _model.compute_gradient(
+                pdb_path=item["pdb_path"],
+                chain_ids=item["chain_ids"],
+                logits_list=item["logits"],
+                temperature=resolve_temperature(input_dict["temperature"]),
+                soft=float(input_dict["soft"]),
+                hard=float(input_dict["hard"]),
+                fixed_positions=item.get("fixed_positions"),
+                seed=input_dict["seed"],
+                seed_index=index,
+                device=input_dict["device"],
+                model_choice=model_choice,
+                verbose=input_dict["verbose"],
+                backprop=input_dict.get("compute_gradient", True),
+            )
+            for index, item in enumerate(input_dict["items"])
+        ]
+        return {
+            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
     raise ValueError(f"proteinmpnn: unknown operation {operation!r}; valid: ['sample', 'score', 'compute_gradient']")
 
 
