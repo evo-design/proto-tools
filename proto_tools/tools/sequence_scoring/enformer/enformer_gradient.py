@@ -134,7 +134,9 @@ class EnformerGradientCandidate(BaseModel):
     def validate_alignment(self) -> Self:
         """Require an exact context length and positions that align with the relaxed rows."""
         if len(self.sequence) != ENFORMER_CONTEXT:
-            raise ValueError(f"enformer gradient: sequence must be exactly {ENFORMER_CONTEXT} bp, got {len(self.sequence)}")
+            raise ValueError(
+                f"enformer gradient: sequence must be exactly {ENFORMER_CONTEXT} bp, got {len(self.sequence)}"
+            )
         if len(self.positions) != len(self.logits):
             raise ValueError(
                 f"enformer gradient: positions ({len(self.positions)}) and logits ({len(self.logits)}) must align"
@@ -142,7 +144,9 @@ class EnformerGradientCandidate(BaseModel):
         if any(later <= earlier for earlier, later in zip(self.positions, self.positions[1:], strict=False)):
             raise ValueError("enformer gradient: positions must be strictly increasing with no duplicates")
         if self.positions[-1] > ENFORMER_CONTEXT:
-            raise ValueError(f"enformer gradient: position {self.positions[-1]} exceeds the {ENFORMER_CONTEXT} bp context")
+            raise ValueError(
+                f"enformer gradient: position {self.positions[-1]} exceeds the {ENFORMER_CONTEXT} bp context"
+            )
         return self
 
 

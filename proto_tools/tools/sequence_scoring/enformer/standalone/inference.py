@@ -104,7 +104,6 @@ class EnformerModel:
         # Extract prediction for specified tracks and species
         return cast(torch.Tensor, output[species][:, :, output_tracks])
 
-
     def compute_gradient(
         self,
         sequence: str,
@@ -147,9 +146,7 @@ class EnformerModel:
             RuntimeError: If an expected gradient is missing after the backward pass.
         """
         if len(sequence) != ENFORMER_CONTEXT:
-            raise ValueError(
-                f"enformer: compute_gradient expects a {ENFORMER_CONTEXT} bp context, got {len(sequence)}"
-            )
+            raise ValueError(f"enformer: compute_gradient expects a {ENFORMER_CONTEXT} bp context, got {len(sequence)}")
         if len(positions) != len(logits_list):
             raise ValueError("enformer: compute_gradient needs one relaxed row per designed position")
         if any(len(row) != 4 for row in logits_list):
