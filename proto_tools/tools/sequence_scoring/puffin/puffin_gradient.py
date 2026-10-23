@@ -114,9 +114,9 @@ class PuffinGradientInput(GradientInput):
 
     Attributes:
         inputs (list[NucleotideSequenceLogits]): One relaxed state per candidate, each ``(L, 4)``
-            in ``A,C,G,T`` order with ``L`` at least ``PUFFIN_MIN_INPUT_LENGTH``. A single state
-            may be passed on its own. Puffin trims ``PUFFIN_PADDING`` bases from each end, so the
-            scored output span is ``L - 2 * PUFFIN_PADDING`` positions.
+            in ``A,C,G,T`` order with ``L`` at least ``PUFFIN_MIN_INPUT_LENGTH``. Puffin trims
+            ``PUFFIN_PADDING`` bases from each end, so the scored output span is
+            ``L - 2 * PUFFIN_PADDING`` positions.
         temperature (float | None): Softmax temperature, shared by every candidate. The default
             ``1.0`` reads each state as unnormalized and applies ``softmax(logits / T)``,
             returning logit-space gradients; ``None`` reads them as probabilities and returns
@@ -125,7 +125,7 @@ class PuffinGradientInput(GradientInput):
 
     inputs: list[NucleotideSequenceLogits] = InputField(
         title="Relaxed Sequences",
-        description="One relaxed (L, 4) DNA state per candidate in A,C,G,T order; a single state is accepted alone",
+        description="One relaxed (L, 4) DNA state per candidate in A,C,G,T order",
     )
 
     @field_validator("inputs", mode="before")
