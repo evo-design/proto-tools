@@ -198,6 +198,7 @@ module = [
     "pandas.*",
     "yaml.*",
     "huggingface_hub.*",
+    "cherimoya.*",
     "tokenizers.*",
     "pyhmmer.*",
     "pymemesuite.*",
@@ -431,6 +432,7 @@ exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*
 "proto_tools.modal.sequence_scoring.alphagenome_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.borzoi_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.enformer_deployment" = ["README.md"]
+"proto_tools.modal.sequence_scoring.cherimoya_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.malinois_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.parade_deployment" = ["README.md"]
 "proto_tools.modal.sequence_scoring.primer3_deployment" = ["README.md"]
