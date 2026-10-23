@@ -32,8 +32,8 @@ class ParadeStabilityGradientInput(BatchedNucleotideGradientInput):
 
     Attributes:
         inputs (list[NucleotideSequenceLogits]): One relaxed ``(L, 4)`` DNA state per candidate in
-            ``A,C,G,T`` order. A single state may be passed on its own. The backend evaluates the
-            batch in one vectorized pass, so every item must share one length.
+            ``A,C,G,T`` order. The backend evaluates the batch in one vectorized pass, so every
+            item must share one length.
         temperature (float | None): Softmax temperature, shared by every candidate. The default
             ``1.0`` reads each state as unnormalized and applies ``softmax(logits / T)``,
             returning logit-space gradients; ``None`` reads them as probabilities and returns
