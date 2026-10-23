@@ -17,6 +17,12 @@ Cherimoya ([Ramirez et al., 2026](https://doi.org/10.5281/zenodo.21535161)) adap
 
 CATv1 is the Cherimoya Accessibility aTlas, v1: models trained on 1,149 DNase-seq and 369 ATAC-seq experiments from the [ENCODE Project](https://doi.org/10.1038/s41586-020-2493-4), on GRCh38, across 407 biosamples. Each experiment has five models, one per chromosome-held-out cross-validation fold. A model reflects only the assay and biosample of the experiment it was trained on, so pick experiments with `cherimoya-catalog` rather than by cell type name alone.
 
+### Learning Resources
+
+- [Cherimoya: a lightweight genomic sequence-to-function model built for large-scale design and understanding](https://genomicsxai.github.io/blogs/2026-011/) (Genomics x AI) - the announcement post introducing the model, the CATv1 atlas, and the design workflows they are built for.
+- [jmschrei/cherimoya](https://github.com/jmschrei/cherimoya) (Programmable Genomics Laboratory) - the reference implementation, with the model code and training scripts.
+- [CATv1 model weights](https://huggingface.co/programmable-genomics/CATv1) (Hugging Face) - the released checkpoints this toolkit loads, one per ENCODE experiment and fold.
+
 ## Tools
 
 ### Cherimoya Catalog (`cherimoya-catalog`)
