@@ -1,12 +1,4 @@
-"""Consistency check for ``cuda-version`` pinning in standalone setup scripts.
-
-``cuda-toolkit=12.1`` constrains only the metapackage. Its sub-packages (``cuda-cccl``,
-``cuda-cupti-static``, ``cuda-profiler-api``, ...) are free to resolve to the newest CUDA
-generation, so once CUDA 13 landed on the nvidia channel the solver started mixing 13.x
-libraries into a 12.x toolkit and the ``libcudart.so.12*`` lookup in evo1 and protenix
-failed. Pinning ``cuda-version`` alongside the toolkit forces every sub-package onto the
-same generation, as ``proto_install_cuda_toolkit`` in ``standalone_helpers.sh`` already does.
-"""
+"""Consistency check for ``cuda-version`` pinning in standalone setup scripts."""
 
 from __future__ import annotations
 
