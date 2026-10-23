@@ -155,7 +155,7 @@ class EnformerGradientInput(GradientInput):
 
     Attributes:
         inputs (list[EnformerGradientCandidate]): One context-and-relaxed-positions bundle per
-            candidate. A single bundle may be passed on its own.
+            candidate.
         temperature (float | None): Softmax temperature, shared by every candidate. The default
             ``1.0`` reads each state as unnormalized and applies ``softmax(logits / T)``,
             returning logit-space gradients; ``None`` reads them as probabilities and returns
@@ -164,7 +164,7 @@ class EnformerGradientInput(GradientInput):
 
     inputs: list[EnformerGradientCandidate] = InputField(
         title="Relaxed Candidates",
-        description="One context window with relaxed positions per candidate; a single bundle is accepted alone",
+        description="One context window with relaxed positions per candidate",
     )
 
     @field_validator("inputs", mode="before")
