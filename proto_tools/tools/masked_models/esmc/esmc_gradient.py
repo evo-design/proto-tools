@@ -27,8 +27,7 @@ class ESMCGradientInput(GradientInput):
 
     Attributes:
         inputs (list[ProteinSequenceLogits]): One relaxed state per candidate, each ``(L, 20)``
-            in canonical amino-acid order ``ACDEFGHIKLMNPQRSTVWY``. A single state may be passed
-            on its own and is normalized to a one-item list.
+            in canonical amino-acid order ``ACDEFGHIKLMNPQRSTVWY``.
         temperature (float | None): Softmax temperature, shared by every item. The default
             ``1.0`` reads each state as unnormalized and applies ``softmax(logits / T)``,
             returning logit-space gradients; ``None`` reads them as probabilities and returns
@@ -37,7 +36,7 @@ class ESMCGradientInput(GradientInput):
 
     inputs: list[ProteinSequenceLogits] = InputField(
         title="Relaxed Sequences",
-        description="One relaxed (L, 20) protein state per candidate; a single state is accepted on its own",
+        description="One relaxed (L, 20) protein state per candidate",
     )
 
     @field_validator("inputs", mode="before")
