@@ -2,6 +2,8 @@
 
 # Cherimoya
 
+![Cherimoya](https://proto-bio.github.io/proto-assets/images/tool/cherimoya/hero.png)
+
 > [!NOTE]
 > **License:** Cherimoya uses MIT for code and CC-BY-4.0 for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/jmschrei/cherimoya/blob/main/LICENSE) and [model weights license](https://huggingface.co/programmable-genomics/CATv1/blob/main/LICENSE) for full terms.
 
