@@ -208,7 +208,7 @@ class SpliceTransformerGradientInput(GradientInput):
 
     Attributes:
         inputs (list[SpliceTransformerGradientCandidate]): One target-and-contexts bundle per
-            candidate. A single bundle may be passed on its own.
+            candidate.
         temperature (float | None): Softmax temperature, shared by every candidate. The default
             ``1.0`` reads each state as unnormalized and applies ``softmax(logits / T)``,
             returning logit-space gradients; ``None`` reads them as probabilities and returns
@@ -217,7 +217,7 @@ class SpliceTransformerGradientInput(GradientInput):
 
     inputs: list[SpliceTransformerGradientCandidate] = InputField(
         title="Relaxed Candidates",
-        description="One relaxed target region with its flanking contexts per candidate; one is accepted alone",
+        description="One relaxed target region with its flanking contexts per candidate",
     )
 
     @field_validator("inputs", mode="before")
