@@ -348,13 +348,13 @@ class BatchedNucleotideGradientInput(GradientInput):
     Attributes:
         temperature (float | None): Inherited softmax temperature; see :class:`GradientInput`.
         inputs (list[NucleotideSequenceLogits]): One relaxed ``(L, 4)`` state per candidate in
-            ``A,C,G,T`` order. A single state may be passed on its own. The backend evaluates the
-            batch in one vectorized pass, so every item must share one length.
+            ``A,C,G,T`` order. The backend evaluates the batch in one vectorized pass, so
+            every item must share one length.
     """
 
     inputs: list[NucleotideSequenceLogits] = InputField(
         title="Relaxed Sequences",
-        description="One relaxed (L, 4) DNA state per candidate in A,C,G,T order; a single state is accepted alone",
+        description="One relaxed (L, 4) DNA state per candidate in A,C,G,T order",
         min_length=1,
         examples=[[[[0.0] * 4] * 50]],
     )

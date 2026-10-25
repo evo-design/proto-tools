@@ -30,7 +30,7 @@ class AbLangGradientInput(GradientInput):
 
     Attributes:
         inputs (list[AntibodyLogits]): One antibody per candidate, each with relaxed sequence
-            distributions and one matrix per chain. A single antibody may be passed on its own.
+            distributions and one matrix per chain.
             The model variant is selected from which chains an antibody provides, and its
             returned gradient concatenates them heavy-then-light.
         temperature (float | None): Softmax temperature shared by every candidate. The default
@@ -41,7 +41,7 @@ class AbLangGradientInput(GradientInput):
 
     inputs: list[AntibodyLogits] = InputField(
         title="Antibodies",
-        description="One antibody per candidate, each with relaxed per-chain distributions; one is accepted alone",
+        description="One antibody per candidate, each with relaxed per-chain distributions",
     )
 
     @field_validator("inputs", mode="before")

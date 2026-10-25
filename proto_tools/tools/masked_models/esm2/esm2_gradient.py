@@ -42,7 +42,7 @@ class ESM2GradientInput(GradientInput):
 
     inputs: list[ProteinSequenceLogits] = InputField(
         title="Relaxed Sequences",
-        description="One relaxed (L, 20) protein state per candidate; a single state is accepted on its own",
+        description="One relaxed (L, 20) protein state per candidate",
     )
 
     @field_validator("inputs", mode="before")
