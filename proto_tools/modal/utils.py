@@ -223,7 +223,7 @@ def strip_base_fields(output_dict: dict[str, Any]) -> dict[str, Any]:
     """Strip caller-recomputable envelope fields from a tool result dict.
 
     Args:
-        output_dict (dict[str, Any]): Result from ``ToolOutput.model_dump()``.
+        output_dict (dict[str, Any]): Result from ``ToolOutput.model_dump(mode="json")``.
 
     Returns:
         dict[str, Any]: Tool-specific fields plus ``success``/``errors``/``warnings``.
@@ -236,7 +236,7 @@ def apply_tool_envelope(
     *args: Any,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    """Run *run_fn* and reduce its ``BaseToolOutput`` to a serializable result dict."""
+    """Run *run_fn* and reduce its ``BaseToolOutput`` to a dict of JSON-native values."""
     try:
         result = run_fn(*args, **kwargs)
     except MissingAssetError as e:
@@ -251,7 +251,8 @@ def apply_tool_envelope(
             "missing_asset_toolkit": e.toolkit,
             "missing_asset_kind": e.asset_kind,
         }
-    return strip_base_fields(result.model_dump())
+    # JSON mode, so nested outputs' timestamps leave as ISO strings, not datetimes the gateway cannot store.
+    return strip_base_fields(result.model_dump(mode="json"))
 
 
 def mark_hosted_env() -> None:
