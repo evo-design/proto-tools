@@ -690,6 +690,39 @@ def test_run_tool_refuses_a_setting_the_device_cannot_honour():
     assert "custom checkpoint" in result["error"]
 
 
+def _config_dispatched_for_example(monkeypatch, tool_key: str, config: dict | None = None):
+    """Run ``tool_key``'s example through ``run_tool`` and return the config it would dispatch."""
+    from proto_tools.mcp import tools as impl
+
+    seen = {}
+
+    def _capture(device, key, payload, cfg, **_kwargs):
+        seen["cfg"] = cfg
+        raise RuntimeError("captured")
+
+    monkeypatch.setattr(impl, "_dispatch", _capture)
+    impl.run_tool(tool_key, config=config, use_example=True)
+    return seen["cfg"]
+
+
+def test_use_example_supplies_the_config_the_example_needs(monkeypatch):
+    """miranda-scan's microRNA queries live on its config, so an inputs-only example cannot run."""
+    cfg = _config_dispatched_for_example(monkeypatch, "miranda-scan")
+
+    assert cfg.mirna_ids == ["miR-bantam"]
+    assert len(cfg.mirna_queries) == 1
+
+
+def test_use_example_config_yields_to_the_callers(monkeypatch):
+    """The example fills in what the caller left unset; anything the caller set still wins."""
+    cfg = _config_dispatched_for_example(
+        monkeypatch, "miranda-scan", {"mirna_queries": ["ACGUACGUACGUACGUACGU"], "score_threshold": 60}
+    )
+
+    assert cfg.mirna_queries == ["ACGUACGUACGUACGUACGU"]
+    assert cfg.score_threshold == 60
+
+
 def test_every_deploy_route_records_fingerprints():
     """An absent manifest reads as "aligned", so a route that skips this is silently exempt.
 

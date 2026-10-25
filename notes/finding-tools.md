@@ -97,9 +97,12 @@ ToolRegistry.get_input_schema("esm2-embedding")
 ToolRegistry.get_config_schema("esm2-embedding")
 ToolRegistry.get_output_schema("esm2-embedding")
 ToolRegistry.get_example_input("esm2-embedding")
+ToolRegistry.get_example_config("miranda-scan")
 ```
 
 `example_input()` values are minimal valid `Input` objects, useful for smoke tests, notebooks, and script templates. They carry real payloads, so for structure tools and model-context-length sequence tools they run to hundreds of KB; that size is inherent (`BorzoiInput` requires exactly 524,288 bp), not a fixture that could be trimmed. When you only need the symbol names and required field names, use `proto-tools signature <tool>`, which renders a fixed few hundred bytes for every tool.
+
+A few examples cannot run on a default config, because the tool takes part of its request on the config: miranda's microRNA queries, or the reference genome a variant scorer reads. Those tools declare `example_config=`, a factory returning the config values the example needs. `get_example_config()` returns them, or `{}` for every other tool. `run_tool(use_example=True)` merges them under whatever config the caller passes, field by field.
 
 ## Citation, Links, License, and Access
 

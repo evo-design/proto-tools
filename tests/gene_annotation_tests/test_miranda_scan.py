@@ -14,6 +14,7 @@ from proto_tools.tools import (
     MirandaOutput,
     MirandaSequenceResult,
     MirandaTargetSite,
+    ToolRegistry,
     run_miranda_scan,
 )
 from proto_tools.tools.gene_annotation.miranda.miranda_scan import (
@@ -173,14 +174,11 @@ def test_export_flattens_sites_to_csv_and_json(tmp_path):
 
 @pytest.mark.integration
 def test_miranda_scan_finds_bantam_site():
-    """End-to-end: miR-bantam scanned against the Drosophila hid 3'UTR finds a real site."""
-    _, mirna_seqs = _read_fasta(_EXAMPLES_DIR / "bantam_mirna.fasta")
-    _, target_seqs = _read_fasta(_EXAMPLES_DIR / "hid_utr.fasta")
+    """End-to-end: the registered example, miR-bantam against the Drosophila hid 3'UTR, finds a real site."""
+    example = ToolRegistry.get_example_input("miranda-scan")
+    target_seqs = example.target_sequences
 
-    result = run_miranda_scan(
-        MirandaInput(target_sequences=target_seqs),
-        MirandaConfig(mirna_queries=mirna_seqs, mirna_ids=["miR-bantam"]),
-    )
+    result = run_miranda_scan(example, MirandaConfig(**ToolRegistry.get_example_config("miranda-scan")))
 
     assert result.success is True
     assert result.tool_id == "miranda-scan"

@@ -667,6 +667,9 @@ class ToolSpec(BaseModel):
         source_file (Path): Path to the source file where the tool function is defined.
         example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal
             valid input for testing.
+        example_config (Callable[[], dict[str, Any]] | None): Factory returning the config
+            values the example needs beyond the defaults, for a tool whose example cannot run
+            on a default config.
         iterable_input_fields (list[str] | None): Index-parallel input list field names
             (primary first; e.g. ``["complexes", "msas"]`` or a single-field ``["sequences"]``).
             Sliced, deduped, and cache-keyed together so siblings stay aligned to the primary.
@@ -737,6 +740,11 @@ class ToolSpec(BaseModel):
         default=None,
         exclude=True,
         description="Factory returning a minimal valid input for testing",
+    )
+    example_config: Callable[[], dict[str, Any]] | None = Field(
+        default=None,
+        exclude=True,
+        description="Factory returning the config values the example needs beyond the defaults",
     )
     iterable_input_fields: list[str] | None = Field(
         default=None,
@@ -928,6 +936,7 @@ class ToolRegistry:
         pin_visible_devices: bool = False,
         device_count: str = "1",
         example_input: Callable[[], BaseToolInput] | None = None,
+        example_config: Callable[[], dict[str, Any]] | None = None,
         iterable_input_fields: list[str] | None = None,
         iterable_output_field: str | None = None,
         max_chunk_size: int | None = _UNSET_CHUNK_SIZE,
@@ -968,6 +977,9 @@ class ToolRegistry:
                 Validates allocation: errors on under-allocation, warns on over-allocation.
             example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal valid
                 input for testing and examples.
+            example_config (Callable[[], dict[str, Any]] | None): Factory returning the config
+                values ``example_input`` needs to run, for a tool whose default config cannot,
+                e.g. one that takes its query set or reference genome on the config.
             iterable_input_fields (list[str] | None): Index-parallel input list field names
                 (primary first) batched/sliced/keyed together for ToolPool fan-out and per-item
                 caching; a None field is skipped. Use a single-element list for an ordinary
@@ -1564,6 +1576,7 @@ class ToolRegistry:
                 function=wrapper,
                 source_file=source_file,
                 example_input=example_input,
+                example_config=example_config,
                 iterable_input_fields=iterable_input_fields,
                 iterable_output_field=iterable_output_field,
                 max_chunk_size=resolved_max_chunk_size,
@@ -1796,6 +1809,14 @@ class ToolRegistry:
         if spec.example_input is None:
             return None
         return spec.example_input()
+
+    @classmethod
+    def get_example_config(cls, key: str) -> dict[str, Any]:
+        """Get the config values a tool's example needs beyond the defaults (empty if none)."""
+        spec = cls.get(key)
+        if spec.example_config is None:
+            return {}
+        return spec.example_config()
 
     @classmethod
     def count(cls) -> int:
