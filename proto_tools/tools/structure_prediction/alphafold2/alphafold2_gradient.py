@@ -15,7 +15,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.entities.structures import BFactorType, Structure
@@ -79,6 +79,8 @@ class AlphaFold2GradientCandidate(BaseModel):
         design_positions (list[int] | None): Zero-based binder residue indices
             for loss focus (e.g. CDR loops). Germinal backend only.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     logits: ProteinSequenceLogits = Field(
         title="Logits",

@@ -12,7 +12,7 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.utils.progress import progress_bar
@@ -299,6 +299,8 @@ class ESMFoldGradientCandidate(BaseModel):
             should pass each occurrence once; gradients are summed through the
             shared logits tensor.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     logits: ProteinSequenceLogits = Field(
         title="Logits",

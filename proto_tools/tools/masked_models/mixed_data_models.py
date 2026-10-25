@@ -7,7 +7,7 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from standalone_helpers.mixed_sequence import one_hot_mixed_logits, tokenize_mixed_sequence
 from standalone_helpers.vocabulary import (
     AMBIGUOUS_PROTEIN_TOKENS,
@@ -196,6 +196,8 @@ class MixedSequenceGradientCandidate(BaseModel):
         logits (MixedSequenceLogits): One 24-column row per model token in
             ``ACDEFGHIKLMNPQRSTVWYacgt`` order. Fixed context rows must be zero.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     sequence: str = Field(
         title="Sequence",

@@ -5,7 +5,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import ExitStack
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities.structures import ChainSelection, ResidueSelection, Structure
 from proto_tools.tools.tool_registry import tool
@@ -43,6 +43,8 @@ class ProteinMPNNGradientCandidate(BaseModel):
             from the perplexity objective.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     logits: ProteinSequenceLogits = Field(
         title="Logits",
         description="Relaxed (L, 20) sequence state in canonical amino-acid order.",
@@ -61,18 +63,6 @@ class ProteinMPNNGradientCandidate(BaseModel):
         title="Fixed Positions",
         description="Per-chain 1-indexed residue positions excluded from the ProteinMPNN objective.",
     )
-
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_legacy_chain_ids(cls, data: Any) -> Any:
-        """Accept legacy ``chain_ids`` as an alias for ``chains_to_redesign``."""
-        if not isinstance(data, dict) or "chain_ids" not in data:
-            return data
-        if "chains_to_redesign" in data:
-            raise ValueError("Specify only one of chain_ids or chains_to_redesign")
-        data = dict(data)
-        data["chains_to_redesign"] = data.pop("chain_ids")
-        return data
 
     def iter_sequence_logits(self) -> Iterator[tuple[str, SequenceLogits]]:
         """Expose this item's relaxed state to the shared validation hooks.
