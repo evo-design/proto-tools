@@ -8,7 +8,7 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from proto_tools.tools.rna_splicing.reference_genome import ReferenceGenomeConfig
+from proto_tools.tools.rna_splicing.reference_genome import ReferenceGenomeConfig, example_reference_config
 from proto_tools.tools.rna_splicing.spliceai.spliceai_score import SpliceAIVariant
 from proto_tools.tools.rna_splicing.spliceai2.shared_data_models import SPLICEAI2_HF_URL, SpliceAI2Config
 from proto_tools.tools.tool_registry import tool
@@ -351,6 +351,7 @@ def _junction_changes(row: dict[str, Any], prefix: str) -> list[SpliceAI2Junctio
     uses_gpu=True,
     gpu_only=True,
     example_input=example_input,
+    example_config=example_reference_config,
     iterable_input_fields=["variants"],
     iterable_output_field="results",
     max_chunk_size=64,

@@ -25,6 +25,15 @@ GENOME_FASTA: dict[str, str] = {
 _GENOME_ALIASES: dict[str, str] = {"hg19": "grch37", "hg38": "grch38"}
 
 
+def example_reference_config() -> dict[str, Any]:
+    """The config a scorer's example needs: the assembly its variants' coordinates are on.
+
+    The example variants are GRCh38 loci. Naming the assembly is what lets the example run on a
+    remote worker, whose deploy stages every assembly in ``GENOME_FASTA``.
+    """
+    return {"reference_fasta": DEFAULT_ASSEMBLY}
+
+
 class ReferenceGenomeConfig(BaseConfig):
     """Config mixin for tools that read variant context from a reference genome FASTA.
 

@@ -713,6 +713,15 @@ def test_use_example_supplies_the_config_the_example_needs(monkeypatch):
     assert len(cfg.mirna_queries) == 1
 
 
+@pytest.mark.parametrize("tool_key", ["spliceai-score", "spliceai2-score"])
+def test_use_example_names_the_assembly_its_variant_is_on(monkeypatch, tool_key: str):
+    """A variant scorer reads the genome around each variant; the default names none."""
+    cfg = _config_dispatched_for_example(monkeypatch, tool_key)
+
+    assert cfg.reference_fasta == "grch38"
+    assert cfg.remote_unsupported_reason("modal") is None
+
+
 def test_use_example_config_yields_to_the_callers(monkeypatch):
     """The example fills in what the caller left unset; anything the caller set still wins."""
     cfg = _config_dispatched_for_example(

@@ -8,7 +8,12 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
-from proto_tools.tools.rna_splicing.reference_genome import DEFAULT_ASSEMBLY, GENOME_FASTA, ReferenceGenomeConfig
+from proto_tools.tools.rna_splicing.reference_genome import (
+    DEFAULT_ASSEMBLY,
+    GENOME_FASTA,
+    ReferenceGenomeConfig,
+    example_reference_config,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
@@ -359,6 +364,7 @@ def example_input() -> Any:
     description="Score variants for splice-altering effects (delta scores/positions) with SpliceAI",
     uses_gpu=True,
     example_input=example_input,
+    example_config=example_reference_config,
     iterable_input_fields=["variants"],
     iterable_output_field="results",
     max_chunk_size=64,
