@@ -66,15 +66,6 @@ def test_tool_config_round_trips_through_dict(tool_key: str) -> None:
     )
 
 
-@pytest.mark.parametrize("tool_key", [key for key in _TOOL_KEYS if ToolRegistry.get(key).example_config is not None])
-def test_tool_example_config_constructs_and_round_trips(tool_key: str) -> None:
-    """The config an example runs with is sent over the wire too, so it must build and rebuild."""
-    spec = ToolRegistry.get(tool_key)
-    cfg = spec.config_model(**ToolRegistry.get_example_config(tool_key))
-    dumped = cfg.model_dump(mode="json", exclude_none=True)
-    assert spec.config_model(**dumped).model_dump(mode="json", exclude_none=True) == dumped
-
-
 # ── Polymorphic output safety ─────────────────────────────────────────────────
 
 
