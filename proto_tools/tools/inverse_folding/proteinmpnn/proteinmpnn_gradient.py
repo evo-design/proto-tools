@@ -93,8 +93,7 @@ class ProteinMPNNGradientInput(GradientInput):
     """One or many relaxed candidates, each with its own backbone.
 
     Attributes:
-        inputs (list[ProteinMPNNGradientCandidate]): One sequence-and-backbone bundle per candidate. A
-            single bundle may be passed on its own.
+        inputs (list[ProteinMPNNGradientCandidate]): One sequence-and-backbone bundle per candidate.
         temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
             reads each state as unnormalized and applies ``softmax(logits / T)``, returning
             logit-space gradients; ``None`` reads them as probabilities and returns
@@ -103,7 +102,7 @@ class ProteinMPNNGradientInput(GradientInput):
 
     inputs: list[ProteinMPNNGradientCandidate] = InputField(
         title="Relaxed Candidates",
-        description="One relaxed sequence with its backbone per candidate; a single bundle is accepted alone",
+        description="One relaxed sequence with its backbone per candidate",
     )
 
     @field_validator("inputs", mode="before")

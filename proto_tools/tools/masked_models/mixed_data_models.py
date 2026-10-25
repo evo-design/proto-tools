@@ -236,8 +236,7 @@ class MixedSequenceGradientInput(GradientInput):
     """One or many relaxed candidates, each aligned to its own mixed-sequence template.
 
     Attributes:
-        inputs (list[MixedSequenceGradientCandidate]): One template-and-state pair per candidate. A
-            single item may be passed on its own.
+        inputs (list[MixedSequenceGradientCandidate]): One template-and-state pair per candidate.
         temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
             reads each state as unnormalized and applies ``softmax(logits / T)``, returning
             logit-space gradients; ``None`` reads them as modality-restricted probabilities and
@@ -246,7 +245,7 @@ class MixedSequenceGradientInput(GradientInput):
 
     inputs: list[MixedSequenceGradientCandidate] = InputField(
         title="Relaxed Candidates",
-        description="One template-and-state pair per candidate; a single pair is accepted on its own",
+        description="One template-and-state pair per candidate",
     )
 
     @field_validator("inputs", mode="before")

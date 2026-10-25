@@ -36,10 +36,9 @@ class CodonFMGradientInput(GradientInput):
     Attributes:
         inputs (list[CodonSequenceLogits]): One relaxed coding-sequence state per candidate, each
             ``(L, 64)`` in lexicographic DNA codon order (``AAA, AAC, AAG, AAT, ...``; see
-            :data:`CODONFM_CODON_VOCAB`). A single state may be passed on its own. Every ``L``
-            must be ≤ 2046 (Encodon's positional cap minus the CLS/SEP tokens); over-length
-            inputs raise ``ValueError``. Each row's argmax codon is that position's
-            masked-language-model target.
+            :data:`CODONFM_CODON_VOCAB`). Every ``L`` must be ≤ 2046 (Encodon's positional cap
+            minus the CLS/SEP tokens); over-length inputs raise ``ValueError``. Each row's argmax
+            codon is that position's masked-language-model target.
         temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
             as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
             gradient; ``None`` reads them as probabilities and returns a probability-space

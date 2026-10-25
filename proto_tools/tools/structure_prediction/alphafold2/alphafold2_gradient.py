@@ -143,8 +143,7 @@ class AlphaFold2GradientInput(GradientInput):
     """One or many relaxed binders, each designed against its own target.
 
     Attributes:
-        inputs (list[AlphaFold2GradientCandidate]): One binder-and-target bundle per candidate. A
-            single bundle may be passed on its own.
+        inputs (list[AlphaFold2GradientCandidate]): One binder-and-target bundle per candidate.
         temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
             reads each state as unnormalized and applies ``softmax(logits / T)``, returning
             logit-space gradients; ``None`` reads them as probabilities and returns
@@ -153,7 +152,7 @@ class AlphaFold2GradientInput(GradientInput):
 
     inputs: list[AlphaFold2GradientCandidate] = InputField(
         title="Relaxed Candidates",
-        description="One relaxed binder with its target template per candidate; a single bundle is accepted alone",
+        description="One relaxed binder with its target template per candidate",
     )
 
     @field_validator("inputs", mode="before")

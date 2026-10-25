@@ -367,8 +367,7 @@ class ESMFoldGradientInput(GradientInput):
     """One or many relaxed candidates, each folded within its own complex.
 
     Attributes:
-        inputs (list[ESMFoldGradientCandidate]): One target-state-and-complex bundle per candidate. A
-            single bundle may be passed on its own.
+        inputs (list[ESMFoldGradientCandidate]): One target-state-and-complex bundle per candidate.
         temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
             reads each state as unnormalized and applies ``softmax(logits / T)``, returning
             logit-space gradients; ``None`` reads them as probabilities and returns
@@ -377,7 +376,7 @@ class ESMFoldGradientInput(GradientInput):
 
     inputs: list[ESMFoldGradientCandidate] = InputField(
         title="Relaxed Candidates",
-        description="One relaxed target state with its complex per candidate; a single bundle is accepted alone",
+        description="One relaxed target state with its complex per candidate",
     )
 
     @field_validator("inputs", mode="before")

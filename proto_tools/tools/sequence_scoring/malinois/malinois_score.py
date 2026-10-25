@@ -347,8 +347,8 @@ class MalinoisGradientInput(BatchedNucleotideGradientInput):
 
     Attributes:
         inputs (list[NucleotideSequenceLogits]): One relaxed ``(L, 4)`` DNA state per
-            candidate in ``A,C,G,T`` order; a single state may be passed on its own. Every item
-            must share one length, because the backend evaluates them in one vectorized pass.
+            candidate in ``A,C,G,T`` order. Every item must share one length, because the
+            backend evaluates them in one vectorized pass.
         temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
             reads each state as unnormalized and applies ``softmax(logits / T)``, returning
             logit-space gradients; ``None`` reads them as probabilities and returns
