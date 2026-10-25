@@ -770,8 +770,9 @@ def run_tool(
     container is warm, but a few are genuinely long-running — see the tool
     description before calling.
 
-    ``use_example=True`` runs the tool's canonical example input, so a caller
-    can exercise a tool without materialising inputs that may be very large.
+    ``use_example=True`` runs the tool's canonical example input, with any config values the
+    example needs, so a caller can exercise a tool without materialising inputs that may be very
+    large. Config the caller passes still wins, field by field.
 
     A structure input takes a file path or an http(s) URL where the schema shows an object,
     so chaining one tool's output file into the next never reads it into the call. This is not
@@ -792,6 +793,8 @@ def run_tool(
         if example is None:
             return {"ok": False, "error": f"{tool_key!r} declares no example input; pass inputs explicitly."}
         inputs = example.model_dump(mode="json")
+        # Some examples cannot run on a default config (miranda's microRNA queries live there).
+        config = {**ToolRegistry.get_example_config(tool_key), **(config or {})}
     elif inputs is None:
         return {"ok": False, "error": "provide inputs, or pass use_example=True to run the canonical example."}
 

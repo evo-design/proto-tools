@@ -290,9 +290,7 @@ class MirandaConfig(BaseConfig):
     def minimal(cls, **kwargs: Any) -> "MirandaConfig":
         """Cheap-mode defaults: bundle the bantam example query so ``Config.minimal()`` works without args."""
         if "mirna_queries" not in kwargs:
-            _, mirna_seqs = _read_fasta(_EXAMPLES_DIR / "bantam_mirna.fasta")
-            kwargs["mirna_queries"] = mirna_seqs
-            kwargs.setdefault("mirna_ids", ["miR-bantam"])
+            kwargs = {**example_config(), **kwargs}
         return super().minimal(**kwargs)  # type: ignore[return-value]
 
 
@@ -324,6 +322,12 @@ def example_input() -> Any:
     return MirandaInput(target_sequences=target_seqs)
 
 
+def example_config() -> dict[str, Any]:
+    """The config the example needs: the bantam microRNA, which is known to target the hid 3'UTR."""
+    _, mirna_seqs = _read_fasta(_EXAMPLES_DIR / "bantam_mirna.fasta")
+    return {"mirna_queries": mirna_seqs, "mirna_ids": ["miR-bantam"]}
+
+
 @tool(
     key="miranda-scan",
     label="miRanda Target Scan",
@@ -336,6 +340,7 @@ def example_input() -> Any:
         "(complementarity alignment plus ViennaRNA thermodynamics)."
     ),
     example_input=example_input,
+    example_config=example_config,
     iterable_input_fields=["target_sequences"],
     iterable_output_field="results",
     max_chunk_size=256,
