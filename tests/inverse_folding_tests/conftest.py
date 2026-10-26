@@ -41,6 +41,12 @@ def with_insertion_code(structure: Structure, after: int, code: str = "A") -> St
 
 
 @pytest.fixture(scope="module")
+def antibody_structure() -> Structure:
+    """PDB 1IGY trimmed: Kabat insertion codes 52A and 82A-82C in chain B, plus N-linked glycans."""
+    return Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "antibody_insertion_codes.pdb")
+
+
+@pytest.fixture(scope="module")
 def staging_structure() -> Structure:
     """A plain single-chain backbone, numbered 1..65."""
     return Structure.from_file(STAGING_PDB_FILE)

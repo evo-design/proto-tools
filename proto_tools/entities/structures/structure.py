@@ -876,6 +876,10 @@ class Structure(BaseModel):
             if gemmi_struct is None:
                 raise ValueError(f"No valid structure found in CIF content (source={self.source!r})")
 
+            # Merge first: a chain whose ligands follow the other chains parses as two chains of one
+            # name, which shorten_chain_names would give two different letters and the map would keep
+            # only the last -- pointing the caller's chain at the wrong part.
+            gemmi_struct.merge_chain_parts()
             before = [chain.name for model in gemmi_struct for chain in model]
             gemmi_struct.shorten_chain_names()
             after = [chain.name for model in gemmi_struct for chain in model]
@@ -1105,15 +1109,13 @@ class Structure(BaseModel):
         """Classify each chain by what it holds.
 
         Polymer chains are ``'protein'``, ``'dna'``, or ``'rna'``, from the polymer type
-        gemmi assigns them. Chains without a polymer are ``'ligand'`` when they hold a
-        non-polymer residue and ``'water'`` otherwise.
+        gemmi assigns them, or plain ``'polymer'`` for another type such as a DNA/RNA hybrid.
+        Chains without a polymer are ``'ligand'`` when they hold a non-polymer residue and
+        ``'water'`` otherwise.
 
         Returns:
             dict[str, str]: Dictionary mapping chain IDs to ``'protein'``, ``'dna'``,
-                ``'rna'``, ``'ligand'``, or ``'water'``.
-
-        Raises:
-            ValueError: If a polymer chain's type is not protein, DNA, or RNA.
+                ``'rna'``, ``'polymer'``, ``'ligand'``, or ``'water'``.
 
         Examples:
             >>> protein.get_chain_types()
@@ -1124,7 +1126,7 @@ class Structure(BaseModel):
         for chain in self.gemmi_struct[0]:
             polymer = chain.get_polymer()
             if polymer:
-                chain_types[chain.name] = _polymer_entity_type(chain.name, polymer)
+                chain_types[chain.name] = _polymer_entity_type(chain.name, polymer, strict=False)
             elif chain.get_ligands():
                 chain_types[chain.name] = "ligand"
             else:
@@ -1309,6 +1311,9 @@ class Structure(BaseModel):
                 :meth:`get_chain_residue_ids` returns them.
             chain_map (dict[str, str] | None): Original to current chain IDs, as
                 :meth:`renumbered_sequentially` returns them. ``None`` leaves IDs unchanged.
+
+        Only polymer residues are renumbered; a ligand or water keeps the number it carries,
+        since ``residue_ids`` describes polymer chains alone.
 
         Returns:
             Structure: This structure's coordinates under the given IDs and numbering, in this
@@ -1874,16 +1879,29 @@ class Structure(BaseModel):
 _ENTITY_TYPE_BY_POLYMER_TYPE = {"PeptideL": "protein", "PeptideD": "protein", "Dna": "dna", "Rna": "rna"}
 
 
-def _polymer_entity_type(chain_name: str, polymer: gemmi.ResidueSpan) -> str:
+def _polymer_entity_type(chain_name: str, polymer: gemmi.ResidueSpan, *, strict: bool = True) -> str:
     """Return the ``Chain`` entity type for a gemmi polymer.
 
+    Args:
+        chain_name (str): Chain the polymer belongs to, named in the error.
+        polymer (gemmi.ResidueSpan): The polymer to classify.
+        strict (bool): Raise for a type no ``Chain`` can carry; ``False`` returns ``"polymer"``.
+
+    Returns:
+        str: ``"protein"``, ``"dna"``, ``"rna"``, or ``"polymer"`` for another type when not strict.
+
     Raises:
-        ValueError: If the polymer is not protein, DNA, or RNA.
+        ValueError: If the polymer is not protein, DNA, or RNA and ``strict`` is set.
     """
     polymer_type = polymer.check_polymer_type().name
-    if polymer_type not in _ENTITY_TYPE_BY_POLYMER_TYPE:
-        raise ValueError(f"Chain '{chain_name}' has polymer type {polymer_type}; expected protein, DNA, or RNA")
-    return _ENTITY_TYPE_BY_POLYMER_TYPE[polymer_type]
+    if polymer_type in _ENTITY_TYPE_BY_POLYMER_TYPE:
+        return _ENTITY_TYPE_BY_POLYMER_TYPE[polymer_type]
+    if not strict:
+        return "polymer"
+    raise ValueError(
+        f"Chain '{chain_name}' is a {polymer_type} polymer, which a Chain cannot carry; a Chain is a "
+        "protein, DNA, or RNA sequence. Split or drop that chain before building a Complex from this structure."
+    )
 
 
 def _residue_letter(residue_name: str) -> tuple[str, str | None]:

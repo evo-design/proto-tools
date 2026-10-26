@@ -132,3 +132,49 @@ def test_sample_tools_hand_the_model_a_sequentially_numbered_structure(monkeypat
     assert staged.get_chain_residue_ids()["A"] == [(n, "") for n in range(1, len(native) + 1)]
     assert captured["chain_ids"] == ["A"]
     assert design.chain_sequence_map() == {"A": native}
+
+
+def test_staging_a_real_antibody_keeps_every_cdr_residue(antibody_structure):
+    """PDB 1IGY's Kabat insertions are the case this staging exists for: all 40 residues reach the model."""
+    with staged_structure(antibody_structure) as staged:
+        written = Structure(structure=staged.path.read_text(), structure_format="pdb", source="test")
+        assert written.get_chain_residue_ids("B")["B"] == [(n, "") for n in range(1, 41)]
+        assert written.get_chain_sequence("B") == antibody_structure.get_chain_sequence("B")
+        model_output = staged.path.read_text()
+
+    restored = staged.restore(model_output, source="test")
+    assert restored.get_chain_residue_ids() == antibody_structure.get_chain_residue_ids()
+
+
+def test_sample_tool_designs_every_residue_of_a_real_antibody(monkeypatch, antibody_structure):
+    """A design over an insertion-coded antibody covers all 40 residues, not the 36 distinct numbers."""
+    from proto_tools.tools.inverse_folding import (
+        InverseFoldingInput,
+        InverseFoldingStructureInput,
+        ProteinMPNNSampleConfig,
+        run_proteinmpnn_sample,
+    )
+
+    native = {cid: antibody_structure.get_chain_sequence(cid) for cid in ("A", "B")}
+
+    def fake_dispatch(toolkit, input_dict, *, instance=None, config=None):
+        staged = Structure(structure=Path(input_dict["pdb_path"]).read_text(), structure_format="pdb", source="test")
+        # The model answers with one residue per residue it was given, in chain order.
+        return {
+            "seq": ["/".join(staged.get_chain_sequence(cid) for cid in input_dict["chain_ids"])],
+            "score": [-1.0],
+            "seqid": [1.0],
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample.ToolInstance.dispatch",
+        staticmethod(fake_dispatch),
+    )
+    output = run_proteinmpnn_sample(
+        InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=antibody_structure)]),
+        ProteinMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=0, device="cpu"),
+    )
+
+    design = output.design_sets[0].complexes[0]
+    assert design.chain_sequence_map() == native
+    assert len(design.chain_sequence_map()["B"]) == 40

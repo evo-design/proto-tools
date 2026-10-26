@@ -1677,6 +1677,83 @@ def test_with_residue_ids_rejects_a_chain_of_a_different_length(modified_gapped)
         modified_gapped.with_residue_ids(shortened)
 
 
+# A real antibody: PDB 1IGY, trimmed. Kabat numbering gives chain B four insertion-coded
+# residues (52A, 82A-82C), so it holds 40 residues under only 36 distinct residue numbers.
+_ANTIBODY_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "antibody_insertion_codes.pdb"
+
+
+@pytest.fixture(scope="module")
+def antibody() -> Structure:
+    return Structure.from_file(_ANTIBODY_PDB_FILE)
+
+
+def test_residue_ids_separate_kabat_insertions_that_numbering_alone_merges(antibody):
+    """A real antibody's CDR insertions are distinct residues sharing a number."""
+    residue_ids = antibody.get_chain_residue_ids("B")["B"]
+    assert [f"{number}{icode}" for number, icode in residue_ids if icode] == ["52A", "82A", "82B", "82C"]
+    assert len(residue_ids) == 40
+    assert len(set(antibody.get_chain_positions("B"))) == 36
+
+
+def test_renumbering_a_real_antibody_round_trips_every_residue(antibody):
+    """Staging an antibody must not lose the CDR residues a bare number cannot address."""
+    content, chain_map = antibody.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+    assert renumbered.get_chain_residue_ids("B")["B"] == [(n, "") for n in range(1, 41)]
+    assert renumbered.get_chain_sequence("B") == antibody.get_chain_sequence("B")
+
+    restored = renumbered.with_residue_ids(antibody.get_chain_residue_ids(), chain_map=chain_map)
+    assert restored.get_chain_residue_ids() == antibody.get_chain_residue_ids()
+
+
+def test_renumbering_keeps_a_glycan_off_the_polymer_numbers(antibody):
+    """The antibody's N-linked glycans must not take numbers its residues already hold."""
+    assert antibody.get_chain_types() == {"A": "protein", "B": "protein", "E": "ligand"}
+    content, _ = antibody.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+    assert [name for name, _ in renumbered.get_chain_ligands("E")] == ["NAG", "NDG", "BMA"]
+
+
+def _multi_char_chain_cif(pdb_file: Path, names: dict[str, str]) -> str:
+    """Rename a PDB's chains and write CIF *without* merging, as a real CIF arrives."""
+    import gemmi
+
+    gemmi_struct = gemmi.read_pdb_string(pdb_file.read_text())
+    for chain in gemmi_struct[0]:
+        chain.name = names[chain.name]
+    return gemmi_struct.make_mmcif_document().as_string()
+
+
+def test_chain_mapping_follows_the_polymer_when_a_chain_is_split_across_parts():
+    """A chain listed again for its ligands must map to its polymer part, not the ligand part."""
+    content = _multi_char_chain_cif(_MODIFIED_GAPPED_PDB_FILE, {"A": "Heavy", "B": "Dna", "L": "Lig"})
+    structure = Structure(structure=content, structure_format="cif", source="test")
+
+    pdb_content, chain_map = structure.renumbered_sequentially()
+
+    staged = Structure(structure=pdb_content, structure_format="pdb", source="test")
+    assert staged.get_chain_types()[chain_map["Heavy"]] == "protein"
+    restored = staged.with_residue_ids(structure.get_chain_residue_ids(), chain_map=chain_map)
+    assert restored.get_chain_residue_ids() == structure.get_chain_residue_ids()
+
+
+def test_an_unrepresentable_polymer_is_reported_rather_than_dropped():
+    """A DNA/RNA hybrid cannot be a Chain, so building a Complex says so instead of losing it."""
+    from proto_tools.entities.complex import Complex
+
+    # Chain B of the protein/DNA fixture, with two deoxy bases swapped for ribonucleotides.
+    source = Path(__file__).parent.parent / "dummy_data" / "protein_dna_complex.pdb"
+    lines = []
+    for line in source.read_text().splitlines():
+        ribo = line.startswith("ATOM") and line[21] == "B" and int(line[22:26]) in (2, 3)
+        lines.append(line[:17] + f"{line[18:20].strip().replace('D', ''):>3}" + line[20:] if ribo else line)
+    hybrid = Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
+
+    assert hybrid.get_chain_types()["B"] == "polymer"
+    with pytest.raises(ValueError, match="which a Chain cannot carry"):
+        Complex.from_structure(hybrid)
+
+
 # ── Remote fetch (from_url / from_rcsb / constructor URL) ──────────────────────
 
 _RCSB_PDB_URL = "https://files.rcsb.org/download/1TIM.pdb"

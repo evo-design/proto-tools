@@ -519,7 +519,8 @@ def test_fampnn_sample_fixes_every_position_of_context_chains(monkeypatch):
         FAMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=0, device="cpu"),
     )
 
-    assert captured["fixed_positions"] == {"B": structure.get_chain_positions("B")}
+    # Ordinals on the staged copy, not the input's residue numbers.
+    assert captured["fixed_positions"] == {"B": list(range(1, len(native["B"]) + 1))}
     design = output.design_sets[0].complexes[0]
     assert design.chain_sequence_map() == {"A": "G" * len(native["A"]), "B": native["B"]}
     assert design.designed == [True, False]

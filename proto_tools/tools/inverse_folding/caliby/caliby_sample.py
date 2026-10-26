@@ -78,7 +78,7 @@ def validate_conformer_alignment(primary: Structure, conformers: list[Structure]
     does when a generative sampler renumbers conformers from 1.
 
     Position-level constraints are ordinals too: every conformer is staged numbered 1..N
-    per chain (see :func:`ensemble_paths`), so position ``i`` names each conformer's
+    per chain (see :func:`staged_ensemble`), so position ``i`` names each conformer's
     ``i``-th residue whatever its original numbering.
 
     Args:

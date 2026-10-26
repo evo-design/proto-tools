@@ -18,7 +18,6 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingOutput,
     InverseFoldingStructureInput,
 )
-from proto_tools.tools.inverse_folding.structure_staging import staged_structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
@@ -308,7 +307,7 @@ def run_fampnn_sample(
         remaining = config.num_sequences_per_structure
         # Staged once per input and reused across chunks, numbered 1..N per chain so FAMPNN,
         # which addresses residues by number alone, sees every insertion-coded residue.
-        with staged_structure(inp.structure) as staged:
+        with inp.staged() as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 input_dict = {
@@ -327,7 +326,7 @@ def run_fampnn_sample(
                     "model_variant": config.model_variant,
                     "device": config.device,
                     "verbose": config.verbose,
-                    "fixed_positions": ({staged.chain_map[cid]: pos for cid, pos in fixed_positions.items()} or None),
+                    "fixed_positions": ({staged.chains([cid])[0]: pos for cid, pos in fixed_positions.items()} or None),
                     "fixed_sidechain_positions": staged.positions(inp.fixed_sidechain_positions),
                 }
                 result = ToolInstance.dispatch(

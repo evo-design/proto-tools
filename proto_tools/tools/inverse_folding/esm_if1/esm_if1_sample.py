@@ -17,7 +17,6 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingOutput,
     InverseFoldingStructureInput,
 )
-from proto_tools.tools.inverse_folding.structure_staging import staged_structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField
 from proto_tools.utils.progress import progress_bar
@@ -217,7 +216,7 @@ def run_esm_if1_sample(
         remaining = config.num_sequences_per_structure
         # Staged once per input and reused across chunks, numbered 1..N per chain so ESM-IF1,
         # which addresses residues by number alone, sees every insertion-coded residue.
-        with staged_structure(inp.structure) as staged:
+        with inp.staged() as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 input_dict = {

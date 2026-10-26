@@ -513,10 +513,15 @@ class Complex(BaseModel):
         Returns:
             Complex: A complex whose chains reproduce the input structure's
                 entities. Use ``DesignedComplex`` for inverse-folding outputs.
+
+        Raises:
+            ValueError: If a polymer chain is of a type a ``Chain`` cannot carry, such as a
+                DNA/RNA hybrid.
         """
         entries: list[Chain | Fragment] = []
         for chain_id, chain_type in structure.get_chain_types().items():
-            if chain_type in ("protein", "dna", "rna"):
+            if chain_type not in ("ligand", "water"):
+                # Raises for a polymer type no Chain can carry, rather than dropping the chain.
                 entries.append(structure.get_chain(chain_id))
             if include_ligands:
                 entries.extend(
