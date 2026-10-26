@@ -6,24 +6,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import (
-    RecoveryAction,
-    get_logger,
-    is_checkpoint_corruption_error,
-    remove_checkpoint_within,
-    retry_checkpoint_operation,
-)
+from standalone_helpers import get_logger, retry_on_checkpoint_corruption
 
 logger = get_logger(__name__)
 
 # Retry ProtenixModel.load() when ByteDance TOS drops the checkpoint download.
 LOAD_MAX_ATTEMPTS = 3
 LOAD_BACKOFF_BASE_S = 2.0
-
-
-def _is_checkpoint_corruption_error(exc: BaseException) -> bool:
-    """Compatibility wrapper around the shared corruption classifier."""
-    return bool(is_checkpoint_corruption_error(exc))
 
 
 def _cuequivariance_available() -> bool:
@@ -71,7 +60,7 @@ def validate_checkpoint(checkpoint_path: Path) -> bool:
         return False
 
 
-def _validate_single_checkpoint(checkpoint_path: Path) -> list[RecoveryAction]:
+def _validate_single_checkpoint(checkpoint_path: Path) -> None:
     """Validate a single checkpoint file, removing it if corrupted.
 
     Uses a `.validated` marker file to cache validation results and avoid
@@ -102,25 +91,16 @@ def _validate_single_checkpoint(checkpoint_path: Path) -> list[RecoveryAction]:
         logger.info(f"Validating checkpoint: {checkpoint_path.name}")
         if not validate_checkpoint(checkpoint_path):
             logger.warning(f"Removing corrupted checkpoint: {checkpoint_path}")
-            action = remove_checkpoint_within(
-                checkpoint_path,
-                checkpoint_path.parent,
-                reason="checkpoint validation failed",
-                attempt=0,
-            )
+            checkpoint_path.unlink()
             marker_path.unlink(missing_ok=True)
             logger.info("Corrupted checkpoint removed. It will be re-downloaded on next use.")
-            return [action]
-        stat = checkpoint_path.stat()
-        marker_path.write_text(f"{stat.st_size},{stat.st_mtime}")
-        logger.debug(f"Validation marker created: {marker_path.name}")
-    return []
+        else:
+            stat = checkpoint_path.stat()
+            marker_path.write_text(f"{stat.st_size},{stat.st_mtime}")
+            logger.debug(f"Validation marker created: {marker_path.name}")
 
 
-def cleanup_corrupted_checkpoints(
-    checkpoint_dir: Path,
-    model_name: str,  # noqa: ARG001 — required by tool interface
-) -> list[RecoveryAction]:
+def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None:  # noqa: ARG001 — required by tool interface
     """Check and remove corrupted checkpoint files in the checkpoint directory.
 
     Validates ALL .pt files in the directory (not just the named model),
@@ -136,16 +116,14 @@ def cleanup_corrupted_checkpoints(
         model_name: Name of the primary model (reserved by tool interface, currently unused)
     """
     if not checkpoint_dir.exists():
-        return []
+        return
 
     pt_files = list(checkpoint_dir.glob("*.pt"))
     if not pt_files:
-        return []
+        return
 
-    actions: list[RecoveryAction] = []
     for checkpoint_path in pt_files:
-        actions.extend(_validate_single_checkpoint(checkpoint_path))
-    return actions
+        _validate_single_checkpoint(checkpoint_path)
 
 
 class ProtenixModel:
@@ -163,7 +141,6 @@ class ProtenixModel:
         self.runner: Any = None
         self.device: str | None = None
         self._cache_key: tuple[Any, ...] | None = None
-        self._last_recovery_actions: list[dict[str, str | int]] = []
 
     def __call__(
         self,
@@ -213,7 +190,7 @@ class ProtenixModel:
                     f"protenix-v2 weights not found at {checkpoint_path}. "
                     "v2 weights are gated by ByteDance and not auto-downloaded."
                 )
-        recovery_actions = cleanup_corrupted_checkpoints(checkpoint_dir, model_name)
+        cleanup_corrupted_checkpoints(checkpoint_dir, model_name)
 
         log = logger.info if verbose else logger.debug
         log(f"Protenix prediction: model={model_name}, input={input_json_path}, output={output_dir}, device={device}")
@@ -231,29 +208,22 @@ class ProtenixModel:
             # init_basics() reads inference_configs["dump_dir"] at runner construction
             # and os.makedirs() it; subsequent calls re-point via runner.dump_dir below.
             inference_configs["dump_dir"] = output_dir
-
-            def load_runner() -> None:
-                self.load(
+            # Retry on truncated-checkpoint errors from a dropped TOS download:
+            # cleanup deletes the corrupt .pt; upstream re-downloads on retry.
+            retry_on_checkpoint_corruption(
+                lambda: self.load(
                     model_name=model_name,
                     num_pairformer_cycles=num_pairformer_cycles,
                     num_diffusion_steps=num_diffusion_steps,
                     num_diffusion_samples=num_diffusion_samples,
                     use_msa=use_msa,
                     kernel=kernel,
-                )
-
-            def recover(_exc: BaseException, _attempt: int) -> list[RecoveryAction]:
-                return cleanup_corrupted_checkpoints(checkpoint_dir, model_name)
-
-            _, retry_actions = retry_checkpoint_operation(
-                load_runner,
-                recover,
+                ),
                 tool_name="protenix",
                 max_attempts=LOAD_MAX_ATTEMPTS,
-                backoff_base_seconds=LOAD_BACKOFF_BASE_S,
+                recover=lambda: cleanup_corrupted_checkpoints(checkpoint_dir, model_name),
+                backoff_s=LOAD_BACKOFF_BASE_S,
             )
-            recovery_actions.extend(retry_actions)
-            self._last_recovery_actions = [action.as_dict() for action in recovery_actions]
         # Catches both cache-hit device changes and "cuda" vs "cuda:0" label mismatch post-load.
         if self.device != device:
             self.to_device(device)

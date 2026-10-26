@@ -6,13 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import (
-    RecoveryAction,
-    get_logger,
-    is_checkpoint_corruption_error,
-    remove_checkpoint_within,
-    retry_checkpoint_operation,
-)
+from standalone_helpers import get_logger, is_checkpoint_corruption_error, retry_on_checkpoint_corruption
 
 logger = get_logger(__name__)
 
@@ -29,20 +23,6 @@ _checkpoint_cache_installed = False
 _checkpoint_cache: dict[str, Any] = {}
 
 
-def _is_checkpoint_corruption_error(exc: BaseException) -> bool:
-    """Return whether PyTorch failed because a downloaded checkpoint is malformed."""
-    return bool(is_checkpoint_corruption_error(exc))
-
-
-class _CorruptCheckpointError(RuntimeError):
-    """Identify the exact Boltz checkpoint that could not be deserialized."""
-
-    def __init__(self, checkpoint: Any, cause: BaseException) -> None:
-        self.checkpoint = Path(checkpoint)
-        self.cause = cause
-        super().__init__(f"corrupt Boltz2 checkpoint {self.checkpoint}: {cause}")
-
-
 def _install_checkpoint_cache() -> None:
     """Memoize ``Boltz2.load_from_checkpoint`` so a resident worker loads each checkpoint once.
 
@@ -56,6 +36,9 @@ def _install_checkpoint_cache() -> None:
     The path-only key does not self-correct: correctness relies on the ``reload_on_change`` set
     covering every field boltz threads into ``Boltz2.load_from_checkpoint``. An unmarked load-affecting
     field would let a same-path entry serve a model loaded with stale args, wrong output, no error.
+
+    A checkpoint that fails to load as a corrupted archive is deleted before the error propagates, so
+    boltz re-downloads it when ``_run_boltz_predict`` retries.
     """
     global _checkpoint_cache_installed
     if _checkpoint_cache_installed:
@@ -69,7 +52,13 @@ def _install_checkpoint_cache() -> None:
         model = _checkpoint_cache.get(key)
         if model is None:
             logger.debug("boltz2: checkpoint cache miss, loading %s", checkpoint)
-            model = original_load(checkpoint, **kwargs)
+            try:
+                model = original_load(checkpoint, **kwargs)
+            except Exception as exc:
+                if is_checkpoint_corruption_error(exc):
+                    logger.warning("boltz2: removing corrupted checkpoint %s", checkpoint)
+                    Path(checkpoint).unlink(missing_ok=True)
+                raise
             _checkpoint_cache[key] = model
         else:
             logger.debug("boltz2: reusing resident checkpoint %s", checkpoint)
@@ -96,7 +85,6 @@ class Boltz2Model:
                 self.cache_dir = Path(hf_home) / "boltz"
             else:
                 raise RuntimeError("boltz2: cannot determine cache directory; set PROTO_HOME or PROTO_MODEL_CACHE")
-        self._last_recovery_actions: list[dict[str, str | int]] = []
 
     def __call__(
         self,
@@ -254,27 +242,8 @@ class Boltz2Model:
             kwargs["diffusion_samples_affinity"] = affinity["diffusion_samples_affinity"]
             kwargs["affinity_mw_correction"] = affinity["affinity_mw_correction"]
 
-        def recover(exc: BaseException, attempt: int) -> list[RecoveryAction]:
-            if not isinstance(exc, _CorruptCheckpointError):
-                return []
-            _checkpoint_cache.pop(str(exc.checkpoint), None)
-            return [
-                remove_checkpoint_within(
-                    exc.checkpoint,
-                    self.cache_dir,
-                    reason=str(exc.cause),
-                    attempt=attempt,
-                )
-            ]
-
         try:
-            _, actions = retry_checkpoint_operation(
-                lambda: predict_cmd.callback(**kwargs),
-                recover,
-                tool_name="boltz2",
-                max_attempts=2,
-            )
-            self._last_recovery_actions = [action.as_dict() for action in actions]
+            retry_on_checkpoint_corruption(lambda: predict_cmd.callback(**kwargs), tool_name="boltz2", max_attempts=2)
         except RuntimeError as e:
             if is_cuda_oom(str(e)):
                 raise_oom("boltz2", hint="Reduce the complex size or use a GPU with more memory.")

@@ -373,14 +373,7 @@ def test_boltz2_affinity_benchmark(request):
 
 def _load_boltz2_standalone_inference():
     import importlib.util
-    import logging
-    import sys
-    import types
 
-    helpers = sys.modules.setdefault("standalone_helpers", types.ModuleType("standalone_helpers"))
-    helpers.get_logger = logging.getLogger
-    helpers.is_cuda_oom = lambda _message: False
-    helpers.raise_oom = lambda *_args, **_kwargs: None
     standalone = (
         Path(__file__).resolve().parents[2]
         / "proto_tools"
@@ -397,40 +390,48 @@ def _load_boltz2_standalone_inference():
     return module
 
 
-def test_boltz2_checkpoint_corruption_classifier_is_narrow():
-    mod = _load_boltz2_standalone_inference()
-    assert mod._is_checkpoint_corruption_error(
-        RuntimeError("PytorchStreamReader failed reading zip archive: failed finding central directory")
-    )
-    assert not mod._is_checkpoint_corruption_error(RuntimeError("CUDA out of memory"))
-    assert not mod._is_checkpoint_corruption_error(OSError("Permission denied"))
-
-
-def test_boltz2_retries_once_after_removing_exact_corrupt_checkpoint(tmp_path, monkeypatch):
+def test_boltz2_redownloads_corrupted_checkpoint_and_retries(tmp_path, monkeypatch):
+    """A truncated checkpoint is deleted on load so boltz re-downloads it when predict is retried."""
     import sys
     import types
 
     mod = _load_boltz2_standalone_inference()
-    checkpoint = tmp_path / "boltz2_aff.ckpt"
+    checkpoint = tmp_path / "boltz2_conf.ckpt"
     checkpoint.write_bytes(b"truncated")
     (tmp_path / "input.yaml").write_text("sequences: []\n")
-    calls = 0
+    downloads = 0
 
-    def predict(**_kwargs):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise mod._CorruptCheckpointError(checkpoint, RuntimeError("failed finding central directory"))
+    class FakeBoltz2:
+        @staticmethod
+        def load_from_checkpoint(checkpoint, **_kwargs):
+            if Path(checkpoint).read_bytes() == b"truncated":
+                raise RuntimeError("PytorchStreamReader failed reading zip archive: failed finding central directory")
+            return object()
 
-    boltz = types.ModuleType("boltz")
+    def predict(cache, **_kwargs):
+        # Mirrors boltz.main.download_boltz2: fetch the checkpoint only when it is missing.
+        nonlocal downloads
+        ckpt = Path(cache) / "boltz2_conf.ckpt"
+        if not ckpt.exists():
+            ckpt.write_bytes(b"complete")
+            downloads += 1
+        FakeBoltz2.load_from_checkpoint(ckpt)
+
     boltz_main = types.ModuleType("boltz.main")
     boltz_main.predict = types.SimpleNamespace(callback=predict)
-    monkeypatch.setitem(sys.modules, "boltz", boltz)
-    monkeypatch.setitem(sys.modules, "boltz.main", boltz_main)
-    monkeypatch.setattr(mod, "_install_checkpoint_cache", lambda: None)
+    boltz2_models = types.ModuleType("boltz.model.models.boltz2")
+    boltz2_models.Boltz2 = FakeBoltz2
     fake_torch = types.ModuleType("torch")
     fake_torch.cuda = types.SimpleNamespace(is_available=lambda: False)
-    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    for name, module in {
+        "boltz": types.ModuleType("boltz"),
+        "boltz.main": boltz_main,
+        "boltz.model": types.ModuleType("boltz.model"),
+        "boltz.model.models": types.ModuleType("boltz.model.models"),
+        "boltz.model.models.boltz2": boltz2_models,
+        "torch": fake_torch,
+    }.items():
+        monkeypatch.setitem(sys.modules, name, module)
 
     model = mod.Boltz2Model.__new__(mod.Boltz2Model)
     model.cache_dir = tmp_path
@@ -449,16 +450,9 @@ def test_boltz2_retries_once_after_removing_exact_corrupt_checkpoint(tmp_path, m
         verbose=False,
     )
 
-    assert calls == 2
-    assert not checkpoint.exists()
-    assert model._last_recovery_actions == [
-        {
-            "action": "removed_corrupt_checkpoint",
-            "path": str(checkpoint.resolve()),
-            "reason": "failed finding central directory",
-            "attempt": 1,
-        }
-    ]
+    assert downloads == 1
+    assert checkpoint.read_bytes() == b"complete"
+    assert str(checkpoint) in mod._checkpoint_cache
 
 
 def test_boltz2_reload_on_change_covers_load_threaded_fields():

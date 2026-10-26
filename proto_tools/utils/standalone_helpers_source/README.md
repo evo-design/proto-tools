@@ -20,6 +20,7 @@ published name, `from standalone_helpers import ...`.
   - `seeding.py` — `get_random_int`, `set_torch_seed`, `set_jax_seed`
   - `weights.py` — `resolve_weights_dir`
   - `compression.py` — `compress_array`, `is_compressed_array` (large-array IPC wire format)
+  - `recovery.py` — `is_checkpoint_corruption_error`, `retry_on_checkpoint_corruption` (re-download truncated checkpoints)
   - `__init__.py` — re-exports every public name for backward compat
 
 Imported by standalone scripts via `from standalone_helpers import ...` (package entry point) or
