@@ -324,9 +324,9 @@ def test_symmetric_chains_rejects_position_constraints_on_a_tied_chain(tmp_path)
         CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"], pinned_residues={"A": {5: "W"}})
 
 
-def test_symmetric_chains_rejects_mismatched_residue_numbering():
-    """Caliby ties by residue number, so chains of differing length cannot be tied."""
-    with pytest.raises(ValidationError, match="different residue numbering"):
+def test_symmetric_chains_rejects_chains_that_are_not_copies_of_each_other():
+    """A tie pairs chains position by position, so two different proteins cannot be tied."""
+    with pytest.raises(ValidationError, match="same residues in the same arrangement"):
         CalibyStructureInput(structure=str(MULTI_CHAIN_PDB_FILE), symmetric_chains=[["A", "B"]])
 
 
@@ -374,7 +374,44 @@ def test_symmetric_chains_rejects_numbering_that_differs_only_by_insertion_code(
     # Integer numbering cannot tell the chains apart.
     assert structure.get_chain_positions("A") == structure.get_chain_positions("B")
 
-    with pytest.raises(ValidationError, match="different residue numbering"):
+    with pytest.raises(ValidationError, match="same residues in the same arrangement"):
+        CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"])
+
+
+def test_symmetric_chains_accepts_chains_whose_numbering_only_differs_by_an_offset(tmp_path):
+    """Caliby ties on the staged copy's ordinals, so a dimer numbered 1-N and 201-(200+N) ties cleanly."""
+    homodimer = _write_homodimer(tmp_path)
+    lines = []
+    for line in homodimer.structure_pdb.splitlines():
+        if line.startswith("ATOM") and line[21] == "B":
+            lines.append(line[:22] + f"{int(line[22:26]) + 200:>4}" + line[26:])
+        else:
+            lines.append(line)
+    structure = Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
+    assert structure.get_chain_positions("A") != structure.get_chain_positions("B")
+
+    tied = CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"])
+
+    assert [list(group.chains) for group in tied.symmetric_chains] == [["A", "B"]]
+
+
+def test_symmetric_chains_rejects_chains_missing_different_residues(tmp_path):
+    """Equal residue counts are not enough: position i must name the same residue in each chain."""
+    homodimer = _write_homodimer(tmp_path)
+    lines = []
+    for line in homodimer.structure_pdb.splitlines():
+        if line.startswith("ATOM"):
+            number, chain = int(line[22:26]), line[21]
+            # Each chain loses three residues, but in different places.
+            if chain == "A" and 20 <= number <= 22:
+                continue
+            if chain == "B" and 40 <= number <= 42:
+                continue
+        lines.append(line)
+    structure = Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
+    assert len(structure.get_chain_positions("A")) == len(structure.get_chain_positions("B"))
+
+    with pytest.raises(ValidationError, match="same residues in the same arrangement"):
         CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"])
 
 

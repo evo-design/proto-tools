@@ -114,6 +114,26 @@ def validate_conformer_alignment(primary: Structure, conformers: list[Structure]
             )
 
 
+def _residue_arrangement(residue_ids: list[tuple[int, str]], sequence: str) -> list[tuple[int, str, str]]:
+    """Describe a chain by the residues it presents, independent of where its numbering starts.
+
+    Each residue becomes ``(offset from the chain's first residue, insertion code, one-letter code)``,
+    so two chains compare equal when they hold the same residues with the same gaps and insertions,
+    however they are numbered.
+
+    Args:
+        residue_ids (list[tuple[int, str]]): The chain's residue IDs, in chain order.
+        sequence (str): The chain's observed residues, one letter each.
+
+    Returns:
+        list[tuple[int, str, str]]: One entry per residue, in chain order.
+    """
+    if not residue_ids:
+        return []
+    first = residue_ids[0][0]
+    return [(number - first, icode, letter) for (number, icode), letter in zip(residue_ids, sequence, strict=True)]
+
+
 class ResidueIdentitySelection(BaseModel):
     """Per-chain residue positions paired with the residue identity to place at each.
 
@@ -293,7 +313,10 @@ class CalibyStructureInput(InverseFoldingStructureInput):
         if self.symmetric_chains is None:
             return self
 
-        residue_ids = self.structure.get_chain_residue_ids()
+        arrangements = {
+            chain_id: _residue_arrangement(ids, self.structure.get_chain_sequence(chain_id))
+            for chain_id, ids in self.structure.get_chain_residue_ids().items()
+        }
         seen: set[str] = set()
         for group in self.symmetric_chains:
             group.validate_against(self.structure, label="symmetric_chains")
@@ -307,14 +330,17 @@ class CalibyStructureInput(InverseFoldingStructureInput):
                 raise ValueError(f"chain(s) {sorted(overlap)} appear in more than one symmetric_chains group")
             seen.update(chains)
 
-            # Caliby ties positions by residue number, so the group must share numbering,
-            # insertion codes included.
-            reference = residue_ids[chains[0]]
+            # Caliby ties a group position-wise on the staged copy, where every chain is numbered
+            # 1..N, so tied chains must present the same residues in the same arrangement for
+            # position i to name the same residue in each. Absolute numbering is free to differ.
+            reference = arrangements[chains[0]]
             for cid in chains[1:]:
-                if residue_ids[cid] != reference:
+                if arrangements[cid] != reference:
                     raise ValueError(
-                        f"chains {chains[0]!r} and {cid!r} are tied together but carry different residue "
-                        "numbering; Caliby ties positions by residue number, so renumber them to match"
+                        f"chains {chains[0]!r} and {cid!r} are tied together but do not present the same "
+                        "residues in the same arrangement, so tying them position-wise would pair residues "
+                        "that do not correspond; give them the same sequence with the same residues resolved "
+                        "(their absolute numbering may differ)"
                     )
 
         # Caliby copies the group representative's residue onto the other members, but only rewrites
