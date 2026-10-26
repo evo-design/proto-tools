@@ -40,6 +40,21 @@ This tool is appropriate for any analysis that begins with a genomic locus and a
 - **Tissue channels report usage rather than the presence of a splice site.** A position can carry a high acceptor or donor probability while showing strong usage in only a few tissues, so differential analysis across the tissue channels is the basis for identifying tissue-specific splicing.
 - **The model was trained on human sequence and is intended for human loci.** Predictions on sequences from other species are not supported by the training data and should not be interpreted as reliable.
 
+### SpliceTransformer Gradient (`splice-transformer-gradient`)
+
+Scores a weighted objective over SpliceTransformer's predicted splice-channel probabilities and returns its derivative with respect to a relaxed distribution over the target region. Each term names an output channel — a splice class or a tissue — a span of target positions, a direction, and a weight; the terms are signed so the summed objective is always minimized.
+
+#### Applications
+
+This is the differentiable form of SpliceTransformer prediction, intended as an objective inside a splice-engineering loop: an optimizer holds a relaxed distribution over the 1,000 bp target region, asks for the gradient, and steps it toward sequences that strengthen or weaken a splice site, or shift tissue-specific usage. Setting `compute_gradient=False` turns it into a forward-only objective score for ranking candidates.
+
+#### Usage Tips
+
+- **Only the target region is relaxed.** A candidate bundles the two fixed 4,000 bp flanking contexts with a `(1000, 4)` relaxed target matrix, so the returned gradient covers the target positions alone while both contexts still reach the model — the flanks shape the prediction but are not design variables.
+- **Channels are named, not indexed.** `NEITHER`/`ACCEPTOR`/`DONOR` are the three splice classes (softmaxed across each other), and the fifteen tissue names select sigmoid-activated channels. The names resolve to the same indices the prediction tool reports.
+- **Position spans are 1-indexed, inclusive, and relative to the target region.** Leaving `position_start`/`position_end` unset covers the whole region; a narrow span around a candidate splice site is usually what you want.
+- **`direction` fixes the sign, `weight` the balance.** Combine opposing terms to express tissue specificity — raise `BRAIN` while suppressing `LIVER`, for instance.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
