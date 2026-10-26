@@ -184,7 +184,10 @@ def container_progress(
 
     A no-op when ``partition`` is None, which lets a caller pass an optional value through
     unconditionally. Installs a non-blocking handler on ``logger_name`` at ``level`` and above plus
-    a throttled drainer, and on exit removes the handler, flushes, and closes the stream.
+    a throttled drainer. On exit it removes the handler at once, then flushes and closes the stream
+    on a daemon thread, so the tool's result never waits on the network. A record that misses the
+    final flush is lost, which progress tolerates by design; the caller stops tailing when the
+    result arrives rather than on the end sentinel.
 
     Args:
         partition (str | None): Queue partition identifying this call, or None to disable.
@@ -209,7 +212,7 @@ def container_progress(
     finally:
         target.removeHandler(handler)
         target.setLevel(prior_level)
-        drainer.close()
+        threading.Thread(target=drainer.close, daemon=True, name=f"{drainer.name}-close").start()
 
 
 # ============================================================================
