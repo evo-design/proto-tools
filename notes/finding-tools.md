@@ -161,7 +161,7 @@ run_tool = spec.function
 result = run_tool(Input(sequences=["MKTLIIA..."]), Config())
 ```
 
-`Config` is optional at the public call site, since the decorator supplies defaults. Output models inherit standard metadata (`tool_id`, `tool_version`, `tool_source_hash`, `proto_tools_version`, `execution_time`, `success`, `errors`) plus tool-specific payload fields. The version fields are covered in `versioning.md`.
+`Config` is optional at the public call site, since the decorator supplies defaults. Output models inherit standard metadata (`tool_id`, `tool_version`, `execution_time`, `success`, `errors`) plus tool-specific payload fields. `tool_version` is covered in `versioning.md`.
 
 ## Persistence and Devices
 

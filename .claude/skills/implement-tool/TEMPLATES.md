@@ -165,8 +165,8 @@ class {ToolName}Output(BaseToolOutput):
     """Output from {ToolName}.
 
     Inherits metadata fields from BaseToolOutput: tool_id, tool_version,
-    tool_source_hash, proto_tools_version, execution_time, timestamp, success,
-    warnings, errors, metadata. DO NOT redeclare these.
+    execution_time, timestamp, success, warnings, errors, metadata. DO NOT
+    redeclare these.
 
     Attributes:
         results (list[str]): Description of tool-specific results.

@@ -103,8 +103,6 @@ MERGE_OWNED_FIELDS = frozenset(
     {
         "tool_id",
         "tool_version",
-        "tool_source_hash",
-        "proto_tools_version",
         "success",
         "execution_time",
         "timestamp",

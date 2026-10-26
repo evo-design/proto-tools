@@ -30,7 +30,7 @@ VERSIONS_FILE = "versions.yaml"
 HASH_LENGTH = 12
 
 # Framework modules every tool shares. Hashing them would move every toolkit's hash on
-# any framework edit; ``proto_tools_version`` on each output covers them instead.
+# any framework edit.
 FRAMEWORK_PREFIXES = ("proto_tools/utils/", "proto_tools/tools/tool_registry.py")
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
@@ -158,46 +158,37 @@ def source_hash(toolkit_dir: Path) -> str:
 
 
 @functools.cache
-def toolkit_provenance(toolkit_dir: Path) -> dict[str, str | None]:
-    """Return the version fields stamped onto every output of a toolkit's tools.
+def toolkit_version(toolkit_dir: Path) -> str | None:
+    """Return the version stamped onto every output of a toolkit's tools.
 
-    A toolkit without ``versions.yaml`` (a tool defined in a test or notebook, say) is not
-    hashed and reports ``None`` for both. When the source no longer matches the newest
-    entry, the version gains a ``+dirty`` suffix and a warning is logged once.
+    When the source no longer matches the newest entry, the version gains a ``+dirty``
+    suffix and a warning is logged once.
 
     Args:
         toolkit_dir (Path): The toolkit directory.
 
     Returns:
-        dict[str, str | None]: ``tool_version``, ``tool_source_hash``, and ``proto_tools_version``.
+        str | None: The newest version in ``versions.yaml``, or None for a toolkit without
+            one (a tool defined in a test or notebook, say), which is then not hashed.
     """
-    from proto_tools import __version__
-
-    provenance: dict[str, str | None] = {
-        "tool_version": None,
-        "tool_source_hash": None,
-        "proto_tools_version": __version__,
-    }
     versions = load_versions(toolkit_dir)
     if not versions:
-        return provenance
+        return None
 
     version, recorded = next(iter(versions.items()))
     live = source_hash(toolkit_dir)
-    if live != recorded:
-        logger.warning(
-            "%s source does not match %s %s (hash %s, recorded %s); outputs are tagged %s+dirty.",
-            toolkit_dir.name,
-            VERSIONS_FILE,
-            version,
-            live,
-            recorded,
-            version,
-        )
-        version = f"{version}+dirty"
-    provenance["tool_version"] = version
-    provenance["tool_source_hash"] = live
-    return provenance
+    if live == recorded:
+        return version
+    logger.warning(
+        "%s source does not match %s %s (hash %s, recorded %s); outputs are tagged %s+dirty.",
+        toolkit_dir.name,
+        VERSIONS_FILE,
+        version,
+        live,
+        recorded,
+        version,
+    )
+    return f"{version}+dirty"
 
 
 def _walk(root: Path, top_level_skip: frozenset[str] = frozenset()) -> Iterator[Path]:

@@ -24,7 +24,7 @@ The first key is the current version. All tools in a toolkit share it; `tool_id`
 
 Python comments, trailing whitespace, and blank lines are dropped before hashing, so formatting and comment edits never move it. Docstrings are code. Line endings are normalized for every file.
 
-Framework code (`proto_tools/utils/`, `tool_registry.py`) is not hashed: an edit there would move every toolkit at once. The `proto_tools_version` output field covers it.
+Framework code (`proto_tools/utils/`, `tool_registry.py`) is not hashed: an edit there would move every toolkit at once, so framework changes are not reflected in tool versions.
 
 Inside a git checkout, only tracked and untracked-but-not-ignored files count, so git-ignored build artifacts (BLAST database files, standalone helper copies) never move the hash. A wheel install hashes the files it ships; `test_hashed_files_ship_in_the_wheel` keeps those the same set.
 
@@ -59,21 +59,13 @@ Only the newest entry is checked against the source; older entries are a record,
 - **Collapse a run of bumps** into one entry above the last version you keep. If a downstream copy of the repo is at `1.2.0` and development since then went through `1.2.1` to `1.5.0`, replace those entries with a single `1.3.0: <current hash>`, picking the level of the largest bump collapsed.
 - **Reset a toolkit** by deleting its `versions.yaml`: the test then fails with the `1.0.0: <hash>` line to write.
 
-Outputs stamped with a dropped version or hash still carry them, but they no longer resolve through `versions.yaml` in a repo whose history never had them.
+Outputs stamped with a dropped version still carry it, but it no longer resolves through `versions.yaml` in a repo whose history never had it.
 
-## Version fields on outputs
+## The version field on outputs
 
-The `@tool` wrapper stamps three fields on every `BaseToolOutput`:
+The `@tool` wrapper stamps `tool_version` on every `BaseToolOutput`: the current version from `versions.yaml`, suffixed `+dirty` when the toolkit's source no longer matches it. The hash is computed once per toolkit per process. A `+dirty` version means the output came from unversioned code, such as an uncommitted edit, and a warning is logged the first time. Outputs from remote dispatch are stamped by the caller, like `tool_id`.
 
-| Field | Value |
-|---|---|
-| `tool_version` | Current version from `versions.yaml`, suffixed `+dirty` when the live hash does not match it |
-| `tool_source_hash` | Hash of the source that actually ran |
-| `proto_tools_version` | `proto_tools.__version__` |
-
-The hash is computed once per toolkit per process. A `+dirty` version, or a `tool_source_hash` absent from `versions.yaml`, means the output came from unversioned code such as an uncommitted edit; a warning is logged the first time. Outputs from remote dispatch are stamped by the caller, like `tool_id`.
-
-`ToolRegistry.get_version(key)` returns a tool's current version. An out-of-tree toolkit opts in by adding its own `versions.yaml`; without one, both fields are `None` and nothing is hashed.
+`ToolRegistry.get_version(key)` returns a tool's current version. An out-of-tree toolkit opts in by adding its own `versions.yaml`; without one, `tool_version` is `None` and nothing is hashed.
 
 ## History
 

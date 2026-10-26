@@ -1,6 +1,6 @@
 """tests/tool_infra_tests/test_tool_versions.py.
 
-Behaviour of the toolkit source hash and the version fields stamped from it.
+Behaviour of the toolkit source hash and the version stamped from it.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from proto_tools.utils import tool_versions
-from proto_tools.utils.tool_versions import load_versions, source_hash, toolkit_provenance
+from proto_tools.utils.tool_versions import load_versions, source_hash, toolkit_version
 
 _TOOL_SOURCE = 'def run(x):\n    return x + 1  # add one\n\n\nLABEL = "# not a comment"\n'
 
@@ -21,7 +21,7 @@ _TOOL_SOURCE = 'def run(x):\n    return x + 1  # add one\n\n\nLABEL = "# not a c
 @pytest.fixture(autouse=True)
 def _clear_caches() -> Iterator[None]:
     yield
-    for cached in (source_hash, toolkit_provenance, tool_versions._repo_root, tool_versions._git_files):
+    for cached in (source_hash, toolkit_version, tool_versions._repo_root, tool_versions._git_files):
         cached.cache_clear()
 
 
@@ -104,28 +104,18 @@ def test_all_digit_hash_stays_a_string(toolkit: Path) -> None:
     assert load_versions(toolkit) == {"1.0.0": "000000000012"}
 
 
-def test_provenance_reports_the_newest_version(toolkit: Path) -> None:
+def test_version_is_the_newest_entry(toolkit: Path) -> None:
     (toolkit / "versions.yaml").write_text(f"1.1.0: {source_hash(toolkit)}\n1.0.0: 4b7e02a91c3f\n")
 
-    provenance = toolkit_provenance(toolkit)
-
-    assert provenance["tool_version"] == "1.1.0"
-    assert provenance["tool_source_hash"] == source_hash(toolkit)
+    assert toolkit_version(toolkit) == "1.1.0"
 
 
-def test_provenance_marks_unversioned_source_dirty(toolkit: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_unversioned_source_is_marked_dirty(toolkit: Path, caplog: pytest.LogCaptureFixture) -> None:
     (toolkit / "versions.yaml").write_text("1.0.0: 4b7e02a91c3f\n")
 
-    provenance = toolkit_provenance(toolkit)
-
-    assert provenance["tool_version"] == "1.0.0+dirty"
-    assert provenance["tool_source_hash"] == source_hash(toolkit)
+    assert toolkit_version(toolkit) == "1.0.0+dirty"
     assert "does not match versions.yaml" in caplog.text
 
 
-def test_provenance_without_versions_file_skips_hashing(toolkit: Path) -> None:
-    provenance = toolkit_provenance(toolkit)
-
-    assert provenance["tool_version"] is None
-    assert provenance["tool_source_hash"] is None
-    assert provenance["proto_tools_version"]
+def test_toolkit_without_versions_file_has_no_version(toolkit: Path) -> None:
+    assert toolkit_version(toolkit) is None

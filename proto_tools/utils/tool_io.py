@@ -612,8 +612,6 @@ class BaseToolInput(BaseModel):
 OUTPUT_METADATA_FIELDS: set[str] = {
     "tool_id",
     "tool_version",
-    "tool_source_hash",
-    "proto_tools_version",
     "execution_time",
     "timestamp",
     "success",
@@ -638,9 +636,6 @@ class BaseToolOutput(BaseModel, ABC):
         tool_version (str | None): Version of the toolkit that produced the output,
             from its ``versions.yaml``. Suffixed ``+dirty`` when the source no longer
             matches that version. See ``notes/versioning.md``.
-        tool_source_hash (str | None): Hash of the toolkit source that produced the
-            output. A hash absent from ``versions.yaml`` marks unversioned code.
-        proto_tools_version (str | None): Version of the proto-tools package.
         execution_time (float | None): Execution time in seconds.
         timestamp (datetime): Execution timestamp.
         success (bool | None): Whether execution succeeded. ``True`` for any
@@ -673,16 +668,6 @@ class BaseToolOutput(BaseModel, ABC):
         default=None,
         title="Tool Version",
         description="Toolkit version from versions.yaml; suffixed '+dirty' if the source has changed",
-    )
-    tool_source_hash: str | None = Field(
-        default=None,
-        title="Tool Source Hash",
-        description="Hash of the toolkit source that produced this output",
-    )
-    proto_tools_version: str | None = Field(
-        default=None,
-        title="Proto-Tools Version",
-        description="Version of the proto-tools package that produced this output",
     )
     execution_time: float | None = Field(
         default=None,
@@ -733,8 +718,6 @@ class BaseToolOutput(BaseModel, ABC):
                 {
                     "tool_id": "blast-search",
                     "tool_version": "1.0.0",
-                    "tool_source_hash": "1554a91a0a6f",
-                    "proto_tools_version": "0.1.0",
                     "execution_time": 45.2,
                     "timestamp": "2025-10-06T10:30:00Z",
                     "success": True,
