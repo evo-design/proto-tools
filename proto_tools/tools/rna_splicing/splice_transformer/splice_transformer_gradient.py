@@ -311,7 +311,9 @@ class SpliceTransformerGradientConfig(RelaxationConfig):
     Attributes:
         loss_terms (list[SpliceTransformerGradientLossTerm]): Objective terms summed into the
             scalar loss.
-        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
+            (1); keep the default 1.0 unless deliberately experimenting. See
+            :class:`~proto_tools.utils.gradient_models.RelaxationConfig`.
         hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Run backward pass and return gradient. Set ``False`` for
             forward-only objective scoring.
