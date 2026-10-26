@@ -29,9 +29,6 @@ from proto_tools.tools.inverse_folding.caliby import (
 from proto_tools.tools.inverse_folding.caliby.caliby_sample import (
     DESIGN_CHECKPOINTS,
     PACKER_CHECKPOINTS,
-    chain_residue_ids,
-    restore_numbering,
-    sequential_pdb,
 )
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
@@ -82,25 +79,6 @@ def _renumber(structure: Structure, offset: int, gap_after: int, gap_size: int) 
     return Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
 
 
-def _with_insertion_code(structure: Structure, after: int, code: str = "A") -> Structure:
-    """Relabel residue ``after + 1`` as ``<after><code>`` and shift every later residue down by one.
-
-    The chain keeps its residue count, but residue ``after`` and its insertion-coded neighbour
-    now share a number, which only an insertion-code-aware mapping keeps apart.
-    """
-    lines = []
-    for line in structure.structure_pdb.splitlines():
-        relabelled = line
-        if line.startswith(("ATOM", "HETATM", "TER")) and len(line) >= 27:
-            number = int(line[22:26])
-            if number == after + 1:
-                relabelled = line[:22] + f"{after:>4}{code}" + line[27:]
-            elif number > after + 1:
-                relabelled = line[:22] + f"{number - 1:>4}" + line[26:]
-        lines.append(relabelled)
-    return Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
-
-
 @pytest.fixture(scope="module")
 def pdb_structure():
     return Structure.from_file(TEST_PDB_FILE)
@@ -115,24 +93,6 @@ def multi_chain_structure():
 def offset_numbered_structure(pdb_structure):
     """The test backbone renumbered to 101-130, 151-185: offset start plus an internal gap."""
     return _renumber(pdb_structure, offset=100, gap_after=30, gap_size=20)
-
-
-@pytest.fixture(scope="module", params=["pdb", "cif"])
-def insertion_coded_structure(request, pdb_structure):
-    """The test backbone numbered 1..5, 5A, 6..64, as PDB and as CIF: position 6 is residue ``5A``."""
-    structure = _with_insertion_code(pdb_structure, after=5)
-    if request.param == "cif":
-        return Structure(structure=structure.structure_cif, structure_format="cif", source="test")
-    return structure
-
-
-@pytest.fixture(scope="module")
-def two_character_chain_structure(pdb_structure):
-    """The test backbone as a CIF whose only chain is ``AB``, an ID PDB format cannot hold."""
-    gemmi_struct = pdb_structure.gemmi_struct.clone()
-    for chain in gemmi_struct[0]:
-        chain.name = "AB"
-    return Structure(structure=gemmi_struct.make_mmcif_document().as_string(), structure_format="cif", source="test")
 
 
 @pytest.fixture(scope="module")
@@ -364,9 +324,9 @@ def test_symmetric_chains_rejects_position_constraints_on_a_tied_chain(tmp_path)
         CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"], pinned_residues={"A": {5: "W"}})
 
 
-def test_symmetric_chains_rejects_mismatched_residue_numbering():
-    """Caliby ties by residue number, so chains of differing length cannot be tied."""
-    with pytest.raises(ValidationError, match="different residue numbering"):
+def test_symmetric_chains_rejects_chains_that_are_not_copies_of_each_other():
+    """A tie pairs chains position by position, so two different proteins cannot be tied."""
+    with pytest.raises(ValidationError, match="same residues in the same arrangement"):
         CalibyStructureInput(structure=str(MULTI_CHAIN_PDB_FILE), symmetric_chains=[["A", "B"]])
 
 
@@ -400,48 +360,6 @@ def test_pinned_residues_rejects_overlap_with_fixed_positions(pdb_structure):
         CalibyStructureInput(structure=pdb_structure, pinned_residues={"A": {3: "W"}}, fixed_positions={"A": [3]})
 
 
-def test_chain_residue_ids_keep_insertion_codes(insertion_coded_structure):
-    """``5`` and ``5A`` are distinct residues, where integer numbering collapses them."""
-    residue_ids = chain_residue_ids(insertion_coded_structure)["A"]
-    assert residue_ids[4:7] == [(5, ""), (5, "A"), (6, "")]
-    assert insertion_coded_structure.get_chain_positions("A")[4:6] == [5, 5]
-
-
-def test_sequential_pdb_numbers_each_residue_by_its_position(insertion_coded_structure):
-    """The staged copy numbers residues 1..N with no insertion codes, sequence unchanged."""
-    staged = Structure(structure=sequential_pdb(insertion_coded_structure)[0], structure_format="pdb", source="test")
-    assert chain_residue_ids(staged)["A"] == [(n, "") for n in range(1, 66)]
-    assert staged.get_chain_sequence("A") == insertion_coded_structure.get_chain_sequence("A")
-
-
-def test_restore_numbering_round_trips_insertion_codes(insertion_coded_structure):
-    """An output written in staged numbering gets the input residue IDs back."""
-    residue_ids = chain_residue_ids(insertion_coded_structure)
-    staged = Structure(structure=sequential_pdb(insertion_coded_structure)[0], structure_format="pdb", source="test")
-    restored = restore_numbering(staged.structure_cif, residue_ids, source="test")
-    assert chain_residue_ids(restored) == residue_ids
-
-
-def test_restore_numbering_maps_shortened_chain_ids_back(two_character_chain_structure):
-    """A CIF chain ID too long for PDB is staged shortened and restored on the output."""
-    pdb_content, chain_map = sequential_pdb(two_character_chain_structure)
-    staged = Structure(structure=pdb_content, structure_format="pdb", source="test")
-    assert staged.get_chain_ids() == [chain_map["AB"]]
-    assert len(chain_map["AB"]) == 1
-
-    residue_ids = chain_residue_ids(two_character_chain_structure)
-    restored = restore_numbering(staged.structure_cif, residue_ids, source="test", chain_map=chain_map)
-    assert restored.get_chain_ids() == ["AB"]
-    assert chain_residue_ids(restored) == residue_ids
-
-
-def test_restore_numbering_rejects_a_chain_of_different_length(pdb_structure, insertion_coded_structure):
-    """A residue-count mismatch cannot be mapped back by position, so it raises."""
-    shortened = {"A": chain_residue_ids(insertion_coded_structure)["A"][:-1]}
-    with pytest.raises(ValueError, match="numbering cannot be restored"):
-        restore_numbering(pdb_structure.structure_cif, shortened, source="test")
-
-
 def test_symmetric_chains_rejects_numbering_that_differs_only_by_insertion_code(tmp_path):
     """``5A`` on one chain and ``5B`` on the other are different residues, so they cannot be tied."""
     homodimer = _write_homodimer(tmp_path)
@@ -456,7 +374,44 @@ def test_symmetric_chains_rejects_numbering_that_differs_only_by_insertion_code(
     # Integer numbering cannot tell the chains apart.
     assert structure.get_chain_positions("A") == structure.get_chain_positions("B")
 
-    with pytest.raises(ValidationError, match="different residue numbering"):
+    with pytest.raises(ValidationError, match="same residues in the same arrangement"):
+        CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"])
+
+
+def test_symmetric_chains_accepts_chains_whose_numbering_only_differs_by_an_offset(tmp_path):
+    """Caliby ties on the staged copy's ordinals, so a dimer numbered 1-N and 201-(200+N) ties cleanly."""
+    homodimer = _write_homodimer(tmp_path)
+    lines = []
+    for line in homodimer.structure_pdb.splitlines():
+        if line.startswith("ATOM") and line[21] == "B":
+            lines.append(line[:22] + f"{int(line[22:26]) + 200:>4}" + line[26:])
+        else:
+            lines.append(line)
+    structure = Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
+    assert structure.get_chain_positions("A") != structure.get_chain_positions("B")
+
+    tied = CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"])
+
+    assert [list(group.chains) for group in tied.symmetric_chains] == [["A", "B"]]
+
+
+def test_symmetric_chains_rejects_chains_missing_different_residues(tmp_path):
+    """Equal residue counts are not enough: position i must name the same residue in each chain."""
+    homodimer = _write_homodimer(tmp_path)
+    lines = []
+    for line in homodimer.structure_pdb.splitlines():
+        if line.startswith("ATOM"):
+            number, chain = int(line[22:26]), line[21]
+            # Each chain loses three residues, but in different places.
+            if chain == "A" and 20 <= number <= 22:
+                continue
+            if chain == "B" and 40 <= number <= 42:
+                continue
+        lines.append(line)
+    structure = Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
+    assert len(structure.get_chain_positions("A")) == len(structure.get_chain_positions("B"))
+
+    with pytest.raises(ValidationError, match="same residues in the same arrangement"):
         CalibyStructureInput(structure=structure, symmetric_chains=["A", "B"])
 
 
@@ -533,8 +488,7 @@ def test_caliby_sample_accepts_chains_with_unmodelled_gaps(tmp_path):
     gapped.write_text("".join(kept))
 
     structure = Structure(structure=str(gapped))
-    # get_chain_sequences() pads each break with "-", so it runs longer than the residue count.
-    assert len(structure.get_chain_sequences()["A"]) > len(structure.get_chain_positions("A"))
+    assert structure.get_chain_breaks("A")
 
     inp = CalibySampleInput(inputs=[CalibyStructureInput(structure=structure)])
     output = run_caliby_sample(inp, CalibySampleConfig(potts_sweeps=20, seed=0))
@@ -546,15 +500,20 @@ def test_caliby_sample_accepts_chains_with_unmodelled_gaps(tmp_path):
 
 
 @pytest.mark.uses_gpu
-def test_caliby_sample_rejects_nucleic_acid_chains():
-    """A nucleic acid chain is dropped by the featurizer, so the chain mismatch is reported."""
+def test_caliby_sample_keeps_nucleic_acid_chains_as_context():
+    """The model sees protein chains only; DNA strands join each design unchanged and undesigned."""
     structure = Structure(structure=str(PROTEIN_DNA_PDB_FILE))
-    # Caliby keeps peptide polymers only, so the two DNA strands never reach the model.
-    assert len(structure.get_chain_ids()) == 3
+    types = structure.get_chain_types()
 
     inp = CalibySampleInput(inputs=[CalibyStructureInput(structure=structure)])
-    with pytest.raises(Exception, match="Supply protein chains only"):
-        run_caliby_sample(inp, CalibySampleConfig(potts_sweeps=10, seed=0))
+    design = run_caliby_sample(inp, CalibySampleConfig(potts_sweeps=10, seed=0)).design_sets[0].complexes[0]
+
+    by_id = {chain.id: (chain, flag) for chain, flag in zip(design.chains, design.designed, strict=True)}
+    for cid, kind in types.items():
+        if kind == "dna":
+            chain, flag = by_id[cid]
+            assert chain.sequence == structure.get_chain_sequence(cid)
+            assert flag is False
 
 
 @pytest.mark.uses_gpu
@@ -678,7 +637,7 @@ def test_caliby_sample_resolves_positions_past_an_insertion_code(insertion_coded
     assert designed[4:6] == "WY"
     assert designed[6] == native[6]
     assert designed[39] == native[39]
-    assert chain_residue_ids(design.structure) == chain_residue_ids(insertion_coded_structure)
+    assert design.structure.get_chain_residue_ids() == insertion_coded_structure.get_chain_residue_ids()
     assert design.structure.get_chain_sequence("A") == designed
 
 
@@ -780,7 +739,7 @@ def test_caliby_pack_keeps_insertion_coded_numbering(insertion_coded_structure):
     assert output.success, f"Failed to pack an insertion-coded structure: {output}"
 
     packed = output.packed_structures[0]
-    assert chain_residue_ids(packed) == chain_residue_ids(insertion_coded_structure)
+    assert packed.get_chain_residue_ids() == insertion_coded_structure.get_chain_residue_ids()
     assert packed.get_chain_sequence("A") == insertion_coded_structure.get_chain_sequence("A")
 
 
@@ -799,7 +758,7 @@ def test_caliby_handles_a_chain_id_too_long_for_pdb(two_character_chain_structur
     assert designed[2] == native[2]
     assert designed[29] == native[29]
     assert design.structure.get_chain_ids() == ["AB"]
-    assert chain_residue_ids(design.structure) == chain_residue_ids(two_character_chain_structure)
+    assert design.structure.get_chain_residue_ids() == two_character_chain_structure.get_chain_residue_ids()
 
     packed = run_caliby_pack(
         CalibyPackInput(structures=[design.structure]), CalibyPackConfig(diffusion_steps=10, seed=0)

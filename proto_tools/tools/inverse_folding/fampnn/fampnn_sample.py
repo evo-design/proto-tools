@@ -10,8 +10,6 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
-from proto_tools.entities.complex import Chain
-from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import ResidueSelection, Structure
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
@@ -182,7 +180,7 @@ class FAMPNNDesign(DesignedComplex):
     """One FAMPNN-designed complex with full-atom sidechain confidence.
 
     Attributes:
-        chains (list[Chain | Fragment]): All protein chains of the design, in input
+        chains (list[Chain | Fragment]): All polymer chains of the design, in input
             structure chain order. Inherited from :class:`DesignedComplex`.
         structure (Structure): Designed full-atom structure with packed sidechain
             coordinates co-generated for this design.
@@ -292,20 +290,30 @@ def run_fampnn_sample(
         unit="structure",
         disable=not config.verbose,
     ):
-        chain_ids = inp.structure.get_chain_ids()
+        # FAMPNN reads protein chains only and redesigns every one of them, so context chains are
+        # held in place by fixing all of their positions.
+        chain_ids = [cid for cid, kind in inp.structure.get_chain_types().items() if kind == "protein"]
         redesign_set = set(inp.chain_ids_to_redesign)
+        # Staged files are numbered 1..N per chain, so a 1-indexed position is its residue number.
+        fixed_positions = {
+            cid: list(pos) for cid, pos in (inp.fixed_positions.chains if inp.fixed_positions else {}).items()
+        }
+        for cid in chain_ids:
+            if cid not in redesign_set:
+                fixed_positions[cid] = list(range(1, len(inp.structure.get_chain_positions(cid)) + 1))
         all_chain_seqs: list[list[str]] = []
         all_psce: list[list[float]] = []
         all_pdbs: list[str] = []
         remaining = config.num_sequences_per_structure
-        # Materialize the Structure to a tempfile once per input, reused across chunks.
-        with inp.structure.temp_file() as pdb_path:
+        # Staged once per input and reused across chunks, numbered 1..N per chain so FAMPNN,
+        # which addresses residues by number alone, sees every insertion-coded residue.
+        with inp.staged() as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 input_dict = {
                     "operation": "sample",
-                    "pdb_path": str(pdb_path),
-                    "chain_ids": inp.chain_ids_to_redesign,
+                    "pdb_path": str(staged.path),
+                    "chain_ids": staged.chains(inp.chain_ids_to_redesign),
                     "num_sequences": chunk,
                     "temperature": config.temperature,
                     "num_steps": config.num_steps,
@@ -318,16 +326,8 @@ def run_fampnn_sample(
                     "model_variant": config.model_variant,
                     "device": config.device,
                     "verbose": config.verbose,
-                    "fixed_positions": (
-                        inp.fixed_positions.to_residue_numbers(inp.structure)
-                        if inp.fixed_positions is not None
-                        else None
-                    ),
-                    "fixed_sidechain_positions": (
-                        inp.fixed_sidechain_positions.to_residue_numbers(inp.structure)
-                        if inp.fixed_sidechain_positions is not None
-                        else None
-                    ),
+                    "fixed_positions": ({staged.chains([cid])[0]: pos for cid, pos in fixed_positions.items()} or None),
+                    "fixed_sidechain_positions": staged.positions(inp.fixed_sidechain_positions),
                 }
                 result = ToolInstance.dispatch(
                     "fampnn",
@@ -346,23 +346,23 @@ def run_fampnn_sample(
             if len(chain_seqs) != len(chain_ids):
                 raise ValueError(
                     f"fampnn-sample: model returned {len(chain_seqs)} chains but the input "
-                    f"structure has {len(chain_ids)} chains ({chain_ids})"
+                    f"structure has {len(chain_ids)} protein chains ({chain_ids})"
                 )
             if sum(len(s) for s in chain_seqs) != len(psce):
                 raise ValueError(
                     f"fampnn-sample: total designed length {sum(len(s) for s in chain_seqs)} "
                     f"does not match per-residue pSCE length {len(psce)}"
                 )
-            chains: list[Chain | Fragment] = [
-                Chain(id=cid, sequence=seq) for cid, seq in zip(chain_ids, chain_seqs, strict=True)
-            ]
-            designed: list[bool] = [cid in redesign_set for cid in chain_ids]
-            structure = Structure(structure=pdb, structure_format="pdb", source="fampnn-sample")
+            sequences = {cid: seq for cid, seq in zip(chain_ids, chain_seqs, strict=True) if cid in redesign_set}
+            structure = staged.restore(pdb, source="fampnn-sample")
             avg_psce = statistics.fmean(psce) if psce else 0.0
             complexes.append(
-                FAMPNNDesign(
-                    chains=chains,
-                    designed=designed,
+                FAMPNNDesign.from_design(
+                    inp.structure,
+                    sequences,
+                    redesign_set,
+                    tool="fampnn-sample",
+                    include_ligands=False,
                     structure=structure,
                     metrics=FAMPNNDesignMetrics(avg_psce=avg_psce, psce=psce),
                 )

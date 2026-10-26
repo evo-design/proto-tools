@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding import (
     InverseFoldingInput,
@@ -55,8 +56,8 @@ def test_ligandmpnn_sample_simple(cif_structure: Structure):
     for design in design_set.complexes:
         # LigandMPNN returns every chain (designed + fixed) per design.
         assert len(design.chains) > 0
-        assert all(isinstance(chain.sequence, str) for chain in design.chains)
-        assert all(len(chain.sequence) > 0 for chain in design.chains)
+        assert all(isinstance(chain.sequence, str) for chain in design.chains if isinstance(chain, Chain))
+        assert all(len(chain.sequence) > 0 for chain in design.chains if isinstance(chain, Chain))
         recovery = design.metrics["sequence_recovery"]
         assert 0.0 <= recovery <= 1.0
         interface_recovery = design.metrics["ligand_interface_sequence_recovery"]
@@ -108,8 +109,8 @@ def test_ligandmpnn_sample_chunked_batching(cif_structure: Structure):
     design_set = output.design_sets[0]
     assert len(design_set.complexes) == 6
     for design in design_set.complexes:
-        assert all(isinstance(chain.sequence, str) for chain in design.chains)
-        assert all(len(chain.sequence) > 0 for chain in design.chains)
+        assert all(isinstance(chain.sequence, str) for chain in design.chains if isinstance(chain, Chain))
+        assert all(len(chain.sequence) > 0 for chain in design.chains if isinstance(chain, Chain))
         assert math.isfinite(design.metrics["sequence_recovery"])
         assert "ligand_interface_sequence_recovery" in design.metrics
 
@@ -133,7 +134,37 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
     for design_set in output.design_sets:
         assert len(design_set.complexes) == 3
         for design in design_set.complexes:
-            assert all(isinstance(chain.sequence, str) for chain in design.chains)
+            assert all(isinstance(chain.sequence, str) for chain in design.chains if isinstance(chain, Chain))
+
+
+def test_ligandmpnn_sample_carries_input_ligands(monkeypatch):
+    """LigandMPNN conditions on the input's ligands, so each design keeps them as undesigned context."""
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        return {
+            "chain_sequences": [[{"id": "A", "sequence": "MKTAYIAK"}]],
+            "metrics": [{"sequence_recovery": 1.0, "ligand_interface_sequence_recovery": math.nan, "pmpnn": 0.5}],
+            "pdb_strings": [None],
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+    structure = Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb")
+    output = run_ligandmpnn_sample(
+        InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=structure)]),
+        LigandMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=0, device="cpu"),
+    )
+
+    design = output.design_sets[0].complexes[0]
+    assert [(type(e).__name__, e.id) for e in design.chains] == [
+        ("Chain", "A"),
+        ("Fragment", "A"),
+        ("Chain", "B"),
+        ("Fragment", "L"),
+    ]
+    assert design.designed == [True, False, False, False]
 
 
 def test_ligandmpnn_sample_dispatch_contract(monkeypatch):

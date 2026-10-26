@@ -10,8 +10,6 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from proto_tools.entities.complex import Chain
-from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
@@ -209,8 +207,8 @@ class LigandMPNNDesign(DesignedComplex):
     order, plus this design's scalar recovery metrics.
 
     Attributes:
-        chains (list[Chain | Fragment]): All protein chains of the design, in input
-            structure chain order.
+        chains (list[Chain | Fragment]): All polymer chains of the design, in input
+            structure chain order, each followed by its ligands as context.
         metrics (LigandMPNNDesignMetrics): Per-design recovery metrics
             (``sequence_recovery`` and ``ligand_interface_sequence_recovery``).
     """
@@ -259,9 +257,9 @@ def _fixed_positions_cover_structure(inp: InverseFoldingStructureInput) -> bool:
     """Return whether fixed_positions cover every residue in every structure chain."""
     if inp.fixed_positions is None:
         return False
-    fixed = inp.fixed_positions.to_residue_numbers(inp.structure)
     for chain_id in inp.structure.get_chain_ids():
-        if set(fixed.get(chain_id, [])) != set(inp.structure.get_chain_positions(chain_id)):
+        selected = set(inp.fixed_positions.chains.get(chain_id, []))
+        if selected != set(range(1, len(inp.structure.get_chain_positions(chain_id)) + 1)):
             return False
     return True
 
@@ -332,23 +330,20 @@ def run_ligandmpnn_sample(
         all_pmpnn: list[float | None] = []
         all_pdb_strings: list[str | None] = []
         remaining = config.num_sequences_per_structure
-        # Materialize the Structure to a tempfile once per input — reused across chunks.
-        with inp.structure.temp_file() as pdb_path:
+        # Staged once per input and reused across chunks, numbered 1..N per chain so LigandMPNN,
+        # which addresses residues by number alone, sees every insertion-coded residue.
+        with inp.staged() as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 all_positions_fixed = _fixed_positions_cover_structure(inp)
                 input_dict = {
                     "operation": "sample",
-                    "pdb_path": str(pdb_path),
-                    "chain_ids": inp.chain_ids_to_redesign,
+                    "pdb_path": str(staged.path),
+                    "chain_ids": staged.chains(inp.chain_ids_to_redesign),
                     "chains_explicitly_set": inp.chains_to_redesign is not None and not all_positions_fixed,
                     "batch_size": chunk,
                     "temperature": config.temperature,
-                    "fixed_positions": (
-                        inp.fixed_positions.to_residue_numbers(inp.structure)
-                        if inp.fixed_positions is not None
-                        else None
-                    ),
+                    "fixed_positions": staged.positions(inp.fixed_positions),
                     "excluded_amino_acids": config.excluded_amino_acids,
                     "seed": base_seed + dispatch_idx,
                     "device": config.device,
@@ -378,18 +373,24 @@ def run_ligandmpnn_sample(
                 remaining -= chunk  # type: ignore[operator]
 
         # The standalone emits ordered per-chain (chain_id, sequence) pairs.
-        redesigned_ids = set() if _fixed_positions_cover_structure(inp) else set(inp.chain_ids_to_redesign)
+        redesign_ids = set(inp.chain_ids_to_redesign)
+        redesigned_ids = set() if _fixed_positions_cover_structure(inp) else redesign_ids
 
         complexes: list[LigandMPNNDesign] = []
         for chain_seqs, recovery, interface_recovery, pmpnn, pdb_string in zip(
             all_chain_sequences, all_recovery, all_interface_recovery, all_pmpnn, all_pdb_strings, strict=True
         ):
-            chains: list[Chain | Fragment] = [Chain(id=entry["id"], sequence=entry["sequence"]) for entry in chain_seqs]
-            designed: list[bool] = [entry["id"] in redesigned_ids for entry in chain_seqs]
             complexes.append(
-                LigandMPNNDesign(
-                    chains=chains,
-                    designed=designed,
+                LigandMPNNDesign.from_design(
+                    inp.structure,
+                    {
+                        cid: entry["sequence"]
+                        for entry in chain_seqs
+                        if (cid := staged.original_chain(entry["id"])) in redesign_ids
+                    },
+                    redesigned_ids,
+                    tool="ligandmpnn-sample",
+                    include_ligands=True,
                     metrics=LigandMPNNDesignMetrics(
                         sequence_recovery=(recovery if math.isfinite(recovery) else None),
                         # Foundry returns NaN when no ligand interface; route to None so the conditional key is dropped.
@@ -398,11 +399,7 @@ def run_ligandmpnn_sample(
                         ),
                         pmpnn=(pmpnn if pmpnn is not None and math.isfinite(pmpnn) else None),
                     ),
-                    structure=(
-                        Structure(structure=pdb_string, structure_format="pdb", source="ligandmpnn-sample")
-                        if pdb_string
-                        else None
-                    ),
+                    structure=(staged.restore(pdb_string, source="ligandmpnn-sample") if pdb_string else None),
                 )
             )
         design_sets.append(LigandMPNNDesignSet(complexes=complexes))

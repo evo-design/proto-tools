@@ -9,8 +9,6 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import Field
 
-from proto_tools.entities.complex import Chain
-from proto_tools.entities.ligands import Fragment
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -111,7 +109,7 @@ class ESMIF1Design(DesignedComplex):
     redesigned, all other chains are carried over as fixed context.
 
     Attributes:
-        chains (list[Chain | Fragment]): All protein chains of the design, in input
+        chains (list[Chain | Fragment]): All polymer chains of the design, in input
             structure chain order.
         metrics (ESMIF1DesignMetrics): Per-design metrics, including the average
             per-position log-likelihood of the redesigned target chain.
@@ -216,25 +214,22 @@ def run_esm_if1_sample(
     ):
         all_seqs, all_metrics = [], []
         remaining = config.num_sequences_per_structure
-        # Materialize the Structure to a tempfile once per input — reused across chunks.
-        with inp.structure.temp_file() as pdb_path:
+        # Staged once per input and reused across chunks, numbered 1..N per chain so ESM-IF1,
+        # which addresses residues by number alone, sees every insertion-coded residue.
+        with inp.staged() as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 input_dict = {
                     "operation": "sample",
-                    "pdb_path": str(pdb_path),
-                    "chain_ids": inp.chain_ids_to_redesign,
+                    "pdb_path": str(staged.path),
+                    "chain_ids": staged.chains(inp.chain_ids_to_redesign),
                     "batch_size": chunk,
                     "temperature": config.temperature,
                     "seed": base_seed + dispatch_idx,
                     "device": config.device,
                     "weights_variant": config.weights_variant,
                     "verbose": config.verbose,
-                    "fixed_positions": (
-                        inp.fixed_positions.to_residue_numbers(inp.structure)
-                        if inp.fixed_positions is not None
-                        else None
-                    ),
+                    "fixed_positions": staged.positions(inp.fixed_positions),
                 }
                 result = ToolInstance.dispatch(
                     "esm_if1",
@@ -249,17 +244,17 @@ def run_esm_if1_sample(
 
         # ESM-IF1 complexes exactly one chain; standalone falls back to chain_ids[0].
         target = inp.chain_ids_to_redesign[0]
-        structure_chain_ids = inp.structure.get_chain_ids()
-        context_seqs = {cid: inp.structure.get_chain_sequence(cid) for cid in structure_chain_ids if cid != target}
-
-        complexes = []
-        for designed_seq, metrics in zip(all_seqs, all_metrics, strict=True):
-            chains: list[Chain | Fragment] = [
-                Chain(id=cid, sequence=designed_seq if cid == target else context_seqs[cid])
-                for cid in structure_chain_ids
-            ]
-            designed: list[bool] = [cid == target for cid in structure_chain_ids]
-            complexes.append(ESMIF1Design(chains=chains, designed=designed, metrics=ESMIF1DesignMetrics(**metrics)))
+        complexes = [
+            ESMIF1Design.from_design(
+                inp.structure,
+                {target: designed_seq},
+                {target},
+                tool="esm-if1-sample",
+                include_ligands=False,
+                metrics=ESMIF1DesignMetrics(**metrics),
+            )
+            for designed_seq, metrics in zip(all_seqs, all_metrics, strict=True)
+        ]
         design_sets.append(ESMIF1DesignSet(complexes=complexes))
 
     return ESMIF1SampleOutput(design_sets=design_sets)

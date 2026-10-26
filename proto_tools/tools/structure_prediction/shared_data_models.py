@@ -290,7 +290,8 @@ class StructurePredictionInput(BaseToolInput):
 
             if not cls.ALLOWS_CHAIN_MODIFICATIONS and comp_checked.has_modifications():
                 raise ValueError(
-                    f"Complex {comp_idx} contains modifications. {cls.__name__} does not allow chain modifications."
+                    f"Complex {comp_idx} contains modifications. {cls.__name__} does not allow chain modifications; "
+                    "call clear_all_modifications() on the complex to predict its unmodified sequence."
                 )
 
         return final_complexes

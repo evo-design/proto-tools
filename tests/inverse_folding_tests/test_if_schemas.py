@@ -21,6 +21,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 )
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
+MODIFIED_GAPPED_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb"
 
 
 @pytest.fixture(scope="module")
@@ -362,3 +363,73 @@ def test_designed_complex_feeds_structure_predictor():
     inp = ESMFoldInput(complexes=[designed])
     assert inp.complexes[0] is designed
     assert inp.complexes[0].chain_sequences == designed.chain_sequences
+
+
+# ── DesignedComplex.from_design ──────────────────────────────────────────
+
+
+class _MetricDesign(DesignedComplex):
+    """Subclass standing in for a model's design type."""
+
+
+@pytest.fixture(scope="module")
+def modified_gapped() -> Structure:
+    return Structure.from_file(MODIFIED_GAPPED_PDB_FILE)
+
+
+def test_from_design_substitutes_designed_chains_over_structure_chains(modified_gapped):
+    """Designed chains take the model sequence unmodified; context chains are the structure's own."""
+    design = _MetricDesign.from_design(
+        modified_gapped, {"A": "MKTAYIAK"}, {"A"}, tool="test-sample", include_ligands=False
+    )
+    assert isinstance(design, _MetricDesign)
+    assert design.chains == [
+        Chain(id="A", sequence="MKTAYIAK", entity_type="protein"),
+        modified_gapped.get_chain("B"),
+    ]
+    assert design.designed == [True, False]
+
+
+def test_from_design_keeps_ligands_as_undesigned_context(modified_gapped):
+    """Ligand-conditioned models carry the input's ligands, never flagged as designed."""
+    design = _MetricDesign.from_design(
+        modified_gapped, {"A": "MKTAYIAK"}, {"A"}, tool="test-sample", include_ligands=True
+    )
+    assert [(type(e).__name__, e.id) for e in design.chains] == [
+        ("Chain", "A"),
+        ("Fragment", "A"),
+        ("Chain", "B"),
+        ("Fragment", "L"),
+    ]
+    assert design.designed == [True, False, False, False]
+
+
+def test_from_design_context_chain_keeps_modifications(modified_gapped):
+    """A chain the model did not design passes through with its modified residues intact."""
+    design = _MetricDesign.from_design(modified_gapped, {"B": "AGC"}, set(), tool="test-sample", include_ligands=False)
+    assert design.chains[0] == modified_gapped.get_chain("A")
+    assert design.designed == [False, False]
+
+
+@pytest.mark.parametrize(
+    ("sequences", "designed", "match"),
+    [
+        (
+            {"A": "MKTAYIA"},
+            {"A"},
+            r"test-sample: designed chain A has 7 residues but the input structure's chain A has 8",
+        ),
+        ({"Z": "MKT"}, {"Z"}, r"designed chain\(s\) \['Z'\] are not polymer chains"),
+        ({}, {"A"}, r"no sequence for designed chain\(s\) \['A'\]"),
+    ],
+    ids=["length-mismatch", "unknown-chain", "missing-sequence"],
+)
+def test_from_design_rejects_sequences_that_do_not_map_onto_the_structure(modified_gapped, sequences, designed, match):
+    """A design that cannot be laid over the input's observed residues fails, naming the tool."""
+    with pytest.raises(ValueError, match=match):
+        _MetricDesign.from_design(modified_gapped, sequences, designed, tool="test-sample", include_ligands=False)
+
+
+def test_default_redesign_set_is_protein_chains(modified_gapped):
+    """Nucleic acid chains are context by default; no inverse folding model designs them."""
+    assert InverseFoldingStructureInput(structure=modified_gapped).chain_ids_to_redesign == ["A"]

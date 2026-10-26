@@ -11,8 +11,6 @@ from typing import Any, ClassVar, Literal
 import numpy as np
 from pydantic import Field, field_validator
 
-from proto_tools.entities.complex import Chain
-from proto_tools.entities.ligands import Fragment
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -121,9 +119,9 @@ class ProteinMPNNDesign(DesignedComplex):
     """One ProteinMPNN-designed complex with its per-design scalar metrics.
 
     Attributes:
-        chains (list[Chain | Fragment]): All protein chains of the design, in input
+        chains (list[Chain | Fragment]): All polymer chains of the design, in input
             structure chain order. Redesigned chains carry the model output;
-            context chains carry the original input sequence unchanged.
+            context chains carry the original input chain unchanged.
         metrics (ProteinMPNNDesignMetrics): Per-design metrics (perplexity and
             sequence recovery) for this design.
     """
@@ -236,21 +234,18 @@ def run_proteinmpnn_sample(
         all_perp: list[float] = []
         all_seq_recovery: list[float] = []
         remaining = config.num_sequences_per_structure
-        # Materialize the Structure to a tempfile once per input, reused across chunks.
-        with inp.structure.temp_file() as pdb_path:
+        # Staged once per input and reused across chunks, numbered 1..N per chain so ProteinMPNN,
+        # which addresses residues by number alone, sees every insertion-coded residue.
+        with inp.staged() as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 input_dict = {
                     "operation": "sample",
-                    "pdb_path": str(pdb_path),
-                    "chain_ids": inp.chain_ids_to_redesign,
+                    "pdb_path": str(staged.path),
+                    "chain_ids": staged.chains(inp.chain_ids_to_redesign),
                     "batch_size": chunk,
                     "temperature": config.temperature,
-                    "fixed_positions": (
-                        inp.fixed_positions.to_residue_numbers(inp.structure)
-                        if inp.fixed_positions is not None
-                        else None
-                    ),
+                    "fixed_positions": staged.positions(inp.fixed_positions),
                     "excluded_amino_acids": config.excluded_amino_acids,
                     "seed": seed_rng.randint(0, 2**31 - 1),
                     "device": config.device,
@@ -271,8 +266,6 @@ def run_proteinmpnn_sample(
                 remaining -= chunk  # type: ignore[operator]
 
         redesign_ids = inp.chain_ids_to_redesign
-        redesign_set = set(redesign_ids)
-        all_chain_ids = inp.structure.get_chain_ids()
         complexes: list[ProteinMPNNDesign] = []
         for raw_seq, perp, recovery in zip(all_seqs, all_perp, all_seq_recovery, strict=True):
             # Segments are the redesigned chains in chain_ids_to_redesign order.
@@ -283,22 +276,13 @@ def run_proteinmpnn_sample(
                     f"{len(redesign_ids)} chain(s) were requested for redesign "
                     f"({redesign_ids}). Raw sequence: {raw_seq!r}."
                 )
-            redesigned_seq_by_chain = dict(zip(redesign_ids, segments, strict=True))
-            # Build all chains in input order; context chains keep the input sequence.
-            chains: list[Chain | Fragment] = [
-                Chain(
-                    id=cid,
-                    sequence=redesigned_seq_by_chain[cid]
-                    if cid in redesign_set
-                    else inp.structure.get_chain_sequence(cid),
-                )
-                for cid in all_chain_ids
-            ]
-            designed: list[bool] = [cid in redesign_set for cid in all_chain_ids]
             complexes.append(
-                ProteinMPNNDesign(
-                    chains=chains,
-                    designed=designed,
+                ProteinMPNNDesign.from_design(
+                    inp.structure,
+                    dict(zip(redesign_ids, segments, strict=True)),
+                    set(redesign_ids),
+                    tool="proteinmpnn-sample",
+                    include_ligands=False,
                     metrics=ProteinMPNNDesignMetrics(perplexity=perp, sequence_recovery=recovery),
                 )
             )

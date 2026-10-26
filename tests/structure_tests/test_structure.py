@@ -519,7 +519,7 @@ def test_structure_properties(protein_from_pdb_file):
     assert protein_from_pdb_file.num_chains > 0
     assert protein_from_pdb_file.num_residues > 0
     chain_types = protein_from_pdb_file.get_chain_types()
-    assert chain_types and all(v in ("polymer", "ligand") for v in chain_types.values())
+    assert chain_types == {"A": "protein"}
     pos_map = protein_from_pdb_file.get_residue_position_map()
     assert pos_map
     assert all(isinstance(t, tuple) and len(t) == 2 for positions in pos_map.values() for t in positions)
@@ -1515,6 +1515,243 @@ def test_ca_coordinates_by_chain_rejects_out_of_range_model():
     structure = Structure(structure=synthetic_cif(["A"]))
     with pytest.raises(ValueError, match="model_index"):
         structure.ca_coordinates_by_chain(model_index=5)
+
+
+# ── Residue-level chain reading ─────────────────────────────────────────────
+
+# Chain A: ALA, HETATM MSE, GLY, LYS, a break (residues 5-7 unresolved), LEU, HETATM SEP, UNK,
+# HETATM DAL, plus a HEM listed after chain B. Chain B: three DNA nucleotides. Chain L: one SO4.
+_MODIFIED_GAPPED_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb"
+
+
+@pytest.fixture(scope="module")
+def modified_gapped() -> Structure:
+    return Structure.from_file(_MODIFIED_GAPPED_PDB_FILE)
+
+
+def test_get_chain_types_reads_polymer_type_and_merges_split_chains(modified_gapped):
+    """A ligand listed after another chain under chain A's ID still belongs to chain A."""
+    assert modified_gapped.get_chain_types() == {"A": "protein", "B": "dna", "L": "ligand"}
+    assert modified_gapped.get_chain_ligands("A") == [("HEM", 101)]
+
+
+def test_get_chain_writes_modified_residues_as_modifications(modified_gapped):
+    """Observed residues only; modified residues become parent + CCD code, unknown parents X + CCD code."""
+    chain = modified_gapped.get_chain("A")
+    assert chain.sequence == "AMGKLSXX"
+    assert chain.entity_type == "protein"
+    assert [(m.position, m.modification_code) for m in chain.modifications] == [(2, "MSE"), (6, "SEP"), (8, "DAL")]
+    assert modified_gapped.get_chain("B").model_dump() == {
+        "id": "B",
+        "sequence": "AGC",
+        "entity_type": "dna",
+        "modifications": [],
+    }
+
+
+def test_chain_sequences_count_observed_residues(modified_gapped):
+    """No gap markers: sequence length, residue positions, and num_residues all agree."""
+    assert modified_gapped.get_chain_sequences() == {"A": "AMGKLSXX", "B": "AGC"}
+    assert modified_gapped.get_chain_sequence("A", remove_non_standard=True) == "AMGKLS"
+    assert len(modified_gapped.get_chain_positions("A")) == 8
+    assert modified_gapped.num_residues == 11
+
+
+def test_get_chain_breaks_marks_unbonded_steps(modified_gapped):
+    """The unresolved loop after the fourth residue is the only break."""
+    assert modified_gapped.get_chain_breaks("A") == [4]
+    assert modified_gapped.get_chain_breaks("B") == []
+
+
+def test_glycine_backbone_chain_is_protein():
+    """A poly-G placeholder backbone is a peptide, not DNA, whatever its one-letter string suggests."""
+    lines = [
+        "ATOM  " + line[6:17] + "GLY" + line[20:]
+        for line in _MODIFIED_GAPPED_PDB_FILE.read_text().splitlines()
+        if line.startswith(("ATOM", "HETATM")) and line[21] == "A" and line[12:16].strip() in ("N", "CA", "C", "O")
+    ]
+    chain = Structure(structure="\n".join([*lines, "END"]) + "\n").get_chain("A")
+    assert (chain.sequence, chain.entity_type) == ("GGGGGGGG", "protein")
+
+
+@pytest.mark.parametrize(
+    ("include_ligands", "expected"),
+    [
+        (
+            True,
+            [("Chain", "A", "protein"), ("Fragment", "A", "HEM"), ("Chain", "B", "dna"), ("Fragment", "L", "SO4")],
+        ),
+        (False, [("Chain", "A", "protein"), ("Chain", "B", "dna")]),
+    ],
+    ids=["with-ligands", "without-ligands"],
+)
+def test_complex_from_structure_uses_structure_chains(modified_gapped, include_ligands, expected):
+    """Polymer chains come from get_chain unchanged; ligands follow their chain when requested."""
+    from proto_tools.entities.complex import Chain, Complex
+
+    complex_ = Complex.from_structure(modified_gapped, include_ligands=include_ligands)
+    assert [
+        (type(e).__name__, e.id, e.entity_type if isinstance(e, Chain) else e.ccd_code) for e in complex_.chains
+    ] == expected
+    assert complex_.chains[0] == modified_gapped.get_chain("A")
+
+
+# ── Residue IDs, sequential renumbering, and restoring numbering ────────────
+
+
+@pytest.fixture(scope="module")
+def insertion_coded() -> Structure:
+    """The modified/gapped fixture with residue 3 relabelled ``2A``, so ``2`` and ``2A`` coexist."""
+    lines = []
+    for line in _MODIFIED_GAPPED_PDB_FILE.read_text().splitlines():
+        relabelled = line
+        if line.startswith(("ATOM", "HETATM")) and line[21] == "A":
+            number = int(line[22:26])
+            if number == 3:
+                relabelled = line[:22] + f"{2:>4}A" + line[27:]
+            elif number > 3:
+                relabelled = line[:22] + f"{number - 1:>4}" + line[26:]
+        lines.append(relabelled)
+    return Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
+
+
+def test_get_chain_residue_ids_keeps_insertion_codes(insertion_coded):
+    """``2`` and ``2A`` are distinct residues, where integer numbering collapses them."""
+    assert insertion_coded.get_chain_residue_ids("A")["A"][:4] == [(1, ""), (2, ""), (2, "A"), (3, "")]
+    assert insertion_coded.get_chain_positions("A")[:4] == [1, 2, 2, 3]
+    with pytest.raises(ValueError, match="no polymer residues"):
+        insertion_coded.get_chain_residue_ids("L")
+
+
+def test_renumbered_sequentially_numbers_each_residue_by_its_position(insertion_coded):
+    """The renumbered copy counts 1..N with no insertion codes, sequence unchanged."""
+    content, chain_map = insertion_coded.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+    assert renumbered.get_chain_residue_ids("A")["A"] == [(n, "") for n in range(1, 9)]
+    assert renumbered.get_chain_sequence("A") == insertion_coded.get_chain_sequence("A")
+    assert chain_map == {"A": "A", "B": "B"}
+
+
+def test_renumbered_sequentially_keeps_non_polymer_residues_off_polymer_numbers(insertion_coded):
+    """A ligand must not take a number a polymer residue already holds."""
+    content, _ = insertion_coded.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+    assert [number for number, _ in renumbered.get_chain_residue_ids("A")["A"]] == list(range(1, 9))
+    assert renumbered.get_chain_ligands("A") == [("HEM", 9)]
+
+
+def test_with_residue_ids_restores_the_original_numbering(insertion_coded):
+    """A structure written in sequential numbering gets the original residue IDs back."""
+    residue_ids = insertion_coded.get_chain_residue_ids()
+    content, _ = insertion_coded.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+
+    restored = renumbered.with_residue_ids(residue_ids)
+
+    assert restored.get_chain_residue_ids() == residue_ids
+    assert restored.structure_format == "pdb"
+
+
+def test_with_residue_ids_maps_shortened_chain_ids_back():
+    """A chain ID too long for PDB is shortened for staging and restored, which forces CIF."""
+    gemmi_struct = Structure.from_file(_MODIFIED_GAPPED_PDB_FILE).gemmi_struct.clone()
+    for chain in gemmi_struct[0]:
+        chain.name = f"X{chain.name}"
+    original = Structure(
+        structure=gemmi_struct.make_mmcif_document().as_string(), structure_format="cif", source="test"
+    )
+    content, chain_map = original.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+    assert renumbered.get_chain_ids() == [chain_map["XA"], chain_map["XB"]]
+
+    restored = renumbered.with_residue_ids(original.get_chain_residue_ids(), chain_map=chain_map)
+
+    assert restored.structure_format == "cif"
+    assert restored.get_chain_residue_ids() == original.get_chain_residue_ids()
+
+
+def test_with_residue_ids_rejects_a_chain_of_a_different_length(modified_gapped):
+    """A residue-count mismatch cannot be matched by position, so it raises."""
+    shortened = {"A": modified_gapped.get_chain_residue_ids("A")["A"][:-1]}
+    with pytest.raises(ValueError, match="cannot be matched by position"):
+        modified_gapped.with_residue_ids(shortened)
+
+
+# A real antibody: PDB 1IGY, trimmed. Kabat numbering gives chain B four insertion-coded
+# residues (52A, 82A-82C), so it holds 40 residues under only 36 distinct residue numbers.
+_ANTIBODY_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "antibody_insertion_codes.pdb"
+
+
+@pytest.fixture(scope="module")
+def antibody() -> Structure:
+    return Structure.from_file(_ANTIBODY_PDB_FILE)
+
+
+def test_residue_ids_separate_kabat_insertions_that_numbering_alone_merges(antibody):
+    """A real antibody's CDR insertions are distinct residues sharing a number."""
+    residue_ids = antibody.get_chain_residue_ids("B")["B"]
+    assert [f"{number}{icode}" for number, icode in residue_ids if icode] == ["52A", "82A", "82B", "82C"]
+    assert len(residue_ids) == 40
+    assert len(set(antibody.get_chain_positions("B"))) == 36
+
+
+def test_renumbering_a_real_antibody_round_trips_every_residue(antibody):
+    """Staging an antibody must not lose the CDR residues a bare number cannot address."""
+    content, chain_map = antibody.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+    assert renumbered.get_chain_residue_ids("B")["B"] == [(n, "") for n in range(1, 41)]
+    assert renumbered.get_chain_sequence("B") == antibody.get_chain_sequence("B")
+
+    restored = renumbered.with_residue_ids(antibody.get_chain_residue_ids(), chain_map=chain_map)
+    assert restored.get_chain_residue_ids() == antibody.get_chain_residue_ids()
+
+
+def test_renumbering_keeps_a_glycan_off_the_polymer_numbers(antibody):
+    """The antibody's N-linked glycans must not take numbers its residues already hold."""
+    assert antibody.get_chain_types() == {"A": "protein", "B": "protein", "E": "ligand"}
+    content, _ = antibody.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+    assert [name for name, _ in renumbered.get_chain_ligands("E")] == ["NAG", "NDG", "BMA"]
+
+
+def _multi_char_chain_cif(pdb_file: Path, names: dict[str, str]) -> str:
+    """Rename a PDB's chains and write CIF *without* merging, as a real CIF arrives."""
+    import gemmi
+
+    gemmi_struct = gemmi.read_pdb_string(pdb_file.read_text())
+    for chain in gemmi_struct[0]:
+        chain.name = names[chain.name]
+    return gemmi_struct.make_mmcif_document().as_string()
+
+
+def test_chain_mapping_follows_the_polymer_when_a_chain_is_split_across_parts():
+    """A chain listed again for its ligands must map to its polymer part, not the ligand part."""
+    content = _multi_char_chain_cif(_MODIFIED_GAPPED_PDB_FILE, {"A": "Heavy", "B": "Dna", "L": "Lig"})
+    structure = Structure(structure=content, structure_format="cif", source="test")
+
+    pdb_content, chain_map = structure.renumbered_sequentially()
+
+    staged = Structure(structure=pdb_content, structure_format="pdb", source="test")
+    assert staged.get_chain_types()[chain_map["Heavy"]] == "protein"
+    restored = staged.with_residue_ids(structure.get_chain_residue_ids(), chain_map=chain_map)
+    assert restored.get_chain_residue_ids() == structure.get_chain_residue_ids()
+
+
+def test_an_unrepresentable_polymer_is_reported_rather_than_dropped():
+    """A DNA/RNA hybrid cannot be a Chain, so building a Complex says so instead of losing it."""
+    from proto_tools.entities.complex import Complex
+
+    # Chain B of the protein/DNA fixture, with two deoxy bases swapped for ribonucleotides.
+    source = Path(__file__).parent.parent / "dummy_data" / "protein_dna_complex.pdb"
+    lines = []
+    for line in source.read_text().splitlines():
+        ribo = line.startswith("ATOM") and line[21] == "B" and int(line[22:26]) in (2, 3)
+        lines.append(line[:17] + f"{line[18:20].strip().replace('D', ''):>3}" + line[20:] if ribo else line)
+    hybrid = Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
+
+    assert hybrid.get_chain_types()["B"] == "polymer"
+    with pytest.raises(ValueError, match="which a Chain cannot carry"):
+        Complex.from_structure(hybrid)
 
 
 # ── Remote fetch (from_url / from_rcsb / constructor URL) ──────────────────────

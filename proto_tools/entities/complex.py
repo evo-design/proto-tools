@@ -496,32 +496,37 @@ class Complex(BaseModel):
         return out
 
     @classmethod
-    def from_structure(cls, structure: "Structure") -> "Complex":
+    def from_structure(cls, structure: "Structure", include_ligands: bool = True) -> "Complex":
         """Build a faithful Complex from a Structure: all polymer chains and ligand residues in input order.
 
-        Polymer chains become ``Chain`` (entity_type auto-inferred from sequence:
-        protein, DNA, or RNA). Ligand HETATM residues become ``Fragment`` entries
-        keyed by their CCD-code residue names. Order follows the input file's
-        chain order; ligand residues within a polymer chain are emitted after
-        that chain in their seqid order. Each entity's ``id`` is set from the
-        structure's chain identifier.
+        Polymer chains come from ``Structure.get_chain``: observed residues only, the
+        entity type gemmi assigns the chain, and modified residues as ``ChainModification``
+        entries. Ligand HETATM residues become ``Fragment`` entries keyed by their CCD-code
+        residue names. Order follows the input file's chain order; ligand residues within a
+        polymer chain are emitted after that chain in their seqid order. Each entity's
+        ``id`` is set from the structure's chain identifier.
 
         Args:
             structure (Structure): Input structure to enumerate.
+            include_ligands (bool): Whether to emit ligand residues as ``Fragment`` entries.
 
         Returns:
             Complex: A complex whose chains reproduce the input structure's
                 entities. Use ``DesignedComplex`` for inverse-folding outputs.
+
+        Raises:
+            ValueError: If a polymer chain is of a type a ``Chain`` cannot carry, such as a
+                DNA/RNA hybrid.
         """
         entries: list[Chain | Fragment] = []
-        chain_types = structure.get_chain_types()
-        for chain_id, chain_type in chain_types.items():
-            if chain_type == "polymer":
-                sequence = structure.get_chain_sequence(chain_id)
-                if sequence:
-                    entries.append(Chain(id=chain_id, sequence=sequence))
-            for resname, _seqid in structure.get_chain_ligands(chain_id):
-                entries.append(Fragment(id=chain_id, ccd_code=resname))
+        for chain_id, chain_type in structure.get_chain_types().items():
+            if chain_type not in ("ligand", "water"):
+                # Raises for a polymer type no Chain can carry, rather than dropping the chain.
+                entries.append(structure.get_chain(chain_id))
+            if include_ligands:
+                entries.extend(
+                    Fragment(id=chain_id, ccd_code=resname) for resname, _ in structure.get_chain_ligands(chain_id)
+                )
         return cls(chains=entries)
 
     def extract_protein_chains(self) -> tuple[list[str], list[str]]:
