@@ -118,7 +118,7 @@ volume, and the client compares them on dispatch.
 | Hash | Covers | Catches |
 |---|---|---|
 | `schema_hash` | the tool's input, config, and output JSON schemas | a field added, removed, or retyped |
-| `code_hash` | the tool's defining files plus its first-party MRO and the framework prefixes | a behaviour change with an unchanged schema |
+| `code_hash` | the tool's defining files plus its first-party MRO, excluding the framework prefixes | a behaviour change with an unchanged schema |
 | `env_hash` | a recursive walk of the standalone directory | a dependency or setup change |
 
 `ALGORITHM` is a version guard. A deployment recorded under a different algorithm reports

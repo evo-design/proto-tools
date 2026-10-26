@@ -212,6 +212,9 @@ LOCAL_DIR_IGNORE: list[str] = [
 ]
 
 
+# Version of the result format apply_tool_envelope returns. Bump it when that format changes.
+RESULT_FORMAT = 2
+
 # Envelope fields the caller can recompute, so they don't ride back over the
 # wire. ``metadata`` is kept: it's tool-specific payload and the only place that
 # telemetry survives into the result. success/errors/warnings also stay — on a

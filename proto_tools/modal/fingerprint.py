@@ -214,11 +214,17 @@ def write_manifest(service_class: str, environment: str | None = None, client: A
 
     import modal
 
+    from proto_tools.modal.utils import RESULT_FORMAT
+
     fps = fingerprints_for_service(service_class)
     if not fps:
         return 0
     payload = json.dumps(
-        {"algorithm": ALGORITHM, "tools": {k: v.model_dump() for k, v in fps.items()}},
+        {
+            "algorithm": ALGORITHM,
+            "result_format": RESULT_FORMAT,
+            "tools": {k: v.model_dump() for k, v in fps.items()},
+        },
         sort_keys=True,
     ).encode()
 
@@ -232,10 +238,18 @@ def write_manifest(service_class: str, environment: str | None = None, client: A
     return len(fps)
 
 
+class ManifestUnreadable(RuntimeError):
+    """A recorded manifest could not be read, as distinct from there being none.
+
+    Its own type so a caller deciding whether to rebuild never mistakes a transient failure for a
+    deployment that recorded nothing.
+    """
+
+
 def read_manifest(
     service_class: str, environment: str | None = None, client: Any | None = None
 ) -> dict[str, Any] | None:
-    """Read a service's recorded fingerprints, or ``None`` if absent or unreadable.
+    """Read a service's recorded fingerprints, or ``None`` if none were recorded.
 
     Absent is normal: a deployment made without ``scripts/deploy.py``, or one
     predating this mechanism, simply has nothing recorded.
@@ -245,6 +259,9 @@ def read_manifest(
         environment (str | None): Modal environment holding the cache volume. Must match the one
             the call resolves in, or this compares against a different deployment.
         client (Any | None): Modal client to read as, or ``None`` for the process's own.
+
+    Raises:
+        ManifestUnreadable: If a manifest may exist but could not be read, or is not a JSON object.
     """
     import modal
 
@@ -253,10 +270,68 @@ def read_manifest(
 
         volume = modal.Volume.from_name(CACHE_VOLUME_NAME, environment_name=environment, client=client)
         raw = b"".join(volume.read_file(manifest_path(service_class)))
-        parsed: dict[str, Any] = json.loads(raw)
-        return parsed
-    except Exception:
+    # read_file re-raises a missing file as FileNotFoundError; NotFoundError is a missing volume.
+    except (FileNotFoundError, modal.exception.NotFoundError):
         return None
+    except Exception as exc:
+        raise ManifestUnreadable(f"could not read the fingerprints of {service_class}: {exc}") from exc
+    try:
+        parsed = json.loads(raw)
+    except ValueError as exc:
+        raise ManifestUnreadable(f"the fingerprints of {service_class} are not valid JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ManifestUnreadable(f"the fingerprints of {service_class} are not a JSON object")
+    return parsed
+
+
+# What a manifest recorded before it recorded a result format: Python-mode dumps.
+_UNRECORDED_RESULT_FORMAT = 1
+
+_HASH_FIELDS = ("schema_hash", "code_hash", "env_hash")
+
+
+def recorded_result_format(manifest: dict[str, Any]) -> int:
+    """Return the result format a deployment recorded, the first format when it recorded none.
+
+    Args:
+        manifest (dict[str, Any]): A manifest from :func:`read_manifest`.
+
+    Returns:
+        int: The deployment's :data:`~proto_tools.modal.utils.RESULT_FORMAT`.
+    """
+    value = manifest.get("result_format")
+    # ``type`` rather than ``isinstance``: a bool is an int, and ``true`` is not a format.
+    return value if type(value) is int else _UNRECORDED_RESULT_FORMAT
+
+
+def drifted_fields(tool_key: str, manifest: dict[str, Any]) -> dict[str, tuple[Any, Any]]:
+    """Return each fingerprint field where ``tool_key``'s deployment differs from this checkout.
+
+    Empty when aligned, and when the deployment recorded nothing for the tool. A manifest hashed
+    by another algorithm cannot be compared hash by hash, so it reports ``algorithm`` alone.
+
+    Args:
+        tool_key (str): Tool to compare.
+        manifest (dict[str, Any]): A manifest from :func:`read_manifest`.
+
+    Returns:
+        dict[str, tuple[Any, Any]]: Field name to ``(deployed, local)`` value.
+
+    Raises:
+        ValueError: If ``tool_key`` is not registered here, since its local fingerprint cannot be computed.
+    """
+    if manifest.get("algorithm") != ALGORITHM:
+        return {"algorithm": (manifest.get("algorithm"), ALGORITHM)}
+    tools = manifest.get("tools")
+    entry = tools.get(tool_key) if isinstance(tools, dict) else None
+    if not isinstance(entry, dict):
+        return {}
+    local = fingerprint(tool_key)
+    return {
+        name: (entry.get(name), getattr(local, name))
+        for name in _HASH_FIELDS
+        if entry.get(name) != getattr(local, name)
+    }
 
 
 def drift_warnings(
@@ -278,33 +353,42 @@ def drift_warnings(
         recorded = read_manifest(service_class, environment=environment, client=client)
         if recorded is None:
             return []
-        if recorded.get("algorithm") != ALGORITHM:
+        from proto_tools.modal.utils import RESULT_FORMAT
+
+        if recorded_result_format(recorded) > RESULT_FORMAT:
+            # Its hashes will differ too, but redeploying from here would downgrade it.
+            return [
+                f"{tool_key}: the deployed tool was built by a newer proto-tools than the one making "
+                f"this call. Upgrade this proto-tools rather than redeploying, which would replace "
+                f"the newer deployment with this older version."
+            ]
+        drifted = drifted_fields(tool_key, recorded)
+        if "algorithm" in drifted:
+            deployed_algorithm, _ = drifted["algorithm"]
             return [
                 f"{tool_key}: deployment recorded fingerprints with algorithm "
-                f"{recorded.get('algorithm')}, this client uses {ALGORITHM}; cannot compare."
+                f"{deployed_algorithm}, this client uses {ALGORITHM}; cannot compare."
             ]
-        entry = recorded.get("tools", {}).get(tool_key)
-        if entry is None:
-            return []
-
-        local = fingerprint(tool_key)
         out = []
-        if entry.get("schema_hash") != local.schema_hash:
+        if "schema_hash" in drifted:
+            deployed, calling = drifted["schema_hash"]
             out.append(
                 f"{tool_key}: the deployed tool's schema differs from the proto-tools making this "
-                f"call (deployed {entry.get('schema_hash')}, calling {local.schema_hash}). Calls may "
+                f"call (deployed {deployed}, calling {calling}). Calls may "
                 f"fail, or fields a newer deployment returns may be silently dropped. Redeploy to realign."
             )
-        if entry.get("code_hash") != local.code_hash:
+        if "code_hash" in drifted:
+            deployed, calling = drifted["code_hash"]
             out.append(
                 f"{tool_key}: the deployed tool's code differs from the proto-tools making this "
-                f"call (deployed {entry.get('code_hash')}, calling {local.code_hash}). Results from "
+                f"call (deployed {deployed}, calling {calling}). Results from "
                 f"the two may not be comparable. Redeploy to realign."
             )
-        if entry.get("env_hash") != local.env_hash:
+        if "env_hash" in drifted:
+            deployed, calling = drifted["env_hash"]
             out.append(
                 f"{tool_key}: the deployed tool's environment differs from the proto-tools making "
-                f"this call (deployed {entry.get('env_hash')}, calling {local.env_hash}). Calls will "
+                f"this call (deployed {deployed}, calling {calling}). Calls will "
                 f"still succeed, but results from the two may not be comparable."
             )
         return out
