@@ -57,54 +57,12 @@ This tool is the prerequisite for any local BLAST workflow that searches against
 
 ## Toolkit Notes
 
-Online FASTA inputs submit all records in one multi-query search, preserving
-unique FASTA identifiers. Empty records and duplicate identifiers are rejected.
-Results expose `metadata["query_ids"]`, including queries with no hits; missing,
-duplicate or unexpected result identifiers fail instead of becoming zero-hit
-successes. `query_length` is the total number of submitted residues, excluding
-FASTA headers. Callers should split large inputs into bounded batches; one
-`timeout` budget covers the entire submitted batch. Local database execution
-remains preferable for large-scale searches.
-
-Online searches use a truthful `Proto-Tools/BLAST` HTTP client identity for both
-submission and result polling. This addresses the observed identity-related rejection of
-the generic `BiopythonClient` header without changing search parameters or
-impersonating a browser. Biopython still parses submission errors and result XML;
-no process-global Biopython or urllib settings are patched.
-
-Requests are spaced by at least 10 seconds within one process, and each search
-is polled no more than once per 60 seconds, including its first poll. Multiple
-processes can opt into shared pacing with `PROTO_BLAST_PACING_PATH`, an absolute
-timestamp-file path visible to all participating clients. A file lock serializes
-HTTP requests; only a timestamp is stored, never queries. Cross-node use requires
-verified shared-filesystem lock semantics and synchronized clocks. Unrelated
-clients sharing outbound access are not coordinated. Corrupt state fails closed.
-`timeout` bounds each search attempt, including lock acquisition, pacing and polling;
-`None` preserves an unbounded wait. Unknown, failed or non-XML responses raise
-rather than becoming successful zero-hit results. The exact NCBI application
-rejection `Cannot accept request, error code: -99` receives at most two retries,
-after 60 and 120 seconds, shared across submission and polling within one search
-deadline. Accepted request IDs are reused for poll retries, not resubmitted.
-Rejection also defers other participating clients for at least 60 seconds.
-Exhaustion raises `BlastSubmissionRejected` (a `ValueError`), deliberately not a
-generic retryable transport failure. Other invalid-request errors are not retried.
-The cooldown is a bounded recovery policy, not proof that `-99` means throttling
-or a guarantee of server acceptance. Higher-level whole-task retries must still
-be explicitly bounded; pending request IDs do not survive process termination.
-The requested database is not rewritten by this client; NCBI may
-independently redirect `nt` to `core_nt`.
-
-The client advances through explicit submit, poll, success, failure, and timeout
-states. A successful submission is polled under the same deadline and request ID;
-only a BLAST XML document is a successful terminal response. Empty/`WAITING`
-responses remain pending, while `FAILED`, `UNKNOWN`, `READY` without XML, and
-other non-XML bodies fail explicitly. Live protocol canaries require the separate
-integration, network, and slow test selectors.
-
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
 These apply to every BLAST tool in this toolkit (`blast-search`, `blast-create-db`).
 
 - **Hits include the standard BLAST tabular fields and alignment detail.** Each `BlastHit` carries the twelve canonical `-outfmt 6` fields plus aligned query (`qseq`), aligned subject (`sseq`), and BTOP traceback operations. Local BLAST returns all three alignment-detail fields; online XML returns the aligned strings and leaves `btop` null. These fields allow consumers to distinguish terminal from internal mismatches. `pident` is reported on a 0-to-100 scale. CSV export deliberately retains the established twelve-column schema; JSON and the typed Python records retain the additive alignment-detail fields.
+- **Online FASTA inputs are searched as one multi-query request.** Every record is submitted under its FASTA identifier, and empty records or duplicate identifiers are rejected. The response must contain exactly one result per submitted identifier, so a missing or unexpected query fails rather than reading as a query with no hits; `metadata["query_ids"]` lists them all. One `timeout` covers the whole request, so split large inputs into batches or search a local database.
+- **Online searches identify the caller and follow NCBI's request pacing.** Requests carry a `proto-tools` User-Agent naming the caller rather than Biopython's generic `BiopythonClient`, which NCBI has rejected. Submissions are spaced at least 10 seconds apart within a process, and each search is polled once a minute until it finishes or `timeout` elapses. An NCBI `Cannot accept request, error code: -99` rejection is retried twice on submission (after 60 and 120 seconds); while polling it counts as still pending. A failed, unknown, or non-XML poll response raises instead of returning an empty result.
 - **The local installation downloads the platform-specific NCBI BLAST+ distribution on first use.** The standalone setup pulls the appropriate NCBI BLAST+ tarball and extracts the `blastn`, `blastp`, `blastx`, `tblastn`, `tblastx`, and `makeblastdb` executables. No reference database is bundled, so local execution requires either a user-built database from `blast-create-db` or a separately downloaded NCBI database.
 - **The two tools differ in execution mode.** `blast-search` supports both online (`search_mode="online"`, the default) and local (`search_mode="local"`) execution. `blast-create-db` runs only locally because the NCBI web service does not expose `makeblastdb`.

@@ -1,235 +1,122 @@
-"""Identified NCBI BLAST transport without process-global Biopython patches."""
+"""NCBI QBLAST submit-and-poll client that identifies its caller."""
 
 import io
 import logging
 import math
-import os
 import re
-import tempfile
 import threading
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
-from enum import Enum
-from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
-_URL = "https://blast.ncbi.nlm.nih.gov/Blast.cgi"
-_USER_AGENT = "Proto-Tools/BLAST (+https://github.com/evo-design/proto-tools)"
-_REQUEST_LOCK = threading.Lock()
-_NEXT_REQUEST = 0.0
+import requests
+
+from proto_tools.utils import build_http_session, poll_until_complete, request_with_retry, user_agent_for
+
 logger = logging.getLogger(__name__)
 
+_URL = "https://blast.ncbi.nlm.nih.gov/Blast.cgi"
+_HTTP_RETRIES = 2
+_BACKOFF_SECONDS = 1.0
+_REQUEST_TIMEOUT_SECONDS = 60
+# NCBI asks for at least 10 seconds between submissions and at most one poll per search per minute.
+_SUBMIT_SPACING_SECONDS = 10.0
+_POLL_INTERVAL_SECONDS = 60.0
+_REJECTION_RETRY_DELAYS_SECONDS = (60.0, 120.0)
+_REJECTION = re.compile(r"Cannot accept request,\s*error code:\s*-99(?![\w.])")
+_STATUS = re.compile(r"Status=\s*([A-Za-z]+)")
 
-class _SearchState(str, Enum):
-    """Internal QBLAST submit/poll terminal-state model."""
-
-    SUBMIT = "submit"
-    POLL = "poll"
-    SUCCESS = "success"
-    FAILURE = "failure"
-    TIMEOUT = "timeout"
-
-
-class BlastSubmissionRejected(ValueError):
-    """NCBI -99 recovery exhausted; callers must not automatically restart its budget."""
-
-
-def _is_rejected(page: str) -> bool:
-    """Recognize the observed application rejection, not arbitrary server errors."""
-    return bool(re.search(r"Cannot accept request,\s*error code:\s*-99(?![\w.])", page))
+_submit_lock = threading.Lock()
+_next_submit = 0.0
 
 
-def _classify_poll(page: str) -> tuple[_SearchState, str | None]:
-    """Classify one QBLAST poll response without treating ambiguity as no hits."""
-    status_match = re.search(r"Status=\s*([A-Za-z]+)", page)
-    status = status_match.group(1).upper() if status_match else None
-    if not page.strip() or status == "WAITING":
-        return _SearchState.POLL, status
-    if status is not None and status != "READY":
-        return _SearchState.FAILURE, status
-    if page.lstrip().startswith(("<?xml", "<BlastOutput")):
-        return _SearchState.SUCCESS, status
-    return _SearchState.FAILURE, status
-
-
-def _publish_slot(path: Path, spacing: float) -> None:
-    """Atomically retain a pacing reservation even if a requesting process dies."""
-    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as handle:
-        temporary = Path(handle.name)
-        try:
-            handle.write(str(time.time() + spacing))
-            handle.flush()
-            os.fsync(handle.fileno())
-            os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
-
-
-@contextmanager
-def _shared_slot(deadline: float | None) -> Iterator[Path | None]:
-    """Optionally coordinate participating processes using an explicit shared path."""
-    from filelock import FileLock
-
-    location = os.environ.get("PROTO_BLAST_PACING_PATH")
-    if not location:
-        yield None
-        return
-    path = Path(location)
-    if not path.is_absolute():
-        raise ValueError("PROTO_BLAST_PACING_PATH must be absolute")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    remaining = _remaining(deadline)
-    with FileLock(str(path) + ".lock", timeout=remaining if remaining is not None else -1):
-        if path.exists():
-            next_epoch = float(path.read_text())
-            if not math.isfinite(next_epoch):
-                raise ValueError("Invalid BLAST pacing timestamp")
-            _wait(max(0.0, next_epoch - time.time()), deadline)
-        _publish_slot(path, 10.0)
-        yield path
-
-
-def _remaining(deadline: float | None) -> float | None:
-    """Return remaining search budget, raising when exhausted."""
-    if deadline is None:
-        return None
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise TimeoutError("Online BLAST search deadline exhausted")
-    return remaining
-
-
-def _wait(seconds: float, deadline: float | None) -> None:
-    """Respect pacing without sleeping past a finite search deadline."""
-    remaining = _remaining(deadline)
-    if remaining is not None and seconds >= remaining:
-        raise TimeoutError("Online BLAST deadline insufficient for next permitted request")
-    if seconds > 0:
-        time.sleep(seconds)
-
-
-def _request(parameters: dict[str, Any], deadline: float | None) -> str:
-    """POST with a truthful client identity and process-local request pacing."""
-    global _NEXT_REQUEST  # noqa: PLW0603 - process-local pacing state protected by the lock
-    remaining = _remaining(deadline)
-    if not _REQUEST_LOCK.acquire(timeout=remaining if remaining is not None else -1):
-        raise TimeoutError("Online BLAST deadline exhausted waiting for request slot")
-    try:
-        _wait(max(0.0, _NEXT_REQUEST - time.monotonic()), deadline)
-        with _shared_slot(deadline) as pacing_path:
-            spacing = 10.0
-            request = Request(_URL, urlencode(parameters).encode(), headers={"User-Agent": _USER_AGENT})  # noqa: S310 - fixed HTTPS endpoint
-            try:
-                with urlopen(request, timeout=_remaining(deadline)) as response:  # noqa: S310 - fixed HTTPS endpoint
-                    text = response.read().decode()
-                if _is_rejected(text):
-                    spacing = 60.0
-                _remaining(deadline)
-                return str(text)
-            finally:
-                _NEXT_REQUEST = time.monotonic() + spacing
-                if pacing_path is not None:
-                    _publish_slot(pacing_path, spacing)
-    finally:
-        _REQUEST_LOCK.release()
-
-
-def search_xml(parameters: dict[str, Any], timeout: int | None) -> str:
-    """Submit and retrieve XML, preserving QBLAST search and output parameters.
+def search_xml(parameters: dict[str, Any], *, timeout: int | None, client_identity: str | None) -> str:
+    """Submit a QBLAST search and return its XML result.
 
     Args:
         parameters (dict[str, Any]): Uppercase NCBI search parameters.
         timeout (int | None): Total search budget in seconds; None waits indefinitely.
+        client_identity (str | None): Caller named in the User-Agent; derived from this process when None.
 
     Returns:
-        str: Raw XML for the existing Biopython result parser.
+        str: Raw BLAST XML.
+
+    Raises:
+        ValueError: When NCBI rejects the search, reports it failed, or answers with a non-XML page.
+        TimeoutError: When the search does not finish within ``timeout``.
     """
+    deadline = time.monotonic() + (math.inf if timeout is None else timeout)
+    with build_http_session(
+        http_retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+        user_agent=user_agent_for(client_identity),
+        allowed_methods=["GET", "POST"],
+    ) as session:
+        # Defaults match Biopython's qblast so existing searches return the same hits.
+        rid = _submit(
+            session,
+            {
+                "EXPECT": 10.0,
+                "HITLIST_SIZE": 50,
+                "ENTREZ_QUERY": "(none)",
+                **parameters,
+                "CMD": "Put",
+                "tool": "proto-tools",
+            },
+        )
+        time.sleep(min(_POLL_INTERVAL_SECONDS, max(0.0, deadline - time.monotonic())))
+        query = urlencode({"CMD": "Get", "RID": rid, "FORMAT_TYPE": "XML", "ALIGNMENTS": 500, "DESCRIPTIONS": 500})
+        xml: str = poll_until_complete(
+            session,
+            f"{_URL}?{query}",
+            poll_interval_seconds=_POLL_INTERVAL_SECONDS,
+            timeout_seconds=max(0.0, deadline - time.monotonic()),
+            success_states=frozenset({"XML"}),
+            failure_states=frozenset(),
+            status_extractor=_qblast_status,
+        )
+    return xml
+
+
+def _submit(session: requests.Session, parameters: dict[str, Any]) -> str:
+    """POST a search and return its request ID, retrying NCBI's ``-99`` rejection after a cooldown."""
     from Bio.Blast import NCBIWWW
 
-    from proto_tools.utils.remote_errors import is_retryable_remote_error
+    global _next_submit  # noqa: PLW0603 -- process-wide submission spacing, guarded by _submit_lock
+    for retry_delay in (*_REJECTION_RETRY_DELAYS_SECONDS, None):
+        with _submit_lock:
+            time.sleep(max(0.0, _next_submit - time.monotonic()))
+            response = request_with_retry(
+                lambda: session.post(_URL, data=parameters, timeout=_REQUEST_TIMEOUT_SECONDS),
+                retries=_HTTP_RETRIES,
+                backoff_seconds=_BACKOFF_SECONDS,
+            )
+            _next_submit = time.monotonic() + _SUBMIT_SPACING_SECONDS
+        response.raise_for_status()
+        if not _REJECTION.search(response.text):
+            rid, _ = NCBIWWW._parse_qblast_ref_page(io.BytesIO(response.content))  # type: ignore[no-untyped-call]
+            return str(rid)
+        if retry_delay is None:
+            break
+        logger.warning("NCBI BLAST rejected the search (error code -99); retrying in %.0fs", retry_delay)
+        time.sleep(retry_delay)
+    raise ValueError(
+        f"NCBI BLAST rejected the search (error code -99) {len(_REJECTION_RETRY_DELAYS_SECONDS) + 1} times"
+    )
 
-    deadline = None if timeout is None else time.monotonic() + timeout
-    rejections = 0
 
-    def wait_with_recovery_budget(seconds: float) -> None:
-        try:
-            _wait(seconds, deadline)
-        except TimeoutError as exc:
-            if not rejections:
-                raise
-            raise BlastSubmissionRejected("NCBI BLAST error code: -99; recovery deadline exhausted") from exc
+def _qblast_status(response: requests.Response) -> tuple[str, str]:
+    """Read a QBLAST poll page as ``("XML", page)`` when finished or ``("WAITING", page)`` while pending.
 
-    def request_with_recovery(parameters: dict[str, Any]) -> str:
-        nonlocal rejections
-        while True:
-            try:
-                page = _request(parameters, deadline)
-            except Exception as exc:
-                if not rejections or not is_retryable_remote_error(exc):
-                    raise
-                raise BlastSubmissionRejected(
-                    "NCBI BLAST error code: -99; recovery interrupted or deadline exhausted"
-                ) from exc
-            if not _is_rejected(page) or re.search(r"^\s*RID\s*=\s*\S+\s*$", page, re.MULTILINE):
-                return page
-            if rejections >= 2:
-                raise BlastSubmissionRejected("NCBI BLAST error code: -99; bounded recovery exhausted")
-            delay = 60.0 * 2**rejections
-            rejections += 1
-            logger.warning("NCBI BLAST -99; retry %s/2 in %.0fs (%s)", rejections, delay, parameters["CMD"])
-            wait_with_recovery_budget(delay)
-
-    # Match the previous qblast defaults; never silently substitute databases.
-    put = {
-        "EXPECT": 10.0,
-        "HITLIST_SIZE": 50,
-        "ENTREZ_QUERY": "(none)",
-        **parameters,
-        "CMD": "Put",
-        "tool": "proto-tools",
-    }
-    state = _SearchState.SUBMIT
-    rid: str | None = None
-    xml: str | None = None
-    try:
-        while state not in {_SearchState.SUCCESS, _SearchState.FAILURE}:
-            if state is _SearchState.SUBMIT:
-                page = request_with_recovery(put)
-                # Reuse Biopython's established server-error/RID parser, not its
-                # hardcoded HTTP client.
-                rid, _ = NCBIWWW._parse_qblast_ref_page(  # type: ignore[no-untyped-call]
-                    io.BytesIO(page.encode())
-                )
-                state = _SearchState.POLL
-                continue
-
-            if state is _SearchState.POLL:
-                if rid is None:  # defensive state-integrity guard
-                    state = _SearchState.FAILURE
-                    raise RuntimeError("NCBI BLAST poll state has no accepted request ID")
-                wait_with_recovery_budget(60.0)
-                get = {
-                    "CMD": "Get",
-                    "RID": rid,
-                    "FORMAT_TYPE": "XML",
-                    "ALIGNMENTS": 500,
-                    "DESCRIPTIONS": 500,
-                }
-                page = request_with_recovery(get)
-                state, reported_status = _classify_poll(page)
-                if state is _SearchState.SUCCESS:
-                    xml = page
-                elif state is _SearchState.FAILURE:
-                    if reported_status is not None and reported_status != "READY":
-                        raise ValueError(f"NCBI BLAST search {rid} returned status {reported_status}")
-                    raise ValueError(f"NCBI BLAST search {rid} returned a non-XML response; no hits can be inferred")
-    except TimeoutError:
-        state = _SearchState.TIMEOUT
-        raise
-
-    if state is not _SearchState.SUCCESS or xml is None:
-        raise RuntimeError(f"NCBI BLAST search ended in unexpected state {state.value}")
-    return xml
+    A ``-99`` rejection of a poll counts as pending, so the search is polled again after the usual
+    interval. Any other page (``FAILED``, ``UNKNOWN``, ``READY`` without XML, or unrecognized HTML)
+    raises, so a failed search never reads as one with no hits.
+    """
+    page = response.text
+    if page.lstrip().startswith(("<?xml", "<BlastOutput")):
+        return "XML", page
+    status = _STATUS.search(page)
+    if not page.strip() or _REJECTION.search(page) or (status is not None and status.group(1).upper() == "WAITING"):
+        return "WAITING", page
+    reported = f"status {status.group(1).upper()}" if status is not None else "a non-XML page"
+    raise ValueError(f"NCBI BLAST returned {reported} for {response.url}; no hits can be inferred")

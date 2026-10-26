@@ -14,7 +14,7 @@ def test_batch_query_coverage_including_no_hits(monkeypatch, tmp_path, returned)
     path.write_text(">a description\nACGT\n>b\nTGCA\n")
     requests = []
 
-    def submit(params, timeout):
+    def submit(params, **_kwargs):
         requests.append(params)
         return "mock XML"
 

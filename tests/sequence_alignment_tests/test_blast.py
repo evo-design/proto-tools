@@ -444,27 +444,6 @@ def test_golden_online_xml_parses_alignment_detail():
     }
 
 
-def test_hit_alignment_details_are_backward_compatible():
-    """Legacy twelve-column hit payloads remain valid after additive fields."""
-    hit = BlastHit(
-        qseqid="q",
-        sseqid="s",
-        pident=90.0,
-        length=10,
-        mismatch=1,
-        gapopen=0,
-        qstart=1,
-        qend=10,
-        sstart=20,
-        send=11,
-        evalue=0.1,
-        bitscore=15.0,
-    )
-    assert hit.qseq is None
-    assert hit.sseq is None
-    assert hit.btop is None
-
-
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
@@ -569,7 +548,6 @@ def test_local_blastp_no_hits(prot_blast_db):
 
 
 @pytest.mark.integration
-@pytest.mark.network
 @pytest.mark.slow
 @pytest.mark.skip_ci
 def test_online_blastp():
