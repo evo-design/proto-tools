@@ -1,6 +1,7 @@
 """Differentiable Cherimoya accessibility objectives for relaxed DNA logits."""
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
@@ -27,11 +28,12 @@ from proto_tools.tools.sequence_scoring.shared_data_models import validate_dna_s
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     DNA_NUCLEOTIDES,
-    BaseConfig,
-    BaseToolInput,
+    BatchedNucleotideGradientInput,
     ConfigField,
     GradientOutput,
-    InputField,
+    GradientResult,
+    NucleotideSequenceLogits,
+    RelaxationConfig,
     ToolInstance,
 )
 from proto_tools.utils.device import RemoteDevice
@@ -39,8 +41,6 @@ from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 CherimoyaQuantity = Literal["log_counts", "log_target_counts"]
 CherimoyaObjectiveDirection = Literal["max", "min"]
-CherimoyaLogits = list[list[list[float]]]
-CherimoyaGradientValue = list[list[list[float]]] | None
 
 
 class CherimoyaGradientLossTerm(BaseModel):
@@ -89,46 +89,21 @@ class CherimoyaGradientLossTerm(BaseModel):
     )
 
 
-class CherimoyaGradientInput(BaseToolInput):
+class CherimoyaGradientInput(BatchedNucleotideGradientInput):
     """Input for differentiable Cherimoya sequence optimization.
 
     Attributes:
-        logits (CherimoyaLogits): Batched relaxed DNA logits with shape ``(B, L, 4)`` in
-            ``A,C,G,T`` order, for the designed segment only. Use ``B=1`` for one candidate.
-        temperature (float): Softmax temperature used to relax logits.
+        inputs (list[NucleotideSequenceLogits]): One relaxed ``(L, 4)`` state per candidate in
+            ``A,C,G,T`` order, for the designed segment only. Every item must share one length,
+            because the backend evaluates them in one vectorized pass.
+        temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
+            reads each state as unnormalized and applies ``softmax(logits / T)``, returning
+            logit-space gradients; ``None`` reads them as probabilities and returns
+            probability-space gradients.
     """
 
-    logits: CherimoyaLogits = InputField(
-        title="Logits",
-        description="Batched relaxed DNA logits of the designed segment, shape (B, L, 4), A,C,G,T order.",
-        examples=[[[[0.0] * 4] * CHERIMOYA_CONTEXT]],
-    )
-    temperature: float = InputField(
-        default=1.0,
-        gt=0.0,
-        title="Temperature",
-        description="Softmax temperature used to convert logits into relaxed nucleotide probabilities.",
-    )
 
-    @field_validator("logits")
-    @classmethod
-    def validate_logits(cls, logits: CherimoyaLogits) -> CherimoyaLogits:
-        """Ensure logits are a non-empty ``B x L x 4`` tensor."""
-        if not logits:
-            raise ValueError("logits must contain at least one batch item")
-        lengths = {len(matrix) for matrix in logits}
-        if len(lengths) != 1 or 0 in lengths:
-            raise ValueError(f"all batched logits must have the same non-zero length; got lengths {sorted(lengths)}")
-        for batch_idx, matrix in enumerate(logits):
-            if not isinstance(matrix[0], list):
-                raise ValueError("logits must have shape (B, L, 4); use batch size 1 for a single candidate")
-            for row_idx, row in enumerate(matrix):
-                if len(row) != len(DNA_NUCLEOTIDES):
-                    raise ValueError(f"logits batch {batch_idx} row {row_idx} must have 4 columns, got {len(row)}")
-        return logits
-
-
-class CherimoyaGradientConfig(BaseConfig):
+class CherimoyaGradientConfig(RelaxationConfig):
     """Configuration for differentiable Cherimoya objectives.
 
     The model input is ``context_left + designed segment + context_right``, which must be
@@ -144,8 +119,11 @@ class CherimoyaGradientConfig(BaseConfig):
         target_end (int | None): End of the ``log_target_counts`` span, relative to the
             designed segment; ``None`` means its end.
         reverse_complement_average (bool): Average forward and reverse-complement predictions.
-        soft (float): Blend hard argmax one-hot (0) to softmax probabilities (1).
-        hard (float): Straight-through hard-forward coefficient.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
+            (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
+            and ColabDesign parity. See
+            :class:`~proto_tools.utils.gradient_models.RelaxationConfig`.
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Run the backward pass and return the gradient.
         deterministic (bool): Use plain PyTorch kernels so repeated gradients are bit-identical.
         device (str): Device used for inference and backpropagation.
@@ -195,20 +173,6 @@ class CherimoyaGradientConfig(BaseConfig):
         title="Reverse-Complement Average",
         default=False,
         description="Average forward and reverse-complement predictions (twice the compute).",
-    )
-    soft: float = ConfigField(
-        title="Soft Mixing",
-        default=1.0,
-        ge=0.0,
-        le=1.0,
-        description="Blend hard argmax one-hot (0) to softmax probabilities (1).",
-    )
-    hard: float = ConfigField(
-        title="Hard Mixing",
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="Straight-through hard-forward coefficient.",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
@@ -295,42 +259,52 @@ class CherimoyaGradientOutput(GradientOutput):
     """Differentiable Cherimoya objective output.
 
     Attributes:
-        gradient (CherimoyaGradientValue): Gradient matching the input logits, or ``None``
-            when ``compute_gradient=False``.
-        loss (float): Sum of per-sample weighted objective values.
-        sample_metrics (list[CherimoyaGradientSampleMetrics]): Per-sample loss and term values.
-        models (list[CherimoyaModelInfo]): Provenance of each model the terms used.
-        metrics (dict[str, Any]): Auxiliary payload from the worker.
+        results (list[GradientResult]): One per input item, in input order, each holding that
+            sample's own gradient, weighted sigmoid objective, and per-term values.
         vocab (list[str]): DNA column ordering for logits and gradient.
+        models (list[CherimoyaModelInfo]): Provenance of each model the terms used.
     """
 
-    gradient: CherimoyaGradientValue = Field(
-        default=None,
-        title="Gradient",
-        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
-    )
-    sample_metrics: list[CherimoyaGradientSampleMetrics] = Field(
-        default_factory=list,
-        title="Sample Metrics",
-        description="Per-sample Cherimoya objective metrics.",
-    )
     models: list[CherimoyaModelInfo] = Field(
         default_factory=list, title="Models", description="Provenance of each model the loss terms used"
     )
 
+    @classmethod
+    def from_batch(cls, payload: Mapping[str, Any], models: list[CherimoyaModelInfo]) -> "CherimoyaGradientOutput":
+        """Unbatch one worker payload into per-sample results.
+
+        The worker evaluates the batch in one vectorized pass and reports a stacked ``(B, L, 4)``
+        gradient with per-sample losses and term values, so this splits them back into one result
+        per designed segment.
+
+        Args:
+            payload (Mapping[str, Any]): Worker payload for the whole batch.
+            models (list[CherimoyaModelInfo]): Provenance of each model the loss terms used.
+
+        Returns:
+            CherimoyaGradientOutput: One result per sample, in input order.
+        """
+        metrics = payload["metrics"]
+        gradients = payload["gradient"] or [None] * len(metrics["losses"])
+        results = []
+        for gradient, loss, term_rows in zip(gradients, metrics["losses"], metrics["loss_terms"], strict=True):
+            sample = CherimoyaGradientSampleMetrics.model_validate({"loss": float(loss), "loss_terms": term_rows})
+            results.append(GradientResult(gradient=gradient, loss=float(loss), metrics=sample.model_dump()))
+        return cls(results=results, vocab=payload["vocab"], models=models)
+
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Export the gradient bundle as JSON."""
+        """Export the gradient bundle, including model provenance, as JSON."""
         if file_format != "json":
             raise ValueError(f"Unsupported format: {file_format}")
         base = Path(export_path)
         json_path = base.parent / f"{base.name}.json"
-        payload = self.model_dump(include={"gradient", "loss", "sample_metrics", "models", "metrics", "vocab"})
+        payload = self.model_dump(include={"results", "vocab", "models"})
         json_path.write_text(json.dumps(payload, indent=2))
 
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return CherimoyaGradientInput(logits=[[[0.0] * len(DNA_NUCLEOTIDES)] * CHERIMOYA_CONTEXT])
+    return CherimoyaGradientInput(inputs=[NucleotideSequenceLogits([[0.0] * len(DNA_NUCLEOTIDES)] * CHERIMOYA_CONTEXT)])
 
 
 def _target_span(config: CherimoyaGradientConfig, length: int) -> tuple[int, int] | None:
@@ -371,19 +345,19 @@ def run_cherimoya_gradient(
     """Compute Cherimoya objective gradients with respect to relaxed DNA logits.
 
     Args:
-        inputs (CherimoyaGradientInput): Relaxed logits of the designed segment.
+        inputs (CherimoyaGradientInput): Batched relaxed logits of the designed segment.
         config (CherimoyaGradientConfig): Loss terms, fixed context, and relaxation settings.
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        CherimoyaGradientOutput: Loss, per-sample metrics, and the gradient with respect to
-            the logits.
+        CherimoyaGradientOutput: Per-sample loss, metrics, and the gradient with respect to
+            each designed segment.
     """
-    length = len(inputs.logits[0])
+    length = len(inputs.inputs[0])
     total = len(config.context_left) + length + len(config.context_right)
     if total != CHERIMOYA_CONTEXT:
         raise ValueError(
-            f"context_left ({len(config.context_left)}) + logits ({length}) + context_right "
+            f"context_left ({len(config.context_left)}) + inputs ({length}) + context_right "
             f"({len(config.context_right)}) is {total} bp; Cherimoya needs {CHERIMOYA_CONTEXT}"
         )
     target_span = _target_span(config, length)
@@ -411,7 +385,7 @@ def run_cherimoya_gradient(
         "cherimoya",
         {
             "operation": "gradient",
-            "logits": inputs.logits,
+            "logits": [item.root for item in inputs.inputs],
             "temperature": inputs.temperature,
             "checkpoints": specs,
             "loss_terms": terms,
@@ -429,17 +403,4 @@ def run_cherimoya_gradient(
         instance=instance,
         config=config,
     )
-    infos = model_infos(models, config.collection, specs, result["applied"])
-    metrics = result["metrics"]
-    sample_metrics = [
-        CherimoyaGradientSampleMetrics.model_validate({"loss": float(loss), "loss_terms": term_rows})
-        for loss, term_rows in zip(metrics["losses"], metrics["loss_terms"], strict=True)
-    ]
-    return CherimoyaGradientOutput(
-        gradient=result["gradient"],
-        loss=float(result["loss"]),
-        metrics=metrics,
-        vocab=result["vocab"],
-        sample_metrics=sample_metrics,
-        models=infos,
-    )
+    return CherimoyaGradientOutput.from_batch(result, model_infos(models, config.collection, specs, result["applied"]))

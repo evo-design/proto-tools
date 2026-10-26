@@ -8,6 +8,7 @@ from collections import OrderedDict
 from typing import Any
 
 from standalone_helpers import get_logger, serialize_output
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 
 logger = get_logger(__name__)
 
@@ -44,19 +45,6 @@ def _one_hot(sequences: list[str], device: str) -> Any:
     rows, positions = numpy.nonzero(codes >= 0)
     encoded[rows, codes[rows, positions], positions] = 1.0
     return torch.from_numpy(encoded).to(device)
-
-
-def _relaxed_dna_probs(logits: Any, *, temperature: float, soft: float, hard: float) -> Any:
-    """Convert ``B x L x 4`` logits to relaxed probabilities, with an optional straight-through estimator."""
-    import torch.nn.functional as F
-
-    probs = F.softmax(logits / temperature, dim=-1)
-    hard_probs = F.one_hot(probs.argmax(dim=-1), num_classes=len(VOCAB)).to(probs.dtype)
-    relaxed = (1.0 - soft) * hard_probs + soft * probs
-    if hard > 0.0:
-        straight_through = hard_probs + probs - probs.detach()
-        relaxed = hard * straight_through + (1.0 - hard) * relaxed
-    return relaxed
 
 
 def _forward(model: Any, X: Any, reverse_complement: bool) -> tuple[Any, Any]:
@@ -255,7 +243,12 @@ class CherimoyaWorker:
         return {"profiles": rows, "applied": applied}
 
     def gradient(self, input_dict: dict[str, Any]) -> dict[str, Any]:
-        """Return the summed loss terms and their gradient with respect to the logits."""
+        """Return the summed loss terms and their gradient with respect to the relaxed state.
+
+        ``temperature`` fixes the coordinate space: a positive value reads the state as logits
+        and returns logit-space gradients, ``None`` consumes probabilities directly and returns
+        probability-space gradients.
+        """
         import torch
 
         self.set_deterministic(bool(input_dict["deterministic"]))
@@ -264,13 +257,14 @@ class CherimoyaWorker:
         compute_gradient = bool(input_dict["compute_gradient"])
         rc = bool(input_dict["reverse_complement_average"])
         span = input_dict["target_span"]
+        temperature = resolve_temperature(input_dict["temperature"])
 
         with torch.set_grad_enabled(compute_gradient):
             logits = torch.tensor(
                 input_dict["logits"], device=device, dtype=torch.float32, requires_grad=compute_gradient
             )
-            relaxed = _relaxed_dna_probs(
-                logits, temperature=float(input_dict["temperature"]), soft=input_dict["soft"], hard=input_dict["hard"]
+            relaxed = relaxed_sequence(
+                logits, temperature=temperature, soft=input_dict["soft"], hard=input_dict["hard"]
             )
             batch = int(relaxed.shape[0])
             parts = [relaxed.transpose(1, 2)]
@@ -331,7 +325,7 @@ class CherimoyaWorker:
                 "losses": losses,
                 "loss_terms": term_rows,
                 "batch_size": batch,
-                "temperature": input_dict["temperature"],
+                "temperature": temperature,
                 "soft": input_dict["soft"],
                 "hard": input_dict["hard"],
                 "deterministic": bool(input_dict["deterministic"]),

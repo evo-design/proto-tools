@@ -310,7 +310,7 @@ def test_cherimoya_gradient_loads_shared_checkpoints_once(monkeypatch: pytest.Mo
 
     monkeypatch.setattr(cherimoya_gradient.ToolInstance, "dispatch", staticmethod(fake_dispatch))
     result = run_cherimoya_gradient(
-        CherimoyaGradientInput(logits=[[[0.0] * 4] * 200]),
+        CherimoyaGradientInput(inputs=[[[0.0] * 4] * 200]),
         CherimoyaGradientConfig(
             context_left="A" * 957,
             context_right="C" * 957,
@@ -333,7 +333,11 @@ def test_cherimoya_gradient_loads_shared_checkpoints_once(monkeypatch: pytest.Mo
     assert [term["checkpoints"] for term in payload["loss_terms"]] == [[0], [2], [0, 1]]
     assert payload["target_span"] == (450, 550)
     assert [info.model for info in result.models] == [_K562_DNASE, _HEPG2_DNASE]
-    assert result.sample_metrics[0]["loss"] == 0.5
+    assert len(result.results) == 1
+    assert result.results[0].loss == 0.5
+    assert result.results[0].metrics["loss"] == 0.5
+    assert result.results[0].gradient == [[0.0] * 4] * 200
+    assert result.vocab == ["A", "C", "G", "T"]
 
 
 def test_cherimoya_gradient_validates_window_geometry() -> None:
@@ -346,10 +350,10 @@ def test_cherimoya_gradient_validates_window_geometry() -> None:
     )
 
     with pytest.raises(ValueError, match="Cherimoya needs 2114"):
-        run_cherimoya_gradient(CherimoyaGradientInput(logits=[[[0.0] * 4] * 200]), CherimoyaGradientConfig())
+        run_cherimoya_gradient(CherimoyaGradientInput(inputs=[[[0.0] * 4] * 200]), CherimoyaGradientConfig())
     with pytest.raises(ValueError, match="central 1,000 bp output window"):
         run_cherimoya_gradient(
-            CherimoyaGradientInput(logits=[[[0.0] * 4] * 2114]),
+            CherimoyaGradientInput(inputs=[[[0.0] * 4] * 2114]),
             CherimoyaGradientConfig(loss_terms=[CherimoyaGradientLossTerm(quantity="log_target_counts")]),
         )
 
@@ -474,8 +478,8 @@ def test_cherimoya_gradient_matches_score_and_finite_differences() -> None:
         CherimoyaScoreConfig(),
     )
 
-    sharp = run_cherimoya_gradient(CherimoyaGradientInput(logits=[_one_hot_logits(design, 30.0)]), config)
-    window, target = sharp.sample_metrics[0].loss_terms
+    sharp = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[_one_hot_logits(design, 30.0)]), config)
+    window, target = sharp.results[0].metrics["loss_terms"]
     assert window["value"] == pytest.approx(score.results[0].scores[0]["log_counts"], abs=1e-3)
     assert span.results[0].output_start == 557
     assert target["value"] == pytest.approx(math.log1p(span.results[0].scores[0]["target_counts"]), abs=1e-3)
@@ -486,20 +490,16 @@ def test_cherimoya_gradient_matches_score_and_finite_differences() -> None:
     steep = config.model_copy(
         update={"loss_terms": [term.model_copy(update={"sigmoid_center": 4.4, "sigmoid_scale": 0.25})]}
     )
-    first = run_cherimoya_gradient(CherimoyaGradientInput(logits=[logits]), steep)
-    second = run_cherimoya_gradient(CherimoyaGradientInput(logits=[logits]), steep)
+    first = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[logits]), steep)
+    second = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[logits]), steep)
     validate_output(first)
-    assert_metrics_in_spec(first)
-    assert first.gradient is not None
-    assert first.gradient == second.gradient
+    gradient = first.results[0].gradient
+    assert gradient is not None
+    assert gradient == second.results[0].gradient
 
     forward_only = steep.model_copy(update={"compute_gradient": False})
     largest = sorted(
-        (
-            (abs(value), position, column)
-            for position, row in enumerate(first.gradient[0])
-            for column, value in enumerate(row)
-        ),
+        ((abs(value), position, column) for position, row in enumerate(gradient) for column, value in enumerate(row)),
         reverse=True,
     )[:3]
     eps = 5e-2
@@ -508,10 +508,10 @@ def test_cherimoya_gradient_matches_score_and_finite_differences() -> None:
         minus = [row[:] for row in logits]
         plus[position][column] += eps
         minus[position][column] -= eps
-        loss_plus = run_cherimoya_gradient(CherimoyaGradientInput(logits=[plus]), forward_only).loss
-        loss_minus = run_cherimoya_gradient(CherimoyaGradientInput(logits=[minus]), forward_only).loss
+        loss_plus = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[plus]), forward_only).results[0].loss
+        loss_minus = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[minus]), forward_only).results[0].loss
         numeric = (loss_plus - loss_minus) / (2 * eps)
-        assert first.gradient[0][position][column] == pytest.approx(numeric, rel=0.02)
+        assert gradient[position][column] == pytest.approx(numeric, rel=0.02)
 
 
 # ── Benchmarks ────────────────────────────────────────────────────────────────
@@ -607,7 +607,7 @@ def test_cherimoya_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     hs2 = _hs2()
     rng = random.Random(0)
     logits = [[[rng.gauss(0.0, 1.0) for _ in range(4)] for _ in range(200)] for _ in range(64)]
-    inputs = CherimoyaGradientInput(logits=logits)
+    inputs = CherimoyaGradientInput(inputs=logits)
     config = CherimoyaGradientConfig(
         context_left=hs2[:957],
         context_right=hs2[1157:],
@@ -619,7 +619,6 @@ def test_cherimoya_gradient_benchmark(request: pytest.FixtureRequest) -> None:
 
     result = benchmark_twice(request, "cherimoya", lambda: run_cherimoya_gradient(inputs, config))
     validate_output(result)
-    assert_metrics_in_spec(result)
-    assert result.gradient is not None
-    assert len(result.gradient) == 64
-    assert all(math.isfinite(value) for sample in result.gradient for row in sample for value in row)
+    assert len(result.results) == 64
+    assert all(item.gradient is not None for item in result.results)
+    assert all(math.isfinite(value) for item in result.results for row in item.gradient for value in row)
