@@ -215,7 +215,8 @@ class AlphaFold2GradientConfig(RelaxationConfig):
         rm_target_sc (bool): Mask target template side chains in ``prep_inputs``.
         rm_template_ic (bool): Mask inter-chain template contacts in ``prep_inputs``.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
-            (1); keep the default 1.0 unless deliberately experimenting. See
+            (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
+            and ColabDesign parity. See
             :class:`~proto_tools.utils.gradient_models.RelaxationConfig`.
         hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         backend (Literal["base", "germinal"]): ``"base"`` (upstream ColabDesign) or ``"germinal"``

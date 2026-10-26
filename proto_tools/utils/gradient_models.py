@@ -63,14 +63,14 @@ class RelaxationConfig(BaseConfig):
     Attributes:
         soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
 
-            Leave this at its default of ``1.0`` for standard gradient-based sequence
-            optimization. That feeds softmax-normalized probabilities to the model — a
-            differentiable relaxation of a valid sequence representation.
+            It is recommended to leave ``soft`` at ``1.0`` in almost all use cases. That feeds
+            softmax-normalized probabilities to the model — a differentiable relaxation of a
+            valid sequence representation. Values below ``1.0`` blend those probabilities with
+            the raw input logits, which can produce inputs outside the model's expected
+            sequence representation and alter gradient behaviour.
 
-            Values below ``1.0`` blend those probabilities with the raw input logits, which can
-            produce inputs outside the model's expected sequence representation. That alters
-            gradient behaviour and may suit experimental optimization strategies, but is not
-            generally recommended.
+            The setting is left exposed for research purposes and for parity with the
+            ColabDesign implementation.
 
             To evaluate a *discrete* sequence in the forward pass while keeping surrogate
             gradients, set ``hard=1.0`` rather than lowering ``soft``.
@@ -83,7 +83,7 @@ class RelaxationConfig(BaseConfig):
         le=1.0,
         allow_inf_nan=False,
         title="Soft Mixing",
-        description="Blend raw input (0) toward softmax probabilities (1); keep 1.0 unless experimenting.",
+        description="Blend raw input (0) toward softmax probabilities (1); 1.0 recommended for almost all uses.",
     )
     hard: float = ConfigField(
         default=0.0,
