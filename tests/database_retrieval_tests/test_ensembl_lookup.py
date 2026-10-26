@@ -156,6 +156,65 @@ def test_dispatches_and_parses_into_ensembl_gene():
     assert [(m.type, m.refseq_match) for m in transcript.MANE] == [("MANE_Select", "NM_007294.4")]
 
 
+@pytest.mark.parametrize(
+    "config_kwargs, match",
+    [
+        ({"transcripts": "canonical"}, "requires expand=True"),
+        ({"transcripts": "mane_select", "expand": True}, "requires mane=True"),
+        ({"transcripts": "mane_select", "expand": True, "mane": True, "assembly": "GRCh37"}, "GRCh38"),
+    ],
+    ids=["canonical-without-expand", "mane-without-mane-flag", "mane-on-grch37"],
+)
+def test_transcripts_rejects_requests_that_cannot_match(config_kwargs, match):
+    """A transcript selection fails at config time when the request could never satisfy it."""
+    with pytest.raises(ValidationError, match=match):
+        EnsemblLookupConfig(**config_kwargs)
+
+
+_ALT_TRANSCRIPT = {
+    **_BRCA1_LOOKUP_PAYLOAD["Transcript"][0],
+    "id": "ENST00000352993",
+    "is_canonical": False,
+    "MANE": [],
+}
+
+
+@pytest.mark.parametrize(
+    "transcripts, expected_ids",
+    [
+        ("all", ["ENST00000357654", "ENST00000352993"]),
+        ("canonical", ["ENST00000357654"]),
+        ("mane_select", ["ENST00000357654"]),
+    ],
+)
+def test_transcripts_filters_result(transcripts, expected_ids):
+    """The selection keeps only matching transcripts in ``result.Transcript``."""
+    payload = {**_BRCA1_LOOKUP_PAYLOAD, "Transcript": [*_BRCA1_LOOKUP_PAYLOAD["Transcript"], _ALT_TRANSCRIPT]}
+    with patch(
+        "proto_tools.tools.database_retrieval.ensembl.ensembl_lookup.build_session",
+        return_value=_stub_session(payload),
+    ):
+        out = run_ensembl_lookup(
+            EnsemblLookupInput(symbol="BRCA1"),
+            EnsemblLookupConfig(expand=True, mane=True, transcripts=transcripts),
+        )
+    assert [t.id for t in out.result.Transcript] == expected_ids
+
+
+def test_transcripts_raises_when_nothing_matches():
+    """A gene with no MANE Select transcript fails rather than returning an empty selection."""
+    payload = {**_BRCA1_LOOKUP_PAYLOAD, "Transcript": [_ALT_TRANSCRIPT]}
+    with patch(
+        "proto_tools.tools.database_retrieval.ensembl.ensembl_lookup.build_session",
+        return_value=_stub_session(payload),
+    ):
+        with pytest.raises(ValueError, match="no mane_select transcript"):
+            run_ensembl_lookup(
+                EnsemblLookupInput(symbol="BRCA1"),
+                EnsemblLookupConfig(expand=True, mane=True, transcripts="mane_select"),
+            )
+
+
 def test_wraps_corrupt_json_with_context():
     """A 200 with non-JSON body surfaces a tight error mentioning the URL."""
     session = MagicMock()

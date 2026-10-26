@@ -8,7 +8,7 @@ import csv
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -16,6 +16,7 @@ from proto_tools.tools.database_retrieval.ensembl.shared_data_models import (
     EnsemblAssembly,
     EnsemblGene,
     EnsemblSpecies,
+    EnsemblTranscript,
     base_url_for,
     build_session,
 )
@@ -31,6 +32,8 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT_SECONDS = 30
+
+TranscriptSelection = Literal["all", "canonical", "mane_select"]
 
 
 # ============================================================================
@@ -81,6 +84,10 @@ class EnsemblLookupConfig(BaseConfig):
             (``/lookup/id`` only).
         utr (bool): Include UTR coordinates per transcript (``/lookup/id``
             only; requires ``expand=True``).
+        transcripts (TranscriptSelection): Which transcripts to keep in
+            ``result.Transcript``: ``all``, the Ensembl ``canonical`` one, or
+            the ``mane_select`` one. ``canonical`` requires ``expand=True``;
+            ``mane_select`` also requires ``mane=True`` on GRCh38.
     """
 
     species: EnsemblSpecies = ConfigField(
@@ -109,6 +116,20 @@ class EnsemblLookupConfig(BaseConfig):
         default=False,
         description="Include UTR coordinates per transcript (lookup-by-id only; requires expand=True)",
     )
+    transcripts: TranscriptSelection = ConfigField(
+        title="Transcripts",
+        default="all",
+        description="Keep all transcripts, only the canonical one, or only MANE Select",
+    )
+
+    @model_validator(mode="after")
+    def validate_transcripts(self) -> "EnsemblLookupConfig":
+        """Require the request flags a transcript selection depends on."""
+        if self.transcripts != "all" and not self.expand:
+            raise ValueError(f"transcripts={self.transcripts!r} requires expand=True")
+        if self.transcripts == "mane_select" and not (self.mane and self.assembly == "GRCh38"):
+            raise ValueError("transcripts='mane_select' requires mane=True and assembly='GRCh38'")
+        return self
 
 
 class EnsemblLookupOutput(BaseToolOutput):
@@ -185,7 +206,7 @@ def run_ensembl_lookup(
 
     Args:
         inputs (EnsemblLookupInput): Ensembl ID or gene symbol.
-        config (EnsemblLookupConfig): Species + assembly + expand toggle.
+        config (EnsemblLookupConfig): Species, assembly, request flags, and transcript selection.
         instance (Any): Optional ToolInstance; unused for HTTP-only tools.
 
     Returns:
@@ -229,10 +250,22 @@ def run_ensembl_lookup(
             ) from exc
         if not isinstance(payload, dict):
             raise ValueError(f"Ensembl lookup returned non-dict payload: {type(payload).__name__}")
+        gene = EnsemblGene.model_validate(payload)
+        if config.transcripts != "all":
+            gene.Transcript = [t for t in gene.Transcript if _is_selected(t, config.transcripts)]
+            if not gene.Transcript:
+                raise ValueError(f"Ensembl gene {gene.id} has no {config.transcripts} transcript")
         return EnsemblLookupOutput(
-            result=EnsemblGene.model_validate(payload),
+            result=gene,
             source_url=response.url,
             raw_payload=payload,
         )
     finally:
         session.close()
+
+
+def _is_selected(transcript: EnsemblTranscript, selection: TranscriptSelection) -> bool:
+    """Return whether a transcript matches a ``canonical`` or ``mane_select`` selection."""
+    if selection == "canonical":
+        return transcript.is_canonical
+    return any(m.type == "MANE_Select" for m in transcript.MANE)
