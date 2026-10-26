@@ -120,9 +120,11 @@ class NCBIEsearchOutput(BaseToolOutput):
 
     Attributes:
         ids (list[str]): List of NCBI IDs matching the search query.
+        source_url (str): Sanitized URL used for the request.
     """
 
     ids: list[str] = Field(default_factory=list, title="IDs", description="List of NCBI IDs found by the search")
+    source_url: str = Field(title="Source URL", description="Sanitized request URL")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -202,7 +204,7 @@ def run_ncbi_esearch(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        NCBIEsearchOutput: Matching NCBI record IDs.
+        NCBIEsearchOutput: Matching NCBI record IDs and the sanitized request URL.
     """
     del instance
 
@@ -214,7 +216,7 @@ def run_ncbi_esearch(
     )
 
     try:
-        ids = _ncbi_esearch(
+        ids, url = _ncbi_esearch(
             db=inputs.db,
             term=inputs.search_term,
             max_results=inputs.max_results,
@@ -228,6 +230,6 @@ def run_ncbi_esearch(
             maxdate=inputs.maxdate,
             reldate=inputs.reldate,
         )
-        return NCBIEsearchOutput(ids=ids)
+        return NCBIEsearchOutput(ids=ids, source_url=url)
     finally:
         session.close()

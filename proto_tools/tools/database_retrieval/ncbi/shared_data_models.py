@@ -131,8 +131,8 @@ def _ncbi_esearch(
     mindate: str | None = None,
     maxdate: str | None = None,
     reldate: int | None = None,
-) -> list[str]:
-    """Run NCBI esearch and return ID list."""
+) -> tuple[list[str], str]:
+    """Run NCBI esearch and return (id_list, sanitized_url)."""
     params: dict[str, Any] = {
         "db": db,
         "term": term,
@@ -164,10 +164,11 @@ def _ncbi_esearch(
         retries=_HTTP_RETRIES,
         backoff_seconds=_BACKOFF_SECONDS,
     )
+    url = _sanitize_url(str(response.url))
     if not _check_response(response, "ncbi-esearch"):
-        return []
+        return [], url
     data = json.loads(response.text, strict=False)
-    return data.get("esearchresult", {}).get("idlist", [])  # type: ignore[no-any-return]
+    return data.get("esearchresult", {}).get("idlist", []), url
 
 
 def _ncbi_esummary(
