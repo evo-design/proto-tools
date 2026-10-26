@@ -1,7 +1,6 @@
 """Fetch standards-native design documents from a SynBioHub registry."""
 
 import json
-import os
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
@@ -79,10 +78,9 @@ class SynBioHubFetchConfig(BaseConfig):
         description="Include referenced child objects in the SBOL document",
     )
     synbiohub_token: str | None = ConfigField(
-        default_factory=lambda: os.environ.get("SYNBIOHUB_TOKEN"),
         title="SynBioHub Token",
-        description="Optional private-object token; defaults to SYNBIOHUB_TOKEN",
-        include_in_key=False,
+        description="Optional private-object token.",
+        credential="SYNBIOHUB_TOKEN",
     )
 
     @field_validator("registry_url")
