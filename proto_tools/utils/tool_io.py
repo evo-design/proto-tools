@@ -609,8 +609,9 @@ class BaseToolInput(BaseModel):
 
 # Metadata fields populated by the @tool decorator — these differ between
 # runs and are excluded from output comparisons.
-_OUTPUT_METADATA_FIELDS: set[str] = {
+OUTPUT_METADATA_FIELDS: set[str] = {
     "tool_id",
+    "tool_version",
     "execution_time",
     "timestamp",
     "success",
@@ -632,6 +633,9 @@ class BaseToolOutput(BaseModel, ABC):
 
     Attributes:
         tool_id (str | None): Unique tool identifier (e.g., ``"blast-search"``).
+        tool_version (str | None): Version of the toolkit that produced the output,
+            from its ``versions.yaml``. Suffixed ``+dirty`` when the source no longer
+            matches that version. See ``notes/versioning.md``.
         execution_time (float | None): Execution time in seconds.
         timestamp (datetime): Execution timestamp.
         success (bool | None): Whether execution succeeded. ``True`` for any
@@ -659,6 +663,11 @@ class BaseToolOutput(BaseModel, ABC):
         default=None,
         title="Tool ID",
         description="Unique tool identifier (e.g., 'blast-search', 'esm3-embedding')",
+    )
+    tool_version: str | None = Field(
+        default=None,
+        title="Tool Version",
+        description="Toolkit version from versions.yaml; suffixed '+dirty' if the source has changed",
     )
     execution_time: float | None = Field(
         default=None,
@@ -708,6 +717,7 @@ class BaseToolOutput(BaseModel, ABC):
             "examples": [
                 {
                     "tool_id": "blast-search",
+                    "tool_version": "1.0.0",
                     "execution_time": 45.2,
                     "timestamp": "2025-10-06T10:30:00Z",
                     "success": True,
@@ -895,7 +905,7 @@ class BaseToolOutput(BaseModel, ABC):
             AssertionError: If the outputs differ, with the path to the first difference.
         """
         for field_name in type(self).model_fields:
-            if field_name in _OUTPUT_METADATA_FIELDS:
+            if field_name in OUTPUT_METADATA_FIELDS:
                 continue
             self_val = getattr(self, field_name)
             other_val = getattr(other, field_name)

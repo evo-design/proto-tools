@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import pathlib
 from typing import Any
 
 from pydantic import BaseModel
+
+from proto_tools.utils.tool_versions import PACKAGE_ROOT, defining_files
 
 # Bump when the hashing rules change. Without this, redefining a fingerprint
 # makes every deployment report drift at once, which is indistinguishable from
@@ -101,47 +102,6 @@ def env_hash(toolkit: str) -> tuple[str, str]:
     return digest.hexdigest()[:_HASH_LENGTH], env_name
 
 
-# Framework modules every tool shares. Hashing them would move every fingerprint at once
-# on any framework edit, which is indistinguishable from everything being broken -- and a
-# change there that alters the wire contract already moves ``schema_hash``.
-_FRAMEWORK_PREFIXES = ("proto_tools/utils/", "proto_tools/tools/tool_registry.py")
-
-_PACKAGE_ROOT = pathlib.Path(__file__).resolve().parents[2]
-
-
-def _defining_files(tool_key: str) -> list[pathlib.Path]:
-    """Return the first-party files defining a tool's behaviour and its models.
-
-    Autodetected: the run function's own module, plus the defining module of every
-    class in each model's MRO, so a shared base such as
-    ``structure_prediction/shared_data_models.py`` is covered without being declared.
-    """
-    import inspect
-
-    from proto_tools.tools import ToolRegistry
-
-    spec = ToolRegistry.get(tool_key)
-    found: set[pathlib.Path] = {pathlib.Path(spec.source_file).resolve()}
-    for model in (spec.input_model, spec.config_model, spec.output_model):
-        for klass in getattr(model, "__mro__", ()):
-            try:
-                origin = inspect.getsourcefile(klass)
-            except TypeError:
-                continue
-            if origin:
-                found.add(pathlib.Path(origin).resolve())
-
-    keep = []
-    for path in found:
-        try:
-            rel = path.relative_to(_PACKAGE_ROOT).as_posix()
-        except ValueError:
-            continue  # third-party or stdlib
-        if rel.startswith("proto_tools/") and not rel.startswith(_FRAMEWORK_PREFIXES):
-            keep.append(path)
-    return sorted(keep)
-
-
 def code_hash(tool_key: str) -> str:
     """Hash the first-party source defining a tool, so behaviour drift is visible.
 
@@ -155,8 +115,8 @@ def code_hash(tool_key: str) -> str:
         str: Truncated SHA-256 over the tool's defining sources.
     """
     digest = hashlib.sha256()
-    for path in _defining_files(tool_key):
-        digest.update(path.relative_to(_PACKAGE_ROOT).as_posix().encode())
+    for path in defining_files(tool_key):
+        digest.update(path.relative_to(PACKAGE_ROOT).as_posix().encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()[:_HASH_LENGTH]
 

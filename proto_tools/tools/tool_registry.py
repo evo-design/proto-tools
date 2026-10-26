@@ -108,6 +108,7 @@ from proto_tools.utils.tool_cache import (
 )
 from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, Metrics, MissingAssetError
+from proto_tools.utils.tool_versions import load_versions, toolkit_version
 
 ToolDispatchBackend = Callable[[str, BaseToolInput, BaseConfig], BaseToolOutput | None]
 
@@ -942,7 +943,7 @@ class ToolRegistry:
         1. Registers the tool in the registry with its metadata
         2. Wraps the function to automatically track execution time
         3. Handles errors and returns standardized output with success/failure status
-        4. Populates metadata fields (tool_id, execution_time, success, timestamp)
+        4. Populates metadata fields (tool_id, tool_version, execution_time, success, timestamp)
         5. Validates device allocation against tool requirements
 
         Args:
@@ -1130,6 +1131,7 @@ class ToolRegistry:
 
                 def _finish_dispatched(dispatched: BaseToolOutput, *, partial_result: bool = False) -> BaseToolOutput:
                     dispatched.tool_id = key
+                    dispatched.tool_version = _tool_version(key)
                     if dispatched.success is None:
                         dispatched.success = True
                     dispatched.execution_time = time.time() - start_time
@@ -1300,6 +1302,7 @@ class ToolRegistry:
                             spec.post_process_iterable(payloads)
                         cache_kwargs: dict[str, Any] = {
                             "tool_id": key,
+                            "tool_version": _tool_version(key),
                             "execution_time": 0.0,
                             "success": True,
                             "timestamp": datetime.now(),
@@ -1450,6 +1453,7 @@ class ToolRegistry:
 
                                 # Populate metadata fields
                                 result.tool_id = key
+                                result.tool_version = _tool_version(key)
                                 result.execution_time = time.time() - start_time
                                 if result.success is None:
                                     result.success = True
@@ -1943,6 +1947,23 @@ class ToolRegistry:
             return data
 
     @classmethod
+    def get_version(cls, key: str) -> str | None:
+        """Get the current version of a tool's toolkit from its versions.yaml.
+
+        Args:
+            key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search')
+
+        Returns:
+            str | None: Newest version in the toolkit's versions.yaml, or None if the
+                toolkit has none. See ``notes/versioning.md``.
+
+        Raises:
+            ValueError: If tool key is not found in registry
+        """
+        versions = load_versions(cls.get(key).toolkit_dir)
+        return next(iter(versions), None)
+
+    @classmethod
     def get_license(cls, key: str) -> dict[str, Any] | None:
         """Get license.yaml metadata for a tool.
 
@@ -2239,6 +2260,11 @@ def _restore_model_runtime_state(source: Any, target: Any) -> Any:
     return target
 
 
+def _tool_version(key: str) -> str | None:
+    """Return the version every output of ``key`` carries. See ``notes/versioning.md``."""
+    return toolkit_version(ToolRegistry._registry[key].toolkit_dir)
+
+
 def _make_error_output(
     output_class: type[BaseToolOutput],
     key: str,
@@ -2250,6 +2276,7 @@ def _make_error_output(
     """Construct a structured error output for a failed tool execution."""
     return output_class.model_construct(
         tool_id=key,
+        tool_version=_tool_version(key),
         execution_time=time.time() - start_time,
         success=False,
         timestamp=datetime.now(),

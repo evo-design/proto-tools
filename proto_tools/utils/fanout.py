@@ -99,7 +99,18 @@ def on_partial_failure() -> Literal["raise", "return_partial"]:
 # so one piece's survives and the others are dropped without a warning. A caller wanting a figure
 # that describes the whole batch has to pass it through ``extra_updates``, as both fan-out paths do
 # for ``dispatch_stats``. Per-piece telemetry, such as each container's own timing, does not survive.
-MERGE_OWNED_FIELDS = frozenset({"tool_id", "success", "execution_time", "timestamp", "warnings", "errors", "metadata"})
+MERGE_OWNED_FIELDS = frozenset(
+    {
+        "tool_id",
+        "tool_version",
+        "success",
+        "execution_time",
+        "timestamp",
+        "warnings",
+        "errors",
+        "metadata",
+    }
+)
 
 
 def warn_on_piece_disagreement(tool_key: str, source: str, iterable_output_field: str, results: list[Any]) -> None:

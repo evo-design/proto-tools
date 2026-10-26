@@ -75,6 +75,7 @@ proto_tools/tools/{category}/{toolkit}/
   cite.bib
   license.yaml
   links.yaml
+  versions.yaml
   examples/
     example.ipynb
   standalone/              # optional, for isolated tool environments
@@ -122,6 +123,9 @@ Rules that affect behavior:
 - Outputs must be JSON-serializable Pydantic-compatible types. Do not expose
   DataFrames, numpy arrays, or arbitrary objects as output fields.
 - Biological coordinates are 1-indexed and inclusive.
+- Any change to a toolkit's hashed source needs a new top entry in its
+  `versions.yaml`; the style tests print the line to add. See
+  `notes/versioning.md`.
 - Use `logging.getLogger(__name__)`, never `print()`. See `notes/logging.md`.
 - Keep heavy ML and optional dependencies lazy unless a Pydantic field type
   requires a module-level import.
@@ -159,6 +163,7 @@ targets are:
 - Error handling: `notes/error-handling.md`.
 - Logging: `notes/logging.md`.
 - Seeding and cache behavior: `notes/seeding.md`.
+- Toolkit versions and the output `tool_version` field: `notes/versioning.md`.
 - Storage and weights: `notes/storage.md`.
 - Test markers, placement, and patterns: `notes/testing.md`.
 - Tool implementation details: toolkit README, example notebook, metadata,

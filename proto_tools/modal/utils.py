@@ -216,7 +216,7 @@ LOCAL_DIR_IGNORE: list[str] = [
 # wire. ``metadata`` is kept: it's tool-specific payload and the only place that
 # telemetry survives into the result. success/errors/warnings also stay — on a
 # caught exception they're all that carries the traceback.
-_BASE_OUTPUT_FIELDS = frozenset({"tool_id", "execution_time", "timestamp"})
+_BASE_OUTPUT_FIELDS = frozenset({"tool_id", "tool_version", "execution_time", "timestamp"})
 
 
 def strip_base_fields(output_dict: dict[str, Any]) -> dict[str, Any]:

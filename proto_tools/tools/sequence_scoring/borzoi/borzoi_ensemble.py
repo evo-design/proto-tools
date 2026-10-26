@@ -21,6 +21,7 @@ from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolOutput, ConfigField
 from proto_tools.utils.progress import progress_bar
+from proto_tools.utils.tool_io import OUTPUT_METADATA_FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -141,16 +142,7 @@ class BorzoiEnsembleOutput(BaseToolOutput):
 
     def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
-        _metadata_fields = {
-            "tool_id",
-            "execution_time",
-            "timestamp",
-            "success",
-            "warnings",
-            "errors",
-            "metadata",
-        }
-        data = {k: v for k, v in self.model_dump().items() if k not in _metadata_fields}
+        data = {k: v for k, v in self.model_dump().items() if k not in OUTPUT_METADATA_FIELDS}
         if file_format == "json":
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)
