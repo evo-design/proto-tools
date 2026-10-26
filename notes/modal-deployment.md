@@ -118,12 +118,20 @@ volume, and the client compares them on dispatch.
 | Hash | Covers | Catches |
 |---|---|---|
 | `schema_hash` | the tool's input, config, and output JSON schemas | a field added, removed, or retyped |
-| `code_hash` | the tool's defining files plus its first-party MRO and the framework prefixes | a behaviour change with an unchanged schema |
+| `code_hash` | the tool's defining files plus its first-party MRO, excluding the framework prefixes | a behaviour change with an unchanged schema |
 | `env_hash` | a recursive walk of the standalone directory | a dependency or setup change |
 
 `ALGORITHM` is a version guard. A deployment recorded under a different algorithm reports
 that it cannot be compared rather than guessing, which is the correct answer and not a
 failure.
+
+The manifest also records `RESULT_FORMAT` (`utils.py`), the version of what
+`apply_tool_envelope` returns. No hash covers the envelope, because framework code is not
+fingerprinted, so a change to its output is invisible to the three above. Bump
+`RESULT_FORMAT` whenever that output changes shape. A caller that stores results reads it
+with `recorded_result_format` (absent means 1, the format before it was recorded) and can
+refuse a deployment it cannot read before dispatching to it. `drifted_fields` is the same
+comparison `drift_warnings` makes, as data.
 
 `code_hash` autodetects a tool's defining files from `spec.source_file` and its
 first-party MRO, so a tool that inherits behaviour from a shared base is covered without

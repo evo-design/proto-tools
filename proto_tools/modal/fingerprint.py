@@ -214,11 +214,17 @@ def write_manifest(service_class: str, environment: str | None = None, client: A
 
     import modal
 
+    from proto_tools.modal.utils import RESULT_FORMAT
+
     fps = fingerprints_for_service(service_class)
     if not fps:
         return 0
     payload = json.dumps(
-        {"algorithm": ALGORITHM, "tools": {k: v.model_dump() for k, v in fps.items()}},
+        {
+            "algorithm": ALGORITHM,
+            "result_format": RESULT_FORMAT,
+            "tools": {k: v.model_dump() for k, v in fps.items()},
+        },
         sort_keys=True,
     ).encode()
 
@@ -259,6 +265,51 @@ def read_manifest(
         return None
 
 
+# What a manifest recorded before it recorded a result format: Python-mode dumps.
+_UNRECORDED_RESULT_FORMAT = 1
+
+_HASH_FIELDS = ("schema_hash", "code_hash", "env_hash")
+
+
+def recorded_result_format(manifest: dict[str, Any]) -> int:
+    """Return the result format a deployment recorded, the first format when it recorded none.
+
+    Args:
+        manifest (dict[str, Any]): A manifest from :func:`read_manifest`.
+
+    Returns:
+        int: The deployment's :data:`~proto_tools.modal.utils.RESULT_FORMAT`.
+    """
+    value = manifest.get("result_format")
+    return value if isinstance(value, int) else _UNRECORDED_RESULT_FORMAT
+
+
+def drifted_fields(tool_key: str, manifest: dict[str, Any]) -> dict[str, tuple[Any, Any]]:
+    """Return each fingerprint field where ``tool_key``'s deployment differs from this checkout.
+
+    Empty when aligned, and when the deployment recorded nothing for the tool. A manifest hashed
+    by another algorithm cannot be compared hash by hash, so it reports ``algorithm`` alone.
+
+    Args:
+        tool_key (str): Tool to compare.
+        manifest (dict[str, Any]): A manifest from :func:`read_manifest`.
+
+    Returns:
+        dict[str, tuple[Any, Any]]: Field name to ``(deployed, local)`` value.
+    """
+    if manifest.get("algorithm") != ALGORITHM:
+        return {"algorithm": (manifest.get("algorithm"), ALGORITHM)}
+    entry = manifest.get("tools", {}).get(tool_key)
+    if entry is None:
+        return {}
+    local = fingerprint(tool_key)
+    return {
+        name: (entry.get(name), getattr(local, name))
+        for name in _HASH_FIELDS
+        if entry.get(name) != getattr(local, name)
+    }
+
+
 def drift_warnings(
     tool_key: str, service_class: str, environment: str | None = None, client: Any | None = None
 ) -> list[str]:
@@ -278,33 +329,33 @@ def drift_warnings(
         recorded = read_manifest(service_class, environment=environment, client=client)
         if recorded is None:
             return []
-        if recorded.get("algorithm") != ALGORITHM:
+        drifted = drifted_fields(tool_key, recorded)
+        if "algorithm" in drifted:
+            deployed_algorithm, _ = drifted["algorithm"]
             return [
                 f"{tool_key}: deployment recorded fingerprints with algorithm "
-                f"{recorded.get('algorithm')}, this client uses {ALGORITHM}; cannot compare."
+                f"{deployed_algorithm}, this client uses {ALGORITHM}; cannot compare."
             ]
-        entry = recorded.get("tools", {}).get(tool_key)
-        if entry is None:
-            return []
-
-        local = fingerprint(tool_key)
         out = []
-        if entry.get("schema_hash") != local.schema_hash:
+        if "schema_hash" in drifted:
+            deployed, calling = drifted["schema_hash"]
             out.append(
                 f"{tool_key}: the deployed tool's schema differs from the proto-tools making this "
-                f"call (deployed {entry.get('schema_hash')}, calling {local.schema_hash}). Calls may "
+                f"call (deployed {deployed}, calling {calling}). Calls may "
                 f"fail, or fields a newer deployment returns may be silently dropped. Redeploy to realign."
             )
-        if entry.get("code_hash") != local.code_hash:
+        if "code_hash" in drifted:
+            deployed, calling = drifted["code_hash"]
             out.append(
                 f"{tool_key}: the deployed tool's code differs from the proto-tools making this "
-                f"call (deployed {entry.get('code_hash')}, calling {local.code_hash}). Results from "
+                f"call (deployed {deployed}, calling {calling}). Results from "
                 f"the two may not be comparable. Redeploy to realign."
             )
-        if entry.get("env_hash") != local.env_hash:
+        if "env_hash" in drifted:
+            deployed, calling = drifted["env_hash"]
             out.append(
                 f"{tool_key}: the deployed tool's environment differs from the proto-tools making "
-                f"this call (deployed {entry.get('env_hash')}, calling {local.env_hash}). Calls will "
+                f"this call (deployed {deployed}, calling {calling}). Calls will "
                 f"still succeed, but results from the two may not be comparable."
             )
         return out
