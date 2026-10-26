@@ -174,6 +174,28 @@ def test_container_progress_removes_its_handler_and_restores_the_level():
     assert target.level == prior_level
 
 
+def test_container_progress_returns_without_waiting_on_the_stream_to_close(monkeypatch):
+    """Closing the stream makes network calls, and the tool's result must not wait behind them."""
+    queue = FakeQueue()
+
+    def slow_open():
+        time.sleep(1.0)  # a cold queue lookup, which the closing join would otherwise sit through
+        return queue
+
+    monkeypatch.setattr("proto_tools.modal.progress.open_progress_queue", slow_open)
+    earlier = set(threading.enumerate())  # an earlier test's closer may still be running
+    started = time.monotonic()
+    with container_progress("p1", level=logging.INFO):
+        logging.getLogger("proto_tools.t").info("folding")
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.5, f"the block waited {elapsed:.2f}s on the stream closing"
+    (closer,) = (thread for thread in set(threading.enumerate()) - earlier if thread.name.endswith("-close"))
+    closer.join(timeout=5.0)
+    assert [record["m"] for record in queue.records()] == ["folding"], "the final flush was lost"
+    assert queue.singles == [({"c": None, "t": "end"}, "p1")]
+
+
 # ============================================================================
 # The tailer terminates
 # ============================================================================

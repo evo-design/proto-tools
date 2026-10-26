@@ -6,11 +6,20 @@ for the length of one PR. The order of these two checks is the whole point of th
 """
 
 import io
+import logging
+import threading
 from unittest.mock import patch
 
+import pytest
 from tqdm import tqdm
 
-from proto_tools.utils.progress import _AnimatedProgressBar, _NotebookProgressBar, progress_bar
+from proto_tools.utils.base_config import HOSTED_ENV_VAR
+from proto_tools.utils.progress import (
+    _AnimatedProgressBar,
+    _NotebookProgressBar,
+    has_active_progress_bar,
+    progress_bar,
+)
 
 
 def _bar(*, notebook: bool, interactive: bool, disabled: bool = False):
@@ -78,3 +87,83 @@ def test_disabling_beats_every_other_condition():
     for notebook, interactive in ((True, True), (True, False), (False, True)):
         bar = _bar(notebook=notebook, interactive=interactive, disabled=True)
         assert not isinstance(bar, _AnimatedProgressBar | _NotebookProgressBar)
+
+
+# ============================================================================
+# A hosted worker reports a counting bar as status phases
+# ============================================================================
+@pytest.fixture
+def hosted(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Pin a redirected stream in a hosted worker, and hand back a settable fake clock."""
+    clock = [0.0]
+    monkeypatch.setenv(HOSTED_ENV_VAR, "1")
+    monkeypatch.setattr("proto_tools.utils.progress._in_notebook", lambda: False)
+    monkeypatch.setattr("proto_tools.utils.progress._is_interactive", lambda: False)
+    monkeypatch.setattr("proto_tools.utils.progress.time.monotonic", lambda: clock[0])
+    return clock
+
+
+def _phases(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [record.getMessage() for record in caplog.records if getattr(record, "update_status", False)]
+
+
+def test_a_hosted_bar_reports_its_count_at_human_pace(hosted, caplog):
+    """The first update shows at once, then one per interval, and reaching the total always shows."""
+    with caplog.at_level(logging.INFO, logger="proto_tools.utils.progress"):
+        bar = progress_bar(total=10, desc="Folding", unit="structure")
+        for step in range(10):
+            hosted[0] = step * 2.0  # an update every 2s against a 5s interval
+            bar.update(1)
+        bar.close()
+
+    assert _phases(caplog) == [
+        "Folding (1/10 structure)",
+        "Folding (4/10 structure)",
+        "Folding (7/10 structure)",
+        "Folding (10/10 structure)",
+    ]
+    assert not has_active_progress_bar(), "a hosted bar must leave set_substatus on its logging fallback"
+
+
+def test_a_hosted_bar_counts_iteration_without_a_total(hosted, caplog):
+    """A generator has no length, so the phase carries the count alone."""
+    with caplog.at_level(logging.INFO, logger="proto_tools.utils.progress"):
+        items = list(progress_bar((i for i in range(3)), desc="Designing", unit="seq"))
+
+    assert items == [0, 1, 2]
+    assert _phases(caplog) == ["Designing (1 seq)"]
+
+
+def test_a_hosted_bar_starts_no_thread(hosted, monkeypatch):
+    """A monitor thread is cost a hosted worker pays for nothing, even on a disabled tqdm."""
+    monkeypatch.setattr(tqdm, "monitor", None)  # otherwise an earlier bar's monitor hides a new one
+    before = set(threading.enumerate())
+    bar = progress_bar(total=2, desc="Folding")
+    bar.update(2)
+    bar.close()
+
+    assert set(threading.enumerate()) <= before
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"show_bar": False}, {"disable": True}], ids=["status-only spinner", "caller disabled"]
+)
+def test_a_hosted_bar_without_a_count_to_report_says_nothing(hosted, caplog, kwargs):
+    """A status-only spinner carries no count, and a caller that disabled its bar asked for silence."""
+    with caplog.at_level(logging.INFO, logger="proto_tools.utils.progress"):
+        bar = progress_bar(total=1, desc="Running tool", **kwargs)
+        bar.update(1)
+        bar.close()
+
+    assert _phases(caplog) == []
+
+
+def test_a_local_redirected_bar_reports_nothing(monkeypatch, caplog):
+    """Outside a hosted worker a redirected stream stays silent, as it always has."""
+    monkeypatch.delenv(HOSTED_ENV_VAR, raising=False)
+    with caplog.at_level(logging.INFO, logger="proto_tools.utils.progress"):
+        bar = _bar(notebook=False, interactive=False)
+        bar.update(1)
+
+    assert type(bar) is tqdm
+    assert _phases(caplog) == []
