@@ -122,6 +122,7 @@ class RfamRegionsOutput(BaseToolOutput):
         matched_regions (int): Regions left after the input filters.
         truncated (bool): Whether matched regions exceeded max_regions.
         regions (list[RfamRegion]): Matched regions, at most max_regions of them.
+        source_url (str): Rfam regions URL.
     """
 
     accession: str = Field(title="Accession", description="Rfam accession of the family")
@@ -133,6 +134,7 @@ class RfamRegionsOutput(BaseToolOutput):
     regions: list[RfamRegion] = Field(
         default_factory=list, title="Regions", description="Matched regions, at most max_regions of them"
     )
+    source_url: str = Field(title="Source URL", description="Rfam regions URL")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -282,6 +284,7 @@ def run_rfam_regions(
         if response is None:
             raise _not_found(inputs.family)
         accession, rfam_id, release, total, regions = _parse_regions(response.text, inputs.family)
+        source_url = str(response.url)
     finally:
         session.close()
 
@@ -294,4 +297,5 @@ def run_rfam_regions(
         matched_regions=len(matched),
         truncated=len(matched) > config.max_regions,
         regions=matched[: config.max_regions],
+        source_url=source_url,
     )

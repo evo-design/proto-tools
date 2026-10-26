@@ -70,6 +70,7 @@ class RfamFamilyOutput(BaseToolOutput):
         consensus_structure (str): Consensus secondary structure (#=GC SS_cons), WUSS notation.
         consensus_sequence (str): Reference consensus sequence (#=GC RF), aligned with it.
         seed_alignment (str | None): Full Stockholm seed alignment, when requested.
+        source_url (str): Rfam family record URL.
     """
 
     accession: str = Field(title="Accession", description="Rfam accession")
@@ -98,6 +99,7 @@ class RfamFamilyOutput(BaseToolOutput):
     seed_alignment: str | None = Field(
         default=None, title="Seed Alignment", description="Full Stockholm seed alignment, when requested"
     )
+    source_url: str = Field(title="Source URL", description="Rfam family record URL")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -201,6 +203,7 @@ def run_rfam_family(
         if record_response is None:
             raise _not_found(inputs.family)
         record = record_response.json()["rfam"]
+        source_url = str(record_response.url)
         accession = record["acc"]
         alignment_response = _rfam_get(session, _family_url(accession, "alignment", "stockholm"))
         if alignment_response is None:
@@ -231,4 +234,5 @@ def run_rfam_family(
         consensus_structure=structure,
         consensus_sequence=sequence,
         seed_alignment=stockholm if config.include_seed_alignment else None,
+        source_url=source_url,
     )

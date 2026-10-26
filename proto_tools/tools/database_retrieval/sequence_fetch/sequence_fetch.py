@@ -191,7 +191,7 @@ class FetchedSequence(BaseModel):
         sequence (str): Retrieved sequence string.
         length (int): Sequence length.
         checksum_sha256 (str | None): SHA256 checksum of sequence.
-        source_url (str | None): Source URL for provenance.
+        source_url (str): Source URL for provenance.
         inferred (bool): True if sequence is inferred, not directly curated.
     """
 
@@ -209,7 +209,7 @@ class FetchedSequence(BaseModel):
     sequence: str = Field(title="Sequence", description="Retrieved sequence")
     length: int = Field(ge=0, title="Length", description="Sequence length")
     checksum_sha256: str | None = Field(default=None, title="SHA256 Checksum", description="SHA256 checksum")
-    source_url: str | None = Field(default=None, title="Source URL", description="Source URL for provenance")
+    source_url: str = Field(title="Source URL", description="Source URL for provenance")
     inferred: bool = Field(
         default=False,
         title="Inferred",
@@ -801,7 +801,7 @@ def _fetch_protein(
             )
 
     term = _ncbi_term_for_request(request)
-    search_ids = _ncbi_esearch(
+    search_ids, _ = _ncbi_esearch(
         db="protein",
         term=term,
         max_results=config.max_candidates_per_source,
@@ -911,11 +911,11 @@ def _fetch_dna_genomic(
         )
 
     term = f"({_ncbi_term_for_request(request)}) AND biomol_genomic[PROP]"
-    ids = _ncbi_esearch(
+    ids, _ = _ncbi_esearch(
         db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
     )
     if not ids:
-        ids = _ncbi_esearch(
+        ids, _ = _ncbi_esearch(
             db="nuccore",
             term=_ncbi_term_for_request(request),
             config=ncfg,
@@ -986,7 +986,7 @@ def _fetch_dna_genomic_from_gene_locus(
     if request.gene_id:
         gene_ids = [request.gene_id]
     else:
-        gene_ids = _ncbi_esearch(
+        gene_ids, _ = _ncbi_esearch(
             db="gene",
             term=_ncbi_gene_term(request.target_name, request.organism),
             config=ncfg,
@@ -1132,7 +1132,7 @@ def _fetch_dna_cds(
 
     # Name-based fallback through nuccore
     term = f"({_ncbi_term_for_request(request)}) AND (mRNA[Title] OR CDS[Title] OR coding[Title])"
-    ids = _ncbi_esearch(
+    ids, _ = _ncbi_esearch(
         db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
     )
     if not ids:
@@ -1210,7 +1210,7 @@ def _fetch_rna_transcript(
         )
 
     term = f"({_ncbi_term_for_request(request)}) AND (biomol_mrna[PROP] OR biomol_rna[PROP])"
-    ids = _ncbi_esearch(
+    ids, _ = _ncbi_esearch(
         db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
     )
     if not ids:
@@ -1408,7 +1408,7 @@ def _sequence_record(
     source_database: Literal["ncbi", "uniprot", "pdb"],
     accession: str | None,
     sequence: str,
-    source_url: str | None,
+    source_url: str,
     inferred: bool,
 ) -> FetchedSequence:
     """Build a normalized FetchedSequence record."""

@@ -49,7 +49,7 @@ def test_ncbi_esearch_retries_connection_reset(monkeypatch):
     """Same reused-connection failure as rest.uniprot.org, here against NCBI eutils."""
     monkeypatch.setattr(shared_data_models, "_BACKOFF_SECONDS", 0.0)
     session = _ResetThenOkSession(failures=2, text='{"esearchresult": {"idlist": ["12345"]}}')
-    ids = _ncbi_esearch("protein", "lacI", 10, NCBIFetchConfig(), session)
+    ids, _ = _ncbi_esearch("protein", "lacI", 10, NCBIFetchConfig(), session)
     assert ids == ["12345"]
     assert session.calls == 3
 
