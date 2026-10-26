@@ -1,6 +1,7 @@
 """Tests for the ESM C masked pseudo-log-likelihood gradient tool."""
 
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -60,6 +61,23 @@ def test_esmc_gradient_dispatch_contract(monkeypatch):
     assert payload["model_checkpoint"] == "esmc_300m"
     assert len(result.results) == 2, "one result per candidate"
     assert result.vocab == AMINO_ACIDS_LIST
+
+
+@pytest.mark.integration
+def test_esmc_gradient_token_layout_matches_the_tokenizer() -> None:
+    """The worker's hand-built ``[cls] + residues + [eos]`` must equal the tokenizer's output.
+
+    ``compute_gradient`` assembles the model input itself instead of tokenizing, so a drift in
+    the special-token layout would score a sequence the model never sees while every other test
+    still passed — the finite-difference check only proves the derivative matches the objective,
+    not that the objective is the right one. ``_esmc_token_layout_env_check.py`` runs inside the
+    shared ESM env, where the tokenizer lives; a failed assertion surfaces as ``RuntimeError``.
+    """
+    from proto_tools.utils import run_in_env
+
+    check = Path(__file__).resolve().parent / "_esmc_token_layout_env_check.py"
+    output = run_in_env("esmc", script=str(check), timeout=1800)
+    assert "ESMC_TOKEN_LAYOUT_OK" in output, output
 
 
 @pytest.mark.uses_gpu
