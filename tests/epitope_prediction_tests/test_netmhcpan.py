@@ -9,8 +9,8 @@ marked ``integration`` and skip cleanly when no netMHCpan install is resolvable.
 netMHCpan's academic license forbids publishing benchmark results to third parties, so
 nothing here commits a table of real scores or a captured output file as an oracle. The
 parser is fed hand-written tables, and the integration tests assert relational and
-structural properties, which is also the only version-stable thing to assert: 4.1 and
-4.2 are not numerically comparable.
+structural properties, which is also the only version-stable thing to assert: netMHCpan
+scores are specific to the release that produced them.
 """
 
 import importlib
@@ -90,11 +90,21 @@ _EXP_ROW_WB = (
     "   1 HLA-A*02:01      AAAAAAAAV AAAAAAAAV  0  0  0  0  0    AAAAAAAAV"
     "         PEPLIST 0.4000000    1.500 0.800 <= WB"
 )
+_HEADS_HEADER = (
+    " Pos         MHC        Peptide      Core Of Gp Gl Ip Il        Icore"
+    "        Identity  Score_EL %Rank_EL Score_BA %Rank_BA  Aff(nM)"
+    " Score_Pathogen %Rank_Pathogen Score_Neo %Rank_Neo BindLevel"
+)
+_HEADS_ROW_SB = (
+    "   1 HLA-A*02:01      AAAAAAAAV AAAAAAAAV  0  0  0  0  0    AAAAAAAAV"
+    "         PEPLIST 0.9000000    0.100 0.700000    0.300    20.00"
+    "       0.650000          0.400  0.550000     0.500 <= SB"
+)
 
 
 def _table(header, *rows):
     """Wrap hand-written rows in the version banner and horizontal rules netMHCpan prints."""
-    return "\n".join(["# NetMHCpan version 4.1b", _RULE, header, _RULE, *rows, _RULE, ""])
+    return "\n".join(["# NetMHCpan version 4.2e", _RULE, header, _RULE, *rows, _RULE, ""])
 
 
 def _binding(rank, peptide="AAAAAAAAV", allele="HLA-A02:01", weak_rank=2.0):
@@ -242,6 +252,15 @@ def test_protein_config_rejects_empty_peptide_lengths():
 # ── Derived binding propensity and classification ────────────────────────────
 
 
+def test_protein_config_rejects_terminal_context_without_context():
+    """-termAcon only changes how -context pads, so requesting it alone is a mistake."""
+    with pytest.raises(ValueError, match="use_context"):
+        NetMHCpanProteinConfig(terminal_context_as_alanine=True)
+
+    config = NetMHCpanProteinConfig(use_context=True, terminal_context_as_alanine=True)
+    assert config.terminal_context_as_alanine
+
+
 def test_binding_propensity_is_one_half_at_the_weak_threshold():
     """The logistic is centred on the weak threshold, so it is exactly 0.5 there."""
     assert binding_propensity(2.0, 2.0) == 0.5
@@ -318,7 +337,7 @@ def test_validate_alleles_rejects_names_absent_from_the_allelenames_list(tmp_pat
 
 def test_diagnostic_lines_drops_the_option_dump():
     """The parameter echo is stripped so a failure message shows what actually went wrong."""
-    noisy = "# [-rth float] 0.5 Rank Threshold\n# [-BA] 0 Include Binding affinity\nError. boom\n"
+    noisy = "# [-rankS float] 0.5 Rank Threshold\n# [-BA] 0 Include Binding affinity\nError. boom\n"
     assert _standalone_run._diagnostic_lines(noisy) == "Error. boom"
 
 
@@ -339,13 +358,30 @@ def test_summarize_reports_tightest_affinity_when_present():
     assert metrics["best_affinity_nm"] == 7.3
 
 
+def test_summarize_omits_head_metrics_without_those_flags():
+    """EL-only predictions leave the pathogen and neo metrics absent rather than zero."""
+    metrics = summarize([_binding(0.1), _binding(5.0)], 2.0)
+    assert "best_rank_pathogen" not in metrics
+    assert "best_rank_neo" not in metrics
+
+
+def test_summarize_reports_best_head_ranks_when_present():
+    """With pathogen/neo values the reported metrics are the minima over the bindings."""
+    weak, strong = _binding(5.0), _binding(0.1)
+    weak.rank_pathogen, weak.rank_neo = 44.0, 51.0
+    strong.rank_pathogen, strong.rank_neo = 0.02, 0.18
+    metrics = summarize([weak, strong], 2.0)
+    assert metrics["best_rank_pathogen"] == 0.02
+    assert metrics["best_rank_neo"] == 0.18
+
+
 # ── stdout parsing (hand-written tables, not captured output) ────────────────
 
 
 def test_parse_output_reads_el_columns_and_version():
     """EL columns are read by header name and the version banner is picked up."""
     version, records = _standalone_run.parse_output(_table(_EL_HEADER, _EL_ROW_SB, _EL_ROW_NO_LEVEL))
-    assert version == "4.1b"
+    assert version == "4.2e"
     assert len(records) == 2
     assert records[0]["Peptide"] == "AAAAAAAAV"
     assert records[0]["Score_EL"] == "0.9000000"
@@ -377,6 +413,29 @@ def test_parse_output_ba_columns_are_additive():
     assert record["BindLevel"] == "<= SB"
 
 
+def test_parse_output_reads_pathogen_and_neo_columns():
+    """-pathogen and -neo add four more columns, again keyed by header rather than offset."""
+    _, records = _standalone_run.parse_output(_table(_HEADS_HEADER, _HEADS_ROW_SB))
+    record = records[0]
+    assert record["%Rank_EL"] == "0.100"
+    assert record["Aff(nM)"] == "20.00"
+    assert record["Score_Pathogen"] == "0.650000"
+    assert record["%Rank_Pathogen"] == "0.400"
+    assert record["Score_Neo"] == "0.550000"
+    assert record["%Rank_Neo"] == "0.500"
+    assert record["BindLevel"] == "<= SB"
+
+
+def test_binding_from_record_maps_the_4_2_head_columns():
+    """The pathogen and neo columns land on their typed fields, not just the raw record."""
+    _, records = _standalone_run.parse_output(_table(_HEADS_HEADER, _HEADS_ROW_SB))
+    binding = binding_from_record(records[0], 0.5, 2.0)
+    assert binding.score_pathogen == 0.65
+    assert binding.rank_pathogen == 0.4
+    assert binding.score_neo == 0.55
+    assert binding.rank_neo == 0.5
+
+
 def test_parse_output_handles_optional_exp_column():
     """An extra Exp column is keyed off the header, so %Rank_EL is still read correctly."""
     _, records = _standalone_run.parse_output(_table(_EXP_HEADER, _EXP_ROW_WB))
@@ -389,7 +448,7 @@ def test_parse_output_handles_optional_exp_column():
 def test_parse_output_without_a_table_raises():
     """Output with no result table is a failure, not an empty result set."""
     with pytest.raises(ValueError, match="no result table"):
-        _standalone_run.parse_output("# NetMHCpan version 4.1b\nError. Something went wrong.\n")
+        _standalone_run.parse_output("# NetMHCpan version 4.2e\nError. Something went wrong.\n")
 
 
 def test_binding_from_record_restates_allele_unstarred():
@@ -470,6 +529,45 @@ def test_netmhcpan_peptides_binding_affinity_flag_populates_ba_fields():
     assert (el_binding.score_ba, el_binding.rank_ba, el_binding.affinity_nm) == (None, None, None)
     # -BA is additive, so the eluted-ligand prediction must be unchanged by the flag.
     assert ba_binding.rank_el == el_binding.rank_el
+
+
+@pytest.mark.integration
+def test_netmhcpan_peptides_head_flags_populate_their_fields_additively():
+    """-pathogen and -neo add their own score/%rank without disturbing the EL prediction."""
+    _require_netmhcpan()
+    inputs = NetMHCpanPeptidesInput(peptides=[_A0201_BINDER])
+
+    both = run_netmhcpan_peptides(inputs, NetMHCpanPeptidesConfig(include_pathogen=True, include_neoepitope=True))
+    el_only = run_netmhcpan_peptides(inputs, NetMHCpanPeptidesConfig())
+
+    heads = both.predictions[0].bindings[0]
+    assert heads.score_pathogen is not None
+    assert heads.rank_pathogen is not None
+    assert heads.score_neo is not None
+    assert heads.rank_neo is not None
+
+    baseline = el_only.predictions[0].bindings[0]
+    assert (baseline.score_pathogen, baseline.rank_pathogen) == (None, None)
+    assert (baseline.score_neo, baseline.rank_neo) == (None, None)
+    assert heads.rank_el == baseline.rank_el
+
+    assert both.predictions[0].best_rank_pathogen == heads.rank_pathogen
+    assert both.predictions[0].best_rank_neo == heads.rank_neo
+
+
+@pytest.mark.integration
+def test_netmhcpan_protein_context_changes_scores_without_changing_shape():
+    """-context re-scores every window off its flanks, so scores move but the scan does not."""
+    _require_netmhcpan()
+    inputs = NetMHCpanProteinInput(sequences=[_PROTEIN])
+
+    plain = run_netmhcpan_protein(inputs, NetMHCpanProteinConfig(peptide_lengths=[_WINDOW_LENGTH]))
+    context = run_netmhcpan_protein(inputs, NetMHCpanProteinConfig(peptide_lengths=[_WINDOW_LENGTH], use_context=True))
+
+    plain_scan, context_scan = plain.results[0], context.results[0]
+    assert context_scan.num_windows == plain_scan.num_windows
+    assert [b.peptide for b in context_scan.bindings] == [b.peptide for b in plain_scan.bindings]
+    assert [b.rank_el for b in context_scan.bindings] != [b.rank_el for b in plain_scan.bindings]
 
 
 def test_protein_rejects_sequences_too_short_for_any_window():
@@ -765,10 +863,11 @@ def test_matches_upstream_reference_fasta_windowing():
         for row in reference
     }
 
-    # test.fsa.out was generated with netMHCpan's defaults, which the config mirrors.
+    # The binary's own -l default is 9, so the shipped reference covers nonamers only;
+    # peptide_lengths keeps the wider scan.
     result = run_netmhcpan_protein(
         NetMHCpanProteinInput(sequences=sequences),
-        NetMHCpanProteinConfig(alleles=["HLA-A02:01"]),
+        NetMHCpanProteinConfig(alleles=["HLA-A02:01"], peptide_lengths=[_WINDOW_LENGTH]),
     )
     ours = {
         (index, binding.position, binding.peptide): (binding.score_el, binding.rank_el)

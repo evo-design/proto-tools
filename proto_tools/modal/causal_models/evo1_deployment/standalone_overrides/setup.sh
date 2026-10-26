@@ -1,7 +1,7 @@
 #!/bin/bash
 # Override of: proto_tools/tools/causal_models/evo1/standalone/setup.sh
 # Intentional delta: pin flash-attn 2.7.4.post1 — Modal-only fix for stripedhyena ↔ flash-attn 2.8.x ABI break.
-# Last reviewed: 2026-06-08 by leba@stanford.edu.
+# Last reviewed: 2026-10-23.
 # Setup script for Evo1 standalone environment
 set -euo pipefail
 
@@ -27,8 +27,10 @@ else
     echo "Detected CUDA ${DETECTED_CUDA_MAJOR} — using CUDA toolkit ${CUDA_TOOLKIT_VERSION}"
 fi
 
+# Pin cuda-version so the solver cannot pull CUDA 13 sub-packages next to the 12.x toolkit.
 echo "Installing CUDA toolkit ${CUDA_TOOLKIT_VERSION} locally via micromamba..."
 if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
+    "cuda-version=${CUDA_TOOLKIT_VERSION}" \
     "cuda-toolkit=${CUDA_TOOLKIT_VERSION}" \
     "cuda-nvcc=${CUDA_TOOLKIT_VERSION}" \
     "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}" \

@@ -148,6 +148,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 <a href="proto_tools/tools/sequence_scoring/">sequence_scoring/</a>               # Genomic and regulatory scoring
 ├── <a href="proto_tools/tools/sequence_scoring/alphagenome/">alphagenome/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/borzoi/">borzoi/</a>
+├── <a href="proto_tools/tools/sequence_scoring/cherimoya/">cherimoya/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/deeppbs_specificity/">deeppbs_specificity/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/enformer/">enformer/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/genomic_intelligence/">genomic_intelligence/</a>

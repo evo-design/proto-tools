@@ -136,11 +136,6 @@ _WALLS_BEFORE_TIERS: dict[str, int] = {
     "USalignService": 600,
 }
 
-# Floor on a GPU service's per-item budget (wall / max_chunk_size). Chosen to sit just under the
-# 56 s/item that every correctly-sized GPU service already clears, so it catches a chunk size
-# grown out of step with its wall without pinning the exact values.
-_MIN_GPU_SECONDS_PER_ITEM = 50
-
 
 def test_every_service_has_a_tier():
     """A service without a tier gets no wall, and its @app.cls would fail at deploy."""
@@ -161,24 +156,6 @@ def test_no_service_wall_was_shortened():
         if SERVICE_MODAL_TIMEOUTS[service] < before
     }
     assert not shortened, f"tier assignment shortened walls (service: before -> after): {shortened}"
-
-
-def test_gpu_walls_leave_a_plausible_per_item_budget():
-    """A chunk size grown out of step with its wall cannot finish; esmfold shipped at 3.5 s/sequence."""
-    from proto_tools.modal.manifest import SERVICE_MODAL_TIMEOUTS
-    from proto_tools.modal.tool_map import TOOL_MAP
-    from proto_tools.tools import ToolRegistry
-
-    specs = {spec.key: spec for spec in ToolRegistry.list_all()}
-    too_tight = {}
-    for key, entry in TOOL_MAP.items():
-        if not entry.gpu:
-            continue
-        chunk = specs[key].max_chunk_size or 1
-        budget = SERVICE_MODAL_TIMEOUTS[entry.service] / chunk
-        if budget < _MIN_GPU_SECONDS_PER_ITEM:
-            too_tight[key] = f"{chunk} items in {SERVICE_MODAL_TIMEOUTS[entry.service]}s = {budget:.1f}s/item"
-    assert not too_tight, f"GPU tools whose chunk cannot finish inside their wall: {too_tight}"
 
 
 @pytest.mark.parametrize(

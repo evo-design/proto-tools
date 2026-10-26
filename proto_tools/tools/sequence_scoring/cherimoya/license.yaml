@@ -1,0 +1,11 @@
+code:
+  spdx: MIT
+  url: https://github.com/jmschrei/cherimoya/blob/main/LICENSE
+weights:
+  spdx: CC-BY-4.0
+  url: https://huggingface.co/programmable-genomics/CATv1/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: CATv1 checkpoints are trained on ENCODE DNase-seq and ATAC-seq data (ENCODE data use policy, no restrictions on use). The bundled catalog's default experiment per biosample comes from Chorus (MIT, Pinello Lab).
+last_updated: '2026-10-23'

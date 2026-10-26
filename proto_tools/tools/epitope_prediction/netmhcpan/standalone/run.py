@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 # NMHOME to a DTU path (clobbering any environment value) and requires tcsh, which is
 # often absent. Editing it is also forbidden by the academic license, so the real binary
 # underneath is invoked directly with -rdir/-tdir.
-_BIN_RELPATH = "bin/netMHCpan"
+_BIN_RELPATH = "bin/netMHCpan-4.2"
 _PSEUDO_RELPATH = "data/MHC_pseudo.dat"
 
 # netMHCpan gates the -a flag on data/allelenames, which is not the same set as
@@ -82,7 +82,7 @@ def _require_install(root: str, source: str) -> tuple[str, str]:
         detail = "is not executable" if os.path.isfile(binary) else "was not found"
         raise FileNotFoundError(
             f"{source} is set to {root!r} but the netMHCpan binary {detail} at "
-            f"{_platform_dir()}/{_BIN_RELPATH} underneath it. Point it at the netMHCpan-4.1 "
+            f"{_platform_dir()}/{_BIN_RELPATH} underneath it. Point it at the netMHCpan-4.2 "
             "install root (the directory holding the per-platform subdirectory)."
         )
     base = os.path.join(root, _platform_dir())
@@ -90,9 +90,9 @@ def _require_install(root: str, source: str) -> tuple[str, str]:
         if not os.path.isfile(os.path.join(base, relpath)):
             raise FileNotFoundError(
                 f"netMHCpan install at {root} (from {source}) is missing its data files "
-                f"({_platform_dir()}/{relpath}). Download data.tar.gz from "
-                "https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/ and extract it inside "
-                "the netMHCpan-4.1 directory."
+                f"({_platform_dir()}/{relpath}). The archive ships its networks and threshold "
+                "tables, so this install is incomplete; re-extract "
+                "netMHCpan-4.2e<platform>.tar.gz at the install root."
             )
     return binary, allelenames
 
@@ -130,9 +130,9 @@ def resolve_install(netmhcpan_dir: str | None = None) -> tuple[str, str]:
 
     raise FileNotFoundError(
         "netMHCpan was not found. It is license-gated and cannot be downloaded automatically. "
-        "Set config.netmhcpan_dir to the netMHCpan-4.1 install root, or point "
+        "Set config.netmhcpan_dir to the netMHCpan-4.2 install root, or point "
         f"PROTO_NETMHCPAN_WEIGHTS_DIR / {' / '.join(_ENV_VARS)} at it. "
-        "Academic users register at https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/; "
+        "Academic users register at https://services.healthtech.dtu.dk/services/NetMHCpan-4.2/; "
         "commercial use requires a separate license from health-software@dtu.dk. "
         f"Looked for {_platform_dir()}/{_BIN_RELPATH} under the managed cache "
         f"({cache_root or 'unavailable'})."
@@ -312,13 +312,17 @@ def _base_argv(binary: str, workdir: str, alleles: list[str], config: dict[str, 
         os.path.join(workdir, _TDIR_TEMPLATE),
         "-a",
         ",".join(alleles),
-        "-rth",
+        "-rankS",
         str(config["strong_rank"]),
-        "-rlt",
+        "-rankW",
         str(config["weak_rank"]),
     ]
     if config.get("include_binding_affinity"):
         argv.append("-BA")
+    if config.get("include_pathogen"):
+        argv.append("-pathogen")
+    if config.get("include_neoepitope"):
+        argv.append("-neo")
     return argv
 
 
@@ -343,7 +347,12 @@ def predict_peptides(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def predict_protein(input_dict: dict[str, Any]) -> dict[str, Any]:
-    """Enumerate k-mers from each protein sequence and score them against an allele panel."""
+    """Enumerate k-mers from each protein sequence and score them against an allele panel.
+
+    ``-context`` is available here but not in peptide mode: the flanking residues it encodes
+    are read off the supplied protein, whereas peptide mode would require the caller to
+    provide each peptide's flanks in netMHCpan's PEPTIDECONT format.
+    """
     binary, pseudo = resolve_install(input_dict.get("netmhcpan_dir"))
     alleles = input_dict["alleles"]
     validate_alleles(alleles, pseudo)
@@ -352,6 +361,10 @@ def predict_protein(input_dict: dict[str, Any]) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="netmhcpan_") as workdir:
         fasta = _write_fasta(sequences, workdir)
         argv = _base_argv(binary, workdir, alleles, input_dict)
+        if input_dict.get("use_context"):
+            argv.append("-context")
+            if input_dict.get("terminal_context_as_alanine"):
+                argv.append("-termAcon")
         argv.extend(["-l", ",".join(str(length) for length in input_dict["peptide_lengths"]), fasta])
         version, records = parse_output(_invoke(argv, workdir, install_base_of(binary)))
 

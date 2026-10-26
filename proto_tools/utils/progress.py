@@ -19,12 +19,15 @@ import logging
 import os
 import sys
 import threading
+import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
 
 from tqdm import tqdm
 from tqdm.auto import tqdm as tqdm_auto
+
+from proto_tools.utils.base_config import is_hosted_env
 
 
 # ============================================================================
@@ -463,6 +466,65 @@ class _AnimatedProgressBar(tqdm):  # type: ignore[type-arg]
 
 
 # ============================================================================
+# Hosted progress bar (no rendering; reports its count as status phases)
+# ============================================================================
+# Seconds between the phases a hosted bar reports, which keeps a caller's status at human pace.
+_HOSTED_PHASE_INTERVAL = 5.0
+
+
+class _HostedProgressBar(tqdm):  # type: ignore[type-arg]
+    """Disabled bar that reports its count as throttled ``update_status`` records.
+
+    A hosted worker has no terminal to draw on, but a caller can see status records. This bar
+    stays disabled, so it renders nothing and starts no monitor thread, and it counts updates
+    itself. It reports the first update at once, then at most one every
+    ``_HOSTED_PHASE_INTERVAL`` seconds, plus the update that reaches ``total``. Each report is one
+    log call, so a tight loop pays a clock read per update and nothing more.
+
+    It never joins the active-bar stack, so :func:`set_substatus` keeps logging its phases.
+    """
+
+    # A disabled tqdm still starts the class-wide monitor thread from ``__new__`` unless this is 0.
+    monitor_interval = 0
+
+    def __init__(
+        self, iterable: Any = None, desc: str | None = None, *args: Any, unit: str = "it", **kwargs: Any
+    ) -> None:
+        """Create a hosted bar. Arguments are forwarded to tqdm, which is always disabled."""
+        kwargs["disable"] = True
+        super().__init__(iterable, desc, *args, unit=unit, **kwargs)  # type: ignore[call-overload]
+        # A disabled tqdm returns from ``__init__`` before storing these.
+        self._phase_desc = desc or ""
+        self._phase_unit = unit
+        self._last_phase: float | None = None
+        self._reported_total = False
+
+    def __iter__(self) -> Any:
+        """Walk the iterable, counting each item as tqdm does when enabled."""
+        for obj in self.iterable:
+            yield obj
+            self.update(1)
+
+    def update(self, n: float | None = 1) -> bool | None:
+        """Count ``n`` more items and report a phase when the throttle allows."""
+        self.n += 1 if n is None else n
+        now = time.monotonic()
+        reached_total = self.total is not None and self.n >= self.total
+        if reached_total and not self._reported_total:
+            self._reported_total = True
+        elif self._last_phase is not None and now - self._last_phase < _HOSTED_PHASE_INTERVAL:
+            return None
+        self._last_phase = now
+        count = f"{self.n}/{self.total}" if self.total is not None else f"{self.n}"
+        _fallback_log(f"{self._phase_desc} ({count} {self._phase_unit})".lstrip())
+        return True
+
+    def set_description(self, desc: str | None = None, refresh: bool | None = True) -> None:  # noqa: ARG002
+        """Rename the phase this bar reports."""
+        self._phase_desc = desc or ""
+
+
+# ============================================================================
 # Public API
 # ============================================================================
 def progress_bar(  # noqa: D417
@@ -474,7 +536,8 @@ def progress_bar(  # noqa: D417
     spinner prefix (e.g. ``⠙``) in the description.  Infrastructure code
     can call ``set_substatus()`` to update the description as phases change.
 
-    Captured/non-TTY streams are silent. If spinners are disabled
+    Captured/non-TTY streams are silent. In a hosted worker a counting bar instead reports its
+    progress as throttled ``update_status`` records, which a caller can see. If spinners are disabled
     (``PROTO_NO_SPINNER=1``) in an interactive terminal, returns a plain
     ``tqdm`` bar.
 
@@ -484,7 +547,8 @@ def progress_bar(  # noqa: D417
         spinner_style (str): Animation style name from ``SPINNER_STYLES``.
         show_bar (bool): Whether to show the progress bar widget. When False,
             only the spinner, description, and elapsed time are visible.
-            Only affects notebook rendering.
+            Affects notebook rendering, and whether a hosted worker reports
+            the bar's count.
         prefix (str | None): Optional static badge rendered before the animated
             frame (e.g. ``"☁"`` to flag cloud-dispatched runs). Held fixed
             across frames so it functions as a glanceable mode indicator.
@@ -517,6 +581,9 @@ def progress_bar(  # noqa: D417
         except (AttributeError, ValueError):
             interactive = False
     if not in_notebook and not interactive:
+        # Status-only spinners carry no count, so a hosted worker has nothing to report for them.
+        if show_bar and is_hosted_env():
+            return _HostedProgressBar(*args, **kwargs)
         kwargs["disable"] = True
         return tqdm(*args, **kwargs)
     if _is_disabled():

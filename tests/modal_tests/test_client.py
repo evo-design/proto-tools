@@ -81,7 +81,7 @@ def test_a_container_declares_itself_a_hosted_environment():
         seen["hosted"] = os.environ.get("PROTO_IS_HOSTED_ENV")
 
         class _Result:
-            def model_dump(self):
+            def model_dump(self, mode: str = "python"):
                 return {"tool_id": "x", "success": True}
 
         return _Result()

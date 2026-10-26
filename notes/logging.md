@@ -103,6 +103,7 @@ Standard Python logging hierarchy applies to records re-emitted by the drain thr
 | `SpinnerFromLogsHandler` | `proto_tools/utils/logging_config.py` | Parent-side: routes flagged records to the active bar via `update_active_substatus(...)` |
 | `install_logger_class` | `proto_tools/utils/logging_config.py` | Sets `ProtoLogger` as default class; called from `proto_tools/__init__.py` |
 | `install_spinner_handler` | `proto_tools/utils/logging_config.py` | Attaches spinner handler to `proto_tools` logger |
+| `_HostedProgressBar` | `proto_tools/utils/progress.py` | Hosted worker: a disabled bar that reports its count as throttled `update_status` records |
 | `verbose_level_from_env` | `proto_tools/utils/logging_config.py` | Parses `PROTO_WORKER_VERBOSE` as int 0..3 |
 | `_TAG_PREFIX` | `proto_tools/utils/logging_config.py` (parent) and `standalone_helpers/proto_logging.py` (subprocess) | Wire-format constant; **must match** on both sides |
 | `_drain_subprocess_stderr` / `_handle_raw_stderr_line` / `_reemit_tagged_line` | `proto_tools/utils/persistent_worker.py` | Drain thread; demuxes tagged lines, ring-buffers / tees untagged |

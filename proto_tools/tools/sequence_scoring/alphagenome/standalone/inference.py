@@ -22,6 +22,27 @@ from standalone_helpers import get_logger, resolve_weights_dir
 
 logger = get_logger(__name__)
 
+# Seconds between per-request phases, which keeps a caller's status at human pace.
+_PHASE_INTERVAL_SECONDS = 5.0
+
+
+class _ThrottledStatus:
+    """Report per-item phases: the first at once, then at most one per interval, and the last."""
+
+    def __init__(self, template: str, total: int, interval: float = _PHASE_INTERVAL_SECONDS) -> None:
+        self._template = template
+        self._total = total
+        self._interval = interval
+        self._last: float | None = None
+
+    def __call__(self, number: int) -> None:
+        """Report item ``number`` (1-based) of the total when the throttle allows."""
+        now = time.monotonic()
+        if number < self._total and self._last is not None and now - self._last < self._interval:
+            return
+        self._last = now
+        logger.update_status(self._template, number, self._total)
+
 
 def _safe_tidy_scores(scores: Any) -> list[Any]:
     """Wrap variant_scorers_lib.tidy_scores to handle upstream empty-result bug."""
@@ -213,6 +234,7 @@ class AlphaGenomeModel:
         parsed = [_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]) for i in intervals]
         self._ensure_loaded(device)
 
+        logger.update_status("Predicting %d interval(s)", len(parsed))
         predictions = self.model.predict_intervals(
             intervals=parsed,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
@@ -246,6 +268,7 @@ class AlphaGenomeModel:
         ]
         self._ensure_loaded(device)
 
+        logger.update_status("Predicting %d variant effect(s)", len(parsed_variants))
         predictions = self.model.predict_variants(
             intervals=parsed_intervals,
             variants=parsed_variants,
@@ -269,6 +292,7 @@ class AlphaGenomeModel:
             _validate_sequence_length(len(seq), operation="predict_sequences")
         self._ensure_loaded(device)
 
+        logger.update_status("Predicting %d sequence(s)", len(sequences))
         predictions = self.model.predict_sequences(
             sequences=sequences,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
@@ -303,6 +327,7 @@ class AlphaGenomeModel:
             )
         self._ensure_loaded(device)
 
+        logger.update_status("Scoring %d variant(s)", len(parsed_variants))
         scores_per_variant = self.model.score_variants(
             intervals=parsed_intervals,
             variants=parsed_variants,
@@ -327,6 +352,7 @@ class AlphaGenomeModel:
             parsed.append(_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]))
         self._ensure_loaded(device)
 
+        logger.update_status("Scoring %d interval(s)", len(parsed))
         scores_per_interval = self.model.score_intervals(
             intervals=parsed,
             interval_scorers=_resolve_interval_scorers(interval_scorers),
@@ -347,7 +373,8 @@ class AlphaGenomeModel:
         scorers = _resolve_variant_scorers(variant_scorers, organism)
 
         all_scores = []
-        for req in requests:
+        report = _ThrottledStatus("ISM scoring request %d of %d", len(requests))
+        for number, req in enumerate(requests, start=1):
             width = req["interval_end"] - req["interval_start"]
             _validate_min_scorer_width(width, _MIN_VARIANT_SCORER_WIDTH, "score_ism_variants_batch")
 
@@ -367,6 +394,7 @@ class AlphaGenomeModel:
                     alternate_bases=req["alternate_bases"],
                 )
 
+            report(number)
             scores = self.model.score_ism_variants(
                 interval=interval,
                 ism_interval=ism_interval,
@@ -383,8 +411,7 @@ class AlphaGenomeModel:
     # ============================================================================
     def load(self, device: str = "cuda", verbose: bool = False) -> None:
         """Load AlphaGenome model to device."""
-        if verbose:
-            logger.info(f"Loading AlphaGenome model: {self.model_version} on {device}")
+        logger.update_status(f"Loading AlphaGenome model: {self.model_version} on {device}")
 
         from standalone_helpers import resolve_jax_device
 
