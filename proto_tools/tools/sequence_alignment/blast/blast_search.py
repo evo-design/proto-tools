@@ -62,6 +62,21 @@ BLAST_TASKS = Literal[
 # Simple heuristic for raw sequence detection: only contains valid
 # nucleotide/protein characters plus common whitespace.
 _SEQUENCE_CHARS = re.compile(r"^[A-Za-z*\-\s]+$")
+_STANDARD_HIT_FIELDS = (
+    "qseqid",
+    "sseqid",
+    "pident",
+    "length",
+    "mismatch",
+    "gapopen",
+    "qstart",
+    "qend",
+    "sstart",
+    "send",
+    "evalue",
+    "bitscore",
+)
+_ALIGNMENT_DETAIL_FIELDS = ("qseq", "sseq", "btop")
 
 
 # ============================================================================
@@ -86,6 +101,9 @@ class BlastHit(BaseModel):
         send (int): End of alignment in subject.
         evalue (float): Expect value.
         bitscore (float): Bit score.
+        qseq (str | None): Aligned query sequence, including gaps.
+        sseq (str | None): Aligned subject sequence, including gaps.
+        btop (str | None): BLAST traceback operations encoding mismatches and gaps.
     """
 
     qseqid: str = Field(title="Query ID", description="Query sequence ID")
@@ -103,6 +121,21 @@ class BlastHit(BaseModel):
     send: int = Field(title="Subject End", description="1-indexed inclusive subject end")
     evalue: float = Field(title="E-value", description="Expect value; smaller values are more significant")
     bitscore: float = Field(title="Bit Score", description="Alignment bit score; higher is better")
+    qseq: str | None = Field(
+        default=None,
+        title="Aligned Query Sequence",
+        description="Aligned query sequence including gaps, when returned by the backend",
+    )
+    sseq: str | None = Field(
+        default=None,
+        title="Aligned Subject Sequence",
+        description="Aligned subject sequence including gaps, when returned by the backend",
+    )
+    btop: str | None = Field(
+        default=None,
+        title="BLAST Traceback Operations",
+        description="BTOP mismatch and gap encoding, when returned by the backend",
+    )
 
 
 # Input:
@@ -202,11 +235,13 @@ class BlastSearchOutput(BaseToolOutput):
 
         path = Path(export_path).with_suffix(f".{file_format}")
 
-        df = pd.DataFrame([hit.model_dump() for hit in self.hits])
-
         if file_format == "csv":
+            # Preserve the established twelve-column CSV contract. Alignment
+            # detail remains available on BlastHit and in the JSON export.
+            df = pd.DataFrame([hit.model_dump(include=set(_STANDARD_HIT_FIELDS)) for hit in self.hits])
             df.to_csv(path, index=False)
         elif file_format == "json":
+            df = pd.DataFrame([hit.model_dump() for hit in self.hits])
             df.to_json(path, orient="records", indent=2)
         else:
             raise ValueError(f"Unsupported format: {file_format}")
@@ -218,7 +253,7 @@ class BlastSearchConfig(BaseConfig):
 
     Controls search mode (online vs local), BLAST program selection, scoring,
     filtering, and output options. The wrapper's online path goes through
-    Biopython's NCBIWWW.qblast which only exposes a subset of BLAST+ flags;
+    NCBI's QBLAST web API which only exposes a subset of BLAST+ flags;
     fields outside that subset are local-only and gated via ``depends_on`` /
     listed in ``_local_only_fields``.
 
@@ -262,7 +297,7 @@ class BlastSearchConfig(BaseConfig):
             (tblastn/tblastx, both modes).
         extra_args (list[str]): Verbatim BLAST+ CLI tokens for niche flags
             not exposed above (e.g. ``["-max_hsps", "1"]``). Local mode only;
-            online mode goes through ``NCBIWWW.qblast`` which doesn't accept
+            online mode goes through the NCBI web API which doesn't accept
             arbitrary CLI tokens.
     """
 
@@ -371,7 +406,7 @@ class BlastSearchConfig(BaseConfig):
 
     # --- Filtering parameters ---
     # Many of these are local-only because the wrapper's online path goes
-    # through Biopython's NCBIWWW.qblast, which doesn't expose them.
+    # through the NCBI web API, which doesn't expose them.
     max_target_seqs: int | None = ConfigField(
         default=None,
         title="Max Target Sequences",
@@ -585,14 +620,24 @@ def run_blast_search(
 def _online_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> BlastSearchOutput:
     """Submit query to NCBI QBLAST and return results."""
     from Bio import SeqIO
-    from Bio.Blast import NCBIWWW, NCBIXML
+    from Bio.Blast import NCBIXML
 
-    # Resolve query sequence
+    from proto_tools.tools.sequence_alignment.blast._online_client import search_xml
+
+    # Preserve every FASTA record and its identifier, including no-hit queries.
+    query_ids: list[str] | None = None
     if inputs.query_type == "fasta_path":
-        seq_record = next(SeqIO.parse(inputs.query, "fasta"))  # type: ignore[no-untyped-call]
-        query_seq = str(seq_record.seq)
+        sequences = list(SeqIO.parse(inputs.query, "fasta"))  # type: ignore[no-untyped-call]
+        query_ids = [record.id for record in sequences]
+        if not sequences or any(not record.seq for record in sequences):
+            raise ValueError("Online BLAST requires nonempty FASTA records")
+        if len(set(query_ids)) != len(query_ids):
+            raise ValueError("Online BLAST requires unique FASTA identifiers")
+        query_seq = "".join(f">{record.id}\n{record.seq}\n" for record in sequences)
+        query_length = sum(len(record.seq) for record in sequences)
     else:
         query_seq = inputs.query
+        query_length = len(query_seq)
 
     # Build qblast keyword arguments from typed config fields.
     # Mapping: config field name → qblast kwarg name.
@@ -625,18 +670,24 @@ def _online_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> Blast
         ge = config.gapextend if config.gapextend is not None else 1
         qblast_kwargs["gapcosts"] = f"{go} {ge}"
 
-    handle = NCBIWWW.qblast(
-        program=config.program,
-        database=config.database,
-        sequence=query_seq,
-        format_type="XML",
-        **qblast_kwargs,
+    raw_xml = search_xml(
+        {
+            "PROGRAM": config.program,
+            "DATABASE": config.database,
+            "QUERY": query_seq,
+            **{key.upper(): value for key, value in qblast_kwargs.items()},
+        },
+        timeout=config.timeout,
+        client_identity=config._client_identity,
     )
 
-    raw_xml = handle.read()
-    handle.close()
-
     blast_records = list(NCBIXML.parse(io.StringIO(raw_xml)))  # type: ignore[no-untyped-call]
+    returned_ids = [record.query.split()[0] for record in blast_records]
+    if query_ids is not None:
+        if len(returned_ids) != len(query_ids) or set(returned_ids) != set(query_ids):
+            raise ValueError("Online BLAST response query identifiers do not match submitted FASTA")
+    elif len(blast_records) != 1:
+        raise ValueError("Online BLAST single-sequence response must contain one query")
     hits = _blast_results_to_hits(blast_records)
 
     return BlastSearchOutput(
@@ -644,7 +695,8 @@ def _online_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> Blast
             "search_mode": "online",
             "program": config.program,
             "database": config.database,
-            "query_length": len(query_seq),
+            "query_length": query_length,
+            "query_ids": returned_ids,
         },
         hits=hits,
     )
@@ -704,9 +756,10 @@ def _local_search(
             cli_args.extend([flag, str(val)])
     cli_args.extend(str(arg) for arg in config.extra_args)
 
-    # Default to tabular output unless the user overrides via extra_args.
+    # Alignment strings and BTOP let downstream consumers locate mismatches,
+    # including biologically important mismatches near an oligo's 3-prime end.
     if "-outfmt" not in cli_args:
-        cli_args.extend(["-outfmt", "6"])
+        cli_args.extend(["-outfmt", "6 std qseq sseq btop"])
 
     input_data = {
         "operation": "local_blast",
@@ -735,7 +788,11 @@ def _local_search(
     raw_output = output_data["stdout"]
     hits: list[BlastHit] = []
     if raw_output.strip():
-        reader = csv.DictReader(io.StringIO(raw_output), delimiter="\t", fieldnames=list(BlastHit.model_fields))
+        reader = csv.DictReader(
+            io.StringIO(raw_output),
+            delimiter="\t",
+            fieldnames=[*_STANDARD_HIT_FIELDS, *_ALIGNMENT_DETAIL_FIELDS],
+        )
         hits.extend(BlastHit(**row) for row in reader)  # type: ignore[arg-type]
 
     return BlastSearchOutput(
@@ -752,8 +809,9 @@ def _local_search(
 def _blast_results_to_hits(blast_records: Any) -> list[BlastHit]:
     """Convert Biopython BLAST records to BlastHit objects.
 
-    Produces the same 12-column layout as BLAST+ ``-outfmt 6`` so that
-    online and local results are directly comparable.
+    Produces the standard BLAST fields plus aligned query and subject strings.
+    BTOP is unavailable from Biopython's XML representation and remains
+    ``None`` for online results.
 
     Args:
         blast_records (Any): List of Bio.Blast.Record objects from NCBIXML.parse.
@@ -785,6 +843,8 @@ def _blast_results_to_hits(blast_records: Any) -> list[BlastHit]:
                         send=hsp.sbjct_end,
                         evalue=hsp.expect,
                         bitscore=hsp.bits,
+                        qseq=hsp.query,
+                        sseq=hsp.sbjct,
                     )
                 )
 
