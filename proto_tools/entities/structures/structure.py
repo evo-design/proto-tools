@@ -1227,6 +1227,129 @@ class Structure(BaseModel):
             raise ValueError(f"Chain '{chain_id}' not found in structure. Available chains: {list(residue_map.keys())}")
         return [pos for _, pos in residue_map[chain_id]]
 
+    def get_chain_residue_ids(self, chain_id: str | None = None) -> dict[str, list[tuple[int, str]]]:
+        """Get each chain's polymer residue IDs as ``(number, insertion code)``, in chain order.
+
+        Unlike :meth:`get_chain_positions`, keeps the insertion code, so ``10`` and ``10A``
+        stay distinct residues rather than collapsing onto one number.
+
+        Args:
+            chain_id (str | None): Chain to read, or ``None`` for every polymer chain.
+
+        Returns:
+            dict[str, list[tuple[int, str]]]: Chain ID to residue IDs, first model only.
+
+        Raises:
+            ValueError: If ``chain_id`` is given but has no polymer residues.
+
+        Examples:
+            >>> antibody.get_chain_residue_ids("H")["H"][51:54]
+            [(52, ''), (52, 'A'), (53, '')]
+        """
+        self.gemmi_struct.setup_entities()
+        chains = [chain for chain in self.gemmi_struct[0] if chain.get_polymer() and chain_id in (None, chain.name)]
+        if chain_id is not None and not chains:
+            raise ValueError(f"Chain '{chain_id}' has no polymer residues")
+        return {
+            chain.name: [(residue.seqid.num, residue.seqid.icode.strip()) for residue in chain.get_polymer()]  # type: ignore[misc]
+            for chain in chains
+        }
+
+    def renumbered_sequentially(self) -> tuple[str, dict[str, str]]:
+        """Return PDB content with each chain's residues numbered 1..N and insertion codes cleared.
+
+        A residue's number then equals its 1-indexed position, which is how selections in this
+        repository are written, so tools whose binaries address a residue by number alone cannot
+        collapse ``10`` and ``10A`` onto one residue. Non-polymer residues are numbered after the
+        polymer so none can share a number with a polymer residue.
+
+        Multi-character chain IDs, which PDB cannot hold, are shortened to single characters;
+        the returned map translates selections in and output chains back.
+
+        Returns:
+            tuple[str, dict[str, str]]: The renumbered structure as PDB content, and the map
+                from each original chain ID to its chain ID in that content.
+        """
+        import gemmi
+
+        pdb_content, chain_map = self.to_pdb_with_chain_mapping()
+        gemmi_struct = gemmi.read_pdb_string(pdb_content)
+        # A chain's ligands are often listed after every polymer chain, which parses as a second
+        # chain of the same ID; merged, they share one numbering so no ligand takes a polymer number.
+        gemmi_struct.merge_chain_parts()
+        gemmi_struct.setup_entities()
+        for model in gemmi_struct:
+            for chain in model:
+                polymer = chain.get_polymer()
+                polymer_subchain = polymer.subchain_id() if polymer else None
+                polymer_count = len(polymer)
+                polymer_index = other_index = 0
+                for residue in chain:
+                    if polymer_subchain is not None and residue.subchain == polymer_subchain:
+                        polymer_index += 1
+                        residue.seqid = gemmi.SeqId(polymer_index, " ")
+                    else:
+                        other_index += 1
+                        residue.seqid = gemmi.SeqId(polymer_count + other_index, " ")
+        return gemmi_struct.make_pdb_string(), chain_map
+
+    def with_residue_ids(
+        self,
+        residue_ids: dict[str, list[tuple[int, str]]],
+        chain_map: dict[str, str] | None = None,
+    ) -> Structure:
+        """Return a new Structure wearing the given chain IDs and residue numbering.
+
+        Each chain's ``i``-th polymer residue takes the ``i``-th ID given for it, insertion code
+        included, which puts a structure written in :meth:`renumbered_sequentially` numbering back
+        into its original numbering.
+
+        Args:
+            residue_ids (dict[str, list[tuple[int, str]]]): Residue IDs per chain, as
+                :meth:`get_chain_residue_ids` returns them.
+            chain_map (dict[str, str] | None): Original to current chain IDs, as
+                :meth:`renumbered_sequentially` returns them. ``None`` leaves IDs unchanged.
+
+        Returns:
+            Structure: This structure's coordinates under the given IDs and numbering, in this
+                structure's format, except that restoring a chain ID too long for PDB forces CIF.
+
+        Raises:
+            ValueError: If a chain is absent from ``residue_ids`` or has a different number of
+                polymer residues, so its residues cannot be matched by position.
+        """
+        import gemmi
+
+        gemmi_struct = self.gemmi_struct.clone()
+        gemmi_struct.setup_entities()
+        original_chain_ids = {current: original for original, current in (chain_map or {}).items()}
+        for model in gemmi_struct:
+            for chain in model:
+                chain.name = original_chain_ids.get(chain.name, chain.name)
+                polymer = chain.get_polymer()
+                if not polymer:
+                    continue
+                original = residue_ids.get(chain.name)
+                if original is None or len(original) != len(polymer):
+                    raise ValueError(
+                        f"chain {chain.name} has {len(polymer)} residues but {len(original) if original else 'none'} "
+                        "residue IDs were given for it, so its residues cannot be matched by position"
+                    )
+                for residue, (number, icode) in zip(polymer, original, strict=True):
+                    residue.seqid = gemmi.SeqId(number, icode or " ")
+        # A chain ID that had to be shortened for PDB cannot be written back to PDB.
+        if self.structure_format == "pdb" and not any(len(original) > 1 for original in (chain_map or {})):
+            content, structure_format = gemmi_struct.make_pdb_string(), "pdb"
+        else:
+            content, structure_format = gemmi_struct.make_mmcif_document().as_string(), "cif"
+        return Structure(
+            structure=content,
+            structure_format=structure_format,  # type: ignore[arg-type]
+            b_factor_type=self.b_factor_type,
+            source=self.source,
+            metrics=self.metrics.model_copy(deep=True),
+        )
+
     @property
     def num_residues(self) -> int:
         """Total number of residues across all chains."""

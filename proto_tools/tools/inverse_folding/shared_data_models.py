@@ -3,6 +3,7 @@
 Shared base schemas (configs and io) for inverse folding tools.
 """
 
+import contextlib
 import csv
 import json
 from abc import ABC
@@ -21,6 +22,7 @@ from proto_tools.entities.structures import (
     Structure,
     StructureInputBase,
 )
+from proto_tools.tools.inverse_folding.structure_staging import StagedStructure, staged_structure
 from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
@@ -119,6 +121,20 @@ class InverseFoldingStructureInput(StructureInputBase):
     def structure_pdb(self) -> str:
         """PDB string of the structure (delegates to ``Structure.structure_pdb``)."""
         return self.structure.structure_pdb
+
+    @contextlib.contextmanager
+    def staged(self) -> Iterator[StagedStructure]:
+        """Stage this input's structure for the model, numbered 1..N per chain.
+
+        Translate this input's own selections with the yielded object, since staging renumbers
+        residues and may shorten chain IDs:
+        ``staged.chains(self.chain_ids_to_redesign)`` and ``staged.positions(self.fixed_positions)``.
+
+        Yields:
+            StagedStructure: The staged file and the maps needed to read model output back.
+        """
+        with staged_structure(self.structure) as staged:
+            yield staged
 
 
 class InverseFoldingInput(BaseToolInput):

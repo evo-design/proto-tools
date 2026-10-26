@@ -10,64 +10,7 @@ from pathlib import Path
 import pytest
 
 from proto_tools.entities.structures.structure import Structure
-from proto_tools.tools.inverse_folding.structure_staging import (
-    chain_residue_ids,
-    restore_numbering,
-    sequential_pdb,
-    staged_ensemble,
-    staged_structure,
-)
-
-
-def test_chain_residue_ids_keep_insertion_codes(insertion_coded_structure):
-    """``5`` and ``5A`` are distinct residues, where integer numbering collapses them."""
-    residue_ids = chain_residue_ids(insertion_coded_structure)["A"]
-    assert residue_ids[4:7] == [(5, ""), (5, "A"), (6, "")]
-    assert insertion_coded_structure.get_chain_positions("A")[4:6] == [5, 5]
-
-
-def test_sequential_pdb_numbers_each_residue_by_its_position(insertion_coded_structure):
-    """The staged copy numbers residues 1..N with no insertion codes, sequence unchanged."""
-    staged = Structure(structure=sequential_pdb(insertion_coded_structure)[0], structure_format="pdb", source="test")
-    assert chain_residue_ids(staged)["A"] == [(n, "") for n in range(1, 66)]
-    assert staged.get_chain_sequence("A") == insertion_coded_structure.get_chain_sequence("A")
-
-
-def test_restore_numbering_round_trips_insertion_codes(insertion_coded_structure):
-    """An output written in staged numbering gets the input residue IDs back."""
-    residue_ids = chain_residue_ids(insertion_coded_structure)
-    staged = Structure(structure=sequential_pdb(insertion_coded_structure)[0], structure_format="pdb", source="test")
-    restored = restore_numbering(staged.structure_cif, residue_ids, source="test")
-    assert chain_residue_ids(restored) == residue_ids
-
-
-def test_restore_numbering_reads_pdb_output(insertion_coded_structure):
-    """Models that write PDB are restored the same way as those that write CIF."""
-    residue_ids = chain_residue_ids(insertion_coded_structure)
-    pdb_content, _ = sequential_pdb(insertion_coded_structure)
-    restored = restore_numbering(pdb_content, residue_ids, source="test", structure_format="pdb")
-    assert chain_residue_ids(restored) == residue_ids
-
-
-def test_restore_numbering_maps_shortened_chain_ids_back(two_character_chain_structure):
-    """A CIF chain ID too long for PDB is staged shortened and restored on the output."""
-    pdb_content, chain_map = sequential_pdb(two_character_chain_structure)
-    staged = Structure(structure=pdb_content, structure_format="pdb", source="test")
-    assert staged.get_chain_ids() == [chain_map["AB"]]
-    assert len(chain_map["AB"]) == 1
-
-    residue_ids = chain_residue_ids(two_character_chain_structure)
-    restored = restore_numbering(staged.structure_cif, residue_ids, source="test", chain_map=chain_map)
-    assert restored.get_chain_ids() == ["AB"]
-    assert chain_residue_ids(restored) == residue_ids
-
-
-def test_restore_numbering_rejects_a_chain_of_different_length(staging_structure, insertion_coded_structure):
-    """A residue-count mismatch cannot be mapped back by position, so it raises."""
-    shortened = {"A": chain_residue_ids(insertion_coded_structure)["A"][:-1]}
-    with pytest.raises(ValueError, match="numbering cannot be restored"):
-        restore_numbering(staging_structure.structure_cif, shortened, source="test")
-
+from proto_tools.tools.inverse_folding.structure_staging import staged_ensemble, staged_structure
 
 # ── StagedStructure ─────────────────────────────────────────────────────────
 
@@ -77,8 +20,8 @@ def test_staged_structure_exposes_the_file_and_the_maps_to_read_output_back(inse
     with staged_structure(insertion_coded_structure) as staged:
         assert staged.path.exists()
         written = Structure(structure=staged.path.read_text(), structure_format="pdb", source="test")
-        assert chain_residue_ids(written)["A"] == [(n, "") for n in range(1, 66)]
-        assert staged.residue_ids == chain_residue_ids(insertion_coded_structure)
+        assert written.get_chain_residue_ids()["A"] == [(n, "") for n in range(1, 66)]
+        assert staged.residue_ids == insertion_coded_structure.get_chain_residue_ids()
         assert staged.chain_map == {"A": "A"}
 
 
@@ -106,7 +49,7 @@ def test_staged_structure_restores_output_written_in_staged_numbering(insertion_
     with staged_structure(insertion_coded_structure) as staged:
         model_output = staged.path.read_text()
     restored = staged.restore(model_output, source="test")
-    assert chain_residue_ids(restored) == chain_residue_ids(insertion_coded_structure)
+    assert restored.get_chain_residue_ids() == insertion_coded_structure.get_chain_residue_ids()
 
 
 def test_staged_ensemble_stages_every_conformer(insertion_coded_structure, staging_structure):
@@ -114,7 +57,7 @@ def test_staged_ensemble_stages_every_conformer(insertion_coded_structure, stagi
     with staged_ensemble([insertion_coded_structure, staging_structure]) as (staged, conformer_paths):
         assert len(conformer_paths) == 1
         assert all(path.exists() for path in [staged.path, *conformer_paths])
-        assert staged.residue_ids == chain_residue_ids(insertion_coded_structure)
+        assert staged.residue_ids == insertion_coded_structure.get_chain_residue_ids()
 
 
 # ── Every sample tool stages its input ──────────────────────────────────────
@@ -186,29 +129,6 @@ def test_sample_tools_hand_the_model_a_sequentially_numbered_structure(monkeypat
     )
 
     staged = Structure(structure=captured["pdb"], structure_format="pdb", source="test")
-    assert chain_residue_ids(staged)["A"] == [(n, "") for n in range(1, len(native) + 1)]
+    assert staged.get_chain_residue_ids()["A"] == [(n, "") for n in range(1, len(native) + 1)]
     assert captured["chain_ids"] == ["A"]
     assert design.chain_sequence_map() == {"A": native}
-
-
-def test_restore_numbering_keeps_pdb_output_as_pdb(insertion_coded_structure):
-    """A model that writes PDB gets a PDB back, so restoring numbering does not change format."""
-    pdb_content, _ = sequential_pdb(insertion_coded_structure)
-    restored = restore_numbering(
-        pdb_content, chain_residue_ids(insertion_coded_structure), source="test", structure_format="pdb"
-    )
-    assert restored.structure_format == "pdb"
-
-
-def test_restore_numbering_falls_back_to_cif_for_a_chain_id_pdb_cannot_hold(two_character_chain_structure):
-    """``AB`` does not fit a PDB chain column, so the restored structure is CIF."""
-    pdb_content, chain_map = sequential_pdb(two_character_chain_structure)
-    restored = restore_numbering(
-        pdb_content,
-        chain_residue_ids(two_character_chain_structure),
-        source="test",
-        chain_map=chain_map,
-        structure_format="pdb",
-    )
-    assert restored.structure_format == "cif"
-    assert restored.get_chain_ids() == ["AB"]

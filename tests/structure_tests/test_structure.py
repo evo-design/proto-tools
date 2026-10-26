@@ -1596,6 +1596,87 @@ def test_complex_from_structure_uses_structure_chains(modified_gapped, include_l
     assert complex_.chains[0] == modified_gapped.get_chain("A")
 
 
+# ── Residue IDs, sequential renumbering, and restoring numbering ────────────
+
+
+@pytest.fixture(scope="module")
+def insertion_coded() -> Structure:
+    """The modified/gapped fixture with residue 3 relabelled ``2A``, so ``2`` and ``2A`` coexist."""
+    lines = []
+    for line in _MODIFIED_GAPPED_PDB_FILE.read_text().splitlines():
+        relabelled = line
+        if line.startswith(("ATOM", "HETATM")) and line[21] == "A":
+            number = int(line[22:26])
+            if number == 3:
+                relabelled = line[:22] + f"{2:>4}A" + line[27:]
+            elif number > 3:
+                relabelled = line[:22] + f"{number - 1:>4}" + line[26:]
+        lines.append(relabelled)
+    return Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
+
+
+def test_get_chain_residue_ids_keeps_insertion_codes(insertion_coded):
+    """``2`` and ``2A`` are distinct residues, where integer numbering collapses them."""
+    assert insertion_coded.get_chain_residue_ids("A")["A"][:4] == [(1, ""), (2, ""), (2, "A"), (3, "")]
+    assert insertion_coded.get_chain_positions("A")[:4] == [1, 2, 2, 3]
+    with pytest.raises(ValueError, match="no polymer residues"):
+        insertion_coded.get_chain_residue_ids("L")
+
+
+def test_renumbered_sequentially_numbers_each_residue_by_its_position(insertion_coded):
+    """The renumbered copy counts 1..N with no insertion codes, sequence unchanged."""
+    content, chain_map = insertion_coded.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+    assert renumbered.get_chain_residue_ids("A")["A"] == [(n, "") for n in range(1, 9)]
+    assert renumbered.get_chain_sequence("A") == insertion_coded.get_chain_sequence("A")
+    assert chain_map == {"A": "A", "B": "B"}
+
+
+def test_renumbered_sequentially_keeps_non_polymer_residues_off_polymer_numbers(insertion_coded):
+    """A ligand must not take a number a polymer residue already holds."""
+    content, _ = insertion_coded.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+    assert [number for number, _ in renumbered.get_chain_residue_ids("A")["A"]] == list(range(1, 9))
+    assert renumbered.get_chain_ligands("A") == [("HEM", 9)]
+
+
+def test_with_residue_ids_restores_the_original_numbering(insertion_coded):
+    """A structure written in sequential numbering gets the original residue IDs back."""
+    residue_ids = insertion_coded.get_chain_residue_ids()
+    content, _ = insertion_coded.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+
+    restored = renumbered.with_residue_ids(residue_ids)
+
+    assert restored.get_chain_residue_ids() == residue_ids
+    assert restored.structure_format == "pdb"
+
+
+def test_with_residue_ids_maps_shortened_chain_ids_back():
+    """A chain ID too long for PDB is shortened for staging and restored, which forces CIF."""
+    gemmi_struct = Structure.from_file(_MODIFIED_GAPPED_PDB_FILE).gemmi_struct.clone()
+    for chain in gemmi_struct[0]:
+        chain.name = f"X{chain.name}"
+    original = Structure(
+        structure=gemmi_struct.make_mmcif_document().as_string(), structure_format="cif", source="test"
+    )
+    content, chain_map = original.renumbered_sequentially()
+    renumbered = Structure(structure=content, structure_format="pdb", source="test")
+    assert renumbered.get_chain_ids() == [chain_map["XA"], chain_map["XB"]]
+
+    restored = renumbered.with_residue_ids(original.get_chain_residue_ids(), chain_map=chain_map)
+
+    assert restored.structure_format == "cif"
+    assert restored.get_chain_residue_ids() == original.get_chain_residue_ids()
+
+
+def test_with_residue_ids_rejects_a_chain_of_a_different_length(modified_gapped):
+    """A residue-count mismatch cannot be matched by position, so it raises."""
+    shortened = {"A": modified_gapped.get_chain_residue_ids("A")["A"][:-1]}
+    with pytest.raises(ValueError, match="cannot be matched by position"):
+        modified_gapped.with_residue_ids(shortened)
+
+
 # ── Remote fetch (from_url / from_rcsb / constructor URL) ──────────────────────
 
 _RCSB_PDB_URL = "https://files.rcsb.org/download/1TIM.pdb"

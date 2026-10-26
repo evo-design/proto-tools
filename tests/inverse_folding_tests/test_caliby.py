@@ -30,7 +30,6 @@ from proto_tools.tools.inverse_folding.caliby.caliby_sample import (
     DESIGN_CHECKPOINTS,
     PACKER_CHECKPOINTS,
 )
-from proto_tools.tools.inverse_folding.structure_staging import chain_residue_ids
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -601,7 +600,7 @@ def test_caliby_sample_resolves_positions_past_an_insertion_code(insertion_coded
     assert designed[4:6] == "WY"
     assert designed[6] == native[6]
     assert designed[39] == native[39]
-    assert chain_residue_ids(design.structure) == chain_residue_ids(insertion_coded_structure)
+    assert design.structure.get_chain_residue_ids() == insertion_coded_structure.get_chain_residue_ids()
     assert design.structure.get_chain_sequence("A") == designed
 
 
@@ -703,7 +702,7 @@ def test_caliby_pack_keeps_insertion_coded_numbering(insertion_coded_structure):
     assert output.success, f"Failed to pack an insertion-coded structure: {output}"
 
     packed = output.packed_structures[0]
-    assert chain_residue_ids(packed) == chain_residue_ids(insertion_coded_structure)
+    assert packed.get_chain_residue_ids() == insertion_coded_structure.get_chain_residue_ids()
     assert packed.get_chain_sequence("A") == insertion_coded_structure.get_chain_sequence("A")
 
 
@@ -722,7 +721,7 @@ def test_caliby_handles_a_chain_id_too_long_for_pdb(two_character_chain_structur
     assert designed[2] == native[2]
     assert designed[29] == native[29]
     assert design.structure.get_chain_ids() == ["AB"]
-    assert chain_residue_ids(design.structure) == chain_residue_ids(two_character_chain_structure)
+    assert design.structure.get_chain_residue_ids() == two_character_chain_structure.get_chain_residue_ids()
 
     packed = run_caliby_pack(
         CalibyPackInput(structures=[design.structure]), CalibyPackConfig(diffusion_steps=10, seed=0)

@@ -16,11 +16,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingOutput,
     InverseFoldingStructureInput,
 )
-from proto_tools.tools.inverse_folding.structure_staging import (
-    chain_residue_ids,
-    restore_numbering,
-    staged_ensemble,
-)
+from proto_tools.tools.inverse_folding.structure_staging import staged_ensemble
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -297,7 +293,7 @@ class CalibyStructureInput(InverseFoldingStructureInput):
         if self.symmetric_chains is None:
             return self
 
-        residue_ids = chain_residue_ids(self.structure)
+        residue_ids = self.structure.get_chain_residue_ids()
         seen: set[str] = set()
         for group in self.symmetric_chains:
             group.validate_against(self.structure, label="symmetric_chains")
@@ -673,7 +669,6 @@ def run_caliby_sample(
     ):
         # Caliby's featurizer keeps peptide chains only; other polymer chains join the design as context.
         chain_ids = [cid for cid, kind in inp.structure.get_chain_types().items() if kind == "protein"]
-        residue_ids = chain_residue_ids(inp.structure)
         redesign_set = set(inp.chain_ids_to_redesign)
         all_chain_seqs: list[list[str]] = []
         all_energies: list[float] = []
@@ -744,9 +739,7 @@ def run_caliby_sample(
                     redesign_set,
                     tool="caliby-sample",
                     include_ligands=False,
-                    structure=restore_numbering(
-                        cif, residue_ids, source="caliby-sample", chain_map=chain_map, structure_format="cif"
-                    ),
+                    structure=staged.restore(cif, source="caliby-sample", structure_format="cif"),
                     metrics=CalibyDesignMetrics(
                         potts_energy=energy,
                         avg_potts_energy=energy / total_length if total_length else 0.0,
