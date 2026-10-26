@@ -70,14 +70,6 @@ A tqdm progress bar (as used by HuggingFace, transformers, and datasets) writes 
 
 The net behavior is that at level 3, you see the start banner and "100% complete" of each progress bar, and intermediate frames are dropped. Newline-separated progress libraries (rich, alive-progress) are not filtered and produce one line per frame at level 3. This is acceptable noise since the user opted in.
 
-## Progress in a hosted worker
-
-When `PROTO_IS_HOSTED_ENV` is set, the process runs tools for a caller on another machine, and records flagged `update_status=True` are the only progress that caller sees. Two rules keep that channel cheap: emitting a phase is one log call, and phases stay at human pace.
-
-- **Batch bars.** `progress_bar()` on a redirected stream normally returns a silent `tqdm(disable=True)`. In a hosted worker it returns `_HostedProgressBar` instead, which also renders nothing and starts no monitor thread but counts `update()` calls and iteration. It reports `"{desc} ({n}/{total} {unit})"` (or `"{desc} ({n} {unit})"` without a total) on the first update, then at most once every 5 seconds, plus the update that reaches the total. It never joins the active-bar stack, so `set_substatus` keeps its logging fallback. Status-only spinners (`show_bar=False`) carry no count and stay silent, as does a bar the caller disabled. Local behavior is unchanged.
-- **Phases from long setup.** Work that runs inside a worker before any bar exists reports its boundaries directly, such as dataset provisioning (`setup_databases.provision`: downloading sources, then indexing).
-- **Phases inside a standalone.** A standalone's `logger.update_status(...)` crosses the bridge like any other record. A loop over items should throttle its per-item phases to the same pace (see `_ThrottledStatus` in the AlphaGenome standalone) rather than emit one per item.
-
 ## Filtering recipes
 
 ```python

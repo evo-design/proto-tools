@@ -195,9 +195,6 @@ anything from leaving a thread polling. Since the container closes the stream af
 returning, the stop event is usually what ends the tailer, and the last lines of a run can
 be lost. Progress tolerates that by design.
 
-A container has no terminal, so a tool's own batch bar reports through the same records:
-see "Progress in a hosted worker" in `notes/logging.md`.
-
 Records replay through `proto_tools.modal.remote` carrying the `update_status` flag the
 spinner keys on, so a remote line renders exactly as the same line does locally. This
 mirrors the `device="proto"` path rather than introducing a second convention.
