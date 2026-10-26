@@ -104,3 +104,51 @@ def test_warnings_describe_exactly_the_drifted_fields(monkeypatch: pytest.Monkey
 
     assert len(warnings) == 1
     assert "schema differs" in warnings[0]
+
+
+class _ReadVolume:
+    """Answers ``read_file`` with a manifest, or raises what Modal would."""
+
+    def __init__(self, payload: bytes | None = None, error: Exception | None = None) -> None:
+        self._payload = payload
+        self._error = error
+
+    def read_file(self, _path: str):
+        if self._error is not None:
+            raise self._error
+        yield self._payload
+
+
+def test_an_absent_manifest_reads_as_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    volume = _ReadVolume(error=modal.exception.NotFoundError("no such file"))
+    monkeypatch.setattr(modal.Volume, "from_name", lambda *_args, **_kwargs: volume)
+
+    assert fp.read_manifest(SERVICE) is None
+
+
+def test_an_unreadable_manifest_is_not_mistaken_for_an_absent_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A caller deciding whether to rebuild must not read a transient failure as "never recorded"."""
+    volume = _ReadVolume(error=ConnectionError("modal unreachable"))
+    monkeypatch.setattr(modal.Volume, "from_name", lambda *_args, **_kwargs: volume)
+
+    with pytest.raises(fp.ManifestUnreadable):
+        fp.read_manifest(SERVICE)
+
+
+def test_drift_warnings_still_report_nothing_for_an_unreadable_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
+    volume = _ReadVolume(error=ConnectionError("modal unreachable"))
+    monkeypatch.setattr(modal.Volume, "from_name", lambda *_args, **_kwargs: volume)
+
+    assert fp.drift_warnings(TOOL_KEY, SERVICE) == []
+
+
+@pytest.mark.parametrize("value", [True, 2.0, "2", None])
+def test_only_an_integer_counts_as_a_recorded_format(value: object) -> None:
+    recorded = fp.recorded_result_format({"result_format": value})
+
+    assert recorded == 1 and type(recorded) is int
+
+
+@pytest.mark.parametrize("tools", [[], "esm2-embedding", None])
+def test_a_malformed_tool_table_reads_as_no_drift(tools: object) -> None:
+    assert fp.drifted_fields(TOOL_KEY, {"algorithm": fp.ALGORITHM, "tools": tools}) == {}

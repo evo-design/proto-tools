@@ -238,10 +238,18 @@ def write_manifest(service_class: str, environment: str | None = None, client: A
     return len(fps)
 
 
+class ManifestUnreadable(RuntimeError):
+    """A recorded manifest could not be read, as distinct from there being none.
+
+    Its own type so a caller deciding whether to rebuild never mistakes a transient failure for a
+    deployment that recorded nothing.
+    """
+
+
 def read_manifest(
     service_class: str, environment: str | None = None, client: Any | None = None
 ) -> dict[str, Any] | None:
-    """Read a service's recorded fingerprints, or ``None`` if absent or unreadable.
+    """Read a service's recorded fingerprints, or ``None`` if none were recorded.
 
     Absent is normal: a deployment made without ``scripts/deploy.py``, or one
     predating this mechanism, simply has nothing recorded.
@@ -251,18 +259,26 @@ def read_manifest(
         environment (str | None): Modal environment holding the cache volume. Must match the one
             the call resolves in, or this compares against a different deployment.
         client (Any | None): Modal client to read as, or ``None`` for the process's own.
+
+    Raises:
+        ManifestUnreadable: If a manifest may exist but could not be read or parsed.
     """
     import modal
 
-    try:
-        from proto_tools.modal.app import CACHE_VOLUME_NAME
+    from proto_tools.modal.app import CACHE_VOLUME_NAME
 
+    try:
         volume = modal.Volume.from_name(CACHE_VOLUME_NAME, environment_name=environment, client=client)
         raw = b"".join(volume.read_file(manifest_path(service_class)))
-        parsed: dict[str, Any] = json.loads(raw)
-        return parsed
-    except Exception:
+    except modal.exception.NotFoundError:
         return None
+    except Exception as exc:
+        raise ManifestUnreadable(f"could not read the fingerprints of {service_class}: {exc}") from exc
+    try:
+        parsed: dict[str, Any] = json.loads(raw)
+    except ValueError as exc:
+        raise ManifestUnreadable(f"the fingerprints of {service_class} are not valid JSON: {exc}") from exc
+    return parsed
 
 
 # What a manifest recorded before it recorded a result format: Python-mode dumps.
@@ -281,7 +297,8 @@ def recorded_result_format(manifest: dict[str, Any]) -> int:
         int: The deployment's :data:`~proto_tools.modal.utils.RESULT_FORMAT`.
     """
     value = manifest.get("result_format")
-    return value if isinstance(value, int) else _UNRECORDED_RESULT_FORMAT
+    # ``type`` rather than ``isinstance``: a bool is an int, and ``true`` is not a format.
+    return value if type(value) is int else _UNRECORDED_RESULT_FORMAT
 
 
 def drifted_fields(tool_key: str, manifest: dict[str, Any]) -> dict[str, tuple[Any, Any]]:
@@ -299,8 +316,9 @@ def drifted_fields(tool_key: str, manifest: dict[str, Any]) -> dict[str, tuple[A
     """
     if manifest.get("algorithm") != ALGORITHM:
         return {"algorithm": (manifest.get("algorithm"), ALGORITHM)}
-    entry = manifest.get("tools", {}).get(tool_key)
-    if entry is None:
+    tools = manifest.get("tools")
+    entry = tools.get(tool_key) if isinstance(tools, dict) else None
+    if not isinstance(entry, dict):
         return {}
     local = fingerprint(tool_key)
     return {
