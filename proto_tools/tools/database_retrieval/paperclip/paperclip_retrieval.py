@@ -57,10 +57,9 @@ class _PaperclipConfig(BaseConfig):
         description="Optional Paperclip service override",
     )
     paperclip_api_key: str | None = ConfigField(
-        default_factory=lambda: os.environ.get("PAPERCLIP_API_KEY"),
         title="Paperclip API Key",
-        description="Optional API key; otherwise PAPERCLIP_API_KEY or PAPERCLIP_BEARER_TOKEN is used",
-        include_in_key=False,
+        description="Optional API key; the client also accepts $PAPERCLIP_BEARER_TOKEN.",
+        credential="PAPERCLIP_API_KEY",
     )
     timeout_seconds: float = ConfigField(
         default=120.0,
