@@ -70,7 +70,7 @@ Use this to pull reference sequences into a design or analysis pipeline: retriev
 
 ### NCBI Reference Bundle (`ncbi-reference-bundle`)
 
-Downloads a version-pinned NCBI Datasets assembly bundle, safely stages extraction, and records the exact ZIP response in `archive_artifact`. Every extracted file has its own checksum and an explicit derivation link to that archive.
+Downloads a version-pinned NCBI Datasets assembly bundle and extracts it into `destination_dir` through a staging directory, so a failed download never leaves a partial bundle. `files` lists the extracted paths.
 
 #### Applications
 

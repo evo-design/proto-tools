@@ -1,6 +1,5 @@
 """Version-pinned NCBI Datasets genome reference bundle retrieval."""
 
-import hashlib
 import json
 import re
 import tempfile
@@ -10,19 +9,12 @@ from typing import Any, Literal
 
 from pydantic import Field, field_validator
 
-from proto_tools.entities.provenance import (
-    AccessLevel,
-    ArtifactDerivation,
-    RetrievedArtifact,
-    SourceProvenance,
-)
 from proto_tools.tools.database_retrieval.ncbi.shared_data_models import NCBIFetchConfig
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField, build_http_session
 
 AnnotationType = Literal["GENOME_FASTA", "GENOME_GFF", "RNA_FASTA", "PROT_FASTA"]
 _ACCESSION = re.compile(r"^GC[AF]_\d+\.\d+$")
-_MEDIA = {".fna": "text/x-fasta", ".faa": "text/x-fasta", ".gff": "text/x-gff3", ".jsonl": "application/jsonl"}
 
 
 class NCBIReferenceBundleInput(BaseToolInput):
@@ -70,28 +62,20 @@ class NCBIReferenceBundleConfig(NCBIFetchConfig):
 
 
 class NCBIReferenceBundleOutput(BaseToolOutput):
-    """Materialized, checksummed NCBI reference artifacts.
+    """NCBI reference files extracted into ``destination_dir``.
 
     Attributes:
         accession (str): Versioned assembly accession.
         source_url (str): NCBI Datasets download endpoint.
-        destination_dir (str): Materialized artifact directory.
-        archive_artifact (RetrievedArtifact | None): Exact downloaded ZIP descriptor.
-        artifacts (list[RetrievedArtifact]): Checksummed extracted files.
+        destination_dir (str): Directory the bundle was extracted into.
+        files (list[str]): Paths of the extracted files.
         dataset_catalog (dict[str, Any]): NCBI dataset catalog when present.
     """
 
     accession: str = Field(title="Assembly Accession", description="Versioned assembly accession")
     source_url: str = Field(title="Source URL", description="NCBI Datasets download endpoint")
-    destination_dir: str = Field(title="Destination Directory", description="Materialized artifact directory")
-    archive_artifact: RetrievedArtifact | None = Field(
-        default=None,
-        title="Archive Artifact",
-        description="Checksum and size descriptor for the exact downloaded ZIP bytes",
-    )
-    artifacts: list[RetrievedArtifact] = Field(
-        default_factory=list, title="Artifacts", description="Checksummed extracted files"
-    )
+    destination_dir: str = Field(title="Destination Directory", description="Directory the bundle was extracted into")
+    files: list[str] = Field(default_factory=list, title="Files", description="Paths of the extracted files")
     dataset_catalog: dict[str, Any] = Field(
         default_factory=dict, title="Dataset Catalog", description="NCBI dataset catalog"
     )
@@ -133,7 +117,7 @@ def example_input() -> Any:
 def run_ncbi_reference_bundle(
     inputs: NCBIReferenceBundleInput, config: NCBIReferenceBundleConfig, instance: Any = None
 ) -> NCBIReferenceBundleOutput:
-    """Download, safely extract, and checksum a pinned NCBI Datasets bundle."""
+    """Download and safely extract a pinned NCBI Datasets bundle."""
     del instance
     destination = Path(inputs.destination_dir).expanduser().resolve()
     if destination.exists() and (not destination.is_dir() or any(destination.iterdir())):
@@ -161,36 +145,17 @@ def run_ncbi_reference_bundle(
         # preserves bounded-memory streaming across the supported interpreters.
         download = tempfile.TemporaryFile()  # noqa: SIM115
         downloaded = 0
-        archive_hasher = hashlib.sha256()
         for chunk in response.iter_content(chunk_size=1024 * 1024):
             if not chunk:
                 continue
             downloaded += len(chunk)
             if downloaded > config.max_download_bytes:
                 raise ValueError("NCBI bundle exceeds max_download_bytes")
-            archive_hasher.update(chunk)
             download.write(chunk)
         download.seek(0)
     finally:
         session.close()
-    provenance = SourceProvenance(
-        provider="NCBI Datasets",
-        source_url=url,
-        identifier=inputs.accession,
-        version=inputs.accession.rsplit(".", 1)[1],
-        content_sha256=archive_hasher.hexdigest(),
-        media_type="application/zip",
-        access_level=AccessLevel.PUBLIC,
-        request_parameters={"include_annotation_type": list(config.annotation_types)},
-    )
-    archive_artifact = RetrievedArtifact(
-        name=f"NCBI Datasets {inputs.accession} reference bundle",
-        content_sha256=archive_hasher.hexdigest(),
-        media_type="application/zip",
-        size_bytes=downloaded,
-        provenance=provenance,
-    )
-    artifacts: list[RetrievedArtifact] = []
+    files: list[str] = []
     catalog: dict[str, Any] = {}
     with tempfile.TemporaryDirectory(prefix="ncbi-reference-", dir=destination.parent) as staging_name:
         staging = Path(staging_name)
@@ -209,26 +174,10 @@ def run_ncbi_reference_bundle(
                 target = staging / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
-                digest = hashlib.sha256(data).hexdigest()
-                media_type = _MEDIA.get(target.suffix, "application/octet-stream")
-                artifacts.append(
-                    RetrievedArtifact(
-                        name=relative.name,
-                        path=str(destination / relative),
-                        content_sha256=digest,
-                        media_type=media_type,
-                        size_bytes=len(data),
-                        provenance=provenance,
-                        derivation=ArtifactDerivation(
-                            source_sha256=[archive_artifact.content_sha256],
-                            tool="zipfile",
-                            parameters={"operation": "extract-member", "member": info.filename},
-                        ),
-                    )
-                )
+                files.append(str(destination / relative))
                 if relative.name == "dataset_catalog.json":
                     catalog = json.loads(data)
-        if not artifacts:
+        if not files:
             raise ValueError("NCBI returned an empty reference bundle")
         if destination.exists():
             destination.rmdir()
@@ -238,7 +187,6 @@ def run_ncbi_reference_bundle(
         accession=inputs.accession,
         source_url=url,
         destination_dir=str(destination),
-        archive_artifact=archive_artifact,
-        artifacts=artifacts,
+        files=files,
         dataset_catalog=catalog,
     )

@@ -46,7 +46,7 @@ class _Session:
         pass
 
 
-def test_reference_bundle_stages_and_checksums_artifacts(monkeypatch, tmp_path):
+def test_reference_bundle_extracts_files_into_destination(monkeypatch, tmp_path):
     payload = _archive()
     monkeypatch.setattr(
         "proto_tools.tools.database_retrieval.ncbi.reference_bundle.build_http_session",
@@ -58,17 +58,8 @@ def test_reference_bundle_stages_and_checksums_artifacts(monkeypatch, tmp_path):
         NCBIReferenceBundleConfig(),
     )
     assert output.destination_dir == str(destination)
-    assert output.archive_artifact is not None
-    assert output.archive_artifact.matches_content(payload)
-    assert len(output.artifacts) == 2
-    assert all(artifact.path and destination in Path(artifact.path).parents for artifact in output.artifacts)
-    assert all(artifact.matches_file() for artifact in output.artifacts)
-    assert all(artifact.derivation is not None for artifact in output.artifacts)
-    assert all(
-        artifact.derivation.source_sha256 == [output.archive_artifact.content_sha256]
-        for artifact in output.artifacts
-        if artifact.derivation is not None
-    )
+    assert len(output.files) == 2
+    assert all(destination in Path(path).parents and Path(path).is_file() for path in output.files)
     assert output.dataset_catalog == {"assemblies": []}
 
 
