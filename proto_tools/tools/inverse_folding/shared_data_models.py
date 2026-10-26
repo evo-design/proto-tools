@@ -312,9 +312,10 @@ class DesignedComplex(Complex):
                 if len(sequence) != len(entry.sequence):
                     raise ValueError(
                         f"{tool}: designed chain {entry.id} has {len(sequence)} residues but the input "
-                        f"structure's chain {entry.id} has {len(entry.sequence)}. The model skipped residues "
-                        "it cannot read, such as residues missing backbone atoms or non-standard (HETATM) "
-                        "residues; remove or repair them in the input structure."
+                        f"structure's chain {entry.id} has {len(entry.sequence)}. The model read fewer "
+                        "residues than the chain holds: residues sharing a number through insertion codes "
+                        "(such as 47 and 47A) collapse onto one, and residues missing backbone atoms or "
+                        "written as HETATM are skipped."
                     )
                 chains.append(Chain(id=entry.id, sequence=sequence, entity_type="protein"))
             else:
