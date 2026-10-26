@@ -118,7 +118,7 @@ volume, and the client compares them on dispatch.
 | Hash | Covers | Catches |
 |---|---|---|
 | `schema_hash` | the tool's input, config, and output JSON schemas | a field added, removed, or retyped |
-| `code_hash` | the tool's defining files plus its first-party MRO and the framework prefixes | a behaviour change with an unchanged schema |
+| `code_hash` | the tool's defining files plus its first-party MRO, excluding the framework prefixes | a behaviour change with an unchanged schema |
 | `env_hash` | a recursive walk of the standalone directory | a dependency or setup change |
 
 `ALGORITHM` is a version guard. A deployment recorded under a different algorithm reports
@@ -185,11 +185,15 @@ The performance contract is enforced by construction, not by measurement:
 - The buffer drops its oldest entry rather than applying backpressure. A lost progress
   line costs nothing; a slow `emit` would cost the run.
 - The first queue error disables streaming for the rest of the run.
+- Closing the stream is off the result path. On exit the handler comes off at once, and the
+  final flush and end sentinel run on a daemon thread, so the result never waits on them.
 
 Streaming is off unless someone is watching, meaning an active spinner or a verbose
 caller. The client's tailer exits on the end sentinels **or** on a stop event set once the
 result is in hand, whichever comes first, which is what stops a deployment too old to emit
-anything from leaving a thread polling.
+anything from leaving a thread polling. Since the container closes the stream after
+returning, the stop event is usually what ends the tailer, and the last lines of a run can
+be lost. Progress tolerates that by design.
 
 Records replay through `proto_tools.modal.remote` carrying the `update_status` flag the
 spinner keys on, so a remote line renders exactly as the same line does locally. This

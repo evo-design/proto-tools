@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -178,3 +179,36 @@ def test_unverifiable_spec_keeps_previous_behaviour(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(setup_databases.subprocess, "run", explode)
 
     assert setup_databases._download_file(spec, tmp_path, CURL) is True
+
+
+def test_provision_reports_its_long_phases(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog) -> None:
+    """Inside a worker the prints reach no caller, so a multi-gigabyte first run must report status."""
+    events: list[str] = []
+    monkeypatch.setattr(setup_databases, "_which_downloader", lambda: CURL)
+    monkeypatch.setattr(setup_databases, "_download_file", lambda spec, *_: events.append(f"download {spec.filename}"))
+    monkeypatch.setattr(setup_databases, "_run_step", lambda step, *_, **__: events.append("step"))
+
+    class Phases(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            if getattr(record, "update_status", False):
+                events.append(f"status {record.getMessage()}")
+
+    handler = Phases()
+    setup_databases.logger.addHandler(handler)
+    name = "uniref30-2302"
+    entry = DatasetRegistry.get(name)
+    try:
+        with caplog.at_level(logging.INFO, logger=setup_databases.logger.name):
+            setup_databases.provision(name, workdir=tmp_path)
+    finally:
+        setup_databases.logger.removeHandler(handler)
+
+    downloads = [event for event in events if event.startswith("download")]
+    steps = [event for event in events if event == "step"]
+    assert events == [
+        f"status Downloading sources for {entry.display_name}",
+        *downloads,
+        f"status Indexing {entry.display_name}",
+        *steps,
+    ]
+    assert downloads and steps

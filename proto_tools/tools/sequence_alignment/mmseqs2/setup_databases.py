@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import logging
 import os
 import shutil
 import subprocess
@@ -58,6 +59,8 @@ from proto_tools.databases import (
 )
 from proto_tools.utils.system_info import available_memory_bytes
 from proto_tools.utils.tool_instance import ToolInstance
+
+logger = logging.getLogger(__name__)
 
 # Fraction of the cgroup-aware budget allotted to mmseqs index builds (mmseqs sizes splits from physical RAM, so the cap keeps `createindex` from OOMing under Slurm / container memory limits).
 _INDEX_MEMORY_SAFETY_FRACTION = 0.7
@@ -291,11 +294,14 @@ def provision(name: str, workdir: Path | None = None, *, force: bool = False) ->
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     print("\n  Downloading sources...")
+    # Inside a worker the prints reach no caller, so the long phases also travel as status records.
+    logger.info("Downloading sources for %s", entry.display_name, extra={"update_status": True})
     downloader = _which_downloader()
     for spec in entry.urls:
         _download_file(spec, cache_dir, downloader)
 
     print("\n  Running index recipe...")
+    logger.info("Indexing %s", entry.display_name, extra={"update_status": True})
     # Only meaningful to a recipe that asks for it. An entry whose steps are plain shell — a
     # reference genome that just decompresses — would otherwise report an mmseqs memory budget it
     # never uses, which reads as though an index were about to be built.

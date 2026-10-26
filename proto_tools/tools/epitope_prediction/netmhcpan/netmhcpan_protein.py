@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from proto_tools.tools.epitope_prediction.netmhcpan.shared_data_models import (
     MAX_PEPTIDE_LENGTH,
@@ -62,12 +62,19 @@ class NetMHCpanProteinConfig(NetMHCpanConfig):
 
     Attributes:
         peptide_lengths (list[int]): k-mer lengths to enumerate from each sequence
-            (netMHCpan ``-l``). Defaults to the netMHCpan default of 8-11.
+            (netMHCpan ``-l``). Defaults to the 8-11 class I screening range, which is
+            wider than 4.2's own ``-l`` default of 9.
+        use_context (bool): Encode each window's flanking residues (``-context``), read
+            off the supplied protein. Changes every reported score.
+        terminal_context_as_alanine (bool): Pad context that runs past a sequence terminus
+            with alanine instead of ``X`` (``-termAcon``). Requires ``use_context``.
         alleles (list[str]): MHC class I alleles to predict against. Accepts the
             ``HLA-A02:01``, ``HLA-A*02:01`` and ``A*02:01`` spellings. Defaults to
             the netMHCpan default allele.
         include_binding_affinity (bool): Also predict binding affinity (``-BA``), adding
             BA score, BA %rank and nM affinity alongside the eluted-ligand columns.
+        include_pathogen (bool): Also report the pathogen-epitope head (``-pathogen``).
+        include_neoepitope (bool): Also report the neoepitope head (``-neo``).
         strong_rank (float): %rank at or below which a peptide is a strong binder.
         weak_rank (float): %rank at or below which a peptide is a weak binder.
         netmhcpan_dir (str | None): Path to a local netMHCpan install root.
@@ -78,6 +85,26 @@ class NetMHCpanProteinConfig(NetMHCpanConfig):
         title="Peptide Lengths",
         description="k-mer lengths to enumerate from each sequence; netMHCpan's -l flag.",
     )
+    use_context: bool = ConfigField(
+        default=False,
+        title="Use Context Encoding",
+        description="Encode each window's flanking residues (-context); changes every score.",
+    )
+    terminal_context_as_alanine: bool = ConfigField(
+        default=False,
+        title="Pad Context With Alanine",
+        description="Pad context past a sequence terminus with alanine, not X (-termAcon).",
+    )
+
+    @model_validator(mode="after")
+    def _validate_context_options(self) -> "NetMHCpanProteinConfig":
+        """Reject terminal-context padding without context encoding, which ignores it."""
+        if self.terminal_context_as_alanine and not self.use_context:
+            raise ValueError(
+                "terminal_context_as_alanine only applies with use_context=True; netMHCpan's "
+                "-termAcon changes how context is padded and is ignored without -context"
+            )
+        return self
 
     @field_validator("peptide_lengths")
     @classmethod
@@ -170,6 +197,10 @@ class NetMHCpanProteinOutput(BaseToolOutput):
             "score_ba",
             "rank_ba",
             "affinity_nm",
+            "score_pathogen",
+            "rank_pathogen",
+            "score_neo",
+            "rank_neo",
         ]
         with path.open("w", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=columns)
@@ -251,8 +282,12 @@ def run_netmhcpan_protein(
         "operation": "predict_protein",
         "sequences": inputs.sequences,
         "peptide_lengths": config.peptide_lengths,
+        "use_context": config.use_context,
+        "terminal_context_as_alanine": config.terminal_context_as_alanine,
         "alleles": config.alleles,
         "include_binding_affinity": config.include_binding_affinity,
+        "include_pathogen": config.include_pathogen,
+        "include_neoepitope": config.include_neoepitope,
         "strong_rank": config.strong_rank,
         "weak_rank": config.weak_rank,
         "netmhcpan_dir": config.netmhcpan_dir,
@@ -301,6 +336,9 @@ def run_netmhcpan_protein(
             "alleles": config.alleles,
             "peptide_lengths": config.peptide_lengths,
             "include_binding_affinity": config.include_binding_affinity,
+            "include_pathogen": config.include_pathogen,
+            "include_neoepitope": config.include_neoepitope,
+            "use_context": config.use_context,
             "netmhcpan_version": output_data["version"],
         },
     )

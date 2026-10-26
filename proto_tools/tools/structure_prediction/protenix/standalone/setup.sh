@@ -16,8 +16,10 @@ else
 fi
 
 # Install CUDA toolkit locally in the venv via micromamba
+# Pin cuda-version so the solver cannot pull CUDA 13 sub-packages next to the 12.x toolkit.
 echo "Installing CUDA toolkit ${CUDA_TOOLKIT_VERSION} locally via micromamba..."
 if ! "$MAMBA_BIN" create -y -p "$VENV_PATH/cuda_env" -c nvidia -c conda-forge \
+    "cuda-version=${CUDA_TOOLKIT_VERSION}" \
     "cuda-toolkit=${CUDA_TOOLKIT_VERSION}" \
     "cuda-nvcc=${CUDA_TOOLKIT_VERSION}" \
     "cuda-cudart-dev=${CUDA_TOOLKIT_VERSION}" \

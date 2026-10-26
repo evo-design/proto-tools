@@ -88,8 +88,8 @@ def _verify_fixed_positions(structure_path: str, fixed_positions: dict[str, list
 
     Caliby's ``parse_fixed_pos_str`` only warns and carries on when a position is absent,
     so a residue-numbering mismatch would otherwise fix nothing at all and pass silently.
-    Matching is on residue number alone, as upstream's is, so a position that shares its
-    number with an insertion-coded neighbour pins that neighbour too.
+    Matching is on residue number alone, as upstream's is; the host stages every structure
+    numbered 1..N per chain with insertion codes cleared, so each number names one residue.
 
     Args:
         structure_path (str): Path to the primary conformer being designed.
