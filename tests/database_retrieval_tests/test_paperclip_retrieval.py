@@ -385,8 +385,7 @@ def test_search_normalizes_citable_hits(monkeypatch):
     assert first.pmid == "39850899"
     assert first.access_kind == "abstract"
     assert first.relevance_score == 0.9
-    assert first.provenance.provider == "Paperclip"
-    assert first.provenance.details == {}
+    assert first.source_url == "https://paperclip.gxl.ai/citations/papers/PMC11754230"
     assert second.document_id == "PMC2"
     assert second.title == "PMC2"
     assert second.access_kind == "metadata"
@@ -413,7 +412,7 @@ def test_lookup_returns_normalized_hits(monkeypatch):
     assert fake.calls == [("lookup", ("doi", "10.1/x"), {"limit": 3})]
     assert output.result_id == "s_2"
     assert [hit.document_id for hit in output.hits] == ["PMC7"]
-    assert output.hits[0].provenance.request_parameters == {"operation": "lookup", "source": "pmc"}
+    assert output.hits[0].source_url == "https://paperclip.gxl.ai/citations/papers/PMC7"
 
 
 def test_lookup_rejects_unknown_fields():
@@ -440,7 +439,7 @@ def test_grep_collects_matching_papers_in_order_of_first_match(monkeypatch):
     assert output.document_ids == ["PMC5", "bio_ab12"]
     assert len(output.lines) == 3
     assert output.result_id == "s_9"
-    assert output.provenance.request_parameters["pattern"] == "ProteinMPNN"
+    assert output.source_url == "https://paperclip.gxl.ai/"
 
 
 def test_document_reads_a_line_range_by_default(monkeypatch):
@@ -457,10 +456,7 @@ def test_document_reads_a_line_range_by_default(monkeypatch):
     assert document.access_kind == "excerpt"
     assert document.excerpt == excerpt
     assert document.content is None
-    assert document.content_provenance is not None
-    assert document.content_provenance.matches(excerpt.encode())
-    assert document.content_provenance.request_parameters == {"operation": "lines", "start_line": 1, "end_line": 2}
-    assert document.metadata_provenance.details == {"license": "CC BY"}
+    assert document.source_url == "https://paperclip.gxl.ai/citations/papers/PMC1"
 
 
 def test_document_grep_parses_match_and_context_lines(monkeypatch):
@@ -496,7 +492,6 @@ def test_document_grep_without_matches_returns_metadata_only(monkeypatch):
     ).document
     assert document.matches == []
     assert document.access_kind == "metadata"
-    assert document.content_provenance is None
 
 
 @pytest.mark.parametrize(
@@ -508,7 +503,7 @@ def test_document_config_rejects_inconsistent_read_settings(overrides: dict[str,
         PaperclipDocumentConfig(**overrides)
 
 
-def test_document_full_text_preserves_exact_text_and_checksum(monkeypatch):
+def test_document_full_text_preserves_exact_text(monkeypatch):
     metadata = json.dumps({"source": "pmc", "license": "CC BY"})
     content = "L1 First line\nL2 Second line\n"
     fake = _FakeClient(
@@ -525,10 +520,7 @@ def test_document_full_text_preserves_exact_text_and_checksum(monkeypatch):
     assert document.access_kind == "full_text"
     assert document.content == content
     assert document.expected_content_bytes == len(content.encode())
-    assert document.metadata_provenance.matches(metadata.encode())
-    assert document.content_provenance is not None
-    assert document.content_provenance.matches(content.encode())
-    assert document.content_provenance.details == {"license": "CC BY"}
+    assert document.metadata == {"source": "pmc", "license": "CC BY"}
 
 
 def test_document_full_text_keeps_short_content_as_preview(monkeypatch):
@@ -545,7 +537,6 @@ def test_document_full_text_keeps_short_content_as_preview(monkeypatch):
     assert document.access_kind == "inaccessible"
     assert document.content is None
     assert document.content_preview == "L1 partial\n"
-    assert document.content_provenance is None
 
 
 def test_document_metadata_mode_reads_only_metadata(monkeypatch):
@@ -558,7 +549,7 @@ def test_document_metadata_mode_reads_only_metadata(monkeypatch):
 
     assert fake.operations() == ["read_file"]
     assert document.access_kind == "metadata"
-    assert document.metadata_provenance.version == "2024"
+    assert document.metadata == {"year": 2024}
 
 
 def test_document_rejects_non_json_metadata(monkeypatch):

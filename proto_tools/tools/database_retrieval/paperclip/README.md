@@ -23,7 +23,7 @@ GXL recommends finding papers first, then reading only the parts that matter. Se
 
 ### Paperclip Literature Search (`paperclip-literature-search`)
 
-Finds papers by topic, ranking them by a mix of keyword and meaning-based matching. Each hit carries its citation details, abstract, matched passage, and provenance.
+Finds papers by topic, ranking them by a mix of keyword and meaning-based matching. Each hit carries its citation details, abstract, matched passage, and citation URL (`source_url`).
 
 #### Applications
 

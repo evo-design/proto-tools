@@ -8,7 +8,6 @@ pattern) rather than its whole full text.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -16,9 +15,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, JsonValue, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from proto_tools.entities.provenance import SourceProvenance
 from proto_tools.tools.database_retrieval.paperclip.paperclip_client import PaperclipClient, PaperclipCommandError
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField
@@ -109,7 +107,7 @@ class PaperclipSearchHit(BaseModel):
         default=None, title="Relevance Score", description="Paperclip relevance score"
     )
     access_kind: LiteratureAccessKind = Field(title="Access Kind", description="Content granularity returned")
-    provenance: SourceProvenance = Field(title="Provenance", description="Source and request provenance")
+    source_url: str = Field(title="Source URL", description="Paperclip citation page for the paper")
     raw_metadata: dict[str, Any] = Field(
         default_factory=dict, title="Raw Metadata", description="Unmodified Paperclip result", repr=False
     )
@@ -131,14 +129,6 @@ def _normalize_hit(item: dict[str, Any], operation: str) -> PaperclipSearchHit:
     abstract = item.get("abstract")
     source = str(item.get("source") or item.get("corpus") or "unknown")
     pmid = item.get("pmid") or (item.get("citation_canonical_work") or {}).get("pmid")
-    provenance = SourceProvenance(
-        provider="Paperclip",
-        source_url=_PAPER_URL.format(document_id=document_id),
-        identifier=document_id,
-        version=str(item.get("pub_date") or item.get("citation_year") or "") or None,
-        media_type="application/json",
-        request_parameters={"operation": operation, "source": source},
-    )
     return PaperclipSearchHit(
         document_id=document_id,
         title=str(item.get("title") or item.get("citation_title") or document_id),
@@ -154,7 +144,7 @@ def _normalize_hit(item: dict[str, Any], operation: str) -> PaperclipSearchHit:
         matched_text=item.get("chunk_text"),
         relevance_score=item.get("rerank_score") if item.get("rerank_score") is not None else item.get("score"),
         access_kind=LiteratureAccessKind.ABSTRACT if abstract else LiteratureAccessKind.METADATA,
-        provenance=provenance,
+        source_url=_PAPER_URL.format(document_id=document_id),
         raw_metadata=item,
     )
 
@@ -261,7 +251,7 @@ def _search_example() -> Any:
     input_class=PaperclipSearchInput,
     config_class=PaperclipSearchConfig,
     output_class=PaperclipSearchOutput,
-    description="Search Paperclip full-text and abstract literature corpora with provenance",
+    description="Search Paperclip full-text and abstract literature corpora for citable papers",
     uses_gpu=False,
     example_input=_search_example,
     cacheable=True,
@@ -277,7 +267,7 @@ def run_paperclip_search(
         instance (Any): Unused; the tool runs in process.
 
     Returns:
-        PaperclipSearchOutput: Normalized, citable hits with source provenance.
+        PaperclipSearchOutput: Normalized, citable hits, each with its citation URL.
     """
     del instance
     result_id, papers = _client(config).search(
@@ -376,7 +366,7 @@ def run_paperclip_lookup(
         instance (Any): Unused; the tool runs in process.
 
     Returns:
-        PaperclipLookupOutput: Matching papers with source provenance.
+        PaperclipLookupOutput: Matching papers, each with its citation URL.
     """
     del instance
     result_id, papers = _client(config).lookup(inputs.field, inputs.value, limit=config.limit)
@@ -437,7 +427,7 @@ class PaperclipGrepOutput(_JsonOutput):
         result_id (str | None): Paperclip result identifier, when one was saved.
         document_ids (list[str]): Papers with at least one match, in order of first match.
         lines (list[str]): Matching lines exactly as Paperclip returned them.
-        provenance (SourceProvenance): Source and request provenance.
+        source_url (str): Paperclip service the corpus was searched on.
     """
 
     pattern: str = Field(title="Pattern", description="Submitted regular expression")
@@ -448,7 +438,7 @@ class PaperclipGrepOutput(_JsonOutput):
     lines: list[str] = Field(
         default_factory=list, title="Lines", description="Matching lines exactly as Paperclip returned them"
     )
-    provenance: SourceProvenance = Field(title="Provenance", description="Source and request provenance")
+    source_url: str = Field(title="Source URL", description="Paperclip service the corpus was searched on")
 
 
 def _grep_example() -> Any:
@@ -503,19 +493,7 @@ def run_paperclip_grep(
         result_id=result.result_id,
         document_ids=document_ids,
         lines=lines,
-        provenance=SourceProvenance(
-            provider="Paperclip",
-            source_url=_SERVICE_URL,
-            media_type="text/plain",
-            request_parameters={
-                "operation": "grep",
-                "path": "/papers/",
-                "pattern": inputs.pattern,
-                "max_matches": config.max_matches,
-                "ignore_case": config.ignore_case,
-                "exhaustive": config.exhaustive,
-            },
-        ),
+        source_url=_SERVICE_URL,
     )
 
 
@@ -614,15 +592,7 @@ class PaperclipDocument(BaseModel):
     expected_content_bytes: int | None = Field(
         default=None, title="Expected Content Bytes", description="Full-text byte count Paperclip reports"
     )
-    metadata_provenance: SourceProvenance = Field(
-        title="Metadata Provenance",
-        description="Provenance and checksum of the exact metadata bytes Paperclip returned",
-    )
-    content_provenance: SourceProvenance | None = Field(
-        default=None,
-        title="Content Provenance",
-        description="Provenance and checksum of the returned excerpt or complete full text",
-    )
+    source_url: str = Field(title="Source URL", description="Paperclip citation page for the paper")
 
 
 class PaperclipDocumentOutput(_JsonOutput):
@@ -684,7 +654,7 @@ def run_paperclip_document(
         instance (Any): Unused; the tool runs in process.
 
     Returns:
-        PaperclipDocumentOutput: Metadata, the requested content, and per-file provenance.
+        PaperclipDocumentOutput: Metadata and the requested content.
     """
     del instance
     client = _client(config)
@@ -699,40 +669,17 @@ def run_paperclip_document(
         ) from exc
     if not isinstance(metadata, dict):
         raise PaperclipCommandError(f"Paperclip metadata for {inputs.document_id} is not a JSON object")
-    source_url = _PAPER_URL.format(document_id=inputs.document_id)
-    version = str(metadata.get("pub_date") or metadata.get("year") or "") or None
-    details: dict[str, JsonValue] = {"license": metadata["license"]} if isinstance(metadata.get("license"), str) else {}
-
-    def provenance_for(text: str, media_type: str, request_parameters: dict[str, JsonValue]) -> SourceProvenance:
-        content_bytes = text.encode("utf-8")
-        return SourceProvenance(
-            provider="Paperclip",
-            source_url=source_url,
-            identifier=inputs.document_id,
-            version=version,
-            media_type=media_type,
-            content_sha256=hashlib.sha256(content_bytes).hexdigest(),
-            size_bytes=len(content_bytes),
-            request_parameters=request_parameters,
-            details=details,
-        )
-
     document = PaperclipDocument(
         document_id=inputs.document_id,
         metadata=metadata,
         access_kind=LiteratureAccessKind.METADATA,
-        metadata_provenance=provenance_for(metadata_output, "application/json", {"operation": "metadata"}),
+        source_url=_PAPER_URL.format(document_id=inputs.document_id),
     )
     if config.read == "lines":
         excerpt = client.read_lines(content_path, config.start_line, config.end_line)
         if excerpt.strip():
             document.excerpt = excerpt
             document.access_kind = LiteratureAccessKind.EXCERPT
-            document.content_provenance = provenance_for(
-                excerpt,
-                "text/plain",
-                {"operation": "lines", "start_line": config.start_line, "end_line": config.end_line},
-            )
         else:
             document.access_kind = LiteratureAccessKind.INACCESSIBLE
     elif config.read == "grep":
@@ -743,16 +690,6 @@ def run_paperclip_document(
         document.matches = _parse_grep_lines(output)
         if document.matches:
             document.access_kind = LiteratureAccessKind.EXCERPT
-            document.content_provenance = provenance_for(
-                output,
-                "text/plain",
-                {
-                    "operation": "grep",
-                    "pattern": pattern,
-                    "context_lines": config.context_lines,
-                    "ignore_case": config.ignore_case,
-                },
-            )
     elif config.read == "full_text":
         content_output = client.read_file(content_path)
         if content_output.strip():
@@ -760,7 +697,6 @@ def run_paperclip_document(
             if document.expected_content_bytes == len(content_output.encode("utf-8")):
                 document.content = content_output
                 document.access_kind = LiteratureAccessKind.FULL_TEXT
-                document.content_provenance = provenance_for(content_output, "text/plain", {"operation": "full_text"})
             else:
                 document.content_preview = content_output
                 document.access_kind = LiteratureAccessKind.INACCESSIBLE

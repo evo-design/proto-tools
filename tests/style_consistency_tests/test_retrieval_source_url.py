@@ -13,6 +13,9 @@ from proto_tools.tools.tool_registry import ToolRegistry
 # Tools that carry their source somewhere other than a top-level output field.
 _EXEMPT_TOOLS = {
     "ccd-lookup": "reads a bundled copy of the CCD offline",
+    "paperclip-literature-document": "records source_url on its PaperclipDocument",
+    "paperclip-literature-lookup": "records source_url on each PaperclipSearchHit",
+    "paperclip-literature-search": "records source_url on each PaperclipSearchHit",
     "sequence-fetch": "records source_url on each FetchedSequence and FetchedStructure",
 }
 
