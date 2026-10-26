@@ -119,11 +119,28 @@ class _ReadVolume:
         yield self._payload
 
 
-def test_an_absent_manifest_reads_as_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    volume = _ReadVolume(error=modal.exception.NotFoundError("no such file"))
+@pytest.mark.parametrize(
+    "error",
+    [
+        # What Volume.read_file raises for a missing file: it re-raises Modal's NotFoundError as this.
+        FileNotFoundError("/_fingerprints/ESM2Service.json"),
+        # A missing volume.
+        modal.exception.NotFoundError("no such volume"),
+    ],
+)
+def test_an_absent_manifest_reads_as_none(monkeypatch: pytest.MonkeyPatch, error: Exception) -> None:
+    volume = _ReadVolume(error=error)
     monkeypatch.setattr(modal.Volume, "from_name", lambda *_args, **_kwargs: volume)
 
     assert fp.read_manifest(SERVICE) is None
+
+
+def test_a_manifest_that_is_not_an_object_is_unreadable(monkeypatch: pytest.MonkeyPatch) -> None:
+    volume = _ReadVolume(payload=b"[]")
+    monkeypatch.setattr(modal.Volume, "from_name", lambda *_args, **_kwargs: volume)
+
+    with pytest.raises(fp.ManifestUnreadable):
+        fp.read_manifest(SERVICE)
 
 
 def test_an_unreadable_manifest_is_not_mistaken_for_an_absent_one(monkeypatch: pytest.MonkeyPatch) -> None:

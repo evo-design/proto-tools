@@ -261,23 +261,26 @@ def read_manifest(
         client (Any | None): Modal client to read as, or ``None`` for the process's own.
 
     Raises:
-        ManifestUnreadable: If a manifest may exist but could not be read or parsed.
+        ManifestUnreadable: If a manifest may exist but could not be read, or is not a JSON object.
     """
     import modal
 
-    from proto_tools.modal.app import CACHE_VOLUME_NAME
-
     try:
+        from proto_tools.modal.app import CACHE_VOLUME_NAME
+
         volume = modal.Volume.from_name(CACHE_VOLUME_NAME, environment_name=environment, client=client)
         raw = b"".join(volume.read_file(manifest_path(service_class)))
-    except modal.exception.NotFoundError:
+    # read_file re-raises a missing file as FileNotFoundError; NotFoundError is a missing volume.
+    except (FileNotFoundError, modal.exception.NotFoundError):
         return None
     except Exception as exc:
         raise ManifestUnreadable(f"could not read the fingerprints of {service_class}: {exc}") from exc
     try:
-        parsed: dict[str, Any] = json.loads(raw)
+        parsed = json.loads(raw)
     except ValueError as exc:
         raise ManifestUnreadable(f"the fingerprints of {service_class} are not valid JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ManifestUnreadable(f"the fingerprints of {service_class} are not a JSON object")
     return parsed
 
 
@@ -313,6 +316,9 @@ def drifted_fields(tool_key: str, manifest: dict[str, Any]) -> dict[str, tuple[A
 
     Returns:
         dict[str, tuple[Any, Any]]: Field name to ``(deployed, local)`` value.
+
+    Raises:
+        ValueError: If ``tool_key`` is not registered here, since its local fingerprint cannot be computed.
     """
     if manifest.get("algorithm") != ALGORITHM:
         return {"algorithm": (manifest.get("algorithm"), ALGORITHM)}
