@@ -38,7 +38,7 @@ Use this to resolve a gene of interest as the entry point of nearly any Ensembl 
 - **Nested transcripts and exons are absent unless `expand` is set.** The default matches Ensembl REST and returns the gene record only, so request expansion explicitly when you need the transcript or exon hierarchy.
 - **`phenotypes` and `utr` apply only to ID-based lookup.** They are sent only on the `/lookup/id` path and are ignored for a symbol lookup. `utr` additionally requires `expand`.
 - **`mane` adds MANE annotations to each transcript and requires `expand`.** It works for both ID and symbol lookup on GRCh38.
-- **`transcripts` keeps only the `canonical` or `mane_select` transcript.** Use it when downstream design needs one reproducible isoform. `canonical` requires `expand`, `mane_select` also requires `mane` on GRCh38, and the lookup fails if no transcript matches.
+- **`transcripts` keeps only the `canonical` or `mane_select` transcript.** Use it when downstream design needs one reproducible isoform. `canonical` requires `expand`, `mane_select` also requires `mane` on GRCh38, and a gene with no matching transcript comes back with an empty `Transcript` list and a message in `warnings`.
 
 ### Ensembl Sequence (`ensembl-sequence`)
 

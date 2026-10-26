@@ -86,8 +86,9 @@ class EnsemblLookupConfig(BaseConfig):
             only; requires ``expand=True``).
         transcripts (TranscriptSelection): Which transcripts to keep in
             ``result.Transcript``: ``all``, the Ensembl ``canonical`` one, or
-            the ``mane_select`` one. ``canonical`` requires ``expand=True``;
-            ``mane_select`` also requires ``mane=True`` on GRCh38.
+            the ``mane_select`` one, with a warning when none matches.
+            ``canonical`` requires ``expand=True``; ``mane_select`` also
+            requires ``mane=True`` on GRCh38.
     """
 
     species: EnsemblSpecies = ConfigField(
@@ -251,14 +252,16 @@ def run_ensembl_lookup(
         if not isinstance(payload, dict):
             raise ValueError(f"Ensembl lookup returned non-dict payload: {type(payload).__name__}")
         gene = EnsemblGene.model_validate(payload)
+        warnings: list[str] = []
         if config.transcripts != "all":
             gene.Transcript = [t for t in gene.Transcript if _is_selected(t, config.transcripts)]
             if not gene.Transcript:
-                raise ValueError(f"Ensembl gene {gene.id} has no {config.transcripts} transcript")
+                warnings.append(f"Ensembl gene {gene.id} has no {config.transcripts} transcript")
         return EnsemblLookupOutput(
             result=gene,
             source_url=response.url,
             raw_payload=payload,
+            warnings=warnings,
         )
     finally:
         session.close()

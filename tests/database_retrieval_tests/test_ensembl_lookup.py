@@ -201,18 +201,20 @@ def test_transcripts_filters_result(transcripts, expected_ids):
     assert [t.id for t in out.result.Transcript] == expected_ids
 
 
-def test_transcripts_raises_when_nothing_matches():
-    """A gene with no MANE Select transcript fails rather than returning an empty selection."""
+def test_transcripts_warns_when_nothing_matches():
+    """A gene with no MANE Select transcript returns an empty selection and says why."""
     payload = {**_BRCA1_LOOKUP_PAYLOAD, "Transcript": [_ALT_TRANSCRIPT]}
     with patch(
         "proto_tools.tools.database_retrieval.ensembl.ensembl_lookup.build_session",
         return_value=_stub_session(payload),
     ):
-        with pytest.raises(ValueError, match="no mane_select transcript"):
-            run_ensembl_lookup(
-                EnsemblLookupInput(symbol="BRCA1"),
-                EnsemblLookupConfig(expand=True, mane=True, transcripts="mane_select"),
-            )
+        out = run_ensembl_lookup(
+            EnsemblLookupInput(symbol="BRCA1"),
+            EnsemblLookupConfig(expand=True, mane=True, transcripts="mane_select"),
+        )
+    assert out.result.id == "ENSG00000012048"
+    assert out.result.Transcript == []
+    assert out.warnings == ["Ensembl gene ENSG00000012048 has no mane_select transcript"]
 
 
 def test_wraps_corrupt_json_with_context():
