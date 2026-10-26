@@ -1,7 +1,7 @@
 """SynBioHub SBOL and sequence document retrieval."""
 
 from proto_tools.tools.database_retrieval.synbiohub.synbiohub_fetch import (
-    SynBioHubArtifact,
+    SynBioHubDocument,
     SynBioHubFetchConfig,
     SynBioHubFetchInput,
     SynBioHubFetchOutput,
@@ -9,7 +9,7 @@ from proto_tools.tools.database_retrieval.synbiohub.synbiohub_fetch import (
 )
 
 __all__ = [
-    "SynBioHubArtifact",
+    "SynBioHubDocument",
     "SynBioHubFetchConfig",
     "SynBioHubFetchInput",
     "SynBioHubFetchOutput",

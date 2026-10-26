@@ -14,6 +14,7 @@ from proto_tools.tools.tool_registry import ToolRegistry
 _EXEMPT_TOOLS = {
     "ccd-lookup": "reads a bundled copy of the CCD offline",
     "sequence-fetch": "records source_url on each FetchedSequence and FetchedStructure",
+    "synbiohub-fetch": "records source_url on each SynBioHubDocument",
 }
 
 _RETRIEVAL_SPECS = sorted(

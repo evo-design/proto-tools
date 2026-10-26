@@ -1,6 +1,5 @@
 """Fetch standards-native design documents from a SynBioHub registry."""
 
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -10,7 +9,6 @@ from urllib.parse import urlsplit
 import requests
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from proto_tools.entities.provenance import AccessLevel, RetrievedArtifact, SourceProvenance
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -24,7 +22,6 @@ from proto_tools.utils import (
 
 SynBioHubFormat = Literal["sbol", "fasta", "genbank"]
 _FORMAT_SUFFIX = {"sbol": "sbol", "fasta": "fasta", "genbank": "gb"}
-_MEDIA_TYPE = {"sbol": "application/rdf+xml", "fasta": "text/x-fasta", "genbank": "text/x-genbank"}
 _REQUEST_TIMEOUT_SECONDS = 30
 _HTTP_RETRIES = 2
 _BACKOFF_SECONDS = 1.0
@@ -105,30 +102,20 @@ class SynBioHubFetchConfig(BaseConfig):
         return list(dict.fromkeys(value))
 
 
-class SynBioHubArtifact(BaseModel):
-    """One exact representation downloaded from SynBioHub.
+class SynBioHubDocument(BaseModel):
+    """One representation downloaded from SynBioHub.
 
     Attributes:
         format (SynBioHubFormat): Representation format.
-        content (str): Exact decoded document content.
+        content (str): Decoded document content.
         source_url (str): Stable download endpoint.
-        provenance (SourceProvenance): Registry and checksum provenance.
-        artifact (RetrievedArtifact): Content checksum and size descriptor.
     """
 
     model_config = ConfigDict(str_strip_whitespace=False)
 
     format: SynBioHubFormat = Field(title="Format", description="Downloaded representation format")
-    content: str = Field(repr=False, title="Content", description="Exact decoded document content")
+    content: str = Field(repr=False, title="Content", description="Decoded document content")
     source_url: str = Field(title="Source URL", description="Stable SynBioHub download endpoint")
-    provenance: SourceProvenance = Field(
-        title="Source Provenance",
-        description="Registry source, access classification, and content checksum",
-    )
-    artifact: RetrievedArtifact = Field(
-        title="Artifact",
-        description="Checksum and size descriptor for exact downloaded bytes",
-    )
 
 
 class SynBioHubFetchOutput(BaseToolOutput):
@@ -137,12 +124,12 @@ class SynBioHubFetchOutput(BaseToolOutput):
     Attributes:
         object_uri (str): Canonical top-level object URI.
         registry_url (str): Registry origin used for retrieval.
-        documents (list[SynBioHubArtifact]): Downloaded SBOL and sequence documents.
+        documents (list[SynBioHubDocument]): Downloaded SBOL and sequence documents.
     """
 
     object_uri: str = Field(title="Object URI", description="Canonical top-level object URI")
     registry_url: str = Field(title="Registry URL", description="Registry origin used for retrieval")
-    documents: list[SynBioHubArtifact] = Field(
+    documents: list[SynBioHubDocument] = Field(
         default_factory=list,
         title="Documents",
         description="Downloaded SBOL and sequence representations",
@@ -190,7 +177,7 @@ def run_synbiohub_fetch(
     config: SynBioHubFetchConfig,
     instance: Any = None,
 ) -> SynBioHubFetchOutput:
-    """Fetch exact representations for one SynBioHub object.
+    """Fetch the requested representations of one SynBioHub object.
 
     Args:
         inputs (SynBioHubFetchInput): Top-level object URI.
@@ -198,7 +185,7 @@ def run_synbiohub_fetch(
         instance (Any): Optional ToolInstance; unused for this HTTP-only tool.
 
     Returns:
-        SynBioHubFetchOutput: Downloaded standards-native documents and provenance.
+        SynBioHubFetchOutput: Downloaded standards-native documents.
     """
     del instance
     _validate_same_origin(inputs.object_uri, config.registry_url)
@@ -216,7 +203,6 @@ def run_synbiohub_fetch(
                 inputs.object_uri,
                 document_format,
                 recursive_sbol=config.recursive_sbol,
-                authenticated=config.synbiohub_token is not None,
                 headers=headers,
                 session=session,
             )
@@ -244,11 +230,10 @@ def _fetch_document(
     document_format: SynBioHubFormat,
     *,
     recursive_sbol: bool,
-    authenticated: bool,
     headers: dict[str, str],
     session: requests.Session,
-) -> SynBioHubArtifact:
-    """Fetch one exact SynBioHub representation."""
+) -> SynBioHubDocument:
+    """Fetch one SynBioHub representation."""
     suffix = "sbolnr" if document_format == "sbol" and not recursive_sbol else _FORMAT_SUFFIX[document_format]
     source_url = f"{object_uri}/{suffix}"
     response = request_with_retry(
@@ -264,29 +249,8 @@ def _fetch_document(
     if 300 <= response.status_code < 400:
         raise ValueError(f"SynBioHub redirected {source_url}; verify the registry, object URI, and access token")
     response.raise_for_status()
-    content = response.content
-    digest = hashlib.sha256(content).hexdigest()
-    provenance = SourceProvenance(
-        provider="SynBioHub",
-        source_url=source_url,
-        identifier=object_uri,
-        content_sha256=digest,
-        molecule_type="SBOL design" if document_format == "sbol" else "nucleic acid",
-        media_type=_MEDIA_TYPE[document_format],
-        access_level=AccessLevel.AUTHENTICATED if authenticated else AccessLevel.PUBLIC,
-        request_parameters={"format": document_format, "recursive_sbol": recursive_sbol},
-    )
-    artifact = RetrievedArtifact(
-        name=f"SynBioHub {document_format} document",
-        content_sha256=digest,
-        media_type=_MEDIA_TYPE[document_format],
-        size_bytes=len(content),
-        provenance=provenance,
-    )
-    return SynBioHubArtifact(
+    return SynBioHubDocument(
         format=document_format,
-        content=content.decode(response.encoding or "utf-8"),
+        content=response.content.decode(response.encoding or "utf-8"),
         source_url=source_url,
-        provenance=provenance,
-        artifact=artifact,
     )

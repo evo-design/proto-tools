@@ -26,7 +26,7 @@ def test_fetch_rejects_cross_origin_object(monkeypatch):
         )
 
 
-def test_fetches_exact_documents_without_exposing_token(monkeypatch):
+def test_fetches_documents_without_exposing_token(monkeypatch):
     sbol = MagicMock(content=b"<rdf:RDF>\n</rdf:RDF>\n", encoding="utf-8", status_code=200)
     fasta = MagicMock(content=b">BBa_E0040\nATGC\n", encoding="utf-8", status_code=200)
     sbol.raise_for_status.return_value = None
@@ -42,8 +42,10 @@ def test_fetches_exact_documents_without_exposing_token(monkeypatch):
 
     assert [document.format for document in output.documents] == ["sbol", "fasta"]
     assert output.documents[0].content.endswith("\n")
-    for document in output.documents:
-        assert document.artifact.matches_content(document.content.encode("utf-8"))
+    assert [document.source_url for document in output.documents] == [
+        "https://api.synbiohub.org/public/bsu/BO_9757/1/sbol",
+        "https://api.synbiohub.org/public/bsu/BO_9757/1/fasta",
+    ]
     assert "private-token" not in output.model_dump_json()
     assert session.get.call_args_list[0].kwargs["headers"]["X-authorization"] == "private-token"
 

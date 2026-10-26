@@ -17,7 +17,7 @@ The `synbiohub-fetch` tool retrieves exact SBOL, FASTA, and GenBank representati
 
 ### SynBioHub Fetch (`synbiohub-fetch`)
 
-Downloads recursive or non-recursive SBOL plus optional FASTA and GenBank representations. Every returned document has an exact-byte SHA256 artifact descriptor. The selected object must share an origin with `registry_url`, preventing a design identifier from silently redirecting retrieval to another host.
+Downloads recursive or non-recursive SBOL plus optional FASTA and GenBank representations. Each returned document carries its download `source_url`. The selected object must share an origin with `registry_url`, preventing a design identifier from silently redirecting retrieval to another host.
 
 #### Applications
 
@@ -27,7 +27,7 @@ Use SBOL as the primary representation for composing multi-segment constructs an
 
 - **Prefer recursive SBOL for composition.** It includes referenced child objects needed to reconstruct a hierarchical design.
 - **Treat FASTA as a view, not the design model.** Flattened sequence cannot retain all component relationships.
-- **Tokens remain private.** `SYNBIOHUB_TOKEN` is excluded from cache keys and provenance. The current public instance returns HTTP 401 for some public-object downloads without a token.
+- **Tokens remain private.** `SYNBIOHUB_TOKEN` is excluded from cache keys and outputs. The current public instance returns HTTP 401 for some public-object downloads without a token.
 - **Select the registry explicitly.** `object_uri` must have the same origin as `registry_url`.
 
 ## Toolkit Notes
