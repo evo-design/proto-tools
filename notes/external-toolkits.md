@@ -158,6 +158,8 @@ def run_mytool_score(inputs: MyToolScoreInput, config: MyToolScoreConfig, instan
 
 Add `README.md`, `cite.bib`, `license.yaml`, `links.yaml`, and `examples/example.ipynb` as for a packaged toolkit. They are read from the directory of the file that defines each tool, so `ToolRegistry.get_citation`, `get_license`, `get_links`, `get_readme`, and the notebook lookups work wherever the package is installed. `ToolRegistry.get_docs_url` returns `None`, since the docs site only covers packaged toolkits.
 
+A `versions.yaml` is optional. With one, outputs carry the toolkit's version and source hash as for a packaged toolkit; without one, both fields are `None`. See `versioning.md`.
+
 ## Step 6: Package it
 
 Non-Python files must ship in your wheel, or a non-editable install loses `setup.sh`, `requirements.txt`, `python_version.txt`, the docs files, and the rest. Use proto-tools' package-data globs, plus any other extensions your toolkit ships, and keep namespace discovery on (the default for `[tool.setuptools.packages.find]`) so `standalone/` ships without an `__init__.py`:

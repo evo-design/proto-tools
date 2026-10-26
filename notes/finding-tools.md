@@ -108,6 +108,7 @@ ToolRegistry.get_citation("esm2-embedding")
 ToolRegistry.get_doi("esm2-embedding")
 ToolRegistry.get_links("esm2-embedding")
 ToolRegistry.get_license("esm2-embedding")
+ToolRegistry.get_version("esm2-embedding")
 ToolRegistry.get_weights_access("esm3-embedding")
 ToolRegistry.get_docs_url("esm2-embedding")
 ToolRegistry.get_example_notebook_path("esm2-embedding")
@@ -120,6 +121,8 @@ ToolRegistry.get_example_notebook_path("esm2-embedding")
 - `"request"`: weights must be obtained from the provider out of band.
 
 Check access before dispatching tools that load model weights.
+
+`get_version()` returns the toolkit's current version from its `versions.yaml` (see `versioning.md`).
 
 `"open"` describes how the weights are *obtained*, not how they may be *used*.
 A tool can download its weights with no gate and still carry restrictive terms —
@@ -158,7 +161,7 @@ run_tool = spec.function
 result = run_tool(Input(sequences=["MKTLIIA..."]), Config())
 ```
 
-`Config` is optional at the public call site, since the decorator supplies defaults. Output models inherit standard metadata (`tool_id`, `execution_time`, `success`, `errors`) plus tool-specific payload fields.
+`Config` is optional at the public call site, since the decorator supplies defaults. Output models inherit standard metadata (`tool_id`, `tool_version`, `tool_source_hash`, `proto_tools_version`, `execution_time`, `success`, `errors`) plus tool-specific payload fields. The version fields are covered in `versioning.md`.
 
 ## Persistence and Devices
 

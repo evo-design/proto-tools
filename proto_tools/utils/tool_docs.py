@@ -702,9 +702,9 @@ def get_model_doc(
     Returns:
         ModelDoc: Normalized view of the model's documentation.
     """
-    from proto_tools.utils.tool_io import _OUTPUT_METADATA_FIELDS
+    from proto_tools.utils.tool_io import OUTPUT_METADATA_FIELDS
 
-    exclude = _OUTPUT_METADATA_FIELDS
+    exclude = OUTPUT_METADATA_FIELDS
     field_docs = field_docs_from_docstrings(model_class)
 
     fields: list[FieldDoc] = []

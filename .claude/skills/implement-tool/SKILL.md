@@ -150,6 +150,7 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    |   +-- cite.bib            # BibTeX citation (required)
    |   +-- license.yaml        # License metadata (required — enforced by test_license_consistency.py)
    |   +-- links.yaml          # Canonical upstream links (required — github/website/paper/huggingface/...)
+   |   +-- versions.yaml       # `1.0.0: <source hash>` (required — written in Phase 5, see notes/versioning.md)
    |   +-- README.md
    |   +-- examples/
    |   |   +-- example.ipynb   # Working example notebook (required)
@@ -946,7 +947,9 @@ Review the **actual diff**, not just the files in isolation, against the quality
 
 **Steps:**
 
-1. **Stage all new files:**
+1. **Pin the version.** With the code final, write `proto_tools/tools/{category}/{toolkit}/versions.yaml` as `1.0.0: <hash>`, taking the hash from the failure of `pytest tests/style_consistency_tests/test_toolkit_versions.py -k {toolkit}`, then rerun it to confirm it passes. See `notes/versioning.md`.
+
+2. **Stage all new files:**
    ```bash
    git add proto_tools/tools/{category}/{toolkit}/
    git add tests/{category}_tests/test_{tool_key_snake}.py
@@ -955,7 +958,7 @@ Review the **actual diff**, not just the files in isolation, against the quality
    git add proto_tools/tools/__init__.py
    ```
 
-2. **Commit:**
+3. **Commit:**
    ```bash
    git commit -m "feat: implement {tool_display_name} tool wrapper
 
@@ -963,7 +966,7 @@ Review the **actual diff**, not just the files in isolation, against the quality
    Closes #{issue_number}"
    ```
 
-3. **Push and create PR:**
+4. **Push and create PR:**
    ```bash
    git push -u origin HEAD
    gh pr create --title "feat: implement {tool_display_name} tool" --body "$(cat <<'EOF'
@@ -992,4 +995,4 @@ Review the **actual diff**, not just the files in isolation, against the quality
    )"
    ```
 
-4. **Report the PR URL to the user.**
+5. **Report the PR URL to the user.**

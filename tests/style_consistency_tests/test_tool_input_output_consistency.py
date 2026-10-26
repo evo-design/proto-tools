@@ -8,7 +8,7 @@ import inspect
 import pytest
 
 from proto_tools.tools.tool_registry import ToolRegistry
-from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput
+from proto_tools.utils.tool_io import OUTPUT_METADATA_FIELDS, BaseToolInput, BaseToolOutput
 from tests.style_consistency_tests.helpers import field_description_is_valid, find_missing_fields_in_docstring
 
 _MAX_FIELD_TITLE_LENGTH = 31
@@ -116,16 +116,7 @@ def test_tool_input_and_output_consistency(tool_input, tool_output):
     )
     missing_fields = find_missing_fields_in_docstring(output_docstring, tool_output.model_fields.keys())
     # Remove standardized output fields
-    standard_tool_output_fields = (
-        "tool_id",
-        "execution_time",
-        "timestamp",
-        "success",
-        "warnings",
-        "errors",
-        "metadata",
-    )
-    missing_fields = [field for field in missing_fields if field not in standard_tool_output_fields]
+    missing_fields = [field for field in missing_fields if field not in OUTPUT_METADATA_FIELDS]
     assert len(missing_fields) == 0, (
         f"Tool output {tool_output.__name__} is missing the following fields in the docstring: {missing_fields}. "
         "Ensure: Field(..., description='Brief explanation')"

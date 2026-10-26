@@ -27,8 +27,8 @@ result = run_esm2_embeddings(
 ```
 
 `Config` is optional at the call site; the decorator supplies defaults. Every
-`Output` carries standard metadata (`tool_id`, `execution_time`, `success`,
-`errors`) plus tool-specific payload fields. Biological coordinates are
+`Output` carries standard metadata (`tool_id`, `tool_version`, `execution_time`,
+`success`, `errors`) plus tool-specific payload fields. Biological coordinates are
 1-indexed and inclusive.
 
 ## Find, inspect and run tools: CLI or MCP
