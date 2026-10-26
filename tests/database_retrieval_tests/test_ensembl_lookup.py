@@ -77,6 +77,7 @@ _BRCA1_LOOKUP_PAYLOAD = {
                 "length": 1863,
                 "Parent": "ENST00000357654",
             },
+            "MANE": [{"type": "MANE_Select", "refseq_match": "NM_007294.4", "id": "ENST00000357654"}],
         }
     ],
 }
@@ -105,8 +106,20 @@ def _stub_session(json_payload):
         ),
         ({"symbol": "BRCA1"}, {}, "/lookup/symbol/homo_sapiens/BRCA1", {}),
         ({"symbol": "BRCA1"}, {"expand": True}, "/lookup/symbol/homo_sapiens/BRCA1", {"expand": "1"}),
+        (
+            {"symbol": "BRCA1"},
+            {"expand": True, "mane": True},
+            "/lookup/symbol/homo_sapiens/BRCA1",
+            {"expand": "1", "mane": "1"},
+        ),
     ],
-    ids=["lookup-by-id-default", "lookup-by-id-expand-on", "lookup-by-symbol-default", "lookup-by-symbol-expand-on"],
+    ids=[
+        "lookup-by-id-default",
+        "lookup-by-id-expand-on",
+        "lookup-by-symbol-default",
+        "lookup-by-symbol-expand-on",
+        "lookup-by-symbol-mane-on",
+    ],
 )
 def test_url_and_params(inputs_kwargs, config_overrides, expected_url_suffix, expected_params):
     """Dispatch builds the right URL + query params for id vs symbol form."""
@@ -140,6 +153,7 @@ def test_dispatches_and_parses_into_ensembl_gene():
     assert len(transcript.Exon) == 1
     assert transcript.Translation is not None
     assert transcript.Translation.length == 1863
+    assert [(m.type, m.refseq_match) for m in transcript.MANE] == [("MANE_Select", "NM_007294.4")]
 
 
 def test_wraps_corrupt_json_with_context():
@@ -179,7 +193,7 @@ def test_rejects_non_dict_payload():
 @pytest.mark.integration
 def test_lookup_symbol_brca1_live():
     """BRCA1 lookup_symbol resolves to ENSG00000012048 with the canonical transcript present."""
-    out = run_ensembl_lookup(EnsemblLookupInput(symbol="BRCA1"), EnsemblLookupConfig(expand=True))
+    out = run_ensembl_lookup(EnsemblLookupInput(symbol="BRCA1"), EnsemblLookupConfig(expand=True, mane=True))
     assert out.success, out.errors
     assert out.result.id == "ENSG00000012048"
     assert out.result.display_name == "BRCA1"
@@ -188,6 +202,8 @@ def test_lookup_symbol_brca1_live():
     # Live BRCA1 returns 47 transcripts; floor at 20 catches "expand=False regression"
     # / "only canonical returned" without being drift-fragile.
     assert len(out.result.Transcript) >= 20
+    mane_select = [t.id for t in out.result.Transcript if any(m.type == "MANE_Select" for m in t.MANE)]
+    assert mane_select == ["ENST00000357654"]
 
 
 @pytest.mark.integration

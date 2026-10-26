@@ -75,8 +75,8 @@ class EnsemblLookupConfig(BaseConfig):
             ``grch37.rest.ensembl.org``.
         expand (bool): Include transcripts, translations, and exons in the
             response. Default ``False`` matches Ensembl REST.
-        mane (bool): Include MANE Select annotations (``/lookup/id`` only;
-            requires ``expand=True``).
+        mane (bool): Include MANE annotations on each transcript (requires
+            ``expand=True``; GRCh38 only).
         phenotypes (bool): Include phenotype annotations on gene records
             (``/lookup/id`` only).
         utr (bool): Include UTR coordinates per transcript (``/lookup/id``
@@ -97,7 +97,7 @@ class EnsemblLookupConfig(BaseConfig):
     mane: bool = ConfigField(
         title="MANE Annotations",
         default=False,
-        description="Include MANE Select annotations (lookup-by-id only; requires expand=True)",
+        description="Include MANE annotations on each transcript (requires expand=True; GRCh38 only)",
     )
     phenotypes: bool = ConfigField(
         title="Phenotype Annotations",
@@ -199,9 +199,7 @@ def run_ensembl_lookup(
     if eid:
         url = f"{base}/lookup/id/{eid}"
         params: dict[str, Any] = {"object_type": "gene"}
-        # mane / phenotypes / utr are accepted only by /lookup/id
-        if config.mane:
-            params["mane"] = "1"
+        # phenotypes / utr are accepted only by /lookup/id
         if config.phenotypes:
             params["phenotypes"] = "1"
         if config.utr:
@@ -211,6 +209,8 @@ def run_ensembl_lookup(
         params = {}
     if config.expand:
         params["expand"] = "1"
+    if config.mane:
+        params["mane"] = "1"
 
     session = build_session("ensembl-lookup")
     try:
