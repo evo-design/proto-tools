@@ -62,6 +62,18 @@ class RelaxationConfig(BaseConfig):
 
     Attributes:
         soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
+
+            Leave this at its default of ``1.0`` for standard gradient-based sequence
+            optimization. That feeds softmax-normalized probabilities to the model — a
+            differentiable relaxation of a valid sequence representation.
+
+            Values below ``1.0`` blend those probabilities with the raw input logits, which can
+            produce inputs outside the model's expected sequence representation. That alters
+            gradient behaviour and may suit experimental optimization strategies, but is not
+            generally recommended.
+
+            To evaluate a *discrete* sequence in the forward pass while keeping surrogate
+            gradients, set ``hard=1.0`` rather than lowering ``soft``.
         hard (float): Straight-through coefficient; 1 forwards a hard one-hot to the model.
     """
 
@@ -71,7 +83,7 @@ class RelaxationConfig(BaseConfig):
         le=1.0,
         allow_inf_nan=False,
         title="Soft Mixing",
-        description="Blend the raw input matrix (0) toward softmax probabilities (1).",
+        description="Blend raw input (0) toward softmax probabilities (1); keep 1.0 unless experimenting.",
     )
     hard: float = ConfigField(
         default=0.0,

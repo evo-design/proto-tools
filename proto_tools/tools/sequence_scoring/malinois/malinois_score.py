@@ -367,7 +367,9 @@ class MalinoisGradientConfig(RelaxationConfig):
         artifact_url (str): URL used to provision the Malinois artifact.
         artifact_md5 (str): Expected checksum for the downloaded artifact.
         malinois_dir (str): Optional extracted Malinois artifact directory.
-        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
+            (1); keep the default 1.0 unless deliberately experimenting. See
+            :class:`~proto_tools.utils.gradient_models.RelaxationConfig`.
         hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Run backward pass and return gradient.
         device (str): Device used for inference and backpropagation.

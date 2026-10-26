@@ -169,7 +169,9 @@ class ProteinMPNNGradientConfig(RelaxationConfig):
 
     Attributes:
         model_choice (ProteinMPNNModelChoice): ProteinMPNN weight variant.
-        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities (1).
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
+            (1); keep the default 1.0 unless deliberately experimenting. See
+            :class:`~proto_tools.utils.gradient_models.RelaxationConfig`.
         hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Return gradients when true; run forward scoring only when false.
         device (str): Device for ProteinMPNN execution.
