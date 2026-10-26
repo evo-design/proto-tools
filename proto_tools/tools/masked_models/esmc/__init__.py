@@ -6,6 +6,12 @@ from proto_tools.tools.masked_models.esmc.esmc_embeddings import (
     ESMCEmbeddingsOutput,
     run_esmc_embeddings,
 )
+from proto_tools.tools.masked_models.esmc.esmc_gradient import (
+    ESMCGradientConfig,
+    ESMCGradientInput,
+    ESMCGradientOutput,
+    run_esmc_gradient,
+)
 from proto_tools.tools.masked_models.esmc.esmc_sae_features import (
     ESMCSAEFeaturesConfig,
     ESMCSAEFeaturesInput,
@@ -26,6 +32,11 @@ __all__ = [
     "ESMCEmbeddingsConfig",
     "ESMCEmbeddingsOutput",
     "run_esmc_embeddings",
+    # Gradient
+    "ESMCGradientConfig",
+    "ESMCGradientInput",
+    "ESMCGradientOutput",
+    "run_esmc_gradient",
     # SAE Features
     "DESCRIBED_SAE_REPO",
     "ESMCSAEFeaturesConfig",

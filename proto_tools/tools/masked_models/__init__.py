@@ -90,12 +90,16 @@ from proto_tools.tools.masked_models.esmc import (
     ESMCEmbeddingsConfig,
     ESMCEmbeddingsInput,
     ESMCEmbeddingsOutput,
+    ESMCGradientConfig,
+    ESMCGradientInput,
+    ESMCGradientOutput,
     ESMCSAEFeaturesConfig,
     ESMCSAEFeaturesInput,
     ESMCSAEFeaturesOutput,
     SAELayerFeatures,
     SequenceSAEFeatures,
     run_esmc_embeddings,
+    run_esmc_gradient,
     run_esmc_sae_features,
 )
 from proto_tools.tools.masked_models.glm2 import (
@@ -339,6 +343,10 @@ __all__ = [
     "ESMCEmbeddingsConfig",
     "ESMCEmbeddingsOutput",
     # ESM C - SAE Features
+    "ESMCGradientConfig",
+    "ESMCGradientInput",
+    "ESMCGradientOutput",
+    "run_esmc_gradient",
     "run_esmc_sae_features",
     "ESMCSAEFeaturesInput",
     "ESMCSAEFeaturesConfig",
