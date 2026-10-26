@@ -541,6 +541,28 @@ def test_codonfm_score_real_gpu() -> None:
 
 
 @pytest.mark.integration
+def test_codonfm_gradient_token_layout_matches_the_scoring_path() -> None:
+    """The gradient's ``[CLS] + codons + [SEP]`` row must match Encodon's own tokenized input.
+
+    The worker assembles the model input itself rather than tokenizing, so a drift in the
+    special tokens around the codon columns would score a sequence the model never sees while
+    staying finite and self-consistent. The check tokenizes a CDS through Encodon's
+    ``process_item`` — the preprocessing every scoring path uses — and compares both the ids and
+    the attention mask against the worker's own assembly helpers. Unlike ESM2 and AbLang there is
+    no whole-sequence scoring tool whose number the gradient should reproduce: ``codonfm-score``
+    scores mutations and ``codonfm-fitness`` reports a different quantity than the gradient's
+    masked PLL, so the input layout is pinned instead of the loss.
+    ``_codonfm_token_layout_env_check.py`` runs inside the codonfm env; a failed assertion
+    surfaces as ``RuntimeError``.
+    """
+    from proto_tools.utils import run_in_env
+
+    check = Path(__file__).resolve().parent / "_codonfm_token_layout_env_check.py"
+    output = run_in_env("codonfm", script=str(check), timeout=1800)
+    assert "CODONFM_TOKEN_LAYOUT_OK" in output, output
+
+
+@pytest.mark.integration
 def test_codonfm_tokenizer_covers_the_canonical_codon_order() -> None:
     """The real tokenizer must map every canonical codon by name, with no weights involved.
 
