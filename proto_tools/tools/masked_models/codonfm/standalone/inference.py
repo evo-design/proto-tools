@@ -195,6 +195,39 @@ def _resolve_checkpoint(input_dict: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # Model wrapper
 # ---------------------------------------------------------------------------
+def special_token_layout(tokenizer: Any) -> tuple[int, int]:
+    """Return the ``(cls, sep)`` ids Encodon wraps a codon row with.
+
+    Args:
+        tokenizer (Any): The Encodon tokenizer.
+
+    Returns:
+        tuple[int, int]: The leading and trailing special-token ids.
+    """
+    return int(tokenizer.cls_token_id), int(tokenizer.sep_token_id)
+
+
+def build_model_input_row(tokenizer: Any, codon_ids: list[int]) -> tuple[list[int], list[int]]:
+    """Assemble the ``(input_ids, attention_mask)`` rows Encodon expects for a codon sequence.
+
+    Wraps the codons in CLS/SEP, pads to the smallest multiple-of-eight context that holds them,
+    and masks the padding out — the same layout upstream ``process_item`` produces when it
+    tokenizes a CDS. The gradient builds its tensors here instead of tokenizing, because its
+    input is a relaxed distribution rather than a sequence.
+
+    Args:
+        tokenizer (Any): The Encodon tokenizer.
+        codon_ids (list[int]): Codon vocabulary ids, in sequence order.
+
+    Returns:
+        tuple[list[int], list[int]]: Padded input ids and their attention mask.
+    """
+    cls_id, sep_id = special_token_layout(tokenizer)
+    wrapped = [cls_id, *codon_ids, sep_id]
+    padding = min(2048, ((len(wrapped) + 7) // 8) * 8) - len(wrapped)
+    return wrapped + [int(tokenizer.pad_token_id)] * padding, [1] * len(wrapped) + [0] * padding
+
+
 class CodonFMModel:
     """Caches a loaded ``EncodonInference`` and drives the codon-scoring tasks."""
 
@@ -371,8 +404,7 @@ class CodonFMModel:
         embed_layer = self._embedding_layer()
         weight = embed_layer.word_embeddings.weight
         codon_token_ids = torch.tensor([self.tokenizer.encoder[c] for c in codons], device=dev)
-        cls_id = int(self.tokenizer.cls_token_id)
-        sep_id = int(self.tokenizer.sep_token_id)
+        cls_id, sep_id = special_token_layout(self.tokenizer)
         mask_id = int(self.tokenizer.mask_token_id)
         pad_id = int(self.tokenizer.pad_token_id)
 
@@ -395,23 +427,15 @@ class CodonFMModel:
                 (special_embeddings[0:1], residue_embeddings, special_embeddings[1:2]),
                 dim=0,
             )
-            raw_token_ids = torch.cat(
-                (
-                    torch.tensor([cls_id], device=dev),
-                    residue_token_ids,
-                    torch.tensor([sep_id], device=dev),
-                ),
-                dim=0,
-            )
-            context_length = min(2048, ((sequence_length + 2 + 7) // 8) * 8)
-            padding = context_length - raw_token_ids.shape[0]
+            # Ids and mask come from the same assembly the scoring paths tokenize into, so the
+            # embeddings below are padded to a layout that cannot drift away from it.
+            id_row, mask_row = build_model_input_row(self.tokenizer, residue_token_ids.tolist())
+            padding = len(id_row) - raw_embeddings.shape[0]
             if padding:
                 raw_embeddings = torch.cat((raw_embeddings, weight[pad_id].expand(padding, -1)), dim=0)
-                raw_token_ids = F.pad(raw_token_ids, (0, padding), value=pad_id)
             input_embeddings = embed_layer.dropout(embed_layer.post_ln(raw_embeddings)).unsqueeze(0)
-            token_ids = raw_token_ids.unsqueeze(0)
-            attention_mask = torch.zeros_like(token_ids)
-            attention_mask[:, : sequence_length + 2] = 1
+            token_ids = torch.tensor(id_row, device=dev, dtype=torch.long).unsqueeze(0)
+            attention_mask = torch.tensor(mask_row, device=dev, dtype=torch.long).unsqueeze(0)
 
             codon_positions = torch.arange(1, sequence_length + 1, device=dev)
             seq_len = input_embeddings.shape[1]
