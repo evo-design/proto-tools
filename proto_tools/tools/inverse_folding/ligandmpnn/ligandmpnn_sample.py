@@ -19,6 +19,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingOutput,
     InverseFoldingStructureInput,
 )
+from proto_tools.tools.inverse_folding.structure_staging import staged_structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
 from proto_tools.utils.progress import progress_bar
@@ -257,9 +258,9 @@ def _fixed_positions_cover_structure(inp: InverseFoldingStructureInput) -> bool:
     """Return whether fixed_positions cover every residue in every structure chain."""
     if inp.fixed_positions is None:
         return False
-    fixed = inp.fixed_positions.to_residue_numbers(inp.structure)
     for chain_id in inp.structure.get_chain_ids():
-        if set(fixed.get(chain_id, [])) != set(inp.structure.get_chain_positions(chain_id)):
+        selected = set(inp.fixed_positions.chains.get(chain_id, []))
+        if selected != set(range(1, len(inp.structure.get_chain_positions(chain_id)) + 1)):
             return False
     return True
 
@@ -330,23 +331,20 @@ def run_ligandmpnn_sample(
         all_pmpnn: list[float | None] = []
         all_pdb_strings: list[str | None] = []
         remaining = config.num_sequences_per_structure
-        # Materialize the Structure to a tempfile once per input — reused across chunks.
-        with inp.structure.temp_file() as pdb_path:
+        # Staged once per input and reused across chunks, numbered 1..N per chain so LigandMPNN,
+        # which addresses residues by number alone, sees every insertion-coded residue.
+        with staged_structure(inp.structure) as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 all_positions_fixed = _fixed_positions_cover_structure(inp)
                 input_dict = {
                     "operation": "sample",
-                    "pdb_path": str(pdb_path),
-                    "chain_ids": inp.chain_ids_to_redesign,
+                    "pdb_path": str(staged.path),
+                    "chain_ids": staged.chains(inp.chain_ids_to_redesign),
                     "chains_explicitly_set": inp.chains_to_redesign is not None and not all_positions_fixed,
                     "batch_size": chunk,
                     "temperature": config.temperature,
-                    "fixed_positions": (
-                        inp.fixed_positions.to_residue_numbers(inp.structure)
-                        if inp.fixed_positions is not None
-                        else None
-                    ),
+                    "fixed_positions": staged.positions(inp.fixed_positions),
                     "excluded_amino_acids": config.excluded_amino_acids,
                     "seed": base_seed + dispatch_idx,
                     "device": config.device,
@@ -386,7 +384,11 @@ def run_ligandmpnn_sample(
             complexes.append(
                 LigandMPNNDesign.from_design(
                     inp.structure,
-                    {entry["id"]: entry["sequence"] for entry in chain_seqs if entry["id"] in redesign_ids},
+                    {
+                        cid: entry["sequence"]
+                        for entry in chain_seqs
+                        if (cid := staged.original_chain(entry["id"])) in redesign_ids
+                    },
                     redesigned_ids,
                     tool="ligandmpnn-sample",
                     include_ligands=True,
@@ -398,11 +400,7 @@ def run_ligandmpnn_sample(
                         ),
                         pmpnn=(pmpnn if pmpnn is not None and math.isfinite(pmpnn) else None),
                     ),
-                    structure=(
-                        Structure(structure=pdb_string, structure_format="pdb", source="ligandmpnn-sample")
-                        if pdb_string
-                        else None
-                    ),
+                    structure=(staged.restore(pdb_string, source="ligandmpnn-sample") if pdb_string else None),
                 )
             )
         design_sets.append(LigandMPNNDesignSet(complexes=complexes))

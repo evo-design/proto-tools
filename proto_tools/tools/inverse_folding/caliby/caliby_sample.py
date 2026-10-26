@@ -3,10 +3,7 @@
 Caliby Potts-model sequence design, optionally conditioned on a conformer ensemble.
 """
 
-import contextlib
 import logging
-import tempfile
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -18,6 +15,11 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignSet,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+)
+from proto_tools.tools.inverse_folding.structure_staging import (
+    chain_residue_ids,
+    restore_numbering,
+    staged_ensemble,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -587,156 +589,6 @@ class CalibySampleOutput(InverseFoldingOutput):
     )
 
 
-def chain_residue_ids(structure: Structure) -> dict[str, list[tuple[int, str]]]:
-    """Per-chain polymer residue IDs as ``(number, insertion code)``, in chain order.
-
-    Unlike ``Structure.get_chain_positions``, keeps the insertion code, so ``10`` and
-    ``10A`` stay distinct residues.
-
-    Args:
-        structure (Structure): The structure to read.
-
-    Returns:
-        dict[str, list[tuple[int, str]]]: Chain ID to residue IDs, first model only.
-    """
-    gemmi_struct = structure.gemmi_struct
-    gemmi_struct.setup_entities()
-    return {
-        chain.name: [(residue.seqid.num, residue.seqid.icode.strip()) for residue in chain.get_polymer()]  # type: ignore[misc]
-        for chain in gemmi_struct[0]
-        if chain.get_polymer()
-    }
-
-
-def sequential_pdb(structure: Structure) -> tuple[str, dict[str, str]]:
-    """PDB content with each chain's residues renumbered 1..N and insertion codes cleared.
-
-    Caliby addresses residues as ``<chain><number>`` and its position syntax has no
-    insertion codes, so ``10`` and ``10A`` would resolve to the same residue. Numbering
-    by ordinal makes a residue's number equal its 1-indexed position, which is how every
-    selection in this toolkit is written. The model is unaffected, since its
-    ``residue_index`` feature is already a within-chain ordinal. Non-polymer residues are
-    numbered after the polymer so none can share a number with a polymer residue.
-
-    Multi-character CIF chain IDs, which PDB cannot hold, are shortened to single
-    characters; the returned map translates selections in and output chains back.
-
-    Args:
-        structure (Structure): The structure to renumber.
-
-    Returns:
-        tuple[str, dict[str, str]]: The renumbered structure as PDB content, and the map
-            from each original chain ID to its chain ID in that content.
-    """
-    import gemmi
-
-    pdb_content, chain_map = structure.to_pdb_with_chain_mapping()
-    gemmi_struct = gemmi.read_pdb_string(pdb_content)
-    gemmi_struct.setup_entities()
-    for model in gemmi_struct:
-        for chain in model:
-            polymer = chain.get_polymer()
-            polymer_subchain = polymer.subchain_id() if polymer else None
-            polymer_count = len(polymer)
-            polymer_index = other_index = 0
-            for residue in chain:
-                if polymer_subchain is not None and residue.subchain == polymer_subchain:
-                    polymer_index += 1
-                    residue.seqid = gemmi.SeqId(polymer_index, " ")
-                else:
-                    other_index += 1
-                    residue.seqid = gemmi.SeqId(polymer_count + other_index, " ")
-    return gemmi_struct.make_pdb_string(), chain_map
-
-
-def restore_numbering(
-    cif: str,
-    residue_ids: dict[str, list[tuple[int, str]]],
-    source: str,
-    chain_map: dict[str, str] | None = None,
-) -> Structure:
-    """Wrap a Caliby output CIF, giving its chains back their input IDs and numbering.
-
-    Caliby writes the sequentially numbered structure it was given, so each chain's
-    ``i``-th polymer residue takes the ``i``-th input residue ID, insertion code included.
-
-    Args:
-        cif (str): The CIF content Caliby wrote.
-        residue_ids (dict[str, list[tuple[int, str]]]): Input residue IDs, as
-            ``chain_residue_ids`` returns them.
-        source (str): ``source`` label for the returned structure.
-        chain_map (dict[str, str] | None): Original to staged chain IDs, as
-            :func:`sequential_pdb` returns them. ``None`` means the IDs are unchanged.
-
-    Returns:
-        Structure: The output structure in the input structure's numbering.
-
-    Raises:
-        ValueError: If an output chain is absent from the input or has a different
-            number of polymer residues, so its residues cannot be matched back.
-    """
-    import gemmi
-
-    gemmi_struct = Structure(structure=cif, structure_format="cif", source=source).gemmi_struct
-    gemmi_struct.setup_entities()
-    original_chain_ids = {staged: original for original, staged in (chain_map or {}).items()}
-    for model in gemmi_struct:
-        for chain in model:
-            chain.name = original_chain_ids.get(chain.name, chain.name)
-            polymer = chain.get_polymer()
-            if not polymer:
-                continue
-            original = residue_ids.get(chain.name)
-            if original is None or len(original) != len(polymer):
-                raise ValueError(
-                    f"{source}: output chain {chain.name} has {len(polymer)} residues but the input chain has "
-                    f"{len(original) if original is not None else 'none'}, so its residue numbering cannot be restored"
-                )
-            for residue, (number, icode) in zip(polymer, original, strict=True):
-                residue.seqid = gemmi.SeqId(number, icode or " ")
-    restored = gemmi_struct.make_mmcif_document().as_string()
-    return Structure(structure=restored, structure_format="cif", source=source)
-
-
-@contextlib.contextmanager
-def ensemble_paths(structures: list[Structure]) -> Iterator[tuple[Path, list[Path], dict[str, str]]]:
-    """Materialize an ensemble to sequentially numbered temp PDB files, primary conformer first.
-
-    PDB rather than CIF because Caliby reads chain IDs from ``label_asym_id``, which
-    ``Structure.write_cif`` leaves unset, so a CIF arrives with every chain annotated
-    ``'.'`` and no chain- or residue-level constraint can resolve. Each file is
-    renumbered by :func:`sequential_pdb`, so a 1-indexed position is also the residue
-    number Caliby resolves, in every conformer.
-
-    Args:
-        structures (list[Structure]): The ensemble, as ``ensemble_structures`` returns it.
-
-    Yields:
-        tuple[Path, list[Path], dict[str, str]]: The primary conformer's path, the other
-            members' paths in ensemble order (empty without an ensemble), and the map from
-            original to staged chain IDs.
-
-    Raises:
-        ValueError: If a conformer's chain IDs shorten differently from the primary's.
-    """
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        paths = []
-        chain_maps = []
-        for index, structure in enumerate(structures):
-            pdb_content, chain_map = sequential_pdb(structure)
-            path = Path(tmp_dir) / f"structure_{index}.pdb"
-            path.write_text(pdb_content)
-            paths.append(path)
-            chain_maps.append(chain_map)
-        for index, chain_map in enumerate(chain_maps[1:]):
-            if chain_map != chain_maps[0]:
-                raise ValueError(
-                    f"conformers[{index}] chain IDs shorten to {chain_map} for PDB staging but the primary "
-                    f"structure's shorten to {chain_maps[0]}; give the ensemble identical chain IDs"
-                )
-        yield paths[0], paths[1:], chain_maps[0]
-
-
 # ============================================================================
 # Tool Implementation
 # ============================================================================
@@ -830,7 +682,8 @@ def run_caliby_sample(
 
         # One dispatch per structure: Caliby computes Potts parameters once and then samples
         # every sequence from them, so splitting the design count costs a re-encode and buys nothing.
-        with ensemble_paths(inp.ensemble_structures) as (primary_path, conformer_paths, chain_map):
+        with staged_ensemble(inp.ensemble_structures) as (staged, conformer_paths):
+            primary_path, chain_map = staged.path, staged.chain_map
             # Chain IDs are sent as staged, since multi-character CIF chain IDs are shortened for PDB.
             input_dict = {
                 "operation": "sample",
@@ -891,7 +744,9 @@ def run_caliby_sample(
                     redesign_set,
                     tool="caliby-sample",
                     include_ligands=False,
-                    structure=restore_numbering(cif, residue_ids, source="caliby-sample", chain_map=chain_map),
+                    structure=restore_numbering(
+                        cif, residue_ids, source="caliby-sample", chain_map=chain_map, structure_format="cif"
+                    ),
                     metrics=CalibyDesignMetrics(
                         potts_energy=energy,
                         avg_potts_energy=energy / total_length if total_length else 0.0,

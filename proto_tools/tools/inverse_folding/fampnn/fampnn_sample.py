@@ -18,6 +18,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingOutput,
     InverseFoldingStructureInput,
 )
+from proto_tools.tools.inverse_folding.structure_staging import staged_structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseToolInput,
@@ -294,22 +295,26 @@ def run_fampnn_sample(
         # held in place by fixing all of their positions.
         chain_ids = [cid for cid, kind in inp.structure.get_chain_types().items() if kind == "protein"]
         redesign_set = set(inp.chain_ids_to_redesign)
-        fixed_positions = inp.fixed_positions.to_residue_numbers(inp.structure) if inp.fixed_positions else {}
+        # Staged files are numbered 1..N per chain, so a 1-indexed position is its residue number.
+        fixed_positions = {
+            cid: list(pos) for cid, pos in (inp.fixed_positions.chains if inp.fixed_positions else {}).items()
+        }
         for cid in chain_ids:
             if cid not in redesign_set:
-                fixed_positions[cid] = inp.structure.get_chain_positions(cid)
+                fixed_positions[cid] = list(range(1, len(inp.structure.get_chain_positions(cid)) + 1))
         all_chain_seqs: list[list[str]] = []
         all_psce: list[list[float]] = []
         all_pdbs: list[str] = []
         remaining = config.num_sequences_per_structure
-        # Materialize the Structure to a tempfile once per input, reused across chunks.
-        with inp.structure.temp_file() as pdb_path:
+        # Staged once per input and reused across chunks, numbered 1..N per chain so FAMPNN,
+        # which addresses residues by number alone, sees every insertion-coded residue.
+        with staged_structure(inp.structure) as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 input_dict = {
                     "operation": "sample",
-                    "pdb_path": str(pdb_path),
-                    "chain_ids": inp.chain_ids_to_redesign,
+                    "pdb_path": str(staged.path),
+                    "chain_ids": staged.chains(inp.chain_ids_to_redesign),
                     "num_sequences": chunk,
                     "temperature": config.temperature,
                     "num_steps": config.num_steps,
@@ -322,12 +327,8 @@ def run_fampnn_sample(
                     "model_variant": config.model_variant,
                     "device": config.device,
                     "verbose": config.verbose,
-                    "fixed_positions": fixed_positions or None,
-                    "fixed_sidechain_positions": (
-                        inp.fixed_sidechain_positions.to_residue_numbers(inp.structure)
-                        if inp.fixed_sidechain_positions is not None
-                        else None
-                    ),
+                    "fixed_positions": ({staged.chain_map[cid]: pos for cid, pos in fixed_positions.items()} or None),
+                    "fixed_sidechain_positions": staged.positions(inp.fixed_sidechain_positions),
                 }
                 result = ToolInstance.dispatch(
                     "fampnn",
@@ -354,7 +355,7 @@ def run_fampnn_sample(
                     f"does not match per-residue pSCE length {len(psce)}"
                 )
             sequences = {cid: seq for cid, seq in zip(chain_ids, chain_seqs, strict=True) if cid in redesign_set}
-            structure = Structure(structure=pdb, structure_format="pdb", source="fampnn-sample")
+            structure = staged.restore(pdb, source="fampnn-sample")
             avg_psce = statistics.fmean(psce) if psce else 0.0
             complexes.append(
                 FAMPNNDesign.from_design(

@@ -17,6 +17,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingOutput,
     InverseFoldingStructureInput,
 )
+from proto_tools.tools.inverse_folding.structure_staging import staged_structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField
 from proto_tools.utils.progress import progress_bar
@@ -214,25 +215,22 @@ def run_esm_if1_sample(
     ):
         all_seqs, all_metrics = [], []
         remaining = config.num_sequences_per_structure
-        # Materialize the Structure to a tempfile once per input — reused across chunks.
-        with inp.structure.temp_file() as pdb_path:
+        # Staged once per input and reused across chunks, numbered 1..N per chain so ESM-IF1,
+        # which addresses residues by number alone, sees every insertion-coded residue.
+        with staged_structure(inp.structure) as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 input_dict = {
                     "operation": "sample",
-                    "pdb_path": str(pdb_path),
-                    "chain_ids": inp.chain_ids_to_redesign,
+                    "pdb_path": str(staged.path),
+                    "chain_ids": staged.chains(inp.chain_ids_to_redesign),
                     "batch_size": chunk,
                     "temperature": config.temperature,
                     "seed": base_seed + dispatch_idx,
                     "device": config.device,
                     "weights_variant": config.weights_variant,
                     "verbose": config.verbose,
-                    "fixed_positions": (
-                        inp.fixed_positions.to_residue_numbers(inp.structure)
-                        if inp.fixed_positions is not None
-                        else None
-                    ),
+                    "fixed_positions": staged.positions(inp.fixed_positions),
                 }
                 result = ToolInstance.dispatch(
                     "esm_if1",

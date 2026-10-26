@@ -29,10 +29,8 @@ from proto_tools.tools.inverse_folding.caliby import (
 from proto_tools.tools.inverse_folding.caliby.caliby_sample import (
     DESIGN_CHECKPOINTS,
     PACKER_CHECKPOINTS,
-    chain_residue_ids,
-    restore_numbering,
-    sequential_pdb,
 )
+from proto_tools.tools.inverse_folding.structure_staging import chain_residue_ids
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -82,25 +80,6 @@ def _renumber(structure: Structure, offset: int, gap_after: int, gap_size: int) 
     return Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
 
 
-def _with_insertion_code(structure: Structure, after: int, code: str = "A") -> Structure:
-    """Relabel residue ``after + 1`` as ``<after><code>`` and shift every later residue down by one.
-
-    The chain keeps its residue count, but residue ``after`` and its insertion-coded neighbour
-    now share a number, which only an insertion-code-aware mapping keeps apart.
-    """
-    lines = []
-    for line in structure.structure_pdb.splitlines():
-        relabelled = line
-        if line.startswith(("ATOM", "HETATM", "TER")) and len(line) >= 27:
-            number = int(line[22:26])
-            if number == after + 1:
-                relabelled = line[:22] + f"{after:>4}{code}" + line[27:]
-            elif number > after + 1:
-                relabelled = line[:22] + f"{number - 1:>4}" + line[26:]
-        lines.append(relabelled)
-    return Structure(structure="\n".join(lines) + "\n", structure_format="pdb", source="test")
-
-
 @pytest.fixture(scope="module")
 def pdb_structure():
     return Structure.from_file(TEST_PDB_FILE)
@@ -115,24 +94,6 @@ def multi_chain_structure():
 def offset_numbered_structure(pdb_structure):
     """The test backbone renumbered to 101-130, 151-185: offset start plus an internal gap."""
     return _renumber(pdb_structure, offset=100, gap_after=30, gap_size=20)
-
-
-@pytest.fixture(scope="module", params=["pdb", "cif"])
-def insertion_coded_structure(request, pdb_structure):
-    """The test backbone numbered 1..5, 5A, 6..64, as PDB and as CIF: position 6 is residue ``5A``."""
-    structure = _with_insertion_code(pdb_structure, after=5)
-    if request.param == "cif":
-        return Structure(structure=structure.structure_cif, structure_format="cif", source="test")
-    return structure
-
-
-@pytest.fixture(scope="module")
-def two_character_chain_structure(pdb_structure):
-    """The test backbone as a CIF whose only chain is ``AB``, an ID PDB format cannot hold."""
-    gemmi_struct = pdb_structure.gemmi_struct.clone()
-    for chain in gemmi_struct[0]:
-        chain.name = "AB"
-    return Structure(structure=gemmi_struct.make_mmcif_document().as_string(), structure_format="cif", source="test")
 
 
 @pytest.fixture(scope="module")
@@ -398,48 +359,6 @@ def test_pinned_residues_rejects_overlap_with_fixed_positions(pdb_structure):
     """Caliby conditions on overridden positions, so naming one as fixed too is contradictory."""
     with pytest.raises(ValidationError, match="appear in both pinned_residues and fixed_positions"):
         CalibyStructureInput(structure=pdb_structure, pinned_residues={"A": {3: "W"}}, fixed_positions={"A": [3]})
-
-
-def test_chain_residue_ids_keep_insertion_codes(insertion_coded_structure):
-    """``5`` and ``5A`` are distinct residues, where integer numbering collapses them."""
-    residue_ids = chain_residue_ids(insertion_coded_structure)["A"]
-    assert residue_ids[4:7] == [(5, ""), (5, "A"), (6, "")]
-    assert insertion_coded_structure.get_chain_positions("A")[4:6] == [5, 5]
-
-
-def test_sequential_pdb_numbers_each_residue_by_its_position(insertion_coded_structure):
-    """The staged copy numbers residues 1..N with no insertion codes, sequence unchanged."""
-    staged = Structure(structure=sequential_pdb(insertion_coded_structure)[0], structure_format="pdb", source="test")
-    assert chain_residue_ids(staged)["A"] == [(n, "") for n in range(1, 66)]
-    assert staged.get_chain_sequence("A") == insertion_coded_structure.get_chain_sequence("A")
-
-
-def test_restore_numbering_round_trips_insertion_codes(insertion_coded_structure):
-    """An output written in staged numbering gets the input residue IDs back."""
-    residue_ids = chain_residue_ids(insertion_coded_structure)
-    staged = Structure(structure=sequential_pdb(insertion_coded_structure)[0], structure_format="pdb", source="test")
-    restored = restore_numbering(staged.structure_cif, residue_ids, source="test")
-    assert chain_residue_ids(restored) == residue_ids
-
-
-def test_restore_numbering_maps_shortened_chain_ids_back(two_character_chain_structure):
-    """A CIF chain ID too long for PDB is staged shortened and restored on the output."""
-    pdb_content, chain_map = sequential_pdb(two_character_chain_structure)
-    staged = Structure(structure=pdb_content, structure_format="pdb", source="test")
-    assert staged.get_chain_ids() == [chain_map["AB"]]
-    assert len(chain_map["AB"]) == 1
-
-    residue_ids = chain_residue_ids(two_character_chain_structure)
-    restored = restore_numbering(staged.structure_cif, residue_ids, source="test", chain_map=chain_map)
-    assert restored.get_chain_ids() == ["AB"]
-    assert chain_residue_ids(restored) == residue_ids
-
-
-def test_restore_numbering_rejects_a_chain_of_different_length(pdb_structure, insertion_coded_structure):
-    """A residue-count mismatch cannot be mapped back by position, so it raises."""
-    shortened = {"A": chain_residue_ids(insertion_coded_structure)["A"][:-1]}
-    with pytest.raises(ValueError, match="numbering cannot be restored"):
-        restore_numbering(pdb_structure.structure_cif, shortened, source="test")
 
 
 def test_symmetric_chains_rejects_numbering_that_differs_only_by_insertion_code(tmp_path):
