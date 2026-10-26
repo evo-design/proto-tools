@@ -212,9 +212,7 @@ LOCAL_DIR_IGNORE: list[str] = [
 ]
 
 
-# Version of what :func:`apply_tool_envelope` returns, recorded with every deploy. Bump it whenever
-# that shape changes, so a caller can refuse a deployment it cannot read before dispatching to it.
-# 1: Python-mode dumps (nested datetimes); 2: JSON-mode dumps.
+# Version of the result format apply_tool_envelope returns. Bump it when that format changes.
 RESULT_FORMAT = 2
 
 # Envelope fields the caller can recompute, so they don't ride back over the
