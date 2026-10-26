@@ -13,6 +13,7 @@ from standalone_helpers import (
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
+    retry_on_checkpoint_corruption,
     serialize_output,
     set_torch_seed,
 )
@@ -388,7 +389,21 @@ class Evo2Model:
         from evo2 import Evo2
 
         _cleanup_vortex_debug_log()
-        self.model = Evo2(model_name=self.model_checkpoint, local_path=self.local_path)
+
+        def construct() -> None:
+            self.model = Evo2(model_name=self.model_checkpoint, local_path=self.local_path)
+
+        if self.local_path is None:
+            from huggingface_hub import constants
+
+            # Upstream merges the downloaded shards straight into this file and reuses it whenever it exists, so an
+            # interrupted merge leaves a truncated checkpoint; deleting it makes upstream re-fetch and re-merge.
+            merged = Path(constants.HF_HUB_CACHE).parent / f"{self.model_checkpoint}.pt"
+            retry_on_checkpoint_corruption(
+                construct, tool_name="evo2", max_attempts=2, recover=lambda: merged.unlink(missing_ok=True)
+            )
+        else:
+            construct()
         self.tokenizer = self.model.tokenizer
         self.model.model = self.model.model.eval()
 
