@@ -496,3 +496,30 @@ def test_fampnn_score_all_mutations_benchmark(
     assert len(scores) == target_len
     first_pos = next(iter(scores))
     assert len(scores[first_pos]) == 20
+
+
+def test_fampnn_sample_fixes_every_position_of_context_chains(monkeypatch):
+    """FAMPNN redesigns every chain it reads, so chains outside the redesign set are fixed in full."""
+    structure = Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "pdl1.pdb")
+    native = structure.get_chain_sequences()
+    captured = {}
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured["fixed_positions"] = payload["fixed_positions"]
+        n = payload["num_sequences"]
+        return {
+            "chain_sequences": [["G" * len(native["A"]), native["B"]]] * n,
+            "psce": [[0.1] * (len(native["A"]) + len(native["B"]))] * n,
+            "pdb_strings": [structure.structure_pdb] * n,
+        }
+
+    monkeypatch.setattr("proto_tools.tools.inverse_folding.fampnn.fampnn_sample.ToolInstance.dispatch", fake_dispatch)
+    output = run_fampnn_sample(
+        FAMPNNSampleInput(inputs=[FAMPNNStructureInput(structure=structure, chains_to_redesign="A")]),
+        FAMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=0, device="cpu"),
+    )
+
+    assert captured["fixed_positions"] == {"B": structure.get_chain_positions("B")}
+    design = output.design_sets[0].complexes[0]
+    assert design.chain_sequence_map() == {"A": "G" * len(native["A"]), "B": native["B"]}
+    assert design.designed == [True, False]

@@ -533,8 +533,7 @@ def test_caliby_sample_accepts_chains_with_unmodelled_gaps(tmp_path):
     gapped.write_text("".join(kept))
 
     structure = Structure(structure=str(gapped))
-    # get_chain_sequences() pads each break with "-", so it runs longer than the residue count.
-    assert len(structure.get_chain_sequences()["A"]) > len(structure.get_chain_positions("A"))
+    assert structure.get_chain_breaks("A")
 
     inp = CalibySampleInput(inputs=[CalibyStructureInput(structure=structure)])
     output = run_caliby_sample(inp, CalibySampleConfig(potts_sweeps=20, seed=0))
@@ -546,15 +545,20 @@ def test_caliby_sample_accepts_chains_with_unmodelled_gaps(tmp_path):
 
 
 @pytest.mark.uses_gpu
-def test_caliby_sample_rejects_nucleic_acid_chains():
-    """A nucleic acid chain is dropped by the featurizer, so the chain mismatch is reported."""
+def test_caliby_sample_keeps_nucleic_acid_chains_as_context():
+    """The model sees protein chains only; DNA strands join each design unchanged and undesigned."""
     structure = Structure(structure=str(PROTEIN_DNA_PDB_FILE))
-    # Caliby keeps peptide polymers only, so the two DNA strands never reach the model.
-    assert len(structure.get_chain_ids()) == 3
+    types = structure.get_chain_types()
 
     inp = CalibySampleInput(inputs=[CalibyStructureInput(structure=structure)])
-    with pytest.raises(Exception, match="Supply protein chains only"):
-        run_caliby_sample(inp, CalibySampleConfig(potts_sweeps=10, seed=0))
+    design = run_caliby_sample(inp, CalibySampleConfig(potts_sweeps=10, seed=0)).design_sets[0].complexes[0]
+
+    by_id = {chain.id: (chain, flag) for chain, flag in zip(design.chains, design.designed, strict=True)}
+    for cid, kind in types.items():
+        if kind == "dna":
+            chain, flag = by_id[cid]
+            assert chain.sequence == structure.get_chain_sequence(cid)
+            assert flag is False
 
 
 @pytest.mark.uses_gpu

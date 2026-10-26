@@ -10,8 +10,6 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from proto_tools.entities.complex import Chain
-from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
@@ -209,8 +207,8 @@ class LigandMPNNDesign(DesignedComplex):
     order, plus this design's scalar recovery metrics.
 
     Attributes:
-        chains (list[Chain | Fragment]): All protein chains of the design, in input
-            structure chain order.
+        chains (list[Chain | Fragment]): All polymer chains of the design, in input
+            structure chain order, each followed by its ligands as context.
         metrics (LigandMPNNDesignMetrics): Per-design recovery metrics
             (``sequence_recovery`` and ``ligand_interface_sequence_recovery``).
     """
@@ -378,18 +376,20 @@ def run_ligandmpnn_sample(
                 remaining -= chunk  # type: ignore[operator]
 
         # The standalone emits ordered per-chain (chain_id, sequence) pairs.
-        redesigned_ids = set() if _fixed_positions_cover_structure(inp) else set(inp.chain_ids_to_redesign)
+        redesign_ids = set(inp.chain_ids_to_redesign)
+        redesigned_ids = set() if _fixed_positions_cover_structure(inp) else redesign_ids
 
         complexes: list[LigandMPNNDesign] = []
         for chain_seqs, recovery, interface_recovery, pmpnn, pdb_string in zip(
             all_chain_sequences, all_recovery, all_interface_recovery, all_pmpnn, all_pdb_strings, strict=True
         ):
-            chains: list[Chain | Fragment] = [Chain(id=entry["id"], sequence=entry["sequence"]) for entry in chain_seqs]
-            designed: list[bool] = [entry["id"] in redesigned_ids for entry in chain_seqs]
             complexes.append(
-                LigandMPNNDesign(
-                    chains=chains,
-                    designed=designed,
+                LigandMPNNDesign.from_design(
+                    inp.structure,
+                    {entry["id"]: entry["sequence"] for entry in chain_seqs if entry["id"] in redesign_ids},
+                    redesigned_ids,
+                    tool="ligandmpnn-sample",
+                    include_ligands=True,
                     metrics=LigandMPNNDesignMetrics(
                         sequence_recovery=(recovery if math.isfinite(recovery) else None),
                         # Foundry returns NaN when no ligand interface; route to None so the conditional key is dropped.

@@ -15,7 +15,6 @@ import sys
 from pathlib import Path
 from typing import Any, ClassVar
 
-import gemmi
 from standalone_helpers import get_logger, set_torch_seed
 
 logger = get_logger(__name__)
@@ -30,28 +29,6 @@ class RFdiffusion3Model:
     """
 
     _STRUCTURE_EXTENSIONS: ClassVar[tuple[str, ...]] = (".pdb", ".cif", ".pdb.gz", ".cif.gz")
-    _AA_MAP: ClassVar[dict[str, str]] = {
-        "ALA": "A",
-        "CYS": "C",
-        "ASP": "D",
-        "GLU": "E",
-        "PHE": "F",
-        "GLY": "G",
-        "HIS": "H",
-        "ILE": "I",
-        "LYS": "K",
-        "LEU": "L",
-        "MET": "M",
-        "ASN": "N",
-        "PRO": "P",
-        "GLN": "Q",
-        "ARG": "R",
-        "SER": "S",
-        "THR": "T",
-        "VAL": "V",
-        "TRP": "W",
-        "TYR": "Y",
-    }
 
     def __init__(self) -> None:
         """Initialize RFdiffusion3 model wrapper."""
@@ -236,7 +213,6 @@ class RFdiffusion3Model:
             designs.append(
                 {
                     "structure_content": content,
-                    "sequence": self._extract_sequence(content, is_cif=".cif" in struct_file.name),
                     "spec_key": spec_key,
                     "design_index": design_index,
                     "metadata": self._read_output_json(struct_file),
@@ -244,26 +220,6 @@ class RFdiffusion3Model:
             )
 
         return {"designs": designs}
-
-    def _extract_sequence(self, content: str, is_cif: bool = False) -> list[str]:
-        """Extract per-chain sequences from structure content.
-
-        Returns one entry per chain in PDB chain order. Uses 'X' for unknown
-        residues (ligands, modified AAs, nucleotides) to preserve index alignment
-        with structure. Critical for all-atom design with RFdiffusion3.
-        """
-        if is_cif:
-            doc = gemmi.cif.read_string(content)
-            structure = gemmi.make_structure_from_block(doc[0])
-        else:
-            structure = gemmi.read_pdb_string(content)
-
-        sequences = []
-        for chain in structure[0]:
-            seq = "".join(self._AA_MAP.get(res.name, "X") for res in chain)
-            if seq:
-                sequences.append(seq)
-        return sequences
 
     def _strip_ext(self, filename: str) -> str:
         """Strip structure file extensions (.cif.gz, .pdb.gz, .cif, .pdb)."""

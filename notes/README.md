@@ -26,6 +26,7 @@ signatures and behavior.
 - `error-handling.md`: the `@tool` raise-by-default policy, opt-in capture mode (`PROTO_CAPTURE_ERRORS`), and the `MissingAssetError` carve-out.
 - `logging.md`: the worker logging architecture, status updates, verbosity control, and third-party progress-bar handling.
 - `versioning.md`: toolkit versions, the source hash that pins them, bump rules, the version field on every output, and finding the commit behind a version.
+- `structures-and-complexes.md`: reading chains from a `Structure` (observed residues, modified residues as `ChainModification`, polymer types, chain breaks), `Complex.from_structure`, and how inverse-folding designs are laid over their input structure.
 - `seeding.md`: seed management for stochastic tools, how seeds interact with caching and dedup, and per-item RNG advancement.
 - `gradients.md`: the shared relaxed-sequence gradient contract — temperature semantics, probability-mode validation, the `SequenceLogits` hierarchy, the `soft`/`hard` relaxation formula and the implementations behind it, and the contract tests.
 - `model-taste.md`: choosing models and validators for biological design tasks, common model failure modes, and confidence labels.

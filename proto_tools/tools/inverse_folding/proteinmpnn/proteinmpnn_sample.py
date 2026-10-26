@@ -11,8 +11,6 @@ from typing import Any, ClassVar, Literal
 import numpy as np
 from pydantic import Field, field_validator
 
-from proto_tools.entities.complex import Chain
-from proto_tools.entities.ligands import Fragment
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -121,9 +119,9 @@ class ProteinMPNNDesign(DesignedComplex):
     """One ProteinMPNN-designed complex with its per-design scalar metrics.
 
     Attributes:
-        chains (list[Chain | Fragment]): All protein chains of the design, in input
+        chains (list[Chain | Fragment]): All polymer chains of the design, in input
             structure chain order. Redesigned chains carry the model output;
-            context chains carry the original input sequence unchanged.
+            context chains carry the original input chain unchanged.
         metrics (ProteinMPNNDesignMetrics): Per-design metrics (perplexity and
             sequence recovery) for this design.
     """
@@ -271,8 +269,6 @@ def run_proteinmpnn_sample(
                 remaining -= chunk  # type: ignore[operator]
 
         redesign_ids = inp.chain_ids_to_redesign
-        redesign_set = set(redesign_ids)
-        all_chain_ids = inp.structure.get_chain_ids()
         complexes: list[ProteinMPNNDesign] = []
         for raw_seq, perp, recovery in zip(all_seqs, all_perp, all_seq_recovery, strict=True):
             # Segments are the redesigned chains in chain_ids_to_redesign order.
@@ -283,22 +279,13 @@ def run_proteinmpnn_sample(
                     f"{len(redesign_ids)} chain(s) were requested for redesign "
                     f"({redesign_ids}). Raw sequence: {raw_seq!r}."
                 )
-            redesigned_seq_by_chain = dict(zip(redesign_ids, segments, strict=True))
-            # Build all chains in input order; context chains keep the input sequence.
-            chains: list[Chain | Fragment] = [
-                Chain(
-                    id=cid,
-                    sequence=redesigned_seq_by_chain[cid]
-                    if cid in redesign_set
-                    else inp.structure.get_chain_sequence(cid),
-                )
-                for cid in all_chain_ids
-            ]
-            designed: list[bool] = [cid in redesign_set for cid in all_chain_ids]
             complexes.append(
-                ProteinMPNNDesign(
-                    chains=chains,
-                    designed=designed,
+                ProteinMPNNDesign.from_design(
+                    inp.structure,
+                    dict(zip(redesign_ids, segments, strict=True)),
+                    set(redesign_ids),
+                    tool="proteinmpnn-sample",
+                    include_ligands=False,
                     metrics=ProteinMPNNDesignMetrics(perplexity=perp, sequence_recovery=recovery),
                 )
             )

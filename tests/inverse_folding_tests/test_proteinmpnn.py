@@ -69,12 +69,6 @@ END
 _persistent_tool = make_persistent_fixture("proteinmpnn")
 
 
-def test_proteinmpnn_scoring_accepts_explicit_default_checkpoint_name():
-    """The upstream v_48_020 name is equivalent to the public proteinmpnn alias."""
-    config = ProteinMPNNScoringConfig(model_choice="v_48_020")
-    assert config.model_choice == "v_48_020"
-
-
 @pytest.fixture(scope="module")
 def pdb_structure():
     return Structure.from_file(TEST_PDB_FILE)
@@ -387,6 +381,29 @@ def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["hard"] == 1.0
     assert captured["payload"]["compute_gradient"] is True
     assert result.results[0].gradient == [[0.0] * 20] * 5
+
+
+def test_proteinmpnn_sample_lays_design_over_structure_chains(monkeypatch):
+    """The designed chain takes the model sequence; DNA context and modifications come from the structure."""
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        bs = payload["batch_size"]
+        return {"seq": ["MKTAYIAK"] * bs, "score": [-1.0] * bs, "seqid": [1.0] * bs}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+    structure = Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb")
+    output = run_proteinmpnn_sample(
+        InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=structure)]),
+        ProteinMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=0, device="cpu"),
+    )
+
+    design = output.design_sets[0].complexes[0]
+    assert design.chain_sequence_map() == {"A": "MKTAYIAK", "B": "AGC"}
+    assert design.chains[1] == structure.get_chain("B")
+    assert design.designed == [True, False]
 
 
 def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):

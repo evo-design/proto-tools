@@ -19,6 +19,9 @@ if TYPE_CHECKING:
     import gemmi
     from biotite.structure import AtomArray
 
+    from proto_tools.entities.complex import Chain
+
+from proto_tools.entities.ligands.ccd_utils import get_canonical_component, is_valid_ccd_code
 from proto_tools.entities.structures.utils import (
     _serialize_gemmi,
     convert_cif_str_to_pdb_str,
@@ -541,6 +544,9 @@ class Structure(BaseModel):
                     raise ValueError(f"No valid structure found in CIF content (source={self.source!r})")
             else:
                 self._gemmi_struct = gemmi.read_pdb_string(self.structure)
+            # Files often list a chain's ligands after every polymer chain; gemmi reads those as a
+            # second chain with the same ID unless the parts are merged.
+            self._gemmi_struct.merge_chain_parts()
         return self._gemmi_struct  # type: ignore[no-any-return]
 
     @property
@@ -950,17 +956,63 @@ class Structure(BaseModel):
     # Chain Related
     # ============================================================================
 
+    def get_chain(self, chain_id: str | None = None) -> Chain:
+        """Build the ``Chain`` for a polymer chain: its observed residues, type, and modifications.
+
+        The sequence holds one letter per observed polymer residue, with no gap markers;
+        use :meth:`get_chain_breaks` for where the chain is discontinuous. A modified
+        residue is written as its parent residue plus a ``ChainModification`` carrying its
+        CCD code, and a residue with no known parent as ``X`` plus its CCD code, so the
+        residue identity is kept. ``UNK`` and residue names outside the CCD become a bare
+        ``X``. ``entity_type`` comes from the polymer type gemmi assigns the chain.
+
+        Args:
+            chain_id (str | None): Chain ID to build (e.g., 'A'). If None, uses the first chain.
+
+        Returns:
+            Chain: The chain, with ``id`` set to the structure's chain identifier.
+
+        Raises:
+            ValueError: If chain_id is not found, the structure has no chains, the chain has
+                no polymer residues, or its polymer type is not protein, DNA, or RNA.
+
+        Examples:
+            >>> chain = protein.get_chain("A")
+            >>> chain.sequence, chain.entity_type, chain.modifications
+            ('MVLSEGEWQX', 'protein', [ChainModification(position=1, modification_code='MSE')])
+        """
+        from proto_tools.entities.complex import Chain, ChainModification
+
+        chain = self._get_chain(chain_id)
+        polymer = chain.get_polymer()
+        if not polymer:
+            raise ValueError(f"Chain '{chain.name}' has no polymer residues")
+        letters: list[str] = []
+        modifications: list[ChainModification] = []
+        for position, residue in enumerate(polymer, start=1):
+            letter, modification_code = _residue_letter(residue.name)
+            letters.append(letter)
+            if modification_code is not None:
+                modifications.append(ChainModification(position=position, modification_code=modification_code))
+        return Chain(
+            id=chain.name,
+            sequence="".join(letters),
+            entity_type=_polymer_entity_type(chain.name, polymer),
+            modifications=modifications,
+        )
+
     def get_chain_sequence(self, chain_id: str | None = None, remove_non_standard: bool = False) -> str:
         """Extract the polymer sequence of a specific chain from the structure.
 
         Args:
             chain_id (str | None): Chain ID to extract (e.g., 'A'). If None, returns the first chain.
-            remove_non_standard (bool): If True, removes non-standard residues (X) and gaps (-)
-                from the sequence. Default is False to preserve all residues.
+            remove_non_standard (bool): If True, removes unknown residues (X) from the
+                sequence. Default is False to preserve all residues.
 
         Returns:
-            str: One-letter amino acid sequence of the chain. Polymer residues only;
-                waters and non-polymer ligands are excluded.
+            str: One letter per observed polymer residue, as in :meth:`get_chain`. Modified
+                residues appear as their parent residue; waters and non-polymer ligands are
+                excluded.
 
         Raises:
             ValueError: If chain_id is not found, the structure has no chains, or the
@@ -968,47 +1020,74 @@ class Structure(BaseModel):
 
         Examples:
             >>> protein.get_chain_sequence("A")
-            'MVLSE-GEWQX'
+            'MVLSEGEWQX'
             >>> protein.get_chain_sequence("A", remove_non_standard=True)
             'MVLSEGEWQ'
         """
-        chain = self._get_chain(chain_id)
-        polymer = chain.get_polymer()
-        if not polymer:
-            raise ValueError(f"Chain '{chain.name}' has no polymer residues")
-        seq = polymer.make_one_letter_sequence()
-        if remove_non_standard:
-            seq = seq.replace("X", "").replace("-", "")
-        return seq
+        seq = self.get_chain(chain_id).sequence
+        return seq.replace("X", "") if remove_non_standard else seq
 
     def get_chain_sequences(self, remove_non_standard: bool = False) -> dict[str, str]:
         """Extract the polymer sequences of all chains in the structure.
 
         Args:
-            remove_non_standard (bool): If True, removes non-standard residues (X) and gaps (-)
-                from the sequences. Default is False to preserve all residues.
+            remove_non_standard (bool): If True, removes unknown residues (X) from the
+                sequences. Default is False to preserve all residues.
 
         Returns:
-            dict[str, str]: Dictionary mapping chain ID to sequence. Polymer residues only;
-                waters and non-polymer ligands are excluded.
+            dict[str, str]: Dictionary mapping chain ID to sequence, as in
+                :meth:`get_chain_sequence`. Polymer residues only; waters and non-polymer
+                ligands are excluded.
 
         Examples:
             >>> protein.get_chain_sequences()
-            {'A': 'MVLSE-GEWQX', 'B': 'ACDEFGHIK'}
+            {'A': 'MVLSEGEWQX', 'B': 'ACDEFGHIK'}
             >>> protein.get_chain_sequences(remove_non_standard=True)
             {'A': 'MVLSEGEWQ', 'B': 'ACDEFGHIK'}
         """
-        self.gemmi_struct.setup_entities()
-        sequences = {}
-        for model in self.gemmi_struct:
-            for chain in model:
-                polymer = chain.get_polymer()
-                if polymer:
-                    seq = polymer.make_one_letter_sequence()
-                    if remove_non_standard:
-                        seq = seq.replace("X", "").replace("-", "")
-                    sequences[chain.name] = seq
-        return sequences
+        return {
+            chain_id: self.get_chain_sequence(chain_id, remove_non_standard=remove_non_standard)
+            for chain_id in self.get_chain_ids()
+        }
+
+    def get_chain_breaks(self, chain_id: str | None = None) -> list[int]:
+        """Find where a polymer chain is discontinuous.
+
+        A break sits between two consecutive observed residues that are not bonded, such as
+        on either side of an unresolved loop. Positions index the sequence from
+        :meth:`get_chain_sequence`.
+
+        Args:
+            chain_id (str | None): Chain ID to inspect (e.g., 'A'). If None, uses the first chain.
+
+        Returns:
+            list[int]: 1-based sequence positions after which the chain breaks, in order.
+
+        Raises:
+            ValueError: If chain_id is not found, the structure has no chains, or the
+                chain has no polymer residues.
+
+        Examples:
+            >>> protein.get_chain_sequence("A")
+            'MVLSEGEWQX'
+            >>> protein.get_chain_breaks("A")
+            [5]
+        """
+        chain = self._get_chain(chain_id)
+        polymer = chain.get_polymer()
+        if not polymer:
+            raise ValueError(f"Chain '{chain.name}' has no polymer residues")
+        # gemmi writes one character per residue and a '-' wherever consecutive residues are not bonded.
+        breaks: list[int] = []
+        residues_seen = 0
+        for char in polymer.make_one_letter_sequence():
+            if char == "-":
+                breaks.append(residues_seen)
+            else:
+                residues_seen += 1
+        if residues_seen != polymer.length():
+            raise ValueError(f"Chain '{chain.name}': gemmi's sequence does not have one character per residue")
+        return breaks
 
     def get_chain_ids(self) -> list[str]:
         """Extract the IDs of all polymer chains in the structure.
@@ -1019,33 +1098,37 @@ class Structure(BaseModel):
         Returns:
             list[str]: List of chain IDs that contain polymer residues.
         """
-        return list(self.get_chain_sequences().keys())
+        self.gemmi_struct.setup_entities()
+        return [chain.name for chain in self.gemmi_struct[0] if chain.get_polymer()]
 
     def get_chain_types(self) -> dict[str, str]:
-        """Classify each chain as either 'polymer' or 'ligand' based on entity type.
+        """Classify each chain by what it holds.
+
+        Polymer chains are ``'protein'``, ``'dna'``, or ``'rna'``, from the polymer type
+        gemmi assigns them. Chains without a polymer are ``'ligand'`` when they hold a
+        non-polymer residue and ``'water'`` otherwise.
 
         Returns:
-            dict[str, str]: Dictionary mapping chain IDs to their type ('polymer' or 'ligand').
+            dict[str, str]: Dictionary mapping chain IDs to ``'protein'``, ``'dna'``,
+                ``'rna'``, ``'ligand'``, or ``'water'``.
+
+        Raises:
+            ValueError: If a polymer chain's type is not protein, DNA, or RNA.
 
         Examples:
             >>> protein.get_chain_types()
-            {'A': 'polymer', 'B': 'polymer', 'C': 'ligand'}
+            {'A': 'protein', 'B': 'dna', 'C': 'ligand'}
         """
         self.gemmi_struct.setup_entities()
-
         chain_types = {}
-        for model in self.gemmi_struct:
-            for chain in model:
-                polymer = chain.get_polymer()
-                ligands = chain.get_ligands()
-
-                if polymer.length() > 0:
-                    chain_types[chain.name] = "polymer"
-                elif ligands.length() > 0:
-                    chain_types[chain.name] = "ligand"
-                else:
-                    chain_types[chain.name] = "polymer"
-
+        for chain in self.gemmi_struct[0]:
+            polymer = chain.get_polymer()
+            if polymer:
+                chain_types[chain.name] = _polymer_entity_type(chain.name, polymer)
+            elif chain.get_ligands():
+                chain_types[chain.name] = "ligand"
+            else:
+                chain_types[chain.name] = "water"
         return chain_types
 
     def get_chain_ligands(self, chain_id: str | None = None) -> list[tuple[str, int]]:
@@ -1662,6 +1745,40 @@ class Structure(BaseModel):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+
+# gemmi polymer types that map onto a Chain entity type.
+_ENTITY_TYPE_BY_POLYMER_TYPE = {"PeptideL": "protein", "PeptideD": "protein", "Dna": "dna", "Rna": "rna"}
+
+
+def _polymer_entity_type(chain_name: str, polymer: gemmi.ResidueSpan) -> str:
+    """Return the ``Chain`` entity type for a gemmi polymer.
+
+    Raises:
+        ValueError: If the polymer is not protein, DNA, or RNA.
+    """
+    polymer_type = polymer.check_polymer_type().name
+    if polymer_type not in _ENTITY_TYPE_BY_POLYMER_TYPE:
+        raise ValueError(f"Chain '{chain_name}' has polymer type {polymer_type}; expected protein, DNA, or RNA")
+    return _ENTITY_TYPE_BY_POLYMER_TYPE[polymer_type]
+
+
+def _residue_letter(residue_name: str) -> tuple[str, str | None]:
+    """Return a polymer residue's one-letter code and, for a non-standard residue, its CCD code.
+
+    A standard residue maps to its own letter. A modified residue maps to its parent's letter
+    and keeps its CCD code; one with no known parent maps to ``X`` and keeps its CCD code.
+    ``UNK`` and names outside the CCD map to a bare ``X``.
+    """
+    import gemmi
+
+    info = gemmi.find_tabulated_residue(residue_name)
+    if info.is_standard():
+        return info.one_letter_code.upper(), None
+    parent = get_canonical_component(residue_name)
+    if parent is not None:
+        return parent, residue_name
+    return "X", residue_name if is_valid_ccd_code(residue_name) else None
 
 
 def _extract_atom_positions(structure: Structure) -> list[tuple[str, tuple[float, float, float]]]:

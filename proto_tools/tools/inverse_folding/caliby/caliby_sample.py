@@ -12,8 +12,6 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from proto_tools.entities.complex import Chain
-from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import ChainSelection, Structure
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
@@ -821,10 +819,8 @@ def run_caliby_sample(
         unit="structure",
         disable=not config.verbose,
     ):
-        chain_ids = inp.structure.get_chain_ids()
-        # Observed residues per chain. get_chain_sequences() pads each chain break with '-',
-        # so its length overcounts any structure with unmodelled regions.
-        native_residue_counts = {cid: len(inp.structure.get_chain_positions(cid)) for cid in chain_ids}
+        # Caliby's featurizer keeps peptide chains only; other polymer chains join the design as context.
+        chain_ids = [cid for cid, kind in inp.structure.get_chain_types().items() if kind == "protein"]
         residue_ids = chain_residue_ids(inp.structure)
         redesign_set = set(inp.chain_ids_to_redesign)
         all_chain_seqs: list[list[str]] = []
@@ -883,28 +879,18 @@ def run_caliby_sample(
             if len(chain_seqs) != len(chain_ids):
                 raise ValueError(
                     f"caliby-sample: model returned {len(chain_seqs)} chains but the input "
-                    f"structure has {len(chain_ids)} chains ({chain_ids})"
+                    f"structure has {len(chain_ids)} protein chains ({chain_ids})"
                 )
-            for cid, seq in zip(chain_ids, chain_seqs, strict=True):
-                expected = native_residue_counts[cid]
-                if len(seq) != expected:
-                    raise ValueError(
-                        f"caliby-sample: designed chain {cid} has {len(seq)} residues but the input "
-                        f"structure's chain {cid} has {expected}. Caliby's preprocessing dropped or "
-                        "masked residues in this chain, so the design cannot be mapped back onto the "
-                        "input numbering; check the chain for unresolved or non-standard residues."
-                    )
-            chains: list[Chain | Fragment] = [
-                Chain(id=cid, sequence=seq) for cid, seq in zip(chain_ids, chain_seqs, strict=True)
-            ]
-            designed = [cid in redesign_set for cid in chain_ids]
             # The Potts energy covers every position in the graph, so normalize by the full length
             # to stay comparable with caliby-score on the same structure.
             total_length = sum(len(seq) for seq in chain_seqs)
             complexes.append(
-                CalibyDesign(
-                    chains=chains,
-                    designed=designed,
+                CalibyDesign.from_design(
+                    inp.structure,
+                    {cid: seq for cid, seq in zip(chain_ids, chain_seqs, strict=True) if cid in redesign_set},
+                    redesign_set,
+                    tool="caliby-sample",
+                    include_ligands=False,
                     structure=restore_numbering(cif, residue_ids, source="caliby-sample", chain_map=chain_map),
                     metrics=CalibyDesignMetrics(
                         potts_energy=energy,

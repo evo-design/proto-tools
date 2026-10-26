@@ -11,7 +11,7 @@ from unittest.mock import Mock
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.entities.complex import Chain, Complex
+from proto_tools.entities.complex import Chain
 from proto_tools.entities.ligands import Fragment
 from proto_tools.tools.structure_prediction.shared_data_models import (
     normalize_output_chain_ids,
@@ -20,77 +20,6 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
 
 _PROTEIN_A = "EELLKKLEELLKKLEELLKK"
 _PROTEIN_B = "KKLLEEKKLLEEKKLLEEKK"
-
-
-def test_complex_from_structure_treats_placeholder_polymer_as_biopolymer():
-    """Generated UNK/gap sequences must not be probed as ligand SMILES."""
-    structure = Mock()
-    structure.get_chain_types.return_value = {"A": "polymer"}
-    structure.get_chain_sequence.return_value = "A-X-X"
-    structure.get_chain_ligands.return_value = []
-
-    complex_ = Complex.from_structure(structure)
-
-    assert len(complex_.chains) == 1
-    chain = complex_.chains[0]
-    assert isinstance(chain, Chain)
-    assert chain.sequence == "A-X-X"
-    assert chain.entity_type == "protein"
-
-
-@pytest.mark.parametrize(
-    ("sequence", "expected_type"),
-    [
-        ("MELKQ", "protein"),
-        ("ACGTN", "dna"),
-        ("ACGUN", "rna"),
-        ("A-X-X", "protein"),
-        ("AC-GT", "dna"),
-    ],
-    ids=["protein", "dna", "rna", "unknown-placeholder", "gapped-dna"],
-)
-def test_complex_from_structure_preserves_polymer_kind_and_sequence(sequence, expected_type):
-    """Parser-established polymers stay polymers while sequence kind is inferred narrowly."""
-    structure = Mock()
-    structure.get_chain_types.return_value = {"P": "polymer"}
-    structure.get_chain_sequence.return_value = sequence
-    structure.get_chain_ligands.return_value = []
-
-    complex_ = Complex.from_structure(structure)
-
-    assert complex_.model_dump() == {
-        "chains": [
-            {
-                "id": "P",
-                "sequence": sequence,
-                "entity_type": expected_type,
-                "modifications": [],
-            }
-        ]
-    }
-
-
-def test_complex_from_structure_reconstructs_polymers_and_bound_ligands_in_order():
-    """Each polymer is followed by its own ligand residues without losing chain identity."""
-    structure = Mock()
-    structure.get_chain_types.return_value = {"A": "polymer", "B": "polymer", "L": "ligand"}
-    structure.get_chain_sequence.side_effect = {"A": "MELKQ", "B": "ACGUN"}.__getitem__
-    structure.get_chain_ligands.side_effect = {
-        "A": [("HEM", 8)],
-        "B": [],
-        "L": [("ATP", 1), ("MG", 2)],
-    }.__getitem__
-
-    complex_ = Complex.from_structure(structure)
-
-    assert [(type(chain).__name__, chain.id, chain.entity_type) for chain in complex_.chains] == [
-        ("Chain", "A", "protein"),
-        ("Fragment", "A", "ligand"),
-        ("Chain", "B", "rna"),
-        ("Fragment", "L", "ligand"),
-        ("Fragment", "L", "ligand"),
-    ]
-    assert [chain.ccd_code for chain in complex_.chains if isinstance(chain, Fragment)] == ["HEM", "ATP", "MG"]
 
 
 # ── resolve_chain_ids ────────────────────────────────────────────────────────

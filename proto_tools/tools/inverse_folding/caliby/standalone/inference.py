@@ -128,7 +128,7 @@ def _build_fixed_pos_seq(
     fixed positions are emitted as one ``<chain><residue number>`` token each.
 
     Args:
-        chain_ids (list[str]): All polymer chain IDs, in input structure order.
+        chain_ids (list[str]): The input structure's protein chain IDs, in input order.
         chains_to_redesign (list[str] | None): Chains whose sequence is redesigned.
         fixed_positions (dict[str, list[int]] | None): Per-chain residue numbers to fix.
 
@@ -231,27 +231,25 @@ def _split_chain_sequences(sequence: str, chain_ids: list[str]) -> list[str]:
 
     Caliby emits one part per chain its featurizer kept, in alphabetical chain order. The
     featurizer keeps peptide polymers of at least five residues and discards everything
-    else, so that set matches the input structure's polymer chains for a plain protein
-    input but omits nucleic acid and short peptide chains. A disagreement is reported
-    rather than silently mis-assigning sequences to chains.
+    else, so that set matches the input structure's protein chains unless one is shorter.
+    A disagreement is reported rather than silently mis-assigning sequences to chains.
 
     Args:
         sequence (str): A Caliby sequence with ``':'`` between chains.
-        chain_ids (list[str]): All polymer chain IDs, in input structure order.
+        chain_ids (list[str]): The input structure's protein chain IDs, in input order.
 
     Returns:
         list[str]: One sequence per chain, aligned with ``chain_ids``.
 
     Raises:
-        ValueError: If the sequence does not carry one part per input polymer chain.
+        ValueError: If the sequence does not carry one part per input protein chain.
     """
     parts = sequence.split(":")
     if len(parts) != len(chain_ids):
         raise ValueError(
             f"caliby: the model produced {len(parts)} chain(s) but the input structure has "
-            f"{len(chain_ids)} polymer chain(s) ({chain_ids}). Caliby designs peptide chains of "
-            "at least five residues and discards everything else, so nucleic acid chains and "
-            "shorter peptides are dropped before the model sees them. Supply protein chains only."
+            f"{len(chain_ids)} protein chain(s) ({chain_ids}). Caliby designs peptide chains of "
+            "at least five residues and drops shorter ones before the model sees them."
         )
     by_chain_id = dict(zip(sorted(chain_ids), parts, strict=True))
     return [by_chain_id[chain_id] for chain_id in chain_ids]
@@ -268,7 +266,7 @@ def _sequence_recovery(
     Args:
         designed (list[str]): Designed per-chain sequences, in ``chain_ids`` order.
         native (list[str]): Input per-chain sequences, in ``chain_ids`` order.
-        chain_ids (list[str]): All polymer chain IDs, in input structure order.
+        chain_ids (list[str]): The input structure's protein chain IDs, in input order.
         chains_to_redesign (list[str] | None): Chains whose sequence is redesigned.
 
     Returns:
@@ -405,7 +403,7 @@ class CalibyRunner:
             primary_path (str): Path to the primary conformer.
             conformer_paths (list[str]): Paths to the other ensemble members; empty runs
                 single-structure design.
-            chain_ids (list[str]): All polymer chain IDs, in input structure order.
+            chain_ids (list[str]): The input structure's protein chain IDs, in input order.
             chains_to_redesign (list[str] | None): Chains whose sequence is redesigned.
             fixed_positions (dict[str, list[int]] | None): Per-chain residue numbers to fix.
             symmetric_chains (list[list[str]] | None): Chain groups sampled to one sequence.

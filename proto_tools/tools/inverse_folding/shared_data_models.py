@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, SerializeAsAny, model_validator
+from typing_extensions import Self
 
 from proto_tools.entities.complex import Chain, Complex, chain_label
 from proto_tools.entities.ligands import Fragment
@@ -72,7 +73,7 @@ class InverseFoldingStructureInput(StructureInputBase):
             PDB/CIF content string, ``Structure`` object, or a dict in the shape
             produced by ``Structure.model_dump(mode='json')``.
         chains_to_redesign (ChainSelection | None): Chains to redesign. ``None`` means
-            redesign every chain in the structure. Accepts shorthand ``"A"`` or
+            redesign every protein chain in the structure. Accepts shorthand ``"A"`` or
             ``["A", "B"]`` at construction.
         fixed_positions (ResidueSelection | None): Per-chain positions whose residue
             identity is held fixed during design (1-indexed). Accepts shorthand
@@ -94,7 +95,7 @@ class InverseFoldingStructureInput(StructureInputBase):
     chains_to_redesign: ChainSelection | None = Field(
         default=None,
         title="Chains to Redesign",
-        description="Chains to redesign. None = redesign every chain in the structure.",
+        description="Chains to redesign. None = redesign every protein chain in the structure.",
     )
     fixed_positions: ResidueSelection | None = Field(
         default=None,
@@ -104,15 +105,15 @@ class InverseFoldingStructureInput(StructureInputBase):
 
     @property
     def chain_ids_to_redesign(self) -> list[str]:
-        """Resolved list of chain IDs to design (defaults to every chain in ``structure``).
+        """Resolved list of chain IDs to design (defaults to every protein chain in ``structure``).
 
         Returns:
             list[str]: Chain IDs the model should redesign. When ``chains_to_redesign`` is
-                ``None``, returns every chain ID in the input structure.
+                ``None``, returns every protein chain ID in the input structure.
         """
         if self.chains_to_redesign is not None:
             return list(self.chains_to_redesign.chains)
-        return self.structure.get_chain_ids()
+        return [cid for cid, kind in self.structure.get_chain_types().items() if kind == "protein"]
 
     @property
     def structure_pdb(self) -> str:
@@ -212,12 +213,14 @@ class InverseFoldingConfig(BaseConfig):
 class DesignedComplex(Complex):
     """One complete designed complex produced from a single input structure.
 
-    Subclass of the shared :class:`Complex`. Faithfully reproduces the input
-    structure's entities (protein/DNA/RNA chains + ligands), in input order,
-    with the redesigned chains' sequences substituted. Per-chain redesign status
-    is tracked as a parallel boolean list (``designed``), aligned with
-    ``chains`` by position. Ligand ``Fragment`` entries are always context
-    (``designed[i] is False``); the IF models don't redesign ligands.
+    Subclass of the shared :class:`Complex`. Reproduces the input structure's
+    polymer chains in input order, exactly as ``Complex.from_structure`` reads
+    them, with the redesigned chains' sequences substituted; build one with
+    :meth:`from_design`. Ligands are included only for models that condition on
+    them. Per-chain redesign status is tracked as a parallel boolean list
+    (``designed``), aligned with ``chains`` by position. Ligand ``Fragment``
+    entries are always context (``designed[i] is False``); the IF models don't
+    redesign ligands.
 
     ``Complex`` accepts a ``DesignedComplex`` directly
     (real ``isinstance`` via the shared base), so a design feeds a structure
@@ -258,6 +261,66 @@ class DesignedComplex(Complex):
                 "the two lists must be the same length (one bool per chain entry)."
             )
         return self
+
+    @classmethod
+    def from_design(
+        cls,
+        input_structure: Structure,
+        sequences: dict[str, str],
+        designed: set[str],
+        *,
+        tool: str,
+        include_ligands: bool,
+        **fields: Any,
+    ) -> Self:
+        """Build a design from its input structure and the model's redesigned sequences.
+
+        Every chain starts as ``Complex.from_structure`` reads it from ``input_structure``, so
+        context chains keep their exact residues, type, and modifications whichever model
+        produced the design. Each chain in ``sequences`` takes the model's sequence as a
+        protein chain without modifications.
+
+        Args:
+            input_structure (Structure): The structure the model designed against.
+            sequences (dict[str, str]): Model-emitted sequence per chain ID to substitute.
+            designed (set[str]): Chain IDs flagged as designed in ``designed``.
+            tool (str): Tool key, named in errors.
+            include_ligands (bool): Whether the input's ligands are kept as ``Fragment``
+                entries; true only for models that condition on ligands.
+            fields (Any): Remaining fields of the subclass, such as ``metrics``.
+
+        Returns:
+            Self: The design, with one ``designed`` flag per chain entry.
+
+        Raises:
+            ValueError: If a designed chain has no sequence, a sequence names a chain that
+                is not a polymer chain of ``input_structure``, or its length differs from that
+                chain's observed residues.
+        """
+        native = Complex.from_structure(input_structure, include_ligands=include_ligands).chains
+        polymer_ids = {entry.id for entry in native if isinstance(entry, Chain)}
+        unknown = sorted(set(sequences) - polymer_ids)
+        if unknown:
+            raise ValueError(f"{tool}: designed chain(s) {unknown} are not polymer chains of the input structure")
+        missing = sorted(designed - set(sequences))
+        if missing:
+            raise ValueError(f"{tool}: the model returned no sequence for designed chain(s) {missing}")
+        chains: list[Chain | Fragment] = []
+        for entry in native:
+            if isinstance(entry, Chain) and entry.id in sequences:
+                sequence = sequences[entry.id]
+                if len(sequence) != len(entry.sequence):
+                    raise ValueError(
+                        f"{tool}: designed chain {entry.id} has {len(sequence)} residues but the input "
+                        f"structure's chain {entry.id} has {len(entry.sequence)}. The model skipped residues "
+                        "it cannot read, such as residues missing backbone atoms or non-standard (HETATM) "
+                        "residues; remove or repair them in the input structure."
+                    )
+                chains.append(Chain(id=entry.id, sequence=sequence, entity_type="protein"))
+            else:
+                chains.append(entry)
+        flags = [isinstance(entry, Chain) and entry.id in designed for entry in chains]
+        return cls(chains=chains, designed=flags, **fields)
 
     @property
     def designed_chains(self) -> list[Chain | Fragment]:

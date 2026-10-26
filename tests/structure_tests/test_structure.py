@@ -519,7 +519,7 @@ def test_structure_properties(protein_from_pdb_file):
     assert protein_from_pdb_file.num_chains > 0
     assert protein_from_pdb_file.num_residues > 0
     chain_types = protein_from_pdb_file.get_chain_types()
-    assert chain_types and all(v in ("polymer", "ligand") for v in chain_types.values())
+    assert chain_types == {"A": "protein"}
     pos_map = protein_from_pdb_file.get_residue_position_map()
     assert pos_map
     assert all(isinstance(t, tuple) and len(t) == 2 for positions in pos_map.values() for t in positions)
@@ -1515,6 +1515,85 @@ def test_ca_coordinates_by_chain_rejects_out_of_range_model():
     structure = Structure(structure=synthetic_cif(["A"]))
     with pytest.raises(ValueError, match="model_index"):
         structure.ca_coordinates_by_chain(model_index=5)
+
+
+# ── Residue-level chain reading ─────────────────────────────────────────────
+
+# Chain A: ALA, HETATM MSE, GLY, LYS, a break (residues 5-7 unresolved), LEU, HETATM SEP, UNK,
+# HETATM DAL, plus a HEM listed after chain B. Chain B: three DNA nucleotides. Chain L: one SO4.
+_MODIFIED_GAPPED_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb"
+
+
+@pytest.fixture(scope="module")
+def modified_gapped() -> Structure:
+    return Structure.from_file(_MODIFIED_GAPPED_PDB_FILE)
+
+
+def test_get_chain_types_reads_polymer_type_and_merges_split_chains(modified_gapped):
+    """A ligand listed after another chain under chain A's ID still belongs to chain A."""
+    assert modified_gapped.get_chain_types() == {"A": "protein", "B": "dna", "L": "ligand"}
+    assert modified_gapped.get_chain_ligands("A") == [("HEM", 101)]
+
+
+def test_get_chain_writes_modified_residues_as_modifications(modified_gapped):
+    """Observed residues only; modified residues become parent + CCD code, unknown parents X + CCD code."""
+    chain = modified_gapped.get_chain("A")
+    assert chain.sequence == "AMGKLSXX"
+    assert chain.entity_type == "protein"
+    assert [(m.position, m.modification_code) for m in chain.modifications] == [(2, "MSE"), (6, "SEP"), (8, "DAL")]
+    assert modified_gapped.get_chain("B").model_dump() == {
+        "id": "B",
+        "sequence": "AGC",
+        "entity_type": "dna",
+        "modifications": [],
+    }
+
+
+def test_chain_sequences_count_observed_residues(modified_gapped):
+    """No gap markers: sequence length, residue positions, and num_residues all agree."""
+    assert modified_gapped.get_chain_sequences() == {"A": "AMGKLSXX", "B": "AGC"}
+    assert modified_gapped.get_chain_sequence("A", remove_non_standard=True) == "AMGKLS"
+    assert len(modified_gapped.get_chain_positions("A")) == 8
+    assert modified_gapped.num_residues == 11
+
+
+def test_get_chain_breaks_marks_unbonded_steps(modified_gapped):
+    """The unresolved loop after the fourth residue is the only break."""
+    assert modified_gapped.get_chain_breaks("A") == [4]
+    assert modified_gapped.get_chain_breaks("B") == []
+
+
+def test_glycine_backbone_chain_is_protein():
+    """A poly-G placeholder backbone is a peptide, not DNA, whatever its one-letter string suggests."""
+    lines = [
+        "ATOM  " + line[6:17] + "GLY" + line[20:]
+        for line in _MODIFIED_GAPPED_PDB_FILE.read_text().splitlines()
+        if line.startswith(("ATOM", "HETATM")) and line[21] == "A" and line[12:16].strip() in ("N", "CA", "C", "O")
+    ]
+    chain = Structure(structure="\n".join([*lines, "END"]) + "\n").get_chain("A")
+    assert (chain.sequence, chain.entity_type) == ("GGGGGGGG", "protein")
+
+
+@pytest.mark.parametrize(
+    ("include_ligands", "expected"),
+    [
+        (
+            True,
+            [("Chain", "A", "protein"), ("Fragment", "A", "HEM"), ("Chain", "B", "dna"), ("Fragment", "L", "SO4")],
+        ),
+        (False, [("Chain", "A", "protein"), ("Chain", "B", "dna")]),
+    ],
+    ids=["with-ligands", "without-ligands"],
+)
+def test_complex_from_structure_uses_structure_chains(modified_gapped, include_ligands, expected):
+    """Polymer chains come from get_chain unchanged; ligands follow their chain when requested."""
+    from proto_tools.entities.complex import Chain, Complex
+
+    complex_ = Complex.from_structure(modified_gapped, include_ligands=include_ligands)
+    assert [
+        (type(e).__name__, e.id, e.entity_type if isinstance(e, Chain) else e.ccd_code) for e in complex_.chains
+    ] == expected
+    assert complex_.chains[0] == modified_gapped.get_chain("A")
 
 
 # ── Remote fetch (from_url / from_rcsb / constructor URL) ──────────────────────

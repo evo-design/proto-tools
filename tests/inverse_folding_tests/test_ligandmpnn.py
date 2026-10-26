@@ -136,6 +136,36 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
             assert all(isinstance(chain.sequence, str) for chain in design.chains)
 
 
+def test_ligandmpnn_sample_carries_input_ligands(monkeypatch):
+    """LigandMPNN conditions on the input's ligands, so each design keeps them as undesigned context."""
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        return {
+            "chain_sequences": [[{"id": "A", "sequence": "MKTAYIAK"}]],
+            "metrics": [{"sequence_recovery": 1.0, "ligand_interface_sequence_recovery": math.nan, "pmpnn": 0.5}],
+            "pdb_strings": [None],
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+    structure = Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb")
+    output = run_ligandmpnn_sample(
+        InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=structure)]),
+        LigandMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=0, device="cpu"),
+    )
+
+    design = output.design_sets[0].complexes[0]
+    assert [(type(e).__name__, e.id) for e in design.chains] == [
+        ("Chain", "A"),
+        ("Fragment", "A"),
+        ("Chain", "B"),
+        ("Fragment", "L"),
+    ]
+    assert design.designed == [True, False, False, False]
+
+
 def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     """Sampling dispatch includes checkpoint/packer controls without a backend selector."""
     captured = {}
