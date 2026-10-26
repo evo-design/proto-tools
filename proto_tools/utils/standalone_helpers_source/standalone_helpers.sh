@@ -20,6 +20,9 @@
 #   proto_download_gdrive <file_id> <dest>
 #   proto_sha256 <path>
 #   proto_download_verified <url> <dest> <sha256>
+#   proto_download <url> <dest>
+#   proto_download_archive <url> <dest_dir> [tar_flags...]
+#   proto_is_truncated_zip <path>
 #   proto_install_binary <toolkit>
 # ============================================================================
 
@@ -349,6 +352,91 @@ proto_download_verified() {
         return 1
     fi
     mv "${dest}.part" "$dest"
+}
+
+# ---------------------------------------------------------------------------
+# proto_is_truncated_zip <path>
+#
+# Succeed when <path> starts like a zip archive but has no end-of-central-directory
+# record, i.e. the download was cut off (torch reports this at load time as
+# "failed finding central directory"). Torch checkpoints (.pt, .ckpt) and .npz
+# files are zip archives; other formats (legacy torch pickles, tarballs) never
+# match, so they are not mistaken for truncated files.
+# ---------------------------------------------------------------------------
+proto_is_truncated_zip() {
+    python3 -c "
+import sys, zipfile
+with open(sys.argv[1], 'rb') as f:
+    looks_like_zip = f.read(4) == b'PK\x03\x04'
+sys.exit(0 if looks_like_zip and not zipfile.is_zipfile(sys.argv[1]) else 1)
+" "$1"
+}
+
+
+# ---------------------------------------------------------------------------
+# proto_download <url> <dest>
+#
+# Download <url> to <dest> when no checksum is published (prefer
+# proto_download_verified when one is). The transfer lands in a .part file that
+# is moved into place only once curl succeeds, so an interrupted run never leaves
+# something that looks finished. An existing <dest> is kept unless it is empty or
+# a truncated zip-format checkpoint (see proto_is_truncated_zip), which is
+# re-downloaded. Returns nonzero on a failed download, which aborts a `set -e`
+# setup.sh.
+#
+# Example:
+#   proto_download "${REPO_BASE}/fampnn_0_3.pt" "${WEIGHTS_DIR}/fampnn_0_3.pt"
+# ---------------------------------------------------------------------------
+proto_download() {
+    local url="$1" dest="$2"
+
+    if [ -s "$dest" ] && ! proto_is_truncated_zip "$dest"; then
+        echo "$(basename "$dest") already present."
+        return 0
+    fi
+    if [ -e "$dest" ]; then
+        echo "$(basename "$dest") is incomplete; re-downloading."
+    fi
+
+    echo "Downloading $(basename "$dest")..."
+    mkdir -p "$(dirname "$dest")"
+    if ! curl -fsSL -o "${dest}.part" "$url"; then
+        rm -f "${dest}.part"
+        echo "ERROR: failed to download ${url}" >&2
+        return 1
+    fi
+    mv "${dest}.part" "$dest"
+}
+
+
+# ---------------------------------------------------------------------------
+# proto_download_archive <url> <dest_dir> [tar_flags...]
+#
+# Stream the tar archive at <url> into <dest_dir> and mark it complete. The
+# marker is written only after curl and tar both succeed, so a partial
+# extraction is re-extracted on the next run instead of being trusted because
+# some of its files exist. Extra arguments go to tar (e.g. -z for .tar.gz).
+#
+# Example:
+#   proto_download_archive "$AF2_PARAMS_URL" "${WEIGHTS_DIR}/params"
+# ---------------------------------------------------------------------------
+proto_download_archive() {
+    local url="$1" dest_dir="$2"
+    shift 2
+    local marker="${dest_dir}/.proto_download_complete"
+
+    if [ -f "$marker" ]; then
+        echo "$(basename "$dest_dir") already present."
+        return 0
+    fi
+
+    echo "Downloading and extracting $(basename "$url")..."
+    mkdir -p "$dest_dir"
+    if ! (set -o pipefail; curl -fsSL "$url" | tar -x -C "$dest_dir" "$@"); then
+        echo "ERROR: failed to download or extract ${url}" >&2
+        return 1
+    fi
+    touch "$marker"
 }
 
 

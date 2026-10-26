@@ -48,6 +48,7 @@ from .device import (
 )
 from .memory import get_jax_memory_stats, get_pytorch_memory_stats
 from .oom import GpuOutOfMemoryError, is_cuda_oom, oom_guard, raise_oom, release_cuda_memory
+from .recovery import is_checkpoint_corruption_error, retry_on_checkpoint_corruption
 
 # ``iterative_sampling`` is not re-exported: it imports torch at module level, so keeping it off the package init lets torch-less envs (CI) import this package. Standalones import the submodule directly.
 from .scoring import log_likelihood_metrics
@@ -89,6 +90,9 @@ __all__ = [
     "oom_guard",
     "raise_oom",
     "release_cuda_memory",
+    # checkpoint recovery
+    "is_checkpoint_corruption_error",
+    "retry_on_checkpoint_corruption",
     # scoring
     "log_likelihood_metrics",
     # seeding

@@ -6,8 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import torch
-from standalone_helpers import get_logger
+from standalone_helpers import get_logger, is_checkpoint_corruption_error, retry_on_checkpoint_corruption
 
 logger = get_logger(__name__)
 
@@ -37,6 +36,9 @@ def _install_checkpoint_cache() -> None:
     The path-only key does not self-correct: correctness relies on the ``reload_on_change`` set
     covering every field boltz threads into ``Boltz2.load_from_checkpoint``. An unmarked load-affecting
     field would let a same-path entry serve a model loaded with stale args, wrong output, no error.
+
+    A checkpoint that fails to load as a corrupted archive is deleted before the error propagates, so
+    boltz re-downloads it when ``_run_boltz_predict`` retries.
     """
     global _checkpoint_cache_installed
     if _checkpoint_cache_installed:
@@ -50,7 +52,13 @@ def _install_checkpoint_cache() -> None:
         model = _checkpoint_cache.get(key)
         if model is None:
             logger.debug("boltz2: checkpoint cache miss, loading %s", checkpoint)
-            model = original_load(checkpoint, **kwargs)
+            try:
+                model = original_load(checkpoint, **kwargs)
+            except Exception as exc:
+                if is_checkpoint_corruption_error(exc):
+                    logger.warning("boltz2: removing corrupted checkpoint %s", checkpoint)
+                    Path(checkpoint).unlink(missing_ok=True)
+                raise
             _checkpoint_cache[key] = model
         else:
             logger.debug("boltz2: reusing resident checkpoint %s", checkpoint)
@@ -211,6 +219,8 @@ class Boltz2Model:
         _install_checkpoint_cache()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
+        import torch
+
         num_devices = 1 if torch.cuda.is_available() else 0
         kwargs: dict[str, Any] = {
             "data": input_yaml_path,
@@ -233,7 +243,7 @@ class Boltz2Model:
             kwargs["affinity_mw_correction"] = affinity["affinity_mw_correction"]
 
         try:
-            predict_cmd.callback(**kwargs)
+            retry_on_checkpoint_corruption(lambda: predict_cmd.callback(**kwargs), tool_name="boltz2", max_attempts=2)
         except RuntimeError as e:
             if is_cuda_oom(str(e)):
                 raise_oom("boltz2", hint="Reduce the complex size or use a GPU with more memory.")

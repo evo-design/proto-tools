@@ -20,6 +20,7 @@ published name, `from standalone_helpers import ...`.
   - `seeding.py` — `get_random_int`, `set_torch_seed`, `set_jax_seed`
   - `weights.py` — `resolve_weights_dir`
   - `compression.py` — `compress_array`, `is_compressed_array` (large-array IPC wire format)
+  - `recovery.py` — `is_checkpoint_corruption_error`, `retry_on_checkpoint_corruption` (re-download truncated checkpoints)
   - `__init__.py` — re-exports every public name for backward compat
 
 Imported by standalone scripts via `from standalone_helpers import ...` (package entry point) or
@@ -31,7 +32,8 @@ have the full `proto_tools` package importable.
 - **`standalone_helpers.sh`** — Bash helper functions for `setup.sh` scripts.
   Sourced via `source standalone_helpers.sh`. Provides `proto_install_pytorch`,
   `proto_install_jax`, `proto_install_cuda_toolkit`, `proto_resolve_weights_dir`,
-  `proto_check_gated_hf_repo`, and `proto_download_gdrive`.
+  `proto_check_gated_hf_repo`, `proto_download_gdrive`, `proto_download_verified`,
+  `proto_download`, `proto_download_archive`, and `proto_is_truncated_zip`.
 
 ## Editing
 

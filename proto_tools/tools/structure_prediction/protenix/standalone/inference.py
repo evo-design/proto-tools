@@ -3,22 +3,16 @@
 import json
 import os
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger
+from standalone_helpers import get_logger, retry_on_checkpoint_corruption
 
 logger = get_logger(__name__)
 
 # Retry ProtenixModel.load() when ByteDance TOS drops the checkpoint download.
 LOAD_MAX_ATTEMPTS = 3
 LOAD_BACKOFF_BASE_S = 2.0
-
-
-def _is_checkpoint_corruption_error(exc: BaseException) -> bool:
-    msg = str(exc)
-    return any(s in msg for s in ("PytorchStreamReader", "central directory", "zip archive", "BadZipFile"))
 
 
 def _cuequivariance_available() -> bool:
@@ -216,31 +210,20 @@ class ProtenixModel:
             inference_configs["dump_dir"] = output_dir
             # Retry on truncated-checkpoint errors from a dropped TOS download:
             # cleanup deletes the corrupt .pt; upstream re-downloads on retry.
-            for attempt in range(1, LOAD_MAX_ATTEMPTS + 1):
-                try:
-                    self.load(
-                        model_name=model_name,
-                        num_pairformer_cycles=num_pairformer_cycles,
-                        num_diffusion_steps=num_diffusion_steps,
-                        num_diffusion_samples=num_diffusion_samples,
-                        use_msa=use_msa,
-                        kernel=kernel,
-                    )
-                    break
-                except (RuntimeError, OSError) as e:
-                    if attempt >= LOAD_MAX_ATTEMPTS or not _is_checkpoint_corruption_error(e):
-                        raise
-                    delay = LOAD_BACKOFF_BASE_S * (2 ** (attempt - 1))
-                    logger.warning(
-                        "Protenix load failed (attempt %d/%d): %s — cleaning corrupted "
-                        "checkpoints and retrying in %.1fs",
-                        attempt,
-                        LOAD_MAX_ATTEMPTS,
-                        e,
-                        delay,
-                    )
-                    cleanup_corrupted_checkpoints(checkpoint_dir, model_name)
-                    time.sleep(delay)
+            retry_on_checkpoint_corruption(
+                lambda: self.load(
+                    model_name=model_name,
+                    num_pairformer_cycles=num_pairformer_cycles,
+                    num_diffusion_steps=num_diffusion_steps,
+                    num_diffusion_samples=num_diffusion_samples,
+                    use_msa=use_msa,
+                    kernel=kernel,
+                ),
+                tool_name="protenix",
+                max_attempts=LOAD_MAX_ATTEMPTS,
+                recover=lambda: cleanup_corrupted_checkpoints(checkpoint_dir, model_name),
+                backoff_s=LOAD_BACKOFF_BASE_S,
+            )
         # Catches both cache-hit device changes and "cuda" vs "cuda:0" label mismatch post-load.
         if self.device != device:
             self.to_device(device)
