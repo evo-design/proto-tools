@@ -298,6 +298,13 @@ class ParadeModel:
         self.to_device(kwargs["device"])
         return parade_scoring.compute_gradient(self.model, **kwargs)  # type: ignore[no-any-return]
 
+    def compute_stability_gradient(self, **kwargs: Any) -> dict[str, Any]:
+        """Compute a differentiable PARADE stability loss and optional gradient."""
+        if self.model is None:
+            raise ValueError("parade: model is not loaded")
+        self.to_device(kwargs["device"])
+        return parade_scoring.compute_stability_gradient(self.model, **kwargs)  # type: ignore[no-any-return]
+
 
 _model = ParadeModel()
 
@@ -306,8 +313,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     set_torch_seed(input_dict.get("seed"))
     operation = input_dict["operation"]
-    if operation not in {"activity", "stability", "gradient"}:
-        raise ValueError(f"parade: unknown operation {operation!r}; valid: ['activity', 'stability', 'gradient']")
+    valid_operations = {"activity", "stability", "gradient", "stability_gradient"}
+    if operation not in valid_operations:
+        raise ValueError(f"parade: unknown operation {operation!r}; valid: {sorted(valid_operations)}")
 
     checkpoint_path = _resolve_checkpoint(input_dict)
     _model.load(
@@ -315,6 +323,17 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         device=input_dict["device"],
         verbose=bool(input_dict.get("verbose", False)),
     )
+
+    if operation == "stability_gradient":
+        return _model.compute_stability_gradient(
+            logits_list=input_dict["logits"],
+            temperature=resolve_temperature(input_dict["temperature"]),
+            direction=input_dict["direction"],
+            soft=float(input_dict.get("soft", 1.0)),
+            hard=float(input_dict.get("hard", 0.0)),
+            compute_gradient=bool(input_dict.get("compute_gradient", True)),
+            device=input_dict["device"],
+        )
 
     if operation == "gradient":
         return _model.compute_gradient(

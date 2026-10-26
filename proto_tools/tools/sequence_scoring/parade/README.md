@@ -64,6 +64,20 @@ Use this tool inside gradient-based UTR design loops (e.g. Fast SeqProp) to maxi
 - **Terms target cell codes.** Each loss term names a `cell_type` — its code (`c2`) or cell-line name (`HepG2`, case-insensitive) — a `direction` (`max`/`min`), and a `weight`; all must be in the `construct_type` panel.
 - **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator — the forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, which is differentiable but outside the model's training distribution.
 
+### PARADE Stability Gradient (`parade-stability-gradient`)
+
+Scores PARADE's predicted 3' UTR stability — the RNA/gDNA log-ratio, where higher means more stable — and returns its derivative with respect to a relaxed distribution over the UTR bases.
+
+#### Applications
+
+This is the differentiable form of `parade-stability`, intended as an objective inside a 3' UTR design loop: an optimizer holds a relaxed distribution over the UTR, asks for the gradient, and steps it toward sequences the model predicts will be more (or less) stable. Pair it with `parade-gradient` when a design needs both an activity profile and a stability target, treating the two as separate objectives.
+
+#### Usage Tips
+
+- **The objective is a single scalar, so there are no loss terms.** Where `parade-gradient` takes per-cell terms, stability takes just a `direction`: `"max"` minimizes `-log_ratio` and drives the sequence toward higher predicted stability, `"min"` does the reverse. The predicted `log_ratio` itself comes back in each candidate's metrics.
+- **It runs the stability checkpoint**, which is a different model from the activity checkpoints — there is no `construct_type` here, since stability is not conditioned on a UTR construct.
+- **One batch, one length.** The backend evaluates the batch in a single vectorized pass, so every candidate in a call must share a sequence length; the gradient comes back stacked and is split into one result per candidate.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
