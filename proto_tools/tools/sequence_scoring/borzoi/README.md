@@ -58,6 +58,22 @@ This tool is appropriate for final assessments and for any analysis that benefit
 - **Replicate selection is not exposed for the ensemble.** All four replicates are always evaluated. The single-replicate tool is the appropriate choice when only one specific replicate is needed.
 - **The species, track-selection, and averaging behavior match the single-replicate tool.** The same `species`, `output_tracks`, and `avg_output_tracks` guidance applies, and the ensemble inherits the same input modes and coordinate reporting.
 
+### Borzoi Gradient (`borzoi-gradient`)
+
+Scores a weighted objective over Borzoi's predicted track activity and returns its derivative with respect to a relaxed distribution over selected positions. Each objective term names an output track and a span of 32 bp output bins, a direction, and a weight; the terms are signed so the summed objective is always minimized.
+
+#### Applications
+
+This is the differentiable form of Borzoi prediction, intended as an objective inside a regulatory-sequence design loop: an optimizer holds a relaxed distribution over the bases it is allowed to change, asks for the gradient, and steps those bases toward sequences with the activity profile the terms describe — raising a track over an enhancer window, or raising one cell type while suppressing another. Setting `compute_gradient=False` turns it into a forward-only objective score for ranking candidates.
+
+#### Usage Tips
+
+- **Each candidate carries the whole context and only the designed positions.** Borzoi reads a fixed 524,288 bp window, but a design problem usually varies a small part of it. A candidate bundles the full context `sequence`, the 1-indexed `positions` whose bases are relaxed, and a `(len(positions), 4)` `logits` matrix aligned to them, so the returned gradient covers only those positions while the surrounding context still reaches the model.
+- **Bin spans are 1-indexed and inclusive** over the 6,144 output bins, each covering 32 bp. A term's score is the mean activity across its span, so widening the span smooths the objective.
+- **`direction` fixes the sign, `weight` the balance.** `"max"` minimizes negative activity, `"min"` minimizes activity. Combine opposing terms to express specificity.
+- **`max_chunk_size` is 1.** A single forward pass over a 524,288 bp context plus its backward pass is already large, so candidates are dispatched one at a time and fan out across devices rather than batching within a worker.
+- **Human uses FlashAttention.** As with prediction, `species="human"` requires a CUDA device.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
