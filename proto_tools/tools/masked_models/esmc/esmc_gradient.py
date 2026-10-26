@@ -64,7 +64,8 @@ class ESMCGradientConfig(RelaxationConfig):
     Attributes:
         model_checkpoint (ESMC_MODEL_CHECKPOINTS): ESM C weights variant.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
-            (1); keep the default 1.0 unless deliberately experimenting. See
+            (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
+            and ColabDesign parity. See
             :class:`~proto_tools.utils.gradient_models.RelaxationConfig`.
         hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Run backward pass and return gradient. Set ``False`` for
