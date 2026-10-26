@@ -135,7 +135,9 @@ between the switch to JSON-mode results and the field being recorded also reads 
 rebuilt once. `read_manifest` returns `None` only when nothing was recorded, and raises
 `ManifestUnreadable` when a manifest could not be read, so a transient failure is never mistaken
 for an old deployment. `drifted_fields` is the same comparison `drift_warnings` makes, as data. It
-says only that a hash differs, not which side is newer.
+says only that a hash differs, not which side is newer. When the deployment records a newer
+`RESULT_FORMAT` than the caller's, `drift_warnings` says to upgrade proto-tools instead of redeploying,
+since a redeploy from the older client would downgrade it.
 
 `code_hash` autodetects a tool's defining files from `spec.source_file` and its
 first-party MRO, so a tool that inherits behaviour from a shared base is covered without

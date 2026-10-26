@@ -353,6 +353,15 @@ def drift_warnings(
         recorded = read_manifest(service_class, environment=environment, client=client)
         if recorded is None:
             return []
+        from proto_tools.modal.utils import RESULT_FORMAT
+
+        if recorded_result_format(recorded) > RESULT_FORMAT:
+            # Its hashes will differ too, but redeploying from here would downgrade it.
+            return [
+                f"{tool_key}: the deployed tool was built by a newer proto-tools than the one making "
+                f"this call. Upgrade this proto-tools rather than redeploying, which would replace "
+                f"the newer deployment with this older version."
+            ]
         drifted = drifted_fields(tool_key, recorded)
         if "algorithm" in drifted:
             deployed_algorithm, _ = drifted["algorithm"]

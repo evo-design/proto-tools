@@ -169,3 +169,15 @@ def test_only_an_integer_counts_as_a_recorded_format(value: object) -> None:
 @pytest.mark.parametrize("tools", [[], "esm2-embedding", None])
 def test_a_malformed_tool_table_reads_as_no_drift(tools: object) -> None:
     assert fp.drifted_fields(TOOL_KEY, {"algorithm": fp.ALGORITHM, "tools": tools}) == {}
+
+
+def test_a_deployment_newer_than_this_client_says_upgrade_not_redeploy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Redeploying from an older client would downgrade a deployment a newer proto-tools built."""
+    manifest = {**_recorded(code_hash="000000000000"), "result_format": RESULT_FORMAT + 1}
+    monkeypatch.setattr(fp, "read_manifest", lambda *_args, **_kwargs: manifest)
+
+    warnings = fp.drift_warnings(TOOL_KEY, SERVICE)
+
+    assert len(warnings) == 1
+    assert "newer proto-tools" in warnings[0]
+    assert "Redeploy" not in warnings[0]
