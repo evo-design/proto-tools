@@ -144,12 +144,14 @@ from proto_tools.tools.database_retrieval.sequence_fetch import (
     run_sequence_fetch,
 )
 
-# SynBioHub standards-native fetch
+# SynBioHub design fetch
 from proto_tools.tools.database_retrieval.synbiohub import (
-    SynBioHubDocument,
+    SynBioHubFeature,
     SynBioHubFetchConfig,
     SynBioHubFetchInput,
     SynBioHubFetchOutput,
+    SynBioHubLocation,
+    SynBioHubPart,
     run_synbiohub_fetch,
 )
 
@@ -281,10 +283,12 @@ __all__ = [
     "SequenceFetchRequest",
     "SequenceFetchResult",
     "run_sequence_fetch",
-    # SynBioHub standards-native fetch
-    "SynBioHubDocument",
+    # SynBioHub design fetch
+    "SynBioHubFeature",
     "SynBioHubFetchConfig",
     "SynBioHubFetchInput",
     "SynBioHubFetchOutput",
+    "SynBioHubLocation",
+    "SynBioHubPart",
     "run_synbiohub_fetch",
 ]

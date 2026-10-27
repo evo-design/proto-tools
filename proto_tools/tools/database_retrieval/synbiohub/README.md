@@ -9,37 +9,25 @@
 
 ## Overview
 
-The `synbiohub-fetch` tool retrieves exact SBOL, FASTA, and GenBank representations of a top-level design object from a caller-selected SynBioHub registry. It maintains no local parts catalog.
+The `synbiohub-fetch` tool retrieves one design from a caller-selected SynBioHub registry and returns it as typed parts and features, with the source SBOL kept verbatim. It maintains no local parts catalog.
 
 ## Background
 
-[SynBioHub](https://synbiohub.org/) is a standards-enabled repository for synthetic biology designs. SBOL preserves components, nested subcomponents, sequence constraints, annotations, and provenance, allowing a circuit or construct to remain a composition of segments rather than only a flattened nucleotide string. The tool uses the documented download endpoints and supports the optional `SYNBIOHUB_TOKEN` header; individual deployments may require login even for records displayed as public.
+[SynBioHub](https://synbiohub.org/) is a standards-enabled repository for synthetic biology designs. SBOL preserves components, nested subcomponents, sequence constraints, annotations, and provenance, allowing a circuit or construct to remain a composition of segments rather than only a flattened nucleotide string. The tool uses the documented SBOL download endpoint and authenticates with a SynBioHub login token.
 
 ## Tools
 
 ### SynBioHub Fetch (`synbiohub-fetch`)
 
-Downloads recursive or non-recursive SBOL plus optional FASTA and GenBank representations. Each returned document carries its download `source_url`. The selected object must share an origin with `registry_url`, preventing a design identifier from silently redirecting retrieval to another host.
+Downloads the recursive SBOL of one ComponentDefinition and parses it. `design` holds the requested part: its sequence, Sequence Ontology roles, and features, each with 1-indexed inclusive locations and a `subpart_uri` when it places a subpart. `subparts` holds every other part in the document. The output exports to JSON, the verbatim SBOL, FASTA, or GenBank. The selected object must share an origin with `registry_url`, preventing a design identifier from silently redirecting retrieval to another host.
 
 #### Applications
 
-Use SBOL as the primary representation for composing multi-segment constructs and use FASTA or GenBank as sequence-oriented views for downstream scoring, synthesis checks, or annotation inspection.
+Read a construct's composition from `design.features` and `subparts` to rebuild it as multi-segment designs, and export FASTA or GenBank for downstream scoring, synthesis checks, or annotation inspection.
 
 #### Usage Tips
 
-- **Prefer recursive SBOL for composition.** It includes referenced child objects needed to reconstruct a hierarchical design.
-- **Treat FASTA as a view, not the design model.** Flattened sequence cannot retain all component relationships.
-- **Tokens remain private.** `SYNBIOHUB_TOKEN` is excluded from cache keys and outputs.
-- **Select the registry explicitly.** `object_uri` must have the same origin as `registry_url`.
-
-## Toolkit Notes
-
-<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
-
-These notes apply to `synbiohub-fetch`.
-
-- **Requires network access.** No registry snapshot or curated database is stored locally.
-- **Requires a SynBioHub token.** The public instance requires a login for every download, including public records. Create a free account at [synbiohub.org](https://synbiohub.org/register), then exchange your email or username and password for a token and export it:
+- **Set a SynBioHub token.** The public instance requires a login for every download, including public records. Create a free account at [synbiohub.org](https://synbiohub.org/register), then exchange your email or username and password for a token and export it:
 
   ```bash
   export SYNBIOHUB_TOKEN=$(curl -s -X POST https://api.synbiohub.org/login \
@@ -49,4 +37,13 @@ These notes apply to `synbiohub-fetch`.
   ```
 
   The token can also be passed as `synbiohub_token` in the config. Request a token from the same host as `registry_url`. Tokens can expire when the registry restarts or when you log out; if downloads start failing with a login redirect, request a new one.
-- **Runs on CPU.** Runtime is dominated by the selected document downloads.
+- **Treat SBOL as the source of truth.** The typed model covers parts, roles, sequences, and ranged features. Provenance, interactions, and registry-specific annotations stay in the verbatim `sbol` field and its export.
+- **Exports are views of the design.** FASTA and GenBank cover the requested design only. GenBank feature keys come from Sequence Ontology roles, and unmapped roles become `misc_feature`.
+- **Tokens remain private.** `SYNBIOHUB_TOKEN` is excluded from cache keys and outputs.
+- **Select the registry explicitly.** `object_uri` must have the same origin as `registry_url`.
+- **Requires network access.** No registry snapshot or curated database is stored locally.
+- **Runs on CPU.** Runtime is dominated by one SBOL download.
+
+## Toolkit Notes
+
+<a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>

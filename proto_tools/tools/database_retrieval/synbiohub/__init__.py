@@ -1,17 +1,21 @@
-"""SynBioHub SBOL and sequence document retrieval."""
+"""SynBioHub design retrieval as typed parts with SBOL, FASTA, and GenBank exports."""
 
 from proto_tools.tools.database_retrieval.synbiohub.synbiohub_fetch import (
-    SynBioHubDocument,
+    SynBioHubFeature,
     SynBioHubFetchConfig,
     SynBioHubFetchInput,
     SynBioHubFetchOutput,
+    SynBioHubLocation,
+    SynBioHubPart,
     run_synbiohub_fetch,
 )
 
 __all__ = [
-    "SynBioHubDocument",
+    "SynBioHubFeature",
     "SynBioHubFetchConfig",
     "SynBioHubFetchInput",
     "SynBioHubFetchOutput",
+    "SynBioHubLocation",
+    "SynBioHubPart",
     "run_synbiohub_fetch",
 ]

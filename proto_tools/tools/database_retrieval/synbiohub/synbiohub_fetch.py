@@ -1,6 +1,7 @@
-"""Fetch standards-native design documents from a SynBioHub registry."""
+"""Fetch a design from a SynBioHub registry as SBOL and parse it into a typed model."""
 
 import json
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
@@ -19,24 +20,46 @@ from proto_tools.utils import (
     request_with_retry,
 )
 
-SynBioHubFormat = Literal["sbol", "fasta", "genbank"]
-_FORMAT_SUFFIX = {"sbol": "sbol", "fasta": "fasta", "genbank": "gb"}
+SynBioHubMolecule = Literal["dna", "rna", "protein", "other"]
+
 _REQUEST_TIMEOUT_SECONDS = 30
 _HTTP_RETRIES = 2
 _BACKOFF_SECONDS = 1.0
 _USER_AGENT = "proto-tools/synbiohub-fetch-v1"
 
+_RDF = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
+_SBOL = "{http://sbols.org/v2#}"
+_DCTERMS = "{http://purl.org/dc/terms/}"
+_SO_PREFIX = "http://identifiers.org/so/"
+_REVERSE_COMPLEMENT = "http://sbols.org/v2#reverseComplement"
+_BIOPAX_MOLECULES: dict[str, SynBioHubMolecule] = {"DnaRegion": "dna", "RnaRegion": "rna", "Protein": "protein"}
+
+_EXPORT_SUFFIX = {"json": ".json", "sbol": ".sbol", "fasta": ".fasta", "genbank": ".gb"}
+_GENBANK_MOLECULE = {"dna": "DNA", "rna": "RNA", "protein": "protein"}
+_GENBANK_FEATURE_KEYS = {
+    "SO:0000139": "RBS",
+    "SO:0000316": "CDS",
+    "SO:0000141": "terminator",
+    "SO:0000167": "promoter",
+    "SO:0000296": "rep_origin",
+    "SO:0000553": "polyA_site",
+    "SO:0000313": "stem_loop",
+    "SO:0000204": "5'UTR",
+    "SO:0000205": "3'UTR",
+}
+_FASTA_LINE_WIDTH = 70
+
 
 class SynBioHubFetchInput(BaseToolInput):
-    """Input identifying one SynBioHub top-level object.
+    """Input identifying one SynBioHub design.
 
     Attributes:
-        object_uri (str): Absolute URI of a top-level object on the selected registry.
+        object_uri (str): Absolute URI of a ComponentDefinition on the selected registry.
     """
 
     object_uri: str = InputField(
         title="Object URI",
-        description="Absolute URI of a top-level object on the selected SynBioHub registry",
+        description="Absolute URI of a ComponentDefinition on the selected SynBioHub registry",
     )
 
     @field_validator("object_uri")
@@ -52,13 +75,11 @@ class SynBioHubFetchInput(BaseToolInput):
 
 
 class SynBioHubFetchConfig(BaseConfig):
-    """Configuration for SynBioHub document retrieval.
+    """Configuration for SynBioHub design retrieval.
 
     Attributes:
         registry_url (str): Registry origin allowed for object retrieval.
-        formats (list[SynBioHubFormat]): Representations to retrieve.
-        recursive_sbol (bool): Include child objects in SBOL output.
-        synbiohub_token (str | None): Optional private-object access token.
+        synbiohub_token (str | None): SynBioHub login token.
     """
 
     registry_url: str = ConfigField(
@@ -66,20 +87,9 @@ class SynBioHubFetchConfig(BaseConfig):
         title="Registry URL",
         description="SynBioHub registry origin allowed for object retrieval",
     )
-    formats: list[SynBioHubFormat] = ConfigField(
-        default_factory=lambda: ["sbol", "fasta"],
-        min_length=1,
-        title="Formats",
-        description="Standards-native representations to retrieve",
-    )
-    recursive_sbol: bool = ConfigField(
-        default=True,
-        title="Recursive SBOL",
-        description="Include referenced child objects in the SBOL document",
-    )
     synbiohub_token: str | None = ConfigField(
         title="SynBioHub Token",
-        description="Optional private-object token.",
+        description="SynBioHub login token; required by the public instance.",
         credential="SYNBIOHUB_TOKEN",
     )
 
@@ -94,49 +104,112 @@ class SynBioHubFetchConfig(BaseConfig):
             raise ValueError("registry_url must not contain credentials, query parameters, or fragments")
         return url
 
-    @field_validator("formats")
-    @classmethod
-    def _deduplicate_formats(cls, value: list[SynBioHubFormat]) -> list[SynBioHubFormat]:
-        return list(dict.fromkeys(value))
 
-
-class SynBioHubDocument(BaseModel):
-    """One representation downloaded from SynBioHub.
+class SynBioHubLocation(BaseModel):
+    """One contiguous range of a feature on its part's sequence.
 
     Attributes:
-        format (SynBioHubFormat): Representation format.
-        content (str): Decoded document content.
-        source_url (str): Stable download endpoint.
+        start (int): First position, 1-indexed and inclusive.
+        end (int): Last position, 1-indexed and inclusive.
+        strand (Literal['+', '-']): Strand of the range relative to the part's sequence.
     """
 
-    model_config = ConfigDict(str_strip_whitespace=False)
+    start: int = Field(title="Start", description="First position, 1-indexed and inclusive")
+    end: int = Field(title="End", description="Last position, 1-indexed and inclusive")
+    strand: Literal["+", "-"] = Field(title="Strand", description="Strand relative to the part's sequence")
 
-    format: SynBioHubFormat = Field(title="Format", description="Downloaded representation format")
-    content: str = Field(repr=False, title="Content", description="Decoded document content")
-    source_url: str = Field(title="Source URL", description="Stable SynBioHub download endpoint")
+
+class SynBioHubFeature(BaseModel):
+    """One annotated feature on a part's sequence.
+
+    Attributes:
+        display_id (str): SBOL displayId of the sequence annotation.
+        name (str | None): Annotation title, else the title of the subpart it places.
+        roles (list[str]): Sequence Ontology roles, from the annotation or else its subpart.
+        locations (list[SynBioHubLocation]): Ranges the feature covers; more than one is a split feature.
+        subpart_uri (str | None): URI of the subpart this feature places, if any.
+    """
+
+    display_id: str = Field(title="Display ID", description="SBOL displayId of the sequence annotation")
+    name: str | None = Field(default=None, title="Name", description="Annotation title, else its subpart's title")
+    roles: list[str] = Field(
+        default_factory=list,
+        title="Roles",
+        description="Sequence Ontology terms such as SO:0000139, inherited from the subpart if unset",
+    )
+    locations: list[SynBioHubLocation] = Field(
+        title="Locations",
+        description="Ranges the feature covers; more than one is a split feature",
+    )
+    subpart_uri: str | None = Field(
+        default=None,
+        title="Subpart URI",
+        description="URI of the subpart this feature places, matching an entry in subparts",
+    )
+
+
+class SynBioHubPart(BaseModel):
+    """One SBOL ComponentDefinition: a design or one of its parts.
+
+    Attributes:
+        uri (str): SBOL identity of the part.
+        display_id (str): SBOL displayId.
+        name (str | None): Part title.
+        description (str | None): Part description.
+        molecule (SynBioHubMolecule): Molecule type of the part.
+        roles (list[str]): Sequence Ontology roles of the part.
+        sequence (str | None): Part sequence, uppercase, if the registry records one.
+        features (list[SynBioHubFeature]): Features annotated on the sequence; ranged annotations only.
+    """
+
+    uri: str = Field(title="URI", description="SBOL identity of the part")
+    display_id: str = Field(title="Display ID", description="SBOL displayId")
+    name: str | None = Field(default=None, title="Name", description="Part title")
+    description: str | None = Field(default=None, title="Description", description="Part description")
+    molecule: SynBioHubMolecule = Field(title="Molecule", description="Molecule type of the part")
+    roles: list[str] = Field(
+        default_factory=list,
+        title="Roles",
+        description="Sequence Ontology terms such as SO:0000141",
+    )
+    sequence: str | None = Field(default=None, title="Sequence", description="Part sequence, uppercase")
+    features: list[SynBioHubFeature] = Field(
+        default_factory=list,
+        title="Features",
+        description="Features annotated on the sequence; annotations without a range are omitted",
+    )
 
 
 class SynBioHubFetchOutput(BaseToolOutput):
-    """Standards-native representations of one SynBioHub object.
+    """One SynBioHub design, parsed from its recursive SBOL.
 
     Attributes:
-        object_uri (str): Canonical top-level object URI.
+        object_uri (str): Requested object URI.
         registry_url (str): Registry origin used for retrieval.
-        documents (list[SynBioHubDocument]): Downloaded SBOL and sequence documents.
+        source_url (str): SBOL download endpoint.
+        design (SynBioHubPart): The requested design.
+        subparts (list[SynBioHubPart]): Every other part in the SBOL document, at any depth.
+        sbol (str): The downloaded SBOL document, verbatim.
     """
 
-    object_uri: str = Field(title="Object URI", description="Canonical top-level object URI")
+    # Keep the SBOL byte-exact; parsed fields carry no surrounding whitespace
+    model_config = ConfigDict(str_strip_whitespace=False)
+
+    object_uri: str = Field(title="Object URI", description="Requested object URI")
     registry_url: str = Field(title="Registry URL", description="Registry origin used for retrieval")
-    documents: list[SynBioHubDocument] = Field(
+    source_url: str = Field(title="Source URL", description="SBOL download endpoint")
+    design: SynBioHubPart = Field(title="Design", description="The requested design")
+    subparts: list[SynBioHubPart] = Field(
         default_factory=list,
-        title="Documents",
-        description="Downloaded SBOL and sequence representations",
+        title="Subparts",
+        description="Every other part in the SBOL document, at any depth",
     )
+    sbol: str = Field(repr=False, title="SBOL", description="The downloaded recursive SBOL document, verbatim")
 
     @property
     def output_format_options(self) -> list[str]:
-        """Return supported aggregate output formats."""
-        return ["json"]
+        """Return supported output formats."""
+        return ["json", "sbol", "fasta", "genbank"]
 
     @property
     def output_format_default(self) -> str:
@@ -144,17 +217,22 @@ class SynBioHubFetchOutput(BaseToolOutput):
         return "json"
 
     def _export_output(self, export_path: Any, file_format: str) -> None:
-        if file_format != "json":
+        if file_format not in _EXPORT_SUFFIX:
             raise ValueError(f"Unsupported format: {file_format}")
-        Path(export_path).with_suffix(".json").write_text(
-            json.dumps(self.model_dump(mode="json"), indent=2),
-            encoding="utf-8",
-        )
+        path = Path(export_path).with_suffix(_EXPORT_SUFFIX[file_format])
+        if file_format == "json":
+            path.write_text(json.dumps(self.model_dump(mode="json"), indent=2), encoding="utf-8")
+        elif file_format == "sbol":
+            path.write_text(self.sbol, encoding="utf-8")
+        elif file_format == "fasta":
+            path.write_text(_to_fasta(self.design), encoding="utf-8")
+        else:
+            _write_genbank(self.design, path)
 
 
 def example_input() -> Any:
     """Return minimal valid example input."""
-    return SynBioHubFetchInput(object_uri="https://api.synbiohub.org/public/bsu/BO_9757/1")
+    return SynBioHubFetchInput(object_uri="https://api.synbiohub.org/public/igem/BBa_I13504/1")
 
 
 @tool(
@@ -165,7 +243,7 @@ def example_input() -> Any:
     input_class=SynBioHubFetchInput,
     config_class=SynBioHubFetchConfig,
     output_class=SynBioHubFetchOutput,
-    description="Fetch SBOL, FASTA, and GenBank representations from a SynBioHub registry",
+    description="Fetch a SynBioHub design as typed parts and features, exportable to SBOL, FASTA, and GenBank",
     uses_gpu=False,
     example_input=example_input,
     cacheable=True,
@@ -175,44 +253,40 @@ def run_synbiohub_fetch(
     config: SynBioHubFetchConfig,
     instance: Any = None,
 ) -> SynBioHubFetchOutput:
-    """Fetch the requested representations of one SynBioHub object.
+    """Fetch one SynBioHub design and parse its recursive SBOL.
 
     Args:
-        inputs (SynBioHubFetchInput): Top-level object URI.
-        config (SynBioHubFetchConfig): Registry, formats, recursion, and token settings.
+        inputs (SynBioHubFetchInput): Design URI.
+        config (SynBioHubFetchConfig): Registry and token settings.
         instance (Any): Optional ToolInstance; unused for this HTTP-only tool.
 
     Returns:
-        SynBioHubFetchOutput: Downloaded standards-native documents.
+        SynBioHubFetchOutput: The parsed design, its subparts, and the verbatim SBOL.
     """
     del instance
     _validate_same_origin(inputs.object_uri, config.registry_url)
+    source_url = f"{inputs.object_uri}/sbol"
+    headers = {"Accept": "text/plain"}
+    if config.synbiohub_token:
+        headers["X-authorization"] = config.synbiohub_token
     session = build_http_session(
         http_retries=_HTTP_RETRIES,
         backoff_seconds=_BACKOFF_SECONDS,
         user_agent=_USER_AGENT,
     )
-    headers = {"Accept": "text/plain"}
-    if config.synbiohub_token:
-        headers["X-authorization"] = config.synbiohub_token
     try:
-        documents = [
-            _fetch_document(
-                inputs.object_uri,
-                document_format,
-                recursive_sbol=config.recursive_sbol,
-                headers=headers,
-                session=session,
-            )
-            for document_format in config.formats
-        ]
-        return SynBioHubFetchOutput(
-            object_uri=inputs.object_uri,
-            registry_url=config.registry_url,
-            documents=documents,
-        )
+        sbol = _download(source_url, headers=headers, session=session)
     finally:
         session.close()
+    design, subparts = _parse_sbol(sbol, inputs.object_uri)
+    return SynBioHubFetchOutput(
+        object_uri=inputs.object_uri,
+        registry_url=config.registry_url,
+        source_url=source_url,
+        design=design,
+        subparts=subparts,
+        sbol=sbol,
+    )
 
 
 def _validate_same_origin(object_uri: str, registry_url: str) -> None:
@@ -223,17 +297,8 @@ def _validate_same_origin(object_uri: str, registry_url: str) -> None:
         raise ValueError("object_uri must use the same scheme and host as registry_url")
 
 
-def _fetch_document(
-    object_uri: str,
-    document_format: SynBioHubFormat,
-    *,
-    recursive_sbol: bool,
-    headers: dict[str, str],
-    session: requests.Session,
-) -> SynBioHubDocument:
-    """Fetch one SynBioHub representation."""
-    suffix = "sbolnr" if document_format == "sbol" and not recursive_sbol else _FORMAT_SUFFIX[document_format]
-    source_url = f"{object_uri}/{suffix}"
+def _download(source_url: str, *, headers: dict[str, str], session: requests.Session) -> str:
+    """Download one SynBioHub document, refusing redirects."""
     response = request_with_retry(
         lambda: session.get(
             source_url,
@@ -247,8 +312,146 @@ def _fetch_document(
     if 300 <= response.status_code < 400:
         raise ValueError(f"SynBioHub redirected {source_url}; verify the registry, object URI, and access token")
     response.raise_for_status()
-    return SynBioHubDocument(
-        format=document_format,
-        content=response.content.decode(response.encoding or "utf-8"),
-        source_url=source_url,
+    return response.content.decode(response.encoding or "utf-8")
+
+
+def _parse_sbol(sbol: str, object_uri: str) -> tuple[SynBioHubPart, list[SynBioHubPart]]:
+    """Parse recursive SBOL into the requested design and every other part."""
+    root = ET.fromstring(sbol)  # noqa: S314 -- expat refuses external entities and caps entity expansion
+    definitions = {element.get(f"{_RDF}about", ""): element for element in root.findall(f"{_SBOL}ComponentDefinition")}
+    sequences = {
+        element.get(f"{_RDF}about", ""): "".join(element.findtext(f"{_SBOL}elements", "").split()).upper()
+        for element in root.findall(f"{_SBOL}Sequence")
+    }
+    # SBOL identities name the registry's public host, which can differ from the download host
+    object_path = urlsplit(object_uri).path
+    design_uri = next((uri for uri in definitions if urlsplit(uri).path == object_path), None)
+    if design_uri is None:
+        raise ValueError(f"{object_uri} is not a ComponentDefinition; synbiohub-fetch retrieves designs")
+    parts = {uri: _parse_part(uri, element, definitions, sequences) for uri, element in definitions.items()}
+    design = parts.pop(design_uri)
+    return design, list(parts.values())
+
+
+def _parse_part(
+    uri: str,
+    element: ET.Element,
+    definitions: dict[str, ET.Element],
+    sequences: dict[str, str],
+) -> SynBioHubPart:
+    """Parse one ComponentDefinition."""
+    molecule: SynBioHubMolecule = next(
+        (
+            _BIOPAX_MOLECULES[fragment]
+            for type_uri in _resources(element, "type")
+            if (fragment := type_uri.rpartition("#")[2]) in _BIOPAX_MOLECULES
+        ),
+        "other",
     )
+    sequence = next((sequences[ref] for ref in _resources(element, "sequence") if ref in sequences), None)
+    subpart_by_component = {
+        component.get(f"{_RDF}about", ""): _resource(component, "definition")
+        for component in element.findall(f"{_SBOL}component/{_SBOL}Component")
+    }
+    features = []
+    for annotation in element.findall(f"{_SBOL}sequenceAnnotation/{_SBOL}SequenceAnnotation"):
+        locations = [
+            SynBioHubLocation(
+                start=int(location.findtext(f"{_SBOL}start", "")),
+                end=int(location.findtext(f"{_SBOL}end", "")),
+                strand="-" if _resource(location, "orientation") == _REVERSE_COMPLEMENT else "+",
+            )
+            for location in annotation.iter(f"{_SBOL}Range")
+        ]
+        if not locations:
+            continue
+        subpart_uri = subpart_by_component.get(_resource(annotation, "component") or "")
+        subpart = definitions.get(subpart_uri or "")
+        features.append(
+            SynBioHubFeature(
+                display_id=annotation.findtext(f"{_SBOL}displayId", ""),
+                name=_title(annotation) or (_title(subpart) if subpart is not None else None),
+                roles=_so_roles(annotation) or (_so_roles(subpart) if subpart is not None else []),
+                locations=locations,
+                subpart_uri=subpart_uri,
+            )
+        )
+    return SynBioHubPart(
+        uri=uri,
+        display_id=element.findtext(f"{_SBOL}displayId", ""),
+        name=_title(element),
+        description=element.findtext(f"{_DCTERMS}description") or None,
+        molecule=molecule,
+        roles=_so_roles(element),
+        sequence=sequence,
+        features=features,
+    )
+
+
+def _resources(element: ET.Element, tag: str) -> list[str]:
+    """Return the rdf:resource URIs of an element's ``sbol:{tag}`` children."""
+    return [child.get(f"{_RDF}resource", "") for child in element.findall(f"{_SBOL}{tag}")]
+
+
+def _resource(element: ET.Element, tag: str) -> str | None:
+    """Return the rdf:resource URI of an element's first ``sbol:{tag}`` child."""
+    return next(iter(_resources(element, tag)), None)
+
+
+def _title(element: ET.Element) -> str | None:
+    """Return an element's dcterms:title, or None when absent or blank."""
+    return element.findtext(f"{_DCTERMS}title") or None
+
+
+def _so_roles(element: ET.Element) -> list[str]:
+    """Return an element's Sequence Ontology roles as ``SO:NNNNNNN`` terms."""
+    return [role.removeprefix(_SO_PREFIX) for role in _resources(element, "role") if role.startswith(_SO_PREFIX)]
+
+
+def _require_sequence(part: SynBioHubPart) -> str:
+    """Return a part's sequence, or raise when the registry recorded none."""
+    if part.sequence is None:
+        raise ValueError(f"{part.display_id} has no sequence to export")
+    return part.sequence
+
+
+def _to_fasta(part: SynBioHubPart) -> str:
+    """Render a part as a FASTA record."""
+    sequence = _require_sequence(part)
+    header = " ".join(filter(None, [f">{part.display_id}", part.description]))
+    lines = [sequence[i : i + _FASTA_LINE_WIDTH] for i in range(0, len(sequence), _FASTA_LINE_WIDTH)]
+    return "\n".join([header, *lines]) + "\n"
+
+
+def _write_genbank(part: SynBioHubPart, path: Path) -> None:
+    """Write a part and its features as a GenBank record."""
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import CompoundLocation, SeqFeature, SimpleLocation
+    from Bio.SeqRecord import SeqRecord
+
+    sequence = _require_sequence(part)
+    if part.molecule not in _GENBANK_MOLECULE:
+        raise ValueError(f"{part.display_id} has molecule type {part.molecule!r}, which GenBank cannot record")
+    record = SeqRecord(
+        Seq(sequence),
+        id=part.display_id,
+        name=part.display_id,
+        description=part.description or part.name or part.display_id,
+        annotations={"molecule_type": _GENBANK_MOLECULE[part.molecule]},
+    )
+    for feature in part.features:
+        ranges = [
+            SimpleLocation(location.start - 1, location.end, strand=1 if location.strand == "+" else -1)  # type: ignore[no-untyped-call]
+            for location in feature.locations
+        ]
+        record.features.append(
+            SeqFeature(  # type: ignore[no-untyped-call]
+                CompoundLocation(ranges) if len(ranges) > 1 else ranges[0],  # type: ignore[no-untyped-call]
+                type=next(
+                    (_GENBANK_FEATURE_KEYS[r] for r in feature.roles if r in _GENBANK_FEATURE_KEYS), "misc_feature"
+                ),
+                qualifiers={"label": [feature.name or feature.display_id]},
+            )
+        )
+    SeqIO.write(record, path, "genbank")
