@@ -547,6 +547,7 @@ class Structure(BaseModel):
             # Files often list a chain's ligands after every polymer chain; gemmi reads those as a
             # second chain with the same ID unless the parts are merged.
             self._gemmi_struct.merge_chain_parts()
+            _name_unnamed_chains(self._gemmi_struct)
         return self._gemmi_struct  # type: ignore[no-any-return]
 
     @property
@@ -853,9 +854,13 @@ class Structure(BaseModel):
                 conversion cannot represent the structure even after chain shortening
                 (e.g., more chains than available single-character slots).
         """
-        # PDB input: no conversion, identity mapping.
+        # PDB input: no conversion, identity mapping. A file that leaves a chain unnamed is emitted
+        # from the parsed structure instead of verbatim, so the content carries the IDs this
+        # Structure reports and a caller's chain selections resolve in it.
         if self.structure_format == "pdb":
             identity = {cid: cid for cid in self.get_chain_ids()}
+            if _has_unnamed_chain(self.structure):
+                return self.gemmi_struct.make_pdb_string(), identity
             return self.structure, identity
 
         import gemmi
@@ -1873,6 +1878,48 @@ class Structure(BaseModel):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+
+def _has_unnamed_chain(pdb_content: str) -> bool:
+    """Return whether PDB content leaves any chain's identifier blank.
+
+    Args:
+        pdb_content (str): PDB content to inspect.
+
+    Returns:
+        bool: True when at least one atom record carries no chain identifier.
+    """
+    return any(
+        len(line) > 21 and line[21] == " " for line in pdb_content.splitlines() if line.startswith(("ATOM", "HETATM"))
+    )
+
+
+def _name_unnamed_chains(gemmi_struct: gemmi.Structure) -> None:
+    """Give every unnamed chain an ID, in place.
+
+    A deposited file may leave the chain identifier blank -- CASP target files do, for one -- and a
+    chain with no ID cannot be named in a selection, carried on a ``Chain``, or addressed by the
+    tools that read a chain column. Each unnamed chain takes the first single character not already
+    in use, so the rest of the library can address it.
+
+    Args:
+        gemmi_struct (gemmi.Structure): Structure to name in place.
+
+    Raises:
+        ValueError: If the structure holds more unnamed chains than there are free identifiers.
+    """
+    import string
+
+    taken = {chain.name for model in gemmi_struct for chain in model if chain.name}
+    free = (c for c in string.ascii_uppercase + string.ascii_lowercase + string.digits if c not in taken)
+    for model in gemmi_struct:
+        for chain in model:
+            if chain.name:
+                continue
+            name = next(free, None)
+            if name is None:
+                raise ValueError("structure has more unnamed chains than available chain identifiers")
+            chain.name = name
 
 
 # gemmi polymer types that map onto a Chain entity type.

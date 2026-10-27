@@ -1754,6 +1754,58 @@ def test_an_unrepresentable_polymer_is_reported_rather_than_dropped():
         Complex.from_structure(hybrid)
 
 
+# ── Unnamed chains ──────────────────────────────────────────────────────────
+
+
+def _blank_chain_pdb(source: Path, chains: tuple[str, ...] = ("A",)) -> str:
+    """Blank the chain column for the given chains, as a CASP target file leaves it."""
+    lines = []
+    for line in source.read_text().splitlines():
+        blank = len(line) > 21 and line.startswith(("ATOM", "HETATM", "TER")) and line[21] in chains
+        lines.append(line[:21] + " " + line[22:] if blank else line)
+    return "\n".join(lines) + "\n"
+
+
+def test_an_unnamed_chain_is_given_an_identifier():
+    """A deposited file may leave the chain column blank; a chain with no ID cannot be addressed."""
+    structure = Structure(structure=_blank_chain_pdb(_MODIFIED_GAPPED_PDB_FILE), structure_format="pdb", source="test")
+
+    assert structure.get_chain_types() == {"A": "protein", "B": "dna", "L": "ligand"}
+    assert structure.get_chain_sequence("A") == Structure.from_file(_MODIFIED_GAPPED_PDB_FILE).get_chain_sequence("A")
+
+
+def test_naming_an_unnamed_chain_avoids_the_identifiers_already_in_use():
+    """The ligand chain here is unnamed while A and B are taken, so it takes the next free letter."""
+    structure = Structure(
+        structure=_blank_chain_pdb(_MODIFIED_GAPPED_PDB_FILE, chains=("L",)), structure_format="pdb", source="test"
+    )
+
+    assert structure.get_chain_types() == {"A": "protein", "B": "dna", "C": "ligand"}
+
+
+def test_a_named_chain_keeps_its_identifier():
+    """Naming an unnamed chain must not disturb chains the file already named."""
+    structure = Structure.from_file(_MODIFIED_GAPPED_PDB_FILE)
+    assert structure.get_chain_ids() == ["A", "B"]
+
+
+def test_an_unnamed_chain_round_trips_through_staging():
+    """Once named, the chain designs and restores like any other."""
+    from proto_tools.entities.complex import Complex
+
+    structure = Structure(structure=_blank_chain_pdb(_MODIFIED_GAPPED_PDB_FILE), structure_format="pdb", source="test")
+    [named] = [chain_id for chain_id, kind in structure.get_chain_types().items() if kind == "protein"]
+
+    content, chain_map = structure.renumbered_sequentially()
+    staged = Structure(structure=content, structure_format="pdb", source="test")
+    restored = staged.with_residue_ids(structure.get_chain_residue_ids(), chain_map=chain_map)
+
+    assert chain_map[named] == named
+    assert restored.get_chain_residue_ids() == structure.get_chain_residue_ids()
+    assert [chain.id for chain in Complex.from_structure(structure).chains] == [named, named, "B", "L"]
+    assert "" not in structure.get_chain_types()
+
+
 # ── Remote fetch (from_url / from_rcsb / constructor URL) ──────────────────────
 
 _RCSB_PDB_URL = "https://files.rcsb.org/download/1TIM.pdb"
