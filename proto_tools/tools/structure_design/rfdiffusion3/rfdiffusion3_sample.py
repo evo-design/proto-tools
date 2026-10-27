@@ -1020,9 +1020,10 @@ def _missing_cfg_feature_specs(inputs: RFdiffusion3Input) -> list[str]:
         specs = ((f"spec-{index}", spec.to_dict()) for index, spec in enumerate(inputs.design_specs))
 
     missing: list[str] = []
-    empty_values: tuple[Any, ...] = (None, "", [], {})
     for spec_key, spec in specs:
-        if not isinstance(spec, dict) or not any(spec.get(field) not in empty_values for field in _CFG_FEATURE_FIELDS):
+        # A falsy selector carries no conditioning: ``None`` and empty str/list/dict leave the
+        # feature unset, and an explicit ``False`` switches it off, so neither enables CFG.
+        if not isinstance(spec, dict) or not any(spec.get(field) for field in _CFG_FEATURE_FIELDS):
             missing.append(str(spec_key))
     return missing
 

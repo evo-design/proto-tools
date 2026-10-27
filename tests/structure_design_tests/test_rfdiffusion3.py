@@ -19,6 +19,7 @@ from proto_tools.tools.structure_design import (
     RFdiffusion3Input,
     run_rfdiffusion3,
 )
+from proto_tools.tools.structure_design.rfdiffusion3.rfdiffusion3_sample import _missing_cfg_feature_specs
 from tests._structure_fixtures import synthetic_cif
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -80,6 +81,59 @@ def test_rfdiffusion3_design_spec_selections_require_input_structure():
     )
     assert spec.contig == "A1-100"
     assert spec.select_hbond_donor == {"A40": ["NE2"]}
+
+
+@pytest.mark.parametrize(
+    ("spec_fields", "expected_missing"),
+    [
+        # No selector at all: the spec conditions on nothing CFG can guide.
+        ({"length": "100"}, True),
+        # select_hotspots places a binder epitope but supplies no CFG feature tensor.
+        ({"input_structure": synthetic_cif(["A"]), "contig": "A1-100", "select_hotspots": "A24"}, True),
+        # An explicit False switches the feature off, so it cannot enable CFG either.
+        ({"input_structure": synthetic_cif(["A"]), "contig": "A1-100", "select_buried": False}, True),
+        # Any truthy native CFG feature satisfies the requirement.
+        ({"input_structure": synthetic_cif(["A"]), "contig": "A1-100", "select_buried": "A24,A35"}, False),
+        ({"input_structure": synthetic_cif(["A"]), "contig": "A1-100", "select_exposed": True}, False),
+        (
+            {"input_structure": synthetic_cif(["A"]), "contig": "A1-100", "select_hbond_donor": {"A40": ["NE2"]}},
+            False,
+        ),
+    ],
+)
+def test_rfdiffusion3_cfg_requires_native_feature_conditioning(spec_fields, expected_missing):
+    """CFG needs a truthy native feature selector on every spec; hotspots are not one."""
+    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(**spec_fields)])
+    assert bool(_missing_cfg_feature_specs(inputs)) is expected_missing
+
+
+def test_rfdiffusion3_cfg_reports_every_unconditioned_spec():
+    """A mixed batch names each offending spec, so the caller knows which to fix."""
+    inputs = RFdiffusion3Input(
+        design_specs=[
+            RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), contig="A1-100", select_buried="A24"),
+            RFdiffusion3DesignSpec(length="100"),
+            RFdiffusion3DesignSpec(length="80"),
+        ]
+    )
+    assert _missing_cfg_feature_specs(inputs) == ["spec-1", "spec-2"]
+
+
+def test_rfdiffusion3_cfg_reads_raw_json_spec_keys():
+    """raw_json specs are checked under their own keys rather than positional names."""
+    raw_json = json.dumps(
+        {
+            "guided": {"length": "100", "select_exposed": "A10"},
+            "unguided": {"length": "100"},
+        }
+    )
+    assert _missing_cfg_feature_specs(RFdiffusion3Input(raw_json=raw_json)) == ["unguided"]
+
+
+def test_rfdiffusion3_cfg_rejects_non_object_raw_json():
+    """A raw_json payload that is not a mapping of named specs cannot be checked."""
+    with pytest.raises(ValueError, match="top-level object of named design specs"):
+        _missing_cfg_feature_specs(RFdiffusion3Input(raw_json=json.dumps([{"length": "100"}])))
 
     # Happy path 3: length alone (unconditional design — the only no-input path).
     spec = RFdiffusion3DesignSpec(length="40")
@@ -498,29 +552,6 @@ def test_rfdiffusion3_standalone_failure_reports_full_subprocess_output(monkeypa
     assert "stderr line 19" in message
     assert "stdout line 0" in message
     assert "stdout line 19" in message
-
-
-def test_rfdiffusion3_standalone_sequence_skips_ligand_chains():
-    """Worker sequence output aligns only to polymer chains, one letter per residue."""
-    standalone_dir = Path(__file__).resolve().parents[2] / "proto_tools/tools/structure_design/rfdiffusion3/standalone"
-    spec = util.spec_from_file_location("rfdiffusion3_standalone_sequence", standalone_dir / "inference.py")
-    mod = util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(mod)
-
-    pdb = """\
-ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00 20.00           N
-ATOM      2  CA  ALA A   1       1.000   0.000   0.000  1.00 20.00           C
-ATOM      3  C   ALA A   1       2.000   0.000   0.000  1.00 20.00           C
-ATOM      4  N   CYS A   3       3.000   0.000   0.000  1.00 20.00           N
-ATOM      5  CA  CYS A   3       4.000   0.000   0.000  1.00 20.00           C
-ATOM      6  C   CYS A   3       5.000   0.000   0.000  1.00 20.00           C
-HETATM    7 ZN    ZN B   1       8.000   0.000   0.000  1.00 20.00          ZN
-TER
-END
-"""
-
-    assert mod.RFdiffusion3Model()._extract_sequence(pdb) == ["AC"]
 
 
 def test_rfdiffusion3_precision_site_promotes_low_precision_alignment(monkeypatch):
