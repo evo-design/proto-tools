@@ -19,7 +19,7 @@ import json
 import logging
 import tempfile
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, Literal
 
@@ -563,7 +563,7 @@ class RFdiffusion3SamplerTuning(BaseModel):
     The settings below are the commonly tuned sampler parameters; each is validated,
     defaults to ``None``, and is forwarded to ``inference_sampler.<name>`` only
     when set, otherwise inheriting the checkpoint's upstream default. Any other
-    valid ``inference_sampler`` field (e.g. ``cfg_t_max``, ``s_min``, ``s_max``)
+    valid ``inference_sampler`` field (e.g. ``s_min`` or ``s_max``)
     may be passed as an extra keyword and is forwarded verbatim. See
     https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
 
@@ -639,7 +639,9 @@ class RFdiffusion3Config(BaseConfig):
         n_batches (int): Independent batches per spec
             (total designs = ``n_batches * diffusion_batch_size * num_specs``).
         diffusion_batch_size (int): Designs sampled in parallel per batch.
-        num_timesteps (int): Diffusion timesteps; more = slower, generally higher quality.
+        num_timesteps (int): Diffusion timesteps; at least two are required to
+            define one denoising transition, and more are slower but generally
+            higher quality.
         step_scale (float): Step size scale; higher = less diverse, more designable.
         sampler_kind (Literal['default', 'symmetry']): Sampler kind;
             ``'symmetry'`` for homo-oligomer design (paired with ``DesignSpec.symmetry``).
@@ -648,6 +650,11 @@ class RFdiffusion3Config(BaseConfig):
             ``diffuse`` (diffused region only).
         use_classifier_free_guidance (bool): Enable CFG sampling.
         cfg_scale (float): CFG scale factor (typical 1.0-3.0); no-op when CFG is off.
+        cfg_t_max (float | None): Noise level below which CFG stops being applied.
+            Compared against the sampler's noise schedule, not a normalized time:
+            with upstream defaults that schedule runs from about 2560 down to
+            0.0064, so a small value such as ``0.5`` leaves CFG on for nearly the
+            whole rollout. ``None`` (the default) applies CFG at every step.
         gamma_0 (float): Sampler stochasticity; lower = more designable,
             less diverse; ``0.0`` = deterministic ODE. Must be ``> 0.5``
             when ``sampler_kind="symmetry"``.
@@ -665,8 +672,8 @@ class RFdiffusion3Config(BaseConfig):
         device (str): ``"cuda"`` or ``"cpu"``.
 
     Note:
-        Headline sampler controls (``sampler_kind``, ``cfg_scale``, ``gamma_0``,
-        ``center_option``, ``use_classifier_free_guidance``) are top-level fields.
+        Headline sampler controls (``sampler_kind``, ``cfg_scale``, ``cfg_t_max``,
+        ``gamma_0``, ``center_option``, ``use_classifier_free_guidance``) are top-level fields.
         Finer ``inference_sampler`` settings live under ``sampler_tuning`` (a typed
         :class:`RFdiffusion3SamplerTuning`), e.g.
         ``RFdiffusion3Config(sampler_tuning={"noise_scale": 1.003})``. See
@@ -688,8 +695,8 @@ class RFdiffusion3Config(BaseConfig):
     num_timesteps: int = ConfigField(
         title="Number of Timesteps",
         default=200,
-        ge=1,
-        description="Diffusion timesteps for sampling (more = slower, generally higher quality)",
+        ge=2,
+        description="Diffusion steps (minimum 2; more is slower and generally higher quality)",
     )
     step_scale: float = ConfigField(
         title="Step Scale",
@@ -718,6 +725,12 @@ class RFdiffusion3Config(BaseConfig):
         default=1.5,
         ge=0.0,
         description="CFG scale (typical: 1.0-3.0); requires use_classifier_free_guidance=True",
+    )
+    cfg_t_max: float | None = ConfigField(
+        title="CFG Noise Level Floor",
+        default=None,
+        ge=0.0,
+        description="Noise level below which CFG stops being applied; None applies it throughout",
     )
     gamma_0: float = ConfigField(
         title="Gamma 0",
@@ -811,6 +824,8 @@ class RFdiffusion3Config(BaseConfig):
                 "inference_sampler.gamma_0": self.gamma_0,
             }
         )
+        if self.cfg_t_max is not None:
+            cli_kwargs["inference_sampler.cfg_t_max"] = self.cfg_t_max
         return cli_kwargs
 
 
@@ -987,6 +1002,44 @@ def _canonicalize_design_chain_ids(structure: Structure) -> Structure:
     return structure.with_renamed_chains(dict(zip(observed, target, strict=True)))
 
 
+# Spec fields that feed the three upstream ``cfg_features`` tensors: select_hbond_donor and
+# select_hbond_acceptor set ``active_donor``/``active_acceptor``, and the three RASA selectors
+# set ``rasa_bin``, which becomes ``ref_atomwise_rasa``. select_hotspots is not among them --
+# it sets ``is_atom_level_hotspot``, which CFG never strips.
+_CFG_FEATURE_FIELDS = (
+    "select_buried",
+    "select_partially_buried",
+    "select_exposed",
+    "select_hbond_donor",
+    "select_hbond_acceptor",
+)
+
+# ``unindex`` carries no CFG feature tensor, but upstream ``strip_f`` crops unindexed-motif atoms
+# out of the reference pass regardless of ``cfg_features``, so CFG still guides away from that
+# conditioning and is not a no-op for such a spec.
+_CFG_CONDITIONING_FIELDS = (*_CFG_FEATURE_FIELDS, "unindex")
+
+
+def _unguided_cfg_specs(inputs: RFdiffusion3Input) -> list[str]:
+    """Return every spec key for which classifier-free guidance would be a no-op."""
+    specs: Iterable[tuple[str, Any]]
+    if inputs.raw_json:
+        payload = json.loads(inputs.raw_json)
+        if not isinstance(payload, dict):
+            raise ValueError("RFdiffusion3 raw_json must contain a top-level object of named design specs")
+        specs = ((str(key), value) for key, value in payload.items())
+    else:
+        specs = ((f"spec-{index}", spec.to_dict()) for index, spec in enumerate(inputs.design_specs))
+
+    unguided: list[str] = []
+    for spec_key, spec in specs:
+        # A falsy selector carries no conditioning: ``None`` and empty str/list/dict leave the
+        # feature unset, and an explicit ``False`` switches it off, so neither enables CFG.
+        if not isinstance(spec, dict) or not any(spec.get(field) for field in _CFG_CONDITIONING_FIELDS):
+            unguided.append(str(spec_key))
+    return unguided
+
+
 @tool(
     key="rfdiffusion3-design",
     label="RFdiffusion3 Structure Design",
@@ -1054,6 +1107,18 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         - Memory usage scales with batch size and protein length
         - Dependency isolation is handled automatically via venv subprocess
     """
+    if config.use_classifier_free_guidance:
+        unguided_cfg_specs = _unguided_cfg_specs(inputs)
+        if unguided_cfg_specs:
+            logger.warning(
+                "use_classifier_free_guidance=True, but specs %s set no native CFG feature "
+                "(select_buried/select_partially_buried/select_exposed/select_hbond_*) and no "
+                "'unindex'. Hotspot controls are distinct from CFG features, so guidance cancels "
+                "to an identical prediction for these specs while doubling the forward passes. "
+                "Set a feature selector, or disable CFG for unconditional and hotspot-only generation.",
+                unguided_cfg_specs,
+            )
+
     logger.debug("Using local GPU for RFdiffusion3 structure design...")
 
     with tempfile.TemporaryDirectory() as temp_dir_str:

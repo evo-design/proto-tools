@@ -136,6 +136,13 @@ class RFdiffusion3Model:
         from standalone_helpers import get_subprocess_device_env
 
         env = get_subprocess_device_env(device)
+        # Foundry's optional motif realignment performs a 3x3 SVD inside the
+        # low-precision inference context. CUDA implements neither float16 nor
+        # bfloat16 SVD, so preload a narrow sitecustomize patch that promotes only
+        # that alignment calculation to float32. Keep any caller PYTHONPATH.
+        precision_site = Path(__file__).with_name("rfd3_precision_site")
+        existing_pythonpath = env.get("PYTHONPATH")
+        env["PYTHONPATH"] = str(precision_site) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
 
         # Run the command — inherit streams when verbose for real-time progress;
         # capture when not verbose so we can surface stderr tail on failure.
