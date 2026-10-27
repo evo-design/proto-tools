@@ -2,6 +2,8 @@
 
 # SynBioHub
 
+![SynBioHub](https://proto-bio.github.io/proto-assets/images/tool/synbiohub/hero.png)
+
 > [!NOTE]
 > **License:** SynBioHub retrieves data from caller-selected SynBioHub registries, distributed under registry and record-specific terms. Attribution to caller-selected SynBioHub registries is required when the data is redistributed. The client wrapper code is MIT-licensed. Please refer to [the data terms](https://wiki.synbiohub.org/) for full terms.
 
@@ -27,7 +29,7 @@ Use SBOL as the primary representation for composing multi-segment constructs an
 
 - **Prefer recursive SBOL for composition.** It includes referenced child objects needed to reconstruct a hierarchical design.
 - **Treat FASTA as a view, not the design model.** Flattened sequence cannot retain all component relationships.
-- **Tokens remain private.** `SYNBIOHUB_TOKEN` is excluded from cache keys and outputs. The current public instance returns HTTP 401 for some public-object downloads without a token.
+- **Tokens remain private.** `SYNBIOHUB_TOKEN` is excluded from cache keys and outputs.
 - **Select the registry explicitly.** `object_uri` must have the same origin as `registry_url`.
 
 ## Toolkit Notes
@@ -37,4 +39,14 @@ Use SBOL as the primary representation for composing multi-segment constructs an
 These notes apply to `synbiohub-fetch`.
 
 - **Requires network access.** No registry snapshot or curated database is stored locally.
+- **Requires a SynBioHub token.** The public instance requires a login for every download, including public records. Create a free account at [synbiohub.org](https://synbiohub.org/register), then exchange your email or username and password for a token and export it:
+
+  ```bash
+  export SYNBIOHUB_TOKEN=$(curl -s -X POST https://api.synbiohub.org/login \
+    -H "Accept: text/plain" \
+    --data-urlencode "email=YOUR_EMAIL" \
+    --data-urlencode "password=YOUR_PASSWORD")
+  ```
+
+  The token can also be passed as `synbiohub_token` in the config. Request a token from the same host as `registry_url`. Tokens can expire when the registry restarts or when you log out; if downloads start failing with a login redirect, request a new one.
 - **Runs on CPU.** Runtime is dominated by the selected document downloads.

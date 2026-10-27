@@ -147,6 +147,10 @@ from proto_tools.tools.database_retrieval import (
     SequenceFetchOutput,
     SequenceFetchRequest,
     SequenceFetchResult,
+    SynBioHubDocument,
+    SynBioHubFetchConfig,
+    SynBioHubFetchInput,
+    SynBioHubFetchOutput,
     UniProtFetchConfig,
     UniProtFetchInput,
     UniProtFetchOutput,
@@ -168,6 +172,7 @@ from proto_tools.tools.database_retrieval import (
     run_rfam_family,
     run_rfam_regions,
     run_sequence_fetch,
+    run_synbiohub_fetch,
     run_uniprot_fetch,
 )
 
@@ -1854,6 +1859,12 @@ __all__ = [
     "RfamRegionsConfig",
     "RfamRegionsOutput",
     "RfamRegion",
+    # Database retrieval - SynBioHub
+    "run_synbiohub_fetch",
+    "SynBioHubFetchInput",
+    "SynBioHubFetchConfig",
+    "SynBioHubFetchOutput",
+    "SynBioHubDocument",
     # Database retrieval - NCBI Entrez tools
     "run_ncbi_esearch",
     "NCBIEsearchConfig",
