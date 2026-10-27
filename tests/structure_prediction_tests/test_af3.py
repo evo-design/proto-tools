@@ -3,7 +3,10 @@
 Tests for AlphaFold3.
 """
 
+import importlib.util
 import json
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -19,9 +22,109 @@ from proto_tools.tools.structure_prediction import (
     run_alphafold3,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.containers import (
+    ContainerRuntime,
+    ResolvedExecutable,
+)
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+
+def _load_af3_standalone_module(monkeypatch):
+    """Load the AF3 worker module without running its worker loop."""
+    standalone_dir = Path(__file__).parents[2] / "proto_tools/tools/structure_prediction/alphafold3/standalone"
+    monkeypatch.syspath_prepend(str(standalone_dir))
+    module_path = standalone_dir / "inference.py"
+    spec = importlib.util.spec_from_file_location("_test_alphafold3_standalone", module_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_af3_sif_command_normalizes_relative_bind_destinations(tmp_path, monkeypatch):
+    """Nested Apptainer binds remain valid when a caller supplies relative paths."""
+    module = _load_af3_standalone_module(monkeypatch)
+
+    monkeypatch.chdir(tmp_path)
+    executable = tmp_path / "apptainer"
+    executable.write_text("#!/bin/sh\nexit 0\n")
+    executable.chmod(0o755)
+    image = tmp_path / "alphafold3.sif"
+    image.write_bytes(b"image")
+    model = module.AlphaFold3Model()
+    model.model_dir = "weights"
+    model.sif_path = str(image)
+    model.container_runtime = ContainerRuntime(
+        executable=ResolvedExecutable(
+            path=executable,
+            name="apptainer",
+            source="configured_path",
+        ),
+        image_path=image,
+    )
+    command = model._build_cmd("inputs/job.json", "outputs", 2, 1)
+
+    bind_specs = [command[index + 1] for index, value in enumerate(command) if value == "--bind"]
+    assert bind_specs
+    for bind_spec in bind_specs:
+        source, destination = bind_spec.split(":", 1)
+        assert Path(source).is_absolute()
+        assert Path(destination).is_absolute()
+    assert f"--json_path={tmp_path / 'inputs/job.json'}" in command
+    assert f"--output_dir={tmp_path / 'outputs'}" in command
+    assert f"--model_dir={tmp_path / 'weights'}" in command
+
+
+def test_af3_load_uses_host_singularity(tmp_path, monkeypatch):
+    """An explicit image resolves against host Singularity with no tool venv present."""
+    module = _load_af3_standalone_module(monkeypatch)
+    singularity = tmp_path / "singularity"
+    singularity.write_text("#!/bin/sh\nexit 0\n")
+    singularity.chmod(0o755)
+    image = tmp_path / "alphafold3.sif"
+    image.write_bytes(b"image")
+    weights = tmp_path / "weights"
+    weights.mkdir()
+    (weights / "af3.bin.zst").write_bytes(b"weights")
+    for name in ("VIRTUAL_ENV", "TOOL_VENV_PATH", "VENV_PATH"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(
+        "shutil.which",
+        lambda name: str(singularity) if name == "singularity" else None,
+    )
+    monkeypatch.setattr(module, "resolve_weights_dir", lambda _tool: str(weights))
+
+    model = module.AlphaFold3Model()
+    model.load(sif_path=str(image))
+
+    assert model.container_runtime is not None
+    assert model.container_runtime.executable.name == "singularity"
+    assert model.container_runtime.executable.source == "PATH"
+    assert model.container_runtime.image_path == image.resolve()
+
+
+def test_af3_load_reports_missing_container_runtime(tmp_path, monkeypatch):
+    """A configured image without a runtime fails before inference with guidance."""
+    module = _load_af3_standalone_module(monkeypatch)
+    image = tmp_path / "alphafold3.sif"
+    image.write_bytes(b"image")
+    weights = tmp_path / "weights"
+    weights.mkdir()
+    (weights / "af3.bin").write_bytes(b"weights")
+    for name in ("VIRTUAL_ENV", "TOOL_VENV_PATH", "VENV_PATH"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr("shutil.which", lambda _name: None)
+    monkeypatch.setattr(module, "resolve_weights_dir", lambda _tool: str(weights))
+
+    with pytest.raises(
+        FileNotFoundError,
+        match="no Apptainer or Singularity executable is available",
+    ):
+        module.AlphaFold3Model().load(sif_path=str(image))
+
 
 # ── Module-level constants ────────────────────────────────────────────────────
 

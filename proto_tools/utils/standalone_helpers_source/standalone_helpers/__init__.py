@@ -39,6 +39,12 @@ from .compression import (
     compress_array,
     is_compressed_array,
 )
+from .containers import (
+    ContainerRuntime,
+    ResolvedExecutable,
+    resolve_container_runtime,
+    resolve_executable,
+)
 from .device import (
     _apply_jax_subprocess_env,
     _parse_cuda_indices,
@@ -75,6 +81,11 @@ __all__ = [
     "_COMPRESSED_ARRAY_SENTINEL",
     "compress_array",
     "is_compressed_array",
+    # container execution
+    "ContainerRuntime",
+    "ResolvedExecutable",
+    "resolve_container_runtime",
+    "resolve_executable",
     # device
     "_apply_jax_subprocess_env",
     "_parse_cuda_indices",

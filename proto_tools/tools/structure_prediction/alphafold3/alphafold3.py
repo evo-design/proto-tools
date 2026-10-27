@@ -161,8 +161,9 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
             NOT be automatically deleted. Default: ``None``.
 
         sif_path (str | None): Optional path to a pre-built AlphaFold3 Apptainer
-            image (``.sif``). When set, the tool runs ``run_alphafold.py`` inside
-            this image via ``apptainer exec`` instead of the in-env Python install. When ``None`` (default), inference.py looks
+            image (``.sif``). When set, the tool runs ``apptainer exec`` or
+            ``singularity exec`` against this image instead of
+            the in-env Python install. When ``None`` (default), inference.py looks
             for ``$VENV_PATH/alphafold3.sif`` (provisioned by setup.sh) and falls
             back to the env-based install if absent.
             Default: ``None``.
