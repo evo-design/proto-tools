@@ -72,6 +72,17 @@ def test_parse_m8_text_preserves_local_tm_scores():
     assert hit.target_tm_score == pytest.approx(0.29)
 
 
+def test_parse_m8_text_keeps_a_hit_whose_tm_score_is_out_of_range():
+    """A TM-score outside [0, 1] must not discard the hit; every other field is still usable."""
+    row = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0\t-1.0\t0.61\t0.29"
+
+    [hit] = _parse_m8_text(row, "testdb")
+
+    assert hit.target_id == "1abc_A"
+    assert hit.bit_score == pytest.approx(150.0)
+    assert hit.alignment_tm_score == pytest.approx(-1.0)
+
+
 def test_remote_12_and_local_15_column_rows_have_base_field_parity():
     """Adding local TM columns must not alter any established server field."""
     standard = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0"

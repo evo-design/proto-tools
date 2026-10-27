@@ -124,22 +124,16 @@ class FoldseekHit(BaseModel):
         default=None,
         title="Alignment-normalized TM-score",
         description="TM-score normalized by alignment length (local extended M8 only)",
-        ge=0.0,
-        le=1.0,
     )
     query_tm_score: float | None = Field(
         default=None,
         title="Query-normalized TM-score",
         description="TM-score normalized by query length (local extended M8 only)",
-        ge=0.0,
-        le=1.0,
     )
     target_tm_score: float | None = Field(
         default=None,
         title="Target-normalized TM-score",
         description="TM-score normalized by target length (local extended M8 only)",
-        ge=0.0,
-        le=1.0,
     )
 
     @model_validator(mode="after")
