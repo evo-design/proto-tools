@@ -10,7 +10,7 @@ Cite: Kim et al., *Nature Methods* 2025, DOI 10.1038/s41592-025-02593-7.
 import json
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field, model_validator
 
@@ -23,6 +23,7 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
     _RESULT_DOWNLOAD_TIMEOUT_SECONDS,
     FoldseekDatabase,
     FoldseekHit,
+    FoldseekHitMetrics,
     FoldseekMode,
     FoldseekSearchMode,
     _parse_m8_archive,
@@ -43,6 +44,7 @@ from proto_tools.utils import (
     request_with_retry,
 )
 from proto_tools.utils.device import RemoteDevice
+from proto_tools.utils.tool_io import MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +57,63 @@ _USER_AGENT = "proto-tools/foldseek-multimer-search-v1"
 # ============================================================================
 
 
-FoldseekMultimerHit = FoldseekHit
-"""Same typed shape as FoldseekHit for remote 12- and local 15-column M8 rows."""
+class FoldseekMultimerHitMetrics(FoldseekHitMetrics):
+    """TM-scores Foldseek Multimer reports for one chain pair.
+
+    Each M8 row aligns one query chain to one target chain, so the inherited scores are
+    per chain pair. The two complex scores describe the assembly alignment as a whole
+    and repeat on every row sharing a target.
+
+    Metrics documented in ``metric_spec``:
+        alignment_tm_score (float): Chain-pair TM-score normalized by alignment
+            length. Range 0-1.
+        query_tm_score (float): Chain-pair TM-score normalized by query chain
+            length. Range 0-1.
+        target_tm_score (float): Chain-pair TM-score normalized by target chain
+            length. Range 0-1.
+        complex_query_tm_score (float): Assembly TM-score normalized by the whole
+            query. Range 0-1.
+        complex_target_tm_score (float): Assembly TM-score normalized by the whole
+            target. Range 0-1.
+    """
+
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        **FoldseekHitMetrics.metric_spec,
+        "complex_query_tm_score": {
+            "availability": "local search only",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+        "complex_target_tm_score": {
+            "availability": "local search only",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+    }
+
+
+class FoldseekMultimerHit(FoldseekHit):
+    """One Foldseek Multimer alignment hit: one query chain against one target chain.
+
+    ``target_id`` carries the chain suffix Foldseek appends, so a multi-chain target
+    contributes one hit per aligned chain pair.
+
+    Attributes:
+        metric_columns (ClassVar[tuple[str, ...]]): The chain-pair TM-scores followed
+            by the two assembly-level ones, in the order the extended M8 appends them.
+        metrics_class (ClassVar[type[FoldseekHitMetrics]]): Container holding both.
+    """
+
+    metric_columns: ClassVar[tuple[str, ...]] = (
+        *FoldseekHit.metric_columns,
+        "complex_query_tm_score",
+        "complex_target_tm_score",
+    )
+    metrics_class: ClassVar[type[FoldseekHitMetrics]] = FoldseekMultimerHitMetrics
 
 
 class FoldseekMultimerSearchInput(BaseToolInput):
@@ -359,7 +416,7 @@ def _remote_multimer_search(
             backoff_seconds=_BACKOFF_SECONDS,
         )
         archive_response.raise_for_status()
-        hits = _parse_m8_archive(archive_response.content)
+        hits = _parse_m8_archive(archive_response.content, FoldseekMultimerHit)
         return FoldseekMultimerSearchOutput(
             ticket_id=ticket_id,
             hits=hits,
@@ -398,7 +455,7 @@ def _local_multimer_search(
         instance=instance,
         config=config,
     )
-    hits = _parse_m8_text(output_data.get("stdout", ""), database=_LOCAL_DB_PSEUDONAME)
+    hits = _parse_m8_text(output_data.get("stdout", ""), database=_LOCAL_DB_PSEUDONAME, hit_class=FoldseekMultimerHit)
     return FoldseekMultimerSearchOutput(
         ticket_id="",
         hits=hits,

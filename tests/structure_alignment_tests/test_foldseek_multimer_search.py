@@ -88,6 +88,39 @@ def test_local_multimer_search_dispatches_easy_multimersearch():
     assert payload["local_db"] == "/path/to/db"
 
 
+def test_local_multimer_search_separates_chain_pair_and_complex_tm_scores():
+    """The two complex columns land on the hit alongside its per-chain-pair scores."""
+    inputs = FoldseekMultimerSearchInput(structure=_TINY_MULTIMER_PDB)
+    config = FoldseekMultimerSearchConfig(search_mode="local", local_db="/path/to/db")
+    row = "query_A\tpdl1_B\t75.0\t100\t5\t1\t1\t100\t10\t110\t1e-30\t150.0\t0.2294\t0.1866\t0.1650\t0.1144\t0.09725\n"
+
+    with patch(
+        "proto_tools.tools.structure_alignment.foldseek.foldseek_multimer_search.ToolInstance.dispatch"
+    ) as mock_dispatch:
+        mock_dispatch.return_value = {"stdout": row}
+        output = run_foldseek_multimer_search(inputs, config)
+
+    metrics = output.hits[0].metrics
+    assert metrics is not None
+    assert metrics.query_tm_score == pytest.approx(0.1866)
+    assert metrics.complex_query_tm_score == pytest.approx(0.1144)
+    assert metrics.complex_target_tm_score == pytest.approx(0.09725)
+
+
+def test_local_multimer_search_leaves_metrics_unset_without_tm_columns():
+    """A standard 12-column row carries no TM-scores, so the hit has no metrics."""
+    inputs = FoldseekMultimerSearchInput(structure=_TINY_MULTIMER_PDB)
+    config = FoldseekMultimerSearchConfig(search_mode="local", local_db="/path/to/db")
+
+    with patch(
+        "proto_tools.tools.structure_alignment.foldseek.foldseek_multimer_search.ToolInstance.dispatch"
+    ) as mock_dispatch:
+        mock_dispatch.return_value = {"stdout": "query\t1abc_A\t75.0\t100\t5\t1\t1\t100\t10\t110\t1e-30\t150.0\n"}
+        output = run_foldseek_multimer_search(inputs, config)
+
+    assert output.hits[0].metrics is None
+
+
 def test_local_mode_validator_requires_local_db():
     """Pydantic rejects search_mode='local' without local_db at config-construction time."""
     with pytest.raises(ValidationError, match="local_db is required"):

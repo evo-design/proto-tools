@@ -4,7 +4,7 @@ Local-only — the public Foldseek server does not expose RBH (verified against
 ``GET https://search.foldseek.com/api/databases``). RBH returns only mutual
 best hits between a query and a target DB, useful for structural orthology
 calls. The typed output schema is shared with ``foldseek-search``; local
-15-column rows additionally populate three TM-score normalizations.
+15-column rows additionally carry the three TM-score normalizations.
 """
 
 import json
@@ -257,7 +257,7 @@ def run_foldseek_rbh(
         instance=instance,
         config=config,
     )
-    hits = _parse_m8_text(output_data.get("stdout", ""), database=_LOCAL_DB_PSEUDONAME)
+    hits = _parse_m8_text(output_data.get("stdout", ""), database=_LOCAL_DB_PSEUDONAME, hit_class=FoldseekHit)
     return FoldseekRBHOutput(
         hits=hits,
         num_hits=len(hits),

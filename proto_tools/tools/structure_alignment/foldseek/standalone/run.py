@@ -83,6 +83,7 @@ def _ensure_prostt5_weights(override: str | None) -> str:
 _M8_FORMAT_PIDENT = (
     "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,alntmscore,qtmscore,ttmscore"
 )
+_M8_FORMAT_MULTIMER = f"{_M8_FORMAT_PIDENT},complexqtmscore,complexttmscore"
 
 
 def _gpu_args(use_gpu: bool) -> list[str]:
@@ -221,8 +222,9 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
             ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
-        ``{"stdout": <m8_text>}`` — internal 15-column M8 with the standard
-        12 columns followed by alignment-, query-, and target-normalized TM-scores.
+        ``{"stdout": <m8_text>}`` — internal 17-column M8 with the standard 12 columns
+        followed by the chain-pair alignment-, query- and target-normalized TM-scores
+        and the query- and target-normalized TM-scores of the whole assembly.
     """
     foldseek = _find_binary()
     with tempfile.TemporaryDirectory() as tmp:
@@ -240,7 +242,7 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
                 str(m8_out),
                 str(tmp_path / "fs_tmp"),
                 "--format-output",
-                _M8_FORMAT_PIDENT,
+                _M8_FORMAT_MULTIMER,
                 "-e",
                 str(input_data["evalue"]),
                 "-s",

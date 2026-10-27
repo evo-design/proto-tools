@@ -14,7 +14,7 @@ import logging
 import platform
 import tarfile
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal, TypeVar
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -33,6 +33,7 @@ from proto_tools.utils import (
     request_with_retry,
 )
 from proto_tools.utils.device import RemoteDevice
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,9 @@ _HTTP_RETRIES = 2
 _BACKOFF_SECONDS = 1.0
 _USER_AGENT = "proto-tools/foldseek-search-v1"
 _LOCAL_DB_PSEUDONAME = "local_db"  # placeholder for FoldseekHit.database in local mode
+_M8_STANDARD_COLUMNS = 12  # BLAST M8 columns every Foldseek mode emits; metric columns follow
+
+_HitT = TypeVar("_HitT", bound="FoldseekHit")
 
 FoldseekDatabase = Literal[
     "pdb100",
@@ -73,6 +77,45 @@ def _require_linux_x86_64_for_gpu(use_gpu: bool) -> None:
 # ============================================================================
 
 
+class FoldseekHitMetrics(Metrics):
+    """TM-scores Foldseek reports for one alignment.
+
+    The public server returns a standard 12-column M8 file with no TM-scores, so these
+    are present for local search only.
+
+    Metrics documented in ``metric_spec``:
+        alignment_tm_score (float): TM-score normalized by alignment length.
+            Foldseek's default ``--tmscore-threshold-mode`` compares against this one.
+            Range 0-1.
+        query_tm_score (float): TM-score normalized by query length. Range 0-1.
+        target_tm_score (float): TM-score normalized by target length. Range 0-1.
+    """
+
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "alignment_tm_score": {
+            "availability": "local search only",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+        "query_tm_score": {
+            "availability": "local search only",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+        "target_tm_score": {
+            "availability": "local search only",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "better_values_are": "higher",
+        },
+    }
+
+
 class FoldseekHit(BaseModel):
     """One Foldseek alignment hit (one row from a result M8 file).
 
@@ -91,13 +134,18 @@ class FoldseekHit(BaseModel):
         target_end (int): 1-indexed end position in the target.
         evalue (float): Expectation value.
         bit_score (float): Bit score.
-        alignment_tm_score (float | None): TM-score normalized by alignment
-            length, used by Foldseek's default TM-score threshold mode.
-        query_tm_score (float | None): TM-score normalized by query length.
-        target_tm_score (float | None): TM-score normalized by target length.
+        metrics (FoldseekHitMetrics | None): TM-scores for this alignment, or
+            ``None`` when the M8 file carries no TM-score columns.
+        metric_columns (ClassVar[tuple[str, ...]]): Metric names in the order the
+            extended M8 appends them after the 12 standard columns.
+        metrics_class (ClassVar[type[FoldseekHitMetrics]]): Container ``from_m8_row``
+            fills with ``metric_columns``.
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    metric_columns: ClassVar[tuple[str, ...]] = ("alignment_tm_score", "query_tm_score", "target_tm_score")
+    metrics_class: ClassVar[type[FoldseekHitMetrics]] = FoldseekHitMetrics
 
     database: str = Field(title="Database", description="Source database the hit came from")
     target_id: str = Field(title="Target ID", description="Database-specific target identifier")
@@ -120,20 +168,10 @@ class FoldseekHit(BaseModel):
         ge=0.0,
     )
     bit_score: float = Field(title="Bit Score", description="Foldseek alignment bit score; higher is better")
-    alignment_tm_score: float | None = Field(
+    metrics: FoldseekHitMetrics | None = Field(
         default=None,
-        title="Alignment-normalized TM-score",
-        description="TM-score normalized by alignment length (local extended M8 only)",
-    )
-    query_tm_score: float | None = Field(
-        default=None,
-        title="Query-normalized TM-score",
-        description="TM-score normalized by query length (local extended M8 only)",
-    )
-    target_tm_score: float | None = Field(
-        default=None,
-        title="Target-normalized TM-score",
-        description="TM-score normalized by target length (local extended M8 only)",
+        title="TM-scores",
+        description="TM-scores for this alignment (local search only)",
     )
 
     @model_validator(mode="after")
@@ -144,6 +182,48 @@ class FoldseekHit(BaseModel):
         if self.target_start > self.target_end:
             raise ValueError(f"target_start ({self.target_start}) must be <= target_end ({self.target_end})")
         return self
+
+    @classmethod
+    def from_m8_row(cls: type[_HitT], row: list[str], database: str) -> _HitT:
+        """Build a hit from one tab-split M8 row.
+
+        Sequence identity in column 3 is encoded as a percentage (0-100) and is
+        normalized to a fraction in [0, 1]. The metric columns past the twelfth are
+        optional and taken in ``metric_columns`` order for as far as the row reaches,
+        so a row with none of them leaves ``metrics`` unset.
+
+        Args:
+            row (list[str]): One M8 line split on tabs; at least 12 columns.
+            database (str): Database the row's target came from.
+
+        Returns:
+            _HitT: The parsed hit, of whichever subclass this is called on.
+
+        Raises:
+            ValueError: If a numeric column does not parse.
+            ValidationError: If a parsed value violates the model's bounds.
+        """
+        values = {
+            name: float(row[_M8_STANDARD_COLUMNS + i])
+            for i, name in enumerate(cls.metric_columns)
+            if len(row) > _M8_STANDARD_COLUMNS + i
+        }
+        metrics = cls.metrics_class.model_validate(values) if values else None
+        return cls(
+            database=database,
+            target_id=row[1],
+            sequence_identity=float(row[2]) / 100.0,
+            alignment_length=int(row[3]),
+            mismatches=int(row[4]),
+            gap_openings=int(row[5]),
+            query_start=int(row[6]),
+            query_end=int(row[7]),
+            target_start=int(row[8]),
+            target_end=int(row[9]),
+            evalue=float(row[10]),
+            bit_score=float(row[11]),
+            metrics=metrics,
+        )
 
 
 class FoldseekSearchInput(BaseToolInput):
@@ -440,7 +520,7 @@ def _remote_search(inputs: FoldseekSearchInput, config: FoldseekSearchConfig) ->
             backoff_seconds=_BACKOFF_SECONDS,
         )
         archive_response.raise_for_status()
-        hits = _parse_m8_archive(archive_response.content)
+        hits = _parse_m8_archive(archive_response.content, FoldseekHit)
         return FoldseekSearchOutput(
             ticket_id=ticket_id,
             hits=hits,
@@ -479,7 +559,7 @@ def _local_search(
         instance=instance,
         config=config,
     )
-    hits = _parse_m8_text(output_data.get("stdout", ""), database=_LOCAL_DB_PSEUDONAME)
+    hits = _parse_m8_text(output_data.get("stdout", ""), database=_LOCAL_DB_PSEUDONAME, hit_class=FoldseekHit)
     return FoldseekSearchOutput(
         ticket_id="",
         hits=hits,
@@ -521,53 +601,33 @@ def _submit(
     return ticket_id
 
 
-def _parse_m8_text(text: str, database: str) -> list[FoldseekHit]:
-    """Parse standard or locally extended BLAST M8 text into FoldseekHit objects.
+def _parse_m8_text(text: str, database: str, hit_class: type[_HitT]) -> list[_HitT]:
+    """Parse standard or locally extended BLAST M8 text into hits of ``hit_class``.
 
     Rows with fewer than 12 columns, non-numeric fields, or out-of-range
-    coordinates are skipped (logged at warning level). Sequence identity in
-    column 3 is encoded as a percentage (0-100); normalize to a fraction in
-    [0, 1] for downstream consumers.
+    coordinates are skipped (logged at warning level).
     """
-    hits: list[FoldseekHit] = []
+    hits: list[_HitT] = []
     for line in text.splitlines():
         row = line.split("\t")
-        if len(row) < 12:
+        if len(row) < _M8_STANDARD_COLUMNS:
             continue
         try:
-            hits.append(
-                FoldseekHit(
-                    database=database,
-                    target_id=row[1],
-                    sequence_identity=float(row[2]) / 100.0,
-                    alignment_length=int(row[3]),
-                    mismatches=int(row[4]),
-                    gap_openings=int(row[5]),
-                    query_start=int(row[6]),
-                    query_end=int(row[7]),
-                    target_start=int(row[8]),
-                    target_end=int(row[9]),
-                    evalue=float(row[10]),
-                    bit_score=float(row[11]),
-                    alignment_tm_score=float(row[12]) if len(row) >= 15 else None,
-                    query_tm_score=float(row[13]) if len(row) >= 15 else None,
-                    target_tm_score=float(row[14]) if len(row) >= 15 else None,
-                )
-            )
+            hits.append(hit_class.from_m8_row(row, database))
         except (ValueError, ValidationError) as exc:
             logger.warning("Skipping malformed Foldseek M8 row %r: %s", line, exc)
             continue
     return hits
 
 
-def _parse_m8_archive(archive_bytes: bytes) -> list[FoldseekHit]:
+def _parse_m8_archive(archive_bytes: bytes, hit_class: type[_HitT]) -> list[_HitT]:
     """Extract per-database M8 files from a Foldseek result tarball and parse them.
 
     The archive contains one file per queried database, named ``alis_{db}.m8``.
     Raises ValueError if the bytes aren't a valid gzipped tar (e.g. the server
     returned an HTML error page).
     """
-    hits: list[FoldseekHit] = []
+    hits: list[_HitT] = []
     try:
         with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
             for member in tar.getmembers():
@@ -578,7 +638,7 @@ def _parse_m8_archive(archive_bytes: bytes) -> list[FoldseekHit]:
                 if extracted is None:
                     continue
                 text = extracted.read().decode("utf-8", errors="replace")
-                hits.extend(_parse_m8_text(text, database))
+                hits.extend(_parse_m8_text(text, database, hit_class))
     except (tarfile.TarError, EOFError) as e:
         raise ValueError(f"Foldseek result is not a valid tar.gz archive (server error?): {e}") from e
     return hits
