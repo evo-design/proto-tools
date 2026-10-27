@@ -39,44 +39,6 @@ This tool is appropriate for any task in which the output is a novel protein bac
 - **Finer sampler tuning is grouped under the `sampler_tuning` field, a typed `RFdiffusion3SamplerTuning` whose settings map to the upstream `inference_sampler` block:** the noise schedule (`noise_scale`, `p`, `s_trans`), the stochasticity threshold `gamma_min` (paired with `gamma_0`), and the motif-noise settings `allow_realignment` / `s_jitter_origin` (effective only for motif-conditioned designs). Each defaults to `None` and is forwarded to the sampler only when set, otherwise inheriting the checkpoint's upstream default. Pass them as a dict, e.g. `RFdiffusion3Config(sampler_tuning={"noise_scale": 1.003})`; less-common upstream fields may be included and are forwarded verbatim with an unvalidated-setting warning. Prefer the typed top-level field for `cfg_t_max`.
 - **For hotspot-conditioned protein binders, keep the target chain in `contig`, append a designed chain after `/0`, set `select_hotspots` on target residues, and use `infer_ori_strategy="hotspots"`.** Sample multiple independent batches because the hotspots constrain the epitope rather than selecting one interface geometry. Validate the emitted sequences directly or pass each backbone through several modest ProteinMPNN temperature arms before staged structure and interface validation.
 
-**Composing a hotspot-conditioned binder campaign.**
-
-Hotspot-conditioned binder design is a native RFdiffusion3 use case, not a
-separate model or tool. Supply the target as `input_structure`, retain its chain
-in `contig`, append a designed chain of the desired length, and identify the
-target epitope with `select_hotspots`. Setting
-`infer_ori_strategy="hotspots"` places the diffusion origin near that epitope.
-For example, a target on chain A and a new 70--100 residue binder can be
-represented as:
-
-```python
-spec = RFdiffusion3DesignSpec(
-    input_structure=target,
-    contig="A1-150,/0,70-100",
-    select_hotspots="A24,A31,A47",
-    infer_ori_strategy="hotspots",
-)
-result = run_rfdiffusion3(
-    RFdiffusion3Input(design_specs=[spec]),
-    RFdiffusion3Config(n_batches=4, diffusion_batch_size=4, seed=seed),
-)
-```
-
-Replace the illustrative residue range and hotspots with positions from the
-actual target. Sample multiple independent batches because hotspot conditioning
-defines the binding region but does not select a single interface geometry.
-RFdiffusion3 co-designs sequence, so its emitted sequences can be evaluated
-directly. When additional inverse folding is useful, sample several sequences
-per backbone across a small ProteinMPNN temperature range rather than treating
-one temperature as universally optimal. Apply deterministic checks first, use
-structure and interface predictors on progressively smaller pools, and retain
-structurally and sequentially distinct finalists after multi-metric ranking.
-
-This composition intentionally leaves proposal counts, temperature values,
-predictors, and acceptance thresholds to the biological objective and compute
-budget. RFdiffusion3 generation, inverse folding, optimization, and validation
-remain separate operations so each can be exchanged or repeated independently.
-
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
