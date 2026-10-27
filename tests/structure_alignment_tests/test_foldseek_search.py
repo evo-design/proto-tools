@@ -59,8 +59,51 @@ def test_parse_m8_text_skips_malformed_rows():
     non_numeric = "q\t1abc_B\tNOTNUM\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0"
     inverted = "q\t1abc_C\t55.0\t120\t10\t2\t120\t1\t5\t125\t1e-30\t150.0"
     zero_coord = "q\t1abc_D\t55.0\t120\t10\t2\t0\t120\t5\t125\t1e-30\t150.0"
-    hits = _parse_m8_text("\n".join([good, non_numeric, inverted, zero_coord]), "testdb")
+    hits = _parse_m8_text("\n".join([good, non_numeric, inverted, zero_coord]), "testdb", FoldseekHit)
     assert [h.target_id for h in hits] == ["1abc_A"]
+
+
+def test_parse_m8_text_preserves_local_tm_scores():
+    """Extended local rows expose the score used by Foldseek's threshold mode."""
+    row = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0\t0.47\t0.61\t0.29"
+    hit = _parse_m8_text(row, "testdb", FoldseekHit)[0]
+    assert hit.metrics is not None
+    assert hit.metrics.alignment_tm_score == pytest.approx(0.47)
+    assert hit.metrics.query_tm_score == pytest.approx(0.61)
+    assert hit.metrics.target_tm_score == pytest.approx(0.29)
+
+
+def test_parse_m8_text_keeps_a_hit_whose_tm_score_is_out_of_range():
+    """A TM-score outside [0, 1] must not discard the hit; every other field is still usable."""
+    row = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0\t-1.0\t0.61\t0.29"
+
+    [hit] = _parse_m8_text(row, "testdb", FoldseekHit)
+
+    assert hit.target_id == "1abc_A"
+    assert hit.bit_score == pytest.approx(150.0)
+    assert hit.metrics is not None
+    assert hit.metrics.alignment_tm_score == pytest.approx(-1.0)
+
+
+def test_parse_m8_text_fills_the_metric_columns_a_short_row_reaches():
+    """A row that stops part-way through the metric columns keeps the ones it carries."""
+    row = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0\t0.47"
+
+    [hit] = _parse_m8_text(row, "testdb", FoldseekHit)
+
+    assert hit.metrics is not None
+    assert hit.metrics.alignment_tm_score == pytest.approx(0.47)
+    assert "query_tm_score" not in hit.metrics
+
+
+def test_remote_12_and_local_15_column_rows_have_base_field_parity():
+    """Adding local TM columns must not alter any established server field."""
+    standard = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0"
+    remote_hit = _parse_m8_text(standard, "testdb", FoldseekHit)[0]
+    local_hit = _parse_m8_text(f"{standard}\t0.47\t0.61\t0.29", "testdb", FoldseekHit)[0]
+
+    assert remote_hit.model_dump(exclude={"metrics"}) == local_hit.model_dump(exclude={"metrics"})
+    assert remote_hit.metrics is None
 
 
 def test_foldseek_hit_rejects_invalid_coordinates():
@@ -98,7 +141,7 @@ def test_parse_m8_archive_extracts_hits_per_database():
         }
     )
 
-    hits = _parse_m8_archive(archive)
+    hits = _parse_m8_archive(archive, FoldseekHit)
 
     assert len(hits) == 2
     by_db = {h.database: h for h in hits}
@@ -119,14 +162,14 @@ def test_parse_m8_archive_extracts_hits_per_database():
 def test_parse_m8_archive_filters_to_m8_files(extra_files, expected_count):
     """Only `.m8` archive entries are parsed; other files are silently ignored."""
     archive = _make_archive({"config.json": '{"version": 1}', **extra_files})
-    assert len(_parse_m8_archive(archive)) == expected_count
+    assert len(_parse_m8_archive(archive, FoldseekHit)) == expected_count
 
 
 def test_parse_m8_archive_raises_on_non_tarball_bytes():
     """An HTML error page from the server raises a clear ValueError, not an opaque TarError."""
     html = b"<html><body>503 Service Unavailable</body></html>"
     with pytest.raises(ValueError, match=r"not a valid tar\.gz archive"):
-        _parse_m8_archive(html)
+        _parse_m8_archive(html, FoldseekHit)
 
 
 # ── _submit ───────────────────────────────────────────────────────────────────
@@ -206,13 +249,20 @@ def test_local_mode_dispatches_easy_search():
     config = FoldseekSearchConfig(search_mode="local", local_db="/path/to/db", num_threads=8)
 
     with patch("proto_tools.tools.structure_alignment.foldseek.foldseek_search.ToolInstance.dispatch") as mock_dispatch:
-        mock_dispatch.return_value = {"stdout": "query\t1abc_A\t50.0\t100\t5\t1\t1\t100\t10\t110\t1e-30\t150.0\n"}
+        mock_dispatch.return_value = {
+            "stdout": "query\t1abc_A\t50.0\t100\t5\t1\t1\t100\t10\t110\t1e-30\t150.0\t0.48\t0.62\t0.31\n"
+        }
         output = run_foldseek_search(inputs, config)
 
     assert output.success
     assert output.ticket_id == ""  # local mode doesn't issue a ticket
     assert output.num_hits == 1
     assert output.hits[0].target_id == "1abc_A"
+    metrics = output.hits[0].metrics
+    assert metrics is not None
+    assert metrics.alignment_tm_score == pytest.approx(0.48)
+    assert metrics.query_tm_score == pytest.approx(0.62)
+    assert metrics.target_tm_score == pytest.approx(0.31)
     assert output.databases_queried == ["/path/to/db"]
 
     payload = mock_dispatch.call_args.args[1]

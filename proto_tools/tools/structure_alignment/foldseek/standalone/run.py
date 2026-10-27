@@ -80,9 +80,10 @@ def _ensure_prostt5_weights(override: str | None) -> str:
     return str(weights_path)
 
 
-# Force `pident` (0-100) so local M8 matches the public server's format.
-# The CLI default is `fident` (0-1), which would silently corrupt parsing.
-_M8_FORMAT_PIDENT = "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits"
+_M8_FORMAT_PIDENT = (
+    "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,alntmscore,qtmscore,ttmscore"
+)
+_M8_FORMAT_MULTIMER = f"{_M8_FORMAT_PIDENT},complexqtmscore,complexttmscore"
 
 
 def _gpu_args(use_gpu: bool) -> list[str]:
@@ -107,7 +108,8 @@ def run_easy_search(input_data: dict[str, Any]) -> dict[str, Any]:
             ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
-        ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8 (pident, 0-100).
+        ``{"stdout": <m8_text>}`` — internal 15-column M8 with the standard
+        12 columns followed by alignment-, query-, and target-normalized TM-scores.
     """
     foldseek = _find_binary()
     with tempfile.TemporaryDirectory() as tmp:
@@ -220,7 +222,9 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
             ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
-        ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8 (pident, 0-100).
+        ``{"stdout": <m8_text>}`` — internal 17-column M8 with the standard 12 columns
+        followed by the chain-pair alignment-, query- and target-normalized TM-scores
+        and the query- and target-normalized TM-scores of the whole assembly.
     """
     foldseek = _find_binary()
     with tempfile.TemporaryDirectory() as tmp:
@@ -238,7 +242,7 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
                 str(m8_out),
                 str(tmp_path / "fs_tmp"),
                 "--format-output",
-                _M8_FORMAT_PIDENT,
+                _M8_FORMAT_MULTIMER,
                 "-e",
                 str(input_data["evalue"]),
                 "-s",
@@ -331,7 +335,8 @@ def run_easy_rbh(input_data: dict[str, Any]) -> dict[str, Any]:
             ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
-        ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8 (pident, 0-100).
+        ``{"stdout": <m8_text>}`` — internal 15-column M8 with the standard
+        12 columns followed by alignment-, query-, and target-normalized TM-scores.
     """
     foldseek = _find_binary()
     with tempfile.TemporaryDirectory() as tmp:
