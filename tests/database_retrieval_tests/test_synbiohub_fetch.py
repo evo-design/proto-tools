@@ -1,6 +1,7 @@
 """Tests for SynBioHub design retrieval."""
 
 import os
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -27,7 +28,10 @@ DEVICE_SBOL = f"""<?xml version="1.0" encoding="UTF-8"?>
     <sbol:displayId>device</sbol:displayId>
     <dcterms:title>Test device</dcterms:title>
     <dcterms:description>RBS, CDS, and terminator</dcterms:description>
+    <dcterms:created>2005-05-30T11:00:00Z</dcterms:created>
+    <dcterms:modified>2015-08-31T04:07:34Z</dcterms:modified>
     <sbol:type rdf:resource="http://www.biopax.org/release/biopax-level3.owl#DnaRegion"/>
+    <sbol:type rdf:resource="http://identifiers.org/so/SO:0000988"/>
     <sbol:role rdf:resource="http://identifiers.org/so/SO:0000804"/>
     <sbol:role rdf:resource="http://wiki.synbiohub.org/wiki/Terms/igem#partType/Reporter"/>
     <sbol:component>
@@ -97,6 +101,7 @@ tgcc</sbol:elements>
   <sbol:ComponentDefinition rdf:about="{PUBLIC}/rbs/1">
     <sbol:displayId>rbs</sbol:displayId>
     <dcterms:title>RBS part</dcterms:title>
+    <dcterms:created>2004-01-02T00:00:00Z</dcterms:created>
     <sbol:type rdf:resource="http://www.biopax.org/release/biopax-level3.owl#DnaRegion"/>
     <sbol:role rdf:resource="http://identifiers.org/so/SO:0000139"/>
   </sbol:ComponentDefinition>
@@ -184,6 +189,8 @@ def test_parses_design_across_download_and_public_hosts(monkeypatch):
     assert (design.display_id, design.name, design.molecule) == ("device", "Test device", "dna")
     assert design.roles == ["SO:0000804"]
     assert design.sequence == "AAAGGATGCATGCC"
+    assert design.topology == "circular"
+    assert design.modified == datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)
 
 
 def test_parses_features_with_locations_and_inherited_roles(monkeypatch):
@@ -209,6 +216,8 @@ def test_subparts_list_every_other_definition(monkeypatch):
     assert set(subparts) == {f"{PUBLIC}/rbs/1", f"{PUBLIC}/cds/1"}
     assert subparts[f"{PUBLIC}/cds/1"].roles == ["SO:0000316"]
     assert subparts[f"{PUBLIC}/cds/1"].sequence is None
+    assert subparts[f"{PUBLIC}/cds/1"].topology is None
+    assert subparts[f"{PUBLIC}/rbs/1"].modified == datetime(2004, 1, 2, tzinfo=UTC)
 
 
 # ── Export ────────────────────────────────────────────────────────────────────
@@ -237,6 +246,7 @@ def test_genbank_export_maps_roles_and_coordinates(tmp_path, monkeypatch):
 
     record = SeqIO.read(tmp_path / "device.gb", "genbank")
     assert str(record.seq) == "AAAGGATGCATGCC"
+    assert (record.annotations["topology"], record.annotations["date"]) == ("circular", "31-AUG-2015")
     features = [(f.type, f.qualifiers["label"][0], str(f.location)) for f in record.features]
     assert features == [
         ("RBS", "RBS part", "[0:4](+)"),

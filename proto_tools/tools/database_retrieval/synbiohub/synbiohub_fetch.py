@@ -2,6 +2,7 @@
 
 import json
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
@@ -21,6 +22,7 @@ from proto_tools.utils import (
 )
 
 SynBioHubMolecule = Literal["dna", "rna", "protein", "other"]
+SynBioHubTopology = Literal["linear", "circular"]
 
 _REQUEST_TIMEOUT_SECONDS = 30
 _HTTP_RETRIES = 2
@@ -33,6 +35,7 @@ _DCTERMS = "{http://purl.org/dc/terms/}"
 _SO_PREFIX = "http://identifiers.org/so/"
 _REVERSE_COMPLEMENT = "http://sbols.org/v2#reverseComplement"
 _BIOPAX_MOLECULES: dict[str, SynBioHubMolecule] = {"DnaRegion": "dna", "RnaRegion": "rna", "Protein": "protein"}
+_SO_TOPOLOGIES: dict[str, SynBioHubTopology] = {"SO:0000987": "linear", "SO:0000988": "circular"}
 
 _EXPORT_SUFFIX = {"json": ".json", "sbol": ".sbol", "fasta": ".fasta", "genbank": ".gb"}
 _GENBANK_MOLECULE = {"dna": "DNA", "rna": "RNA", "protein": "protein"}
@@ -157,9 +160,11 @@ class SynBioHubPart(BaseModel):
         name (str | None): Part title.
         description (str | None): Part description.
         molecule (SynBioHubMolecule): Molecule type of the part.
+        topology (SynBioHubTopology | None): Linear or circular, when the registry records it.
         roles (list[str]): Sequence Ontology roles of the part.
         sequence (str | None): Part sequence, uppercase, if the registry records one.
         features (list[SynBioHubFeature]): Features annotated on the sequence; ranged annotations only.
+        modified (datetime | None): Last modification time, else creation time.
     """
 
     uri: str = Field(title="URI", description="SBOL identity of the part")
@@ -167,6 +172,11 @@ class SynBioHubPart(BaseModel):
     name: str | None = Field(default=None, title="Name", description="Part title")
     description: str | None = Field(default=None, title="Description", description="Part description")
     molecule: SynBioHubMolecule = Field(title="Molecule", description="Molecule type of the part")
+    topology: SynBioHubTopology | None = Field(
+        default=None,
+        title="Topology",
+        description="Linear or circular, when the registry records it",
+    )
     roles: list[str] = Field(
         default_factory=list,
         title="Roles",
@@ -177,6 +187,11 @@ class SynBioHubPart(BaseModel):
         default_factory=list,
         title="Features",
         description="Features annotated on the sequence; annotations without a range are omitted",
+    )
+    modified: datetime | None = Field(
+        default=None,
+        title="Modified",
+        description="Last modification time (dcterms:modified), else creation time",
     )
 
 
@@ -348,7 +363,11 @@ def _parse_part(
         ),
         "other",
     )
+    topology = next(
+        (_SO_TOPOLOGIES[term] for term in _so_terms(_resources(element, "type")) if term in _SO_TOPOLOGIES), None
+    )
     sequence = next((sequences[ref] for ref in _resources(element, "sequence") if ref in sequences), None)
+    timestamp = element.findtext(f"{_DCTERMS}modified") or element.findtext(f"{_DCTERMS}created")
     subpart_by_component = {
         component.get(f"{_RDF}about", ""): _resource(component, "definition")
         for component in element.findall(f"{_SBOL}component/{_SBOL}Component")
@@ -382,9 +401,11 @@ def _parse_part(
         name=_title(element),
         description=element.findtext(f"{_DCTERMS}description") or None,
         molecule=molecule,
+        topology=topology,
         roles=_so_roles(element),
         sequence=sequence,
         features=features,
+        modified=datetime.fromisoformat(timestamp) if timestamp else None,
     )
 
 
@@ -405,7 +426,12 @@ def _title(element: ET.Element) -> str | None:
 
 def _so_roles(element: ET.Element) -> list[str]:
     """Return an element's Sequence Ontology roles as ``SO:NNNNNNN`` terms."""
-    return [role.removeprefix(_SO_PREFIX) for role in _resources(element, "role") if role.startswith(_SO_PREFIX)]
+    return _so_terms(_resources(element, "role"))
+
+
+def _so_terms(uris: list[str]) -> list[str]:
+    """Return the Sequence Ontology URIs among ``uris`` as ``SO:NNNNNNN`` terms."""
+    return [uri.removeprefix(_SO_PREFIX) for uri in uris if uri.startswith(_SO_PREFIX)]
 
 
 def _require_sequence(part: SynBioHubPart) -> str:
@@ -440,6 +466,10 @@ def _write_genbank(part: SynBioHubPart, path: Path) -> None:
         description=part.description or part.name or part.display_id,
         annotations={"molecule_type": _GENBANK_MOLECULE[part.molecule]},
     )
+    if part.topology is not None:
+        record.annotations["topology"] = part.topology
+    if part.modified is not None:
+        record.annotations["date"] = part.modified.strftime("%d-%b-%Y").upper()
     for feature in part.features:
         ranges = [
             SimpleLocation(location.start - 1, location.end, strand=1 if location.strand == "+" else -1)  # type: ignore[no-untyped-call]

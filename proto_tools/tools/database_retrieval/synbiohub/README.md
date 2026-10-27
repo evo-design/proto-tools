@@ -38,7 +38,7 @@ Read a construct's composition from `design.features` and `subparts` to rebuild 
 
   The token can also be passed as `synbiohub_token` in the config. Request a token from the same host as `registry_url`. Tokens can expire when the registry restarts or when you log out; if downloads start failing with a login redirect, request a new one.
 - **Treat SBOL as the source of truth.** The typed model covers parts, roles, sequences, and ranged features. Provenance, interactions, and registry-specific annotations stay in the verbatim `sbol` field and its export.
-- **Exports are views of the design.** FASTA and GenBank cover the requested design only. GenBank feature keys come from Sequence Ontology roles, and unmapped roles become `misc_feature`.
+- **Exports are views of the design.** FASTA and GenBank cover the requested design only. GenBank feature keys come from Sequence Ontology roles, and unmapped roles become `misc_feature`. The GenBank header carries the design's topology when the SBOL records one, and its last modification date.
 - **Tokens remain private.** `SYNBIOHUB_TOKEN` is excluded from cache keys and outputs.
 - **Select the registry explicitly.** `object_uri` must have the same origin as `registry_url`.
 - **Requires network access.** No registry snapshot or curated database is stored locally.
