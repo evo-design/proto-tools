@@ -19,7 +19,7 @@ from proto_tools.tools.structure_design import (
     RFdiffusion3Input,
     run_rfdiffusion3,
 )
-from proto_tools.tools.structure_design.rfdiffusion3.rfdiffusion3_sample import _missing_cfg_feature_specs
+from proto_tools.tools.structure_design.rfdiffusion3.rfdiffusion3_sample import _unguided_cfg_specs
 from tests._structure_fixtures import synthetic_cif
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -84,7 +84,7 @@ def test_rfdiffusion3_design_spec_selections_require_input_structure():
 
 
 @pytest.mark.parametrize(
-    ("spec_fields", "expected_missing"),
+    ("spec_fields", "expected_unguided"),
     [
         # No selector at all: the spec conditions on nothing CFG can guide.
         ({"length": "100"}, True),
@@ -92,23 +92,26 @@ def test_rfdiffusion3_design_spec_selections_require_input_structure():
         ({"input_structure": synthetic_cif(["A"]), "contig": "A1-100", "select_hotspots": "A24"}, True),
         # An explicit False switches the feature off, so it cannot enable CFG either.
         ({"input_structure": synthetic_cif(["A"]), "contig": "A1-100", "select_buried": False}, True),
-        # Any truthy native CFG feature satisfies the requirement.
+        # Any truthy native CFG feature makes guidance meaningful.
         ({"input_structure": synthetic_cif(["A"]), "contig": "A1-100", "select_buried": "A24,A35"}, False),
         ({"input_structure": synthetic_cif(["A"]), "contig": "A1-100", "select_exposed": True}, False),
         (
             {"input_structure": synthetic_cif(["A"]), "contig": "A1-100", "select_hbond_donor": {"A40": ["NE2"]}},
             False,
         ),
+        # unindex carries no feature tensor, but upstream crops those atoms from the reference
+        # pass, so guidance still has something to guide away from.
+        ({"input_structure": synthetic_cif(["A"]), "contig": "A1-100", "unindex": "A24,A35"}, False),
     ],
 )
-def test_rfdiffusion3_cfg_requires_native_feature_conditioning(spec_fields, expected_missing):
-    """CFG needs a truthy native feature selector on every spec; hotspots are not one."""
+def test_rfdiffusion3_cfg_detects_specs_guidance_cannot_affect(spec_fields, expected_unguided):
+    """CFG needs a truthy feature selector or unindex; hotspots alone leave it a no-op."""
     inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(**spec_fields)])
-    assert bool(_missing_cfg_feature_specs(inputs)) is expected_missing
+    assert bool(_unguided_cfg_specs(inputs)) is expected_unguided
 
 
-def test_rfdiffusion3_cfg_reports_every_unconditioned_spec():
-    """A mixed batch names each offending spec, so the caller knows which to fix."""
+def test_rfdiffusion3_cfg_reports_every_unguided_spec():
+    """A mixed batch names each unguided spec, so the caller knows which to fix."""
     inputs = RFdiffusion3Input(
         design_specs=[
             RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), contig="A1-100", select_buried="A24"),
@@ -116,7 +119,7 @@ def test_rfdiffusion3_cfg_reports_every_unconditioned_spec():
             RFdiffusion3DesignSpec(length="80"),
         ]
     )
-    assert _missing_cfg_feature_specs(inputs) == ["spec-1", "spec-2"]
+    assert _unguided_cfg_specs(inputs) == ["spec-1", "spec-2"]
 
 
 def test_rfdiffusion3_cfg_reads_raw_json_spec_keys():
@@ -127,13 +130,13 @@ def test_rfdiffusion3_cfg_reads_raw_json_spec_keys():
             "unguided": {"length": "100"},
         }
     )
-    assert _missing_cfg_feature_specs(RFdiffusion3Input(raw_json=raw_json)) == ["unguided"]
+    assert _unguided_cfg_specs(RFdiffusion3Input(raw_json=raw_json)) == ["unguided"]
 
 
 def test_rfdiffusion3_cfg_rejects_non_object_raw_json():
     """A raw_json payload that is not a mapping of named specs cannot be checked."""
     with pytest.raises(ValueError, match="top-level object of named design specs"):
-        _missing_cfg_feature_specs(RFdiffusion3Input(raw_json=json.dumps([{"length": "100"}])))
+        _unguided_cfg_specs(RFdiffusion3Input(raw_json=json.dumps([{"length": "100"}])))
 
     # Happy path 3: length alone (unconditional design — the only no-input path).
     spec = RFdiffusion3DesignSpec(length="40")

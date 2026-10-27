@@ -650,8 +650,11 @@ class RFdiffusion3Config(BaseConfig):
             ``diffuse`` (diffused region only).
         use_classifier_free_guidance (bool): Enable CFG sampling.
         cfg_scale (float): CFG scale factor (typical 1.0-3.0); no-op when CFG is off.
-        cfg_t_max (float | None): Optional diffusion-time threshold for applying
-            CFG; ``None`` uses CFG wherever the upstream sampler permits it.
+        cfg_t_max (float | None): Noise level below which CFG stops being applied.
+            Compared against the sampler's noise schedule, not a normalized time:
+            with upstream defaults that schedule runs from about 2560 down to
+            0.0064, so a small value such as ``0.5`` leaves CFG on for nearly the
+            whole rollout. ``None`` (the default) applies CFG at every step.
         gamma_0 (float): Sampler stochasticity; lower = more designable,
             less diverse; ``0.0`` = deterministic ODE. Must be ``> 0.5``
             when ``sampler_kind="symmetry"``.
@@ -724,10 +727,10 @@ class RFdiffusion3Config(BaseConfig):
         description="CFG scale (typical: 1.0-3.0); requires use_classifier_free_guidance=True",
     )
     cfg_t_max: float | None = ConfigField(
-        title="CFG Maximum Time",
+        title="CFG Noise Level Floor",
         default=None,
         ge=0.0,
-        description="Optional upstream diffusion-time threshold for classifier-free guidance",
+        description="Noise level below which CFG stops being applied; None applies it throughout",
     )
     gamma_0: float = ConfigField(
         title="Gamma 0",
@@ -999,6 +1002,10 @@ def _canonicalize_design_chain_ids(structure: Structure) -> Structure:
     return structure.with_renamed_chains(dict(zip(observed, target, strict=True)))
 
 
+# Spec fields that feed the three upstream ``cfg_features`` tensors: select_hbond_donor and
+# select_hbond_acceptor set ``active_donor``/``active_acceptor``, and the three RASA selectors
+# set ``rasa_bin``, which becomes ``ref_atomwise_rasa``. select_hotspots is not among them --
+# it sets ``is_atom_level_hotspot``, which CFG never strips.
 _CFG_FEATURE_FIELDS = (
     "select_buried",
     "select_partially_buried",
@@ -1007,9 +1014,14 @@ _CFG_FEATURE_FIELDS = (
     "select_hbond_acceptor",
 )
 
+# ``unindex`` carries no CFG feature tensor, but upstream ``strip_f`` crops unindexed-motif atoms
+# out of the reference pass regardless of ``cfg_features``, so CFG still guides away from that
+# conditioning and is not a no-op for such a spec.
+_CFG_CONDITIONING_FIELDS = (*_CFG_FEATURE_FIELDS, "unindex")
 
-def _missing_cfg_feature_specs(inputs: RFdiffusion3Input) -> list[str]:
-    """Return every spec key that lacks native RFd3 CFG feature conditioning."""
+
+def _unguided_cfg_specs(inputs: RFdiffusion3Input) -> list[str]:
+    """Return every spec key for which classifier-free guidance would be a no-op."""
     specs: Iterable[tuple[str, Any]]
     if inputs.raw_json:
         payload = json.loads(inputs.raw_json)
@@ -1019,13 +1031,13 @@ def _missing_cfg_feature_specs(inputs: RFdiffusion3Input) -> list[str]:
     else:
         specs = ((f"spec-{index}", spec.to_dict()) for index, spec in enumerate(inputs.design_specs))
 
-    missing: list[str] = []
+    unguided: list[str] = []
     for spec_key, spec in specs:
         # A falsy selector carries no conditioning: ``None`` and empty str/list/dict leave the
         # feature unset, and an explicit ``False`` switches it off, so neither enables CFG.
-        if not isinstance(spec, dict) or not any(spec.get(field) for field in _CFG_FEATURE_FIELDS):
-            missing.append(str(spec_key))
-    return missing
+        if not isinstance(spec, dict) or not any(spec.get(field) for field in _CFG_CONDITIONING_FIELDS):
+            unguided.append(str(spec_key))
+    return unguided
 
 
 @tool(
@@ -1096,14 +1108,15 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         - Dependency isolation is handled automatically via venv subprocess
     """
     if config.use_classifier_free_guidance:
-        missing_cfg_specs = _missing_cfg_feature_specs(inputs)
-        if missing_cfg_specs:
-            raise ValueError(
-                "use_classifier_free_guidance=True requires every design spec to include native CFG "
-                "feature conditioning (select_buried/select_partially_buried/select_exposed/"
-                f"select_hbond_*); missing for {missing_cfg_specs}. Hotspot controls are distinct from "
-                "CFG features. Disable CFG for unconditional or hotspot-only generation; otherwise "
-                "upstream RFdiffusion3 fails after GPU dispatch."
+        unguided_cfg_specs = _unguided_cfg_specs(inputs)
+        if unguided_cfg_specs:
+            logger.warning(
+                "use_classifier_free_guidance=True, but specs %s set no native CFG feature "
+                "(select_buried/select_partially_buried/select_exposed/select_hbond_*) and no "
+                "'unindex'. Hotspot controls are distinct from CFG features, so guidance cancels "
+                "to an identical prediction for these specs while doubling the forward passes. "
+                "Set a feature selector, or disable CFG for unconditional and hotspot-only generation.",
+                unguided_cfg_specs,
             )
 
     logger.debug("Using local GPU for RFdiffusion3 structure design...")
