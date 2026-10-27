@@ -26,7 +26,6 @@ from Bio import PDB
 # Import from the published standalone_helpers
 from standalone_helpers import (
     ContainerRuntime,
-    file_identity,
     get_logger,
     get_subprocess_device_env,
     resolve_container_runtime,
@@ -162,7 +161,6 @@ class AlphaFold3Model:
         self.repo_path: str | None = None  # set when running via env
         self.model_dir: str | None = None
         self.container_runtime: ContainerRuntime | None = None
-        self.runtime_provenance: dict[str, Any] = {}
 
     def load(self, sif_path: str | None = None) -> None:
         """Resolve execution-path + weights paths and verify they exist.
@@ -225,34 +223,6 @@ class AlphaFold3Model:
                 "setup, or download that file into the directory above yourself (or "
                 "point PROTO_ALPHAFOLD3_WEIGHTS_DIR at a copy)"
             )
-
-        weights = [
-            file_identity(
-                Path(self.model_dir) / filename,
-                role="model_checkpoint",
-                logical_id=filename,
-            )
-            for filename in sorted(os.listdir(self.model_dir))
-            if filename.endswith((".bin", ".bin.zst")) and os.path.isfile(os.path.join(self.model_dir, filename))
-        ]
-        execution = (
-            self.container_runtime.provenance()
-            if self.container_runtime is not None
-            else {
-                "mode": "environment",
-                "runtime": file_identity(
-                    sys.executable,
-                    role="python_executable",
-                    logical_id="python",
-                ),
-                "repository_path": str(Path(self.repo_path or "").resolve()),
-            }
-        )
-        self.runtime_provenance = {
-            "execution": execution,
-            "assets": weights,
-            "recovery_actions": [],
-        }
 
         self._loaded = True
 
@@ -411,7 +381,6 @@ class AlphaFold3Model:
         return {
             "structure_pdb": pdb_path,
             "metrics": alphafold3_scores,
-            "runtime_provenance": self.runtime_provenance,
         }
 
 

@@ -78,8 +78,8 @@ def test_af3_sif_command_normalizes_relative_bind_destinations(tmp_path, monkeyp
     assert f"--model_dir={tmp_path / 'weights'}" in command
 
 
-def test_af3_load_uses_host_singularity_and_records_exact_assets(tmp_path, monkeypatch):
-    """An explicit image works without a venv and records exact runtime inputs."""
+def test_af3_load_uses_host_singularity(tmp_path, monkeypatch):
+    """An explicit image resolves against host Singularity with no tool venv present."""
     module = _load_af3_standalone_module(monkeypatch)
     singularity = tmp_path / "singularity"
     singularity.write_text("#!/bin/sh\nexit 0\n")
@@ -100,12 +100,10 @@ def test_af3_load_uses_host_singularity_and_records_exact_assets(tmp_path, monke
     model = module.AlphaFold3Model()
     model.load(sif_path=str(image))
 
-    provenance = model.runtime_provenance
-    assert provenance["execution"]["runtime"]["logical_id"] == "singularity"
-    assert provenance["execution"]["runtime"]["resolution_source"] == "PATH"
-    assert len(provenance["execution"]["image"]["sha256"]) == 64
-    assert provenance["assets"][0]["logical_id"] == "af3.bin.zst"
-    assert len(provenance["assets"][0]["sha256"]) == 64
+    assert model.container_runtime is not None
+    assert model.container_runtime.executable.name == "singularity"
+    assert model.container_runtime.executable.source == "PATH"
+    assert model.container_runtime.image_path == image.resolve()
 
 
 def test_af3_load_reports_missing_container_runtime(tmp_path, monkeypatch):

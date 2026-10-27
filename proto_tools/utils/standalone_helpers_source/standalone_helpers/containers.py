@@ -6,31 +6,25 @@ import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from .proto_logging import get_logger
-from .runtime_provenance import file_identity
 
 logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
 class ResolvedExecutable:
-    """One executable resolved from a configured path or ``PATH``."""
+    """One executable resolved from a configured path or ``PATH``.
+
+    Attributes:
+        path (Path): Absolute path to the resolved executable.
+        name (str): The executable's name as resolved.
+        source (str): Where it came from: ``"configured_path"`` or ``"PATH"``.
+    """
 
     path: Path
     name: str
     source: str
-
-    def provenance(self) -> dict[str, Any]:
-        """Return the executable's exact file identity and resolution source."""
-        result = file_identity(
-            self.path,
-            role="container_runtime_executable",
-            logical_id=self.name,
-        )
-        result["resolution_source"] = self.source
-        return result
 
 
 def resolve_executable(
@@ -91,18 +85,6 @@ class ContainerRuntime:
                 ]
             )
         return [*command, str(self.image_path), *entrypoint, *arguments]
-
-    def provenance(self) -> dict[str, Any]:
-        """Return exact executable and image identities."""
-        return {
-            "mode": "container",
-            "runtime": self.executable.provenance(),
-            "image": file_identity(
-                self.image_path,
-                role="container_image",
-                logical_id=self.image_path.name,
-            ),
-        }
 
 
 def resolve_container_runtime(

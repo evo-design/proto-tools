@@ -13,7 +13,7 @@ def _executable(path: Path) -> Path:
     return path
 
 
-def test_configured_runtime_precedes_path_and_records_hash(tmp_path: Path, monkeypatch) -> None:
+def test_configured_runtime_precedes_path(tmp_path: Path, monkeypatch) -> None:
     executable = _executable(tmp_path / "apptainer")
     image = tmp_path / "model.sif"
     image.write_bytes(b"image")
@@ -23,12 +23,9 @@ def test_configured_runtime_precedes_path_and_records_hash(tmp_path: Path, monke
         image,
         configured_executables=(executable,),
     )
-    provenance = runtime.provenance()
 
     assert runtime.executable.path == executable.resolve()
-    assert provenance["runtime"]["resolution_source"] == "configured_path"
-    assert len(provenance["runtime"]["sha256"]) == 64
-    assert len(provenance["image"]["sha256"]) == 64
+    assert runtime.executable.source == "configured_path"
 
 
 def test_singularity_is_supported_as_ordered_path_fallback(tmp_path: Path, monkeypatch) -> None:

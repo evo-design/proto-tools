@@ -273,7 +273,6 @@ def run_alphafold3(
 ) -> AlphaFold3Output:
     """Predict protein 3D structures using AlphaFold3."""
     output_structures: list[Structure] = []
-    runtime_provenance: list[dict[str, Any]] = []
 
     # Seeded: single seed; unseeded: fresh random seeds, count taken from config.seeds for AF3 seed-averaging.
     if config.seed is not None:
@@ -353,8 +352,6 @@ def run_alphafold3(
             # Extract results from dict
             pdb_path = output_data["structure_pdb"]
             metrics = AlphaFold3Metrics(**output_data["metrics"])
-            if output_data.get("runtime_provenance"):
-                runtime_provenance.append(output_data["runtime_provenance"])
 
             structure = Structure.from_file(
                 pdb_path,
@@ -369,7 +366,6 @@ def run_alphafold3(
         metadata={
             "num_complexes": len(output_structures),
             "total_chains": sum(s.num_chains for s in output_structures),
-            "runtime_provenance": runtime_provenance,
         },
     )
 
