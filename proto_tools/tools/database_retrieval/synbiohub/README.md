@@ -5,7 +5,7 @@
 ![SynBioHub](https://proto-bio.github.io/proto-assets/images/tool/synbiohub/hero.png)
 
 > [!NOTE]
-> **License:** SynBioHub retrieves data from caller-selected SynBioHub registries, distributed under registry and record-specific terms. Attribution to caller-selected SynBioHub registries is required when the data is redistributed. The client wrapper code is MIT-licensed. Please refer to [the data terms](https://wiki.synbiohub.org/) for full terms.
+> **License:** SynBioHub retrieves data from the source registry and each record's contributors, distributed under each record's source license; CC BY 4.0 or CC BY-SA 4.0 for most iGEM parts. Attribution to the source registry and each record's contributors is required when the data is redistributed. The client wrapper code is MIT-licensed. Please refer to [the data terms](https://registry.igem.org/) for full terms.
 
 ## Overview
 

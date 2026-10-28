@@ -2,14 +2,14 @@ code:
   spdx: MIT
   url: https://github.com/evo-design/proto-tools
 data:
-  name: caller-selected SynBioHub registries
-  spdx: Custom (registry and record-specific terms)
-  url: https://wiki.synbiohub.org/
-  text: SynBioHub instances host independently contributed records. Access and reuse terms may vary by registry, collection, and record; callers are responsible for checking the selected source.
+  name: the source registry and each record's contributors
+  spdx: Custom (each record's source license; CC BY 4.0 or CC BY-SA 4.0 for most iGEM parts)
+  url: https://registry.igem.org/
+  text: SynBioHub registries host independently contributed records, and each record keeps the license its source assigns. Parts from the iGEM Registry of Standard Biological Parts carry a per-part license, most often CC BY 4.0 (the Registry's default) or CC BY-SA 4.0. Both permit redistribution with attribution, and CC BY-SA requires adaptations to keep the same license. Check a part's license on registry.igem.org before redistributing it.
   attribution_required: true
 commercial_use: restricted
-redistribution: false
+redistribution: true
 attribution_required: true
 proto_tools_original: true
-notes: The client performs live retrieval only and does not redistribute or maintain a registry snapshot.
-last_updated: '2026-09-10'
+notes: The client performs live retrieval only and maintains no registry snapshot. Records keep their source licenses; iGEM parts are redistributable with attribution under CC BY 4.0 or CC BY-SA 4.0. commercial_use is restricted because records outside the iGEM collection may carry other terms.
+last_updated: '2026-10-28'
