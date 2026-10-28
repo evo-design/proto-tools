@@ -375,6 +375,17 @@ def test_fasta_export(tmp_path, monkeypatch):
     assert (tmp_path / "device.fasta").read_text() == ">device RBS, CDS, and terminator\nAAAGGATGCATGCC\n"
 
 
+def test_fasta_header_stays_on_one_line(tmp_path, monkeypatch):
+    description = "<dcterms:description>RBS, CDS, and terminator</dcterms:description>"
+    _mock_session(monkeypatch, content=DEVICE_SBOL.replace(description, description.replace(", CDS,", ",\n  CDS,\t")))
+
+    output = _fetch()
+    output.export("device", export_path=tmp_path, file_format="fasta")
+
+    assert "\n" in output.design.description
+    assert (tmp_path / "device.fasta").read_text() == ">device RBS, CDS, and terminator\nAAAGGATGCATGCC\n"
+
+
 def test_genbank_export_maps_roles_and_coordinates(tmp_path, monkeypatch):
     _mock_session(monkeypatch)
 

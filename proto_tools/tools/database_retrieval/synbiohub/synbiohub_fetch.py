@@ -524,7 +524,8 @@ def _require_sequence(part: SynBioHubPart) -> str:
 def _to_fasta(part: SynBioHubPart) -> str:
     """Render a part as a FASTA record."""
     sequence = _require_sequence(part)
-    header = " ".join(filter(None, [f">{part.display_id}", part.description]))
+    # A FASTA header is one line, so collapse any whitespace the description spans
+    header = " ".join(f">{part.display_id} {part.description or ''}".split())
     lines = [sequence[i : i + _FASTA_LINE_WIDTH] for i in range(0, len(sequence), _FASTA_LINE_WIDTH)]
     return "\n".join([header, *lines]) + "\n"
 
