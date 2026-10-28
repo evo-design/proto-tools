@@ -3,13 +3,13 @@
 import json
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import requests
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -63,6 +63,7 @@ _GENBANK_FEATURE_KEYS = {
     "SO:0000205": "3'UTR",
 }
 _FASTA_LINE_WIDTH = 70
+_DATETIME = TypeAdapter(datetime)
 # Links and SBOL identities on the public website resolve on its API host
 _PUBLIC_API_HOST = "api.synbiohub.org"
 _PUBLIC_WEB_HOSTS = {"synbiohub.org", "www.synbiohub.org"}
@@ -191,7 +192,7 @@ class SynBioHubPart(BaseModel):
         roles (list[str]): Sequence Ontology roles of the part.
         sequence (str | None): Part sequence, uppercase, if the registry records one.
         features (list[SynBioHubFeature]): Features annotated on the sequence; ranged annotations only.
-        modified (datetime | None): Last modification time, else creation time.
+        modified (datetime | None): Last modification time in UTC, else creation time.
     """
 
     uri: str = Field(title="URI", description="SBOL identity of the part")
@@ -218,7 +219,7 @@ class SynBioHubPart(BaseModel):
     modified: datetime | None = Field(
         default=None,
         title="Modified",
-        description="Last modification time (dcterms:modified), else creation time",
+        description="Last modification time in UTC (dcterms:modified), else creation time",
     )
 
 
@@ -438,7 +439,6 @@ def _parse_part(
         (_SO_TOPOLOGIES[term] for term in _so_terms(_resources(element, "type")) if term in _SO_TOPOLOGIES), None
     )
     sequence = next((sequences[ref] for ref in _resources(element, "sequence") if ref in sequences), None)
-    timestamp = element.findtext(f"{_DCTERMS}modified") or element.findtext(f"{_DCTERMS}created")
     subpart_by_component = {
         component.get(f"{_RDF}about", ""): _resource(component, "definition")
         for component in element.findall(f"{_SBOL}component/{_SBOL}Component")
@@ -476,8 +476,17 @@ def _parse_part(
         roles=_so_roles(element),
         sequence=sequence,
         features=features,
-        modified=datetime.fromisoformat(timestamp) if timestamp else None,
+        modified=_timestamp(element, "modified") or _timestamp(element, "created"),
     )
+
+
+def _timestamp(element: ET.Element, tag: str) -> datetime | None:
+    """Return an element's ``dcterms:{tag}`` time in UTC, or None when absent or malformed."""
+    try:
+        parsed = _DATETIME.validate_python((element.findtext(f"{_DCTERMS}{tag}") or "").strip())
+    except ValidationError:
+        return None
+    return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
 
 
 def _resources(element: ET.Element, tag: str) -> list[str]:

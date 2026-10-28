@@ -1,6 +1,7 @@
 """Tests for SynBioHub design retrieval."""
 
 import os
+import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
@@ -295,6 +296,37 @@ def test_parses_design_across_download_and_public_hosts(monkeypatch):
     assert design.sequence == "AAAGGATGCATGCC"
     assert design.topology == "circular"
     assert design.modified == datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2015-08-31T04:07:34Z", datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)),
+        (" 2015-08-31T04:07:34 ", datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)),
+        ("2015-08-31T06:07:34+02:00", datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)),
+        ("2015-08-31T04:07:34.1234Z", datetime(2015, 8, 31, 4, 7, 34, 123400, tzinfo=UTC)),
+        ("2015-08-31", datetime(2015, 8, 31, tzinfo=UTC)),
+        ("last Tuesday", None),
+        ("", None),
+    ],
+)
+def test_timestamps_parse_to_utc(value, expected):
+    element = ET.Element("part")
+    ET.SubElement(element, "{http://purl.org/dc/terms/}modified").text = value
+
+    parsed = synbiohub_fetch._timestamp(element, "modified")
+
+    assert parsed == expected
+    assert parsed is None or parsed.tzinfo is UTC
+
+
+def test_malformed_modification_time_falls_back_to_creation_time(monkeypatch):
+    _mock_session(monkeypatch, content=DEVICE_SBOL.replace("2015-08-31T04:07:34Z", "unknown"))
+
+    output = _fetch()
+
+    assert output.design.modified == datetime(2005, 5, 30, 11, tzinfo=UTC)
+    assert '"modified":"2005-05-30T11:00:00Z"' in output.model_dump_json()
 
 
 def test_parses_features_with_locations_and_inherited_roles(monkeypatch):
