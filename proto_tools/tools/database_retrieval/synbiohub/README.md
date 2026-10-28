@@ -40,7 +40,7 @@ Read a construct's composition from `design.features` and `subparts` to rebuild 
 - **Treat SBOL as the source of truth.** The typed model covers parts, roles, sequences, and ranged features. Provenance, interactions, and registry-specific annotations stay in the verbatim `sbol` field and its export.
 - **Exports are views of the design.** FASTA and GenBank cover the requested design only. GenBank feature keys come from Sequence Ontology roles, and unmapped roles become `misc_feature`. The GenBank header carries the design's topology when the SBOL records one, and its last modification date.
 - **Tokens remain private.** `SYNBIOHUB_TOKEN` is excluded from cache keys and outputs.
-- **Paste the link you have.** With the default registry, links copied from `synbiohub.org` download from its API host. iGEM part names and links from `parts.igem.org` or `registry.igem.org` resolve to the registry's iGEM collection. A link without a version resolves to the version the registry serves.
+- **Paste the link you have.** With the default registry, links copied from `synbiohub.org` download from its API host. iGEM part names and links from `parts.igem.org` or `registry.igem.org` resolve to the registry's iGEM collection. A link or name without a version resolves to the object's only public version; an object with several versions, or a private one, needs a versioned link.
 - **Select the registry explicitly.** Any other SynBioHub link must have the same origin as `registry_url`. Parts outside the iGEM collection need a full link.
 - **Requires network access.** No registry snapshot or curated database is stored locally.
 - **Runs on CPU.** Runtime is dominated by the recursive SBOL download.

@@ -67,6 +67,10 @@ _DATETIME = TypeAdapter(datetime)
 # Links and SBOL identities on the public website resolve on its API host
 _PUBLIC_API_HOST = "api.synbiohub.org"
 _PUBLIC_WEB_HOSTS = {"synbiohub.org", "www.synbiohub.org"}
+_PUBLIC_IDENTITY_ORIGIN = "https://synbiohub.org"
+# Path segments of a versioned SynBioHub URI: /public/{collection}/{id}/{version}, /user/{user}/{collection}/{id}/{version}
+_VERSIONED_PATH_SEGMENTS = {"public": 4, "user": 5}
+_SPARQL_SAFE_PATH = re.compile(r"[A-Za-z0-9_./-]+")
 # A bare SBOL displayId names a part in the registry's iGEM collection
 _DISPLAY_ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _IGEM_COLLECTION_PATH = "/public/igem"
@@ -319,6 +323,10 @@ def run_synbiohub_fetch(
     )
     session.mount("https://", HTTPAdapter(max_retries=_RETRY))
     try:
+        # Without a version, SynBioHub serves the recursive document from /sbolnr too, so resolve the version first
+        if not _is_versioned(download_uri):
+            download_uri = _resolve_version(download_uri, config.registry_url, headers=headers, session=session)
+            source_url = f"{download_uri}/sbol"
         # The non-recursive document is cheap for the registry to build, so check the type before the recursive one
         nonrecursive = _download(f"{download_uri}/sbolnr", headers=headers, session=session)
         design_uri = _design_uri(nonrecursive, download_uri)
@@ -362,12 +370,50 @@ def _igem_part_name(name: str) -> str:
     return f"BBa_{rest.upper()}" if prefix.lower() in {"bba_", "bba-"} else name
 
 
+def _is_versioned(download_uri: str) -> bool:
+    """Return whether a SynBioHub URI names one version of an object, judged by its path layout."""
+    segments = urlsplit(download_uri).path.strip("/").split("/")
+    return len(segments) >= _VERSIONED_PATH_SEGMENTS.get(segments[0], 0)
+
+
+def _resolve_version(
+    download_uri: str, registry_url: str, *, headers: dict[str, str], session: requests.Session
+) -> str:
+    """Return the download URI of the single version of an unversioned object, found by a SPARQL lookup."""
+    path = urlsplit(download_uri).path
+    if not _SPARQL_SAFE_PATH.fullmatch(path):
+        raise ValueError(f"{download_uri} is not a SynBioHub object path")
+    origin = _PUBLIC_IDENTITY_ORIGIN if urlsplit(registry_url).netloc.lower() == _PUBLIC_API_HOST else registry_url
+    query = f"SELECT ?s WHERE {{ ?s <{_SBOL[1:-1]}persistentIdentity> <{origin}{path}> }}"
+    response = _get(
+        f"{registry_url}/sparql",
+        headers={**headers, "Accept": "application/sparql-results+json"},
+        session=session,
+        params={"query": query},
+    )
+    versions = [binding["s"]["value"] for binding in response.json()["results"]["bindings"]]
+    if not versions:
+        raise ValueError(f"SynBioHub has no public object at {download_uri}; for other parts, pass a versioned link")
+    if len(versions) > 1:
+        raise ValueError(f"{download_uri} has several versions; include the version in the identifier")
+    return f"{registry_url}{urlsplit(versions[0]).path}"
+
+
 def _download(source_url: str, *, headers: dict[str, str], session: requests.Session) -> str:
     """Download one SynBioHub document, refusing redirects."""
+    response = _get(source_url, headers=headers, session=session)
+    return response.content.decode(response.encoding or "utf-8")
+
+
+def _get(
+    url: str, *, headers: dict[str, str], session: requests.Session, params: dict[str, str] | None = None
+) -> requests.Response:
+    """Send one GET to SynBioHub, refusing redirects and explaining authentication and lookup failures."""
     response = request_with_retry(
         lambda: session.get(
-            source_url,
+            url,
             headers=headers,
+            params=params,
             timeout=_REQUEST_TIMEOUT_SECONDS,
             allow_redirects=False,
         ),
@@ -375,9 +421,9 @@ def _download(source_url: str, *, headers: dict[str, str], session: requests.Ses
         backoff_seconds=_BACKOFF_SECONDS,
     )
     if 300 <= response.status_code < 400:
-        raise ValueError(f"SynBioHub redirected {source_url}; verify the registry and identifier")
+        raise ValueError(f"SynBioHub redirected {url}; verify the registry and identifier")
     if response.status_code == 404:
-        raise ValueError(f"SynBioHub has no object at {source_url}; outside the iGEM collection, pass a full link")
+        raise ValueError(f"SynBioHub has no object at {url}")
     if response.status_code in (401, 403):
         if "X-authorization" not in headers:
             raise ValueError("SynBioHub requires a login token; set SYNBIOHUB_TOKEN")
@@ -385,7 +431,7 @@ def _download(source_url: str, *, headers: dict[str, str], session: requests.Ses
             f"SynBioHub rejected the token (HTTP {response.status_code}); it may have expired, so request a new one"
         )
     response.raise_for_status()
-    return response.content.decode(response.encoding or "utf-8")
+    return response
 
 
 def _design_uri(sbol: str, download_uri: str) -> str:
@@ -393,14 +439,7 @@ def _design_uri(sbol: str, download_uri: str) -> str:
     root = ET.fromstring(sbol)  # noqa: S314 -- expat refuses external entities and caps entity expansion
     # SBOL identities name the registry's public host, which can differ from the download host
     object_path = urlsplit(download_uri).path
-    matches = [child for child in root if urlsplit(child.get(f"{_RDF}about", "")).path == object_path]
-    # An unversioned URI names the persistent identity that every version of an object shares
-    matches = matches or [
-        child for child in root if urlsplit(_resource(child, "persistentIdentity") or "").path == object_path
-    ]
-    if len(matches) > 1:
-        raise ValueError(f"{download_uri} matches several versions; include the version in the identifier")
-    element = next(iter(matches), None)
+    element = next((child for child in root if urlsplit(child.get(f"{_RDF}about", "")).path == object_path), None)
     if element is None or element.tag != f"{_SBOL}ComponentDefinition":
         kind = f"a {element.tag.rpartition('}')[2]}, not" if element is not None else "not"
         raise ValueError(f"{download_uri} is {kind} a ComponentDefinition; synbiohub-fetch retrieves designs")

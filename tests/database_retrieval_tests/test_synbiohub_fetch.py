@@ -26,7 +26,6 @@ DEVICE_SBOL = f"""<?xml version="1.0" encoding="UTF-8"?>
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dcterms="http://purl.org/dc/terms/"
          xmlns:sbol="http://sbols.org/v2#">
   <sbol:ComponentDefinition rdf:about="{PUBLIC}/device/1">
-    <sbol:persistentIdentity rdf:resource="{PUBLIC}/device"/>
     <sbol:displayId>device</sbol:displayId>
     <dcterms:title>Test device</dcterms:title>
     <dcterms:description>RBS, CDS, and terminator</dcterms:description>
@@ -123,9 +122,12 @@ COLLECTION_SBOL = f"""<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-def _mock_session(monkeypatch, *, content: str = DEVICE_SBOL, status_code: int = 200) -> MagicMock:
+def _mock_session(
+    monkeypatch, *, content: str = DEVICE_SBOL, status_code: int = 200, versions: list[str] | None = None
+) -> MagicMock:
     response = MagicMock(content=content.encode(), encoding="utf-8", status_code=status_code)
     response.raise_for_status.return_value = None
+    response.json.return_value = {"results": {"bindings": [{"s": {"value": uri}} for uri in versions or []]}}
     session = MagicMock()
     session.get.return_value = response
     monkeypatch.setattr(synbiohub_fetch, "build_http_session", lambda **kwargs: session)
@@ -232,29 +234,28 @@ def test_website_link_downloads_from_the_api_host(monkeypatch):
     assert output.design.uri == f"{PUBLIC}/device/1"
 
 
-def test_unversioned_link_matches_the_persistent_identity(monkeypatch):
-    session = _mock_session(monkeypatch)
+def test_unversioned_identifier_resolves_its_version_before_any_sbol_download(monkeypatch):
+    session = _mock_session(monkeypatch, versions=[f"{PUBLIC}/device/1"])
 
     output = run_synbiohub_fetch(SynBioHubFetchInput(identifier=f"{PUBLIC}/device"), SynBioHubFetchConfig())
 
-    assert session.get.call_args_list[0].args[0] == f"{API}/public/test/device/sbolnr"
-    assert output.design.uri == f"{PUBLIC}/device/1"
+    calls = session.get.call_args_list
+    assert [call.args[0] for call in calls] == [f"{API}/sparql", f"{DESIGN_URI}/sbolnr", f"{DESIGN_URI}/sbol"]
+    assert f"persistentIdentity> <{PUBLIC}/device>" in calls[0].kwargs["params"]["query"]
+    assert output.source_url == f"{DESIGN_URI}/sbol"
 
 
-def test_unversioned_link_with_several_versions_is_refused(monkeypatch):
-    second_version = f"""<sbol:ComponentDefinition rdf:about="{PUBLIC}/device/2">
-    <sbol:persistentIdentity rdf:resource="{PUBLIC}/device"/>
-  </sbol:ComponentDefinition>
-</rdf:RDF>"""
-    _mock_session(monkeypatch, content=DEVICE_SBOL.replace("</rdf:RDF>", second_version))
+def test_unversioned_identifier_with_several_versions_is_refused(monkeypatch):
+    session = _mock_session(monkeypatch, versions=[f"{PUBLIC}/device/1", f"{PUBLIC}/device/2"])
     with pytest.raises(ValueError, match="several versions"):
         run_synbiohub_fetch(SynBioHubFetchInput(identifier=f"{PUBLIC}/device"), SynBioHubFetchConfig())
+    assert [call.args[0] for call in session.get.call_args_list] == [f"{API}/sparql"]
 
 
 def test_missing_object_on_the_registry_is_reported(monkeypatch):
     _mock_session(monkeypatch, status_code=404)
     with pytest.raises(ValueError, match="no object at"):
-        run_synbiohub_fetch(SynBioHubFetchInput(identifier="my_device"), SynBioHubFetchConfig())
+        _fetch()
 
 
 def test_missing_token_is_reported(monkeypatch):
