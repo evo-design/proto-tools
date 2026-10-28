@@ -170,6 +170,18 @@ def test_redirect_is_refused(monkeypatch):
         _fetch()
 
 
+def test_missing_token_is_reported(monkeypatch):
+    _mock_session(monkeypatch, status_code=401)
+    with pytest.raises(ValueError, match="requires a login token"):
+        _fetch(synbiohub_token=None)
+
+
+def test_rejected_token_is_reported(monkeypatch):
+    _mock_session(monkeypatch, status_code=401)
+    with pytest.raises(ValueError, match="rejected the token"):
+        _fetch(synbiohub_token="expired-token")
+
+
 def test_object_that_is_not_a_component_definition_is_refused_before_the_recursive_download(monkeypatch):
     session = _mock_session(monkeypatch, content=COLLECTION_SBOL)
     with pytest.raises(ValueError, match="is a Collection, not a ComponentDefinition"):

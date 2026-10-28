@@ -340,7 +340,13 @@ def _download(source_url: str, *, headers: dict[str, str], session: requests.Ses
         backoff_seconds=_BACKOFF_SECONDS,
     )
     if 300 <= response.status_code < 400:
-        raise ValueError(f"SynBioHub redirected {source_url}; verify the registry, object URI, and access token")
+        raise ValueError(f"SynBioHub redirected {source_url}; verify the registry and object URI")
+    if response.status_code in (401, 403):
+        if "X-authorization" not in headers:
+            raise ValueError("SynBioHub requires a login token; set SYNBIOHUB_TOKEN")
+        raise ValueError(
+            f"SynBioHub rejected the token (HTTP {response.status_code}); it may have expired, so request a new one"
+        )
     response.raise_for_status()
     return response.content.decode(response.encoding or "utf-8")
 
