@@ -153,14 +153,13 @@ def test_fetch_rejects_cross_origin_object():
 # ── Retrieval ─────────────────────────────────────────────────────────────────
 
 
-def test_downloads_sbol_once_without_exposing_token(monkeypatch):
+def test_checks_type_then_downloads_recursive_sbol_without_exposing_token(monkeypatch):
     session = _mock_session(monkeypatch)
 
     output = _fetch(synbiohub_token="private-token")
 
-    assert session.get.call_count == 1
-    assert session.get.call_args.args[0] == f"{OBJECT_URI}/sbol"
-    assert session.get.call_args.kwargs["headers"]["X-authorization"] == "private-token"
+    assert [call.args[0] for call in session.get.call_args_list] == [f"{OBJECT_URI}/sbolnr", f"{OBJECT_URI}/sbol"]
+    assert all(call.kwargs["headers"]["X-authorization"] == "private-token" for call in session.get.call_args_list)
     assert output.source_url == f"{OBJECT_URI}/sbol"
     assert "private-token" not in output.model_dump_json()
 
@@ -171,9 +170,16 @@ def test_redirect_is_refused(monkeypatch):
         _fetch()
 
 
-def test_object_that_is_not_a_component_definition_is_refused(monkeypatch):
-    _mock_session(monkeypatch, content=COLLECTION_SBOL)
-    with pytest.raises(ValueError, match="not a ComponentDefinition"):
+def test_object_that_is_not_a_component_definition_is_refused_before_the_recursive_download(monkeypatch):
+    session = _mock_session(monkeypatch, content=COLLECTION_SBOL)
+    with pytest.raises(ValueError, match="is a Collection, not a ComponentDefinition"):
+        _fetch()
+    assert [call.args[0] for call in session.get.call_args_list] == [f"{OBJECT_URI}/sbolnr"]
+
+
+def test_missing_object_is_refused(monkeypatch):
+    _mock_session(monkeypatch, content=COLLECTION_SBOL.replace("device/1", "other/1"))
+    with pytest.raises(ValueError, match="is not a ComponentDefinition"):
         _fetch()
 
 

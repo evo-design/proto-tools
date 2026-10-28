@@ -19,7 +19,7 @@ The `synbiohub-fetch` tool retrieves one design from a caller-selected SynBioHub
 
 ### SynBioHub Fetch (`synbiohub-fetch`)
 
-Downloads the recursive SBOL of one ComponentDefinition and parses it. `design` holds the requested part: its sequence, Sequence Ontology roles, and features, each with 1-indexed inclusive locations and a `subpart_uri` when it places a subpart. `subparts` holds every other part in the document. The output exports to JSON, the verbatim SBOL, FASTA, or GenBank. The selected object must share an origin with `registry_url`, preventing a design identifier from silently redirecting retrieval to another host.
+Confirms the object is a ComponentDefinition from its non-recursive SBOL, then downloads its recursive SBOL and parses it. `design` holds the requested part: its sequence, Sequence Ontology roles, and features, each with 1-indexed inclusive locations and a `subpart_uri` when it places a subpart. `subparts` holds every other part in the document. The output exports to JSON, the verbatim SBOL, FASTA, or GenBank. The selected object must share an origin with `registry_url`, preventing a design identifier from silently redirecting retrieval to another host.
 
 #### Applications
 

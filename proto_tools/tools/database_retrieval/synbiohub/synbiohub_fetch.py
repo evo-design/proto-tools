@@ -9,6 +9,8 @@ from urllib.parse import urlsplit
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -28,6 +30,15 @@ _REQUEST_TIMEOUT_SECONDS = 30
 _HTTP_RETRIES = 2
 _BACKOFF_SECONDS = 1.0
 _USER_AGENT = "proto-tools/synbiohub-fetch-v1"
+# A read timeout or gateway error usually means the registry is still building the document; retrying adds load
+_RETRY = Retry(
+    total=_HTTP_RETRIES,
+    connect=_HTTP_RETRIES,
+    read=0,
+    backoff_factor=_BACKOFF_SECONDS,
+    status_forcelist=[429, 500, 503],
+    allowed_methods=["GET"],
+)
 
 _RDF = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
 _SBOL = "{http://sbols.org/v2#}"
@@ -289,11 +300,15 @@ def run_synbiohub_fetch(
         backoff_seconds=_BACKOFF_SECONDS,
         user_agent=_USER_AGENT,
     )
+    session.mount("https://", HTTPAdapter(max_retries=_RETRY))
     try:
+        # The non-recursive document is cheap for the registry to build, so check the type before the recursive one
+        nonrecursive = _download(f"{inputs.object_uri}/sbolnr", headers=headers, session=session)
+        design_uri = _design_uri(nonrecursive, inputs.object_uri)
         sbol = _download(source_url, headers=headers, session=session)
     finally:
         session.close()
-    design, subparts = _parse_sbol(sbol, inputs.object_uri)
+    design, subparts = _parse_sbol(sbol, design_uri)
     return SynBioHubFetchOutput(
         object_uri=inputs.object_uri,
         registry_url=config.registry_url,
@@ -330,19 +345,26 @@ def _download(source_url: str, *, headers: dict[str, str], session: requests.Ses
     return response.content.decode(response.encoding or "utf-8")
 
 
-def _parse_sbol(sbol: str, object_uri: str) -> tuple[SynBioHubPart, list[SynBioHubPart]]:
-    """Parse recursive SBOL into the requested design and every other part."""
+def _design_uri(sbol: str, object_uri: str) -> str:
+    """Return the SBOL identity of the ComponentDefinition at ``object_uri``, refusing any other object."""
+    root = ET.fromstring(sbol)  # noqa: S314 -- expat refuses external entities and caps entity expansion
+    # SBOL identities name the registry's public host, which can differ from the download host
+    object_path = urlsplit(object_uri).path
+    element = next((child for child in root if urlsplit(child.get(f"{_RDF}about", "")).path == object_path), None)
+    if element is None or element.tag != f"{_SBOL}ComponentDefinition":
+        kind = f"a {element.tag.rpartition('}')[2]}, not" if element is not None else "not"
+        raise ValueError(f"{object_uri} is {kind} a ComponentDefinition; synbiohub-fetch retrieves designs")
+    return element.get(f"{_RDF}about", "")
+
+
+def _parse_sbol(sbol: str, design_uri: str) -> tuple[SynBioHubPart, list[SynBioHubPart]]:
+    """Parse recursive SBOL into the design ``design_uri`` and every other part."""
     root = ET.fromstring(sbol)  # noqa: S314 -- expat refuses external entities and caps entity expansion
     definitions = {element.get(f"{_RDF}about", ""): element for element in root.findall(f"{_SBOL}ComponentDefinition")}
     sequences = {
         element.get(f"{_RDF}about", ""): "".join(element.findtext(f"{_SBOL}elements", "").split()).upper()
         for element in root.findall(f"{_SBOL}Sequence")
     }
-    # SBOL identities name the registry's public host, which can differ from the download host
-    object_path = urlsplit(object_uri).path
-    design_uri = next((uri for uri in definitions if urlsplit(uri).path == object_path), None)
-    if design_uri is None:
-        raise ValueError(f"{object_uri} is not a ComponentDefinition; synbiohub-fetch retrieves designs")
     parts = {uri: _parse_part(uri, element, definitions, sequences) for uri, element in definitions.items()}
     design = parts.pop(design_uri)
     return design, list(parts.values())
