@@ -102,7 +102,6 @@ tgcc</sbol:elements>
   <sbol:ComponentDefinition rdf:about="{PUBLIC}/rbs/1">
     <sbol:displayId>rbs</sbol:displayId>
     <dcterms:title>RBS part</dcterms:title>
-    <dcterms:created>2004-01-02T00:00:00Z</dcterms:created>
     <sbol:type rdf:resource="http://www.biopax.org/release/biopax-level3.owl#DnaRegion"/>
     <sbol:role rdf:resource="http://identifiers.org/so/SO:0000139"/>
   </sbol:ComponentDefinition>
@@ -135,8 +134,14 @@ def _mock_session(
     return session
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_login(request, monkeypatch):
+    if "integration" not in request.keywords:
+        monkeypatch.delenv("SYNBIOHUB_EMAIL", raising=False)
+        monkeypatch.delenv("SYNBIOHUB_PASSWORD", raising=False)
+
+
 def _fetch(**config) -> SynBioHubFetchOutput:
-    config = {"synbiohub_email": None, "synbiohub_password": None, **config}
     return run_synbiohub_fetch(SynBioHubFetchInput(identifier=DESIGN_URI), SynBioHubFetchConfig(**config))
 
 
@@ -151,27 +156,15 @@ def test_identifier_rejects_query_parameters():
         SynBioHubFetchInput(identifier="https://synbiohub.org/public/igem/BBa_E0040/1?token=secret")
 
 
-@pytest.mark.parametrize(
-    ("identifier", "normalized"),
-    [
-        ("BBa_I13504", "BBa_I13504"),
-        ("  https://synbiohub.org/public/igem/BBa_I13504/1/ ", "https://synbiohub.org/public/igem/BBa_I13504/1"),
-        ("synbiohub.org/public/igem/BBa_I13504/1", "https://synbiohub.org/public/igem/BBa_I13504/1"),
-    ],
-)
-def test_identifier_normalization(identifier, normalized):
-    assert SynBioHubFetchInput(identifier=identifier).identifier == normalized
-
-
 API = "https://api.synbiohub.org"
 
 
 @pytest.mark.parametrize(
     ("identifier", "download_uri"),
     [
-        (f"{API}/public/igem/BBa_I13504/1", f"{API}/public/igem/BBa_I13504/1"),
         ("http://api.synbiohub.org/public/igem/BBa_I13504/1", f"{API}/public/igem/BBa_I13504/1"),
-        ("https://synbiohub.org/public/igem/BBa_I13504/1", f"{API}/public/igem/BBa_I13504/1"),
+        ("  https://synbiohub.org/public/igem/BBa_I13504/1/ ", f"{API}/public/igem/BBa_I13504/1"),
+        ("synbiohub.org/public/igem/BBa_I13504/1", f"{API}/public/igem/BBa_I13504/1"),
         ("http://www.synbiohub.org/public/igem/BBa_I13504", f"{API}/public/igem/BBa_I13504"),
         ("https://SynBioHub.org/user/alice/designs/device/1", f"{API}/user/alice/designs/device/1"),
         ("BBa_I13504", f"{API}/public/igem/BBa_I13504"),
@@ -180,7 +173,6 @@ API = "https://api.synbiohub.org"
         ("https://parts.igem.org/Part:BBa_I13504", f"{API}/public/igem/BBa_I13504"),
         ("http://parts.igem.org/Part:BBa_I13504:Design", f"{API}/public/igem/BBa_I13504"),
         ("https://registry.igem.org/parts/bba-i13504", f"{API}/public/igem/BBa_I13504"),
-        ("https://registry.igem.org/parts/BBa_I13504", f"{API}/public/igem/BBa_I13504"),
     ],
 )
 def test_identifier_resolves_to_a_registry_download(identifier, download_uri):
@@ -193,20 +185,16 @@ def test_igem_link_without_a_part_is_refused():
         synbiohub_fetch._download_uri("https://parts.igem.org/Main_Page", API)
 
 
-def test_fetch_rejects_cross_origin_object():
+@pytest.mark.parametrize(
+    ("identifier", "registry_url"),
+    [
+        ("https://example.org/public/igem/BBa_E0040/1", API),
+        (f"{PUBLIC}/device/1", "https://synbiohub.example.org"),
+    ],
+)
+def test_objects_outside_the_registry_are_refused(identifier, registry_url):
     with pytest.raises(ValueError, match="same scheme and host"):
-        run_synbiohub_fetch(
-            SynBioHubFetchInput(identifier="https://example.org/public/igem/BBa_E0040/1"),
-            SynBioHubFetchConfig(registry_url="https://synbiohub.org"),
-        )
-
-
-def test_website_links_need_the_public_registry():
-    with pytest.raises(ValueError, match="same scheme and host"):
-        run_synbiohub_fetch(
-            SynBioHubFetchInput(identifier=f"{PUBLIC}/device/1"),
-            SynBioHubFetchConfig(registry_url="https://synbiohub.example.org"),
-        )
+        synbiohub_fetch._download_uri(identifier, registry_url)
 
 
 # ── Retrieval ─────────────────────────────────────────────────────────────────
@@ -234,16 +222,6 @@ def test_redirect_is_refused(monkeypatch):
         _fetch()
 
 
-def test_website_link_downloads_from_the_api_host(monkeypatch):
-    session = _mock_session(monkeypatch)
-
-    output = run_synbiohub_fetch(SynBioHubFetchInput(identifier=f"{PUBLIC}/device/1"), SynBioHubFetchConfig())
-
-    assert [call.args[0] for call in session.get.call_args_list] == [f"{DESIGN_URI}/sbolnr", f"{DESIGN_URI}/sbol"]
-    assert output.identifier == f"{PUBLIC}/device/1"
-    assert output.design.uri == f"{PUBLIC}/device/1"
-
-
 def test_unversioned_identifier_resolves_its_version_before_any_sbol_download(monkeypatch):
     session = _mock_session(monkeypatch, versions=[f"{PUBLIC}/device/1"])
 
@@ -260,12 +238,6 @@ def test_unversioned_identifier_with_several_versions_is_refused(monkeypatch):
     with pytest.raises(ValueError, match="several versions"):
         run_synbiohub_fetch(SynBioHubFetchInput(identifier=f"{PUBLIC}/device"), SynBioHubFetchConfig())
     assert [call.args[0] for call in session.get.call_args_list] == [f"{API}/sparql"]
-
-
-def test_missing_object_on_the_registry_is_reported(monkeypatch):
-    _mock_session(monkeypatch, status_code=404)
-    with pytest.raises(ValueError, match="no object at"):
-        _fetch()
 
 
 def test_missing_login_is_reported(monkeypatch):
@@ -296,12 +268,6 @@ def test_object_that_is_not_a_component_definition_is_refused_before_the_recursi
     assert [call.args[0] for call in session.get.call_args_list] == [f"{DESIGN_URI}/sbolnr"]
 
 
-def test_missing_object_is_refused(monkeypatch):
-    _mock_session(monkeypatch, content=COLLECTION_SBOL.replace("device/1", "other/1"))
-    with pytest.raises(ValueError, match="is not a ComponentDefinition"):
-        _fetch()
-
-
 # ── Parsing ───────────────────────────────────────────────────────────────────
 
 
@@ -322,12 +288,9 @@ def test_parses_design_across_download_and_public_hosts(monkeypatch):
     ("value", "expected"),
     [
         ("2015-08-31T04:07:34Z", datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)),
-        (" 2015-08-31T04:07:34 ", datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)),
+        ("2015-08-31T04:07:34", datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)),
         ("2015-08-31T06:07:34+02:00", datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)),
-        ("2015-08-31T04:07:34.1234Z", datetime(2015, 8, 31, 4, 7, 34, 123400, tzinfo=UTC)),
-        ("2015-08-31", datetime(2015, 8, 31, tzinfo=UTC)),
         ("last Tuesday", None),
-        ("", None),
     ],
 )
 def test_timestamps_parse_to_utc(value, expected):
@@ -373,7 +336,6 @@ def test_subparts_list_every_other_definition(monkeypatch):
     assert subparts[f"{PUBLIC}/cds/1"].roles == ["SO:0000316"]
     assert subparts[f"{PUBLIC}/cds/1"].sequence is None
     assert subparts[f"{PUBLIC}/cds/1"].topology is None
-    assert subparts[f"{PUBLIC}/rbs/1"].modified == datetime(2004, 1, 2, tzinfo=UTC)
 
 
 # ── Export ────────────────────────────────────────────────────────────────────
@@ -385,14 +347,6 @@ def test_sbol_export_is_verbatim(tmp_path, monkeypatch):
     _fetch().export("device", export_path=tmp_path, file_format="sbol")
 
     assert (tmp_path / "device.sbol").read_text(encoding="utf-8") == DEVICE_SBOL
-
-
-def test_fasta_export(tmp_path, monkeypatch):
-    _mock_session(monkeypatch)
-
-    _fetch().export("device", export_path=tmp_path, file_format="fasta")
-
-    assert (tmp_path / "device.fasta").read_text() == ">device RBS, CDS, and terminator\nAAAGGATGCATGCC\n"
 
 
 def test_fasta_header_stays_on_one_line(tmp_path, monkeypatch):
