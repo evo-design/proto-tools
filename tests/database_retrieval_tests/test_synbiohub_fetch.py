@@ -17,7 +17,7 @@ from proto_tools.tools.database_retrieval import (
 )
 from proto_tools.tools.database_retrieval.synbiohub import synbiohub_fetch
 
-OBJECT_URI = "https://api.synbiohub.org/public/test/device/1"
+DESIGN_URI = "https://api.synbiohub.org/public/test/device/1"
 PUBLIC = "https://synbiohub.org/public/test"
 
 # A device of an RBS, a reverse-strand CDS, and a split terminator, identified on the public host
@@ -25,6 +25,7 @@ DEVICE_SBOL = f"""<?xml version="1.0" encoding="UTF-8"?>
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dcterms="http://purl.org/dc/terms/"
          xmlns:sbol="http://sbols.org/v2#">
   <sbol:ComponentDefinition rdf:about="{PUBLIC}/device/1">
+    <sbol:persistentIdentity rdf:resource="{PUBLIC}/device"/>
     <sbol:displayId>device</sbol:displayId>
     <dcterms:title>Test device</dcterms:title>
     <dcterms:description>RBS, CDS, and terminator</dcterms:description>
@@ -131,22 +132,72 @@ def _mock_session(monkeypatch, *, content: str = DEVICE_SBOL, status_code: int =
 
 
 def _fetch(**config) -> SynBioHubFetchOutput:
-    return run_synbiohub_fetch(SynBioHubFetchInput(object_uri=OBJECT_URI), SynBioHubFetchConfig(**config))
+    return run_synbiohub_fetch(SynBioHubFetchInput(identifier=DESIGN_URI), SynBioHubFetchConfig(**config))
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
 
 
-def test_object_uri_rejects_query_parameters():
+def test_identifier_rejects_query_parameters():
     with pytest.raises(ValidationError, match="query parameters"):
-        SynBioHubFetchInput(object_uri="https://synbiohub.org/public/igem/BBa_E0040/1?token=secret")
+        SynBioHubFetchInput(identifier="https://synbiohub.org/public/igem/BBa_E0040/1?token=secret")
+
+
+@pytest.mark.parametrize(
+    ("identifier", "normalized"),
+    [
+        ("BBa_I13504", "BBa_I13504"),
+        ("  https://synbiohub.org/public/igem/BBa_I13504/1/ ", "https://synbiohub.org/public/igem/BBa_I13504/1"),
+        ("synbiohub.org/public/igem/BBa_I13504/1", "https://synbiohub.org/public/igem/BBa_I13504/1"),
+    ],
+)
+def test_identifier_normalization(identifier, normalized):
+    assert SynBioHubFetchInput(identifier=identifier).identifier == normalized
+
+
+API = "https://api.synbiohub.org"
+
+
+@pytest.mark.parametrize(
+    ("identifier", "download_uri"),
+    [
+        (f"{API}/public/igem/BBa_I13504/1", f"{API}/public/igem/BBa_I13504/1"),
+        ("http://api.synbiohub.org/public/igem/BBa_I13504/1", f"{API}/public/igem/BBa_I13504/1"),
+        ("https://synbiohub.org/public/igem/BBa_I13504/1", f"{API}/public/igem/BBa_I13504/1"),
+        ("http://www.synbiohub.org/public/igem/BBa_I13504", f"{API}/public/igem/BBa_I13504"),
+        ("https://SynBioHub.org/user/alice/designs/device/1", f"{API}/user/alice/designs/device/1"),
+        ("BBa_I13504", f"{API}/public/igem/BBa_I13504"),
+        ("bba_i13504", f"{API}/public/igem/BBa_I13504"),
+        ("pSB1C3", f"{API}/public/igem/pSB1C3"),
+        ("https://parts.igem.org/Part:BBa_I13504", f"{API}/public/igem/BBa_I13504"),
+        ("http://parts.igem.org/Part:BBa_I13504:Design", f"{API}/public/igem/BBa_I13504"),
+        ("https://registry.igem.org/parts/bba-i13504", f"{API}/public/igem/BBa_I13504"),
+        ("https://registry.igem.org/parts/BBa_I13504", f"{API}/public/igem/BBa_I13504"),
+    ],
+)
+def test_identifier_resolves_to_a_registry_download(identifier, download_uri):
+    identifier = SynBioHubFetchInput(identifier=identifier).identifier
+    assert synbiohub_fetch._download_uri(identifier, API) == download_uri
+
+
+def test_igem_link_without_a_part_is_refused():
+    with pytest.raises(ValueError, match="does not link to an iGEM part"):
+        synbiohub_fetch._download_uri("https://parts.igem.org/Main_Page", API)
 
 
 def test_fetch_rejects_cross_origin_object():
     with pytest.raises(ValueError, match="same scheme and host"):
         run_synbiohub_fetch(
-            SynBioHubFetchInput(object_uri="https://example.org/public/igem/BBa_E0040/1"),
+            SynBioHubFetchInput(identifier="https://example.org/public/igem/BBa_E0040/1"),
             SynBioHubFetchConfig(registry_url="https://synbiohub.org"),
+        )
+
+
+def test_website_links_need_the_public_registry():
+    with pytest.raises(ValueError, match="same scheme and host"):
+        run_synbiohub_fetch(
+            SynBioHubFetchInput(identifier=f"{PUBLIC}/device/1"),
+            SynBioHubFetchConfig(registry_url="https://synbiohub.example.org"),
         )
 
 
@@ -158,9 +209,9 @@ def test_checks_type_then_downloads_recursive_sbol_without_exposing_token(monkey
 
     output = _fetch(synbiohub_token="private-token")
 
-    assert [call.args[0] for call in session.get.call_args_list] == [f"{OBJECT_URI}/sbolnr", f"{OBJECT_URI}/sbol"]
+    assert [call.args[0] for call in session.get.call_args_list] == [f"{DESIGN_URI}/sbolnr", f"{DESIGN_URI}/sbol"]
     assert all(call.kwargs["headers"]["X-authorization"] == "private-token" for call in session.get.call_args_list)
-    assert output.source_url == f"{OBJECT_URI}/sbol"
+    assert output.source_url == f"{DESIGN_URI}/sbol"
     assert "private-token" not in output.model_dump_json()
 
 
@@ -168,6 +219,41 @@ def test_redirect_is_refused(monkeypatch):
     _mock_session(monkeypatch, status_code=302)
     with pytest.raises(ValueError, match="redirected"):
         _fetch()
+
+
+def test_website_link_downloads_from_the_api_host(monkeypatch):
+    session = _mock_session(monkeypatch)
+
+    output = run_synbiohub_fetch(SynBioHubFetchInput(identifier=f"{PUBLIC}/device/1"), SynBioHubFetchConfig())
+
+    assert [call.args[0] for call in session.get.call_args_list] == [f"{DESIGN_URI}/sbolnr", f"{DESIGN_URI}/sbol"]
+    assert output.identifier == f"{PUBLIC}/device/1"
+    assert output.design.uri == f"{PUBLIC}/device/1"
+
+
+def test_unversioned_link_matches_the_persistent_identity(monkeypatch):
+    session = _mock_session(monkeypatch)
+
+    output = run_synbiohub_fetch(SynBioHubFetchInput(identifier=f"{PUBLIC}/device"), SynBioHubFetchConfig())
+
+    assert session.get.call_args_list[0].args[0] == f"{API}/public/test/device/sbolnr"
+    assert output.design.uri == f"{PUBLIC}/device/1"
+
+
+def test_unversioned_link_with_several_versions_is_refused(monkeypatch):
+    second_version = f"""<sbol:ComponentDefinition rdf:about="{PUBLIC}/device/2">
+    <sbol:persistentIdentity rdf:resource="{PUBLIC}/device"/>
+  </sbol:ComponentDefinition>
+</rdf:RDF>"""
+    _mock_session(monkeypatch, content=DEVICE_SBOL.replace("</rdf:RDF>", second_version))
+    with pytest.raises(ValueError, match="several versions"):
+        run_synbiohub_fetch(SynBioHubFetchInput(identifier=f"{PUBLIC}/device"), SynBioHubFetchConfig())
+
+
+def test_missing_object_on_the_registry_is_reported(monkeypatch):
+    _mock_session(monkeypatch, status_code=404)
+    with pytest.raises(ValueError, match="no object at"):
+        run_synbiohub_fetch(SynBioHubFetchInput(identifier="my_device"), SynBioHubFetchConfig())
 
 
 def test_missing_token_is_reported(monkeypatch):
@@ -186,7 +272,7 @@ def test_object_that_is_not_a_component_definition_is_refused_before_the_recursi
     session = _mock_session(monkeypatch, content=COLLECTION_SBOL)
     with pytest.raises(ValueError, match="is a Collection, not a ComponentDefinition"):
         _fetch()
-    assert [call.args[0] for call in session.get.call_args_list] == [f"{OBJECT_URI}/sbolnr"]
+    assert [call.args[0] for call in session.get.call_args_list] == [f"{DESIGN_URI}/sbolnr"]
 
 
 def test_missing_object_is_refused(monkeypatch):
@@ -276,9 +362,9 @@ def test_genbank_export_maps_roles_and_coordinates(tmp_path, monkeypatch):
 def test_sequence_exports_need_a_sequence(tmp_path):
     part = SynBioHubPart(uri=f"{PUBLIC}/protein/1", display_id="protein", molecule="protein")
     output = SynBioHubFetchOutput(
-        object_uri=OBJECT_URI,
+        identifier=DESIGN_URI,
         registry_url="https://api.synbiohub.org",
-        source_url=f"{OBJECT_URI}/sbol",
+        source_url=f"{DESIGN_URI}/sbol",
         design=part,
         sbol="",
     )

@@ -19,7 +19,7 @@ The `synbiohub-fetch` tool retrieves one design from a caller-selected SynBioHub
 
 ### SynBioHub Fetch (`synbiohub-fetch`)
 
-Confirms the object is a ComponentDefinition from its non-recursive SBOL, then downloads its recursive SBOL and parses it. `design` holds the requested part: its sequence, Sequence Ontology roles, and features, each with 1-indexed inclusive locations and a `subpart_uri` when it places a subpart. `subparts` holds every other part in the document. The output exports to JSON, the verbatim SBOL, FASTA, or GenBank. The selected object must share an origin with `registry_url`, preventing a design identifier from silently redirecting retrieval to another host.
+Confirms the object is a ComponentDefinition from its non-recursive SBOL, then downloads its recursive SBOL and parses it. `design` holds the requested part: its sequence, Sequence Ontology roles, and features, each with 1-indexed inclusive locations and a `subpart_uri` when it places a subpart. `subparts` holds every other part in the document. The output exports to JSON, the verbatim SBOL, FASTA, or GenBank. `identifier` takes a SynBioHub link, with or without its version, an iGEM Registry part link, or an iGEM part name such as `BBa_I13504`. A SynBioHub link must share an origin with `registry_url`, preventing an identifier from silently redirecting retrieval to another host.
 
 #### Applications
 
@@ -40,9 +40,10 @@ Read a construct's composition from `design.features` and `subparts` to rebuild 
 - **Treat SBOL as the source of truth.** The typed model covers parts, roles, sequences, and ranged features. Provenance, interactions, and registry-specific annotations stay in the verbatim `sbol` field and its export.
 - **Exports are views of the design.** FASTA and GenBank cover the requested design only. GenBank feature keys come from Sequence Ontology roles, and unmapped roles become `misc_feature`. The GenBank header carries the design's topology when the SBOL records one, and its last modification date.
 - **Tokens remain private.** `SYNBIOHUB_TOKEN` is excluded from cache keys and outputs.
-- **Select the registry explicitly.** `object_uri` must have the same origin as `registry_url`.
+- **Paste the link you have.** With the default registry, links copied from `synbiohub.org` download from its API host. iGEM part names and links from `parts.igem.org` or `registry.igem.org` resolve to the registry's iGEM collection. A link without a version resolves to the version the registry serves.
+- **Select the registry explicitly.** Any other SynBioHub link must have the same origin as `registry_url`. Parts outside the iGEM collection need a full link.
 - **Requires network access.** No registry snapshot or curated database is stored locally.
-- **Runs on CPU.** Runtime is dominated by one SBOL download.
+- **Runs on CPU.** Runtime is dominated by the recursive SBOL download.
 
 ## Toolkit Notes
 

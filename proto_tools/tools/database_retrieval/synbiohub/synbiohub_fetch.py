@@ -1,6 +1,7 @@
 """Fetch a design from a SynBioHub registry as SBOL and parse it into a typed model."""
 
 import json
+import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
@@ -62,30 +63,45 @@ _GENBANK_FEATURE_KEYS = {
     "SO:0000205": "3'UTR",
 }
 _FASTA_LINE_WIDTH = 70
+# Links and SBOL identities on the public website resolve on its API host
+_PUBLIC_API_HOST = "api.synbiohub.org"
+_PUBLIC_WEB_HOSTS = {"synbiohub.org", "www.synbiohub.org"}
+# A bare SBOL displayId names a part in the registry's iGEM collection
+_DISPLAY_ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_IGEM_COLLECTION_PATH = "/public/igem"
+_IGEM_PART_LINKS = {
+    "parts.igem.org": re.compile(r"/Part:([A-Za-z0-9_]+)"),
+    "registry.igem.org": re.compile(r"^/parts/([A-Za-z0-9_-]+)"),
+}
 
 
 class SynBioHubFetchInput(BaseToolInput):
     """Input identifying one SynBioHub design.
 
     Attributes:
-        object_uri (str): Absolute URI of a ComponentDefinition on the selected registry.
+        identifier (str): A SynBioHub link to a ComponentDefinition, with or without its version, an
+            iGEM Registry part link, or an iGEM part name such as ``BBa_I13504``.
     """
 
-    object_uri: str = InputField(
-        title="Object URI",
-        description="Absolute URI of a ComponentDefinition on the selected SynBioHub registry",
+    identifier: str = InputField(
+        title="Identifier",
+        description="SynBioHub or iGEM Registry part link, or iGEM part name (e.g. 'BBa_I13504')",
     )
 
-    @field_validator("object_uri")
+    @field_validator("identifier")
     @classmethod
-    def _validate_object_uri(cls, value: str) -> str:
-        uri = value.rstrip("/")
-        parsed = urlsplit(uri)
+    def _validate_identifier(cls, value: str) -> str:
+        identifier = value.strip().rstrip("/")
+        if _DISPLAY_ID.fullmatch(identifier):
+            return identifier
+        if "://" not in identifier:
+            identifier = f"https://{identifier}"
+        parsed = urlsplit(identifier)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError("object_uri must be an absolute HTTP or HTTPS URL")
+            raise ValueError("identifier must be an HTTP or HTTPS link or an iGEM part name")
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise ValueError("object_uri must not contain credentials, query parameters, or fragments")
-        return uri
+            raise ValueError("identifier must not contain credentials, query parameters, or fragments")
+        return identifier
 
 
 class SynBioHubFetchConfig(BaseConfig):
@@ -210,7 +226,7 @@ class SynBioHubFetchOutput(BaseToolOutput):
     """One SynBioHub design, parsed from its recursive SBOL.
 
     Attributes:
-        object_uri (str): Requested object URI.
+        identifier (str): Requested identifier, as given.
         registry_url (str): Registry origin used for retrieval.
         source_url (str): SBOL download endpoint.
         design (SynBioHubPart): The requested design.
@@ -221,7 +237,7 @@ class SynBioHubFetchOutput(BaseToolOutput):
     # Keep the SBOL byte-exact; parsed fields carry no surrounding whitespace
     model_config = ConfigDict(str_strip_whitespace=False)
 
-    object_uri: str = Field(title="Object URI", description="Requested object URI")
+    identifier: str = Field(title="Identifier", description="Requested identifier, as given")
     registry_url: str = Field(title="Registry URL", description="Registry origin used for retrieval")
     source_url: str = Field(title="Source URL", description="SBOL download endpoint")
     design: SynBioHubPart = Field(title="Design", description="The requested design")
@@ -258,7 +274,7 @@ class SynBioHubFetchOutput(BaseToolOutput):
 
 def example_input() -> Any:
     """Return minimal valid example input."""
-    return SynBioHubFetchInput(object_uri="https://api.synbiohub.org/public/igem/BBa_I13504/1")
+    return SynBioHubFetchInput(identifier="https://api.synbiohub.org/public/igem/BBa_I13504/1")
 
 
 @tool(
@@ -290,8 +306,8 @@ def run_synbiohub_fetch(
         SynBioHubFetchOutput: The parsed design, its subparts, and the verbatim SBOL.
     """
     del instance
-    _validate_same_origin(inputs.object_uri, config.registry_url)
-    source_url = f"{inputs.object_uri}/sbol"
+    download_uri = _download_uri(inputs.identifier, config.registry_url)
+    source_url = f"{download_uri}/sbol"
     headers = {"Accept": "text/plain"}
     if config.synbiohub_token:
         headers["X-authorization"] = config.synbiohub_token
@@ -303,14 +319,14 @@ def run_synbiohub_fetch(
     session.mount("https://", HTTPAdapter(max_retries=_RETRY))
     try:
         # The non-recursive document is cheap for the registry to build, so check the type before the recursive one
-        nonrecursive = _download(f"{inputs.object_uri}/sbolnr", headers=headers, session=session)
-        design_uri = _design_uri(nonrecursive, inputs.object_uri)
+        nonrecursive = _download(f"{download_uri}/sbolnr", headers=headers, session=session)
+        design_uri = _design_uri(nonrecursive, download_uri)
         sbol = _download(source_url, headers=headers, session=session)
     finally:
         session.close()
     design, subparts = _parse_sbol(sbol, design_uri)
     return SynBioHubFetchOutput(
-        object_uri=inputs.object_uri,
+        identifier=inputs.identifier,
         registry_url=config.registry_url,
         source_url=source_url,
         design=design,
@@ -319,12 +335,30 @@ def run_synbiohub_fetch(
     )
 
 
-def _validate_same_origin(object_uri: str, registry_url: str) -> None:
-    """Reject cross-origin object URLs to bound caller-selected network access."""
-    object_origin = urlsplit(object_uri)
-    registry_origin = urlsplit(registry_url)
-    if (object_origin.scheme, object_origin.netloc) != (registry_origin.scheme, registry_origin.netloc):
-        raise ValueError("object_uri must use the same scheme and host as registry_url")
+def _download_uri(identifier: str, registry_url: str) -> str:
+    """Return the registry URI to download ``identifier`` from, rejecting objects outside ``registry_url``."""
+    if _DISPLAY_ID.fullmatch(identifier):
+        return f"{registry_url}{_IGEM_COLLECTION_PATH}/{_igem_part_name(identifier)}"
+    parsed = urlsplit(identifier)
+    host = parsed.netloc.lower()
+    if host in _IGEM_PART_LINKS:
+        match = _IGEM_PART_LINKS[host].search(parsed.path)
+        if match is None:
+            raise ValueError(f"{identifier} does not link to an iGEM part")
+        return f"{registry_url}{_IGEM_COLLECTION_PATH}/{_igem_part_name(match[1])}"
+    registry = urlsplit(registry_url)
+    registry_host = registry.netloc.lower()
+    if registry_host == _PUBLIC_API_HOST and host in {_PUBLIC_API_HOST, *_PUBLIC_WEB_HOSTS}:
+        return f"{registry_url}{parsed.path}"
+    if (parsed.scheme, host) != (registry.scheme, registry_host):
+        raise ValueError("identifier must use the same scheme and host as registry_url")
+    return f"{registry_url}{parsed.path}"
+
+
+def _igem_part_name(name: str) -> str:
+    """Return an iGEM part name as SynBioHub spells it, e.g. ``bba-i13504`` as ``BBa_I13504``."""
+    prefix, rest = name[:4], name[4:]
+    return f"BBa_{rest.upper()}" if prefix.lower() in {"bba_", "bba-"} else name
 
 
 def _download(source_url: str, *, headers: dict[str, str], session: requests.Session) -> str:
@@ -340,7 +374,9 @@ def _download(source_url: str, *, headers: dict[str, str], session: requests.Ses
         backoff_seconds=_BACKOFF_SECONDS,
     )
     if 300 <= response.status_code < 400:
-        raise ValueError(f"SynBioHub redirected {source_url}; verify the registry and object URI")
+        raise ValueError(f"SynBioHub redirected {source_url}; verify the registry and identifier")
+    if response.status_code == 404:
+        raise ValueError(f"SynBioHub has no object at {source_url}; outside the iGEM collection, pass a full link")
     if response.status_code in (401, 403):
         if "X-authorization" not in headers:
             raise ValueError("SynBioHub requires a login token; set SYNBIOHUB_TOKEN")
@@ -351,15 +387,22 @@ def _download(source_url: str, *, headers: dict[str, str], session: requests.Ses
     return response.content.decode(response.encoding or "utf-8")
 
 
-def _design_uri(sbol: str, object_uri: str) -> str:
-    """Return the SBOL identity of the ComponentDefinition at ``object_uri``, refusing any other object."""
+def _design_uri(sbol: str, download_uri: str) -> str:
+    """Return the SBOL identity of the ComponentDefinition at ``download_uri``, refusing any other object."""
     root = ET.fromstring(sbol)  # noqa: S314 -- expat refuses external entities and caps entity expansion
     # SBOL identities name the registry's public host, which can differ from the download host
-    object_path = urlsplit(object_uri).path
-    element = next((child for child in root if urlsplit(child.get(f"{_RDF}about", "")).path == object_path), None)
+    object_path = urlsplit(download_uri).path
+    matches = [child for child in root if urlsplit(child.get(f"{_RDF}about", "")).path == object_path]
+    # An unversioned URI names the persistent identity that every version of an object shares
+    matches = matches or [
+        child for child in root if urlsplit(_resource(child, "persistentIdentity") or "").path == object_path
+    ]
+    if len(matches) > 1:
+        raise ValueError(f"{download_uri} matches several versions; include the version in the identifier")
+    element = next(iter(matches), None)
     if element is None or element.tag != f"{_SBOL}ComponentDefinition":
         kind = f"a {element.tag.rpartition('}')[2]}, not" if element is not None else "not"
-        raise ValueError(f"{object_uri} is {kind} a ComponentDefinition; synbiohub-fetch retrieves designs")
+        raise ValueError(f"{download_uri} is {kind} a ComponentDefinition; synbiohub-fetch retrieves designs")
     return element.get(f"{_RDF}about", "")
 
 

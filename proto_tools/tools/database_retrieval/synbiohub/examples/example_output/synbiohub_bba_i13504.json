@@ -7,7 +7,7 @@
   "warnings": [],
   "errors": [],
   "metadata": {},
-  "object_uri": "https://api.synbiohub.org/public/igem/BBa_I13504/1",
+  "identifier": "https://api.synbiohub.org/public/igem/BBa_I13504/1",
   "registry_url": "https://api.synbiohub.org",
   "source_url": "https://api.synbiohub.org/public/igem/BBa_I13504/1/sbol",
   "design": {
