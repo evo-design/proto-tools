@@ -13,7 +13,7 @@ The `synbiohub-fetch` tool retrieves one design from a caller-selected SynBioHub
 
 ## Background
 
-[SynBioHub](https://synbiohub.org/) is a standards-enabled repository for synthetic biology designs. SBOL preserves components, nested subcomponents, sequence constraints, annotations, and provenance, allowing a circuit or construct to remain a composition of segments rather than only a flattened nucleotide string. The tool uses the documented SBOL download endpoint and authenticates with a SynBioHub login token.
+[SynBioHub](https://synbiohub.org/) is a standards-enabled repository for synthetic biology designs. SBOL preserves components, nested subcomponents, sequence constraints, annotations, and provenance, allowing a circuit or construct to remain a composition of segments rather than only a flattened nucleotide string. The tool uses the documented SBOL download endpoint and logs in with a SynBioHub account.
 
 ## Tools
 
@@ -27,19 +27,10 @@ Read a construct's composition from `design.features` and `subparts` to rebuild 
 
 #### Usage Tips
 
-- **Set a SynBioHub token.** The public instance requires a login for every download, including public records. Create a free account at [synbiohub.org](https://synbiohub.org/register), then exchange your email or username and password for a token and export it:
-
-  ```bash
-  export SYNBIOHUB_TOKEN=$(curl -s -X POST https://api.synbiohub.org/login \
-    -H "Accept: text/plain" \
-    --data-urlencode "email=YOUR_EMAIL" \
-    --data-urlencode "password=YOUR_PASSWORD")
-  ```
-
-  The token can also be passed as `synbiohub_token` in the config. Request a token from the same host as `registry_url`. Tokens can expire when the registry restarts or when you log out; if downloads start failing with 401 Unauthorized, request a new one.
+- **Set your SynBioHub login.** The public instance requires a login for every download, including public records. Create a free account at [synbiohub.org](https://synbiohub.org/register), then set `SYNBIOHUB_EMAIL` (your email or username) and `SYNBIOHUB_PASSWORD`, or pass `synbiohub_email` and `synbiohub_password` in the config. Use an account on the same registry as `registry_url`. Each fetch logs in, downloads, and logs out, so there is no token to renew.
 - **Treat SBOL as the source of truth.** The typed model covers parts, roles, sequences, and ranged features. Provenance, interactions, and registry-specific annotations stay in the verbatim `sbol` field and its export.
 - **Exports are views of the design.** FASTA and GenBank cover the requested design only. GenBank feature keys come from Sequence Ontology roles, and unmapped roles become `misc_feature`. The GenBank header carries the design's topology when the SBOL records one, and its last modification date.
-- **Tokens remain private.** `SYNBIOHUB_TOKEN` is excluded from cache keys and outputs.
+- **Credentials remain private.** `SYNBIOHUB_EMAIL` and `SYNBIOHUB_PASSWORD` are excluded from cache keys and outputs.
 - **Paste the link you have.** With the default registry, links copied from `synbiohub.org` download from its API host. iGEM part names and links from `parts.igem.org` or `registry.igem.org` resolve to the registry's iGEM collection. A link or name without a version resolves to the object's only public version; an object with several versions, or a private one, needs a versioned link.
 - **Select the registry explicitly.** Any other SynBioHub link must have the same origin as `registry_url`. Parts outside the iGEM collection need a full link.
 - **Requires network access.** No registry snapshot or curated database is stored locally.

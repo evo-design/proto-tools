@@ -130,12 +130,17 @@ def _mock_session(
     response.json.return_value = {"results": {"bindings": [{"s": {"value": uri}} for uri in versions or []]}}
     session = MagicMock()
     session.get.return_value = response
+    session.post.return_value = MagicMock(status_code=200, text="session-token\n")
     monkeypatch.setattr(synbiohub_fetch, "build_http_session", lambda **kwargs: session)
     return session
 
 
 def _fetch(**config) -> SynBioHubFetchOutput:
+    config = {"synbiohub_email": None, "synbiohub_password": None, **config}
     return run_synbiohub_fetch(SynBioHubFetchInput(identifier=DESIGN_URI), SynBioHubFetchConfig(**config))
+
+
+LOGIN = {"synbiohub_email": "me@example.org", "synbiohub_password": "private-password"}
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
@@ -207,15 +212,20 @@ def test_website_links_need_the_public_registry():
 # ── Retrieval ─────────────────────────────────────────────────────────────────
 
 
-def test_checks_type_then_downloads_recursive_sbol_without_exposing_token(monkeypatch):
+def test_logs_in_checks_type_downloads_and_logs_out_without_exposing_credentials(monkeypatch):
     session = _mock_session(monkeypatch)
 
-    output = _fetch(synbiohub_token="private-token")
+    output = _fetch(**LOGIN)
 
+    login, logout = session.post.call_args_list
+    assert login.args[0] == f"{API}/login"
+    assert login.kwargs["data"] == {"email": "me@example.org", "password": "private-password"}
     assert [call.args[0] for call in session.get.call_args_list] == [f"{DESIGN_URI}/sbolnr", f"{DESIGN_URI}/sbol"]
-    assert all(call.kwargs["headers"]["X-authorization"] == "private-token" for call in session.get.call_args_list)
+    assert all(call.kwargs["headers"]["X-authorization"] == "session-token" for call in session.get.call_args_list)
+    assert logout.args[0] == f"{API}/logout"
+    assert logout.kwargs["headers"]["X-authorization"] == "session-token"
     assert output.source_url == f"{DESIGN_URI}/sbol"
-    assert "private-token" not in output.model_dump_json()
+    assert all(secret not in output.model_dump_json() for secret in ("private-password", "session-token"))
 
 
 def test_redirect_is_refused(monkeypatch):
@@ -258,16 +268,25 @@ def test_missing_object_on_the_registry_is_reported(monkeypatch):
         _fetch()
 
 
-def test_missing_token_is_reported(monkeypatch):
+def test_missing_login_is_reported(monkeypatch):
     _mock_session(monkeypatch, status_code=401)
-    with pytest.raises(ValueError, match="requires a login token"):
-        _fetch(synbiohub_token=None)
+    with pytest.raises(ValueError, match="requires a login; set SYNBIOHUB_EMAIL and SYNBIOHUB_PASSWORD"):
+        _fetch()
 
 
-def test_rejected_token_is_reported(monkeypatch):
-    _mock_session(monkeypatch, status_code=401)
-    with pytest.raises(ValueError, match="rejected the token"):
-        _fetch(synbiohub_token="expired-token")
+def test_rejected_login_is_reported(monkeypatch):
+    session = _mock_session(monkeypatch)
+    session.post.return_value = MagicMock(status_code=401, text="Your e-mail address was not recognized.")
+    with pytest.raises(ValueError, match="rejected the email or password"):
+        _fetch(**LOGIN)
+    assert session.post.call_count == 1
+
+
+def test_logs_out_when_the_fetch_fails(monkeypatch):
+    session = _mock_session(monkeypatch, status_code=404)
+    with pytest.raises(ValueError, match="no object"):
+        _fetch(**LOGIN)
+    assert session.post.call_args_list[-1].args[0] == f"{API}/logout"
 
 
 def test_object_that_is_not_a_component_definition_is_refused_before_the_recursive_download(monkeypatch):
@@ -422,7 +441,10 @@ def test_sequence_exports_need_a_sequence(tmp_path):
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(not os.environ.get("SYNBIOHUB_TOKEN"), reason="SYNBIOHUB_TOKEN is not set")
+@pytest.mark.skipif(
+    not (os.environ.get("SYNBIOHUB_EMAIL") and os.environ.get("SYNBIOHUB_PASSWORD")),
+    reason="SYNBIOHUB_EMAIL and SYNBIOHUB_PASSWORD are not set",
+)
 def test_live_gfp_cassette():
     output = run_synbiohub_fetch(synbiohub_fetch.example_input(), SynBioHubFetchConfig())
 

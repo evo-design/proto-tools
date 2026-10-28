@@ -114,7 +114,8 @@ class SynBioHubFetchConfig(BaseConfig):
 
     Attributes:
         registry_url (str): Registry origin allowed for object retrieval.
-        synbiohub_token (str | None): SynBioHub login token.
+        synbiohub_email (str | None): SynBioHub account email or username.
+        synbiohub_password (str | None): SynBioHub account password.
     """
 
     registry_url: str = ConfigField(
@@ -122,10 +123,15 @@ class SynBioHubFetchConfig(BaseConfig):
         title="Registry URL",
         description="SynBioHub registry origin allowed for object retrieval",
     )
-    synbiohub_token: str | None = ConfigField(
-        title="SynBioHub Token",
-        description="SynBioHub login token; required by the public instance.",
-        credential="SYNBIOHUB_TOKEN",
+    synbiohub_email: str | None = ConfigField(
+        title="SynBioHub Email",
+        description="SynBioHub email or username; required by the public instance.",
+        credential="SYNBIOHUB_EMAIL",
+    )
+    synbiohub_password: str | None = ConfigField(
+        title="SynBioHub Password",
+        description="SynBioHub password; required by the public instance.",
+        credential="SYNBIOHUB_PASSWORD",
     )
 
     @field_validator("registry_url")
@@ -304,7 +310,7 @@ def run_synbiohub_fetch(
 
     Args:
         inputs (SynBioHubFetchInput): Design URI.
-        config (SynBioHubFetchConfig): Registry and token settings.
+        config (SynBioHubFetchConfig): Registry and account settings.
         instance (Any): Optional ToolInstance; unused for this HTTP-only tool.
 
     Returns:
@@ -313,9 +319,9 @@ def run_synbiohub_fetch(
     del instance
     download_uri = _download_uri(inputs.identifier, config.registry_url)
     source_url = f"{download_uri}/sbol"
+    if bool(config.synbiohub_email) != bool(config.synbiohub_password):
+        raise ValueError("Set both SYNBIOHUB_EMAIL and SYNBIOHUB_PASSWORD, or neither")
     headers = {"Accept": "text/plain"}
-    if config.synbiohub_token:
-        headers["X-authorization"] = config.synbiohub_token
     session = build_http_session(
         http_retries=_HTTP_RETRIES,
         backoff_seconds=_BACKOFF_SECONDS,
@@ -323,6 +329,10 @@ def run_synbiohub_fetch(
     )
     session.mount("https://", HTTPAdapter(max_retries=_RETRY))
     try:
+        if config.synbiohub_email and config.synbiohub_password:
+            headers["X-authorization"] = _login(
+                config.registry_url, config.synbiohub_email, config.synbiohub_password, session=session
+            )
         # Without a version, SynBioHub serves the recursive document from /sbolnr too, so resolve the version first
         if not _is_versioned(download_uri):
             download_uri = _resolve_version(download_uri, config.registry_url, headers=headers, session=session)
@@ -332,6 +342,9 @@ def run_synbiohub_fetch(
         design_uri = _design_uri(nonrecursive, download_uri)
         sbol = _download(source_url, headers=headers, session=session)
     finally:
+        # SynBioHub keeps every token in memory until logout, so release this one
+        if "X-authorization" in headers:
+            session.post(f"{config.registry_url}/logout", headers=headers, timeout=_REQUEST_TIMEOUT_SECONDS)
         session.close()
     design, subparts = _parse_sbol(sbol, design_uri)
     return SynBioHubFetchOutput(
@@ -368,6 +381,21 @@ def _igem_part_name(name: str) -> str:
     """Return an iGEM part name as SynBioHub spells it, e.g. ``bba-i13504`` as ``BBa_I13504``."""
     prefix, rest = name[:4], name[4:]
     return f"BBa_{rest.upper()}" if prefix.lower() in {"bba_", "bba-"} else name
+
+
+def _login(registry_url: str, email: str, password: str, *, session: requests.Session) -> str:
+    """Log in to SynBioHub and return a token for this fetch."""
+    response = session.post(
+        f"{registry_url}/login",
+        data={"email": email, "password": password},
+        headers={"Accept": "text/plain"},
+        timeout=_REQUEST_TIMEOUT_SECONDS,
+        allow_redirects=False,
+    )
+    if response.status_code in (401, 403):
+        raise ValueError(f"SynBioHub rejected the email or password: {response.text.strip()}")
+    response.raise_for_status()
+    return response.text.strip()
 
 
 def _is_versioned(download_uri: str) -> bool:
@@ -426,10 +454,8 @@ def _get(
         raise ValueError(f"SynBioHub has no object at {url}")
     if response.status_code in (401, 403):
         if "X-authorization" not in headers:
-            raise ValueError("SynBioHub requires a login token; set SYNBIOHUB_TOKEN")
-        raise ValueError(
-            f"SynBioHub rejected the token (HTTP {response.status_code}); it may have expired, so request a new one"
-        )
+            raise ValueError("SynBioHub requires a login; set SYNBIOHUB_EMAIL and SYNBIOHUB_PASSWORD")
+        raise ValueError(f"SynBioHub refused access to {url} (HTTP {response.status_code})")
     response.raise_for_status()
     return response
 
