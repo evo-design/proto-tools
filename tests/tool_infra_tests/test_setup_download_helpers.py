@@ -32,7 +32,8 @@ def _run(command: str) -> subprocess.CompletedProcess[str]:
 def _zip_bytes() -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
-        archive.writestr("archive/data.pkl", b"x" * 4096)
+        # A fixed timestamp keeps the bytes identical across calls; writestr otherwise stamps the current time
+        archive.writestr(zipfile.ZipInfo("archive/data.pkl", date_time=(1980, 1, 1, 0, 0, 0)), b"x" * 4096)
     return buffer.getvalue()
 
 

@@ -144,6 +144,17 @@ from proto_tools.tools.database_retrieval.sequence_fetch import (
     run_sequence_fetch,
 )
 
+# SynBioHub design fetch
+from proto_tools.tools.database_retrieval.synbiohub import (
+    SynBioHubFeature,
+    SynBioHubFetchConfig,
+    SynBioHubFetchInput,
+    SynBioHubFetchOutput,
+    SynBioHubLocation,
+    SynBioHubPart,
+    run_synbiohub_fetch,
+)
+
 # UniProt fetch
 from proto_tools.tools.database_retrieval.uniprot import (
     UniProtFetchConfig,
@@ -272,4 +283,12 @@ __all__ = [
     "SequenceFetchRequest",
     "SequenceFetchResult",
     "run_sequence_fetch",
+    # SynBioHub design fetch
+    "SynBioHubFeature",
+    "SynBioHubFetchConfig",
+    "SynBioHubFetchInput",
+    "SynBioHubFetchOutput",
+    "SynBioHubLocation",
+    "SynBioHubPart",
+    "run_synbiohub_fetch",
 ]
