@@ -815,8 +815,7 @@ class RFD4CommonConfig(BaseConfig):
             ``output_dir`` cannot return a previous run's designs, and the trajectory
             frames for a run land in that run's own subdirectory.
         device (str): Execution device. ``rfd4-generate`` builds its Lightning trainer
-            with ``accelerator="gpu"`` unconditionally, so a GPU is required and
-            ``"cpu"`` fails rather than running slowly.
+            with ``accelerator="gpu"`` unconditionally, so a GPU is required.
     """
 
     num_replicates: int = ConfigField(
@@ -897,7 +896,7 @@ class RFD4CommonConfig(BaseConfig):
     device: str = ConfigField(
         title="Device",
         default="cuda",
-        description="Device to run the model on; RFD4 requires a GPU, so 'cpu' fails rather than running slowly",
+        description="Device to run the model on; RFD4 requires a GPU",
         include_in_key=False,
     )
 
@@ -1057,8 +1056,7 @@ class RFD4DesignConfig(RFD4CommonConfig):
             ``output_dir`` cannot return a previous run's designs, and the trajectory
             frames for a run land in that run's own subdirectory.
         device (str): Execution device. ``rfd4-generate`` builds its Lightning trainer
-            with ``accelerator="gpu"`` unconditionally, so a GPU is required and
-            ``"cpu"`` fails rather than running slowly.
+            with ``accelerator="gpu"`` unconditionally, so a GPU is required.
 
     Note:
         Partial diffusion needs the input's conditioning to survive the round trip, so

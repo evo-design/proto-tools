@@ -79,8 +79,7 @@ class RFD4InverseFoldingConfig(RFD4CommonConfig):
             ``output_dir`` cannot return a previous run's designs, and the trajectory
             frames for a run land in that run's own subdirectory.
         device (str): Execution device. ``rfd4-generate`` builds its Lightning trainer
-            with ``accelerator="gpu"`` unconditionally, so a GPU is required and
-            ``"cpu"`` fails rather than running slowly.
+            with ``accelerator="gpu"`` unconditionally, so a GPU is required.
     """
 
     def get_cli_kwargs(self) -> dict[str, Any]:
