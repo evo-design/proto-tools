@@ -1,0 +1,32 @@
+# Environment variables for RFD4-Proteina (structure and sequence design).
+#
+# Lines starting with # are comments and will be ignored.
+# Variables listed under [passthrough] are inherited from the parent environment.
+# Variables under [set] are set to specific values in the subprocess.
+
+[passthrough]
+# Escape hatch: skips the fused cuEquivariance kernels RFD4 imports when a GPU is
+# visible, for hosts where those kernels misbehave.
+DISABLE_CUEQUIVARIANCE
+# RFD4 reads these to tune cuEquivariance (it defaults both to "1").
+CUEQ_DISABLE_AOT_TUNING
+CUEQ_DEFAULT_CONFIG
+# Gates RFD4's runtime NaN assertions (default on).
+NAN_CHECK
+
+[set]
+# configs/inference.yaml defines ckpt_path and autoencoder_ckpt_path as
+# ${oc.env:DATA_PATH}/... OmegaConf resolvers. The wrapper's hf_ckpt_path overrides
+# both, so these nodes are never read, but an unset DATA_PATH would turn any resolve
+# of them into an interpolation error. Point it at a real directory setup.sh creates.
+DATA_PATH=${VENV_PATH}/rfd4_data
+# Full Hydra tracebacks, so the stderr tail inference.py surfaces on failure names the
+# actual exception instead of Hydra's one-line summary.
+HYDRA_FULL_ERROR=1
+# Point triton/inductor's JIT (reached via use_torch_compile=True) at the tool-local
+# CUDA toolkit installed by proto_install_cuda_toolkit in setup.sh. Without these,
+# compilation fails on hosts with no system gcc / nvcc (e.g. shared HPC clusters).
+CC=${VENV_PATH}/cuda_env/bin/gcc
+CXX=${VENV_PATH}/cuda_env/bin/g++
+CUDA_HOME=${VENV_PATH}/cuda_env
+LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib
