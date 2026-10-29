@@ -317,11 +317,12 @@ def test_evo2_score_benchmark(request):
 
 
 @pytest.mark.uses_gpu
-def test_evo2_continuation_handles_fork_and_release():
+def test_evo2_continuation_handles_fork_and_release(monkeypatch):
     """Continue a cached prefix twice, then reject its released worker-local handle."""
     from proto_tools.tools.causal_models.evo2.evo2_sample import release_evo2_kv_caches
     from proto_tools.utils import ToolInstance
 
+    monkeypatch.setenv("PROTO_CAPTURE_ERRORS", "0")
     with ToolInstance.persist_tool("evo2") as instance:
         config = Evo2SampleConfig(max_new_tokens=8, top_k=1, stop_at_eos=False, return_kv_cache=True, seed=17)
         first = run_evo2_sample(Evo2SampleInput(prompts=["ACGTACGT"]), config, instance=instance)
