@@ -1,5 +1,1 @@
-# RFD4-Proteina. The all-cuda12 extra is effectively mandatory: it carries the fused
-# cuEquivariance kernels the model loads at import and the TMol CUDA operators. It is
-# mutually exclusive with all-cuda13; cu12 matches the CUDA 12 torch wheels this repo's
-# compute detection installs (as for rf3 and protenix).
 rfd4-proteina[all-cuda12]==0.0.3
