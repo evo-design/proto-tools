@@ -1,21 +1,21 @@
 <a href="https://bio-pro.mintlify.app/tools/causal-models/evo2"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a><img align="right" src="https://img.shields.io/badge/Use_on_Proto-coming_soon-6c5ce7?style=flat-square&labelColor=6c5ce7&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTMgMiAzIDE0IDEyIDE0IDExIDIyIDIxIDEwIDEyIDEwIDEzIDIiLz48L3N2Zz4=&logoColor=white" alt="Use on Proto (coming soon)">
 
-# Evo2
+# Evo 2
 
-![Evo2](https://proto-bio.github.io/proto-assets/images/tool/evo2/hero.png)
+![Evo 2](https://proto-bio.github.io/proto-assets/images/tool/evo2/hero.png)
 
 > [!NOTE]
-> **License:** Evo2 is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/arcinstitute/evo2/blob/main/LICENSE) for full terms.
+> **License:** Evo 2 is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/arcinstitute/evo2/blob/main/LICENSE) for full terms.
 
 ## Overview
 
-Evo2 is an autoregressive DNA language model from Arc Institute and Stanford, trained at single-nucleotide resolution across all domains of life. This toolkit wraps it to generate new DNA sequences from a prompt, design DNA from a shared set of in-context examples, and score how likely supplied DNA sequences are under the model.
+Evo 2 is an autoregressive DNA language model from Arc Institute and Stanford, trained at single-nucleotide resolution across all domains of life. This toolkit wraps it to generate new DNA sequences from a prompt, design DNA from a shared set of in-context examples, and score how likely supplied DNA sequences are under the model.
 
 ## Background
 
-Evo2 ([Brixi et al., 2026](https://doi.org/10.1038/s41586-026-10176-5)) is a DNA language model trained with an autoregressive objective: during training the model learns to predict the next nucleotide given all preceding nucleotides. Training used the [OpenGenome2](https://huggingface.co/datasets/arcinstitute/opengenome2) dataset, which spans bacterial, archaeal, eukaryotic, and phage genomes across all domains of life, so the model is not restricted to any single clade. It is available at several scales, the largest being 40 billion parameters, and uses the StripedHyena 2 architecture, a sequence model that combines convolutional state-space layers with a smaller number of attention layers. This design lets the model process very long stretches of DNA, up to roughly one million nucleotides for the long-context checkpoints, without the memory cost a pure attention model would incur at that length. Several checkpoints are also offered with shorter context windows for lower memory use, and one variant is trained specifically on Microviridae phage genomes.
+Evo 2 ([Brixi et al., 2026](https://doi.org/10.1038/s41586-026-10176-5)) is a DNA language model trained with an autoregressive objective: during training the model learns to predict the next nucleotide given all preceding nucleotides. Training used the [OpenGenome2](https://huggingface.co/datasets/arcinstitute/opengenome2) dataset, which spans bacterial, archaeal, eukaryotic, and phage genomes across all domains of life, so the model is not restricted to any single clade. It is available at several scales, the largest being 40 billion parameters, and uses the StripedHyena 2 architecture, a sequence model that combines convolutional state-space layers with a smaller number of attention layers. This design lets the model process very long stretches of DNA, up to roughly one million nucleotides for the long-context checkpoints, without the memory cost a pure attention model would incur at that length. Several checkpoints are also offered with shorter context windows for lower memory use, and one variant is trained specifically on Microviridae phage genomes.
 
-The autoregressive objective yields two capabilities directly. Sampling from the predicted next-nucleotide distributions produces new candidate sequences, and reading off the probabilities the model assigns to an existing sequence gives a likelihood score that reflects how closely the sequence matches the patterns seen during training. Evo2 is the second model in the Evo family; the earlier [Evo1](https://bio-pro.mintlify.app/tools/causal-models/evo1) was trained only on prokaryotic and phage genomes, whereas Evo2 extends to eukaryotic genomes and longer context.
+The autoregressive objective yields two capabilities directly. Sampling from the predicted next-nucleotide distributions produces new candidate sequences, and reading off the probabilities the model assigns to an existing sequence gives a likelihood score that reflects how closely the sequence matches the patterns seen during training. Evo 2 is the second model in the Evo family; the earlier [Evo1](https://bio-pro.mintlify.app/tools/causal-models/evo1) was trained only on prokaryotic and phage genomes, whereas Evo 2 extends to eukaryotic genomes and longer context.
 
 ### Learning Resources
 
@@ -37,29 +37,29 @@ Use examples of a sequence family, such as regulatory DNA with a shared experime
 - **Default run.** Draw up to 16 examples, join them with a single `N` separator, and generate 20 designs of 200 bp. Generation always runs to the requested length. Sampling defaults are temperature `1.0`, top K `4`, and top P `0.9`.
 - **Choose the examples.** `n_shots` sets examples per prompt; `n_prompts` sets the number of prompts, each producing `num_sequences` designs. Use `fixed_examples=True` to take the first records in FASTA order instead of sampling.
 - **Protein input and output.** Set `sequence_type="protein"` to supply the 20 standard amino acids. Examples are reverse-translated by uniformly sampling synonymous codons from the standard genetic code, using `codon_seed` (default `42`). Length is measured in amino acids. Outputs include protein designs and matching `dna_sequences`; stop codons remain `*` and ambiguous codons become `X`, with warnings. No start or stop codon is added.
-- **Reproduce a run.** `example_seed` controls example selection, `codon_seed` controls reverse translation, and `seed` controls generation. Keep all three seeds and the batch size fixed to reproduce a run; change only `seed` to sample new designs from the same prompts.
+- **Reproduce a run.** `example_seed` controls example selection, `codon_seed` controls reverse translation, and `seed` controls generation. Keep all three seeds and the prompt order fixed to reproduce a run; change only `seed` to sample new designs from the same prompts.
 
-### Evo2 Sampling (`evo2-sample`)
+### Evo 2 Sampling (`evo2-sample`)
 
-Generates DNA sequences by autoregressive sampling. Given one or more prompt sequences in Evo2's prompt format, the model extends each prompt nucleotide by nucleotide, drawing each new nucleotide from the model's predicted distribution under the configured `temperature`, `top_k`, and `top_p` settings, until `max_new_tokens` new nucleotides have been produced or an end-of-sequence token is sampled. A key-value cache makes long generations efficient and can be carried forward to continue a generation.
+Generates DNA sequences by autoregressive sampling. Given one or more prompt sequences in Evo 2's prompt format, the model extends each prompt nucleotide by nucleotide, drawing each new nucleotide from the model's predicted distribution under the configured `temperature`, `top_k`, and `top_p` settings, until `max_new_tokens` new nucleotides have been produced or an end-of-sequence token is sampled. A key-value cache makes long generations efficient and can be carried forward to continue a generation.
 
 #### Applications
 
-This tool produces candidate DNA sequences for downstream design and screening, including genes, regulatory regions, and longer multi-gene segments. Because Evo2 is trained across all domains of life, it can be prompted with eukaryotic as well as prokaryotic and phage context, unlike the prokaryote-and-phage-only Evo1. The prompt sets the biological context for what follows.
+This tool produces candidate DNA sequences for downstream design and screening, including genes, regulatory regions, and longer multi-gene segments. Because Evo 2 is trained across all domains of life, it can be prompted with eukaryotic as well as prokaryotic and phage context, unlike the prokaryote-and-phage-only Evo1. The prompt sets the biological context for what follows.
 
 #### Usage Tips
 
 - **Match the checkpoint to the task.** `evo2_7b` (the default), `evo2_20b`, and `evo2_40b` are the 1M-context models in increasing size and capability. The `evo2_7b_base`, `evo2_40b_base`, and `evo2_1b_base` checkpoints are 8K-context counterparts (`evo2_1b_base` is the smallest); `evo2_7b_262k` is a 262K-context variant; `evo2_7b_microviridae` is a 7B model adapted on Microviridae genomes for generating that bacteriophage family.
-- **Prompts use Evo2's prompt format.** Prompt strings follow Evo2's special tokenization (for example a leading `+~` before DNA); see the upstream [Evo2 documentation](https://github.com/arcinstitute/evo2) for the conventions.
+- **Prompts use Evo 2's prompt format.** Prompt strings follow Evo 2's special tokenization (for example a leading `+~` before DNA); see the upstream [Evo 2 documentation](https://github.com/arcinstitute/evo2) for the conventions.
 - **`top_k` defaults to 4, the size of the DNA alphabet.** It exists mainly to keep generation on the four bases rather than other byte tokens, so it is not the diversity parameter; control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
 - **Output includes the prompt by default.** `prepend_prompt=True` (the default for this toolkit) returns the prompt joined to its continuation; set it `False` to receive only the newly generated nucleotides.
-- **Prompt length plus `max_new_tokens` (default 32) must fit the checkpoint's context window.** The model cannot attend beyond that window, so a long prompt directly reduces how much can be generated; pick a longer-context checkpoint when the combined length is large.
+- **Prompt length plus `max_new_tokens` (default 32) must fit the engine's context window.** vLLM fits the context to the checkpoint and available GPU memory; requests that exceed it fail before generation.
 - **`stop_at_eos` ends generation early** when the model emits an end-of-sequence token; set it to `False` to always produce the full `max_new_tokens`.
 - **Generated sequences are candidates.** Validate them with downstream tools (for example ORF detection, structure prediction, or homology search) before drawing biological conclusions.
 
-### Evo2 Scoring (`evo2-score`)
+### Evo 2 Scoring (`evo2-score`)
 
-Scores existing DNA sequences under the Evo2 model. For each sequence, it computes the model's predicted probability of every nucleotide given the preceding nucleotides and aggregates these into a log-likelihood, an average log-likelihood per nucleotide, and a perplexity. Optionally returns the per-position logits, alongside the token vocabulary giving their column order.
+Scores existing DNA sequences under the Evo 2 model. For each sequence, it computes the model's predicted probability of every nucleotide given the preceding nucleotides and aggregates these into a log-likelihood, an average log-likelihood per nucleotide, and a perplexity. Optionally returns the per-position logits, alongside the token vocabulary giving their column order.
 
 #### Applications
 
@@ -75,8 +75,16 @@ This tool measures how well a DNA sequence matches the patterns the model learne
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every Evo2 tool in this toolkit (`evo2-icl`, `evo2-sample`, `evo2-score`).
+These apply to every Evo 2 tool in this toolkit (`evo2-icl`, `evo2-sample`, `evo2-score`).
 
-- **Requires a high-memory GPU; memory scales with model size and context length.** The 7B checkpoint needs a high-memory NVIDIA GPU; the 20B and 40B models and the 1M-context checkpoints need substantially more. CPU execution is not practical.
-- **`batch_size` trades memory for throughput.** It sets how many designs (`evo2-icl`), prompts (`evo2-sample`), or sequences (`evo2-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it if generation or scoring runs out of GPU memory.
-- **Trained across all domains of life.** Evo2 covers prokaryotic, eukaryotic, archaeal, and phage genomes. For prokaryote-and-phage-only generation with a smaller model, [Evo1](https://bio-pro.mintlify.app/tools/causal-models/evo1) is an alternative.
+- **Requires a high-memory GPU; memory scales with model size and context length.** The 7B checkpoint needs a high-memory NVIDIA GPU; the 20B model needs more. The 40B variants remain unsupported in this wrapper. CPU execution is not supported.
+- **Fast inference.** All three tools use [evo2_flash](https://github.com/evo-design/evo2_flash) on vLLM, with continuous batching, chunked prefill, and shared-prefix caching. `batch_size`, `cached_generation`, and `force_prompt_threshold` remain accepted for compatibility; vLLM manages these internally.
+- **Trained across all domains of life.** Evo 2 covers prokaryotic, eukaryotic, archaeal, and phage genomes. For prokaryote-and-phage-only generation with a smaller model, [Evo1](https://bio-pro.mintlify.app/tools/causal-models/evo1) is an alternative.
+
+### Inference backend
+
+The managed environment pins evo2_flash to `c71eb6f4`, vLLM to `0.26.0+cu129`, and PyTorch to `2.11.0+cu129` on Python 3.12. It requires Linux x86_64 and an NVIDIA GPU. Original Evo 2 checkpoints are converted once and cached alongside the Hugging Face weights. Inference uses bfloat16 and the default, unquantized KV cache.
+
+A sampling seed assigns an independent stream to each prompt in input order. Repeated seeded calls are reproducible within this backend; samples need not match the previous Vortex implementation byte for byte. Scoring uses each sequence's real length, without scoring padding. `return_logits=True` performs an additional prefill to reconstruct full-vocabulary logits.
+
+Persistent-worker continuation handles retain exact token prefixes while vLLM manages their GPU cache. Continue with the full returned sequence as the prompt; handles may be forked and released as before. Workers are bound to their assigned GPU. Device changes and eviction restart the worker, releasing the engine and invalidating its continuation handles; in-process CPU offload is not supported.

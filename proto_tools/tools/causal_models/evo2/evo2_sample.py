@@ -1,6 +1,6 @@
 """proto_tools/tools/causal_models/evo2/evo2_sample.py.
 
-Evo2 sampling tool.
+Evo 2 sampling tool.
 """
 
 import logging
@@ -42,12 +42,12 @@ Evo2SampleInput = CausalModelSampleInput
 
 
 class Evo2KVCacheRef(BaseModel):
-    """Worker-local Evo2 KV-cache handle returned by a persistent worker."""
+    """Worker-local Evo 2 KV-cache handle returned by a persistent worker."""
 
     type: Literal["evo2_kv_cache"] = Field(
         default="evo2_kv_cache",
         title="Cache Type",
-        description="Evo2 KV-cache handle type",
+        description="Evo 2 KV-cache handle type",
     )
     cache_id: str = Field(
         title="Cache ID",
@@ -79,7 +79,7 @@ class Evo2Sample(CausalModelSample):
 
 
 class Evo2SampleOutput(CausalModelSampleOutput):
-    """Output from Evo2 DNA sequence sampling.
+    """Output from Evo 2 DNA sequence sampling.
 
     Attributes:
         results (list[Evo2Sample]): One generated DNA sequence per prompt, with its
@@ -94,22 +94,21 @@ class Evo2SampleOutput(CausalModelSampleOutput):
 
 # Config:
 class Evo2SampleConfig(CausalModelSampleConfig):
-    """Configuration object for Evo2 DNA sequence sampling.
+    """Configuration object for Evo 2 DNA sequence sampling.
 
     Attributes:
         prepend_prompt (bool): Include the input prompt at the start of each generated
             sequence; when ``False``, only newly generated tokens are returned.
         temperature (float): Sampling temperature controlling randomness.
         top_p (float): Nucleus sampling threshold over per-position token probabilities.
-        batch_size (int): Number of sequences to process simultaneously.
-        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo2 weights variant.
+        batch_size (int): Compatibility option; vLLM schedules sequences automatically.
+        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo 2 weights variant.
         local_path (str | None): Override HuggingFace download with a local weights directory.
         top_k (int): Limit sampling to the top-k most probable tokens at each step.
         max_new_tokens (int): Maximum number of new tokens to generate per prompt (excludes prompt).
-        cached_generation (bool): Use the model's per-call KV cache during generation.
-        force_prompt_threshold (int | None): Tokens to prefill in parallel before switching
-            to autoregressive prompt forcing.
-        max_seqlen (int | None): Maximum sequence length the KV cache will be sized for.
+        cached_generation (bool): Compatibility option; vLLM manages prefix caching automatically.
+        force_prompt_threshold (int | None): Compatibility option; vLLM manages chunked prefill.
+        max_seqlen (int | None): Optional upper bound on prompt plus generation length.
         skip_special_tokens (bool): Filter EOS/PAD bytes from the detokenized output.
         stop_at_eos (bool): Stop generation when an EOS (id=0) token is sampled.
         old_kv_cache (Evo2KVCacheRef | None): Worker-local KV cache handle returned by a
@@ -122,16 +121,15 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         title="Batch Size",
         default=4,
         ge=1,
-        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
+        description="Compatibility option; vLLM schedules sequences automatically",
     )
 
     @model_validator(mode="after")
     def _validate_40b(self) -> Any:
         if "40b" in self.model_checkpoint:
             raise NotImplementedError(
-                f"The {self.model_checkpoint} model requires 2 GPUs with tensor "
-                "parallelism, which we haven't implemented into our device "
-                "manager system. Use a 7b or 1b variant instead."
+                f"The {self.model_checkpoint} checkpoint is not supported by this Proto wrapper. "
+                "Use a 20b, 7b, or 1b variant instead."
             )
         return self
 
@@ -144,11 +142,11 @@ class Evo2SampleConfig(CausalModelSampleConfig):
             )
         return self
 
-    # Evo2 model params
+    # Evo 2 model params
     model_checkpoint: EVO2_MODEL_CHECKPOINTS = ConfigField(
         title="Model Checkpoint",
         default="evo2_7b",
-        description="Evo2 weights variant",
+        description="Evo 2 weights variant",
         reload_on_change=True,
     )
     local_path: str | None = ConfigField(
@@ -180,17 +178,17 @@ class Evo2SampleConfig(CausalModelSampleConfig):
     cached_generation: bool = ConfigField(
         title="Cached Generation",
         default=True,
-        description="Use the model's per-call KV cache during generation",
+        description="Compatibility option; vLLM manages prefix caching automatically",
     )
     force_prompt_threshold: int | None = ConfigField(
         title="Force Prompt Threshold",
         default=None,
-        description="Tokens to prefill in parallel before switching to prompt forcing",
+        description="Compatibility option; vLLM manages chunked prefill automatically",
     )
     max_seqlen: int | None = ConfigField(
         title="Max Sequence Length",
         default=None,
-        description="Maximum sequence length the KV cache will be sized for",
+        description="Optional upper bound on prompt plus generation length",
     )
     skip_special_tokens: bool = ConfigField(
         title="Skip Special Tokens",
@@ -221,7 +219,7 @@ class Evo2SampleConfig(CausalModelSampleConfig):
     def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """A local weights directory (``local_path``) isn't present on a hosted worker."""
         if self.local_path:
-            return f"local_path points to a local weights directory not available on device='{device}'. Unset it, or run locally with device='cpu'."
+            return f"local_path points to a local weights directory not available on device='{device}'. Unset it, or run on a local NVIDIA GPU."
         return None
 
 
@@ -235,13 +233,15 @@ def example_input() -> Any:
 
 @tool(
     key="evo2-sample",
-    label="Evo2 Sampling",
+    label="Evo 2 Sampling",
     category="causal_models",
     input_class=Evo2SampleInput,
     config_class=Evo2SampleConfig,
     output_class=Evo2SampleOutput,
-    description="Sample DNA sequences using Evo2 language model",
+    description="Sample DNA sequences using Evo 2 language model",
     uses_gpu=True,
+    gpu_only=True,
+    pin_visible_devices=True,
     stochastic=True,
     example_input=example_input,
     iterable_input_fields=["prompts"],
@@ -253,16 +253,16 @@ def run_evo2_sample(
     config: Evo2SampleConfig,
     instance: Any = None,
 ) -> Evo2SampleOutput:
-    """Sample DNA sequences using Evo2 language model.
+    """Sample DNA sequences using Evo 2 language model.
 
-    Uses the configured Evo2 checkpoint (``evo2_7b`` by default) to
+    Uses the configured Evo 2 checkpoint (``evo2_7b`` by default) to
     autoregressively generate genomic DNA sequences from prompt sequences.
     Supports local GPU execution with nucleus sampling and KV caching.
 
     Args:
         inputs (Evo2SampleInput): Validated input containing one or more DNA
-            prompt sequences using Evo2's special prompt format (e.g., ``"+~GA"``).
-        config (Evo2SampleConfig): Validated Evo2 sampling configuration specifying
+            prompt sequences using Evo 2's special prompt format (e.g., ``"+~GA"``).
+        config (Evo2SampleConfig): Validated Evo 2 sampling configuration specifying
             model variant, generation parameters (temperature, top-k, top-p),
             sequence length, and caching options.
 
@@ -283,16 +283,14 @@ def run_evo2_sample(
         >>> print(f"Generated: {result.sequences[0]}")
 
     Note:
-        - For long sequences, use ``cached_generation=True`` for efficiency
-        - Prompts of differing lengths in one batch are processed individually;
-          uniform-length prompts share a single batched forward pass
+        - vLLM continuously batches prompts of differing lengths and reuses shared prefixes
 
     See Also:
-        - Evo2 GitHub Repository: https://github.com/arcinstitute/evo2
-        - Evo2 Website: https://arcinstitute.org/tools/evo
+        - Evo 2 GitHub Repository: https://github.com/arcinstitute/evo2
+        - Evo 2 Website: https://arcinstitute.org/tools/evo
     """
     # Local GPU - use standalone venv
-    logger.debug(f"Using local venv for Evo2 sampling: {config.model_checkpoint}")
+    logger.debug(f"Using local venv for Evo 2 sampling: {config.model_checkpoint}")
 
     result = ToolInstance.dispatch(
         "evo2",
@@ -368,7 +366,7 @@ def release_evo2_kv_caches(
     kv_caches: list[Evo2KVCacheRef | None] | Evo2KVCacheRef | None,
     instance: Any = None,
 ) -> None:
-    """Release Evo2 KV-cache handles held by the persistent worker."""
+    """Release Evo 2 KV-cache handles held by the persistent worker."""
     if kv_caches is None:
         return
     cache_payload = (

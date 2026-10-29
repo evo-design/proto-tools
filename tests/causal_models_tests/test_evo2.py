@@ -314,3 +314,27 @@ def test_evo2_score_benchmark(request):
         assert score.logits is not None
         assert len(score.logits) == 4096
         assert len(score.logits[0]) == 512  # Evo2 byte-level vocab
+
+
+@pytest.mark.uses_gpu
+def test_evo2_continuation_handles_fork_and_release():
+    """Continue a cached prefix twice, then reject its released worker-local handle."""
+    from proto_tools.tools.causal_models.evo2.evo2_sample import release_evo2_kv_caches
+    from proto_tools.utils import ToolInstance
+
+    with ToolInstance.persist_tool("evo2") as instance:
+        config = Evo2SampleConfig(max_new_tokens=8, top_k=1, stop_at_eos=False, return_kv_cache=True, seed=17)
+        first = run_evo2_sample(Evo2SampleInput(prompts=["ACGTACGT"]), config, instance=instance)
+        handle = first.results[0].kv_cache
+        assert handle is not None
+        continued = config.model_copy(update={"old_kv_cache": handle})
+        forks = run_evo2_sample(
+            Evo2SampleInput(prompts=[first.sequences[0], first.sequences[0] + "A"]), continued, instance=instance
+        )
+        assert [len(s) for s in forks.sequences] == [24, 25]
+        assert len({item.kv_cache.cache_id for item in forks.results if item.kv_cache}) == 2
+        release_evo2_kv_caches(handle, instance=instance)
+        with pytest.raises(Exception, match="no longer available"):
+            # A distinct prompt avoids the framework's memoized seeded result.
+            run_evo2_sample(Evo2SampleInput(prompts=[first.sequences[0] + "C"]), continued, instance=instance)
+        release_evo2_kv_caches([item.kv_cache for item in forks.results], instance=instance)

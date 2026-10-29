@@ -88,7 +88,7 @@ def test_evo2_icl_dispatches_one_joint_prompt_for_each_design(mock_sampler):
     sampled.extend(["AAAA", "CCCC", "GGGG", "TTTT"])
     inputs = Evo2ICLInput(examples=["ACGT", "TGCA", "ACGT"])
 
-    result = run_evo2_icl(inputs, Evo2ICLConfig(num_sequences=4, sequence_length=4, fixed_examples=True, device="cpu"))
+    result = run_evo2_icl(inputs, Evo2ICLConfig(num_sequences=4, sequence_length=4, fixed_examples=True, device="cuda"))
 
     assert len(calls) == 1
     assert calls[0][1]["prompts"] == ["NACGTNTGCANACGTN"] * 4
@@ -113,7 +113,7 @@ def test_evo2_icl_dispatch_propagates_sampling_controls_and_seed(mock_sampler, s
         top_k=2,
         top_p=0.8,
         batch_size=2,
-        device="cpu",
+        device="cuda",
         verbose=False,
         timeout=900,
         seed=seed,
@@ -143,7 +143,7 @@ def test_evo2_icl_dispatch_propagates_sampling_controls_and_seed(mock_sampler, s
         "return_kv_cache": False,
         "return_logits": False,
         "batch_size": 2,
-        "device": "cpu",
+        "device": "cuda",
         "verbose": False,
         "seed": seed,
     }
@@ -159,7 +159,7 @@ def test_evo2_icl_bounds_parallel_prefill_without_truncating_context(mock_sample
 
     result = run_evo2_icl(
         inputs,
-        Evo2ICLConfig(num_sequences=1, sequence_length=4, batch_size=batch_size, device="cpu"),
+        Evo2ICLConfig(num_sequences=1, sequence_length=4, batch_size=batch_size, device="cuda"),
     )
 
     payload = calls[0][1]
@@ -177,7 +177,7 @@ def test_evo2_icl_filters_invalid_generations_with_yield_warning(mock_sampler):
 
     result = run_evo2_icl(
         Evo2ICLInput(examples=_EXAMPLES),
-        Evo2ICLConfig(num_sequences=6, sequence_length=4, device="cpu"),
+        Evo2ICLConfig(num_sequences=6, sequence_length=4, device="cuda"),
     )
 
     assert result.sequences == ["AAAA", "ACGN", "TTTT"]
@@ -197,7 +197,7 @@ def test_evo2_icl_rejects_all_invalid_generations(mock_sampler):
     with pytest.raises(ValueError, match="No usable A/C/G/T/N designs were generated"):
         run_evo2_icl(
             Evo2ICLInput(examples=_EXAMPLES),
-            Evo2ICLConfig(num_sequences=2, sequence_length=4, device="cpu"),
+            Evo2ICLConfig(num_sequences=2, sequence_length=4, device="cuda"),
         )
 
 
@@ -210,7 +210,7 @@ def test_evo2_icl_rejects_wrong_sampler_result_count(mock_sampler, sequences):
     with pytest.raises(ValueError, match=f"Evo 2 returned {len(sequences)} generations for 2 requested designs"):
         run_evo2_icl(
             Evo2ICLInput(examples=_EXAMPLES),
-            Evo2ICLConfig(num_sequences=2, sequence_length=4, device="cpu"),
+            Evo2ICLConfig(num_sequences=2, sequence_length=4, device="cuda"),
         )
 
 
@@ -222,7 +222,7 @@ def test_export_fasta_contains_only_generated_designs(mock_sampler, tmp_path):
     sampled.extend(["AAAA", "XCCC", "TTTT"])
     result = run_evo2_icl(
         Evo2ICLInput(examples=_EXAMPLES),
-        Evo2ICLConfig(num_sequences=3, sequence_length=4, device="cpu"),
+        Evo2ICLConfig(num_sequences=3, sequence_length=4, device="cuda"),
     )
 
     result.export("icl_designs", export_path=tmp_path, file_format="fasta")
@@ -239,7 +239,7 @@ def test_evo2_icl_generates_one_thousand_designs(mock_sampler):
 
     result = run_evo2_icl(
         Evo2ICLInput(examples=_TWO_HUNDRED_BP_EXAMPLES),
-        Evo2ICLConfig(num_sequences=1000, sequence_length=200, fixed_examples=True, device="cpu"),
+        Evo2ICLConfig(num_sequences=1000, sequence_length=200, fixed_examples=True, device="cuda"),
     )
 
     assert len(calls) == 1
@@ -257,7 +257,7 @@ def test_evo2_icl_full_context_is_preserved_with_long_design(mock_sampler):
     sampled.append("A" * 4096)
     inputs = Evo2ICLInput(examples=["C" * 32_766])
 
-    result = run_evo2_icl(inputs, Evo2ICLConfig(num_sequences=1, sequence_length=4096, device="cpu"))
+    result = run_evo2_icl(inputs, Evo2ICLConfig(num_sequences=1, sequence_length=4096, device="cuda"))
 
     assert len(calls[0][1]["prompts"][0]) == 32_768
     assert calls[0][1]["max_new_tokens"] == 4096
@@ -268,7 +268,7 @@ def test_evo2_icl_large_local_run_reaches_sampler_without_count_or_work_quota(mo
     """Local dispatch can exceed both the old count and sequential-work limits."""
     calls, sampled = mock_sampler
     sampled.extend(["A"] * 1001)
-    config = Evo2ICLConfig(num_sequences=1001, sequence_length=1, device="cpu")
+    config = Evo2ICLConfig(num_sequences=1001, sequence_length=1, device="cuda")
     inputs = Evo2ICLInput(examples=["C" * 32_766])
 
     result = run_evo2_icl(inputs, config)
@@ -307,7 +307,7 @@ def test_evo2_icl_large_example_pool_is_subsampled(mock_sampler):
     sampled.extend(["ACGT"] * 2)
     result = run_evo2_icl(
         Evo2ICLInput(examples=["ACGT" * 50] * 463),
-        Evo2ICLConfig(n_shots=16, num_sequences=2, sequence_length=4, device="cpu"),
+        Evo2ICLConfig(n_shots=16, num_sequences=2, sequence_length=4, device="cuda"),
     )
     assert all(len(prompt) == 3217 for prompt in calls[0][1]["prompts"])
     assert result.metadata["num_examples"] == 463
@@ -318,7 +318,7 @@ def test_evo2_icl_multiple_prompts_use_one_dispatch_and_preserve_output_provenan
     """Prompt/sample ordering survives omission of invalid generations, with one RNG execution."""
     calls, sampled = mock_sampler
     sampled.extend(["AAAA", "XXXX", "CCCC", "TTTT"])
-    config = Evo2ICLConfig(n_shots=1, n_prompts=2, num_sequences=2, sequence_length=4, seed=37, device="cpu")
+    config = Evo2ICLConfig(n_shots=1, n_prompts=2, num_sequences=2, sequence_length=4, seed=37, device="cuda")
     inputs = Evo2ICLInput(examples=["ACGT", "TGCA", "CCCC"])
     prompts, selections = config.compose_prompts(inputs)
     result = run_evo2_icl(inputs, config)
@@ -344,7 +344,7 @@ def test_evo2_icl_minimum_length_checks_entire_pool_before_dispatch(mock_sampler
     with pytest.raises(ValueError, match="Example 2 is shorter than min_example_len=4"):
         run_evo2_icl(
             Evo2ICLInput(examples=["ACGT", "A"]),
-            Evo2ICLConfig(n_shots=1, fixed_examples=True, min_example_len=4, device="cpu"),
+            Evo2ICLConfig(n_shots=1, fixed_examples=True, min_example_len=4, device="cuda"),
         )
     assert calls == []
 
@@ -366,7 +366,7 @@ def test_evo2_icl_explicit_prefill_reaches_fixed_length_sampler(mock_sampler):
     """Explicit prefill is forwarded while early stopping stays disabled."""
     calls, sampled = mock_sampler
     sampled.append("ACGT")
-    config = Evo2ICLConfig(num_sequences=1, sequence_length=4, force_prompt_threshold=1024, device="cpu")
+    config = Evo2ICLConfig(num_sequences=1, sequence_length=4, force_prompt_threshold=1024, device="cuda")
     run_evo2_icl(Evo2ICLInput(examples=["ACGT"]), config)
     assert calls[0][1]["force_prompt_threshold"] == 1024
     assert calls[0][1]["stop_at_eos"] is False
@@ -378,7 +378,7 @@ def test_evo2_icl_requested_length_ignores_separator(mock_sampler):
     sampled.append("ACNNTG")
     result = run_evo2_icl(
         Evo2ICLInput(examples=["ACGT"]),
-        Evo2ICLConfig(num_sequences=1, sequence_length=6, spacer="NN", device="cpu"),
+        Evo2ICLConfig(num_sequences=1, sequence_length=6, spacer="NN", device="cuda"),
     )
     assert result.sequences == ["ACNNTG"]
     assert calls[0][1]["max_new_tokens"] == 6
@@ -391,7 +391,7 @@ def test_evo2_icl_requires_full_requested_length(mock_sampler):
     sampled.extend(["AC", "ACNT"])
     result = run_evo2_icl(
         Evo2ICLInput(examples=["ACGT"]),
-        Evo2ICLConfig(num_sequences=2, sequence_length=4, device="cpu"),
+        Evo2ICLConfig(num_sequences=2, sequence_length=4, device="cuda"),
     )
     assert result.sequences == ["ACNT"]
     assert result.metadata["num_omitted"] == 1
@@ -488,7 +488,7 @@ def test_protein_generation_returns_translated_fasta_and_matching_dna(mock_sampl
     calls, sampled = mock_sampler
     sampled.extend(["ATGTAANNNTGG", "GCTTGTTTTGAA", "ATG"])
     inputs = Evo2ICLInput(examples=[" m\nlnw "], sequence_type="protein")
-    config = Evo2ICLConfig(num_sequences=3, sequence_length=4, seed=17, device="cpu")
+    config = Evo2ICLConfig(num_sequences=3, sequence_length=4, seed=17, device="cuda")
     result = run_evo2_icl(inputs, config)
     assert result.success
     payload = calls[0][1]
@@ -513,7 +513,7 @@ def test_protein_codon_and_generation_seeds_are_independent(mock_sampler):
     calls, sampled = mock_sampler
     sampled.extend(["ATG" * 4])
     inputs = Evo2ICLInput(sequence_type="protein", examples=["ACDEFGHIKLMNPQRSTVWY" * 2])
-    config = Evo2ICLConfig(num_sequences=1, sequence_length=4, seed=17, codon_seed=23, device="cpu")
+    config = Evo2ICLConfig(num_sequences=1, sequence_length=4, seed=17, codon_seed=23, device="cuda")
     for changed in [config, config.model_copy(update={"seed": 18}), config.model_copy(update={"codon_seed": 24})]:
         result = run_evo2_icl(inputs, changed)
         assert result.metadata["seed"] == changed.seed

@@ -82,7 +82,7 @@ Tools can override centralized recommendations via env_vars.txt or tool-specific
 
 Some tools have hard version pins for ABI compatibility with pre-built wheels (flash-attn, transformer-engine). These tools explicitly pin torch versions in their setup.sh and should NOT be migrated to use dynamic version selection:
 - `evo1`: `torch==2.7.1` (flash-attn ABI compatibility)
-- `evo2`: `torch==2.6.0` (flash-attn + transformer-engine compatibility)
+- `evo2`: `torch==2.11.0+cu129` (vLLM 0.26.0 CUDA 12.9 wheel compatibility)
 - `borzoi`: `torch==2.7.1` (flash-attn wheel compatibility)
 
 PyTorch prunes old wheels from `download.pytorch.org/whl/<variant>`, so a pinned torch can stop

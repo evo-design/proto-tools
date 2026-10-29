@@ -1,2 +1,5 @@
+[no_passthrough]
+LD_LIBRARY_PATH
+
 [set]
-LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib
+VLLM_ENABLE_V1_MULTIPROCESSING=0
