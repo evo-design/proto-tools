@@ -170,5 +170,5 @@ def test_flash_device_changes_require_a_new_worker(flash, device):
     _, model, _ = flash
     model._ready("cuda", False)
     assert model.device == "cuda"
-    with pytest.raises(ValueError, match="NVIDIA GPU|new worker to change devices"):
+    with pytest.raises(ValueError, match=r"NVIDIA GPU|new worker to change devices"):
         model._ready(device, False)
