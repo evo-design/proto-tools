@@ -50,7 +50,7 @@ class Evo2Model:
         if not self._loaded:
             self.load(device, verbose)
         elif self.device != device:
-            self.to_device(device)
+            raise ValueError("Evo 2 Flash engines are GPU-bound; use a new worker to change devices")
 
     def sample(
         self,
@@ -175,11 +175,6 @@ class Evo2Model:
                 logits.append(values[0].cpu())
         return {"metrics": metrics, "logits": logits, "vocab": EVO2_VOCAB}
 
-    def to_device(self, device: str) -> None:
-        """Require worker restart for device changes; vLLM owns its GPU allocations."""
-        if self._loaded and self.device != device:
-            raise ValueError("Evo 2 Flash engines are GPU-bound; use a new worker to change devices")
-
 
 KV_CACHE_REF_TYPE = "evo2_kv_cache"
 _kv_cache_store: dict[str, dict[str, Any]] = {}
@@ -275,13 +270,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return result
     keys = ("sequences", "device", "verbose", "batch_size", "return_logits", "prepend_bos", "seed")
     return _model.score(**{k: input_dict[k] for k in keys if k in input_dict})
-
-
-def to_device(device: str) -> dict[str, Any]:
-    """Reject in-process moves; Proto restarts GPU-bound workers on device changes."""
-    if _model is not None and _model._loaded:
-        _model.to_device(device)
-    return {"success": True, "device": device}
 
 
 def get_memory_stats() -> dict[str, Any]:

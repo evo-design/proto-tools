@@ -167,8 +167,8 @@ def test_flash_cache_handles_require_persistent_worker(flash, monkeypatch):
 @pytest.mark.parametrize("device", ["cpu", "cuda:3"])
 def test_flash_device_changes_require_a_new_worker(flash, device):
     """The engine cannot migrate CUDA state in process; Proto's pinned workers restart instead."""
-    module, model, _ = flash
-    module.to_device("cuda")
+    _, model, _ = flash
+    model._ready("cuda", False)
     assert model.device == "cuda"
-    with pytest.raises(ValueError, match="new worker to change devices"):
-        module.to_device(device)
+    with pytest.raises(ValueError, match="NVIDIA GPU|new worker to change devices"):
+        model._ready(device, False)
