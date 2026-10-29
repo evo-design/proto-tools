@@ -2,6 +2,8 @@
 
 # RFD4-Proteina
 
+![RFD4-Proteina](https://proto-bio.github.io/proto-assets/images/tool/rfd4/hero.png)
+
 > [!NOTE]
 > **License:** RFD4-Proteina is open source and free for academic and commercial use under a BSD-3-Clause license. Please refer to [the license](https://github.com/RosettaCommons/RFD4-Proteina/blob/main/LICENSE) for full terms.
 
