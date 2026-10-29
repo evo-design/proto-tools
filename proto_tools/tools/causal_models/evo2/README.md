@@ -9,7 +9,7 @@
 
 ## Overview
 
-Evo2 is an autoregressive DNA language model from Arc Institute and Stanford, trained at single-nucleotide resolution across all domains of life. This toolkit wraps it to generate new DNA sequences from a prompt and to score how likely supplied DNA sequences are under the model.
+Evo2 is an autoregressive DNA language model from Arc Institute and Stanford, trained at single-nucleotide resolution across all domains of life. This toolkit wraps it to generate new DNA sequences from a prompt, design DNA from a shared set of in-context examples, and score how likely supplied DNA sequences are under the model.
 
 ## Background
 
@@ -23,6 +23,21 @@ The autoregressive objective yields two capabilities directly. Sampling from the
 - [Evo 2 Mechanistic Interpretability](https://arcinstitute.org/tools/evo/evo-mech-interp) (Arc Institute) - an interactive look at the internal features Evo 2 learns, built with sparse autoencoders to surface interpretable genomic patterns.
 
 ## Tools
+
+### Evo 2 In-context Design (`evo2-icl`)
+
+In-context learning (ICL) conditions pretrained Evo 2 7B on example DNA without retraining. Supply a FASTA-derived pool of DNA or protein sequences; the tool selects examples, composes DNA prompts, and returns designs in the input alphabet for FASTA export.
+
+#### Applications
+
+Use examples of a sequence family, such as regulatory DNA with a shared experimental activity, to condition candidate generation. The ICL study is **Few-shot regulatory sequence design with a genomic language model** (manuscript; paper URL coming soon). The [HepG2 example pool](https://github.com/evo-design/ICL_regulatory/blob/main/inference/data/invitro_cell_activity_seqprop/HepG2.fasta) contains 463 regulatory sequences of 200 bp each.
+
+#### Usage Tips
+
+- **Default run.** Draw up to 16 examples, join them with a single `N` separator, and generate 20 designs of 200 bp. Generation always runs to the requested length. Sampling defaults are temperature `1.0`, top K `4`, and top P `0.9`.
+- **Choose the examples.** `n_shots` sets examples per prompt; `n_prompts` sets the number of prompts, each producing `num_sequences` designs. Use `fixed_examples=True` to take the first records in FASTA order instead of sampling.
+- **Protein input and output.** Set `sequence_type="protein"` to supply the 20 standard amino acids. Examples are reverse-translated by uniformly sampling synonymous codons from the standard genetic code, using `codon_seed` (default `42`). Length is measured in amino acids. Outputs include protein designs and matching `dna_sequences`; stop codons remain `*` and ambiguous codons become `X`, with warnings. No start or stop codon is added.
+- **Reproduce a run.** `example_seed` controls example selection, `codon_seed` controls reverse translation, and `seed` controls generation. Keep all three seeds and the batch size fixed to reproduce a run; change only `seed` to sample new designs from the same prompts.
 
 ### Evo2 Sampling (`evo2-sample`)
 
@@ -60,8 +75,8 @@ This tool measures how well a DNA sequence matches the patterns the model learne
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every Evo2 tool in this toolkit (`evo2-sample`, `evo2-score`).
+These apply to every Evo2 tool in this toolkit (`evo2-icl`, `evo2-sample`, `evo2-score`).
 
 - **Requires a high-memory GPU; memory scales with model size and context length.** The 7B checkpoint needs a high-memory NVIDIA GPU; the 20B and 40B models and the 1M-context checkpoints need substantially more. CPU execution is not practical.
-- **`batch_size` trades memory for throughput across both tools.** It sets how many prompts (`evo2-sample`) or sequences (`evo2-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it (default `1`) if generation or scoring runs out of GPU memory.
+- **`batch_size` trades memory for throughput.** It sets how many designs (`evo2-icl`), prompts (`evo2-sample`), or sequences (`evo2-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it if generation or scoring runs out of GPU memory.
 - **Trained across all domains of life.** Evo2 covers prokaryotic, eukaryotic, archaeal, and phage genomes. For prokaryote-and-phage-only generation with a smaller model, [Evo1](https://bio-pro.mintlify.app/tools/causal-models/evo1) is an alternative.

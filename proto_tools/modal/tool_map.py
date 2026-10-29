@@ -21,11 +21,19 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "alphafold2-gradient": ToolEntry("proto-tools-alphafold2", "AlphaFold2Service", "gradient", True),
     "alphafold2-prediction": ToolEntry("proto-tools-alphafold2", "AlphaFold2Service", "predict", True),
     "alphafold3-prediction": ToolEntry("proto-tools-alphafold3", "AlphaFold3Service", "predict", True),
-    "alphagenome-predict-intervals": ToolEntry("proto-tools-alphagenome", "AlphaGenomeService", "predict_intervals", True),
-    "alphagenome-predict-sequences": ToolEntry("proto-tools-alphagenome", "AlphaGenomeService", "predict_sequences", True),
-    "alphagenome-predict-variants": ToolEntry("proto-tools-alphagenome", "AlphaGenomeService", "predict_variants", True),
+    "alphagenome-predict-intervals": ToolEntry(
+        "proto-tools-alphagenome", "AlphaGenomeService", "predict_intervals", True
+    ),
+    "alphagenome-predict-sequences": ToolEntry(
+        "proto-tools-alphagenome", "AlphaGenomeService", "predict_sequences", True
+    ),
+    "alphagenome-predict-variants": ToolEntry(
+        "proto-tools-alphagenome", "AlphaGenomeService", "predict_variants", True
+    ),
     "alphagenome-score-intervals": ToolEntry("proto-tools-alphagenome", "AlphaGenomeService", "score_intervals", True),
-    "alphagenome-score-ism-variants-batch": ToolEntry("proto-tools-alphagenome", "AlphaGenomeService", "score_ism_variants", True),
+    "alphagenome-score-ism-variants-batch": ToolEntry(
+        "proto-tools-alphagenome", "AlphaGenomeService", "score_ism_variants", True
+    ),
     "alphagenome-score-variants": ToolEntry("proto-tools-alphagenome", "AlphaGenomeService", "score_variants", True),
     "bioemu-sample": ToolEntry("proto-tools-bioemu", "BioEmuService", "sample", True),
     "boltz2-affinity": ToolEntry("proto-tools-boltz2", "Boltz2Service", "affinity", True),
@@ -64,6 +72,7 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "esmfold2-prediction": ToolEntry("proto-tools-esmfold2", "ESMFold2Service", "predict", True),
     "evo1-sample": ToolEntry("proto-tools-evo1", "Evo1Service", "sample", True),
     "evo1-score": ToolEntry("proto-tools-evo1", "Evo1Service", "score", True),
+    "evo2-icl": ToolEntry("proto-tools-evo2", "Evo2Service", "icl", True),
     "evo2-sample": ToolEntry("proto-tools-evo2", "Evo2Service", "sample", True),
     "evo2-score": ToolEntry("proto-tools-evo2", "Evo2Service", "score", True),
     "fampnn-pack": ToolEntry("proto-tools-fampnn", "FAMPNNService", "pack", True),
@@ -109,7 +118,9 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "progen2-score": ToolEntry("proto-tools-progen2", "ProGen2Service", "score", True),
     "progen3-sample": ToolEntry("proto-tools-progen3", "ProGen3Service", "sample", True),
     "progen3-score": ToolEntry("proto-tools-progen3", "ProGen3Service", "score", True),
-    "promoter-calculator": ToolEntry("proto-tools-promoter-calculator", "PromoterCalculatorService", "calculate", False),
+    "promoter-calculator": ToolEntry(
+        "proto-tools-promoter-calculator", "PromoterCalculatorService", "calculate", False
+    ),
     "proteinmpnn-gradient": ToolEntry("proto-tools-proteinmpnn", "ProteinMPNNService", "gradient", True),
     "proteinmpnn-sample": ToolEntry("proto-tools-proteinmpnn", "ProteinMPNNService", "sample", True),
     "proteinmpnn-score": ToolEntry("proto-tools-proteinmpnn", "ProteinMPNNService", "score", True),
@@ -128,7 +139,9 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "rf3-prediction": ToolEntry("proto-tools-rf3", "RF3Service", "predict", True),
     "rfdiffusion3-design": ToolEntry("proto-tools-rfdiffusion3", "RFdiffusion3Service", "generate", True),
     "segmasker-score": ToolEntry("proto-tools-segmasker", "SegmaskerService", "score", False),
-    "splice-transformer-prediction": ToolEntry("proto-tools-splice-transformer", "SpliceTransformerService", "run", True),
+    "splice-transformer-prediction": ToolEntry(
+        "proto-tools-splice-transformer", "SpliceTransformerService", "run", True
+    ),
     "spliceai-predict": ToolEntry("proto-tools-spliceai", "SpliceAIService", "predict", True),
     "spliceai-score": ToolEntry("proto-tools-spliceai", "SpliceAIService", "score", True),
     "spliceai2-predict": ToolEntry("proto-tools-spliceai2", "SpliceAI2Service", "predict", True),
