@@ -220,6 +220,7 @@ module = [
     "evo.*",
     "evo2.*",
     "progen3.*",
+    "iglm.*",
     "vortex.*",
     "fampnn.*",
     "caliby.*",
@@ -404,6 +405,7 @@ exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*
 "proto_tools.modal.binder_design.freebindcraft_deployment" = ["README.md"]
 "proto_tools.modal.causal_models.evo1_deployment" = ["README.md"]
 "proto_tools.modal.causal_models.evo2_deployment" = ["README.md"]
+"proto_tools.modal.causal_models.iglm_deployment" = ["README.md"]
 "proto_tools.modal.causal_models.progen2_deployment" = ["README.md"]
 "proto_tools.modal.causal_models.progen3_deployment" = ["README.md"]
 "proto_tools.modal.database_retrieval.ccd_lookup_deployment" = ["README.md"]

@@ -1,7 +1,10 @@
 """Cross-tool contract tests for causal model shared base classes.
 
-Verifies that all 4 causal model tools (evo1, evo2, progen2, progen3) honor
-the shared Input/Config/Output contracts after migration to base classes.
+Verifies that the causal model tools honor the shared Input/Config/Output
+contracts. Every scorer in the category is covered. On the sampling side, evo1,
+evo2, progen2 and progen3 return one sequence per prompt and so build on the
+shared sampling bases; iglm generates a bundle of distinct sequences per input
+and deliberately does not (see ``IgLMGenerationConfig``), so it is absent here.
 """
 
 import typing
@@ -24,6 +27,11 @@ from proto_tools.tools.causal_models.evo2 import (
     Evo2ScoringConfig,
     Evo2ScoringInput,
     Evo2ScoringOutput,
+)
+from proto_tools.tools.causal_models.iglm import (
+    IgLMScoringConfig,
+    IgLMScoringInput,
+    IgLMScoringOutput,
 )
 from proto_tools.tools.causal_models.progen2 import (
     ProGen2SampleConfig,
@@ -60,6 +68,7 @@ SAMPLE_TOOLS = [
 
 SCORING_TOOLS = [
     pytest.param(Evo1ScoringInput, Evo1ScoringConfig, Evo1ScoringOutput, id="evo1"),
+    pytest.param(IgLMScoringInput, IgLMScoringConfig, IgLMScoringOutput, id="iglm"),
     pytest.param(Evo2ScoringInput, Evo2ScoringConfig, Evo2ScoringOutput, id="evo2"),
     pytest.param(ProGen2ScoringInput, ProGen2ScoringConfig, ProGen2ScoringOutput, id="progen2"),
     pytest.param(ProGen3ScoringInput, ProGen3ScoringConfig, ProGen3ScoringOutput, id="progen3"),

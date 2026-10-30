@@ -33,6 +33,7 @@ APP_BUCKETS: dict[str, list[str]] = {
     "proto-tools-fampnn": ["FAMPNNService"],
     "proto-tools-freebindcraft": ["FreeBindCraftService"],
     "proto-tools-glm2": ["GLM2Service"],
+    "proto-tools-iglm": ["IgLMService"],
     "proto-tools-ligandmpnn": ["LigandMPNNService"],
     "proto-tools-malinois": ["MalinoisService"],
     "proto-tools-metal3d": ["Metal3DService"],
@@ -146,6 +147,7 @@ SERVICE_TIERS: dict[str, str] = {
     "FreeBindCraftService": "batch",
     "GLM2Service": "long",
     "IPSAEService": "fast",
+    "IgLMService": "long",
     # Raised from medium: ligandmpnn-score chunks 64 items, the same as proteinmpnn-score, which
     # gets an hour for the same work.
     "LigandMPNNService": "long",
@@ -262,6 +264,7 @@ GPU_SERVICES: frozenset[str] = frozenset(
         "FAMPNNService",
         "FreeBindCraftService",
         "GLM2Service",
+        "IgLMService",
         "LigandMPNNService",
         "MalinoisService",
         "Metal3DService",
@@ -331,6 +334,7 @@ SERVICE_TO_MODULE: dict[str, str] = {
     "FreeBindCraftService": "proto_tools.modal.binder_design.freebindcraft_deployment.freebindcraft_service",
     "GLM2Service": "proto_tools.modal.masked_models.glm2_deployment.glm2_service",
     "IPSAEService": "proto_tools.modal.structure_scoring.ipsae_deployment.ipsae_service",
+    "IgLMService": "proto_tools.modal.causal_models.iglm_deployment.iglm_service",
     "LigandMPNNService": "proto_tools.modal.inverse_folding.ligandmpnn_deployment.ligandmpnn_service",
     "MafftAlignService": "proto_tools.modal.sequence_alignment.mafft_deployment.mafft_service",
     "MalinoisService": "proto_tools.modal.sequence_scoring.malinois_deployment.malinois_service",

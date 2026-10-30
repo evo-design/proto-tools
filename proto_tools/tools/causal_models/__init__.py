@@ -27,6 +27,21 @@ from proto_tools.tools.causal_models.evo2 import (
     run_evo2_sample,
     run_evo2_score,
 )
+from proto_tools.tools.causal_models.iglm import (
+    IgLMInfillConfig,
+    IgLMInfillInput,
+    IgLMInfillOutput,
+    IgLMSampleConfig,
+    IgLMSampleInput,
+    IgLMSampleOutput,
+    IgLMScoringConfig,
+    IgLMScoringInput,
+    IgLMScoringOutput,
+    IgLMSpan,
+    run_iglm_infill,
+    run_iglm_sample,
+    run_iglm_score,
+)
 from proto_tools.tools.causal_models.progen2 import (
     ProGen2SampleConfig,
     ProGen2SampleInput,
@@ -77,6 +92,20 @@ __all__ = [
     "Evo2ScoringOutput",
     "run_evo2_sample",
     "run_evo2_score",
+    # IgLM
+    "IgLMInfillConfig",
+    "IgLMInfillInput",
+    "IgLMInfillOutput",
+    "run_iglm_infill",
+    "IgLMSampleConfig",
+    "IgLMSampleInput",
+    "IgLMSampleOutput",
+    "run_iglm_sample",
+    "IgLMScoringConfig",
+    "IgLMScoringInput",
+    "IgLMScoringOutput",
+    "run_iglm_score",
+    "IgLMSpan",
     # ProGen2
     "ProGen2SampleConfig",
     "ProGen2SampleInput",
