@@ -802,7 +802,7 @@ def test_config_rejects_custom_nsteps_with_a_recycle_strategy():
     """A recycle_strategy preset expands to exactly 60 steps, so it pins nsteps.
 
     Upstream only raises "recycle schedule expands to 60 steps; expected N" after the
-    model has loaded, so the wrapper enforces the invariant before dispatch.
+    model has loaded, so the implementation enforces the invariant before dispatch.
     """
     with pytest.raises(ValidationError, match="expands to a fixed 60-step schedule"):
         RFD4DesignConfig(nsteps=20, recycle_strategy="low/flat")
@@ -901,11 +901,11 @@ def test_remote_unsupported_reason_flags_local_adapters_and_bundles(tmp_path):
 # ── Config: CLI override construction ───────────────────────────────────────
 
 
-def test_common_config_cli_kwargs_pins_wrapper_owned_overrides(tmp_path):
+def test_common_config_cli_kwargs_pins_implementation_owned_overrides(tmp_path):
     """metrics_tags and skip_existing are hardcoded off, and compile/recycle use Hydra's 'null'."""
     kwargs = RFD4DesignConfig().get_cli_kwargs()
 
-    # No AlphaFold oracle is provisioned, and the wrapper owns a fresh output dir per call.
+    # No AlphaFold oracle is provisioned, and the implementation owns a fresh output dir per call.
     assert kwargs["metrics_tags"] == []
     assert kwargs["skip_existing"] is False
     # Upstream's untagged unknown_residue_filter still runs, and deleting its failures exits 0.
@@ -1063,7 +1063,7 @@ def test_standalone_format_override_renders_hydra_tokens():
 def test_standalone_drops_ephemeral_paths_from_a_metrics_row():
     """Run-local paths must not reach design metadata, or two identical runs differ.
 
-    The wrapper runs in a fresh temporary directory per call, so every path upstream records
+    The implementation runs in a fresh temporary directory per call, so every path upstream records
     is unique to that run: leaking them breaks output comparison and seeded reproducibility
     (and hands callers host paths). Both rules are needed -- ``dataset_name`` is caught only
     by its absolute value, and a relative ``*_path`` only by its key.

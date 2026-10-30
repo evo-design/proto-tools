@@ -36,7 +36,7 @@ def _drop_ephemeral_paths(row: dict[str, Any]) -> dict[str, Any]:
     """Strip run-local filesystem paths out of a metrics row before it becomes output metadata.
 
     Upstream's ``per_example_metrics.csv`` records absolute paths for the run it came from
-    (``designed_structure_path``, ``dataset_name``, ...). The wrapper runs in a fresh
+    (``designed_structure_path``, ``dataset_name``, ...). The implementation runs in a fresh
     temporary directory every call, so those values differ between two otherwise identical
     runs: they would leak host paths to callers and defeat output comparison and seeded
     reproducibility. The design's content is returned directly, so the paths carry nothing.
@@ -147,7 +147,7 @@ def _split_example_id(example_id: str, spec_keys: list[str]) -> tuple[str, int]:
 def _read_per_example_metrics(output_dir: Path) -> dict[str, dict[str, Any]]:
     """Read upstream's per-example metrics table when one was written.
 
-    The wrapper always passes ``metrics_tags=[]``, which gates only *tagged* metrics
+    The implementation always passes ``metrics_tags=[]``, which gates only *tagged* metrics
     -- the oracle-scored set. Untagged metrics such as ``unknown_residue_filter``
     still run, so a table with a few composition columns is the normal case. The
     read stays best-effort because a run may write none at all.
@@ -169,7 +169,7 @@ def _read_per_example_metrics(output_dir: Path) -> dict[str, dict[str, Any]]:
 
 
 class RFD4Model:
-    """Wrapper for the ``rfd4-generate`` Hydra CLI (fresh subprocess per call).
+    """Implementation over the ``rfd4-generate`` Hydra CLI (fresh subprocess per call).
 
     References:
         https://github.com/RosettaCommons/RFD4-Proteina
@@ -177,7 +177,7 @@ class RFD4Model:
     """
 
     def __init__(self) -> None:
-        """Initialize the wrapper with an unresolved executable."""
+        """Initialize the implementation with an unresolved executable."""
         self._loaded = False
         self.rfd4_executable: str | None = None
 
@@ -217,7 +217,7 @@ class RFD4Model:
         """Run RFD4-Proteina generation and harvest the designs it wrote.
 
         Args:
-            spec_path (str): Path to the condition-spec YAML/JSON written by the wrapper.
+            spec_path (str): Path to the condition-spec YAML/JSON written by the implementation.
             output_dir (str): Directory passed to upstream as ``out_dir``.
             spec_keys (list[str]): Spec ids that were dispatched, in input order.
             device (str): Device string (e.g. ``"cuda"``, ``"cuda:1"``, ``"cpu"``).

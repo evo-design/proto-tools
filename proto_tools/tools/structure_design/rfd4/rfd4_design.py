@@ -168,7 +168,7 @@ class RFD4DesignSpec(BaseModel):
     Attributes:
         input_structure (Structure): Starting structure. RFD4 requires one even for
             unconditional generation, and consumes bonds and formal charges, so the
-            wrapper always hands it a CIF (PDB input is converted automatically).
+            implementation always hands it a CIF (PDB input is converted automatically).
 
         input_as_annotated_cif (bool): When ``True``, load ``input_structure``
             as-is and preserve condition annotations it already carries (e.g. a prior
@@ -192,7 +192,7 @@ class RFD4DesignSpec(BaseModel):
 
         residue_numbering (Literal['auth', 'label']): How residue ids in ``contig``
             and selections are read. ``'auth'`` (default) is the author numbering shown
-            in PDB files and used elsewhere in proto-tools; the wrapper translates it to
+            in PDB files and used elsewhere in proto-tools; the implementation translates it to
             the mmCIF ``label_seq_id`` RFD4 resolves against. ``'label'`` passes ids
             through untouched, for annotated-CIF inputs already in label numbering.
 
@@ -1200,7 +1200,7 @@ class RFD4Design(BaseModel):
 class RFD4Designs(BaseModel):
     """All designs produced for a single input spec.
 
-    Bundling the ``num_replicates`` designs for one spec into a single wrapper keeps the
+    Bundling the ``num_replicates`` designs for one spec into a single container keeps the
     framework's 1:1 cardinality between ``iterable_input_fields`` and
     ``iterable_output_field`` while RFD4 fans out per spec.
 

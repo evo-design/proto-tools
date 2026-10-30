@@ -16,7 +16,7 @@ NAN_CHECK
 
 [set]
 # configs/inference.yaml defines ckpt_path and autoencoder_ckpt_path as
-# ${oc.env:DATA_PATH}/... OmegaConf resolvers. The wrapper's hf_ckpt_path overrides
+# ${oc.env:DATA_PATH}/... OmegaConf resolvers. The implementation's hf_ckpt_path overrides
 # both, so these nodes are never read, but an unset DATA_PATH would turn any resolve
 # of them into an interpolation error. Point it at a real directory setup.sh creates.
 DATA_PATH=${VENV_PATH}/rfd4_data

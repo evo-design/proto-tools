@@ -17,5 +17,5 @@ fully resolved. That is why upstream's own rigid-group selection filters with
 `and not has_nan_coord()`; its three hotspot selections carry no such filter.
 It is a binder *target*, not a suitable
 inverse-folding input: upstream's own CLI returns a CA-only poly-alanine trace for it in
-`generation=inverse_folding` mode, and our wrapper reproduces that exactly.
+`generation=inverse_folding` mode, and our implementation reproduces that exactly.
 <!-- docs:ignore end -->
