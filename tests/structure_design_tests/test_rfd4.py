@@ -1155,31 +1155,60 @@ def test_standalone_collect_designs_orders_designs_and_merges_metrics(tmp_path, 
     assert "harvested 3" in caplog.text
 
 
-def test_standalone_failure_message_includes_stdout_as_well_as_stderr(monkeypatch, tmp_path):
-    """``rfd4-generate`` logs through Hydra, which writes to stdout; stderr alone is usually empty.
+def _patch_run_generation(monkeypatch, raises: BaseException) -> None:
+    """Stand in for the tool-env ``rfproteina.generate`` module with a failing ``run_generation``."""
 
-    Reporting only stderr turns most upstream failures (a rejected spec, a missing checkpoint)
-    into a bare exit code with no diagnosis.
+    def _boom(cfg, job_id=0, model=None):
+        raise raises
+
+    package = ModuleType("rfproteina")
+    generate = ModuleType("rfproteina.generate")
+    generate.run_generation = _boom  # type: ignore[attr-defined]
+    package.generate = generate  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "rfproteina", package)
+    monkeypatch.setitem(sys.modules, "rfproteina.generate", generate)
+
+
+def test_standalone_failure_message_names_the_upstream_exception(monkeypatch, tmp_path):
+    """Generation runs in-process, so the raised exception is the only diagnosis available.
+
+    Reporting a bare failure would turn every upstream error (a rejected spec, a missing
+    checkpoint) into an unexplained one.
     """
     inference = _standalone_inference()
     helpers = importlib.import_module("standalone_helpers")
     monkeypatch.setattr(helpers, "set_torch_seed", lambda seed: None)
-    monkeypatch.setattr(helpers, "get_subprocess_device_env", lambda device: {})
-    monkeypatch.setattr(
-        helpers,
-        "run_teed",
-        lambda cmd, env=None, verbose=False: (1, "Error executing job: contig has no preserved segment", "Traceback"),
-    )
+    _patch_run_generation(monkeypatch, RuntimeError("contig has no preserved segment"))
+
     model = inference.RFD4Model()
     model._loaded = True
-    model.rfd4_executable = "rfd4-generate"
+    monkeypatch.setattr(model, "_compose", lambda *args, **kwargs: object())
 
-    with pytest.raises(inference.RFD4ExecutionError, match="exit 1") as excinfo:
+    with pytest.raises(inference.RFD4ExecutionError) as excinfo:
         model(spec_path=str(tmp_path / "rfd4_input.yaml"), output_dir=str(tmp_path), spec_keys=["spec-0"])
 
     message = str(excinfo.value)
     assert "contig has no preserved segment" in message
-    assert "Traceback" in message
+    assert "RuntimeError" in message
+
+
+def test_standalone_cuda_oom_is_reraised_as_the_framework_oom_error(monkeypatch, tmp_path):
+    """An in-process OOM must still reach the framework's OOM type, not a generic failure.
+
+    ToolInstance retries and downsizes on ``GpuOutOfMemoryError``; an OOM reported as an
+    ``RFD4ExecutionError`` would instead surface to the caller as a hard failure.
+    """
+    inference = _standalone_inference()
+    helpers = importlib.import_module("standalone_helpers")
+    monkeypatch.setattr(helpers, "set_torch_seed", lambda seed: None)
+    _patch_run_generation(monkeypatch, RuntimeError("CUDA out of memory. Tried to allocate 2.00 GiB"))
+
+    model = inference.RFD4Model()
+    model._loaded = True
+    monkeypatch.setattr(model, "_compose", lambda *args, **kwargs: object())
+
+    with pytest.raises(helpers.GpuOutOfMemoryError, match="batch_size"):
+        model(spec_path=str(tmp_path / "rfd4_input.yaml"), output_dir=str(tmp_path), spec_keys=["spec-0"])
 
 
 def test_standalone_collect_designs_rejects_an_output_tree_with_no_designs(tmp_path):

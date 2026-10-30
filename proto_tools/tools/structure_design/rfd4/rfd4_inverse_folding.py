@@ -105,6 +105,8 @@ def example_input() -> RFD4Input:
     output_class=RFD4Output,
     description="All-atom sequence and sidechain design on a fixed backbone with RFD4-Proteina",
     uses_gpu=True,
+    # Same Lightning device constraint as rfd4-design; see the note there.
+    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["design_specs"],
     iterable_output_field="designed_structures",

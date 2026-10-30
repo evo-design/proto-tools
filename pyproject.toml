@@ -236,6 +236,7 @@ module = [
     "scipy.*",
     "umap.*",
     "hydra.*",
+    "rfproteina.*",
     "zstandard.*",
     "tensorflow.*",
     "keras.*",

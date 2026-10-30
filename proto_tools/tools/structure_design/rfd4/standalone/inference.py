@@ -7,7 +7,7 @@ References:
 
 import csv
 import json
-import shutil
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,8 +16,11 @@ from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 
-# Both tools run the same binary; the difference is already in the Hydra overrides.
+# Both tools run the same model; the difference is already in the Hydra overrides.
 _VALID_OPERATIONS = ("design", "inverse_folding")
+
+# Matches the model_checkpoint default; only reached if an override omits hf_ckpt_path.
+_DEFAULT_CHECKPOINT = "nvidia/RFD4-Proteina"
 
 # Upstream layout: <out_dir>/inference_samples/<example_id>/<example_id>_generated.cif
 _SAMPLES_SUBDIR = "inference_samples"
@@ -169,7 +172,11 @@ def _read_per_example_metrics(output_dir: Path) -> dict[str, dict[str, Any]]:
 
 
 class RFD4Model:
-    """Implementation over the ``rfd4-generate`` Hydra CLI (fresh subprocess per call).
+    """RFD4-Proteina generation with the checkpoint held in memory across calls.
+
+    ``rfd4-generate`` is a thin Hydra wrapper over :func:`rfproteina.generate.run_generation`,
+    which accepts an already-loaded model. Calling it in-process instead of shelling out to
+    the console script is what lets a persistent worker pay the checkpoint load once.
 
     References:
         https://github.com/RosettaCommons/RFD4-Proteina
@@ -177,32 +184,116 @@ class RFD4Model:
     """
 
     def __init__(self) -> None:
-        """Initialize the implementation with an unresolved executable."""
+        """Initialize RFD4Model."""
         self._loaded = False
-        self.rfd4_executable: str | None = None
+        self.device: str | None = None
+        self.model: Any = None
+        self._config_dir: str | None = None
 
-    def load(self) -> None:
-        """Locate the ``rfd4-generate`` console script installed into the tool venv.
+    def load(
+        self,
+        model_checkpoint: str,
+        model_revision: str | None,
+        adapter_path: str | None,
+        device: str,
+        verbose: bool = False,
+    ) -> None:
+        """Load the RFD4-Proteina checkpoint and hold it for subsequent calls.
 
-        The worker runs the venv's interpreter, so the entry point sits next to
-        ``sys.executable``; a ``PATH`` lookup covers atypical layouts.
+        The adapter is applied here rather than per call: upstream's
+        ``load_ckpt_n_configure_inference`` re-applies ``adapter_path`` every time it is
+        given one, which would stack LoRA layers onto a model that is being reused.
+        ``adapter_path`` is ``reload_on_change``, so a different adapter respawns the worker.
+
+        Args:
+            model_checkpoint (str): HuggingFace repo id of the checkpoint bundle.
+            model_revision (str | None): Pinned HuggingFace revision, or None for the default.
+            adapter_path (str | None): Local PEFT/LoRA adapter directory, or None.
+            device (str): Device to hold the model on (e.g. ``"cuda"``, ``"cpu"``).
+            verbose (bool): Log the checkpoint being loaded.
 
         Raises:
-            ImportError: If the executable cannot be located.
+            ImportError: If the rfd4-proteina package is not importable.
         """
         logger.debug("Initializing RFD4-Proteina")
 
-        candidate = Path(sys.executable).parent / "rfd4-generate"
-        exe = str(candidate) if candidate.exists() else shutil.which("rfd4-generate")
-        if not exe:
-            raise ImportError(
-                "rfd4: 'rfd4-generate' executable not found; the rfd4-proteina package must be "
-                "installed (re-run setup.sh)"
-            )
-        self.rfd4_executable = exe
+        try:
+            import torch
+            from rfproteina.proteina import Proteina
+        except ImportError as exc:
+            raise ImportError("rfd4: the rfd4-proteina package is not importable; re-run setup.sh") from exc
+
+        if verbose:
+            logger.info(f"Loading RFD4-Proteina checkpoint {model_checkpoint} (revision={model_revision})")
+
+        model = Proteina.from_pretrained(model_checkpoint, revision=model_revision, nn_overrides={})
+        if adapter_path:
+            from rfproteina.utils.lora import load_lora_adapter
+
+            load_lora_adapter(model, adapter_path)
+
+        self.model = model.to(torch.device(device)).eval()
+        self.device = device
+        # generate.py reads PROJECT_ROOT at import time; rfproteina.utils.env setdefault's it.
+        self._config_dir = os.path.join(os.environ["PROJECT_ROOT"], "configs")
         self._loaded = True
 
-        logger.debug(f"RFD4-Proteina initialized. Executable: {self.rfd4_executable}")
+        logger.debug(f"RFD4-Proteina initialized on {device}.")
+
+    def _compose(self, spec_path: str, output_dir: str, seed: int | None, cli_kwargs: dict[str, Any]) -> Any:
+        """Compose the inference config the ``rfd4-generate`` CLI would have composed.
+
+        A fresh config is built per call because ``run_generation`` mutates what it is
+        given (``cfg.seed``, ``cfg.out_dir``). ``adapter_path`` is dropped: the adapter is
+        already on the held model, and passing it again would re-apply it.
+
+        Args:
+            spec_path (str): Path to the condition-spec YAML/JSON.
+            output_dir (str): Directory passed to upstream as ``out_dir``.
+            seed (int | None): Base seed; None lets upstream draw its own.
+            cli_kwargs (dict[str, Any]): Hydra overrides as ``key: value`` pairs.
+
+        Returns:
+            Any: The composed Hydra ``DictConfig``.
+        """
+        from hydra import compose, initialize_config_dir
+        from hydra.core.global_hydra import GlobalHydra
+
+        overrides = [f"inputs={spec_path}", f"out_dir={output_dir}"]
+        if seed is not None:
+            overrides.append(f"seed={seed}")
+        overrides += [
+            _format_override(key, value)
+            for key, value in cli_kwargs.items()
+            if value is not None and key != "adapter_path"
+        ]
+
+        logger.debug(f"Composing RFD4-Proteina config with overrides: {overrides}")
+
+        if GlobalHydra.instance().is_initialized():
+            GlobalHydra.instance().clear()
+        with initialize_config_dir(config_dir=str(self._config_dir), version_base="1.3"):
+            return compose(config_name="inference", overrides=overrides)
+
+    def unload(self) -> None:
+        """Unload the model to free GPU memory."""
+        import gc
+
+        if not self._loaded:
+            return
+
+        self.model = None
+        self._loaded = False
+        self.device = None
+
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
 
     def __call__(
         self,
@@ -222,7 +313,7 @@ class RFD4Model:
             spec_keys (list[str]): Spec ids that were dispatched, in input order.
             device (str): Device string (e.g. ``"cuda"``, ``"cuda:1"``, ``"cpu"``).
             seed (int | None): Base seed; ``None`` lets upstream draw its own.
-            verbose (bool): Tee the subprocess output to this process as it arrives.
+            verbose (bool): Log the composed overrides and the checkpoint being loaded.
             **cli_kwargs (Any): Hydra overrides forwarded verbatim as ``key=value``.
 
         Returns:
@@ -230,8 +321,8 @@ class RFD4Model:
                 "design_index", "metadata"}, ...]}``.
 
         Raises:
-            RFD4ExecutionError: If the CLI exits non-zero, or produced no designs.
-            GpuOutOfMemoryError: If the CLI failed with a CUDA out-of-memory error.
+            RFD4ExecutionError: If generation failed, or produced no designs.
+            GpuOutOfMemoryError: If generation failed with a CUDA out-of-memory error.
         """
         # Seeds the Python-side RNG and no-ops on None; the Hydra override is what drives generation.
         from standalone_helpers import set_torch_seed
@@ -239,36 +330,32 @@ class RFD4Model:
         set_torch_seed(seed)
 
         if not self._loaded:
-            self.load()
+            revision = cli_kwargs.get("hf_ckpt_revision")
+            self.load(
+                model_checkpoint=cli_kwargs.get("hf_ckpt_path", _DEFAULT_CHECKPOINT),
+                # get_cli_kwargs renders an unpinned revision as Hydra's literal "null".
+                model_revision=None if revision in (None, "null") else str(revision),
+                adapter_path=cli_kwargs.get("adapter_path"),
+                device=device,
+                verbose=verbose,
+            )
 
-        cmd = [
-            str(self.rfd4_executable),
-            f"inputs={spec_path}",
-            f"out_dir={output_dir}",
-            # Hydra would otherwise litter ./hydra_outputs in the worker's cwd.
-            f"hydra.run.dir={Path(output_dir) / 'hydra'}",
-        ]
-        if seed is not None:
-            cmd.append(f"seed={seed}")
-        cmd += [_format_override(key, value) for key, value in cli_kwargs.items() if value is not None]
+        from standalone_helpers import is_cuda_oom, raise_oom
 
-        logger.debug(f"Running RFD4-Proteina command: {' '.join(cmd)}")
+        cfg = self._compose(spec_path, output_dir, seed, cli_kwargs)
 
-        from standalone_helpers import get_subprocess_device_env, is_cuda_oom, raise_oom, run_teed
+        from rfproteina.generate import run_generation
 
-        env = get_subprocess_device_env(device)
-        returncode, stdout, stderr = run_teed(cmd, env=env, verbose=verbose)
-
-        if returncode != 0:
-            # Hydra sends every upstream log record to stdout; only a traceback reaches stderr.
-            captured = "\n".join(stream for stream in (stderr.strip(), stdout.strip()) if stream)
-            stderr_tail = " | ".join(captured.splitlines()) or "<no subprocess output>"
-            if is_cuda_oom(stderr_tail):
+        try:
+            run_generation(cfg, job_id=0, model=self.model)
+        except Exception as exc:
+            detail = f"{type(exc).__name__}: {exc}"
+            if is_cuda_oom(detail):
                 raise_oom(
                     "rfd4",
                     hint="Lower batch_size, shorten the contig, or use a GPU with more memory.",
                 )
-            raise RFD4ExecutionError(f"rfd4: generation failed (exit {returncode}): {stderr_tail}")
+            raise RFD4ExecutionError(f"rfd4: generation failed: {detail}") from exc
 
         logger.debug("RFD4-Proteina execution completed successfully.")
         return {"designs": self._collect_designs(Path(output_dir), spec_keys, seed, cli_kwargs)}
@@ -397,11 +484,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def to_device(device: str) -> dict[str, Any]:
-    """DeviceManager callback for moving the model to a different device.
+    """DeviceManager callback; a no-op because this tool pins its visible devices.
 
-    RFD4 runs as a fresh subprocess per call with no persistent in-process state, so
-    device assignment is a passthrough — ``CUDA_VISIBLE_DEVICES`` on the subprocess
-    handles allocation.
+    Upstream builds its Lightning trainer with ``devices=N`` and claims local
+    ``cuda:0..N-1``, which cannot be retargeted at a logical index from inside the
+    process. The tools therefore register ``pin_visible_devices=True``, so a worker
+    only ever sees its assigned GPU and DeviceManager respawns it on a device change
+    rather than moving the model here.
 
     Args:
         device (str): Target device (e.g., "cpu", "cuda:0").
@@ -409,7 +498,7 @@ def to_device(device: str) -> dict[str, Any]:
     Returns:
         dict[str, Any]: Success status dict.
     """
-    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
+    return {"success": True, "device": device, "note": "pinned worker, respawns on device change"}
 
 
 def get_memory_stats() -> dict[str, Any]:

@@ -882,6 +882,9 @@ class RFD4CommonConfig(BaseConfig):
         default=False,
         description="Compile the trunk across upstream length buckets; pays a long first-call compile",
         include_in_key=False,
+        # reserve_shape_cache() gates the held model's buckets on, so this cannot change under a
+        # worker that already loaded one.
+        reload_on_change=True,
     )
     save_trajectory_every: int = ConfigField(
         title="Save Trajectory Every",
@@ -1355,6 +1358,9 @@ def build_designs(output_data: dict[str, Any], spec_keys: list[str], source: str
     output_class=RFD4Output,
     description="Joint sequence and all-atom structure design with RFD4-Proteina",
     uses_gpu=True,
+    # Upstream builds its Lightning trainer with devices=N, which claims local cuda:0..N-1 and
+    # cannot be redirected at a logical index in-process. Pinning makes the assigned GPU cuda:0.
+    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["design_specs"],
     iterable_output_field="designed_structures",
