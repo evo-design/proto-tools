@@ -133,7 +133,8 @@ def run_iglm_score(
 
     Args:
         inputs (IgLMScoringInput): Sequences to score, their per-sequence chain and
-            species conditioning, and optional spans to score conditionally.
+            species conditioning, and optional spans to score conditionally
+            (1-indexed, inclusive, as everywhere in proto-tools).
         config (IgLMScoringConfig): Checkpoint, batching, and logits configuration.
         instance (Any): Optional ToolInstance for subprocess execution.
 
@@ -169,6 +170,8 @@ def run_iglm_score(
           supplied conditioning; scores from different conditioning are not comparable.
         - Following upstream, the scored region ends with IgLM's terminal token, so a
           sequence contributes one more scored token than it has residues.
+        - Span coordinates are 1-indexed and inclusive, matching ``iglm-infill``: the
+          spans an infill run reports go straight back in without conversion.
     """
     logger.debug("Using local venv for IgLM scoring: %s", config.model_checkpoint)
     spans = inputs.spans or [None] * len(inputs.sequences)

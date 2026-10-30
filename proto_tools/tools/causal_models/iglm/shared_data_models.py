@@ -40,7 +40,14 @@ IGLM_DEFAULT_MAX_LENGTH = 150
 # Inputs
 # ============================================================================
 class IgLMSpan(BaseToolInput):
-    """A residue span of an antibody sequence.
+    """A residue span of an antibody sequence, 1-indexed and inclusive at both ends.
+
+    ``IgLMSpan(start=99, end=106)`` covers residues 99 through 106 — eight residues,
+    equivalently ``sequence[98:106]`` in Python slice terms, so the span length is
+    ``end - start + 1`` and ``start=1`` is the first residue. This is the proto-tools
+    convention for biological coordinates; IgLM upstream numbers the same region
+    ``(98, 106)``, 0-indexed with an exclusive end, and the conversion happens once
+    when the tool builds its worker payload.
 
     Attributes:
         start (int): First residue of the span (1-indexed, inclusive).

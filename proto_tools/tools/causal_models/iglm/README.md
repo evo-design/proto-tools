@@ -68,6 +68,7 @@ Use the whole-sequence score as a naturalness measure for antibody sequences - t
 
 #### Usage Tips
 
+- **Span coordinates are 1-indexed and inclusive here too.** `IgLMSpan(start=99, end=106)` is the same eight residues `iglm-infill` re-designs, so `spans=designs.spans` hands an infill result straight back with no conversion. Upstream's 0-indexed, end-exclusive `(98, 106)` is translated for you.
 - **`spans` is optional and broadcastable; omit it (or pass `None`) to score the whole chain.** One span broadcasts across every sequence, which is the convenient form for ranking a library of designs that share a parent framework and loop position.
 - **Compare length-normalized scores under identical conditioning.** `log_likelihood` is a sum and grows with sequence length, so use `avg_log_likelihood` or `perplexity` across sequences of different lengths. Lower perplexity means IgLM finds the sequence more antibody-like under the conditioning it was given; scores obtained under different `chains`, `species`, or `model_checkpoint` values sit on different scales and are not comparable.
 - **`avg_log_likelihood` is the value upstream's `IgLM.log_likelihood` returns.** Upstream reports the mean per-token log-likelihood and derives perplexity as `exp(-avg_log_likelihood)`, which is what `perplexity` holds here.

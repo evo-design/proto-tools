@@ -182,7 +182,7 @@ def test_iglm_infill_dispatch_converts_spans_and_conditioning(monkeypatch):
             chains=["heavy", "light"],
             species=["human", "camel"],
         ),
-        IgLMInfillConfig(seed=11),
+        IgLMInfillConfig(seed=11, batch_size=4),
     )
 
     assert result.success
@@ -192,6 +192,8 @@ def test_iglm_infill_dispatch_converts_spans_and_conditioning(monkeypatch):
     assert payload["infill_ranges"] == [[98, 106], [0, 5]]
     assert payload["chain_tokens"] == ["[HEAVY]", "[LIGHT]"]
     assert payload["species_tokens"] == ["[HUMAN]", "[CAMEL]"]
+    # Infilling draws candidates in batches too, so the setting has to reach the worker.
+    assert payload["batch_size"] == 4
 
     # The converted ranges must slice exactly the residues the caller named.
     start, end = payload["infill_ranges"][0]
@@ -234,6 +236,7 @@ def test_iglm_sample_dispatch_carries_the_batch_and_its_conditioning(monkeypatch
     assert payload["species_tokens"] == ["[HUMAN]", "[CAMEL]"]
     assert payload["num_sequences_per_input"] == 2
     assert payload["max_length"] == 200
+    assert payload["batch_size"] == 8
     assert payload["prepend_prompt"] is False
     assert payload["seed"] == 3
     assert len(result.results) == 2
@@ -416,6 +419,23 @@ def test_iglm_infill_rewrites_the_span_and_keeps_the_framework():
         "Re-design should explore loop lengths other than the native one"
     )
     assert sum(infilled == _CDR_H3 for infilled in bundle.infilled_residues) <= 1
+
+
+@pytest.mark.uses_gpu
+def test_iglm_infill_batching_changes_speed_not_results():
+    """Candidates are drawn in batches, so a batch must not lose, duplicate, or corrupt designs."""
+    inputs = IgLMInfillInput(sequences=[_HEAVY_CHAIN], spans=[_cdr_h3_span()], chains=["heavy"])
+    prefix, suffix = _HEAVY_CHAIN[: _CDR_H3_START - 1], _HEAVY_CHAIN[_CDR_H3_END:]
+
+    for batch_size in (1, 16):
+        bundle = run_iglm_infill(
+            inputs, IgLMInfillConfig(num_sequences_per_input=4, batch_size=batch_size, seed=0, verbose=False)
+        ).results[0]
+
+        assert len(bundle.sequences) == 4, f"batch_size={batch_size} must still yield the requested count"
+        assert len(set(bundle.sequences)) == 4, f"batch_size={batch_size} must not return duplicates"
+        for sequence, infilled in zip(bundle.sequences, bundle.infilled_residues, strict=True):
+            assert sequence == prefix + infilled + suffix
 
 
 @pytest.mark.uses_gpu
