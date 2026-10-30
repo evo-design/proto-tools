@@ -2,8 +2,8 @@ data_spec-0_3_generated.cif
 #
 _entry.id       spec-0_3_generated.cif
 _entry.author   unknown_user
-_entry.date     2026-10-29
-_entry.time     22:00:53
+_entry.date     2026-10-30
+_entry.time     11:43:47
 #
 _entity.id                 0
 _entity.type               polymer
