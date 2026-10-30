@@ -992,4 +992,30 @@ Review the **actual diff**, not just the files in isolation, against the quality
    )"
    ```
 
-4. **Report the PR URL to the user.**
+4. **Ship the Modal deployment with the toolkit.** A new toolkit is not finished until
+   it can run on `device="modal"`. Add `proto_tools/modal/{category}/{toolkit}_deployment/{toolkit}_service.py`
+   (copy the closest sibling service), register it in `proto_tools/modal/manifest.py`
+   (`APP_BUCKETS`, `SERVICE_TIERS`, `GPU_SERVICES` if it needs a GPU, `SERVICE_TO_MODULE`),
+   regenerate the dispatch table with `python scripts/generate_tool_map.py`, and add the
+   deployment's `README.md` to `[tool.setuptools.package-data]` in `pyproject.toml`.
+   Then deploy and benchmark it (both cost money on the user's Modal account — confirm
+   before the first run unless already asked to):
+   ```bash
+   python3 -m proto_tools.cli deploy --apps {toolkit} --env proto-env
+   pytest --benchmark-toolkit={toolkit} --use-modal --benchmark-report=/tmp/{toolkit}-bench
+   ```
+   `--benchmark-report` is what writes the runtime table into the deployment README;
+   without it the benchmarks run but nothing is recorded. Commit that generated README.
+
+5. **Run the full sweep for the new toolkit, as the last step, after the PR exists:**
+   ```bash
+   pytest --all --ext -k "{toolkit}"
+   ```
+   This is the final gate on every tool implementation. It runs the toolkit's own
+   tests plus every parametrized infra and style test that touches it, on real
+   hardware (GPU included). Run it even when earlier phases passed — the fixes
+   applied during Phase 4.8 are exactly what it re-checks. Report the counts, and
+   name any skip that is not an expected exemption (benchmarks needing
+   `--benchmark`, a `Custom (...)` license skipping the SPDX fingerprint check).
+
+6. **Report the PR URL to the user.**
