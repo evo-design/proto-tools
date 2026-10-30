@@ -7,6 +7,15 @@ strip output mime types that don't render outside the original execution
 context (ipywidgets progress bars, live Plotly/Bokeh handles, etc.). The
 text/plain and text/html fallbacks stay.
 
+py3Dmol viewers are the exception: their text/html is a script that GitHub and
+other static viewers strip, leaving a "3Dmol.js failed to load" box. Each one is
+rendered in headless Chromium and replaced with an ``image/png`` snapshot.
+Re-running the cell in Jupyter restores the interactive viewer. Snapshots need
+Playwright (``pip install playwright && playwright install --with-deps chromium``)
+(``--with-deps`` also installs the system fonts legend labels need) and network
+access to the 3Dmol.js CDN; without Playwright the viewers are left as-is with a
+warning. Pass ``--no-snapshots`` to skip them.
+
 Typical usage::
 
     # Clean every notebook without executing (fast; handles notebooks that can't re-run)
@@ -27,6 +36,7 @@ Exits non-zero if any notebook fails to execute.
 from __future__ import annotations
 
 import argparse
+import base64
 import getpass
 import json
 import os
@@ -34,6 +44,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from tqdm import tqdm
 
@@ -55,6 +66,77 @@ _STRIP_MIMES = frozenset(
 # Text-bearing output mime types that may carry machine- or user-specific paths
 # and identifiers worth redacting before committing.
 _TEXT_MIMES = frozenset({"text/plain", "text/html", "text/markdown"})
+
+# Marker py3Dmol's generated HTML uses for its viewer div; the digits name the JS viewer global.
+_3DMOL_VIEWER_RE = re.compile(r"3dmolviewer_(\d+)")
+
+
+def _join(value: object) -> str:
+    """Join a notebook ``str | list[str]`` field into one string."""
+    return "".join(value) if isinstance(value, list) else str(value)
+
+
+def _3dmol_html(data: dict[str, Any]) -> str | None:
+    """Return the py3Dmol viewer HTML in an output bundle, or ``None`` if it has none."""
+    html = _join(data.get("text/html", ""))
+    return html if _3DMOL_VIEWER_RE.search(html) else None
+
+
+class Snapshotter:
+    """Render py3Dmol viewer HTML to PNG in a shared headless Chromium.
+
+    WebGL runs on SwiftShader, so no GPU or display is needed. The browser starts
+    on the first render and stays open until ``close()``.
+    """
+
+    def __init__(self, timeout_ms: int = 30_000) -> None:
+        """Configure the per-viewer render timeout; the browser starts lazily."""
+        self._timeout_ms = timeout_ms
+        self._playwright: Any = None
+        self._browser: Any = None
+
+    @staticmethod
+    def available() -> bool:
+        """Whether Playwright is importable."""
+        try:
+            import playwright.sync_api  # noqa: F401
+        except ImportError:
+            return False
+        return True
+
+    def render(self, html: str) -> bytes:
+        """Screenshot the viewer (plus any legend wrapped around it) as PNG bytes."""
+        if self._browser is None:
+            from playwright.sync_api import sync_playwright
+
+            self._playwright = sync_playwright().start()
+            self._browser = self._playwright.chromium.launch(
+                args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
+            )
+        match = _3DMOL_VIEWER_RE.search(html)
+        if match is None:
+            raise ValueError("HTML has no py3Dmol viewer div")
+        page = self._browser.new_page()
+        try:
+            page.set_content(f"<html><body style='margin:0'>{html}</body></html>")
+            # py3Dmol sets the viewer global and renders in one callback; two frames let it composite.
+            page.wait_for_function(
+                f"() => typeof viewer_{match.group(1)} !== 'undefined' && viewer_{match.group(1)} !== null",
+                timeout=self._timeout_ms,
+            )
+            page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+            # The first top-level div is the viewer itself, or the wrapper holding viewer + legend.
+            png: bytes = page.locator("body > div").first.screenshot(timeout=self._timeout_ms)
+        finally:
+            page.close()
+        return png
+
+    def close(self) -> None:
+        """Shut down the browser if it was started."""
+        if self._browser is not None:
+            self._browser.close()
+            self._playwright.stop()
+            self._browser = self._playwright = None
 
 
 def _ignored_warning_substrings() -> tuple[str, ...]:
@@ -196,26 +278,54 @@ def execute_notebook(path: Path, timeout: int) -> tuple[bool, str]:
     return True, "ok"
 
 
-def sanitize(path: Path) -> tuple[int, int, int, set[str]]:
+def _snapshot_3dmol(data: dict[str, Any], snapshotter: Snapshotter, where: str) -> bool:
+    """Replace a py3Dmol output bundle's HTML with a PNG snapshot, in place.
+
+    Only ``image/png`` and any existing ``text/plain`` are kept: static viewers would
+    otherwise prefer the HTML and show its load-failure box. A failed render leaves
+    the bundle untouched and logs why.
+
+    Returns:
+        bool: Whether the bundle was replaced.
+    """
+    html = _3dmol_html(data)
+    if html is None:
+        return False
+    try:
+        png = snapshotter.render(html)
+    except Exception as exc:
+        print(f"  WARN  {where}: py3Dmol snapshot failed, leaving HTML: {exc}", flush=True)
+        return False
+    for mime in list(data):
+        if mime != "text/plain":
+            del data[mime]
+    data["image/png"] = base64.b64encode(png).decode("ascii")
+    return True
+
+
+def sanitize(path: Path, snapshotter: Snapshotter | None = None) -> tuple[int, int, int, int, set[str]]:
     """Sanitize one notebook's cell outputs in place for committing.
 
     Strips non-renderable mime types, scrubs stderr lines for warnings the registry
     suppresses at runtime, redacts machine/user-specific identifiers from cell
-    outputs, and drops orphan ``widgets`` metadata.
+    outputs, and drops orphan ``widgets`` metadata. With a ``snapshotter``, py3Dmol
+    viewers are replaced by PNG snapshots.
 
     Returns:
-        tuple[int, int, int, set[str]]: ``(stripped, scrubbed, redacted, seen_mimes)`` —
-        mime entries stripped, stderr warning lines scrubbed, identifier redactions
-        applied, and the full set of mime types encountered (for reporting).
+        tuple[int, int, int, int, set[str]]: ``(stripped, scrubbed, redacted, snapshots,
+        seen_mimes)`` — mime entries stripped, stderr warning lines scrubbed, identifier
+        redactions applied, py3Dmol viewers snapshotted, and the full set of mime types
+        encountered before any changes (for reporting).
     """
     nb = json.loads(path.read_text())
     ignored = _ignored_warning_substrings()
     stripped = 0
     scrubbed = 0
     redacted = 0
+    snapshots = 0
     seen_mimes: set[str] = set()
 
-    for cell in nb.get("cells", []):
+    for cell_idx, cell in enumerate(nb.get("cells", [])):
         if cell.get("cell_type") != "code":
             continue
         kept_outputs = []
@@ -236,8 +346,10 @@ def sanitize(path: Path) -> tuple[int, int, int, set[str]]:
                 redacted += n
             data = out.get("data")
             if isinstance(data, dict):
+                seen_mimes.update(data)
+                if snapshotter is not None and _snapshot_3dmol(data, snapshotter, f"{_rel(path)} cell {cell_idx}"):
+                    snapshots += 1
                 for mime in list(data.keys()):
-                    seen_mimes.add(mime)
                     if mime in _STRIP_MIMES:
                         del data[mime]
                         stripped += 1
@@ -251,11 +363,11 @@ def sanitize(path: Path) -> tuple[int, int, int, set[str]]:
     if "widgets" in nb.get("metadata", {}):
         del nb["metadata"]["widgets"]
 
-    if stripped or scrubbed or redacted:
+    if stripped or scrubbed or redacted or snapshots:
         # ensure_ascii=False keeps literal UTF-8 (em dashes, emoji, arrows), matching
         # nbformat's writer; the default would escape them and churn every notebook.
         path.write_text(json.dumps(nb, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    return stripped, scrubbed, redacted, seen_mimes
+    return stripped, scrubbed, redacted, snapshots, seen_mimes
 
 
 def _rel(path: Path) -> str:
@@ -289,6 +401,11 @@ def main() -> int:
         action="store_true",
         help="Skip execution; only strip stale widget-view outputs. Fast; handles notebooks that can't re-run.",
     )
+    ap.add_argument(
+        "--no-snapshots",
+        action="store_true",
+        help="Leave py3Dmol viewers as HTML instead of replacing them with PNG snapshots.",
+    )
     args = ap.parse_args()
 
     notebooks = discover_notebooks(args.only)
@@ -306,6 +423,16 @@ def main() -> int:
 
     mode = "sanitize-only" if args.sanitize_only else f"execute+sanitize (timeout {args.timeout}s/notebook)"
     print(f"Mode: {mode}", flush=True)
+    snapshotter: Snapshotter | None = None
+    if not args.no_snapshots:
+        if Snapshotter.available():
+            snapshotter = Snapshotter()
+        else:
+            print(
+                "WARNING: playwright not installed; py3Dmol viewers stay as HTML and won't render on GitHub. "
+                "Install with `pip install playwright && playwright install --with-deps chromium`.",
+                flush=True,
+            )
     print(flush=True)
 
     failures: list[tuple[Path, str]] = []
@@ -313,35 +440,44 @@ def main() -> int:
     total_stripped = 0
     total_scrubbed = 0
     total_redacted = 0
+    total_snapshots = 0
 
     progress = tqdm(notebooks, desc="Processing", unit="nb", file=sys.stderr)
-    for nb_path in progress:
-        rel = _rel(nb_path)
-        progress.set_postfix_str(nb_path.parent.parent.name)
+    try:
+        for nb_path in progress:
+            rel = _rel(nb_path)
+            progress.set_postfix_str(nb_path.parent.parent.name)
 
-        if args.sanitize_only:
-            ok, msg = True, "ok"
-        else:
-            ok, msg = execute_notebook(nb_path, args.timeout)
+            if args.sanitize_only:
+                ok, msg = True, "ok"
+            else:
+                ok, msg = execute_notebook(nb_path, args.timeout)
 
-        if ok:
-            stripped, scrubbed, redacted, mimes = sanitize(nb_path)
-            total_stripped += stripped
-            total_scrubbed += scrubbed
-            total_redacted += redacted
-            all_mimes.update(mimes)
-            print(f"  ok    {rel}  (stripped {stripped}, scrubbed {scrubbed}, redacted {redacted})", flush=True)
-        else:
-            failures.append((nb_path, msg))
-            print(f"  FAIL  {rel}: {msg}", flush=True)
-
-    progress.close()
+            if ok:
+                stripped, scrubbed, redacted, snapshots, mimes = sanitize(nb_path, snapshotter)
+                total_stripped += stripped
+                total_scrubbed += scrubbed
+                total_redacted += redacted
+                total_snapshots += snapshots
+                all_mimes.update(mimes)
+                print(
+                    f"  ok    {rel}  (stripped {stripped}, scrubbed {scrubbed}, redacted {redacted}, "
+                    f"snapshots {snapshots})",
+                    flush=True,
+                )
+            else:
+                failures.append((nb_path, msg))
+                print(f"  FAIL  {rel}: {msg}", flush=True)
+    finally:
+        progress.close()
+        if snapshotter is not None:
+            snapshotter.close()
 
     print(flush=True)
     print(
         f"Summary: {len(notebooks) - len(failures)}/{len(notebooks)} notebooks processed; "
         f"{total_stripped} widget views stripped, {total_scrubbed} warning lines scrubbed, "
-        f"{total_redacted} identifiers redacted.",
+        f"{total_redacted} identifiers redacted, {total_snapshots} py3Dmol viewers snapshotted.",
         flush=True,
     )
     if all_mimes:
