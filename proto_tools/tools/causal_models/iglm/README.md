@@ -7,82 +7,98 @@
 
 ## Overview
 
-[IgLM](https://github.com/Graylab/IgLM) is an antibody-specific generative language model from the Gray Lab at Johns Hopkins University, trained on 558 million antibody variable-domain sequences from the [Observed Antibody Space](https://opig.stats.ox.ac.uk/webapps/oas/). Its infilling objective lets it re-design a variable-length span inside an antibody using the residues on both sides as context, and every generation is conditioned on chain type and species of origin. This toolkit exposes full-length generation, span re-design, and likelihood scoring.
+[IgLM](https://github.com/Graylab/IgLM) is a generative language model developed by the Gray Lab at Johns Hopkins University for antibody sequence design. Trained on 558 million antibody variable-domain sequences, IgLM can generate complete antibody sequences, redesign selected regions, and evaluate sequence likelihood. Generation is conditioned on antibody chain type and species of origin, allowing the model to produce sequences with different repertoire characteristics.
 
 ## Background
 
-IgLM ([Shuai et al., 2023](https://doi.org/10.1016/j.cels.2023.10.001)) is a [GPT-2](https://en.wikipedia.org/wiki/GPT-2) decoder trained on 558 million antibody heavy- and light-chain variable sequences: the 809 million unique sequences then available in the [Observed Antibody Space](https://opig.stats.ox.ac.uk/webapps/oas/) (OAS) were clustered at 95% sequence identity down to 588 million non-redundant sequences, a random 5% of which was held out for testing, leaving 558 million for training. Every training sequence is prefixed with two conditioning tags naming its chain type (heavy or light) and its species of origin (human, mouse, rat, rabbit, rhesus, or camel), so the same checkpoint generates and scores across chains and species. Two checkpoints are released: `IgLM`, the model used throughout the paper, with 4 layers, 512-dimensional embeddings, 8 attention heads, and 12,889,600 parameters; and `IgLM-S`, a smaller variant with 3 layers, 192-dimensional embeddings, 6 attention heads, and 1,439,616 parameters. Both released checkpoints share a 33-token vocabulary (the 20 amino acids, the two chain tags, the six species tags, and five special tokens) and a 512-token context window.
+IgLM ([Shuai et al., 2023](https://doi.org/10.1016/j.cels.2023.10.001)) is a transformer-based language model trained on antibody sequences from the [Observed Antibody Space](https://opig.stats.ox.ac.uk/webapps/oas/) (OAS) database. Its architecture is based on [GPT-2](https://en.wikipedia.org/wiki/GPT-2), with two released checkpoints: `IgLM` (13 million parameters) and `IgLM-S` (1.4 million parameters).
 
-What distinguishes IgLM from a left-to-right protein language model is its training objective, which the paper formulates as text infilling. For each training sequence a span of length drawn uniformly from 10 to 20 residues is replaced in place by a mask token and then re-appended after a separator token, so the model learns to emit the span conditioned on the residues that both precede *and* follow it while remaining an ordinary autoregressive decoder. That matters because the [complementarity-determining regions](https://en.wikipedia.org/wiki/Complementarity-determining_region) that dominate antigen binding sit in the middle of the variable domain, between conserved framework regions: re-designing one means generating into a gap with known flanks, not continuing a prefix. On a 30-million-sequence held-out test set, IgLM with bidirectional context achieved lower infilling perplexity on CDR loops than the same model restricted to preceding context and than ProGen2-base or ProGen2-OAS, which the authors read as evidence that aligning the pre-training objective with the design task is what buys the improvement.
+The model's principal innovation is its sequence-infilling objective. During training, a randomly selected span of 10-20 amino acids is masked and appended after the remaining sequence. This allows an autoregressive model to generate replacement residues using information from both sides of the masked region.
 
-The paper's headline application is CDR loop library design. Infilling the CDR H3 loop of each of 49 therapeutic antibodies across sampling temperatures of 0.8, 1.0, and 1.2 and nucleus probabilities of 0.5, 0.75, and 1.0 produced libraries whose members showed reduced predicted aggregation propensity, increased predicted solubility (CamSol Intrinsic), and higher OASis identity - the fraction of a sequence's 9-mers seen in human repertoires - than their parent antibodies. The same model likelihoods also carry signal on their own: used to classify sequences from the IMGT mAb DB as human versus non-human, IgLM reached a ROC AUC of 0.96, ahead of ProGen2-OAS at 0.94, which is the basis for treating IgLM likelihood as a naturalness score for antibody sequences.
+This approach is particularly useful for antibody design, where the [complementarity-determining regions](https://en.wikipedia.org/wiki/Complementarity-determining_region) (CDRs) can be modified while retaining the surrounding framework. The authors demonstrated this by generating CDR H3 libraries for 49 therapeutic antibodies. Compared with their parent sequences, the generated libraries showed improvements in computational estimates of solubility, aggregation propensity, and sequence similarity to human antibody repertoires. These results support IgLM's use for antibody library design, although experimental characterization is still required to establish binding, stability, and developability.
+
+IgLM also assigns likelihoods to antibody sequences, providing a quantitative measure of how well they conform to the sequence distributions learned during training. The authors demonstrated that these scores can distinguish human from non-human antibodies, achieving a reported ROC AUC of 0.96 on their evaluation dataset.
 
 ### Learning Resources
 
-- [Graylab/IgLM](https://github.com/Graylab/IgLM) (Gray Lab, Johns Hopkins University) - the official repository, with command-line and Python examples for generation, infilling, and likelihood evaluation that map one-to-one onto the three tools here.
-- [IgLM in Google Colab](https://colab.research.google.com/github/Graylab/IgLM/blob/main/IgLM.ipynb) (Gray Lab) - a hosted notebook for trying antibody sequence generation without a local install.
-- [Observed Antibody Space](https://opig.stats.ox.ac.uk/webapps/oas/) (OPIG, University of Oxford) - the antibody repertoire database IgLM was trained on, and the origin of its chain and species conditioning vocabulary.
-- [OAS95 dataset](https://data.graylab.jhu.edu/OAS95.tar.gz) (Gray Lab) - the exact training and test split used in the paper, clustered at 95% sequence identity.
+- [Observed Antibody Space](https://opig.stats.ox.ac.uk/webapps/oas/) - Database of antibody sequences used to train IgLM.
+- [OAS95 dataset](https://data.graylab.jhu.edu/OAS95.tar.gz) - Sequence dataset and training/test splits associated with the original publication.
 
 ## Tools
 
 ### IgLM Sequence Generation (`iglm-sample`)
 
-Generates full-length antibody variable sequences autoregressively from the chain and species conditioning tokens plus an optional N-terminal prompt, returning `config.num_sequences_per_input` distinct sequences for each prompt, bundled per input item in `results`.
+Generates antibody variable-domain sequences conditioned on chain type and species of origin. An optional N-terminal sequence can be provided as a starting prompt. Each input produces `num_sequences_per_input` distinct sequences.
 
 #### Applications
 
-Use this to build synthetic antibody or nanobody libraries from scratch, or to extend a fixed N-terminal motif into complete variable domains. Upstream's own worked examples are the two canonical cases: human heavy chains grown from the prompt `EVQ`, and nanobodies grown from `QVQ` under camel conditioning. Generated sequences are candidates, so pair them with structure prediction, developability scoring, or `iglm-score` before drawing conclusions.
+Use `iglm-sample` to generate synthetic antibody sequence libraries or extend an existing N-terminal sequence into a complete variable domain. The original publication demonstrates the generation of human heavy chains beginning with `EVQ` and camelid heavy-chain sequences beginning with `QVQ`.
+
+Generated sequences can be evaluated with `iglm-score` or other methods for assessing structural properties and developability.
 
 #### Usage Tips
 
-- **`chains` and `species` are per-item and broadcastable, and are named in plain words.** `chains` accepts `"heavy"` or `"light"`; `species` accepts `"human"`, `"mouse"`, `"rat"`, `"rabbit"`, `"rhesus"`, or `"camel"`. Both are case-insensitive, so `"HUMAN"` and `"Heavy"` are accepted and normalized to lower case. Pass a single value to condition every item the same way, or one value per item to mix chains and species in one call. Camel conditioning is only meaningful with `chains=["heavy"]` - OAS's camel repertoires are heavy-chain only, which is why the paper sampled camel heavy chains alone.
-- **An over-ambitious `num_sequences_per_input` can exhaust the attempt budget.** The tool resamples until it holds that many *distinct* sequences per item, discarding malformed generations the way upstream does. On a sharply peaked distribution (low `temperature`, low `top_p`) the distinct sequences run out and the tool raises rather than returning a short list. The default is `1`; upstream's own default is 1000, so raise it deliberately and keep `temperature` near the paper's 0.8-1.2 range when asking for large counts.
-- **`max_length` (default 150, upstream's cap) counts the two conditioning tokens and the prompt.** It is a token budget for the whole generation, not a count of new residues, so a long prompt eats into the sequence that follows. Both checkpoints accept up to 512.
-- **Running out of `max_length` shows up as an error, not as short sequences.** IgLM's format spends five tokens on the two conditioning tags, the mask, the separator, and the terminator, and a candidate that reaches the budget before completing that format fails upstream's well-formedness check and is discarded, spending a draw from the attempt budget. So a budget that is too tight surfaces as `yielded only N of M requested unique sequences`, and the fix is to raise `max_length` (up to 512) rather than to filter the output. Short sequences that *are* returned are IgLM's own choice of stopping point, not a truncation.
-- **`prepend_prompt=True` (the default) returns the prompt joined to its continuation.** Set it `False` to receive only the newly generated residues.
+- **Chain and species conditioning:** `chains` accepts `heavy` or `light`, while `species` supports `human`, `mouse`, `rat`, `rabbit`, `rhesus`, and `camel`. A single value can be applied to an entire batch, or separate values can be provided for individual sequences.
+- **Sequence diversity:** `temperature` and `top_p` control sampling diversity. Lower values favor more probable residues, while higher values allow a broader range of sequences. The paper explores temperatures of 0.8-1.2.
+- **Number of sequences:** `num_sequences_per_input` specifies the number of distinct sequences requested for each input. If the implementation cannot generate enough unique, valid sequences within its sampling budget, it raises an error rather than returning an incomplete collection.
+- **Maximum length:** `max_length` sets the total token budget, including conditioning tokens and the input prompt. The default is 150, and both released models support a context length of up to 512 tokens. Sequences that fail to terminate within the available budget are discarded.
+- **Prompt handling:** By default, `prepend_prompt=True` includes the original prompt in the returned sequence. Set it to `False` to return only the generated continuation.
 
-### IgLM Span Re-design (`iglm-infill`)
+### IgLM Span Redesign (`iglm-infill`)
 
-Replaces the residues of `spans[i]` in `sequences[i]` with a mask token and has IgLM write a new segment conditioned on the flanking residues plus the chain and species tokens - the infilling objective the model was trained on. Each bundle in `results` holds the full re-designed sequences and, aligned with them, the residues IgLM wrote into the span in `infilled_residues` and where those residues landed in `spans`.
+Replaces a specified region of an antibody sequence with newly generated residues while preserving the surrounding sequence. The model uses both flanking regions, together with chain and species conditioning, to generate a replacement of variable length.
+
+Each result includes the redesigned full sequence, the newly generated residues, and their positions within the resulting sequence.
 
 #### Applications
 
-This is the CDR loop diversification workflow from the paper: hold a parent framework fixed, re-design the loop, and screen the resulting library. Infilling CDR H3 across 49 therapeutic antibodies produced libraries with reduced predicted aggregation propensity (SAP score), increased predicted solubility (CamSol Intrinsic), and higher OASis identity than the parents, so the typical pipeline is infill a loop, then filter the designs on developability predictors and `iglm-score`.
+The primary application is diversification of antibody CDR loops while retaining the parent framework. This follows the approach used in the original study, where IgLM generated alternative CDR H3 sequences for therapeutic antibodies.
+
+The resulting libraries can be evaluated using IgLM likelihood scores, developability predictors, and downstream structural or experimental assays.
 
 #### Usage Tips
 
-- **Span coordinates are 1-indexed and inclusive.** This is the easiest thing to get wrong: upstream's 0-indexed, end-exclusive `(98, 106)` for the 1JPT CDR H3 is `IgLMSpan(start=99, end=106)` here. Supply exactly one span per sequence; a span whose `end` runs past its sequence, or whose `end` precedes its `start`, is rejected at input construction.
-- **IgLM chooses the span length, which need not match the original.** The new segment is returned per design in `results[i].infilled_residues` and is free to be shorter or longer than the residues it replaced. The paper found infilled CDR H3 length distributions varying considerably across the 49 parents, including occasional loops of fewer than five residues, so check the returned lengths before committing designs downstream.
-- **Hand `results[i].spans` straight back to `iglm-score`.** Because each design's new span has its own length, the bundle also reports where it landed as `IgLMSpan` objects, so ranking a library by its span-conditional likelihood needs no coordinate arithmetic: `run_iglm_score(IgLMScoringInput(sequences=designs.sequences, spans=designs.spans), IgLMScoringConfig())`.
-- **Spans of roughly 10-20 residues match the training distribution.** Masks were drawn uniformly from that range during training, so much shorter or much longer spans are extrapolation.
-- **`max_length` has to cover the masked parent as well as the new span.** The whole masked sequence is the prompt here, so the 150-token default leaves a full variable domain roughly 30 tokens of headroom for the new span; raise it (up to 512) for long chains or long spans.
+- **Span coordinates:** Residue positions are 1-indexed and inclusive. For example, `IgLMSpan(start=99, end=106)` selects eight residues. The implementation converts these coordinates to the 0-indexed, end-exclusive format used by upstream IgLM.
+- **Variable-length generation:** IgLM determines the length of each replacement span, which may differ from the original. The generated residues are available through `infilled_residues`, and their updated positions are recorded in `spans`.
+- **Scoring generated regions:** The returned `spans` can be passed directly to `iglm-score` to calculate the conditional likelihood of each redesigned region without manually adjusting coordinates.
+- **Span length:** The model was trained with masked regions of 10-20 residues. It can generate replacements of other lengths, but performance outside the training distribution is less well characterized.
+- **Maximum length:** `max_length` must accommodate the masked parent sequence, its conditioning tokens, and the generated replacement. Increase the default of 150 when working with longer sequences or expecting longer replacements.
 
 ### IgLM Scoring (`iglm-score`)
 
-Computes the autoregressive likelihood of each sequence under its chain and species conditioning, returning `log_likelihood`, `avg_log_likelihood`, and `perplexity` per sequence, plus optional per-position logits over the 33-token vocabulary. Supplying a span switches to IgLM's infilling likelihood, scoring that span given the rest of the chain.
+Calculates the likelihood of antibody sequences under IgLM, conditioned on chain type and species of origin. The tool returns total log-likelihood, average log-likelihood, and perplexity, with optional per-position logits.
+
+When a span is provided, the model instead evaluates the conditional likelihood of that region given the remainder of the sequence.
 
 #### Applications
 
-Use the whole-sequence score as a naturalness measure for antibody sequences - the paper's human versus non-human classification on the IMGT mAb DB (ROC AUC 0.96) rests on exactly this quantity. Use the span-conditional score to rank re-designed loops from `iglm-infill` against one another, since every design shares the same parent framework and span and so is scored under identical context.
+Whole-sequence likelihood can be used to assess how closely a sequence resembles the antibody repertoire represented in IgLM's training data. This is useful for comparing candidate antibodies or studying differences between antibody sequence distributions.
+
+Conditional likelihood is particularly useful for evaluating regions generated by `iglm-infill`, allowing candidate CDR loops to be compared in the context of their surrounding framework.
+
+These scores reflect the model's learned sequence distribution and should not be interpreted as direct predictions of binding affinity, stability, or experimental performance.
 
 #### Usage Tips
 
-- **Span coordinates are 1-indexed and inclusive here too.** `IgLMSpan(start=99, end=106)` is the same eight residues `iglm-infill` re-designs, so `spans=designs.spans` hands an infill result straight back with no conversion. Upstream's 0-indexed, end-exclusive `(98, 106)` is translated for you.
-- **`spans` is optional and broadcastable; omit it (or pass `None`) to score the whole chain.** One span broadcasts across every sequence, which is the convenient form for ranking a library of designs that share a parent framework and loop position.
-- **Compare length-normalized scores under identical conditioning.** `log_likelihood` is a sum and grows with sequence length, so use `avg_log_likelihood` or `perplexity` across sequences of different lengths. Lower perplexity means IgLM finds the sequence more antibody-like under the conditioning it was given; scores obtained under different `chains`, `species`, or `model_checkpoint` values sit on different scales and are not comparable.
-- **`avg_log_likelihood` is the value upstream's `IgLM.log_likelihood` returns.** Upstream reports the mean per-token log-likelihood and derives perplexity as `exp(-avg_log_likelihood)`, which is what `perplexity` holds here.
-- **The scored region ends with IgLM's terminal token.** Following upstream, a sequence therefore contributes one more scored token than it has residues, which slightly shifts both the sum and the mean relative to a residues-only score.
-- **`return_logits` defaults to `False`.** The logits array is `(scored_len, 33)` per sequence; enable it only when you need the per-position distributions, and read the column order from the returned `vocab`.
+- **Span coordinates:** Spans use the same 1-indexed, inclusive convention as `iglm-infill`. Returned infilling spans can be supplied directly to the scoring tool.
+- **Whole-sequence and conditional scoring:** Omit `spans` to evaluate complete sequences. Providing a span scores that region using the remaining sequence as context.
+- **Comparing scores:** `log_likelihood` is summed over the scored tokens and depends on sequence length. Use `avg_log_likelihood` or `perplexity` when comparing sequences of different lengths. Lower perplexity indicates greater likelihood under the model.
+- **Conditioning consistency:** Compare scores obtained using the same checkpoint, chain type, species, and scoring procedure. Scores from different conditioning settings should not be treated as directly equivalent.
+- **Scoring convention:** Following the upstream implementation, likelihood calculations include the terminal token. `avg_log_likelihood` is the mean per-token log-likelihood, and `perplexity` is calculated as `exp(-avg_log_likelihood)`.
+- **Per-position logits:** Set `return_logits=True` to obtain token logits for each scored position. These are returned with the vocabulary needed to identify the corresponding amino acid and special tokens.
 
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every IgLM tool in this toolkit (`iglm-sample`, `iglm-infill`, `iglm-score`).
+The Proto guides for tool persistence, device management, parallel execution, and cloud inference apply to all three IgLM tools.
 
-- **The weights ship inside the pip package, so there is no download step and no token.** Both checkpoints live under `iglm/trained_models/` in the `iglm` distribution (about 59 MB together), so setting up the toolkit never fetches weights from a model hub and nothing has to be requested or authorized. The JHU license still limits use to non-commercial, non-profit purposes, and commercial use is licensed separately through [Johns Hopkins Technology Ventures](https://jhtv.e-lucid.com/product/generative-language-model-for-antibody-sequence-design-iglm).
-- **`model_checkpoint` is shared by all three tools and reloads the worker when it changes.** `IgLM` (12.9M parameters) is the model the paper evaluates and the default; `IgLM-S` (1.4M parameters) is the smaller variant the paper compares against. Both carry the same conditioning vocabulary and the same 512-token context, so inputs transfer between them, but scores do not.
-- **The models are small; throughput, not memory, is the constraint.** Neither checkpoint is large enough for GPU memory to be the limiting factor, so `batch_size` (default 32) is the dominant lever on the two generation tools: on a warm worker, 128 designs take 0.61s at `batch_size=8` and 0.19s at 32, and the curve keeps improving to 0.09s at 128. Raise it freely for library-scale runs - a batch of 128 generations holds roughly 300 MB of KV cache. Each draw is capped by how many sequences are still outstanding, so a high value never over-draws a single-design request.
-- **The conditioning vocabulary is closed.** `chains` and `species` accept only the two chain types and six species IgLM was conditioned on; anything else is rejected at input construction rather than silently mapped. The species set mirrors the OAS repertoires the model was trained on.
-- **IgLM models antibody variable domains only.** It was trained exclusively on heavy- and light-chain variable sequences, so constant domains, single-chain constructs with linkers, and non-antibody proteins fall outside its distribution - use a general-purpose protein language model such as ProGen2 or ESM2 for those.
+- **Model checkpoints:** Two pretrained checkpoints are available: `IgLM` (13M parameters) and `IgLM-S` (1.4M parameters). Both support the same conditioning vocabulary. The larger model is used for the principal evaluations in the original publication.
+- **Model weights:** Both checkpoints are distributed with the upstream Python package, so no separate model download or authentication is required.
+- **Licensing:** IgLM is distributed under the JHU Academic Software License Agreement. Use is restricted to eligible non-commercial, non-profit purposes unless a separate commercial license is obtained.
+- **Supported sequences:** IgLM was trained on antibody heavy- and light-chain variable domains. Constant regions, linked antibody constructs, and unrelated proteins fall outside its intended training distribution.
+- **Conditioning:** The model supports two chain types and six species of origin. These categories are fixed by the pretrained vocabulary and cannot be extended through inference settings alone.
+- **Batch processing:** `batch_size` controls the number of sequences processed together. Larger batches can improve generation throughput, subject to available device memory.
+- **Sampling:** Generation is stochastic, and multiple candidates can be produced for each input. Sampling temperature and nucleus probability provide control over sequence diversity.
+- **Output organization:** Generated sequences are grouped by input, preserving the association between each prompt or parent antibody and its candidate designs.
+- **Evaluation:** IgLM likelihood provides a measure of sequence plausibility under its training distribution, not a calibrated estimate of antibody function or developability. Additional computational and experimental evaluation is recommended.
