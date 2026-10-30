@@ -1,0 +1,2 @@
+# rfd4-proteina pins requires-python = ">=3.12,<3.13".
+default: 3.12

@@ -913,12 +913,24 @@ from proto_tools.tools.structure_alignment import (
 
 # Structure design tools
 from proto_tools.tools.structure_design import (
+    RFD4CommonConfig,
+    RFD4Design,
+    RFD4DesignConfig,
+    RFD4Designs,
+    RFD4DesignSpec,
+    RFD4Input,
+    RFD4InverseFoldingConfig,
+    RFD4Output,
+    RFD4SamplerTuning,
+    RFD4SequenceProbability,
     RFdiffusion3Config,
     RFdiffusion3Designs,
     RFdiffusion3DesignSpec,
     RFdiffusion3Input,
     RFdiffusion3Output,
     RFdiffusion3Structure,
+    run_rfd4_design,
+    run_rfd4_inverse_folding,
     run_rfdiffusion3,
 )
 
@@ -1866,6 +1878,19 @@ __all__ = [
     "Mmseqs2HomologySearchOutput",
     "Mmseqs2HomologySearchQuery",
     "Mmseqs2HomologySearchResult",
+    # Structure design - RFD4-Proteina
+    "RFD4CommonConfig",
+    "RFD4Design",
+    "RFD4DesignConfig",
+    "RFD4Designs",
+    "RFD4DesignSpec",
+    "RFD4Input",
+    "RFD4InverseFoldingConfig",
+    "RFD4Output",
+    "RFD4SamplerTuning",
+    "RFD4SequenceProbability",
+    "run_rfd4_design",
+    "run_rfd4_inverse_folding",
     # Structure design - RFdiffusion3
     "run_rfdiffusion3",
     "RFdiffusion3Input",

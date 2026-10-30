@@ -1,0 +1,25 @@
+# Environment variables for RFD4-Proteina (structure and sequence design).
+#
+# Lines starting with # are comments and will be ignored.
+# Variables listed under [passthrough] are inherited from the parent environment.
+# Variables under [set] are set to specific values in the subprocess.
+
+[passthrough]
+# Escape hatch for hosts where the fused cuEquivariance kernels RFD4 imports misbehave.
+DISABLE_CUEQUIVARIANCE
+# RFD4 reads these to tune cuEquivariance (it defaults both to "1").
+CUEQ_DISABLE_AOT_TUNING
+CUEQ_DEFAULT_CONFIG
+# Gates RFD4's runtime NaN assertions (default on).
+NAN_CHECK
+
+[set]
+# Backs ckpt_path/autoencoder_ckpt_path resolvers that hf_ckpt_path overrides but must resolve.
+DATA_PATH=${VENV_PATH}/rfd4_data
+# Full Hydra tracebacks, so the stderr tail on failure names the actual exception.
+HYDRA_FULL_ERROR=1
+# Point triton/inductor's JIT at the tool-local CUDA toolkit setup.sh installs.
+CC=${VENV_PATH}/cuda_env/bin/gcc
+CXX=${VENV_PATH}/cuda_env/bin/g++
+CUDA_HOME=${VENV_PATH}/cuda_env
+LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib

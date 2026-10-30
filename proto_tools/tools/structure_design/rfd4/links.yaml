@@ -1,0 +1,9 @@
+github: https://github.com/RosettaCommons/RFD4-Proteina
+website: https://rfd4-proteina.org/
+preprint: https://rfd4-proteina.org/assets/paper/RFD4-Proteina.pdf
+huggingface:
+  - https://huggingface.co/nvidia/RFD4-Proteina
+  - https://huggingface.co/datasets/nvidia/RFD4-Proteina
+organizations:
+  - Institute for Protein Design
+  - NVIDIA

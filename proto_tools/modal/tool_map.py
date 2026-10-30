@@ -127,6 +127,8 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "pyrosetta-sap": ToolEntry("proto-tools-pyrosetta", "PyRosettaService", "sap", False),
     "pyrosetta-sasa": ToolEntry("proto-tools-pyrosetta", "PyRosettaService", "sasa", False),
     "rf3-prediction": ToolEntry("proto-tools-rf3", "RF3Service", "predict", True),
+    "rfd4-design": ToolEntry("proto-tools-rfd4", "RFD4Service", "design", True),
+    "rfd4-inverse-folding": ToolEntry("proto-tools-rfd4", "RFD4Service", "inverse_folding", True),
     "rfdiffusion3-design": ToolEntry("proto-tools-rfdiffusion3", "RFdiffusion3Service", "generate", True),
     "segmasker-score": ToolEntry("proto-tools-segmasker", "SegmaskerService", "score", False),
     "splice-transformer-prediction": ToolEntry("proto-tools-splice-transformer", "SpliceTransformerService", "run", True),

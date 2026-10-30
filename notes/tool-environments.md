@@ -414,6 +414,8 @@ The wrapper's `.to_device()` uses `move_model_to_device()` from `standalone_help
 
 **JAX tools** (AlphaFold2, ProteinMPNN, AlphaGenome, …) do **not** implement `to_device()`. A JAX runtime initializes a context on *every* visible GPU, so these tools set `pin_visible_devices=True` on the `@tool` registration. The worker is then spawned with `CUDA_VISIBLE_DEVICES` restricted to its assigned physical GPU(s), which it addresses as local `cuda:0..N-1`, and the model is placed on its sole visible GPU at load — there is nothing to move. Because `CUDA_VISIBLE_DEVICES` is fixed for a process, a JAX worker cannot reach another GPU in-process, so DeviceManager **respawns** it on a device change (and kills it on eviction). The user-facing `device=` selection is unchanged; the logical→physical mapping is internal. See `notes/device-management.md`.
 
+Pinning is not JAX-specific — it is the pattern for any runtime that picks its own device. `rfd4-design` and `rfd4-inverse-folding` hold a PyTorch model in memory but still pin, because upstream builds its Lightning trainer with `devices=N` and claims local `cuda:0..N-1`; a logical index cannot be imposed on it from inside the process. Their `to_device()` is therefore a documented no-op. The trade is deliberate: pinning costs CPU offload (eviction kills the worker) but is what makes `device="cuda:1"` land on the right GPU instead of silently running on `cuda:0`.
+
 `AlphaGenome` additionally sets `gpu_only=True`: its black-box model cannot be CPU-offloaded usefully (CPU compilation takes 10+ minutes), so eviction kills the worker and the next dispatch reloads on GPU.
 
 **Neither pattern works, use `gpu_only=True`**

@@ -237,6 +237,8 @@ module = [
     "scipy.*",
     "umap.*",
     "hydra.*",
+    "rfproteina.*",
+    "zstandard.*",
     "tensorflow.*",
     "keras.*",
     "spliceai.*",
@@ -443,6 +445,7 @@ exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*
 "proto_tools.modal.structure_alignment.pymol_deployment" = ["README.md"]
 "proto_tools.modal.structure_alignment.tmalign_deployment" = ["README.md"]
 "proto_tools.modal.structure_alignment.usalign_deployment" = ["README.md"]
+"proto_tools.modal.structure_design.rfd4_deployment" = ["README.md"]
 "proto_tools.modal.structure_design.rfdiffusion3_deployment" = ["README.md"]
 "proto_tools.modal.structure_dynamics.bioemu_deployment" = ["README.md"]
 "proto_tools.modal.structure_prediction.alphafold2_deployment" = ["README.md"]

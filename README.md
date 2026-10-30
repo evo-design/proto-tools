@@ -165,6 +165,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/structure_alignment/tmalign/">tmalign/</a>
 └── <a href="proto_tools/tools/structure_alignment/usalign/">usalign/</a>
 <a href="proto_tools/tools/structure_design/">structure_design/</a>               # De novo structure generation
+├── <a href="proto_tools/tools/structure_design/rfd4/">rfd4/</a>
 └── <a href="proto_tools/tools/structure_design/rfdiffusion3/">rfdiffusion3/</a>
 <a href="proto_tools/tools/structure_dynamics/">structure_dynamics/</a>             # Conformational dynamics
 └── <a href="proto_tools/tools/structure_dynamics/bioemu/">bioemu/</a>

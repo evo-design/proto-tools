@@ -1,0 +1,11 @@
+code:
+  spdx: BSD-3-Clause
+  url: https://github.com/RosettaCommons/RFD4-Proteina/blob/main/LICENSE
+weights:
+  spdx: BSD-3-Clause
+  url: https://huggingface.co/nvidia/RFD4-Proteina
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: RosettaCommons/RFD4-Proteina is BSD-3-Clause (Institute for Protein Design, University of Washington, 2026) and the nvidia/RFD4-Proteina weights card states the same license for the model and weights, so code and weights share one permissive license and the weights are ungated. Two adjacent artifacts are licensed differently and are not used by this toolkit. The nvidia/RFD4-Proteina training dataset is CC-BY-4.0, and the optional refolding oracles distributed alongside RFD4-Proteina carry their own upstream terms. Upstream ships AlphaFold2 and AlphaFold3/OpenFold3 runtime container images, which bundle third-party code under its own licenses (some restricting commercial use or redistribution), plus Apache-2.0 ported OpenFold3 weights, and it does not distribute the AlphaFold2 parameters or the AlphaFold3 weights, which come from DeepMind under DeepMind's terms. Neither gates this toolkit, which never retrieves the dataset and never invokes the oracles.
+last_updated: '2026-10-21'
