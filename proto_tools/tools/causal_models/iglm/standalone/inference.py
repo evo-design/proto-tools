@@ -36,6 +36,9 @@ IGLM_MODEL_CHECKPOINTS = Literal[
 # Positional-embedding cap of both released checkpoints (GPT-2 n_positions=512).
 IGLM_MAX_CONTEXT = 512
 
+# Generation cap used by upstream's iglm.IgLM._generate.
+IGLM_DEFAULT_MAX_LENGTH = 150
+
 # Rejection-sampling budget per item: candidates drawn before giving up on the requested count.
 IGLM_CANDIDATES_PER_SEQUENCE = 20
 IGLM_MIN_CANDIDATE_BUDGET = 100
@@ -222,10 +225,12 @@ class IgLMModel:
                 drawn += num_to_draw
 
                 for candidate in candidates.detach().cpu().numpy():
-                    if not validate_generated_seq(candidate, self.tokenizer):
-                        continue
+                    # Attributed before the format check: a clipped generation is usually also
+                    # malformed, and blaming the distribution for it points at the wrong remedy.
                     if self._ran_out_of_budget(candidate, max_length):
                         truncated += 1
+                        continue
+                    if not validate_generated_seq(candidate, self.tokenizer):
                         continue
                     sequence = self._reassemble(candidate)
                     if sequence in accepted:
@@ -244,7 +249,8 @@ class IgLMModel:
             )
             raise ValueError(
                 f"iglm: item {item_index} yielded only {len(accepted)} of {num_sequences} requested unique "
-                f"sequences after {drawn} candidates ({truncated} ran out of max_length); {remedy}."
+                f"sequences after {drawn} candidates ({truncated} ran out of max_length), the per-item "
+                f"ceiling; {remedy}."
             )
 
         if truncated:
@@ -267,7 +273,7 @@ class IgLMModel:
         num_sequences_per_input: int = 1,
         temperature: float = 1.0,
         top_p: float = 1.0,
-        max_length: int = 150,
+        max_length: int = IGLM_DEFAULT_MAX_LENGTH,
         prepend_prompt: bool = True,
         batch_size: int = 8,
         device: str = "cuda",
@@ -333,7 +339,7 @@ class IgLMModel:
         num_sequences_per_input: int = 1,
         temperature: float = 1.0,
         top_p: float = 1.0,
-        max_length: int = 150,
+        max_length: int = IGLM_DEFAULT_MAX_LENGTH,
         batch_size: int = 8,
         device: str = "cuda",
         verbose: bool = False,
@@ -405,7 +411,7 @@ class IgLMModel:
         infill_ranges: list[list[int] | None],
         chain_tokens: list[str],
         species_tokens: list[str],
-        batch_size: int = 1,
+        batch_size: int = 8,
         return_logits: bool = False,
         device: str = "cuda",
         verbose: bool = False,

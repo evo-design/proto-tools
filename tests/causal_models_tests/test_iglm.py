@@ -184,6 +184,40 @@ def test_iglm_infill_dispatch_converts_spans_and_conditioning(monkeypatch):
     assert result.results[1].spans == [IgLMSpan(start=1, end=2), IgLMSpan(start=1, end=4)]
 
 
+def test_iglm_sample_dispatch_carries_the_batch_and_its_conditioning(monkeypatch):
+    """Multi-prompt input goes through one dispatch carrying every generation setting."""
+    payloads = []
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        assert toolkit == "iglm"
+        assert config is not None
+        payloads.append(payload)
+        return {"sequences": [[f"{prompt}AAA"] for prompt in payload["prompts"]]}
+
+    monkeypatch.setattr(
+        "proto_tools.tools.causal_models.iglm.iglm_sample.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    result = run_iglm_sample(
+        IgLMSampleInput(prompts=["EVQ", "QVQ"], chains=["heavy"], species=["human", "camel"]),
+        IgLMSampleConfig(num_sequences_per_input=2, max_length=200, prepend_prompt=False, seed=3),
+    )
+
+    assert result.success
+    assert len(payloads) == 1
+    payload = payloads[0]
+    assert payload["prompts"] == ["EVQ", "QVQ"]
+    # One chain value broadcasts across both prompts; species stays 1:1.
+    assert payload["chain_tokens"] == ["[HEAVY]", "[HEAVY]"]
+    assert payload["species_tokens"] == ["[HUMAN]", "[CAMEL]"]
+    assert payload["num_sequences_per_input"] == 2
+    assert payload["max_length"] == 200
+    assert payload["prepend_prompt"] is False
+    assert payload["seed"] == 3
+    assert len(result.results) == 2
+
+
 def test_iglm_score_dispatch_converts_spans_and_conditioning(monkeypatch):
     """Scoring converts spans the same way and sends ``None`` wherever no span was given."""
     payloads = []

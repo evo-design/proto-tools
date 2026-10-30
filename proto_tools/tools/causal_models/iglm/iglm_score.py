@@ -202,4 +202,8 @@ def run_iglm_score(
         for i, metrics in enumerate(result["metrics"])
     ]
 
-    return IgLMScoringOutput(scores=scores)
+    return IgLMScoringOutput(
+        # Scores from different checkpoints sit on different scales, so record which produced these.
+        metadata={"model_checkpoint": config.model_checkpoint},
+        scores=scores,
+    )
