@@ -147,8 +147,10 @@ def _split_example_id(example_id: str, spec_keys: list[str]) -> tuple[str, int]:
 def _read_per_example_metrics(output_dir: Path) -> dict[str, dict[str, Any]]:
     """Read upstream's per-example metrics table when one was written.
 
-    The wrapper always passes ``metrics_tags=[]``, so there is normally no metrics
-    table at all; this is a best-effort read for runs that were given tags.
+    The wrapper always passes ``metrics_tags=[]``, which gates only *tagged* metrics
+    -- the oracle-scored set. Untagged metrics such as ``unknown_residue_filter``
+    still run, so a table with a few composition columns is the normal case. The
+    read stays best-effort because a run may write none at all.
 
     Args:
         output_dir (Path): Run output directory passed as ``out_dir``.

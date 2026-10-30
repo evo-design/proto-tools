@@ -271,6 +271,35 @@ def test_gappy_author_numbering_is_translated_for_every_residue():
     assert translate_selection("sel('A/*/[2, 10]')", gappy) == "sel('A/*/[2, 3]')"
 
 
+def test_author_range_whose_label_span_is_inexact_is_rejected_on_both_paths():
+    """A range is translatable only when its label span covers exactly the residues it names.
+
+    Insertion codes inside the span and non-monotone author numbering both make the
+    translated range address a different residue count than the user wrote, which would
+    silently condition the wrong residues. The selection path needs the same check as the
+    contig path -- a guard on contigs alone leaves ``sel()`` ranges quietly wrong.
+    """
+    inserted = {"A": {"52": 1, "52A": 2, "52B": 3, "53": 4}}
+    with pytest.raises(ValueError, match="insertion-coded residue"):
+        translate_contig("A52-53", inserted)
+    with pytest.raises(ValueError, match="insertion-coded residue"):
+        translate_selection("sel('A/*/[52-53]')", inserted)
+
+    # Non-monotone numbering names 9 residues but spans only 6 labels.
+    with pytest.raises(ValueError, match="not monotone"):
+        translate_contig("A1-12", {"A": {"1": 1, "12": 6, **{str(n): n for n in range(2, 6)}, "6": 9}})
+
+
+def test_author_range_is_accepted_when_the_label_span_matches_exactly():
+    """Insertion codes outside the span, and plain numbering gaps, are both translatable."""
+    # 52A sits after the range, so labels 1-3 address exactly the three residues named.
+    assert translate_contig("A50-52", {"A": {"50": 1, "51": 2, "52": 3, "52A": 4}}) == "A1-3"
+    # A digit-leading contig token is always a length, never a chain id, even when some
+    # chain happens to be named '5' -- the documented binder contig must survive.
+    binder = {"5": {"1": 1}, "A": {str(n): n for n in range(1, 66)}}
+    assert translate_contig("50-120, /0, A1-65", binder) == "50-120, /0, A1-65"
+
+
 def test_translate_selection_resolves_chain_wildcards_and_lists_across_chains():
     """A path's chain field may be a wildcard or a list, and each chain has its own offset."""
     two_chains = {"A": {"17": 1, "18": 2}, "B": {"100": 1, "101": 2}}

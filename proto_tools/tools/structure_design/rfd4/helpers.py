@@ -74,11 +74,12 @@ def prepare_rfd4_cif(structure_content: str, structure_format: str) -> tuple[str
                     continue
                 icode = residue.seqid.icode.strip()
                 key = f"{residue.seqid.num}{icode}"
-                if key in chain_map:
+                # Two gemmi residues may share one author id (microheterogeneity, altlocs). That is
+                # only ambiguous when they disagree about the label it maps to.
+                if key in chain_map and chain_map[key] != int(residue.label_seq):
                     raise ValueError(
-                        f"Chain {chain.name!r} numbers two residues {key!r} "
-                        f"(label {chain_map[key]} and {int(residue.label_seq)}). Author residue ids "
-                        "must be unique within a chain to translate them onto label numbering; "
+                        f"Chain {chain.name!r} maps author residue {key!r} to two different label ids "
+                        f"({chain_map[key]} and {int(residue.label_seq)}), so it cannot be translated; "
                         "renumber the input, or pass residue_numbering='label'."
                     )
                 chain_map[key] = int(residue.label_seq)
@@ -144,16 +145,6 @@ def translate_contig(contig: str, auth_to_label: dict[str, dict[str, int]]) -> s
             translated.append(segment)
             continue
         if not segment[0].isalpha():
-            # Upstream classifies by the same test, so a numeric chain reads as an expandable segment.
-            numeric_prefix = segment.split("-", 1)[0]
-            for length in range(len(numeric_prefix), 0, -1):
-                if numeric_prefix[:length] in auth_to_label:
-                    raise ValueError(
-                        f"Contig token {segment!r} starts with a digit, so RFD4 reads it as an "
-                        f"expandable segment rather than chain {numeric_prefix[:length]!r}. "
-                        "RFD4 contigs can only address alphabetic chain ids; rename the chain "
-                        "before designing against it."
-                    )
             translated.append(segment)
             continue
         translated.append(_translate_preserved_segment(segment, auth_to_label))
@@ -176,31 +167,38 @@ def _translate_preserved_segment(token: str, auth_to_label: dict[str, dict[str, 
     end = _translate_residue_id(chain_id, int(end_str), auth_to_label, context)
     if end < start:
         raise ValueError(f"{context}: range end {end_str} precedes start {start_str} after translation.")
-    _reject_insertion_codes_in_span(chain_id, int(start_str), int(end_str), auth_to_label, context)
+    _reject_inexact_span(chain_id, int(start_str), int(end_str), auth_to_label, context)
     return f"{chain_id}{start}-{end}"
 
 
-def _reject_insertion_codes_in_span(
+def _reject_inexact_span(
     chain_id: str, start: int, end: int, auth_to_label: dict[str, dict[str, int]], context: str
 ) -> None:
-    """Refuse an author range whose interior carries insertion codes.
+    """Refuse an author range whose label span does not cover exactly the residues it names.
 
-    A contig cannot express an insertion code, so ``A52-53`` over residues 52, 52A, 52B, 53
-    would quietly become a four-residue preserved segment -- and two adjacent author ranges
-    would quietly drop the inserted residues out of the middle, fusing 52 to 53.
+    An author range is only translatable when it maps onto a contiguous label run of the same
+    length. It does not when an insertion code sits inside the span (``A52-53`` over 52, 52A,
+    52B, 53 would silently cover four residues) or when the chain's author numbering is not
+    monotone (the label span then covers fewer residues than were named). A plain gap in the
+    author numbering is fine: those residues are simply absent from the structure.
     """
-    inserted = sorted(
-        key
-        for key in auth_to_label.get(chain_id, {})
-        if not key.isdigit() and key[:-1].isdigit() and start <= int(key[:-1]) <= end
+    chain_map = auth_to_label.get(chain_id, {})
+    named = [key for key in chain_map if key.isdigit() and start <= int(key) <= end]
+    span = chain_map[str(end)] - chain_map[str(start)] + 1
+    if span == len(named):
+        return
+    inserted = sorted(k for k in chain_map if not k.isdigit() and k[:-1].isdigit() and start <= int(k[:-1]) <= end)
+    detail = (
+        f"insertion-coded residue(s) {inserted} sit inside it"
+        if inserted
+        else "the chain's author numbering is not monotone across it"
     )
-    if inserted:
-        raise ValueError(
-            f"{context}: chain {chain_id} carries insertion-coded residue(s) {inserted} inside "
-            f"{start}-{end}, which a contig cannot address, so the segment would silently cover "
-            "more residues than it names. Renumber the input, or pass residue_numbering='label' "
-            "and use label_seq_id values."
-        )
+    raise ValueError(
+        f"{context}: author range {start}-{end} on chain {chain_id} covers {len(named)} residue(s) "
+        f"but maps to a {span}-residue label span, because {detail}. A contig cannot address "
+        "insertion codes; renumber the input, or pass residue_numbering='label' and use "
+        "label_seq_id values."
+    )
 
 
 _SEL_CALL_RE = re.compile(r"\bsel\s*\(\s*(['\"])(.*?)\1\s*\)")
@@ -314,7 +312,13 @@ def _translate_selection_path(
             )
         return str(labels.pop())
 
-    fields[2] = _map_bracketed_values(res_id_field, _map_one)
+    def _check_span(start: str, end: str) -> None:
+        if not (start.lstrip("-").isdigit() and end.lstrip("-").isdigit()):
+            return
+        for chain in chain_ids:
+            _reject_inexact_span(chain, int(start), int(end), auth_to_label, context)
+
+    fields[2] = _map_bracketed_values(res_id_field, _map_one, _check_span)
     return "/".join(fields)
 
 
@@ -327,8 +331,14 @@ def _selection_chain_ids(chain_field: str, auth_to_label: dict[str, dict[str, in
     return [chain_field]
 
 
-def _map_bracketed_values(field: str, map_one: Callable[[str], str]) -> str:
-    """Apply ``map_one`` to each scalar, list entry, and range endpoint in a path field."""
+def _map_bracketed_values(
+    field: str, map_one: Callable[[str], str], check_span: Callable[[str, str], None] = lambda _a, _b: None
+) -> str:
+    """Apply ``map_one`` to each scalar, list entry, and range endpoint in a path field.
+
+    ``check_span`` is called with each range's endpoints before they are mapped, so a selection
+    range gets the same exactness check a contig range does.
+    """
     if not (field.startswith("[") and field.endswith("]")):
         return map_one(field)
 
@@ -340,6 +350,7 @@ def _map_bracketed_values(field: str, map_one: Callable[[str], str]) -> str:
         # A range uses a '-' that is not a leading sign on either endpoint.
         range_match = re.fullmatch(r"(-?\d+)\s*-\s*(-?\d+)", part)
         if range_match is not None:
+            check_span(range_match.group(1), range_match.group(2))
             parts.append(f"{map_one(range_match.group(1))}-{map_one(range_match.group(2))}")
         else:
             parts.append(map_one(part))

@@ -270,7 +270,7 @@ class RFD4DesignSpec(BaseModel):
 
     Note:
         Symmetric oligomer design is documented as *Planned* upstream and is not
-        available here. Use ``rfdiffusion3-design`` for cyclic or dihedral symmetry.
+        available here. Use ``rfdiffusion3-design`` for symmetric homo-oligomer design.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -813,7 +813,10 @@ class RFD4CommonConfig(BaseConfig):
         output_dir (str | None): Directory for run outputs; ``None`` uses a tempdir. Each
             call writes into a fresh ``run-<id>`` subdirectory of it, so a reused
             ``output_dir`` cannot return a previous run's designs, and the trajectory
-            frames for a run land in that run's own subdirectory.
+            frames for a run land in that run's own subdirectory. The ``<id>`` is random
+            and is deliberately not returned, since a per-run path in the output would
+            break seeded reproducibility; locate a run by directory mtime, or pass a
+            fresh ``output_dir`` per call.
         device (str): Execution device. ``rfd4-generate`` builds its Lightning trainer
             with ``accelerator="gpu"`` unconditionally, so a GPU is required.
     """
@@ -1054,7 +1057,10 @@ class RFD4DesignConfig(RFD4CommonConfig):
         output_dir (str | None): Directory for run outputs; ``None`` uses a tempdir. Each
             call writes into a fresh ``run-<id>`` subdirectory of it, so a reused
             ``output_dir`` cannot return a previous run's designs, and the trajectory
-            frames for a run land in that run's own subdirectory.
+            frames for a run land in that run's own subdirectory. The ``<id>`` is random
+            and is deliberately not returned, since a per-run path in the output would
+            break seeded reproducibility; locate a run by directory mtime, or pass a
+            fresh ``output_dir`` per call.
         device (str): Execution device. ``rfd4-generate`` builds its Lightning trainer
             with ``accelerator="gpu"`` unconditionally, so a GPU is required.
 
@@ -1166,11 +1172,12 @@ class RFD4Design(BaseModel):
     Attributes:
         structure (Structure): The generated all-atom structure.
         complex (Complex): Predictor-ready chains; feed directly to a structure
-            predictor for validation. A design that carries a ligand, DNA, or RNA holds
-            ``Fragment`` entries alongside the protein ``Chain`` entries, and a
-            ``Fragment`` has no ``sequence`` -- reach for ``extract_protein_chains()``,
-            ``chain_sequence_map()``, or ``chain_sequences`` rather than indexing
-            ``chains`` directly.
+            predictor for validation. Every polymer chain is a ``Chain`` with a
+            ``sequence``, whatever its ``entity_type``; only a ligand becomes a
+            ``Fragment``, which carries a CCD code or SMILES instead. Read sequences with
+            ``chain_sequence_map()`` or ``chain_sequences``, which cover every entity --
+            ``extract_protein_chains()`` returns only the ``entity_type == "protein"``
+            chains, so a DNA or RNA design's nucleic chains are omitted from it.
         metadata (dict[str, Any]): Per-design metadata from RFD4's metrics table
             (resolved generation settings, checkpoint, seed).
     """
