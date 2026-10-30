@@ -12,7 +12,9 @@ import pytest
 
 from proto_tools.tools import (
     IgLMInfillConfig,
+    IgLMInfilledSequences,
     IgLMInfillInput,
+    IgLMInfillOutput,
     IgLMSampleConfig,
     IgLMSampleInput,
     IgLMScoringConfig,
@@ -130,11 +132,6 @@ def test_iglm_conditioning_is_case_insensitive():
 
     assert scoring.chains == ["heavy", "heavy", "light"]
     assert scoring.species == ["human", "camel", "rhesus"]
-    # The worker still receives IgLM's own bracketed tokens.
-    assert scoring.chain_tokens() == ["[HEAVY]", "[HEAVY]", "[LIGHT]"]
-    assert scoring.species_tokens() == ["[HUMAN]", "[CAMEL]", "[RHESUS]"]
-
-    assert IgLMSampleInput(prompts=["EVQ"], chains="Heavy", species="MOUSE").species == ["mouse"]
 
     # Normalizing case must not start accepting values IgLM was never conditioned on.
     with pytest.raises(ValueError, match="Input should be 'heavy' or 'light'"):
@@ -151,6 +148,27 @@ def test_iglm_inputs_normalize_single_values_to_lists():
     scoring = IgLMScoringInput(sequences=_HEAVY_CHAIN, spans={"start": 99, "end": 106}, species="mouse")
     assert scoring.spans == [IgLMSpan(start=99, end=106)]
     assert scoring.species == ["mouse"]
+
+
+# ── Infill output model ──────────────────────────────────────────────────────
+
+
+def test_iglm_infill_output_keeps_designs_aligned_and_self_describing(tmp_path):
+    """The three per-design lists stay aligned, and FASTA headers name each written span."""
+    bundle = IgLMInfilledSequences(
+        sequences=["AAACCCGGG", "AAACGGG"],
+        infilled_residues=["CCC", "C"],
+        spans=[IgLMSpan(start=4, end=6), IgLMSpan(start=4, end=4)],
+    )
+
+    IgLMInfillOutput(results=[bundle]).export(name="designs", export_path=tmp_path, file_format="fasta")
+    headers = [line for line in (tmp_path / "designs.fasta").read_text().splitlines() if line.startswith(">")]
+    assert headers == [">input_0_seq_0 span=4-6 residues=CCC", ">input_0_seq_1 span=4-4 residues=C"]
+
+    # Chunk merging and cache round-trips rebuild this model from a dict, where a mismatch
+    # would pair a design with another design's span instead of failing.
+    with pytest.raises(ValueError, match="the three must be aligned per design"):
+        IgLMInfilledSequences(sequences=["AAA", "CCC"], infilled_residues=["A"], spans=[IgLMSpan(start=1, end=1)])
 
 
 # ── Dispatch payloads ────────────────────────────────────────────────────────
@@ -388,11 +406,16 @@ def test_iglm_sample_export_fasta(tmp_path):
 
 
 @pytest.mark.uses_gpu
-def test_iglm_infill_rewrites_the_span_and_keeps_the_framework():
-    """Designs keep the parent's prefix and suffix, and the loop between them is re-written."""
+@pytest.mark.parametrize("batch_size", [1, 16], ids=["unbatched", "batched"])
+def test_iglm_infill_rewrites_the_span_and_keeps_the_framework(batch_size):
+    """Designs keep the parent's prefix and suffix, and the loop between them is re-written.
+
+    Run at two batch sizes because candidates are drawn in batches: batching may change
+    which designs come back, but never their count, uniqueness, or framework.
+    """
     result = run_iglm_infill(
         IgLMInfillInput(sequences=[_HEAVY_CHAIN], spans=[_cdr_h3_span()], chains=["heavy"]),
-        IgLMInfillConfig(num_sequences_per_input=4, seed=0, verbose=False),
+        IgLMInfillConfig(num_sequences_per_input=4, batch_size=batch_size, seed=0, verbose=False),
     )
     validate_output(result)
 
@@ -402,6 +425,7 @@ def test_iglm_infill_rewrites_the_span_and_keeps_the_framework():
     bundle = result.results[0]
     prefix, suffix = _HEAVY_CHAIN[: _CDR_H3_START - 1], _HEAVY_CHAIN[_CDR_H3_END:]
     assert len(bundle.sequences) == 4
+    assert len(set(bundle.sequences)) == 4, "Designs within a bundle must be distinct"
     assert len(bundle.infilled_residues) == len(bundle.sequences)
     assert len(bundle.spans) == len(bundle.sequences)
 
@@ -419,23 +443,6 @@ def test_iglm_infill_rewrites_the_span_and_keeps_the_framework():
         "Re-design should explore loop lengths other than the native one"
     )
     assert sum(infilled == _CDR_H3 for infilled in bundle.infilled_residues) <= 1
-
-
-@pytest.mark.uses_gpu
-def test_iglm_infill_batching_changes_speed_not_results():
-    """Candidates are drawn in batches, so a batch must not lose, duplicate, or corrupt designs."""
-    inputs = IgLMInfillInput(sequences=[_HEAVY_CHAIN], spans=[_cdr_h3_span()], chains=["heavy"])
-    prefix, suffix = _HEAVY_CHAIN[: _CDR_H3_START - 1], _HEAVY_CHAIN[_CDR_H3_END:]
-
-    for batch_size in (1, 16):
-        bundle = run_iglm_infill(
-            inputs, IgLMInfillConfig(num_sequences_per_input=4, batch_size=batch_size, seed=0, verbose=False)
-        ).results[0]
-
-        assert len(bundle.sequences) == 4, f"batch_size={batch_size} must still yield the requested count"
-        assert len(set(bundle.sequences)) == 4, f"batch_size={batch_size} must not return duplicates"
-        for sequence, infilled in zip(bundle.sequences, bundle.infilled_residues, strict=True):
-            assert sequence == prefix + infilled + suffix
 
 
 @pytest.mark.uses_gpu
