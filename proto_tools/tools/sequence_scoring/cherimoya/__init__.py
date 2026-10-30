@@ -1,4 +1,4 @@
-"""Cherimoya chromatin accessibility models (CATv1): catalog search, scoring, profiles, and gradients."""
+"""Cherimoya accessibility (CATv1) and ChIP-seq (BATv1) models: catalog search, scoring, profiles, and gradients."""
 
 from proto_tools.tools.sequence_scoring.cherimoya.catalog import (
     CHERIMOYA_COLLECTIONS,

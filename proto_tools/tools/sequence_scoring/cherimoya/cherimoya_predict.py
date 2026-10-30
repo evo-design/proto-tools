@@ -1,4 +1,4 @@
-"""Cherimoya base-resolution chromatin accessibility profile prediction."""
+"""Cherimoya base-resolution chromatin accessibility and ChIP-seq profile prediction."""
 
 import csv
 import json
@@ -61,7 +61,8 @@ class CherimoyaProfile(BaseModel):
         model (str): Model this profile comes from.
         log_counts (float): Predicted ln(reads + 1) over the output window, mean over folds.
         fold_log_counts (list[float]): ``log_counts`` of each fold before averaging.
-        values (list[float]): 1,000 per-base values over ``output_start``..``output_end``.
+        values (list[float]): 1,000 per-base values over ``output_start``..``output_end``;
+            a ChIP-seq model's two strands are summed.
     """
 
     model: str = Field(title="Model", description="Model this profile comes from")
@@ -151,7 +152,7 @@ def example_input() -> Any:
     input_class=CherimoyaPredictInput,
     config_class=CherimoyaPredictConfig,
     output_class=CherimoyaPredictOutput,
-    description="Predict base-resolution DNase-seq or ATAC-seq profiles with Cherimoya (CATv1) models",
+    description="Predict base-resolution accessibility (CATv1) or ChIP-seq (BATv1) profiles with Cherimoya models",
     uses_gpu=True,
     example_input=example_input,
     iterable_input_fields=["sequences"],

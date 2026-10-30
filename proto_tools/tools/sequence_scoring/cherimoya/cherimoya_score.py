@@ -1,4 +1,4 @@
-"""Cherimoya chromatin accessibility scoring of DNA sequences."""
+"""Cherimoya chromatin accessibility and ChIP-seq scoring of DNA sequences."""
 
 import csv
 import json
@@ -134,7 +134,7 @@ def example_input() -> Any:
     config_class=CherimoyaScoreConfig,
     output_class=CherimoyaScoreOutput,
     metrics_class=CherimoyaScoreMetrics,
-    description="Predict DNase-seq or ATAC-seq read counts for DNA sequences with Cherimoya (CATv1) models",
+    description="Predict accessibility (CATv1) or ChIP-seq (BATv1) read counts for DNA sequences with Cherimoya models",
     uses_gpu=True,
     example_input=example_input,
     iterable_input_fields=["sequences"],
