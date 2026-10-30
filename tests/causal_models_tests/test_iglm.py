@@ -120,6 +120,27 @@ def test_iglm_conditioning_broadcast_lengths():
         IgLMSampleInput(prompts=["EVQ", "DIQ", "QVQ"], chains=["heavy", "light"])
 
 
+def test_iglm_conditioning_is_case_insensitive():
+    """Chain and species names are words, so any casing (and stray whitespace) is accepted."""
+    scoring = IgLMScoringInput(
+        sequences=[_HEAVY_CHAIN, _LIGHT_CHAIN, _HEAVY_CHAIN],
+        chains=["HEAVY", "heaVY", " Light "],
+        species=["HUMAN", "Camel", "rhesus"],
+    )
+
+    assert scoring.chains == ["heavy", "heavy", "light"]
+    assert scoring.species == ["human", "camel", "rhesus"]
+    # The worker still receives IgLM's own bracketed tokens.
+    assert scoring.chain_tokens() == ["[HEAVY]", "[HEAVY]", "[LIGHT]"]
+    assert scoring.species_tokens() == ["[HUMAN]", "[CAMEL]", "[RHESUS]"]
+
+    assert IgLMSampleInput(prompts=["EVQ"], chains="Heavy", species="MOUSE").species == ["mouse"]
+
+    # Normalizing case must not start accepting values IgLM was never conditioned on.
+    with pytest.raises(ValueError, match="Input should be 'heavy' or 'light'"):
+        IgLMScoringInput(sequences=[_HEAVY_CHAIN], chains=["[HEAVY]"])
+
+
 def test_iglm_inputs_normalize_single_values_to_lists():
     """A bare chain, sequence, or span is accepted and normalized to a one-element list."""
     infill = IgLMInfillInput(sequences=_HEAVY_CHAIN, spans=_cdr_h3_span(), chains="heavy")

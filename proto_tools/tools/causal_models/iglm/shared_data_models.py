@@ -71,6 +71,8 @@ class IgLMConditioningInput(BaseToolInput):
 
     Both fields are broadcastable: supply one value to condition every item the
     same way, or one value per item to mix chains and species in a single call.
+    Values are case-insensitive and normalized to lower case, so ``"HUMAN"``,
+    ``"Human"`` and ``"human"`` are the same conditioning.
 
     Attributes:
         chains (list[IgLMChain]): Chain type conditioning each item.
@@ -93,9 +95,16 @@ class IgLMConditioningInput(BaseToolInput):
     @field_validator("chains", "species", mode="before")
     @classmethod
     def normalize_conditioning(cls, v: Any) -> Any:
-        """Convert a single conditioning token to a one-element list."""
+        """Accept a bare value and any casing, normalizing to a lower-case list.
+
+        The conditioning names read as ordinary words rather than identifiers, so
+        ``"Heavy"`` and ``"HUMAN"`` are the same request as their lower-case forms;
+        only genuinely unknown values should reach the caller as an error.
+        """
         if isinstance(v, str):
-            return [v]
+            v = [v]
+        if isinstance(v, list):
+            return [item.strip().lower() if isinstance(item, str) else item for item in v]
         return v
 
     def chain_tokens(self) -> list[str]:
