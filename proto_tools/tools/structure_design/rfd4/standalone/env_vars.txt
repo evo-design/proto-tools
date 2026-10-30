@@ -5,8 +5,7 @@
 # Variables under [set] are set to specific values in the subprocess.
 
 [passthrough]
-# Escape hatch: skips the fused cuEquivariance kernels RFD4 imports when a GPU is
-# visible, for hosts where those kernels misbehave.
+# Escape hatch for hosts where the fused cuEquivariance kernels RFD4 imports misbehave.
 DISABLE_CUEQUIVARIANCE
 # RFD4 reads these to tune cuEquivariance (it defaults both to "1").
 CUEQ_DISABLE_AOT_TUNING
@@ -15,17 +14,11 @@ CUEQ_DEFAULT_CONFIG
 NAN_CHECK
 
 [set]
-# configs/inference.yaml defines ckpt_path and autoencoder_ckpt_path as
-# ${oc.env:DATA_PATH}/... OmegaConf resolvers. The implementation's hf_ckpt_path overrides
-# both, so these nodes are never read, but an unset DATA_PATH would turn any resolve
-# of them into an interpolation error. Point it at a real directory setup.sh creates.
+# Backs ckpt_path/autoencoder_ckpt_path resolvers that hf_ckpt_path overrides but must resolve.
 DATA_PATH=${VENV_PATH}/rfd4_data
-# Full Hydra tracebacks, so the stderr tail inference.py surfaces on failure names the
-# actual exception instead of Hydra's one-line summary.
+# Full Hydra tracebacks, so the stderr tail on failure names the actual exception.
 HYDRA_FULL_ERROR=1
-# Point triton/inductor's JIT (reached via use_torch_compile=True) at the tool-local
-# CUDA toolkit installed by proto_install_cuda_toolkit in setup.sh. Without these,
-# compilation fails on hosts with no system gcc / nvcc (e.g. shared HPC clusters).
+# Point triton/inductor's JIT at the tool-local CUDA toolkit setup.sh installs.
 CC=${VENV_PATH}/cuda_env/bin/gcc
 CXX=${VENV_PATH}/cuda_env/bin/g++
 CUDA_HOME=${VENV_PATH}/cuda_env
