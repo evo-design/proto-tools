@@ -1,5 +1,11 @@
 """RFD4-Proteina inference implementation.
 
+Generation runs in-process so a persistent worker can hold the checkpoint across calls.
+There is deliberately no module-level ``to_device()``: both tools register
+``pin_visible_devices=True`` because upstream's Lightning trainer claims local
+``cuda:0..N-1`` and cannot be retargeted at a logical index from inside the process, so
+DeviceManager respawns a pinned worker on a device change instead of moving the model.
+
 References:
     https://github.com/RosettaCommons/RFD4-Proteina
     https://rfd4-proteina.org/latest/
@@ -481,24 +487,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         verbose=kwargs.pop("verbose"),
         **kwargs,
     )
-
-
-def to_device(device: str) -> dict[str, Any]:
-    """DeviceManager callback; a no-op because this tool pins its visible devices.
-
-    Upstream builds its Lightning trainer with ``devices=N`` and claims local
-    ``cuda:0..N-1``, which cannot be retargeted at a logical index from inside the
-    process. The tools therefore register ``pin_visible_devices=True``, so a worker
-    only ever sees its assigned GPU and DeviceManager respawns it on a device change
-    rather than moving the model here.
-
-    Args:
-        device (str): Target device (e.g., "cpu", "cuda:0").
-
-    Returns:
-        dict[str, Any]: Success status dict.
-    """
-    return {"success": True, "device": device, "note": "pinned worker, respawns on device change"}
 
 
 def get_memory_stats() -> dict[str, Any]:
