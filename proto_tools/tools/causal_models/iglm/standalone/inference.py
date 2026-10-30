@@ -208,7 +208,10 @@ class IgLMModel:
 
         with torch.no_grad():
             while len(accepted) < num_sequences and drawn < budget:
-                num_to_draw = min(batch_size, budget - drawn)
+                # Capped by what is still outstanding (with room for a rejection or two), so a
+                # large batch_size speeds up a library without over-drawing a single design.
+                outstanding = num_sequences - len(accepted)
+                num_to_draw = max(1, min(batch_size, 2 * outstanding, budget - drawn))
                 candidates = self.model.generate(
                     input_ids,
                     attention_mask=attention_mask,

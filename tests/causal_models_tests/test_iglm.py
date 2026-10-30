@@ -236,7 +236,7 @@ def test_iglm_sample_dispatch_carries_the_batch_and_its_conditioning(monkeypatch
     assert payload["species_tokens"] == ["[HUMAN]", "[CAMEL]"]
     assert payload["num_sequences_per_input"] == 2
     assert payload["max_length"] == 200
-    assert payload["batch_size"] == 8
+    assert payload["batch_size"] == 32
     assert payload["prepend_prompt"] is False
     assert payload["seed"] == 3
     assert len(result.results) == 2

@@ -154,7 +154,11 @@ class IgLMGenerationConfig(BaseConfig):
             format is discarded and charged against the attempt budget, so too small a
             value surfaces as "yielded only N of M requested unique sequences" rather
             than as short output. Raise it for long chains or long spans.
-        batch_size (int): Candidate sequences drawn per forward pass.
+        batch_size (int): Candidate sequences drawn per forward pass. Both checkpoints are
+            small enough that this is the dominant throughput lever on a warm worker:
+            128 designs take 0.61s at 8 and 0.19s at 32. Each draw is capped by how many
+            sequences are still outstanding, so a large value costs nothing on a small
+            request.
         device (str): Device to run the model on.
     """
 
@@ -192,7 +196,7 @@ class IgLMGenerationConfig(BaseConfig):
     )
     batch_size: int = ConfigField(
         title="Batch Size",
-        default=8,
+        default=32,
         ge=1,
         description="Candidate sequences per GPU forward pass; raise for throughput, lower if OOM",
     )
