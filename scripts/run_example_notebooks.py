@@ -10,11 +10,12 @@ text/plain and text/html fallbacks stay.
 py3Dmol viewers are the exception: their text/html is a script that GitHub and
 other static viewers strip, leaving a "3Dmol.js failed to load" box. Each one is
 rendered in headless Chromium and replaced with an ``image/png`` snapshot.
-Re-running the cell in Jupyter restores the interactive viewer. Snapshots need
-Playwright (``pip install playwright && playwright install --with-deps chromium``)
-(``--with-deps`` also installs the system fonts legend labels need) and network
-access to the 3Dmol.js CDN; without Playwright the viewers are left as-is with a
-warning. Pass ``--no-snapshots`` to skip them.
+Re-running the cell in Jupyter restores the interactive viewer. Snapshots use
+Playwright from the ``dev`` extra, which downloads Chromium on first use, and need
+network access to the 3Dmol.js CDN. On a bare host without Chromium's system
+libraries or fonts, run ``playwright install --with-deps chromium`` once (legend
+labels render blank without fonts). Without Playwright the viewers are left as-is
+with a warning. Pass ``--no-snapshots`` to skip them.
 
 Typical usage::
 
@@ -109,6 +110,8 @@ class Snapshotter:
         if self._browser is None:
             from playwright.sync_api import sync_playwright
 
+            # No-op when this Playwright version's Chromium is already downloaded.
+            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
             self._playwright = sync_playwright().start()
             self._browser = self._playwright.chromium.launch(
                 args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
@@ -430,7 +433,7 @@ def main() -> int:
         else:
             print(
                 "WARNING: playwright not installed; py3Dmol viewers stay as HTML and won't render on GitHub. "
-                "Install with `pip install playwright && playwright install --with-deps chromium`.",
+                'Install the dev extra: `pip install -e ".[dev]"`.',
                 flush=True,
             )
     print(flush=True)

@@ -611,7 +611,7 @@ Notebook metadata:
 
 Write the notebook as valid .ipynb JSON (the raw JSON format with cells array, metadata, etc.).
 
-Note: the notebook will be executed during Phase 4 via `scripts/run_example_notebooks.py`, which strips widget/Plotly/Bokeh mime types that don't render in static viewers and replaces py3Dmol viewers with PNG snapshots so structures show on GitHub (needs `pip install playwright && playwright install --with-deps chromium`).
+Note: the notebook will be executed during Phase 4 via `scripts/run_example_notebooks.py`, which strips widget/Plotly/Bokeh mime types that don't render in static viewers and replaces py3Dmol viewers with PNG snapshots so structures show on GitHub (Playwright from the `dev` extra; it downloads Chromium on first use).
 ```
 
 ---
