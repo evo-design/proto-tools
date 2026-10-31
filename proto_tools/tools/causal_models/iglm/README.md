@@ -2,6 +2,8 @@
 
 # IgLM
 
+![IgLM](https://proto-bio.github.io/proto-assets/images/tool/iglm/hero.png)
+
 > [!NOTE]
 > **License:** IgLM is licensed under Custom (JHU Academic Software License Agreement) and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to [the license](https://github.com/Graylab/IgLM/blob/main/LICENSE.md) for full terms.
 
