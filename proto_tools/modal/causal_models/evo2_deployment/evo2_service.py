@@ -6,7 +6,6 @@ tool env and downloads weights for all checkpoints, both persisted on the
 Modal volume via ``PROTO_MODEL_CACHE``.
 """
 
-from pathlib import Path
 from typing import Any
 
 import modal
@@ -35,15 +34,11 @@ def _warmup() -> None:
     run_evo2_sample(example_input(), Evo2SampleConfig())
 
 
-image = with_proto_tools(GPU_BASE, overrides="evo2", overrides_dir=Path(__file__).parent)
+image = with_proto_tools(GPU_BASE)
 image = (
     image.env(
         {
             **env_for(),
-            # UV_INDEX_STRATEGY=unsafe-best-match allows uv to search all configured
-            # indexes (not just the first) to resolve evo2's torch==2.6.0 pin, which
-            # isn't on the cu128 wheel index.
-            "UV_INDEX_STRATEGY": "unsafe-best-match",
         }
     )
     .run_function(

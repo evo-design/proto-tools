@@ -82,7 +82,7 @@ Tools can override centralized recommendations via env_vars.txt or tool-specific
 
 Some tools have hard version pins for ABI compatibility with pre-built wheels (flash-attn, transformer-engine). These tools explicitly pin torch versions in their setup.sh and should NOT be migrated to use dynamic version selection:
 - `evo1`: `torch==2.7.1` (flash-attn ABI compatibility)
-- `evo2`: `torch==2.6.0` (flash-attn + transformer-engine compatibility)
+- `evo2`: `torch==2.11.0+cu129` (vLLM 0.26.0 CUDA 12.9 wheel compatibility)
 - `borzoi`: `torch==2.7.1` (flash-attn wheel compatibility)
 
 PyTorch prunes old wheels from `download.pytorch.org/whl/<variant>`, so a pinned torch can stop
@@ -202,7 +202,7 @@ Tools that JIT-compile CUDA C++ extensions install a compatible GCC from conda-f
 **Per-tool versions:**
 - **evo1** (CUDA 12.1): `"gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"`
 - **protenix** (CUDA 12.1): `"gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"`
-- **evo2** (latest CUDA ~12.8): `"gcc=14.*" "gxx=14.*"`
+- **evo2** (CUDA 12.9): `"gcc=14.*" "gxx=14.*"` via `proto_install_cuda_toolkit`, with `CC`/`CXX`/`CUDA_HOME` set in `env_vars.txt`. vLLM ships prebuilt wheels, but Triton (Evo 2 Flash kernels) and FlashInfer (vLLM sampler) JIT-compile at runtime
 
 **Why sysroot 2.17 for GCC 12 tools:** conda-forge GCC packages pull in the latest sysroot by default, but sysroot 2.34+ adds `_Float32`/`_Float16` typedefs in `<stdlib.h>` that nvcc 12.1's EDG parser rejects, so pinning to glibc 2.17 avoids this.
 
@@ -401,7 +401,9 @@ needs its own install directory to be writable at runtime.
 
 ## Device movement: `to_device()` (PyTorch) vs. `pin_visible_devices` (JAX)
 
-**PyTorch tools** (ESMFold, Evo2, ESM2, etc.) implement a `to_device(device: str) -> dict` function in their standalone script. DeviceManager calls it via the worker bootstrap when `ToolInstance.to(device)` is invoked, moving the loaded model between devices **in-process** (CPU offload, GPU↔GPU):
+Evo 2 Flash uses a GPU-bound vLLM engine: `gpu_only=True` and `pin_visible_devices=True` make DeviceManager restart its worker on eviction or a GPU change. It deliberately omits the `to_device()` hook.
+
+**Movable PyTorch tools** (ESMFold, ESM2, etc.) implement a `to_device(device: str) -> dict` function in their standalone script. DeviceManager calls it via the worker bootstrap when `ToolInstance.to(device)` is invoked, moving the loaded model between devices **in-process** (CPU offload, GPU↔GPU):
 ```python
 def to_device(device: str) -> dict:
     global _model
@@ -437,7 +439,7 @@ The framework then changes two things for this tool:
 1. **It refuses CPU dispatch up front.** Calling the tool with `config.device="cpu"` raises `ValueError` immediately, so misconfigurations fail clearly instead of crashing deep inside the worker.
 2. **On LRU eviction, it kills the worker outright.** Instead of sending `to_device("cpu")` (which would hit the broken reload path), the framework calls `worker.stop()`, logs a warning, and drops the reference. The next time this tool is dispatched, a brand-new subprocess is spawned on GPU from scratch, with fresh imports, fresh model load, and fresh compile. It's slow but always correct.
 
-`gpu_only=True` implies `uses_gpu=True`, which the framework checks at registration. Currently only `alphagenome-predict-variants` opts in, because the other alphagenome variants don't exhibit the consecutive-dispatch crash and so use plain reload-based.
+`gpu_only=True` implies `uses_gpu=True`, which the framework checks at registration. `alphagenome-predict-variants` opts in because the other alphagenome variants don't exhibit the consecutive-dispatch crash and so use plain reload-based.
 
 **CLI tools** (Boltz2, RFDiffusion3, BLAST, etc.):
 ```python
@@ -445,4 +447,4 @@ def to_device(device: str) -> dict:
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 ```
 
-When implementing new tools, add `to_device()` to `standalone/inference.py` or `standalone/run.py` following the pattern above. The model wrapper class should have a `to_device(device: str)` method for actual device moves.
+When implementing new movable tools, add `to_device()` to `standalone/inference.py` or `standalone/run.py` following the pattern above. The model wrapper class should have a `to_device(device: str)` method for actual device moves.

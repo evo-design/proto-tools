@@ -96,7 +96,7 @@ class Evo2ICLConfig(BaseConfig):
         spacer (str): DNA delimiter preceding each example and ending each prompt.
         spacer_both_sides (bool): Also append the delimiter after every example.
         min_example_len (int): Minimum length required for every example in the pool.
-        force_prompt_threshold (int | None): Parallel prefill length; None selects a batch-aware value.
+        force_prompt_threshold (int | None): Compatibility option; vLLM manages chunked prefill.
         codon_seed (int): Seed for uniform reverse translation, independent of generation.
         seed (int | None): Generation seed; None draws fresh designs.
         sequence_length (int): New bases (DNA mode) or amino acids (protein mode) per design;
@@ -105,7 +105,7 @@ class Evo2ICLConfig(BaseConfig):
             nucleotides; higher values explore more alternatives.
         top_k (int): Number of highest-probability tokens considered at each step.
         top_p (float): Cumulative probability cutoff for nucleus sampling.
-        batch_size (int): Number of designs decoded together on the GPU.
+        batch_size (int): Compatibility option; vLLM schedules designs automatically.
         device (str): Device to run the model on.
         timeout (int | None): Maximum execution time in seconds.
     """
@@ -160,7 +160,7 @@ class Evo2ICLConfig(BaseConfig):
         title="Prompt prefill (bases)",
         default=None,
         ge=1,
-        description="Power-of-two parallel prefill length; unset uses a memory-conscious batch-aware value",
+        description="Compatibility option; vLLM manages chunked prefill automatically",
     )
     codon_seed: int = ConfigField(
         title="Codon-selection seed",
@@ -208,7 +208,7 @@ class Evo2ICLConfig(BaseConfig):
         default=1,
         ge=1,
         le=8,
-        description="Designs decoded together; lower this if GPU memory runs out",
+        description="Compatibility option; vLLM schedules designs automatically",
     )
     device: str = ConfigField(
         title="Device",
@@ -322,6 +322,8 @@ def example_input() -> Evo2ICLInput:
     output_class=Evo2ICLOutput,
     description="Generate DNA or protein designs from FASTA examples with pretrained Evo 2",
     uses_gpu=True,
+    gpu_only=True,
+    pin_visible_devices=True,
     stochastic=True,
     example_input=example_input,
 )

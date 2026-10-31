@@ -1,5 +1,0 @@
-# Evo2/Vortex installs are sensitive; see upstream repos if this fails.
-# Note: flash-attn, transformer-engine, vtx, and evo2 are installed in setup.sh
-# before this file to ensure correct installation order.
-
-tqdm

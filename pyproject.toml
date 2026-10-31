@@ -196,6 +196,8 @@ module = [
     "esm.*",
     "transformers.*",
     "flash_attn.*",
+    "evo2_flash.*",
+    "vllm.*",
     "py3Dmol.*",
     "pymol.*",
     "pandas.*",
