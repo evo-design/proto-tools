@@ -1,4 +1,4 @@
-"""Cherimoya standalone inference: scores, profiles, and gradients for CATv1 and custom checkpoints."""
+"""Cherimoya standalone inference: scores, profiles, and gradients for CATv1, BATv1 and custom checkpoints."""
 
 import hashlib
 import json
@@ -18,7 +18,7 @@ CONTEXT = 2114
 OUTPUT = 1000
 TRIMMING = (CONTEXT - OUTPUT) // 2
 VOCAB = ["A", "C", "G", "T"]
-# 64 models (or loss terms) x 5 folds is the most one call can request; all stay loaded (~2.4 MB each in fp32).
+# 64 models (or loss terms) x 5 folds is the most one call can request; all stay loaded (up to ~2.4 MB each in fp32).
 MAX_CACHED_CHECKPOINTS = 512
 
 
@@ -59,17 +59,28 @@ def _relaxed_dna_probs(logits: Any, *, temperature: float, soft: float, hard: fl
     return relaxed
 
 
-def _forward(model: Any, X: Any, reverse_complement: bool) -> tuple[Any, Any]:
-    """Return ``(probabilities (B, 1000), log_counts (B,))`` for one checkpoint."""
+def _probabilities(profile: Any) -> Any:
+    """Softmax ``(B, C, 1000)`` profile logits jointly over channels and positions, summed to ``(B, 1000)``.
+
+    A CATv1 model has one channel. A BATv1 model has a plus and a minus strand sharing one
+    distribution; summing them gives the per-base probability of a read on either strand.
+    """
     import torch
 
+    batch = profile.shape[0]
+    return torch.softmax(profile.float().reshape(batch, -1), dim=-1).reshape(profile.shape).sum(dim=1)
+
+
+def _forward(model: Any, X: Any, reverse_complement: bool) -> tuple[Any, Any]:
+    """Return ``(probabilities (B, 1000), log_counts (B,))`` for one checkpoint."""
     profile, log_counts = model(X)
-    probs = torch.softmax(profile.float(), dim=-1)[:, 0]
+    probs = _probabilities(profile)
     counts = log_counts.float()[:, 0]
     if reverse_complement:
-        # Flipping both axes reverse-complements an A,C,G,T one-hot.
+        # Flipping both axes reverse-complements an A,C,G,T one-hot; the strands of a stranded
+        # prediction swap too, which the sum over channels makes irrelevant.
         rc_profile, rc_log_counts = model(X.flip(dims=[1, 2]))
-        probs = (probs + torch.softmax(rc_profile.float(), dim=-1)[:, 0].flip(-1)) / 2.0
+        probs = (probs + _probabilities(rc_profile).flip(-1)) / 2.0
         counts = (counts + rc_log_counts.float()[:, 0]) / 2.0
     return probs, counts
 
@@ -112,7 +123,7 @@ class CherimoyaWorker:
         return f"{spec['repo_id']}@{spec['revision']}:{spec['filename']}"
 
     def _load(self, spec: dict[str, Any], device: str, verbose: bool) -> dict[str, Any]:
-        from cherimoya import Cherimoya
+        from cherimoya import Cherimoya, ControlWrapper
 
         if spec.get("path"):
             path = source = str(spec["path"])
@@ -126,13 +137,15 @@ class CherimoyaWorker:
             logger.info("Loading Cherimoya checkpoint %s", source)
         model = Cherimoya.load(path, device=device, compile=False).eval()
         model.requires_grad_(False)
-        if model.n_control_tracks != 0 or model.n_outputs != 1 or model.trimming != TRIMMING:
+        if model.trimming != TRIMMING:
             raise ValueError(
-                f"cherimoya: {spec['model']!r} has {model.n_control_tracks} control tracks, {model.n_outputs} "
-                f"outputs and trimming {model.trimming}; this toolkit runs models with no control tracks, one "
-                f"output and trimming {TRIMMING} ({CONTEXT} bp in, {OUTPUT} bp out)"
+                f"cherimoya: {spec['model']!r} has trimming {model.trimming}; this toolkit runs models with "
+                f"trimming {TRIMMING} ({CONTEXT} bp in, {OUTPUT} bp out)"
             )
-        return {"model": model, "source": source, "sha256": _sha256(path)}
+        # A model trained with control tracks (BATv1) gets an all-zero control, so its
+        # predictions are the sequence's contribution alone. The wrapper passes a model without
+        # control tracks (CATv1) through unchanged.
+        return {"model": ControlWrapper(model), "source": source, "sha256": _sha256(path)}
 
     def checkpoints(
         self, specs: list[dict[str, Any]], device: str, verbose: bool = False
