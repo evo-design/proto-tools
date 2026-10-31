@@ -202,7 +202,7 @@ Tools that JIT-compile CUDA C++ extensions install a compatible GCC from conda-f
 **Per-tool versions:**
 - **evo1** (CUDA 12.1): `"gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"`
 - **protenix** (CUDA 12.1): `"gcc=12.*" "gxx=12.*" "sysroot_linux-64=2.17"`
-- **evo2** (latest CUDA ~12.8): `"gcc=14.*" "gxx=14.*"`
+- **evo2** (CUDA 12.9): `"gcc=14.*" "gxx=14.*"` via `proto_install_cuda_toolkit`, with `CC`/`CXX`/`CUDA_HOME` set in `env_vars.txt`. vLLM ships prebuilt wheels, but Triton (Evo 2 Flash kernels) and FlashInfer (vLLM sampler) JIT-compile at runtime
 
 **Why sysroot 2.17 for GCC 12 tools:** conda-forge GCC packages pull in the latest sysroot by default, but sysroot 2.34+ adds `_Float32`/`_Float16` typedefs in `<stdlib.h>` that nvcc 12.1's EDG parser rejects, so pinning to glibc 2.17 avoids this.
 

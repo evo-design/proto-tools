@@ -1,6 +1,7 @@
 #!/bin/bash
 # Evo 2 Flash uses vLLM's CUDA 12.9 wheels, including on CUDA 13 drivers.
 set -euo pipefail
+source standalone_helpers.sh
 
 if [ "$(uname -s)" != "Linux" ] || [ "$(uname -m)" != "x86_64" ]; then
     echo "ERROR: Evo 2 Flash requires Linux x86_64 and an NVIDIA GPU" >&2
@@ -13,3 +14,6 @@ uv pip install --python "$VENV_PATH/bin/python" \
     --index-strategy unsafe-best-match \
     "torch==2.11.0+cu129" "$VLLM_WHEEL" "torchcodec==0.16.0" \
     "evo2-flash @ git+https://github.com/evo-design/evo2_flash.git@c71eb6f4bee7d45683c3a4b76a4eacf0dda0e189"
+
+# Triton and FlashInfer JIT-compile kernels at runtime; ship gcc and nvcc instead of relying on the host's.
+proto_install_cuda_toolkit "12.9" "gcc=14.*" "gxx=14.*"

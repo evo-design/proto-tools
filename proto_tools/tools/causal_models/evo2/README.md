@@ -83,7 +83,7 @@ These apply to every Evo 2 tool in this toolkit (`evo2-icl`, `evo2-sample`, `evo
 
 ### Inference backend
 
-The managed environment pins evo2_flash to `c71eb6f4`, vLLM to `0.26.0+cu129`, and PyTorch to `2.11.0+cu129` on Python 3.12. It requires Linux x86_64 and an NVIDIA GPU. Published Flash checkpoints use the shared Hugging Face cache. Checkpoints that need conversion, including local Vortex weights, are converted once into that cache. Inference uses bfloat16 and the default, unquantized KV cache.
+The managed environment pins evo2_flash to `c71eb6f4`, vLLM to `0.26.0+cu129`, and PyTorch to `2.11.0+cu129` on Python 3.12, plus a tool-local CUDA 12.9 toolkit and GCC 14 that Triton and FlashInfer use to compile kernels at runtime. It requires Linux x86_64 and an NVIDIA GPU. Published Flash checkpoints use the shared Hugging Face cache. Checkpoints that need conversion, including local Vortex weights, are converted once into that cache. Inference uses bfloat16 and the default, unquantized KV cache.
 
 A sampling seed assigns an independent stream to each prompt in input order. Repeated seeded calls are reproducible within this backend; samples need not match the previous Vortex implementation byte for byte. Scoring uses each sequence's real length, without scoring padding. `return_logits=True` performs an additional prefill to reconstruct full-vocabulary logits.
 
