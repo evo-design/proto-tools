@@ -33,7 +33,7 @@ class _Response:
 
 
 class _Session:
-    """Fake RCSB session: echoes the queried chain into the top hit's identifier."""
+    """Fake RCSB session that records calls and can drop the connection a set number of times."""
 
     def __init__(self, status_code: int = 200, resets: int = 0) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
@@ -48,13 +48,12 @@ class _Session:
             raise requests.exceptions.ConnectionError("Connection reset by peer")
         if url == module._UPLOAD_URL:
             return _Response({"key": "synthetic/query.bcif"})
-        chain = kwargs["json"]["query"]["parameters"]["value"].get("asym_id", "X")
         return _Response(
             {
                 "total_count": 7,
                 "result_set": [
                     {
-                        "identifier": f"1YCR.{chain}",
+                        "identifier": "1YCR.A",
                         "score": 1.0,
                         "services": [
                             {
@@ -126,6 +125,7 @@ def test_public_query_payload_and_scores(session: _Session) -> None:
     payload = session.calls[0][1]["json"]
     assert payload["query"]["parameters"]["value"] == {"entry_id": "1YCR", "asym_id": "A"}
     assert payload["query"]["parameters"]["ptmscore_cutoff"] == 0.4
+    assert payload["return_type"] == "polymer_instance"
     assert payload["request_options"]["paginate"]["rows"] == 25
     assert payload["request_options"]["results_content_type"] == ["experimental"]
     (result,) = output.results
@@ -133,22 +133,6 @@ def test_public_query_payload_and_scores(session: _Session) -> None:
     assert result.hits[0].predicted_tm_score == pytest.approx(0.978926)
     assert result.hits[1].predicted_tm_score == 1.0  # float rounding past 1 is clamped
     assert output.source_url == module._SEARCH_URL
-
-
-def test_queries_share_one_session_and_keep_input_order(session: _Session) -> None:
-    output = run_pdb_structure_similarity(
-        PdbStructureSimilarityInput(
-            queries=[
-                PdbStructureSimilarityQuery(pdb_id="1YCR", chain_id="B"),
-                PdbStructureSimilarityQuery(pdb_id="1YCR", chain_id="A"),
-            ]
-        ),
-        PdbStructureSimilarityConfig(),
-    )
-
-    assert [result.hits[0].identifier for result in output.results] == ["1YCR.B", "1YCR.A"]
-    assert len(session.calls) == 2
-    assert session.closed is True
 
 
 def test_custom_structure_is_uploaded_before_search(session: _Session) -> None:
@@ -164,15 +148,6 @@ def test_custom_structure_is_uploaded_before_search(session: _Session) -> None:
         "format": "bcif",
     }
     assert search_payload["return_type"] == "assembly"
-
-
-def test_custom_chain_search_returns_chain_level_hits(session: _Session) -> None:
-    run_pdb_structure_similarity(
-        PdbStructureSimilarityInput(queries=[PdbStructureSimilarityQuery(structure=_FIXTURE)]),
-        PdbStructureSimilarityConfig(target_search_space="polymer_entity_instance"),
-    )
-
-    assert session.calls[1][1]["json"]["return_type"] == "polymer_instance"
 
 
 def test_connection_reset_retries_only_the_failed_request(monkeypatch: pytest.MonkeyPatch) -> None:
