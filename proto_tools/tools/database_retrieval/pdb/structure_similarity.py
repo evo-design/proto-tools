@@ -346,6 +346,7 @@ def example_input() -> Any:
 
 @tool(
     key="pdb-structure-similarity",
+    local_only="pdb-structure-similarity does not use a gpu and does not need an environment, so it can run in process",
     label="PDB Structure Similarity",
     category="database_retrieval",
     input_class=PdbStructureSimilarityInput,
