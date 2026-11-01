@@ -187,6 +187,7 @@ def test_batch_preserves_alignment_and_reports_partial_failure(monkeypatch: pyte
         return PdbStructureSimilarityOutput(
             max_predicted_tm_score=0.75 if inputs.chain_id == "A" else 0.25,
             total_count=1,
+            source_url=module._SEARCH_URL,
         )
 
     monkeypatch.setattr(module, "run_pdb_structure_similarity", search)

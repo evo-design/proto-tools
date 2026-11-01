@@ -20,12 +20,6 @@ import requests
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from proto_tools.entities import Structure
-from proto_tools.tools.capabilities import (
-    CapabilityArtifact,
-    CapabilityMetric,
-    CapabilityOperation,
-    CapabilityRelationship,
-)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -212,7 +206,6 @@ class PdbStructureSimilarityOutput(BaseToolOutput):
         description="Largest learned predicted TM-like score among returned hits",
     )
     source_url: str = Field(
-        default=_SEARCH_URL,
         title="Source URL",
         description="RCSB Search API endpoint used",
     )
@@ -362,6 +355,7 @@ class PdbStructureSimilarityBatchOutput(BaseToolOutput):
             structure-search result.
         failed_count (int): Number of queries that failed and carry no
             measurement.
+        source_url (str): RCSB Search API endpoint used for every query.
     """
 
     results: list[PdbStructureSimilarityBatchResult] = Field(
@@ -380,6 +374,10 @@ class PdbStructureSimilarityBatchOutput(BaseToolOutput):
         ge=0,
         title="Failed Count",
         description="Number of queries that failed and carry no measurement",
+    )
+    source_url: str = Field(
+        title="Source URL",
+        description="RCSB Search API endpoint used for every query",
     )
 
     @property
@@ -505,75 +503,6 @@ def batch_example_input() -> Any:
     uses_gpu=False,
     example_input=example_input,
     cacheable=True,
-    operations=(
-        CapabilityOperation(
-            name="experimental_structure_database_search",
-            kind="search",
-            stage="retrieve",
-            entities=("protein",),
-            requires_starting_artifact=True,
-            inputs=(
-                CapabilityArtifact(
-                    role="query_structure",
-                    kind="structure",
-                    entities=("protein",),
-                    description=(
-                        "One public PDB chain or assembly reference, or one custom protein structure uploaded to RCSB."
-                    ),
-                ),
-            ),
-            outputs=(
-                CapabilityArtifact(
-                    role="ranked_experimental_structure_hits",
-                    kind="database_record",
-                    entities=("protein",),
-                    field="hits",
-                ),
-                CapabilityArtifact(
-                    role="structure_similarity_scores",
-                    kind="scores",
-                    entities=("protein",),
-                    field="hits",
-                ),
-            ),
-            metrics=(
-                CapabilityMetric(
-                    name="predicted_tm_score",
-                    role="observation",
-                    output_field="max_predicted_tm_score",
-                    direction="higher_is_better",
-                    method="RCSB learned structure-embedding model trained to approximate maximum TM-score",
-                ),
-                CapabilityMetric(
-                    name="normalized_ranking_score",
-                    role="observation",
-                    output_field="hits",
-                    direction="higher_is_better",
-                    method="RCSB structure-search result ranking",
-                ),
-            ),
-            intents=(
-                "find similar structures",
-                "compare protein structures",
-                "assess structural novelty",
-            ),
-            limitations=(
-                "Similarity is inferred from RCSB's learned embedding; the tool does not perform a coordinate superposition or report RMSD.",
-                "Novelty is relative to experimental structures indexed by RCSB and the selected search settings; weak or absent hits are not proof of structural novelty.",
-                "Custom query structures are sent to RCSB only after the caller explicitly allows external upload.",
-            ),
-        ),
-    ),
-    relationships=(
-        CapabilityRelationship(
-            tool_key="pdb-structure-similarity-batch",
-            kind="related",
-            reason="The batch tool applies this same RCSB structure-similarity search to multiple aligned queries.",
-            compatibility_gaps=(
-                "The batch tool accepts a query collection and returns per-query success or failure records rather than one direct hit list.",
-            ),
-        ),
-    ),
 )
 def run_pdb_structure_similarity(
     inputs: PdbStructureSimilarityInput,
@@ -644,6 +573,7 @@ def run_pdb_structure_similarity(
         hits=hits,
         total_count=int(payload.get("total_count", len(hits))),
         max_predicted_tm_score=max(measured) if measured else None,
+        source_url=_SEARCH_URL,
         query_was_uploaded=uploaded_url is not None,
     )
 
@@ -662,77 +592,6 @@ def run_pdb_structure_similarity(
     uses_gpu=False,
     example_input=batch_example_input,
     cacheable=True,
-    operations=(
-        CapabilityOperation(
-            name="batch_experimental_structure_database_search",
-            kind="search",
-            stage="retrieve",
-            entities=("protein",),
-            requires_starting_artifact=True,
-            inputs=(
-                CapabilityArtifact(
-                    role="query_structures",
-                    kind="structure",
-                    entities=("protein",),
-                    field="queries",
-                    description=(
-                        "Public PDB chain or assembly references and/or custom protein structures searched in a bounded batch."
-                    ),
-                ),
-            ),
-            outputs=(
-                CapabilityArtifact(
-                    role="aligned_structure_search_results",
-                    kind="database_record",
-                    entities=("protein",),
-                    field="results",
-                ),
-                CapabilityArtifact(
-                    role="structure_similarity_scores",
-                    kind="scores",
-                    entities=("protein",),
-                    field="results",
-                ),
-            ),
-            metrics=(
-                CapabilityMetric(
-                    name="predicted_tm_score",
-                    role="observation",
-                    output_field="results",
-                    direction="higher_is_better",
-                    method="RCSB learned structure-embedding model trained to approximate maximum TM-score",
-                ),
-                CapabilityMetric(
-                    name="normalized_ranking_score",
-                    role="observation",
-                    output_field="results",
-                    direction="higher_is_better",
-                    method="RCSB structure-search result ranking",
-                ),
-            ),
-            intents=(
-                "find similar structures",
-                "compare protein structures",
-                "assess structural novelty",
-            ),
-            limitations=(
-                "Similarity is inferred from RCSB's learned embedding; the tool does not perform a coordinate superposition or report RMSD.",
-                "Novelty is relative to experimental structures indexed by RCSB and the selected search settings; weak or absent hits are not proof of structural novelty.",
-                "Per-query failures are returned without measurements unless fail_fast is enabled.",
-                "Custom query structures are sent to RCSB only after the caller explicitly allows external upload.",
-            ),
-        ),
-    ),
-    relationships=(
-        CapabilityRelationship(
-            tool_key="pdb-structure-similarity",
-            kind="related",
-            reason="The single-query tool exposes the same RCSB structure-similarity search without batch orchestration.",
-            compatibility_gaps=(
-                "The single-query tool accepts one query and returns a direct hit list rather than aligned per-query result records.",
-            ),
-        ),
-    ),
 )
 def run_pdb_structure_similarity_batch(
     inputs: PdbStructureSimilarityBatchInput,
@@ -771,6 +630,7 @@ def run_pdb_structure_similarity_batch(
         results=results,
         successful_count=successful_count,
         failed_count=len(results) - successful_count,
+        source_url=_SEARCH_URL,
         metadata={
             "query_count": len(results),
             "max_workers": config.max_workers,
