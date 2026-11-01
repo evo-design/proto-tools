@@ -68,9 +68,10 @@ Use this to find experimental structures related to a design or a known protein:
 
 - **This is not Foldseek or an exact TM-align result.** `predicted_tm_score` comes from RCSB's learned embedding model, so treat it as an estimate rather than a measured alignment score.
 - **For exact scores, align the retrieved hits yourself.** Fetch hit identifiers with `pdb-fetch-entry` and align them against your query with a `structure_alignment` tool such as `tmalign-alignment` or `usalign-alignment`.
+- **`chain_id` is RCSB's `label_asym_id`, not the author chain ID.** The two often match but can differ: in 1EFA, author chains A to C (protein) are label chains C to E, and label chains A and B are DNA. `pdb-fetch-fasta` reports author IDs, so check the label ID on the entry's RCSB page before querying. Chain hit identifiers (`1YCR.A`) use label IDs too.
 - **Use `global` for whole-fold similarity and `local` for shared substructures.** Match `target_search_space` to chains (`polymer_entity_instance`) or assemblies (`assembly`).
 - **Custom structures leave the local environment.** Their coordinates and embedded sequences are sent to RCSB's public upload service. Public `pdb_id` queries upload nothing.
-- **A small result limit can miss hits.** `number_of_candidates` bounds the approximate search, and `predicted_tm_score_cutoff` filters by score; `total_count` reports how many matches RCSB found in all.
+- **A small result limit can miss hits.** `number_of_candidates` (at most 10,000, RCSB's per-request cap) bounds the approximate search, and `predicted_tm_score_cutoff` filters by score; `total_count` reports how many matches RCSB found in all.
 
 ## Toolkit Notes
 

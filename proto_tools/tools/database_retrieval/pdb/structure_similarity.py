@@ -50,7 +50,8 @@ class PdbStructureSimilarityQuery(BaseModel):
     Attributes:
         structure (Structure | None): Custom query structure, mutually exclusive with ``pdb_id``.
         pdb_id (str | None): Existing public PDB entry ID.
-        chain_id (str | None): Input chain/asym ID for a public PDB query.
+        chain_id (str | None): RCSB ``label_asym_id`` of the query chain, which can differ
+            from the author chain ID that ``pdb-fetch-fasta`` reports.
         assembly_id (str | None): Input biological assembly ID for a public PDB query.
     """
 
@@ -69,7 +70,7 @@ class PdbStructureSimilarityQuery(BaseModel):
     chain_id: str | None = Field(
         default=None,
         title="Chain ID",
-        description="Input asym/chain ID for a public PDB query",
+        description="RCSB label_asym_id of the query chain; can differ from the author chain ID",
     )
     assembly_id: str | None = Field(
         default=None,
@@ -120,8 +121,14 @@ class PdbStructureSimilarityConfig(BaseConfig):
         target_search_space (PdbStructureTarget): Experimental PDB chains or assemblies to search.
         similarity_type (PdbStructureSimilarityType): Global whole-shape or local substructure similarity.
         predicted_tm_score_cutoff (float): Minimum learned predicted TM-like score.
-        number_of_candidates (int): Maximum nearest-neighbor candidates considered.
+        number_of_candidates (int): Maximum nearest-neighbor candidates returned (at most 10,000).
     """
+
+    @field_validator("similarity_type", mode="before")
+    @classmethod
+    def _normalize_similarity_type(cls, value: Any) -> Any:
+        """Accept any casing, e.g. ``GLOBAL`` or ``Local``."""
+        return value.lower() if isinstance(value, str) else value
 
     target_search_space: PdbStructureTarget = ConfigField(
         default="polymer_entity_instance",
@@ -131,7 +138,7 @@ class PdbStructureSimilarityConfig(BaseConfig):
     similarity_type: PdbStructureSimilarityType = ConfigField(
         default="global",
         title="Similarity Type",
-        description="GLOBAL length-normalized similarity or LOCAL substructure similarity",
+        description="global length-normalized similarity or local substructure similarity (any case)",
     )
     predicted_tm_score_cutoff: float = ConfigField(
         default=0.0,
@@ -143,9 +150,9 @@ class PdbStructureSimilarityConfig(BaseConfig):
     number_of_candidates: int = ConfigField(
         default=100,
         ge=1,
-        le=15000,
+        le=10000,
         title="Number of Candidates",
-        description="Maximum nearest-neighbor candidates considered by RCSB",
+        description="Maximum nearest-neighbor candidates returned; RCSB caps one request at 10,000",
     )
 
 
@@ -154,7 +161,9 @@ class PdbStructureSimilarityHit(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    identifier: str = Field(title="Identifier", description="RCSB chain or assembly identifier")
+    identifier: str = Field(
+        title="Identifier", description="RCSB hit ID: entry.label_asym_id for chains, entry-assembly for assemblies"
+    )
     score: float | None = Field(default=None, title="Score", description="RCSB normalized ranking score")
     predicted_tm_score: float | None = Field(
         default=None,
@@ -237,16 +246,16 @@ def _raise_for_status(response: Any, operation: str) -> None:
 
 
 def _original_structure_score(result: dict[str, Any]) -> float | None:
-    """Extract the structure node's unnormalized/original score."""
-    direct = result.get("original_score")
-    if isinstance(direct, int | float):
-        return float(direct)
+    """Extract the structure node's original score, clamped to [0, 1].
+
+    The score is a cosine similarity, so float rounding can push an exact self-match just past 1.
+    """
     for service in result.get("services", []):
         if not isinstance(service, dict) or service.get("service_type") != "structure":
             continue
         for node in service.get("nodes", []):
             if isinstance(node, dict) and isinstance(node.get("original_score"), int | float):
-                return float(node["original_score"])
+                return min(max(float(node["original_score"]), 0.0), 1.0)
     return None
 
 

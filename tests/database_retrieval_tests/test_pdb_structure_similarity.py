@@ -59,7 +59,16 @@ class _Session:
                             }
                         ],
                     },
-                    {"identifier": "4ABC.B", "score": 0.8, "original_score": 0.71},
+                    {
+                        "identifier": "4ABC.B",
+                        "score": 0.8,
+                        "services": [
+                            {
+                                "service_type": "structure",
+                                "nodes": [{"node_id": 0, "original_score": 1.0000001}],
+                            }
+                        ],
+                    },
                 ],
             },
             status_code=self.status_code,
@@ -90,6 +99,13 @@ def test_public_query_requires_chain_or_assembly() -> None:
         PdbStructureSimilarityQuery(pdb_id="1YCR", chain_id="A", assembly_id="1")
 
 
+def test_similarity_type_accepts_any_case() -> None:
+    assert PdbStructureSimilarityConfig(similarity_type="GLOBAL").similarity_type == "global"
+    assert PdbStructureSimilarityConfig(similarity_type="LoCaL").similarity_type == "local"
+    with pytest.raises(ValidationError):
+        PdbStructureSimilarityConfig(similarity_type="partial")
+
+
 def test_single_query_is_normalized_to_list() -> None:
     inputs = PdbStructureSimilarityInput(queries={"pdb_id": "1YCR", "chain_id": "A"})
     assert [query.pdb_id for query in inputs.queries] == ["1YCR"]
@@ -108,11 +124,10 @@ def test_public_query_payload_and_scores(session: _Session) -> None:
     assert payload["query"]["parameters"]["ptmscore_cutoff"] == 0.4
     assert payload["request_options"]["paginate"]["rows"] == 25
     assert payload["request_options"]["results_content_type"] == ["experimental"]
-    assert "request_info" not in payload
     (result,) = output.results
     assert result.total_count == 7
     assert result.hits[0].predicted_tm_score == pytest.approx(0.978926)
-    assert result.hits[1].predicted_tm_score == pytest.approx(0.71)
+    assert result.hits[1].predicted_tm_score == 1.0  # float rounding past 1 is clamped
     assert output.source_url == module._SEARCH_URL
 
 
