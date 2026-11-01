@@ -5,8 +5,9 @@ Toolkit versions pinned to a hash of the toolkit's source.
 Each toolkit's ``versions.yaml`` maps version to source hash, newest first. The hash
 covers the code a toolkit's results depend on: every file in the toolkit directory
 except docs and examples, the shared environment it builds from, its category's shared
-modules, and the first-party modules defining its models. Python comments and blank
-lines are ignored, so only code edits move it. See ``notes/versioning.md``.
+modules (but not the category ``__init__.py``), and the first-party modules defining its
+models. Python comments and blank lines are ignored, so only code edits move it. See
+``notes/versioning.md``.
 """
 
 from __future__ import annotations
@@ -125,7 +126,12 @@ def hashed_files(toolkit_dir: Path) -> dict[str, Path]:
         env_dir = env_dir.resolve()
         files |= {f"env/{p.relative_to(env_dir).as_posix()}": p for p in _walk(env_dir)}
 
-    shared = set(toolkit_dir.parent.glob("*.py")) if toolkit_dir.parent.parent == _TOOLS_DIR else set()
+    # A category's __init__.py only re-exports its toolkits, so it never changes behaviour.
+    shared = (
+        {path for path in toolkit_dir.parent.glob("*.py") if path.name != "__init__.py"}
+        if toolkit_dir.parent.parent == _TOOLS_DIR
+        else set()
+    )
     for spec in ToolRegistry.list_all():
         if spec.toolkit_dir.resolve() == toolkit_dir:
             shared.update(path for path in defining_files(spec.key) if not path.is_relative_to(toolkit_dir))

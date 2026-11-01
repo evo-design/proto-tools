@@ -19,7 +19,7 @@ The first key is the current version. All tools in a toolkit share it; `tool_id`
 
 - every file in the toolkit directory except `README.md`, `cite.bib`, `links.yaml`, `license.yaml`, `versions.yaml`, `examples/`, Markdown, notebooks, and dotfiles;
 - the shared environment named in `standalone/shared_env.txt`, if any;
-- the category's top-level modules, such as `structure_prediction/dispatch.py` or `masked_models/shared_data_models.py`;
+- the category's top-level modules, such as `structure_prediction/dispatch.py` or `masked_models/shared_data_models.py`, except its `__init__.py`, which only re-exports toolkits;
 - the first-party modules defining the tools' input, config, and output models (their MRO), wherever they live.
 
 Python comments, trailing whitespace, and blank lines are dropped before hashing, so formatting and comment edits never move it. Docstrings are code. Line endings are normalized for every file.
@@ -58,6 +58,7 @@ Only the newest entry is checked against the source; older entries are a record,
 
 - **Collapse a run of bumps** into one entry above the last version you keep. If a downstream copy of the repo is at `1.2.0` and development since then went through `1.2.1` to `1.5.0`, replace those entries with a single `1.3.0: <current hash>`, picking the level of the largest bump collapsed.
 - **Reset a toolkit** by deleting its `versions.yaml`: the test then fails with the `1.0.0: <hash>` line to write.
+- **Rehash in place** when the hashing itself changes (what `tool_versions.py` covers or how it normalizes) but no toolkit's code does: replace each top entry's hash rather than adding versions, since the code behind each version is the same.
 
 Outputs stamped with a dropped version still carry it, but it no longer resolves through `versions.yaml` in a repo whose history never had it.
 

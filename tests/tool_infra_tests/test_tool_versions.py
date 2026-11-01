@@ -119,3 +119,10 @@ def test_unversioned_source_is_marked_dirty(toolkit: Path, caplog: pytest.LogCap
 
 def test_toolkit_without_versions_file_has_no_version(toolkit: Path) -> None:
     assert toolkit_version(toolkit) is None
+
+
+def test_category_shared_modules_are_hashed_but_not_its_init() -> None:
+    labels = set(tool_versions.hashed_files(tool_versions._TOOLS_DIR / "masked_models" / "ablang"))
+
+    assert "proto_tools/tools/masked_models/shared_data_models.py" in labels
+    assert "proto_tools/tools/masked_models/__init__.py" not in labels
