@@ -14,16 +14,13 @@ from proto_tools.tools.database_retrieval.pdb.fetch_fasta import (
 )
 from proto_tools.tools.database_retrieval.pdb.shared_data_models import PdbChain, PdbFetchConfig
 from proto_tools.tools.database_retrieval.pdb.structure_similarity import (
-    PdbStructureSimilarityBatchConfig,
-    PdbStructureSimilarityBatchInput,
-    PdbStructureSimilarityBatchOutput,
-    PdbStructureSimilarityBatchResult,
     PdbStructureSimilarityConfig,
     PdbStructureSimilarityHit,
     PdbStructureSimilarityInput,
     PdbStructureSimilarityOutput,
+    PdbStructureSimilarityQuery,
+    PdbStructureSimilarityResult,
     run_pdb_structure_similarity,
-    run_pdb_structure_similarity_batch,
 )
 
 __all__ = [
@@ -37,14 +34,11 @@ __all__ = [
     "PdbFetchFastaInput",
     "PdbFetchFastaOutput",
     "run_pdb_fetch_fasta",
-    "PdbStructureSimilarityBatchConfig",
-    "PdbStructureSimilarityBatchInput",
-    "PdbStructureSimilarityBatchOutput",
-    "PdbStructureSimilarityBatchResult",
     "PdbStructureSimilarityConfig",
     "PdbStructureSimilarityHit",
+    "PdbStructureSimilarityQuery",
+    "PdbStructureSimilarityResult",
     "PdbStructureSimilarityInput",
     "PdbStructureSimilarityOutput",
     "run_pdb_structure_similarity",
-    "run_pdb_structure_similarity_batch",
 ]

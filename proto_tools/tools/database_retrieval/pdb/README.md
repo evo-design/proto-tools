@@ -58,59 +58,25 @@ Use this to extract reference sequences from an experimental structure for seque
 
 ### PDB Structure Similarity (`pdb-structure-similarity`)
 
-Searches the experimental PDB structure index using either a public PDB chain/assembly or a custom `Structure`. It returns ranked identifiers, RCSB's normalized ranking score, and the structure service's original predicted TM-like score.
+Searches the experimental PDB structure index for chains or assemblies similar to each query. A query is either a public PDB chain or assembly, or a custom `Structure`. Each result lists ranked hit identifiers with RCSB's normalized ranking score and the structure service's predicted TM-score.
 
 #### Applications
 
-Use this as database-scale evidence for structural relatedness when an independent global structure search is appropriate: screen de novo structures for close experimental neighbors, identify remote structural analogs, or compare assemblies at whole-complex scale. Calibrate score direction and a decision threshold with matched known-related and known-unrelated controls before filtering a design pool.
+Use this to find experimental structures related to a design or a known protein: screen de novo structures for close experimental neighbors, identify remote structural analogs, or compare assemblies at whole-complex scale. Pass several queries in one call to search a shortlist; results come back in input order.
 
 #### Usage Tips
 
-- **This is not Foldseek or an exact TM-align result.** `predicted_tm_score` comes from RCSB's learned embedding model. Treat it as an independent proxy and do not silently substitute it for a task's named structural oracle.
-- **For exact evidence, align the retrieved neighbors yourself.** This tool returns identifiers in `hits`; fetch them with `pdb-fetch-entry` and align against your query with a registered `structure_alignment` tool such as `tmalign-alignment` or `usalign-alignment`. Treat a fetch or alignment failure as missing evidence rather than as low similarity.
-- **Use `global` for whole-fold relatedness and `local` for shared substructures.** Match `target_search_space` to chains (`polymer_entity_instance`) or assemblies (`assembly`).
-- **Custom structures leave the local environment.** Their coordinates and embedded sequences are sent to RCSB's public upload service. Public `pdb_id` queries require no local upload.
-- **A small result limit can miss neighbors.** `number_of_candidates` controls approximate retrieval breadth, while `predicted_tm_score_cutoff` filters the model score. Calibrate both with controls when absence of a hit drives selection.
-- **Use the batch wrapper for shortlist coverage.** `pdb-structure-similarity-batch`
-  preserves input alignment and explicit failures while applying conservative
-  concurrency; this is preferable to a long sequential loop when every
-  finalist or control needs the same measurement.
-- **Remote retries are deliberately bounded.** `timeout_seconds` limits each
-  upload/search request and `http_retries` controls extra transport attempts
-  (default 1, maximum 3). Exhaustion is reported once and is not retried again
-  around the entire upload-plus-search operation. Preserve successful batch
-  entries and treat failed entries as missing evidence.
-
-### Batch PDB Structure Similarity (`pdb-structure-similarity-batch`)
-
-Runs the same learned RCSB comparison for an aligned shortlist with conservative
-bounded concurrency. Results preserve input order and query identifiers. A
-failed upload or search is returned as an explicit error record, never as a
-novelty measurement.
-
-#### Applications
-
-Use this when proxy coverage—not generation—is limiting a design campaign. It
-is especially useful for measuring every finalist and matched control through
-the same wrapper before attempting feedback calibration or portfolio selection.
-
-#### Usage Tips
-
-- **Keep concurrency conservative.** The default of two workers improves
-  shortlist throughput without treating a public service as local compute; the
-  configuration caps concurrency at four.
-- **Audit coverage before selection.** Require an `output` for any query whose
-  score participates in filtering or calibration. `error_type` and
-  `error_message` are failure evidence, not evidence of database novelty.
-- **The proxy remains independent.** Batch execution improves coverage but does
-  not make the learned RCSB score equivalent to Foldseek, TM-align, or another
-  task-named oracle.
+- **This is not Foldseek or an exact TM-align result.** `predicted_tm_score` comes from RCSB's learned embedding model, so treat it as an estimate rather than a measured alignment score.
+- **For exact scores, align the retrieved hits yourself.** Fetch hit identifiers with `pdb-fetch-entry` and align them against your query with a `structure_alignment` tool such as `tmalign-alignment` or `usalign-alignment`.
+- **Use `global` for whole-fold similarity and `local` for shared substructures.** Match `target_search_space` to chains (`polymer_entity_instance`) or assemblies (`assembly`).
+- **Custom structures leave the local environment.** Their coordinates and embedded sequences are sent to RCSB's public upload service. Public `pdb_id` queries upload nothing.
+- **A small result limit can miss hits.** `number_of_candidates` bounds the approximate search, and `predicted_tm_score_cutoff` filters by score; `total_count` reports how many matches RCSB found in all.
 
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every PDB tool in this toolkit (`pdb-fetch-entry`, `pdb-fetch-fasta`, `pdb-structure-similarity`, `pdb-structure-similarity-batch`).
+These apply to every PDB tool in this toolkit (`pdb-fetch-entry`, `pdb-fetch-fasta`, `pdb-structure-similarity`).
 
 - **Requires network access.** The tools call the live RCSB PDB HTTP endpoints; they do not run offline and keep no local copy of the archive.
 - **Subject to RCSB rate limits.** RCSB throttles clients that exceed a few requests per second and returns HTTP 429 when the limit is exceeded; space out high-volume requests, since no account or API key is available to raise the limit.
