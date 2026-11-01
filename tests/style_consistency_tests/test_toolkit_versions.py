@@ -14,8 +14,15 @@ from pathlib import Path
 
 import pytest
 
-from proto_tools.tools import ToolRegistry
-from proto_tools.utils.tool_versions import HASH_LENGTH, VERSIONS_FILE, hashed_files, load_versions, source_hash
+from proto_tools.utils.tool_versions import (
+    HASH_LENGTH,
+    VERSIONS_FILE,
+    hashed_files,
+    load_versions,
+    next_version,
+    packaged_toolkit_dirs,
+    source_hash,
+)
 
 try:  # Python 3.11+
     import tomllib
@@ -28,16 +35,7 @@ _SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 _HASH = re.compile(rf"^[0-9a-f]{{{HASH_LENGTH}}}$")
 
-# Mock tools that exist only to exercise the framework.
-_EXEMPT_CATEGORIES = frozenset({"testing"})
-
-_TOOLKIT_DIRS = sorted(
-    {
-        spec.toolkit_dir
-        for spec in ToolRegistry.list_all()
-        if not spec.is_external and spec.toolkit_dir.parent.name not in _EXEMPT_CATEGORIES
-    }
-)
+_TOOLKIT_DIRS = packaged_toolkit_dirs()
 
 
 def _rel(path: Path) -> str:
@@ -73,13 +71,13 @@ def test_current_version_matches_source(toolkit_dir: Path) -> None:
         pytest.skip(f"no {VERSIONS_FILE}; reported by test_versions_file_is_well_formed")
     version, recorded = next(iter(versions.items()))
     live = source_hash(toolkit_dir)
-    major, minor, patch = _semver_key(version)
     assert live == recorded, (
         f"{toolkit_dir.name} source changed: {VERSIONS_FILE} has {version} → {recorded}, current hash is {live}\n"
         f"Add a new top entry to {_rel(toolkit_dir / VERSIONS_FILE)}:\n"
-        f"  {major}.{minor}.{patch + 1}: {live}   (patch: no output change)\n"
-        f"  {major}.{minor + 1}.0: {live}   (minor: outputs may differ)\n"
-        f"  {major + 1}.0.0: {live}   (major: schema break)"
+        f"  {next_version(version, 'patch')}: {live}   (patch: no output change)\n"
+        f"  {next_version(version, 'minor')}: {live}   (minor: outputs may differ)\n"
+        f"  {next_version(version, 'major')}: {live}   (major: schema break)\n"
+        f"or run: python scripts/update_versions.py --bump patch {toolkit_dir.name}"
     )
 
 

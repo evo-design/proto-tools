@@ -48,7 +48,17 @@ Pick the level by what a caller sees:
 | Minor | The same call can return different results: new weights, a changed default, an upstream release |
 | Patch | Results are unchanged: refactors, logging, docstrings |
 
-While a branch is in progress, keep one new entry and update its hash as the source changes, rather than adding an entry per commit. Two branches bumping the same toolkit conflict in `versions.yaml`, which forces the second to reconcile.
+While a branch is in progress, keep one new entry and update its hash as the source changes, rather than adding an entry per commit.
+
+`scripts/update_versions.py` writes the entries for you, for every toolkit whose hash moved or only the ones named:
+
+```bash
+python scripts/update_versions.py --bump patch            # add a patch entry to each changed toolkit
+python scripts/update_versions.py --bump minor esmfold    # only esmfold
+python scripts/update_versions.py --in-place              # update the top entry's hash, e.g. one added on this branch
+```
+
+Toolkits whose top entry already matches are left alone. Two branches bumping the same toolkit conflict in `versions.yaml`, which forces the second to reconcile.
 
 A new toolkit starts at `1.0.0` with its current hash.
 
@@ -58,7 +68,7 @@ Only the newest entry is checked against the source; older entries are a record,
 
 - **Collapse a run of bumps** into one entry above the last version you keep. If a downstream copy of the repo is at `1.2.0` and development since then went through `1.2.1` to `1.5.0`, replace those entries with a single `1.3.0: <current hash>`, picking the level of the largest bump collapsed.
 - **Reset a toolkit** by deleting its `versions.yaml`: the test then fails with the `1.0.0: <hash>` line to write.
-- **Rehash in place** when the hashing itself changes (what `tool_versions.py` covers or how it normalizes) but no toolkit's code does: replace each top entry's hash rather than adding versions, since the code behind each version is the same.
+- **Rehash in place** when the hashing itself changes (what `tool_versions.py` covers or how it normalizes) but no toolkit's code does: replace each top entry's hash (`--in-place`) rather than adding versions, since the code behind each version is the same.
 
 Outputs stamped with a dropped version still carry it, but it no longer resolves through `versions.yaml` in a repo whose history never had it.
 

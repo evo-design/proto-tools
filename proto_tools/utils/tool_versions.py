@@ -21,6 +21,7 @@ import subprocess
 import tokenize
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Literal
 
 import yaml
 
@@ -29,6 +30,8 @@ logger = logging.getLogger(__name__)
 VERSIONS_FILE = "versions.yaml"
 
 HASH_LENGTH = 12
+
+Bump = Literal["patch", "minor", "major"]
 
 # Framework modules every tool shares. Hashing them would move every toolkit's hash on
 # any framework edit.
@@ -79,6 +82,26 @@ def defining_files(tool_key: str) -> list[Path]:
         if rel.startswith("proto_tools/") and not rel.startswith(FRAMEWORK_PREFIXES):
             keep.append(path)
     return sorted(keep)
+
+
+def packaged_toolkit_dirs() -> list[Path]:
+    """Return every versioned toolkit shipped with proto-tools.
+
+    Excludes external toolkits and the ``testing`` category, whose mock tools only exercise
+    the framework.
+
+    Returns:
+        list[Path]: Sorted toolkit directories.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    return sorted(
+        {
+            spec.toolkit_dir
+            for spec in ToolRegistry.list_all()
+            if not spec.is_external and spec.toolkit_dir.parent.name != "testing"
+        }
+    )
 
 
 def load_versions(toolkit_dir: Path) -> dict[str, str]:
@@ -195,6 +218,54 @@ def toolkit_version(toolkit_dir: Path) -> str | None:
         version,
     )
     return f"{version}+dirty"
+
+
+def next_version(version: str, bump: Bump) -> str:
+    """Return the version after ``version`` at the given bump level.
+
+    Args:
+        version (str): An ``X.Y.Z`` version.
+        bump (Bump): Which part to increment; the parts after it reset to zero.
+
+    Returns:
+        str: The bumped ``X.Y.Z`` version.
+    """
+    major, minor, patch = (int(part) for part in version.split("."))
+    if bump == "major":
+        return f"{major + 1}.0.0"
+    if bump == "minor":
+        return f"{major}.{minor + 1}.0"
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def record_source_hash(toolkit_dir: Path, bump: Bump | None) -> str | None:
+    """Pin a toolkit's current source hash in its ``versions.yaml``.
+
+    A toolkit without the file starts at ``1.0.0``.
+
+    Args:
+        toolkit_dir (Path): The toolkit directory.
+        bump (Bump | None): Add a new top entry at this level, or None to replace the top
+            entry's hash in place.
+
+    Returns:
+        str | None: The version now pinned to the current hash, or None if the top entry
+            already matched and nothing was written.
+    """
+    versions = load_versions(toolkit_dir)
+    live = source_hash(toolkit_dir)
+    if not versions:
+        versions = {"1.0.0": live}
+    else:
+        version, recorded = next(iter(versions.items()))
+        if live == recorded:
+            return None
+        if bump is None:
+            versions[version] = live
+        else:
+            versions = {next_version(version, bump): live, **versions}
+    (toolkit_dir / VERSIONS_FILE).write_text("".join(f"{v}: {h}\n" for v, h in versions.items()))
+    return next(iter(versions))
 
 
 def _walk(root: Path, top_level_skip: frozenset[str] = frozenset()) -> Iterator[Path]:

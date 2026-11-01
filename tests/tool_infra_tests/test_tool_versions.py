@@ -13,7 +13,12 @@ from pathlib import Path
 import pytest
 
 from proto_tools.utils import tool_versions
-from proto_tools.utils.tool_versions import load_versions, source_hash, toolkit_version
+from proto_tools.utils.tool_versions import (
+    load_versions,
+    record_source_hash,
+    source_hash,
+    toolkit_version,
+)
 
 _TOOL_SOURCE = 'def run(x):\n    return x + 1  # add one\n\n\nLABEL = "# not a comment"\n'
 
@@ -126,3 +131,29 @@ def test_category_shared_modules_are_hashed_but_not_its_init() -> None:
 
     assert "proto_tools/tools/masked_models/shared_data_models.py" in labels
     assert "proto_tools/tools/masked_models/__init__.py" not in labels
+
+
+def test_record_source_hash_bumps_a_stale_toolkit(toolkit: Path) -> None:
+    (toolkit / "versions.yaml").write_text("1.0.0: 4b7e02a91c3f\n")
+
+    assert record_source_hash(toolkit, "minor") == "1.1.0"
+    assert load_versions(toolkit) == {"1.1.0": source_hash(toolkit), "1.0.0": "4b7e02a91c3f"}
+
+
+def test_record_source_hash_in_place_keeps_the_version(toolkit: Path) -> None:
+    (toolkit / "versions.yaml").write_text("1.1.0: 9f3c1a77d0e2\n1.0.0: 4b7e02a91c3f\n")
+
+    assert record_source_hash(toolkit, None) == "1.1.0"
+    assert load_versions(toolkit) == {"1.1.0": source_hash(toolkit), "1.0.0": "4b7e02a91c3f"}
+
+
+def test_record_source_hash_leaves_a_current_toolkit_alone(toolkit: Path) -> None:
+    (toolkit / "versions.yaml").write_text(f"1.0.0: {source_hash(toolkit)}\n")
+
+    assert record_source_hash(toolkit, "patch") is None
+    assert list(load_versions(toolkit)) == ["1.0.0"]
+
+
+def test_record_source_hash_starts_a_new_toolkit_at_1_0_0(toolkit: Path) -> None:
+    assert record_source_hash(toolkit, "patch") == "1.0.0"
+    assert load_versions(toolkit) == {"1.0.0": source_hash(toolkit)}
