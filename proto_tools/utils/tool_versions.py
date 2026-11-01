@@ -4,9 +4,10 @@ Toolkit versions pinned to a hash of the toolkit's source.
 
 Each toolkit's ``versions.yaml`` maps version to source hash, newest first. The hash
 covers the code a toolkit's results depend on: every file in the toolkit directory
-except docs and examples, the shared environment it builds from, its category's shared
-modules (but not the category ``__init__.py``), and the first-party modules defining its
-models. Python comments and blank lines are ignored, so only code edits move it. See
+except docs, examples, and example data, the shared environment it builds from, its
+category's shared modules, and the first-party modules defining its models. The toolkit
+and category ``__init__.py`` files only re-export tools, so they are left out. Python
+comments and blank lines are ignored, so only code edits move it. See
 ``notes/versioning.md``.
 """
 
@@ -41,8 +42,14 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 
 _TOOLS_DIR = PACKAGE_ROOT / "proto_tools" / "tools"
 
-# Toolkit-root entries that document a toolkit rather than define its behaviour.
-_DOC_ENTRIES = frozenset({"README.md", "cite.bib", "links.yaml", "license.yaml", "examples", VERSIONS_FILE})
+# Toolkit-root entries that document a toolkit rather than define its behaviour. The
+# root __init__.py only re-exports the toolkit's tools.
+_UNHASHED_ENTRIES = frozenset(
+    {"README.md", "cite.bib", "links.yaml", "license.yaml", "examples", VERSIONS_FILE, "__init__.py"}
+)
+
+# Toolkit-root data files read only by a tool's example_input().
+_EXAMPLE_DATA_PREFIX = "example_"
 
 _DOC_SUFFIXES = frozenset({".md", ".ipynb"})
 
@@ -139,7 +146,11 @@ def hashed_files(toolkit_dir: Path) -> dict[str, Path]:
     from proto_tools.utils.tool_instance import ToolInstance
 
     toolkit_dir = toolkit_dir.resolve()
-    files = {f"toolkit/{p.relative_to(toolkit_dir).as_posix()}": p for p in _walk(toolkit_dir, _DOC_ENTRIES)}
+    files = {
+        f"toolkit/{p.relative_to(toolkit_dir).as_posix()}": p
+        for p in _walk(toolkit_dir, _UNHASHED_ENTRIES)
+        if not (p.parent == toolkit_dir and p.name.startswith(_EXAMPLE_DATA_PREFIX))
+    }
 
     try:
         env_dir, _env_name = ToolInstance._packaged_env_def(toolkit_dir.name)

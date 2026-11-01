@@ -8,6 +8,7 @@ exact source. See ``notes/versioning.md``.
 
 from __future__ import annotations
 
+import ast
 import fnmatch
 import re
 from pathlib import Path
@@ -94,4 +95,27 @@ def test_hashed_files_ship_in_the_wheel() -> None:
     assert not unshipped, (
         f"Hashed files not matched by [tool.setuptools.package-data] in pyproject.toml: {unshipped}. "
         "Add a pattern for them so wheel installs hash the same source."
+    )
+
+
+def _is_reexport(node: ast.stmt) -> bool:
+    if isinstance(node, ast.Import | ast.ImportFrom):
+        return True
+    if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+        return True  # docstring
+    return isinstance(node, ast.Assign) and [getattr(t, "id", None) for t in node.targets] == ["__all__"]
+
+
+def test_unhashed_init_files_only_reexport() -> None:
+    """Toolkit and category ``__init__.py`` files are not hashed, so they must hold no logic."""
+    inits = {toolkit_dir / "__init__.py" for toolkit_dir in _TOOLKIT_DIRS}
+    inits |= {toolkit_dir.parent / "__init__.py" for toolkit_dir in _TOOLKIT_DIRS}
+    offenders = sorted(
+        _rel(path)
+        for path in inits
+        if path.is_file() and not all(_is_reexport(node) for node in ast.parse(path.read_text()).body)
+    )
+    assert not offenders, (
+        f"These __init__.py files are left out of toolkit version hashes but contain logic: {offenders}. "
+        "Move the code into a module of the toolkit or category."
     )

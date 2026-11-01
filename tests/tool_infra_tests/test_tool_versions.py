@@ -67,6 +67,7 @@ def test_a_hash_inside_a_string_is_code(toolkit: Path) -> None:
     [
         ("fake_toolkit_run.py", _TOOL_SOURCE.replace("x + 1", "x + 2")),
         ("standalone/requirements.txt", "numpy==2.1.0\n"),
+        ("standalone/__init__.py", "SCALE = 2\n"),
     ],
 )
 def test_code_and_environment_edits_move_the_hash(toolkit: Path, relative: str, content: str) -> None:
@@ -78,7 +79,17 @@ def test_code_and_environment_edits_move_the_hash(toolkit: Path, relative: str, 
 
 @pytest.mark.parametrize(
     "relative",
-    ["README.md", "cite.bib", "links.yaml", "license.yaml", "versions.yaml", "examples/out.json", ".gitignore"],
+    [
+        "README.md",
+        "cite.bib",
+        "links.yaml",
+        "license.yaml",
+        "versions.yaml",
+        "examples/out.json",
+        ".gitignore",
+        "__init__.py",
+        "example_input_fixture.pdb",
+    ],
 )
 def test_docs_examples_and_metadata_do_not_move_the_hash(toolkit: Path, relative: str) -> None:
     before = _rehash(toolkit)

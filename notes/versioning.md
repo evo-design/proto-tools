@@ -17,7 +17,7 @@ The first key is the current version. All tools in a toolkit share it; `tool_id`
 
 `proto_tools/utils/tool_versions.py` computes a 12-hex SHA-256 over:
 
-- every file in the toolkit directory except `README.md`, `cite.bib`, `links.yaml`, `license.yaml`, `versions.yaml`, `examples/`, Markdown, notebooks, and dotfiles;
+- every file in the toolkit directory except `README.md`, `cite.bib`, `links.yaml`, `license.yaml`, `versions.yaml`, `examples/`, Markdown, notebooks, dotfiles, the root `__init__.py` (it only re-exports tools), and root `example_*` data files (read only by `example_input()`);
 - the shared environment named in `standalone/shared_env.txt`, if any;
 - the category's top-level modules, such as `structure_prediction/dispatch.py` or `masked_models/shared_data_models.py`, except its `__init__.py`, which only re-exports toolkits;
 - the first-party modules defining the tools' input, config, and output models (their MRO), wherever they live.
