@@ -23,6 +23,7 @@ def flash(monkeypatch):
             "log_likelihood": mean * count,
             "perplexity": math.exp(-mean),
         },
+        retry_on_checkpoint_corruption=lambda load, **_: load(),
         serialize_output=lambda value: value,
     )
     monkeypatch.setitem(sys.modules, "standalone_helpers", helpers)
