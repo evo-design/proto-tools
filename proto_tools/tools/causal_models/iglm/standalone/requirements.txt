@@ -1,0 +1,4 @@
+iglm==0.1.0  # weights ship inside the wheel: iglm/trained_models/{IgLM,IgLM-S}
+numpy<2  # transformers 4.38.2 predates the numpy 2 ABI break
+tqdm
+transformers==4.38.2  # GPT-2 generate(bad_words_ids=..., forced_eos_token_id=...) and BertTokenizerFast, warning-free

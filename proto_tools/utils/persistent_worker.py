@@ -38,8 +38,9 @@ _BODY_GRACE_SECONDS = 30
 
 # Heartbeat: while a single worker request is in flight longer than this, log a WARNING so a
 # hung inference / model load is visible live (prod surfaces only proto_tools WARNING+). 0 disables.
-# Override via PROTO_WORKER_HEARTBEAT_SECONDS.
-_DEFAULT_HEARTBEAT_SECONDS = 120.0
+# Override via PROTO_WORKER_HEARTBEAT_SECONDS. Set well above healthy first loads, which can spend
+# minutes downloading weights or JIT-compiling kernels (Evo 2 Flash takes ~10 min on a fresh cache).
+_DEFAULT_HEARTBEAT_SECONDS = 900.0
 
 
 def _verbose_to_log_level(verbose: int) -> int:

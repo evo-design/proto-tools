@@ -1,0 +1,50 @@
+code:
+  spdx: Custom (JHU Academic Software License Agreement)
+  url: https://github.com/Graylab/IgLM/blob/main/LICENSE.md
+  text: 'JHU Academic Software License Agreement. The License takes effect automatically
+    between a non-profit academic or non-profit research institution (the Licensee) and
+    The Johns Hopkins University (JHU) for use of the distributed software, so long as the
+    Licensee complies with its terms. It requires acknowledging the copyright of JHU as
+    follows: "© 2022 The Johns Hopkins University", together with the copyrights of any
+    incorporated third party software. Redistribution and use in source and binary forms,
+    with or without modification, are permitted provided that the source code retains the
+    copyright notice and these terms and conditions. The name of JHU and its affiliates may
+    not be used to endorse or promote derived products without specific prior written
+    permission from an authorized JHU representative. Only a non-exclusive, nontransferable
+    license is granted, for non-commercial, non-profit purposes: "Commercial use of the
+    Software, including research use by for-profit entities, requires a separately executed
+    written license agreement." The Licensee must use the Software and any modifications,
+    improvements or derivatives solely for non-commercial, non-profit purposes, may not
+    distribute or transfer the Software or such improvements to any third party without
+    requiring that the third party adhere to the terms of this License, and any improvements
+    are subject to the same terms as the Software. Any publication of results obtained with
+    the Software must acknowledge its use by an appropriate citation. The Software is
+    provided "AS IS" with all warranties disclaimed, the Licensee indemnifies JHU against
+    claims arising from its use, rights terminate automatically on non-compliance, and the
+    agreement is governed by the laws of the State of Maryland. Full terms at the canonical
+    URL above.'
+weights:
+  spdx: Custom (JHU Academic Software License Agreement)
+  url: https://github.com/Graylab/IgLM/blob/main/LICENSE.md
+  text: 'Both released checkpoints (IgLM and IgLM-S) are bundled inside the iglm PyPI
+    distribution under iglm/trained_models/, so they are distributed with, and covered by,
+    the same JHU Academic Software License Agreement as the code: non-commercial,
+    non-profit use only, with the JHU copyright notice retained and a citation in any
+    publication of results. The weights are freely downloadable with the package and are
+    not access-gated.'
+commercial_use: 'no'
+redistribution: true
+attribution_required: true
+notes: 'IgLM (Graylab/IgLM, Gray Lab at Johns Hopkins University) ships code and
+  pre-trained weights under the JHU Academic Software License Agreement, which grants a
+  non-exclusive, nontransferable license for non-commercial, non-profit purposes only;
+  research use by for-profit entities counts as commercial use and needs a separately
+  executed agreement, obtained through Johns Hopkins Technology Ventures at
+  https://jhtv.e-lucid.com/product/generative-language-model-for-antibody-sequence-design-iglm.
+  Redistribution in source and binary form is permitted as long as the copyright notice
+  and terms are retained and third parties are required to adhere to the same terms.
+  Acknowledgement of "© 2022 The Johns Hopkins University" and a citation of Shuai et al.
+  (2023) in publications are required. Both checkpoints are bundled in the iglm wheel, so
+  there is no gated download and no weights.access gate; the OAS95 training and test data
+  are published separately at https://data.graylab.jhu.edu/OAS95.tar.gz.'
+last_updated: '2026-10-30'
