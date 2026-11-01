@@ -91,6 +91,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 <a href="proto_tools/tools/causal_models/">causal_models/</a>                 # Autoregressive sequence models
 ├── <a href="proto_tools/tools/causal_models/evo1/">evo1/</a>
 ├── <a href="proto_tools/tools/causal_models/evo2/">evo2/</a>
+├── <a href="proto_tools/tools/causal_models/iglm/">iglm/</a>
 ├── <a href="proto_tools/tools/causal_models/progen2/">progen2/</a>
 └── <a href="proto_tools/tools/causal_models/progen3/">progen3/</a>
 <a href="proto_tools/tools/database_retrieval/">database_retrieval/</a>             # Sequence and structure database access
@@ -166,6 +167,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/structure_alignment/tmalign/">tmalign/</a>
 └── <a href="proto_tools/tools/structure_alignment/usalign/">usalign/</a>
 <a href="proto_tools/tools/structure_design/">structure_design/</a>               # De novo structure generation
+├── <a href="proto_tools/tools/structure_design/rfd4/">rfd4/</a>
 └── <a href="proto_tools/tools/structure_design/rfdiffusion3/">rfdiffusion3/</a>
 <a href="proto_tools/tools/structure_dynamics/">structure_dynamics/</a>             # Conformational dynamics
 └── <a href="proto_tools/tools/structure_dynamics/bioemu/">bioemu/</a>

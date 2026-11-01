@@ -1,6 +1,6 @@
 """proto_tools/tools/causal_models/evo2/evo2_score.py.
 
-Evo2 scoring tool.
+Evo 2 scoring tool.
 """
 
 import logging
@@ -48,43 +48,43 @@ Evo2ScoringOutput = CausalModelScoringOutput
 
 # Config:
 class Evo2ScoringConfig(CausalModelScoringConfig):
-    """Configuration for Evo2 DNA sequence scoring.
+    """Configuration for Evo 2 DNA sequence scoring.
 
     Computes autoregressive likelihood by computing P(x_t | x_{<t}) for each
     position and summing the log probabilities. Uses batched processing.
 
     Attributes:
-        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo2 weights variant.
+        batch_size (int): Compatibility option; vLLM schedules sequences automatically.
+        model_checkpoint (EVO2_MODEL_CHECKPOINTS): Evo 2 weights variant.
         local_path (str | None): Override HuggingFace download with a local weights directory.
         prepend_bos (bool): Prepend a beginning-of-sequence token before scoring.
         return_logits (bool): Include per-position logits in the output.
 
     Note:
-        - Evo2 uses byte-level tokenization with vocab_size=512.
-        - Evo2 is a large model; batch_size tuning may be needed for memory.
+        - Evo 2 uses byte-level tokenization with vocab_size=512.
+        - vLLM automatically schedules ragged sequences within available GPU memory.
     """
 
     batch_size: int = ConfigField(
         title="Batch Size",
         default=8,
         ge=1,
-        description="Sequences per GPU forward pass; raise for throughput, lower if OOM",
+        description="Compatibility option; vLLM schedules sequences automatically",
     )
 
     @model_validator(mode="after")
     def _validate_40b(self) -> Any:
         if "40b" in self.model_checkpoint:
             raise NotImplementedError(
-                f"The {self.model_checkpoint} model requires 2 GPUs with tensor "
-                "parallelism, which we haven't implemented into our device "
-                "manager system. Use a 7b or 1b variant instead."
+                f"The {self.model_checkpoint} checkpoint is not supported by this Proto wrapper. "
+                "Use a 20b, 7b, or 1b variant instead."
             )
         return self
 
     model_checkpoint: EVO2_MODEL_CHECKPOINTS = ConfigField(
         title="Model Checkpoint",
         default="evo2_7b",
-        description="Evo2 weights variant",
+        description="Evo 2 weights variant",
         reload_on_change=True,
     )
     local_path: str | None = ConfigField(
@@ -109,7 +109,7 @@ class Evo2ScoringConfig(CausalModelScoringConfig):
     def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """A local weights directory (``local_path``) isn't present on a hosted worker."""
         if self.local_path:
-            return f"local_path points to a local weights directory not available on device='{device}'. Unset it, or run locally with device='cpu'."
+            return f"local_path points to a local weights directory not available on device='{device}'. Unset it, or run on a local NVIDIA GPU."
         return None
 
 
@@ -123,14 +123,16 @@ def example_input() -> Any:
 
 @tool(
     key="evo2-score",
-    label="Evo2 Scoring",
+    label="Evo 2 Scoring",
     category="causal_models",
     input_class=Evo2ScoringInput,
     config_class=Evo2ScoringConfig,
     output_class=Evo2ScoringOutput,
     metrics_class=CausalModelScoringMetrics,
-    description="Score DNA sequences using Evo2 language model",
+    description="Score DNA sequences using Evo 2 language model",
     uses_gpu=True,
+    gpu_only=True,
+    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="scores",
@@ -142,9 +144,9 @@ def run_evo2_score(
     config: Evo2ScoringConfig,
     instance: Any = None,
 ) -> Evo2ScoringOutput:
-    """Score DNA sequences using Evo2 autoregressive language model.
+    """Score DNA sequences using Evo 2 autoregressive language model.
 
-    Computes the likelihood of DNA sequences using Evo2's autoregressive
+    Computes the likelihood of DNA sequences using Evo 2's autoregressive
     modeling. For each position t, computes log P(x_t | x_{<t}) and sums
     these to get the total log-likelihood.
 
@@ -183,9 +185,9 @@ def run_evo2_score(
         - Lower perplexity indicates higher model confidence in the sequence
         - Set ``return_logits=False`` (default) to save memory when only metrics
           are needed
-        - Evo2 uses byte-level tokenization; DNA bases map to their ASCII values
+        - Evo 2 uses byte-level tokenization; DNA bases map to their ASCII values
     """
-    logger.debug(f"Using local venv for Evo2 scoring: {config.model_checkpoint}")
+    logger.debug(f"Using local venv for Evo 2 scoring: {config.model_checkpoint}")
 
     result = ToolInstance.dispatch(
         "evo2",

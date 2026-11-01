@@ -1,5 +1,11 @@
-"""Evo2 DNA language model for sampling and scoring."""
+"""Evo2 DNA language model for sampling, in-context design, and scoring."""
 
+from proto_tools.tools.causal_models.evo2.evo2_icl import (
+    Evo2ICLConfig,
+    Evo2ICLInput,
+    Evo2ICLOutput,
+    run_evo2_icl,
+)
 from proto_tools.tools.causal_models.evo2.evo2_sample import (
     Evo2KVCacheRef,
     Evo2Sample,
@@ -17,6 +23,10 @@ from proto_tools.tools.causal_models.evo2.evo2_score import (
 )
 
 __all__ = [
+    "Evo2ICLInput",
+    "Evo2ICLConfig",
+    "Evo2ICLOutput",
+    "run_evo2_icl",
     "Evo2Sample",
     # Tools layer - simple sampling interface
     "Evo2SampleInput",

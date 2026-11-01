@@ -36,7 +36,7 @@ Tools whose algorithm explicitly samples (`torch.multinomial`, `torch.randn`, JA
 
 **Examples (by category):**
 
-- **Language model samplers**: Evo1-sample, Evo2-sample, ProGen2-sample, ProGen3-sample, ESM2-sample, ESM3-sample, AbLang-sample
+- **Language model samplers**: Evo1-sample, Evo 2-sample, ProGen2-sample, ProGen3-sample, ESM2-sample, ESM3-sample, AbLang-sample
 - **Gradient tools**: ProteinMPNN-gradient (random decoding order), AlphaFold2-gradient (MSA subsampling)
 - **Inverse folding samplers**: ProteinMPNN-sample, LigandMPNN-sample, ESM-IF1-sample, FaMPNN-sample, FaMPNN-pack
 - **Iterative / diffusion structure predictors**: AlphaFold2-binder, AlphaFold3-prediction, Boltz2-prediction, Chai1-prediction, Protenix-prediction
