@@ -1,21 +1,13 @@
 {
   "tool_id": "pdb-fetch-fasta",
-  "execution_time": 0.17605042457580566,
-  "timestamp": "2026-06-20T22:49:16.577478",
+  "tool_version": "2.1.0",
+  "execution_time": 0.18976712226867676,
+  "timestamp": "2026-11-01T14:02:05.806522",
   "success": true,
   "warnings": [],
   "errors": [],
   "metadata": {},
   "chains": [
-    {
-      "chain_ids": [
-        "D",
-        "E"
-      ],
-      "header": "1EFA_1|Chains A[auth D], B[auth E]|DNA (5'-D(*GP*AP*AP*T*TP*GP*TP*GP*AP*GP*CP*GP*CP*TP*CP*AP*CP*AP*AP*TP*T)-3')|",
-      "sequence": "GAATTGTGAGCGCTCACAATT",
-      "is_protein": false
-    },
     {
       "chain_ids": [
         "A",
@@ -25,6 +17,15 @@
       "header": "1EFA_2|Chains C[auth A], D[auth B], E[auth C]|LAC REPRESSOR|Escherichia coli (562)",
       "sequence": "MKPVTLYDVAEYAGVSYQTVSRVVNQASHVSAKTREKVEAAMAELNYIPNRVAQQLAGKQSLLIGVATSSLALHAPSQIVAAIKSRADQLGASVVVSMVERSGVEACKTAVHNLLAQRVSGLIINYPLDDQDAIAVEAACTNVPALFLDVSDQTPINSIIFSHEDGTRLGVEHLVALGHQQIALLAGPLSSVSARLRLAGWHKYLTRNQIQPIAEREGDWSAMSGFQQTMQMLNEGIVPTAMLVANDQMALGAMRAITESGLRVGADISVVGYDDTEDSSCYIPPLTTIKQDFRLLGQTSVDRLLQLSQGQAVKGNQLLPVSLVKRKTTLAPN",
       "is_protein": true
+    },
+    {
+      "chain_ids": [
+        "D",
+        "E"
+      ],
+      "header": "1EFA_1|Chains A[auth D], B[auth E]|DNA (5'-D(*GP*AP*AP*T*TP*GP*TP*GP*AP*GP*CP*GP*CP*TP*CP*AP*CP*AP*AP*TP*T)-3')|",
+      "sequence": "GAATTGTGAGCGCTCACAATT",
+      "is_protein": false
     }
   ],
   "source_url": "https://www.rcsb.org/fasta/entry/1EFA"

@@ -105,8 +105,15 @@ from proto_tools.tools.database_retrieval.pdb import (
     PdbFetchFastaConfig,
     PdbFetchFastaInput,
     PdbFetchFastaOutput,
+    PdbStructureSimilarityConfig,
+    PdbStructureSimilarityHit,
+    PdbStructureSimilarityInput,
+    PdbStructureSimilarityOutput,
+    PdbStructureSimilarityQuery,
+    PdbStructureSimilarityResult,
     run_pdb_fetch_entry,
     run_pdb_fetch_fasta,
+    run_pdb_structure_similarity,
 )
 
 # PubChem fetch
@@ -274,6 +281,13 @@ __all__ = [
     "RfamRegionsOutput",
     "run_rfam_family",
     "run_rfam_regions",
+    "PdbStructureSimilarityConfig",
+    "PdbStructureSimilarityHit",
+    "PdbStructureSimilarityQuery",
+    "PdbStructureSimilarityResult",
+    "PdbStructureSimilarityInput",
+    "PdbStructureSimilarityOutput",
+    "run_pdb_structure_similarity",
     # Sequence fetch (orchestrator)
     "FetchedSequence",
     "FetchedStructure",
