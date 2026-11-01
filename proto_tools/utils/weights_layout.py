@@ -41,7 +41,7 @@ LAYOUT_ENV_VALUE = "toolkit"
 
 # Toolkits switched to the per-toolkit layout. Transitional: toolkits are added one at a time
 # while their downloads are audited, and the gate is removed once every toolkit is migrated.
-MIGRATED_TOOLKITS: frozenset[str] = frozenset()
+MIGRATED_TOOLKITS: frozenset[str] = frozenset({"fampnn"})
 
 
 @dataclass(frozen=True)
@@ -89,7 +89,9 @@ MigrationEntry = HFRepo | WeightsDir | TorchHubFile
 # What each migrated toolkit downloaded under the old layout. An entry is added in the same
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
-MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {}
+MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "fampnn": (WeightsDir("fampnn"),),
+}
 
 
 def uses_toolkit_layout(toolkit: str) -> bool:
