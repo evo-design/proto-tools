@@ -13,7 +13,12 @@ from pathlib import Path
 import pytest
 
 from proto_tools.utils import tool_versions
-from proto_tools.utils.tool_versions import load_versions, source_hash, toolkit_version
+from proto_tools.utils.tool_versions import (
+    load_versions,
+    record_source_hash,
+    source_hash,
+    toolkit_version,
+)
 
 _TOOL_SOURCE = 'def run(x):\n    return x + 1  # add one\n\n\nLABEL = "# not a comment"\n'
 
@@ -62,6 +67,7 @@ def test_a_hash_inside_a_string_is_code(toolkit: Path) -> None:
     [
         ("fake_toolkit_run.py", _TOOL_SOURCE.replace("x + 1", "x + 2")),
         ("standalone/requirements.txt", "numpy==2.1.0\n"),
+        ("standalone/__init__.py", "SCALE = 2\n"),
     ],
 )
 def test_code_and_environment_edits_move_the_hash(toolkit: Path, relative: str, content: str) -> None:
@@ -73,7 +79,17 @@ def test_code_and_environment_edits_move_the_hash(toolkit: Path, relative: str, 
 
 @pytest.mark.parametrize(
     "relative",
-    ["README.md", "cite.bib", "links.yaml", "license.yaml", "versions.yaml", "examples/out.json", ".gitignore"],
+    [
+        "README.md",
+        "cite.bib",
+        "links.yaml",
+        "license.yaml",
+        "versions.yaml",
+        "examples/out.json",
+        ".gitignore",
+        "__init__.py",
+        "example_input_fixture.pdb",
+    ],
 )
 def test_docs_examples_and_metadata_do_not_move_the_hash(toolkit: Path, relative: str) -> None:
     before = _rehash(toolkit)
@@ -119,3 +135,36 @@ def test_unversioned_source_is_marked_dirty(toolkit: Path, caplog: pytest.LogCap
 
 def test_toolkit_without_versions_file_has_no_version(toolkit: Path) -> None:
     assert toolkit_version(toolkit) is None
+
+
+def test_category_shared_modules_are_hashed_but_not_its_init() -> None:
+    labels = set(tool_versions.hashed_files(tool_versions._TOOLS_DIR / "masked_models" / "ablang"))
+
+    assert "proto_tools/tools/masked_models/shared_data_models.py" in labels
+    assert "proto_tools/tools/masked_models/__init__.py" not in labels
+
+
+def test_record_source_hash_bumps_a_stale_toolkit(toolkit: Path) -> None:
+    (toolkit / "versions.yaml").write_text("1.0.0: 4b7e02a91c3f\n")
+
+    assert record_source_hash(toolkit, "minor") == "1.1.0"
+    assert load_versions(toolkit) == {"1.1.0": source_hash(toolkit), "1.0.0": "4b7e02a91c3f"}
+
+
+def test_record_source_hash_in_place_keeps_the_version(toolkit: Path) -> None:
+    (toolkit / "versions.yaml").write_text("1.1.0: 9f3c1a77d0e2\n1.0.0: 4b7e02a91c3f\n")
+
+    assert record_source_hash(toolkit, None) == "1.1.0"
+    assert load_versions(toolkit) == {"1.1.0": source_hash(toolkit), "1.0.0": "4b7e02a91c3f"}
+
+
+def test_record_source_hash_leaves_a_current_toolkit_alone(toolkit: Path) -> None:
+    (toolkit / "versions.yaml").write_text(f"1.0.0: {source_hash(toolkit)}\n")
+
+    assert record_source_hash(toolkit, "patch") is None
+    assert list(load_versions(toolkit)) == ["1.0.0"]
+
+
+def test_record_source_hash_starts_a_new_toolkit_at_1_0_0(toolkit: Path) -> None:
+    assert record_source_hash(toolkit, "patch") == "1.0.0"
+    assert load_versions(toolkit) == {"1.0.0": source_hash(toolkit)}

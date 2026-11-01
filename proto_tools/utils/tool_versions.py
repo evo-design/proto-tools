@@ -4,9 +4,11 @@ Toolkit versions pinned to a hash of the toolkit's source.
 
 Each toolkit's ``versions.yaml`` maps version to source hash, newest first. The hash
 covers the code a toolkit's results depend on: every file in the toolkit directory
-except docs and examples, the shared environment it builds from, its category's shared
-modules, and the first-party modules defining its models. Python comments and blank
-lines are ignored, so only code edits move it. See ``notes/versioning.md``.
+except docs, examples, and example data, the shared environment it builds from, its
+category's shared modules, and the first-party modules defining its models. The toolkit
+and category ``__init__.py`` files only re-export tools, so they are left out. Python
+comments and blank lines are ignored, so only code edits move it. See
+``notes/versioning.md``.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import subprocess
 import tokenize
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Literal
 
 import yaml
 
@@ -29,6 +32,8 @@ VERSIONS_FILE = "versions.yaml"
 
 HASH_LENGTH = 12
 
+Bump = Literal["patch", "minor", "major"]
+
 # Framework modules every tool shares. Hashing them would move every toolkit's hash on
 # any framework edit.
 FRAMEWORK_PREFIXES = ("proto_tools/utils/", "proto_tools/tools/tool_registry.py")
@@ -37,8 +42,14 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 
 _TOOLS_DIR = PACKAGE_ROOT / "proto_tools" / "tools"
 
-# Toolkit-root entries that document a toolkit rather than define its behaviour.
-_DOC_ENTRIES = frozenset({"README.md", "cite.bib", "links.yaml", "license.yaml", "examples", VERSIONS_FILE})
+# Toolkit-root entries that document a toolkit rather than define its behaviour. The
+# root __init__.py only re-exports the toolkit's tools.
+_UNHASHED_ENTRIES = frozenset(
+    {"README.md", "cite.bib", "links.yaml", "license.yaml", "examples", VERSIONS_FILE, "__init__.py"}
+)
+
+# Toolkit-root data files read only by a tool's example_input().
+_EXAMPLE_DATA_PREFIX = "example_"
 
 _DOC_SUFFIXES = frozenset({".md", ".ipynb"})
 
@@ -80,6 +91,26 @@ def defining_files(tool_key: str) -> list[Path]:
     return sorted(keep)
 
 
+def packaged_toolkit_dirs() -> list[Path]:
+    """Return every versioned toolkit shipped with proto-tools.
+
+    Excludes external toolkits and the ``testing`` category, whose mock tools only exercise
+    the framework.
+
+    Returns:
+        list[Path]: Sorted toolkit directories.
+    """
+    from proto_tools.tools import ToolRegistry
+
+    return sorted(
+        {
+            spec.toolkit_dir
+            for spec in ToolRegistry.list_all()
+            if not spec.is_external and spec.toolkit_dir.parent.name != "testing"
+        }
+    )
+
+
 def load_versions(toolkit_dir: Path) -> dict[str, str]:
     """Read a toolkit's ``versions.yaml``.
 
@@ -115,7 +146,11 @@ def hashed_files(toolkit_dir: Path) -> dict[str, Path]:
     from proto_tools.utils.tool_instance import ToolInstance
 
     toolkit_dir = toolkit_dir.resolve()
-    files = {f"toolkit/{p.relative_to(toolkit_dir).as_posix()}": p for p in _walk(toolkit_dir, _DOC_ENTRIES)}
+    files = {
+        f"toolkit/{p.relative_to(toolkit_dir).as_posix()}": p
+        for p in _walk(toolkit_dir, _UNHASHED_ENTRIES)
+        if not (p.parent == toolkit_dir and p.name.startswith(_EXAMPLE_DATA_PREFIX))
+    }
 
     try:
         env_dir, _env_name = ToolInstance._packaged_env_def(toolkit_dir.name)
@@ -125,7 +160,12 @@ def hashed_files(toolkit_dir: Path) -> dict[str, Path]:
         env_dir = env_dir.resolve()
         files |= {f"env/{p.relative_to(env_dir).as_posix()}": p for p in _walk(env_dir)}
 
-    shared = set(toolkit_dir.parent.glob("*.py")) if toolkit_dir.parent.parent == _TOOLS_DIR else set()
+    # A category's __init__.py only re-exports its toolkits, so it never changes behaviour.
+    shared = (
+        {path for path in toolkit_dir.parent.glob("*.py") if path.name != "__init__.py"}
+        if toolkit_dir.parent.parent == _TOOLS_DIR
+        else set()
+    )
     for spec in ToolRegistry.list_all():
         if spec.toolkit_dir.resolve() == toolkit_dir:
             shared.update(path for path in defining_files(spec.key) if not path.is_relative_to(toolkit_dir))
@@ -189,6 +229,54 @@ def toolkit_version(toolkit_dir: Path) -> str | None:
         version,
     )
     return f"{version}+dirty"
+
+
+def next_version(version: str, bump: Bump) -> str:
+    """Return the version after ``version`` at the given bump level.
+
+    Args:
+        version (str): An ``X.Y.Z`` version.
+        bump (Bump): Which part to increment; the parts after it reset to zero.
+
+    Returns:
+        str: The bumped ``X.Y.Z`` version.
+    """
+    major, minor, patch = (int(part) for part in version.split("."))
+    if bump == "major":
+        return f"{major + 1}.0.0"
+    if bump == "minor":
+        return f"{major}.{minor + 1}.0"
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def record_source_hash(toolkit_dir: Path, bump: Bump | None) -> str | None:
+    """Pin a toolkit's current source hash in its ``versions.yaml``.
+
+    A toolkit without the file starts at ``1.0.0``.
+
+    Args:
+        toolkit_dir (Path): The toolkit directory.
+        bump (Bump | None): Add a new top entry at this level, or None to replace the top
+            entry's hash in place.
+
+    Returns:
+        str | None: The version now pinned to the current hash, or None if the top entry
+            already matched and nothing was written.
+    """
+    versions = load_versions(toolkit_dir)
+    live = source_hash(toolkit_dir)
+    if not versions:
+        versions = {"1.0.0": live}
+    else:
+        version, recorded = next(iter(versions.items()))
+        if live == recorded:
+            return None
+        if bump is None:
+            versions[version] = live
+        else:
+            versions = {next_version(version, bump): live, **versions}
+    (toolkit_dir / VERSIONS_FILE).write_text("".join(f"{v}: {h}\n" for v, h in versions.items()))
+    return next(iter(versions))
 
 
 def _walk(root: Path, top_level_skip: frozenset[str] = frozenset()) -> Iterator[Path]:

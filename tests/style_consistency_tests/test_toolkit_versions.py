@@ -8,14 +8,22 @@ exact source. See ``notes/versioning.md``.
 
 from __future__ import annotations
 
+import ast
 import fnmatch
 import re
 from pathlib import Path
 
 import pytest
 
-from proto_tools.tools import ToolRegistry
-from proto_tools.utils.tool_versions import HASH_LENGTH, VERSIONS_FILE, hashed_files, load_versions, source_hash
+from proto_tools.utils.tool_versions import (
+    HASH_LENGTH,
+    VERSIONS_FILE,
+    hashed_files,
+    load_versions,
+    next_version,
+    packaged_toolkit_dirs,
+    source_hash,
+)
 
 try:  # Python 3.11+
     import tomllib
@@ -28,16 +36,7 @@ _SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 _HASH = re.compile(rf"^[0-9a-f]{{{HASH_LENGTH}}}$")
 
-# Mock tools that exist only to exercise the framework.
-_EXEMPT_CATEGORIES = frozenset({"testing"})
-
-_TOOLKIT_DIRS = sorted(
-    {
-        spec.toolkit_dir
-        for spec in ToolRegistry.list_all()
-        if not spec.is_external and spec.toolkit_dir.parent.name not in _EXEMPT_CATEGORIES
-    }
-)
+_TOOLKIT_DIRS = packaged_toolkit_dirs()
 
 
 def _rel(path: Path) -> str:
@@ -73,13 +72,13 @@ def test_current_version_matches_source(toolkit_dir: Path) -> None:
         pytest.skip(f"no {VERSIONS_FILE}; reported by test_versions_file_is_well_formed")
     version, recorded = next(iter(versions.items()))
     live = source_hash(toolkit_dir)
-    major, minor, patch = _semver_key(version)
     assert live == recorded, (
         f"{toolkit_dir.name} source changed: {VERSIONS_FILE} has {version} → {recorded}, current hash is {live}\n"
         f"Add a new top entry to {_rel(toolkit_dir / VERSIONS_FILE)}:\n"
-        f"  {major}.{minor}.{patch + 1}: {live}   (patch: no output change)\n"
-        f"  {major}.{minor + 1}.0: {live}   (minor: outputs may differ)\n"
-        f"  {major + 1}.0.0: {live}   (major: schema break)"
+        f"  {next_version(version, 'patch')}: {live}   (patch: no output change)\n"
+        f"  {next_version(version, 'minor')}: {live}   (minor: outputs may differ)\n"
+        f"  {next_version(version, 'major')}: {live}   (major: schema break)\n"
+        f"or run: python scripts/update_versions.py --bump patch {toolkit_dir.name}"
     )
 
 
@@ -96,4 +95,27 @@ def test_hashed_files_ship_in_the_wheel() -> None:
     assert not unshipped, (
         f"Hashed files not matched by [tool.setuptools.package-data] in pyproject.toml: {unshipped}. "
         "Add a pattern for them so wheel installs hash the same source."
+    )
+
+
+def _is_reexport(node: ast.stmt) -> bool:
+    if isinstance(node, ast.Import | ast.ImportFrom):
+        return True
+    if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+        return True  # docstring
+    return isinstance(node, ast.Assign) and [getattr(t, "id", None) for t in node.targets] == ["__all__"]
+
+
+def test_unhashed_init_files_only_reexport() -> None:
+    """Toolkit and category ``__init__.py`` files are not hashed, so they must hold no logic."""
+    inits = {toolkit_dir / "__init__.py" for toolkit_dir in _TOOLKIT_DIRS}
+    inits |= {toolkit_dir.parent / "__init__.py" for toolkit_dir in _TOOLKIT_DIRS}
+    offenders = sorted(
+        _rel(path)
+        for path in inits
+        if path.is_file() and not all(_is_reexport(node) for node in ast.parse(path.read_text()).body)
+    )
+    assert not offenders, (
+        f"These __init__.py files are left out of toolkit version hashes but contain logic: {offenders}. "
+        "Move the code into a module of the toolkit or category."
     )
