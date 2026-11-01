@@ -26,6 +26,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     build_http_session,
+    request_with_retry,
 )
 
 _UPLOAD_URL = "https://user-upload.rcsb.org/v1/putMultipart"
@@ -264,15 +265,19 @@ def _upload_structure(session: requests.Session, structure: Structure) -> str:
     with TemporaryDirectory(prefix="proto-rcsb-structure-") as temp_dir:
         path = Path(temp_dir) / "query.pdb"
         structure.write_pdb(path)
-        with path.open("rb") as handle:
-            response = session.post(
-                _UPLOAD_URL,
-                files={"file": (path.name, handle, "chemical/x-pdb")},
-                data={"format": "pdb"},
-                timeout=_REQUEST_TIMEOUT_SECONDS,
-            )
-        _raise_for_status(response, "structure upload")
-        payload = response.json()
+        content = path.read_bytes()
+    response = request_with_retry(
+        lambda: session.post(
+            _UPLOAD_URL,
+            files={"file": ("query.pdb", content, "chemical/x-pdb")},
+            data={"format": "pdb"},
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+        ),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
+    _raise_for_status(response, "structure upload")
+    payload = response.json()
     key = payload.get("key")
     if not isinstance(key, str) or not key:
         raise ValueError("RCSB upload response did not contain a structure key")
@@ -324,10 +329,11 @@ def _search(
 ) -> PdbStructureSimilarityResult:
     """Run one structure-similarity search, uploading the query first if it is custom."""
     uploaded_url = _upload_structure(session, query.structure) if query.structure is not None else None
-    response = session.post(
-        _SEARCH_URL,
-        json=_search_payload(query, config, uploaded_url),
-        timeout=_REQUEST_TIMEOUT_SECONDS,
+    request_payload = _search_payload(query, config, uploaded_url)
+    response = request_with_retry(
+        lambda: session.post(_SEARCH_URL, json=request_payload, timeout=_REQUEST_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
     )
     _raise_for_status(response, "structure search")
     payload = response.json()

@@ -35,13 +35,17 @@ class _Response:
 class _Session:
     """Fake RCSB session: echoes the queried chain into the top hit's identifier."""
 
-    def __init__(self, status_code: int = 200) -> None:
+    def __init__(self, status_code: int = 200, resets: int = 0) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.closed = False
         self.status_code = status_code
+        self.resets = resets
 
     def post(self, url: str, **kwargs: Any) -> _Response:
         self.calls.append((url, kwargs))
+        if self.resets:
+            self.resets -= 1
+            raise requests.exceptions.ConnectionError("Connection reset by peer")
         if url == module._UPLOAD_URL:
             return _Response({"key": "synthetic/query.bcif"})
         chain = kwargs["json"]["query"]["parameters"]["value"].get("asym_id", "X")
@@ -169,6 +173,21 @@ def test_custom_chain_search_returns_chain_level_hits(session: _Session) -> None
     )
 
     assert session.calls[1][1]["json"]["return_type"] == "polymer_instance"
+
+
+def test_connection_reset_retries_only_the_failed_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    flaky = _Session(resets=2)
+    monkeypatch.setattr(module, "build_http_session", lambda **_kwargs: flaky)
+    monkeypatch.setattr(module, "_BACKOFF_SECONDS", 0.0)
+
+    output = run_pdb_structure_similarity(
+        PdbStructureSimilarityInput(queries=[PdbStructureSimilarityQuery(structure=_FIXTURE)]),
+        PdbStructureSimilarityConfig(),
+    )
+
+    # Two resets on the upload, then one upload and one search succeed.
+    assert [url for url, _kwargs in flaky.calls] == [module._UPLOAD_URL] * 3 + [module._SEARCH_URL]
+    assert output.results[0].total_count == 7
 
 
 def test_http_error_propagates_with_response_body(monkeypatch: pytest.MonkeyPatch) -> None:
