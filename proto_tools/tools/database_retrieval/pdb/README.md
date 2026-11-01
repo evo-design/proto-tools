@@ -17,7 +17,7 @@ The Protein Data Bank ([Berman et al., 2000](https://doi.org/10.1093/nar/28.1.23
 
 The tools call two RCSB HTTP endpoints directly. `pdb-fetch-entry` issues a GET request to the RCSB Data API core entry endpoint (`https://data.rcsb.org/rest/v1/core/entry/{pdb_id}`) and reads the structure title from `struct.title`, the experimental method from the first `exptl` record, and the resolution from `rcsb_entry_info.resolution_combined`, which covers both X-ray and cryo-EM entries; entries solved by NMR have no resolution value. `pdb-fetch-fasta` requests the FASTA endpoint (`https://www.rcsb.org/fasta/entry/{pdb_id}`), parses each record, extracts the author-assigned chain identifiers from the header, and classifies a sequence as protein when it contains amino-acid letters that do not also occur in nucleotide alphabets. Both tools uppercase the supplied accession, retry transient HTTP failures with backoff, and return an empty result when the accession is not found (HTTP 404). Results reflect the live archive at query time rather than a fixed release snapshot.
 
-`pdb-structure-similarity` calls the RCSB Search API's structure service. The service represents structures with ESM3 residue embeddings followed by a learned aggregator whose cosine similarity was trained to approximate maximum TM-score ([Segura et al., 2026](https://doi.org/10.1093/bioinformatics/btag058)). It is an independent approximate-nearest-neighbor search, not Foldseek or an exact structural alignment. Public PDB references are queried by entry and chain/assembly ID. Custom structures are converted to PDB format and sent to RCSB's public upload service, which requires the caller to set `allow_external_upload=True` explicitly.
+`pdb-structure-similarity` calls the RCSB Search API's structure service. The service represents structures with ESM3 residue embeddings followed by a learned aggregator whose cosine similarity was trained to approximate maximum TM-score ([Segura et al., 2026](https://doi.org/10.1093/bioinformatics/btag058)). It is an independent approximate-nearest-neighbor search, not Foldseek or an exact structural alignment. Public PDB references are queried by entry and chain/assembly ID. Custom structures are converted to PDB format and sent to RCSB's public upload service.
 
 ### Learning Resources
 
@@ -69,7 +69,7 @@ Use this as database-scale evidence for structural relatedness when an independe
 - **This is not Foldseek or an exact TM-align result.** `predicted_tm_score` comes from RCSB's learned embedding model. Treat it as an independent proxy and do not silently substitute it for a task's named structural oracle.
 - **For exact evidence, align the retrieved neighbors yourself.** This tool returns identifiers in `hits`; fetch them with `pdb-fetch-entry` and align against your query with a registered `structure_alignment` tool such as `tmalign-alignment` or `usalign-alignment`. Treat a fetch or alignment failure as missing evidence rather than as low similarity.
 - **Use `global` for whole-fold relatedness and `local` for shared substructures.** Match `target_search_space` to chains (`polymer_entity_instance`) or assemblies (`assembly`).
-- **Custom structures leave the local environment.** Their coordinates and embedded sequences are sent to RCSB. The default rejects that operation; set `allow_external_upload=True` only when external disclosure is permitted. Public `pdb_id` queries require no local upload.
+- **Custom structures leave the local environment.** Their coordinates and embedded sequences are sent to RCSB's public upload service. Public `pdb_id` queries require no local upload.
 - **A small result limit can miss neighbors.** `number_of_candidates` controls approximate retrieval breadth, while `predicted_tm_score_cutoff` filters the model score. Calibrate both with controls when absence of a hit drives selection.
 - **Use the batch wrapper for shortlist coverage.** `pdb-structure-similarity-batch`
   preserves input alignment and explicit failures while applying conservative
@@ -102,8 +102,6 @@ the same wrapper before attempting feedback calibration or portfolio selection.
 - **Audit coverage before selection.** Require an `output` for any query whose
   score participates in filtering or calibration. `error_type` and
   `error_message` are failure evidence, not evidence of database novelty.
-- **The same disclosure boundary applies.** Custom structures still require
-  `allow_external_upload=True`; batching does not weaken that acknowledgement.
 - **The proxy remains independent.** Batch execution improves coverage but does
   not make the learned RCSB score equivalent to Foldseek, TM-align, or another
   task-named oracle.

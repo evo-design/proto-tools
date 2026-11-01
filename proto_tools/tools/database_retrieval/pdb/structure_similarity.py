@@ -3,7 +3,7 @@
 This is intentionally distinct from Foldseek.  The RCSB Search API embeds a
 query structure and retrieves structurally related experimental PDB chains or
 assemblies using its learned global representation.  Custom structures are
-uploaded to RCSB and therefore require an explicit acknowledgement.
+uploaded to RCSB's public upload service before the search.
 """
 
 from __future__ import annotations
@@ -56,8 +56,7 @@ class PdbStructureSimilarityInput(BaseToolInput):
 
     ``structure`` accepts the same ``Structure``/path/raw-content inputs as
     other Proto structure tools.  Supplying it sends coordinates and embedded
-    sequences to the public RCSB upload service; callers must set
-    ``allow_external_upload=True`` in the config.  Public ``pdb_id`` queries do
+    sequences to the public RCSB upload service.  Public ``pdb_id`` queries do
     not upload local data.
 
     Attributes:
@@ -109,7 +108,6 @@ class PdbStructureSimilarityConfig(BaseConfig):
         similarity_type (PdbStructureSimilarityType): Global whole-shape or local substructure similarity.
         predicted_tm_score_cutoff (float): Minimum learned predicted TM-like score.
         number_of_candidates (int): Maximum nearest-neighbor candidates considered.
-        allow_external_upload (bool): Acknowledge disclosure of a custom structure.
         timeout_seconds (float): Per-request HTTP timeout.
         http_retries (int): Extra transport attempts per upload/search request.
     """
@@ -137,12 +135,6 @@ class PdbStructureSimilarityConfig(BaseConfig):
         le=15000,
         title="Number of Candidates",
         description="Maximum nearest-neighbor candidates considered by RCSB",
-    )
-    allow_external_upload: bool = ConfigField(
-        default=False,
-        title="Allow External Upload",
-        description="Acknowledge that a custom structure is sent to RCSB's public upload service",
-        include_in_key=False,
     )
     timeout_seconds: float = ConfigField(
         default=120.0,
@@ -286,7 +278,6 @@ class PdbStructureSimilarityBatchConfig(PdbStructureSimilarityConfig):
         similarity_type (PdbStructureSimilarityType): Global whole-shape or local substructure similarity.
         predicted_tm_score_cutoff (float): Minimum learned predicted TM-like score.
         number_of_candidates (int): Maximum nearest-neighbor candidates considered.
-        allow_external_upload (bool): Acknowledge disclosure of a custom structure.
         timeout_seconds (float): Per-request HTTP timeout.
         http_retries (int): Extra bounded transport attempts per RCSB request.
         max_workers (int): Concurrent query workers, kept low for RCSB rate limits.
@@ -516,11 +507,6 @@ def run_pdb_structure_similarity(
     matched controls before using it as a hard decision boundary.
     """
     del instance
-    if inputs.structure is not None and not config.allow_external_upload:
-        raise ValueError(
-            "Custom structure search uploads coordinates and embedded sequences to RCSB; "
-            "set allow_external_upload=True only when that disclosure is permitted"
-        )
     session = build_http_session(
         http_retries=config.http_retries,
         backoff_seconds=_BACKOFF_SECONDS,

@@ -132,21 +132,14 @@ def test_exhausted_transport_retry_is_not_retried_by_registry(
     assert session.closed is True
 
 
-def test_custom_structure_requires_external_upload_acknowledgement() -> None:
-    fixture = Path(__file__).parent.parent / "dummy_data" / "test_structure_similarity.pdb"
-    inputs = PdbStructureSimilarityInput(structure=fixture)
-    with pytest.raises(ValueError, match="allow_external_upload=True"):
-        run_pdb_structure_similarity(inputs, PdbStructureSimilarityConfig())
-
-
-def test_acknowledged_custom_structure_is_uploaded(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_custom_structure_is_uploaded(monkeypatch: pytest.MonkeyPatch) -> None:
     fixture = Path(__file__).parent.parent / "dummy_data" / "test_structure_similarity.pdb"
     session = _Session()
     monkeypatch.setattr(module, "build_http_session", lambda **_kwargs: session)
 
     output = run_pdb_structure_similarity(
         PdbStructureSimilarityInput(structure=fixture),
-        PdbStructureSimilarityConfig(allow_external_upload=True, target_search_space="assembly"),
+        PdbStructureSimilarityConfig(target_search_space="assembly"),
     )
 
     assert session.closed is True
@@ -167,10 +160,7 @@ def test_custom_chain_search_preserves_chain_level_return_type(monkeypatch: pyte
 
     run_pdb_structure_similarity(
         PdbStructureSimilarityInput(structure=fixture),
-        PdbStructureSimilarityConfig(
-            allow_external_upload=True,
-            target_search_space="polymer_entity_instance",
-        ),
+        PdbStructureSimilarityConfig(target_search_space="polymer_entity_instance"),
     )
 
     search_payload = session.calls[1][1]["json"]
