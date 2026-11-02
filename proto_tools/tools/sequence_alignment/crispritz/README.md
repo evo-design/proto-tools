@@ -54,9 +54,9 @@ its private staging area and builds a CRISPRitz TST index under a cache key made
 from the reference checksum, guide length, PAM, PAM side, bulge capacity, and
 CRISPRitz version. No genome or curated sequence database ships with Proto.
 
-Setup compiles CRISPRitz from its pinned source with OpenMP, so Apple Silicon
-needs a compiler that supports `-fopenmp`; Apple's `clang++` does not without
-`libomp`. Linux builds with the system `g++`.
+Setup compiles CRISPRitz from its pinned source with `g++ -fopenmp`, which
+Apple's `clang++` rejects, so the environment builds on Linux only and setup
+exits early on macOS.
 
 ## Outputs
 
