@@ -83,6 +83,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "progen3",
         "promoter_calculator",
         "proteinmpnn",
+        "protenix",
         "puffin",
         "pyhmmer",
         "pymol_rmsd",
@@ -171,6 +172,7 @@ MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "protenix": (WeightsDir("protenix"),),
     "rfd4": (HFRepo("nvidia/RFD4-Proteina"),),
     "esmc": (
         *(HFRepo(f"biohub/ESMC-{size}") for size in ("300M", "600M", "6B")),
