@@ -52,6 +52,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "fampnn",
         "glm2",
         "ligandmpnn",
+        "malinois",
         "metal3d",
         "minerva",
         "parade",
@@ -108,6 +109,7 @@ MigrationEntry = HFRepo | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "malinois": (WeightsDir("malinois"),),
     "parade": (WeightsDir("parade"),),
     "codonfm": (WeightsDir("codonfm"),),
     "borzoi": (

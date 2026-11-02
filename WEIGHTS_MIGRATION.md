@@ -54,7 +54,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 41 | `sequence_scoring/cherimoya` |  | cherimoya | `huggingface/hub/models--programmable-genomics--CATv1` (pinned revision) | 2 MB (1 fold) | ✅✅✅✅✅ | Triton kernels compile to ~/.triton/cache (not weights; cleaned by wipe). |
 | 42 | `sequence_scoring/deeppbs_specificity` |  |  |  |  |  |  |
 | 43 | `sequence_scoring/enformer` |  | enformer | `huggingface/hub/models--EleutherAI--enformer-official-rough` | 959 MB | ✅✅✅✅✅ |  |
-| 44 | `sequence_scoring/malinois` |  |  |  |  |  |  |
+| 44 | `sequence_scoring/malinois` |  | malinois | `malinois/MODELS-malinois_artifacts__*.tar.gz` + extracted `malinois/malinois_artifacts/` (runtime zenodo) | 128 MB | ✅✅✅✅✅ | Tarball kept beside extraction (upstream behavior). Temp-dir fallback only when resolve returns None. |
 | 45 | `sequence_scoring/na_mpnn_specificity` |  |  |  |  |  |  |
 | 46 | `sequence_scoring/parade` |  | parade | `parade/*.ckpt` (runtime, MD5-checked GitHub raw) | 3 MB (utr5) | ✅✅✅✅✅ | Temp-dir fallback only when resolve_weights_dir returns None. |
 | 47 | `sequence_scoring/primer3` |  |  |  |  |  |  |
