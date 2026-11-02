@@ -19,7 +19,7 @@ from pydantic import model_validator
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import BFactorType, Structure
-from proto_tools.entities.structures.msa_conditioning import MSA_SEARCH_SOURCES, MSASubsampling
+from proto_tools.entities.structures.msa_conditioning import MSASubsampling
 from proto_tools.tools.structure_prediction.msa_reporting import msa_consumption
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
@@ -575,7 +575,7 @@ def run_protenix(
         )
         complex_msas = inputs.msas[dispatch_idx] if inputs.msas else None
         msa_consumed, msa_ignored_reasons = msa_consumption(
-            comp.chains, complex_msas, backend="Protenix", max_skipped_length=4
+            comp.chains, complex_msas, backend="Protenix", max_skipped_length=4, sends_unpaired_only_chains=True
         )
         results.append(
             normalize_output_chain_ids(
@@ -651,9 +651,6 @@ def _write_msas_to_batch_json(
         # Map chain_idx -> a3m path written for that chain.
         chain_idx_to_path: dict[int, str] = {}
         chain_idx_to_paired_path: dict[int, str] = {}
-        generated_no_hit_indices = (
-            set(complex_msas.requested_chain_indices or []) if complex_msas.source in MSA_SEARCH_SOURCES else set()
-        )
         for chain_idx in protein_chain_indices:
             chain = sp_complex.chains[chain_idx]
             if not isinstance(chain, Chain):
@@ -662,19 +659,18 @@ def _write_msas_to_batch_json(
             chain_id = chain.id if chain.id is not None else chain_label(chain_idx)
             a3m_path = os.path.join(msa_dir, f"job_{job_idx}_chain_{chain_id}_{chain_idx}.a3m")
             if msa is None:
-                if chain_idx not in generated_no_hit_indices:
-                    continue
-                # MMseqs2 legitimately returns no MSA for de novo sequences.  Protenix
-                # treats an absent path as a request to contact its remote MSA server,
-                # which violates a completed local-preprocessing decision and can poll
-                # indefinitely.  Its input format accepts a one-row A3M, so make the
-                # no-homolog state explicit instead.
-                write_query_only_a3m(chain.sequence, a3m_path)
+                # Every protein chain needs a path: Protenix treats any chain without one as a
+                # request to search its own MSA server for the whole complex, overwriting the
+                # MSAs we supply. Send the chain's unpaired rows when it has them, else its query.
+                unpaired_only = (unpaired_per_chain or {}).get(chain_idx)
+                if unpaired_only is not None:
+                    unpaired_only.to_a3m_file(a3m_path, query_index=0)
+                else:
+                    write_query_only_a3m(chain.sequence, a3m_path)
                 chain_idx_to_path[chain_idx] = a3m_path
                 if config.verbose:
                     logger.info(
-                        f"Assigned query-only MSA to chain {chain_id} in complex {job_idx} "
-                        "because homology search returned no hits"
+                        f"Assigned {'unpaired-only' if unpaired_only else 'query-only'} MSA to chain {chain_id}"
                     )
                 continue
             # unpairedMsaPath gets each chain's deep unpaired MSA when available, else the

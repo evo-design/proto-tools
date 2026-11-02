@@ -101,20 +101,24 @@ def msa_consumption(
     *,
     backend: str,
     max_skipped_length: int | None = None,
+    sends_unpaired_only_chains: bool = False,
 ) -> tuple[set[int], dict[int, str]]:
-    """Consumed chain indices and ignored reasons for a backend sent each chain's primary alignment.
+    """Consumed chain indices and ignored reasons for the alignments a backend's writer sends.
 
-    Backends that write one alignment file per chain from ``per_chain`` never see a chain that has
-    only unpaired rows. AlphaFold3, Protenix, and OpenDDE also featurize no MSA for chains of
+    Most writers emit one file per chain from ``per_chain``, so a chain with only unpaired rows
+    is never seen; ``sends_unpaired_only_chains`` marks writers (Protenix, OpenDDE) that send
+    those rows instead. AlphaFold3, Protenix, and OpenDDE also featurize no MSA for chains of
     ``max_skipped_length`` or fewer residues.
     """
     if complex_msas is None:
         return set(), {}
     reasons: dict[int, str] = {}
-    for index in set(complex_msas.per_chain) | set(complex_msas.unpaired_per_chain or {}):
+    with_rows = set(complex_msas.per_chain) | set(complex_msas.unpaired_per_chain or {})
+    for index in with_rows:
         chain = chains[index]
-        if index not in complex_msas.per_chain:
+        if index not in complex_msas.per_chain and not sends_unpaired_only_chains:
             reasons[index] = f"only unpaired rows were supplied; {backend} is sent a chain's primary alignment"
         elif max_skipped_length is not None and isinstance(chain, Chain) and len(chain.sequence) <= max_skipped_length:
             reasons[index] = f"{backend} skips the MSA of chains with {max_skipped_length} or fewer residues"
-    return set(complex_msas.per_chain) - set(reasons), reasons
+    sent = with_rows if sends_unpaired_only_chains else set(complex_msas.per_chain)
+    return sent - set(reasons), reasons

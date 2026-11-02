@@ -4,6 +4,7 @@ Tests for OpenDDE all-atom structure prediction (``opendde-prediction``).
 """
 
 import importlib.util
+import json
 import logging
 import re
 import sys
@@ -159,31 +160,35 @@ def test_opendde_build_chain_msa_paths_emits_species_paired_headers(tmp_path):
     assert len(set(species_a)) == len(species_a)  # distinct per row (row-index encoded)
 
 
-def test_opendde_generated_no_hit_writes_query_only_msa(tmp_path):
-    """A completed no-hit search cannot trigger OpenDDE's implicit remote search."""
-    sequence = "MKTAYIAKQR"
-    cx = Complex(chains=[Chain(id="T", sequence=sequence, entity_type="protein")])
-    complex_msas = ComplexMSAs(
-        per_chain={},
-        source="colabfold_server",
-        requested_chain_indices=[0],
-    )
+def test_opendde_partial_supplied_bundle_gives_every_chain_an_msa_path(tmp_path):
+    """A chain without a path makes OpenDDE search its own server and overwrite the supplied MSAs."""
+    target, binder = "MKTAYIAKQR", "GSHMLEDPVD"
+    cx = Complex(chains=[Chain(sequence=target, entity_type="protein"), Chain(sequence=binder, entity_type="protein")])
+    msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[target, "MKTAYIAKQA", "MKTAYIAKQE"])})
 
-    unpaired_paths, paired_paths = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
+    unpaired_paths, _ = build_chain_msa_paths(cx, msas, str(tmp_path))
 
-    assert paired_paths == {}
-    assert set(unpaired_paths) == {"T"}
-    assert Path(unpaired_paths["T"]).read_text() == f">query\n{sequence}\n"
+    assert {chain_id: Path(path).read_text().count(">") for chain_id, path in unpaired_paths.items()} == {
+        "A": 3,
+        "B": 1,
+    }
+    assert Path(unpaired_paths["B"]).read_text() == f">query\n{binder}\n"
 
 
-def test_opendde_empty_supplied_bundle_does_not_claim_no_hit(tmp_path):
-    """An empty supplied bundle has no completed-search provenance to synthesize."""
-    cx = Complex(chains=[Chain(sequence="MKTAYIAKQR", entity_type="protein")])
+@pytest.mark.integration
+def test_opendde_does_not_search_for_a_partial_supplied_bundle(tmp_path):
+    """OpenDDE's own need_msa_search stays False on the JSON we write for a target-only MSA."""
+    from proto_tools.utils import run_in_env
 
-    unpaired_paths, paired_paths = build_chain_msa_paths(cx, ComplexMSAs(per_chain={}), str(tmp_path))
+    target, binder = "MKTAYIAKQR", "GSHMLEDPVD"
+    cx = Complex(chains=[Chain(sequence=target, entity_type="protein"), Chain(sequence=binder, entity_type="protein")])
+    msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[target, "MKTAYIAKQA"])})
+    unpaired_paths, paired_paths = build_chain_msa_paths(cx, msas, str(tmp_path))
+    job_path = tmp_path / "job.json"
+    job_path.write_text(json.dumps(complex_to_opendde_json(cx.chains, "job", [0], unpaired_paths, paired_paths)))
 
-    assert unpaired_paths == {}
-    assert paired_paths == {}
+    code = "import json, sys\nfrom runner.msa_search import need_msa_search\nprint(need_msa_search(json.load(open(sys.argv[1]))))"
+    assert run_in_env("opendde", code=code, args=[str(job_path)], timeout=1800).strip().splitlines()[-1] == "False"
 
 
 def test_opendde_protein_modifications_prefixed_ptm():

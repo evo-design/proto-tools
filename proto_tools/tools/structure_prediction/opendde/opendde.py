@@ -377,8 +377,9 @@ def run_opendde_on_complex(
         with open(input_json_path, "w") as f:
             json.dump([input_json], f, indent=2)
 
-        # --use_msa must be true whenever MSAs exist; OpenDDE skips its featurizer (ignoring supplied paths) when false.
-        opendde_use_msa = bool(chain_msa_paths or chain_paired_msa_paths) or config.use_msa
+        # --use_msa must be true whenever MSAs exist (OpenDDE skips its featurizer when false), and only
+        # then: with it true, OpenDDE searches its own server unless every protein chain has a path.
+        opendde_use_msa = bool(chain_msa_paths or chain_paired_msa_paths)
 
         input_data = {
             "operation": "predict",
@@ -423,7 +424,7 @@ def run_opendde_on_complex(
         source="opendde-prediction",
     )
     msa_consumed, msa_ignored_reasons = msa_consumption(
-        sp_complex.chains, complex_msas, backend="OpenDDE", max_skipped_length=4
+        sp_complex.chains, complex_msas, backend="OpenDDE", max_skipped_length=4, sends_unpaired_only_chains=True
     )
     return normalize_output_chain_ids(
         structure,

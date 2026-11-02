@@ -3,6 +3,9 @@
 Tests for Protenix.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -96,43 +99,55 @@ def test_protenix_unpaired_msa_path_gets_deep_per_chain_unpaired(tmp_path):
         assert paired_rows == 2, f"pairedMsaPath should carry the paired set, got {paired_rows}"
 
 
-def test_protenix_generated_no_hit_writes_query_only_msa(tmp_path):
-    """A completed no-hit search cannot trigger Protenix's implicit remote search."""
-    from pathlib import Path
-
+def test_protenix_partial_supplied_bundle_gives_every_chain_an_msa_path(tmp_path):
+    """A chain without a path makes Protenix search its own server and overwrite the supplied MSAs."""
+    from proto_tools.entities.msa import MSA
     from proto_tools.tools.structure_prediction.protenix.protenix import _write_msas_to_batch_json
     from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
 
-    sequence = "MKTAYIAKQR"
+    target, binder, linker = "MKTAYIAKQR", "GSHMLEDPVD", "ACDEFGHIKL"
     inputs = ProtenixInput(
-        complexes=[Complex(chains=[Chain(sequence=sequence, entity_type="protein")])],
-        msas=[ComplexMSAs(per_chain={}, source="colabfold_server", requested_chain_indices=[0])],
+        complexes=[Complex(chains=[Chain(sequence=s, entity_type="protein") for s in (target, binder, linker)])],
+        msas=[
+            ComplexMSAs(
+                per_chain={0: MSA(aligned_sequences=[target, "MKTAYIAKQA", "MKTAYIAKQE"])},
+                unpaired_per_chain={2: MSA(aligned_sequences=[linker, "ACDEFGHIKA"])},
+            )
+        ],
     )
-    batch_json = [{"sequences": [{"proteinChain": {}}]}]
+    batch_json = [{"sequences": [{"proteinChain": {}} for _ in range(3)]}]
 
     _write_msas_to_batch_json(batch_json, inputs, ProtenixConfig(), str(tmp_path))
 
-    protein = batch_json[0]["sequences"][0]["proteinChain"]
-    assert Path(protein["unpairedMsaPath"]).read_text() == f">query\n{sequence}\n"
-    assert "pairedMsaPath" not in protein
+    paths = [entry["proteinChain"]["unpairedMsaPath"] for entry in batch_json[0]["sequences"]]
+    assert [Path(path).read_text().count(">") for path in paths] == [3, 1, 2]
+    assert Path(paths[1]).read_text() == f">query\n{binder}\n"
 
 
-def test_protenix_empty_supplied_bundle_does_not_claim_no_hit(tmp_path):
-    """An empty supplied bundle has no completed-search provenance to synthesize."""
+@pytest.mark.integration
+def test_protenix_does_not_search_for_a_partial_supplied_bundle(tmp_path):
+    """Protenix's own need_msa_search stays False on the JSON we write for a target-only MSA."""
+    from proto_tools.entities.msa import MSA
     from proto_tools.tools.structure_prediction.protenix.protenix import _write_msas_to_batch_json
     from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+    from proto_tools.utils import run_in_env
 
+    target, binder = "MKTAYIAKQR", "GSHMLEDPVD"
     inputs = ProtenixInput(
-        complexes=[Complex(chains=[Chain(sequence="MKTAYIAKQR", entity_type="protein")])],
-        msas=[ComplexMSAs(per_chain={})],
+        complexes=[
+            Complex(
+                chains=[Chain(sequence=target, entity_type="protein"), Chain(sequence=binder, entity_type="protein")]
+            )
+        ],
+        msas=[ComplexMSAs(per_chain={0: MSA(aligned_sequences=[target, "MKTAYIAKQA"])})],
     )
-    batch_json = [{"sequences": [{"proteinChain": {}}]}]
-
+    batch_json = [{"sequences": [{"proteinChain": {"sequence": target}}, {"proteinChain": {"sequence": binder}}]}]
     _write_msas_to_batch_json(batch_json, inputs, ProtenixConfig(), str(tmp_path))
+    job_path = tmp_path / "job.json"
+    job_path.write_text(json.dumps(batch_json[0]))
 
-    protein = batch_json[0]["sequences"][0]["proteinChain"]
-    assert "unpairedMsaPath" not in protein
-    assert "pairedMsaPath" not in protein
+    code = "import json, sys\nfrom runner.msa_search import need_msa_search\nprint(need_msa_search(json.load(open(sys.argv[1]))))"
+    assert run_in_env("protenix", code=code, args=[str(job_path)], timeout=1800).strip().splitlines()[-1] == "False"
 
 
 # ── protenix-v2 token limit (no GPU) ─────────────────────────────────────────

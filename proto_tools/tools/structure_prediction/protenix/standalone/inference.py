@@ -241,10 +241,13 @@ class ProtenixModel:
         prev_cwd = os.getcwd()
         os.chdir(working_dir)
         try:
+            # proto-tools writes every chain's MSA path; use_msa=False here only stops Protenix
+            # from searching its own server (which would overwrite them). The runner, built with
+            # use_msa above, still featurizes the supplied MSAs.
             processed_json = preprocess_input(
                 input_json=input_json_path,
                 out_dir=output_dir,
-                use_msa=use_msa,
+                use_msa=False,
             )
             configs = self.runner.configs
             configs["input_json_path"] = processed_json
