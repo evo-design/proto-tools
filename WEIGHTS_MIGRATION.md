@@ -90,3 +90,19 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 77 | `testing/mock_jax_tool` |  | - | — | — | ✅ traced (no weights) | Test fixture; no weights. JAX mocks write their compile cache to <toolkit>/jax_cache. |
 | 78 | `testing/mock_pytorch_multi_gpu_tool` |  | - | — | — | ✅ traced (no weights) | Test fixture; no weights. JAX mocks write their compile cache to <toolkit>/jax_cache. |
 | 79 | `testing/mock_pytorch_tool` |  | - | — | — | ✅ traced (no weights) | Test fixture; no weights. JAX mocks write their compile cache to <toolkit>/jax_cache. |
+
+## Compile and JIT caches
+
+Toolkit-specific caches go to `proto_model_cache/{toolkit}/compile_cache/`; driver-level ones to `PROTO_HOME/compile_cache/`. Verified by running each toolkit and checking for new files in the old locations (`~/.triton/cache`, `/tmp/torchinductor_$USER`, `~/.nv/ComputeCache`, `~/.cache/vllm`, `~/.humming`, ...).
+
+| Toolkit | Lands in toolkit `compile_cache/` | Lands in `PROTO_HOME/compile_cache/` | Old location written? |
+|---|---|---|---|
+| cherimoya | numba, torchinductor, triton (32 MB) | cuda | no |
+| esmfold | torchinductor, triton | cuda | no |
+| rfd4 | torchinductor, triton | cuda | no |
+| rf3 | torchinductor, triton | cuda | no |
+| rfdiffusion3 | torchinductor, triton | cuda | no |
+| evo2 | flashinfer, humming, torchinductor, triton, vllm (31 MB) | cuda | only `~/.config/vllm` (usage-stats config, not a cache; left as is) and `~/.humming/tmp` lock files (hardcoded in humming-kernels, no override) |
+| freebindcraft | — | cuda (3.7 MB, was `~/.nv/ComputeCache`) | no |
+
+JAX tools already used `{toolkit}/jax_cache/`. Old caches in `~` are not migrated: they are shared across all tools and regenerate on demand, so they can be deleted by hand.
