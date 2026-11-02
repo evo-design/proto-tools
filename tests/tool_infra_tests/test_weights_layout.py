@@ -12,6 +12,7 @@ from proto_tools.utils.persistent_worker import _build_subprocess_env
 from proto_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
 from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.weights_layout import (
+    CachePath,
     HFHomePath,
     HFRepo,
     HFRepoPattern,
@@ -332,3 +333,16 @@ def test_migrate_hf_repo_pattern_and_hf_home_path(tmp_path: Path, migrated):
     assert (new_hf / "hub" / "models--org--sae-k128" / "w.bin").is_file()
     assert (new_hf / "evo2_vllm" / "evo2_40b_hf" / "model.safetensors").is_file()
     assert (hub / "models--org--base" / "w.bin").is_file()
+
+
+def test_migrate_cache_path_into_shared_folder(tmp_path: Path, migrated):
+    """A private copy moves into the shared folder, ordered before WeightsDir so it isn't nested first."""
+    migrated(CachePath("mocktool/params", "alphafold2/weights/params"), WeightsDir("mocktool"))
+    _touch(tmp_path / "mocktool" / "params" / "model.npz")
+    _touch(tmp_path / "mocktool" / "binaries" / "tool")
+
+    migrate_toolkit("mocktool", tmp_path)
+
+    assert (tmp_path / "alphafold2" / "weights" / "params" / "model.npz").is_file()
+    assert (tmp_path / "mocktool" / "weights" / "binaries" / "tool").is_file()
+    assert not (tmp_path / "mocktool" / "weights" / "params").exists()

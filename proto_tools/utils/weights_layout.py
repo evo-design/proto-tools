@@ -167,7 +167,23 @@ class HFHomePath:
     relpath: str
 
 
-MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile
+@dataclass(frozen=True)
+class CachePath:
+    """An explicit move between two paths relative to the cache root.
+
+    For files a toolkit kept in its own folder that now live in a shared one, e.g. germinal's
+    private AF2 params moving to ``alphafold2/weights/params``.
+
+    Attributes:
+        old (str): Old path relative to the cache root.
+        new (str): New path relative to the cache root.
+    """
+
+    old: str
+    new: str
+
+
+MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile | CachePath
 
 # What each migrated toolkit downloaded under the old layout. An entry is added in the same
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
@@ -340,6 +356,8 @@ def _planned_moves(toolkit: str, cache_root: Path) -> list[tuple[Path, Path]]:
             )
         elif isinstance(entry, TorchHubFile):
             moves.append((cache_root / "torch" / entry.relpath, folder / "torch" / entry.relpath))
+        elif isinstance(entry, CachePath):
+            moves.append((cache_root / entry.old, cache_root / entry.new))
         else:
             # Old files sit beside the new layout subfolders in the same {name}/ folder
             old_dir = cache_root / entry.name
