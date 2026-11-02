@@ -7,7 +7,8 @@ Workers run the same migration automatically the first time a migrated toolkit s
 this script is only needed to migrate everything up front, or to preview the moves. It
 covers every toolkit with an old path to move and acts on ``PROTO_MODEL_CACHE``
 (default ``{PROTO_HOME}/proto_model_cache``). ``IN_ENV`` and ``NONE`` modes have nothing to
-migrate.
+migrate. Old weights that are not there are skipped, a path that cannot be moved is reported
+and left in place, and old folders left empty by the moves are removed.
 
 Usage::
 
@@ -46,7 +47,12 @@ def main() -> int:
     verb = "would move" if args.dry_run else "moved"
     total = 0
     for toolkit in toolkits:
-        for old, new in migrate_toolkit(toolkit, cache_root, dry_run=args.dry_run):
+        try:
+            moves = migrate_toolkit(toolkit, cache_root, dry_run=args.dry_run)
+        except OSError as exc:
+            logger.warning("%s: skipped (%s); its old weights stay in place", toolkit, exc)
+            continue
+        for old, new in moves:
             logger.info("%s: %s %s -> %s", toolkit, verb, old, new)
             total += 1
     logger.info("%d path(s) %s under %s", total, verb, cache_root)

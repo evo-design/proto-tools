@@ -330,6 +330,55 @@ def test_migrate_drops_empty_old_folder(tmp_path: Path, migrated, caplog):
     assert "already exists" not in caplog.text
 
 
+def test_migrate_removes_emptied_old_folders(tmp_path: Path, migrated):
+    """Moves leave no empty old folders or hub lock folders behind, and keep other old-cache files."""
+    migrated(HFRepo("org/model"), TorchHubFile("hub/checkpoints/m.pt"))
+    _touch(tmp_path / "huggingface" / "hub" / "models--org--model" / "w.bin")
+    _touch(tmp_path / "huggingface" / "hub" / ".locks" / "models--org--model" / "abc.lock")
+    _touch(tmp_path / "huggingface" / "token", "secret")
+    _touch(tmp_path / "torch" / "hub" / "checkpoints" / "m.pt")
+    _touch(tmp_path / "jax_cache" / "mocktool" / "entry")
+
+    migrate_toolkit("mocktool", tmp_path)
+
+    assert not (tmp_path / "huggingface" / "hub").exists()
+    assert (tmp_path / "huggingface" / "token").read_text() == "secret"
+    assert not (tmp_path / "torch").exists()
+    assert not (tmp_path / "jax_cache").exists()
+    assert tmp_path.is_dir()
+
+
+def test_migrate_without_old_weights_is_a_no_op(tmp_path: Path, migrated):
+    """A missing cache root or missing old paths move nothing and create nothing."""
+    migrated(HFRepo("org/model"), WeightsDir("mocktool"), CachePath("a/b", "c/d"))
+
+    assert migrate_toolkit("mocktool", tmp_path / "absent") == []
+    assert not (tmp_path / "absent").exists()
+    assert migrate_toolkit("mocktool", tmp_path) == []
+
+
+def test_migrate_skips_a_path_it_cannot_move(tmp_path: Path, migrated, monkeypatch, caplog):
+    """A move that fails is logged and left in place, and the remaining paths still move."""
+    migrated(TorchHubFile("bad.pt"), TorchHubFile("good.pt"))
+    _touch(tmp_path / "torch" / "bad.pt")
+    _touch(tmp_path / "torch" / "good.pt")
+    real_move = weights_layout.shutil.move
+
+    def flaky_move(src, dst):
+        if src.endswith("bad.pt"):
+            raise PermissionError("read-only")
+        return real_move(src, dst)
+
+    monkeypatch.setattr(weights_layout.shutil, "move", flaky_move)
+    with caplog.at_level(logging.WARNING, logger="proto_tools.utils.weights_layout"):
+        moves = migrate_toolkit("mocktool", tmp_path)
+
+    assert [old.name for old, _ in moves] == ["good.pt"]
+    assert (tmp_path / "torch" / "bad.pt").is_file()
+    assert (tmp_path / "mocktool" / "torch" / "good.pt").is_file()
+    assert "could not migrate" in caplog.text
+
+
 def test_toolkits_to_migrate_includes_old_jax_caches(tmp_path: Path, migrated):
     """Toolkits without entries still get their old jax_cache/{toolkit}/ moved."""
     migrated(WeightsDir("mocktool"))

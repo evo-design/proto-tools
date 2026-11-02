@@ -37,7 +37,7 @@ Each toolkit's folder holds every model file it downloads, whichever framework f
 
 ### Moving from the old layout
 
-Older versions kept one shared `huggingface/`, `torch/`, and `jax_cache/` at the top of `proto_model_cache/`, and put other weights directly in `{toolkit}/`. The first tool you run moves those files into the new folders, so nothing is downloaded again. It moves files rather than copying them, and if a file already exists in both places it leaves both and logs a warning. To migrate up front, or to see what would move:
+Older versions kept one shared `huggingface/`, `torch/`, and `jax_cache/` at the top of `proto_model_cache/`, and put other weights directly in `{toolkit}/`. The first tool you run moves every toolkit's files into the new folders, so nothing is downloaded again. It moves files rather than copying them and removes the old folders it empties; anything not in the old place is skipped. If a file already exists in both places, or cannot be moved (for example a read-only shared cache), it stays where it is and a warning is logged. To migrate up front, or to see what would move:
 
 ```bash
 python scripts/migrate_proto_home.py --dry-run

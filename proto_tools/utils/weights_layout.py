@@ -395,13 +395,47 @@ def _materialize_shared_blobs(repo_dir: Path) -> None:
         else:
             for stale in (payload, manifest, payload.with_name(f"{payload.name}.lock")):
                 stale.unlink(missing_ok=True)
+            _prune_empty_dirs(payload.parent, repo_dir.parent)
+
+
+def _prune_empty_dirs(path: Path, stop: Path) -> None:
+    """Remove ``path`` and each parent below ``stop`` while they are empty folders.
+
+    Args:
+        path (Path): The deepest folder to try.
+        stop (Path): A folder that is never removed; pruning ends at it.
+    """
+    while path != stop and stop in path.parents:
+        try:
+            path.rmdir()
+        except OSError:  # not empty, already gone, or not ours to remove
+            return
+        path = path.parent
+
+
+def _clean_up_after_move(old: Path, cache_root: Path) -> None:
+    """Remove what a move leaves behind: a hub repo's lock folder and empty old parent folders.
+
+    Only empty folders and ``huggingface_hub`` lock files are removed, so a token or other file in
+    the old ``HF_HOME`` stays.
+
+    Args:
+        old (Path): The path that was moved away.
+        cache_root (Path): The model cache root, never removed.
+    """
+    if old.parent.name == "hub":
+        shutil.rmtree(old.parent / ".locks" / old.name, ignore_errors=True)
+        _prune_empty_dirs(old.parent / ".locks", cache_root)
+    _prune_empty_dirs(old.parent, cache_root)
 
 
 def migrate_toolkit(toolkit: str, cache_root: Path, *, dry_run: bool = False) -> list[tuple[Path, Path]]:
     """Move ``toolkit``'s weights from the old flat layout into its per-toolkit folder.
 
     Safe to repeat: a path is moved only when it exists at the old location and not at the new
-    one. When both exist the old path is left alone and a warning is logged.
+    one. When both exist the old path is left alone and a warning is logged. Missing old paths
+    are skipped, a path that cannot be moved is logged and left in place, and the old folders a
+    move empties are removed.
 
     Args:
         toolkit (str): Toolkit name.
@@ -411,6 +445,8 @@ def migrate_toolkit(toolkit: str, cache_root: Path, *, dry_run: bool = False) ->
     Returns:
         list[tuple[Path, Path]]: The (old, new) pairs moved, or that would be moved in a dry run.
     """
+    if not cache_root.is_dir():
+        return []
     with contextlib.ExitStack() as stack:
         if not dry_run:
             stack.enter_context(_migration_lock(cache_root))
@@ -421,16 +457,22 @@ def migrate_toolkit(toolkit: str, cache_root: Path, *, dry_run: bool = False) ->
             if old.is_dir() and not old.is_symlink() and not any(old.iterdir()):
                 # An empty folder an old setup.sh created carries nothing to move
                 if not dry_run:
-                    old.rmdir()
+                    _prune_empty_dirs(old, cache_root)
                 continue
             if new.exists():
                 logger.warning("%s: not migrating %s, %s already exists; remove one of them", toolkit, old, new)
                 continue
             if not dry_run:
-                if old.parent.name == "hub":
-                    _materialize_shared_blobs(old)
-                new.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(old), str(new))
+                try:
+                    if old.parent.name == "hub":
+                        _materialize_shared_blobs(old)
+                    new.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(old), str(new))
+                except OSError as exc:
+                    # One unmovable path, e.g. read-only, must not stop the rest; it stays where it was
+                    logger.warning("%s: could not migrate %s (%s); it stays in place", toolkit, old, exc)
+                    continue
+                _clean_up_after_move(old, cache_root)
                 logger.info("%s: migrated %s -> %s", toolkit, old, new)
             moved.append((old, new))
         return moved
