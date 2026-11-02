@@ -25,6 +25,7 @@ from proto_tools.utils import (
     build_http_session,
     request_with_retry,
 )
+from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,14 @@ class NCBIReferenceBundleConfig(BaseConfig):
         description="Optional NCBI API key; raises the request rate limit.",
         credential="NCBI_API_KEY",
     )
+
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
+        """The bundle is written to the disk of whatever machine runs the tool."""
+        return (
+            f"ncbi-reference-bundle downloads reference files to local disk and returns their paths, "
+            f"which a caller cannot reach on device='{device}'. Run it with the local proto-tools MCP "
+            f"server or CLI instead."
+        )
 
 
 class NCBIAssemblySummary(BaseModel):

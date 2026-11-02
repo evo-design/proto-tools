@@ -690,6 +690,44 @@ def test_run_tool_refuses_a_setting_the_device_cannot_honour():
     assert "custom checkpoint" in result["error"]
 
 
+def test_run_tool_runs_an_in_process_tool_whose_config_refuses_remote_devices(monkeypatch, tmp_path):
+    """run_tool defaults to device="modal", and a local_only tool answers that by running here.
+
+    Its config's remote refusal is for the hosted service, where "here" is a server the caller
+    cannot reach; on this machine the call must still run rather than be refused.
+    """
+    from proto_tools.mcp.tools import run_tool
+    from proto_tools.tools.database_retrieval.ncbi import reference_bundle
+
+    monkeypatch.setattr(reference_bundle, "_is_complete", lambda *_args: True)
+    monkeypatch.setattr(
+        reference_bundle,
+        "_output",
+        lambda accession, source_url, directory: reference_bundle.NCBIReferenceBundleOutput(
+            accession=accession,
+            source_url=source_url,
+            directory=str(directory),
+            assembly=reference_bundle.NCBIAssemblySummary(
+                organism_name="Escherichia coli",
+                tax_id=562,
+                assembly_name="ASM584v2",
+                assembly_level="Complete Genome",
+                total_sequence_length=4641652,
+                number_of_contigs=1,
+            ),
+        ),
+    )
+
+    result = run_tool(
+        "ncbi-reference-bundle",
+        inputs={"accession": "GCF_000005845.2", "destination_dir": str(tmp_path)},
+        device="modal",
+    )
+
+    assert result["ok"] is True, result
+    assert result["ran_on"] == "local"
+
+
 def test_every_deploy_route_records_fingerprints():
     """An absent manifest reads as "aligned", so a route that skips this is silently exempt.
 

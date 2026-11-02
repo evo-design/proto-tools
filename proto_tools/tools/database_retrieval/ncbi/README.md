@@ -82,6 +82,7 @@ Use this to materialize a fixed genome, transcript, protein, and annotation refe
 - **Pick formats with `annotation_types`.** NCBI serves each format natively, so there is no conversion: `GENOME_FASTA`, `GENOME_GFF`, `RNA_FASTA` and `PROT_FASTA` by default, plus `GENOME_GBFF` (GenBank flat file), `GENOME_GTF`, and `CDS_FASTA` on request. Only the requested files are downloaded and stored.
 - **Not every assembly has every file.** A path is `None` when the assembly has no such file; for example, E. coli K-12 has no transcript FASTA.
 - **Bundles are reused.** A second call for the same accession returns the existing bundle without a download, as long as it was fetched with at least the requested `annotation_types`. Pass `destination_dir` to extract somewhere else; it must be empty or hold an earlier bundle.
+- **Runs only where you can read its files.** The bundle is written to the disk of the machine running the tool, so it works with the local proto-tools MCP server, the CLI, or Python, and the hosted service refuses it.
 - **Size is checked before downloading.** NCBI's size estimate is compared with `max_download_bytes` (5 GB by default; the human assembly is about 1.2 GB), and the download stops if it runs past the limit. A failed download never leaves a partial bundle.
 
 ## Toolkit Notes
