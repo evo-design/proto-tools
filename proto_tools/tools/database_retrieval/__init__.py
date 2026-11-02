@@ -77,6 +77,7 @@ from proto_tools.tools.database_retrieval.interproscan import (
 
 # NCBI Entrez tools
 from proto_tools.tools.database_retrieval.ncbi import (
+    NCBIAssemblySummary,
     NCBIDatabase,
     NCBIEfetchConfig,
     NCBIEfetchInput,
@@ -89,7 +90,6 @@ from proto_tools.tools.database_retrieval.ncbi import (
     NCBIEsummaryOutput,
     NCBIFastaRecord,
     NCBIFetchConfig,
-    NCBIAssemblySummary,
     NCBIReferenceBundleConfig,
     NCBIReferenceBundleInput,
     NCBIReferenceBundleOutput,
