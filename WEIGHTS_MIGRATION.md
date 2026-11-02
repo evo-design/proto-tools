@@ -71,7 +71,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 58 | `structure_prediction/alphafold2` |  |  |  |  |  |  |
 | 59 | `structure_prediction/alphafold3` |  |  |  |  |  |  |
 | 60 | `structure_prediction/boltz2` |  |  |  |  |  |  |
-| 61 | `structure_prediction/chai1` |  |  |  |  |  |  |
+| 61 | `structure_prediction/chai1` |  | chai1 | `chai1/{models_v2/*.pt,conformers_v1.apkl,esm/traced_sdpa_esm2_t36_3B_UR50D_fp16.pt}` (setup.sh, sha-pinned) | 6.6 GB | ✅✅✅✅✅ | Sub-model: traced ESM2-3B in esm/ (same folder). Now uses export_weights_dir. germinal will share this folder. |
 | 62 | `structure_prediction/esmfold` |  | esmfold | `huggingface/hub/models--facebook--esmfold_v1` (ESM2-3B bundled) | 8 GB | ✅✅✅✅✅ | No sub-model downloads (ESM2-3B is inside the repo). Step 3 wrote no new hub blobs: migrated copy loaded. |
 | 63 | `structure_prediction/esmfold2` | biohub_esm | esmfold2 | `huggingface/hub/models--biohub--ESMFold2-Fast` + `models--biohub--ESMFold2` (ccd.pkl sub-load, even for Fast) | 25 GB (fast + ccd) | ✅✅✅✅✅ | Sub-model confirmed: ccd.pkl (398 MB) from biohub/ESMFold2 always. Shared env biohub_esm. |
 | 64 | `structure_prediction/opendde` |  | opendde | `opendde/checkpoint/*.pt` + `opendde/common/` (setup.sh hf_hub_download local_dir) + HF ref stub | 5.6 GB | ✅✅✅✅✅ | No sub-model downloads. OPENDDE_ROOT_DIR stays a documented override for user-provided assets. |
