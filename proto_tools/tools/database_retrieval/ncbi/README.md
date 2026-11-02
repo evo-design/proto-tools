@@ -9,13 +9,13 @@
 
 ## Overview
 
-[NCBI Entrez](https://www.ncbi.nlm.nih.gov/search/) is the [National Center for Biotechnology Information](https://www.ncbi.nlm.nih.gov/)'s search and retrieval system over its biological sequence databases, accessed through the Entrez Programming Utilities (E-utilities). This toolkit wraps three E-utilities endpoints: `ncbi-esearch` (query term to matching record UIDs), `ncbi-esummary` (document-summary metadata for a UID or accession), and `ncbi-efetch` (full sequence records as parsed FASTA for the protein and nucleotide databases).
+[NCBI Entrez](https://www.ncbi.nlm.nih.gov/search/) is the [National Center for Biotechnology Information](https://www.ncbi.nlm.nih.gov/)'s search and retrieval system over its biological sequence databases, accessed through the Entrez Programming Utilities (E-utilities). This toolkit wraps three E-utilities endpoints: `ncbi-esearch` (query term to matching record UIDs), `ncbi-esummary` (document-summary metadata for a UID or accession), and `ncbi-efetch` (full sequence records as parsed FASTA for the protein and nucleotide databases). A fourth tool, `ncbi-reference-bundle`, downloads whole genome assemblies from the separate [NCBI Datasets](https://www.ncbi.nlm.nih.gov/datasets/) service.
 
 ## Background
 
 [NCBI Entrez](https://www.ncbi.nlm.nih.gov/search/) and its underlying sequence archive are described in the GenBank report ([Sayers et al., 2022](https://doi.org/10.1093/nar/gkab1135)), published in *Nucleic Acids Research*. The Entrez system and the [E-utilities](https://www.ncbi.nlm.nih.gov/books/NBK25501/) are operated by the [National Center for Biotechnology Information](https://www.ncbi.nlm.nih.gov/) (NCBI), part of the [U.S. National Library of Medicine](https://www.nlm.nih.gov/) (NLM). Entrez unifies search and retrieval across more than forty interconnected databases, including the protein, nucleotide, and gene databases used here, with records drawn from sources such as [RefSeq](https://www.ncbi.nlm.nih.gov/refseq/) and [GenBank](https://www.ncbi.nlm.nih.gov/genbank/).
 
-Internally, each tool issues an HTTP GET to the E-utilities base endpoint `https://eutils.ncbi.nlm.nih.gov/entrez/eutils`. `ncbi-esearch` calls `esearch.fcgi` and returns the JSON `idlist`. `ncbi-esummary` calls `esummary.fcgi` and returns the JSON result map. `ncbi-efetch` calls `efetch.fcgi` with a FASTA `rettype` and parses the response into records. Every request carries a fixed `tool=` identifier. The `email=` and `api_key=` parameters are sent only when `ncbi_email` and `ncbi_api_key` are configured. The request URL surfaced on outputs is sanitized so the API key and email are stripped before it is returned. Records and their provenance come directly from NCBI's live E-utilities, so results reflect the database state at query time rather than a fixed release snapshot.
+Internally, each tool issues an HTTP GET to the E-utilities base endpoint `https://eutils.ncbi.nlm.nih.gov/entrez/eutils`. `ncbi-esearch` calls `esearch.fcgi` and returns the JSON `idlist`. `ncbi-esummary` calls `esummary.fcgi` and returns the JSON result map. `ncbi-efetch` calls `efetch.fcgi` with a FASTA `rettype` and parses the response into records. Every request carries a fixed `tool=` identifier. The `email=` and `api_key=` parameters are sent only when `ncbi_email` and `ncbi_api_key` are configured. The request URL surfaced on outputs is sanitized so the API key and email are stripped before it is returned. Records and their provenance come directly from NCBI's live E-utilities, so results reflect the database state at query time rather than a fixed release snapshot. `ncbi-reference-bundle` instead calls the NCBI Datasets v2 API ([O'Leary et al., 2024](https://doi.org/10.1038/s41597-024-03571-y)), whose versioned assembly accessions name fixed sequence content.
 
 ### Learning Resources
 
@@ -70,17 +70,18 @@ Use this to pull reference sequences into a design or analysis pipeline: retriev
 
 ### NCBI Reference Bundle (`ncbi-reference-bundle`)
 
-Downloads a version-pinned NCBI Datasets assembly bundle and extracts it into `destination_dir` through a staging directory, so a failed download never leaves a partial bundle. `files` lists the extracted paths.
+Downloads the NCBI Datasets bundle for a versioned assembly accession and returns typed paths to its genome FASTA, GFF3 annotation, transcript FASTA, and protein FASTA. Bundles go to `$PROTO_DATABASES_DIR/ncbi/<accession>/` by default, the same shared root as the other reference databases, and a later call reuses a bundle already there instead of downloading it again.
 
 #### Applications
 
-Use this to materialize a fixed genome, transcript, protein, and annotation reference for reproducible specificity searches and sequence design.
+Use this to materialize a fixed genome, transcript, protein, and annotation reference for reproducible specificity searches and sequence design, such as the genome FASTA an off-target search scans.
 
 #### Usage Tips
 
-- Always provide a versioned `GCA_` or `GCF_` accession.
-- Use an empty or nonexistent destination; the tool will not overwrite existing content.
-- Set `max_download_bytes` to a workload-appropriate bound for compressed and extracted data.
+- **Pin a version.** `accession` needs a versioned `GCA_` or `GCF_` accession such as `GCF_000005845.2`; an NCBI Datasets page link works too. An unversioned accession is rejected, since its content can change.
+- **Not every assembly has every file.** A path is `None` when the assembly has no such file; for example, E. coli K-12 has no transcript FASTA.
+- **Bundles are reused.** A second call for the same accession returns the existing bundle without a download, as long as it was fetched with at least the requested `annotation_types`. Pass `destination_dir` to extract somewhere else; it must be empty or hold an earlier bundle.
+- **Size is checked before downloading.** NCBI's size estimate is compared with `max_download_bytes` (5 GB by default; the human assembly is about 1.2 GB), and the download stops if it runs past the limit. A failed download never leaves a partial bundle.
 
 ## Toolkit Notes
 
@@ -88,5 +89,5 @@ Use this to materialize a fixed genome, transcript, protein, and annotation refe
 
 These apply to every NCBI tool in this toolkit (`ncbi-esearch`, `ncbi-esummary`, `ncbi-efetch`, `ncbi-reference-bundle`).
 
-- **Requires network access.** The tools call the live NCBI E-utilities online.
+- **Requires network access.** The Entrez tools call the live NCBI E-utilities, and `ncbi-reference-bundle` calls the NCBI Datasets API.
 - **An NCBI API key raises the rate limit.** Without credentials, NCBI E-utilities permits 3 requests per second per IP. Setting credentials raises this to 10 requests per second. A key is obtained at no cost from the Settings page of a free NCBI account (https://www.ncbi.nlm.nih.gov/account/). NCBI also asks that a contact email be set; it uses the email for abuse handling and IP-block recovery. Provide credentials either via the `ncbi_api_key` / `ncbi_email` config attributes or via the `NCBI_API_KEY` / `NCBI_EMAIL` environment variables; an explicit config value overrides the env var.
