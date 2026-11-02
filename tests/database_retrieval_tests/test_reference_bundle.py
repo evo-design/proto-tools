@@ -28,9 +28,21 @@ _CATALOG = {
             "files": [
                 {"filePath": f"{_ACCESSION}/genomic.fna", "fileType": "GENOMIC_NUCLEOTIDE_FASTA"},
                 {"filePath": f"{_ACCESSION}/genomic.gff", "fileType": "GFF3"},
+                {"filePath": f"{_ACCESSION}/genomic.gbff", "fileType": "GENBANK_FLAT_FILE"},
             ],
         },
     ],
+}
+_REPORT = {
+    "accession": _ACCESSION,
+    "organism": {"taxId": 511145, "organismName": "Escherichia coli str. K-12 substr. MG1655"},
+    "assemblyInfo": {
+        "assemblyName": "ASM584v2",
+        "assemblyLevel": "Complete Genome",
+        "assemblyStatus": "current",
+        "refseqCategory": "reference genome",
+    },
+    "assemblyStats": {"totalSequenceLength": "4641652", "numberOfContigs": 1, "gcPercent": 51},
 }
 
 
@@ -41,6 +53,8 @@ def _archive(extra: dict[str, str] | None = None) -> bytes:
         archive.writestr("ncbi_dataset/data/dataset_catalog.json", json.dumps(_CATALOG))
         archive.writestr(f"ncbi_dataset/data/{_ACCESSION}/genomic.fna", ">NC_000913.3\nACGT\n")
         archive.writestr(f"ncbi_dataset/data/{_ACCESSION}/genomic.gff", "##gff-version 3\n")
+        archive.writestr(f"ncbi_dataset/data/{_ACCESSION}/genomic.gbff", "LOCUS       NC_000913\n")
+        archive.writestr("ncbi_dataset/data/assembly_data_report.jsonl", json.dumps(_REPORT) + "\n")
         for name, content in (extra or {}).items():
             archive.writestr(name, content)
     return payload.getvalue()
@@ -104,7 +118,7 @@ def test_unversioned_accession_asks_for_a_version() -> None:
         NCBIReferenceBundleInput(accession="GCF_000005845")
 
 
-def test_bundle_extracts_into_databases_root_with_typed_paths(
+def test_bundle_extracts_into_databases_root_with_typed_paths_and_summary(
     monkeypatch: pytest.MonkeyPatch, databases_root: Path
 ) -> None:
     _serve(monkeypatch, _Session(_archive()))
@@ -116,8 +130,11 @@ def test_bundle_extracts_into_databases_root_with_typed_paths(
     assert output.genome_fasta == str(directory / "ncbi_dataset" / "data" / _ACCESSION / "genomic.fna")
     assert Path(output.genome_fasta).read_text() == ">NC_000913.3\nACGT\n"
     assert output.genome_gff is not None and Path(output.genome_gff).is_file()
+    assert output.genome_gbff is not None and Path(output.genome_gbff).read_text().startswith("LOCUS")
     assert output.rna_fasta is None  # not in this assembly's catalog
     assert output.source_url.endswith(f"/{_ACCESSION}/download")
+    assert output.assembly.organism_name == "Escherichia coli str. K-12 substr. MG1655"
+    assert output.assembly.total_sequence_length == 4641652
 
 
 def test_existing_bundle_is_reused_without_downloading(monkeypatch: pytest.MonkeyPatch, databases_root: Path) -> None:
@@ -188,3 +205,4 @@ def test_reference_bundle_live(tmp_path: Path) -> None:
 
     assert output.genome_fasta is not None
     assert Path(output.genome_fasta).read_text().startswith(">NC_000913.3")
+    assert output.assembly.tax_id == 511145

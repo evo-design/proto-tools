@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import IO, Any, Literal
 
 import requests
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.databases.registry import get_databases_root
 from proto_tools.tools.tool_registry import tool
@@ -28,7 +28,15 @@ from proto_tools.utils import (
 
 logger = logging.getLogger(__name__)
 
-AnnotationType = Literal["GENOME_FASTA", "GENOME_GFF", "RNA_FASTA", "PROT_FASTA"]
+AnnotationType = Literal[
+    "GENOME_FASTA",
+    "GENOME_GFF",
+    "GENOME_GBFF",
+    "GENOME_GTF",
+    "RNA_FASTA",
+    "CDS_FASTA",
+    "PROT_FASTA",
+]
 
 _DATASETS_BASE = "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession"
 _USER_AGENT = "proto-tools/ncbi-reference-bundle-v1"
@@ -39,13 +47,16 @@ _CHUNK_BYTES = 1024 * 1024
 
 # The annotation types this bundle was downloaded with, so a later call can reuse it.
 _REQUEST_RECORD = "proto_request.json"
-_CATALOG = "ncbi_dataset/data/dataset_catalog.json"
+_DATA_DIR = "ncbi_dataset/data"
 
 # dataset_catalog.json file types for each output path field.
 _CATALOG_FIELDS = {
     "GENOMIC_NUCLEOTIDE_FASTA": "genome_fasta",
     "GFF3": "genome_gff",
+    "GENBANK_FLAT_FILE": "genome_gbff",
+    "GTF": "genome_gtf",
     "RNA_NUCLEOTIDE_FASTA": "rna_fasta",
+    "CDS_NUCLEOTIDE_FASTA": "cds_fasta",
     "PROTEIN_FASTA": "protein_fasta",
 }
 
@@ -118,6 +129,38 @@ class NCBIReferenceBundleConfig(BaseConfig):
     )
 
 
+class NCBIAssemblySummary(BaseModel):
+    """Assembly metadata from the bundle's ``assembly_data_report.jsonl``.
+
+    Attributes:
+        organism_name (str): Organism the assembly is from.
+        tax_id (int): NCBI Taxonomy identifier.
+        assembly_name (str): Submitter's assembly name, e.g. ``GRCh38.p14``.
+        assembly_level (str): ``Complete Genome``, ``Chromosome``, ``Scaffold``, or ``Contig``.
+        assembly_status (str | None): Whether the assembly is current, replaced, or suppressed.
+        refseq_category (str | None): ``reference genome`` when NCBI designates it one.
+        total_sequence_length (int): Total length in bases, gaps included.
+        number_of_contigs (int): Contig count.
+        gc_percent (float | None): GC content as a percentage.
+    """
+
+    organism_name: str = Field(title="Organism Name", description="Organism the assembly is from")
+    tax_id: int = Field(title="Taxonomy ID", description="NCBI Taxonomy identifier")
+    assembly_name: str = Field(title="Assembly Name", description="Submitter's assembly name")
+    assembly_level: str = Field(title="Assembly Level", description="Complete Genome, Chromosome, Scaffold, or Contig")
+    assembly_status: str | None = Field(
+        default=None, title="Assembly Status", description="Current, replaced, or suppressed"
+    )
+    refseq_category: str | None = Field(
+        default=None, title="RefSeq Category", description="Reference genome when NCBI designates one"
+    )
+    total_sequence_length: int = Field(
+        title="Total Sequence Length", description="Total length in bases, gaps included"
+    )
+    number_of_contigs: int = Field(title="Number of Contigs", description="Contig count")
+    gc_percent: float | None = Field(default=None, title="GC Percent", description="GC content as a percentage")
+
+
 class NCBIReferenceBundleOutput(BaseToolOutput):
     """Paths to an extracted NCBI reference bundle.
 
@@ -125,18 +168,28 @@ class NCBIReferenceBundleOutput(BaseToolOutput):
         accession (str): Versioned assembly accession.
         source_url (str): NCBI Datasets download endpoint.
         directory (str): Directory holding the extracted bundle.
+        assembly (NCBIAssemblySummary): Organism, assembly, and size metadata.
         genome_fasta (str | None): Genomic nucleotide FASTA.
         genome_gff (str | None): GFF3 genome annotation.
+        genome_gbff (str | None): GenBank flat file with sequence and annotation.
+        genome_gtf (str | None): GTF genome annotation.
         rna_fasta (str | None): Transcript nucleotide FASTA.
+        cds_fasta (str | None): Coding-sequence nucleotide FASTA.
         protein_fasta (str | None): Protein FASTA.
     """
 
     accession: str = Field(title="Assembly Accession", description="Versioned assembly accession")
     source_url: str = Field(title="Source URL", description="NCBI Datasets download endpoint")
     directory: str = Field(title="Directory", description="Directory holding the extracted bundle")
+    assembly: NCBIAssemblySummary = Field(title="Assembly", description="Organism, assembly, and size metadata")
     genome_fasta: str | None = Field(default=None, title="Genome FASTA", description="Genomic nucleotide FASTA")
     genome_gff: str | None = Field(default=None, title="Genome GFF", description="GFF3 genome annotation")
+    genome_gbff: str | None = Field(
+        default=None, title="Genome GenBank", description="GenBank flat file with sequence and annotation"
+    )
+    genome_gtf: str | None = Field(default=None, title="Genome GTF", description="GTF genome annotation")
     rna_fasta: str | None = Field(default=None, title="RNA FASTA", description="Transcript nucleotide FASTA")
+    cds_fasta: str | None = Field(default=None, title="CDS FASTA", description="Coding-sequence nucleotide FASTA")
     protein_fasta: str | None = Field(default=None, title="Protein FASTA", description="Protein FASTA")
 
     @property
@@ -230,17 +283,41 @@ def _extract(archive: zipfile.ZipFile, staging: Path) -> None:
             shutil.copyfileobj(source, sink, _CHUNK_BYTES)
 
 
+def _assembly_summary(directory: Path, accession: str) -> NCBIAssemblySummary:
+    """Read this accession's line of the bundle's assembly data report."""
+    lines = (directory / _DATA_DIR / "assembly_data_report.jsonl").read_text().splitlines()
+    report = next(record for record in map(json.loads, lines) if record["accession"] == accession)
+    info, stats = report["assemblyInfo"], report["assemblyStats"]
+    return NCBIAssemblySummary(
+        organism_name=report["organism"]["organismName"],
+        tax_id=report["organism"]["taxId"],
+        assembly_name=info["assemblyName"],
+        assembly_level=info["assemblyLevel"],
+        assembly_status=info.get("assemblyStatus"),
+        refseq_category=info.get("refseqCategory"),
+        total_sequence_length=int(stats["totalSequenceLength"]),
+        number_of_contigs=stats["numberOfContigs"],
+        gc_percent=stats.get("gcPercent"),
+    )
+
+
 def _output(accession: str, source_url: str, directory: Path) -> NCBIReferenceBundleOutput:
     """Locate each reference file through the bundle's dataset catalog."""
-    catalog = json.loads((directory / _CATALOG).read_text())
+    catalog = json.loads((directory / _DATA_DIR / "dataset_catalog.json").read_text())
     paths = {
-        _CATALOG_FIELDS[entry["fileType"]]: str(directory / "ncbi_dataset" / "data" / entry["filePath"])
+        _CATALOG_FIELDS[entry["fileType"]]: str(directory / _DATA_DIR / entry["filePath"])
         for assembly in catalog["assemblies"]
         for entry in assembly["files"]
         if entry["fileType"] in _CATALOG_FIELDS
     }
     return NCBIReferenceBundleOutput.model_validate(
-        {"accession": accession, "source_url": source_url, "directory": str(directory), **paths}
+        {
+            "accession": accession,
+            "source_url": source_url,
+            "directory": str(directory),
+            "assembly": _assembly_summary(directory, accession),
+            **paths,
+        }
     )
 
 

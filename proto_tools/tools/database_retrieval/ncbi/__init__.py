@@ -19,6 +19,7 @@ from proto_tools.tools.database_retrieval.ncbi.esummary import (
     run_ncbi_esummary,
 )
 from proto_tools.tools.database_retrieval.ncbi.reference_bundle import (
+    NCBIAssemblySummary,
     NCBIReferenceBundleConfig,
     NCBIReferenceBundleInput,
     NCBIReferenceBundleOutput,
@@ -48,6 +49,7 @@ __all__ = [
     "NCBIEfetchInput",
     "NCBIEfetchOutput",
     "run_ncbi_efetch",
+    "NCBIAssemblySummary",
     "NCBIReferenceBundleConfig",
     "NCBIReferenceBundleInput",
     "NCBIReferenceBundleOutput",

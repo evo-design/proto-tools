@@ -70,7 +70,7 @@ Use this to pull reference sequences into a design or analysis pipeline: retriev
 
 ### NCBI Reference Bundle (`ncbi-reference-bundle`)
 
-Downloads the NCBI Datasets bundle for a versioned assembly accession and returns typed paths to its genome FASTA, GFF3 annotation, transcript FASTA, and protein FASTA. Bundles go to `$PROTO_DATABASES_DIR/ncbi/<accession>/` by default, the same shared root as the other reference databases, and a later call reuses a bundle already there instead of downloading it again.
+Downloads the NCBI Datasets bundle for a versioned assembly accession and returns an `assembly` summary (organism, taxonomy ID, assembly name and level, total length, contig count, GC content) with typed paths to each file NCBI provides in the requested formats. Bundles go to `$PROTO_DATABASES_DIR/ncbi/<accession>/` by default, the same shared root as the other reference databases, and a later call reuses a bundle already there instead of downloading it again.
 
 #### Applications
 
@@ -79,6 +79,7 @@ Use this to materialize a fixed genome, transcript, protein, and annotation refe
 #### Usage Tips
 
 - **Pin a version.** `accession` needs a versioned `GCA_` or `GCF_` accession such as `GCF_000005845.2`; an NCBI Datasets page link works too. An unversioned accession is rejected, since its content can change.
+- **Pick formats with `annotation_types`.** NCBI serves each format natively, so there is no conversion: `GENOME_FASTA`, `GENOME_GFF`, `RNA_FASTA` and `PROT_FASTA` by default, plus `GENOME_GBFF` (GenBank flat file), `GENOME_GTF`, and `CDS_FASTA` on request. Only the requested files are downloaded and stored.
 - **Not every assembly has every file.** A path is `None` when the assembly has no such file; for example, E. coli K-12 has no transcript FASTA.
 - **Bundles are reused.** A second call for the same accession returns the existing bundle without a download, as long as it was fetched with at least the requested `annotation_types`. Pass `destination_dir` to extract somewhere else; it must be empty or hold an earlier bundle.
 - **Size is checked before downloading.** NCBI's size estimate is compared with `max_download_bytes` (5 GB by default; the human assembly is about 1.2 GB), and the download stops if it runs past the limit. A failed download never leaves a partial bundle.

@@ -1,8 +1,8 @@
 {
   "tool_id": "ncbi-efetch",
   "tool_version": "2.1.0",
-  "execution_time": 0.3666961193084717,
-  "timestamp": "2026-11-01T16:38:35.224238",
+  "execution_time": 0.381298303604126,
+  "timestamp": "2026-11-01T16:50:11.493395",
   "success": true,
   "warnings": [],
   "errors": [],
