@@ -81,7 +81,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 68 | `structure_prediction/x3dna` |  |  |  |  |  |  |
 | 69 | `structure_scoring/dssp` |  |  |  |  |  |  |
 | 70 | `structure_scoring/ipsae` |  |  |  |  |  |  |
-| 71 | `structure_scoring/metal3d` |  |  |  |  |  |  |
+| 71 | `structure_scoring/metal3d` |  | metal3d | `metal3d/*.pth` (setup.sh, 3 files) | 42 MB | ✅✅✅✅✅ | Load log confirms weights/ path. |
 | 72 | `structure_scoring/pyrosetta` |  |  |  |  |  |  |
 | 73 | `testing/mock_cli_multi_gpu_tool` |  |  |  |  |  |  |
 | 74 | `testing/mock_cli_tool` |  |  |  |  |  |  |
