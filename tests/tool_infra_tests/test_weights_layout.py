@@ -27,10 +27,9 @@ _HELPERS_SH = Path(weights_layout.__file__).parent / "standalone_helpers_source"
 
 @pytest.fixture
 def migrated(monkeypatch):
-    """Put ``mocktool`` on the per-toolkit layout with the given migration entries."""
+    """Give ``mocktool`` the given migration entries (and no other toolkit any)."""
 
     def _migrate(*entries, toolkit: str = "mocktool"):
-        monkeypatch.setattr(weights_layout, "MIGRATED_TOOLKITS", frozenset({toolkit}))
         monkeypatch.setattr(weights_layout, "MIGRATIONS", {toolkit: entries})
 
     return _migrate
@@ -74,8 +73,8 @@ def test_weights_key_empty_file_raises(key_file):
 # ── subprocess env ───────────────────────────────────────────────────────────
 
 
-def test_migrated_toolkit_caches_live_in_its_folder(monkeypatch, tmp_path: Path, migrated, key_file):
-    """HF, torch, and JAX caches all resolve under {cache}/{weights_key}/ for a migrated toolkit."""
+def test_toolkit_caches_live_in_its_folder(monkeypatch, tmp_path: Path, migrated, key_file):
+    """HF, torch, and JAX caches all resolve under {cache}/{weights_key}/."""
     migrated()
     key_file("shared")
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
@@ -88,36 +87,23 @@ def test_migrated_toolkit_caches_live_in_its_folder(monkeypatch, tmp_path: Path,
     assert env["HF_HOME"] == str(folder / "huggingface")
     assert env["TORCH_HOME"] == str(folder / "torch")
     assert env["JAX_COMPILATION_CACHE_DIR"] == str(folder / "jax_cache")
-    assert env["PROTO_WEIGHTS_MIGRATED"] == "mocktool"
-
-
-def test_unmigrated_toolkit_keeps_flat_layout(monkeypatch, tmp_path: Path, migrated):
-    """Toolkits not yet migrated keep the shared HF cache, but still learn which names are migrated."""
-    migrated(toolkit="othertool")
-    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
-
-    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path / "venv", toolkit="mocktool")
-
-    assert env["HF_HOME"] == str(tmp_path / "huggingface")
-    assert env["PROTO_WEIGHTS_MIGRATED"] == "othertool"
 
 
 @pytest.mark.parametrize("mode", ["IN_ENV", "NONE"])
 def test_in_env_and_none_modes_ignore_layout(monkeypatch, tmp_path: Path, migrated, mode):
-    """IN_ENV and NONE modes behave exactly as before, migrated or not."""
+    """IN_ENV and NONE modes keep their per-venv and pass-through caches."""
     migrated()
     monkeypatch.setenv("PROTO_MODEL_CACHE", mode)
     monkeypatch.delenv("HF_HOME", raising=False)
 
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path / "venv", toolkit="mocktool")
 
-    assert "PROTO_WEIGHTS_MIGRATED" not in env
     expected_hf = str(tmp_path / "venv" / "cache" / "huggingface") if mode == "IN_ENV" else None
     assert env.get("HF_HOME") == expected_hf
 
 
 def test_user_jax_cache_beats_toolkit_layout(monkeypatch, tmp_path: Path, migrated):
-    """A user-set JAX_COMPILATION_CACHE_DIR still wins for a migrated toolkit."""
+    """A user-set JAX_COMPILATION_CACHE_DIR still wins over the toolkit folder."""
     migrated()
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
     monkeypatch.setenv("JAX_COMPILATION_CACHE_DIR", "/custom/jax")
@@ -128,7 +114,7 @@ def test_user_jax_cache_beats_toolkit_layout(monkeypatch, tmp_path: Path, migrat
 
 
 def test_worker_env_migrates_old_weights(monkeypatch, tmp_path: Path, migrated):
-    """Building a migrated toolkit's env moves its old weights before the subprocess starts."""
+    """Building a toolkit's env moves its old weights before the subprocess starts."""
     migrated(HFRepo("org/model"))
     monkeypatch.setattr(weights_layout, "_migrated_roots", set())
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
@@ -149,7 +135,7 @@ def _shell_weights_dir(env: dict[str, str], name: str) -> str:
 
 @pytest.mark.parametrize("explicit_cache", [True, False])
 def test_resolve_weights_dir_toolkit_layout(monkeypatch, tmp_path: Path, explicit_cache):
-    """Under the layout marker, Python and shell helpers both resolve {cache}/{name}/weights."""
+    """Python and shell helpers both resolve {cache}/{name}/weights."""
     monkeypatch.setenv("PROTO_HOME", str(tmp_path / "home"))
     if explicit_cache:
         monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "cache"))
@@ -157,7 +143,6 @@ def test_resolve_weights_dir_toolkit_layout(monkeypatch, tmp_path: Path, explici
     else:
         monkeypatch.delenv("PROTO_MODEL_CACHE", raising=False)
         cache = tmp_path / "home" / "proto_model_cache"
-    monkeypatch.setenv("PROTO_WEIGHTS_MIGRATED", "esm2,fampnn")
     monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
 
     expected = str(cache / "fampnn" / "weights")
@@ -165,23 +150,8 @@ def test_resolve_weights_dir_toolkit_layout(monkeypatch, tmp_path: Path, explici
     assert _shell_weights_dir(dict(os.environ), "fampnn") == expected
 
 
-def test_resolve_weights_dir_follows_requested_name(monkeypatch, tmp_path: Path):
-    """The weights/ subfolder depends on the name asked for, so bindcraft reading alphafold2 finds it."""
-    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
-    monkeypatch.setenv("PROTO_WEIGHTS_MIGRATED", "alphafold2")
-    for name in ("alphafold2", "bindcraft"):
-        monkeypatch.delenv(f"PROTO_{name.upper()}_WEIGHTS_DIR", raising=False)
-    env = dict(os.environ)
-
-    assert resolve_weights_dir("alphafold2") == str(tmp_path / "alphafold2" / "weights")
-    assert resolve_weights_dir("bindcraft") == str(tmp_path / "bindcraft")
-    assert _shell_weights_dir(env, "alphafold2") == str(tmp_path / "alphafold2" / "weights")
-    # A name that merely contains a migrated name is not migrated
-    assert _shell_weights_dir(env, "alphafold") == str(tmp_path / "alphafold")
-
-
-def test_unmigrated_worker_migrates_other_toolkits(monkeypatch, tmp_path: Path, migrated):
-    """Any worker start migrates every migrated toolkit, so a reader of another's folder finds it moved."""
+def test_any_worker_migrates_every_toolkit(monkeypatch, tmp_path: Path, migrated):
+    """Any worker start migrates every toolkit, so a reader of another's folder finds it moved."""
     migrated(WeightsDir("mocktool"))
     monkeypatch.setattr(weights_layout, "_migrated_roots", set())
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
@@ -194,7 +164,6 @@ def test_unmigrated_worker_migrates_other_toolkits(monkeypatch, tmp_path: Path, 
 
 def test_resolve_weights_dir_override_ignores_layout(monkeypatch, tmp_path: Path):
     """PROTO_{TOOL}_WEIGHTS_DIR is used as given, with no weights/ appended."""
-    monkeypatch.setenv("PROTO_WEIGHTS_MIGRATED", "fampnn")
     monkeypatch.setenv("PROTO_FAMPNN_WEIGHTS_DIR", str(tmp_path / "mine"))
 
     assert resolve_weights_dir("fampnn") == str(tmp_path / "mine")
@@ -359,3 +328,14 @@ def test_migrate_drops_empty_old_folder(tmp_path: Path, migrated, caplog):
 
     assert not (tmp_path / "mocktool" / "params").exists()
     assert "already exists" not in caplog.text
+
+
+def test_toolkits_to_migrate_includes_old_jax_caches(tmp_path: Path, migrated):
+    """Toolkits without entries still get their old jax_cache/{toolkit}/ moved."""
+    migrated(WeightsDir("mocktool"))
+    _touch(tmp_path / "jax_cache" / "jaxtool" / "entry")
+
+    assert weights_layout.toolkits_to_migrate(tmp_path) == ["jaxtool", "mocktool"]
+    migrate_toolkit("jaxtool", tmp_path)
+
+    assert (tmp_path / "jaxtool" / "jax_cache" / "entry").is_file()

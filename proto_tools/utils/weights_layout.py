@@ -14,11 +14,11 @@ The weights key is the toolkit name unless ``standalone/weights_key.txt`` names 
 toolkit's folder, so toolkits that load the same checkpoints share one copy.
 
 The old layout put ``huggingface/``, ``torch/``, and ``jax_cache/{toolkit}/`` at the cache
-root, and ``resolve_weights_dir(name)`` files directly in ``{name}/``. Each migrated toolkit
-lists what it owns in ``MIGRATIONS``; the first worker a process starts moves every migrated
-toolkit's paths into the new layout, so a toolkit that reads another's weights (bindcraft
-reading alphafold2's) never finds them half-moved. ``scripts/migrate_proto_home.py`` runs the
-same moves by hand. ``IN_ENV`` and ``NONE`` modes are not affected.
+root, and ``resolve_weights_dir(name)`` files directly in ``{name}/``. Each toolkit lists what
+it owned there in ``MIGRATIONS``; the first worker a process starts moves every toolkit's old
+paths into the new layout, so a toolkit that reads another's weights (bindcraft reading
+alphafold2's) never finds them half-moved. ``scripts/migrate_proto_home.py`` runs the same moves
+by hand. ``IN_ENV`` and ``NONE`` modes are not affected.
 """
 
 import contextlib
@@ -35,96 +35,6 @@ logger = logging.getLogger(__name__)
 
 # Subfolders of a toolkit folder that belong to the new layout.
 LAYOUT_SUBDIRS = ("huggingface", "torch", "jax_cache", "weights")
-
-# Set in the subprocess env to the comma-separated migrated toolkits, so the standalone weights
-# helpers resolve {name}/weights for exactly those names, whichever toolkit is asking.
-MIGRATED_ENV_VAR = "PROTO_WEIGHTS_MIGRATED"
-
-# Toolkits switched to the per-toolkit layout. Transitional: toolkits are added one at a time
-# while their downloads are audited, and the gate is removed once every toolkit is migrated.
-MIGRATED_TOOLKITS: frozenset[str] = frozenset(
-    {
-        "ablang",
-        "alphafold2",
-        "alphafold3",
-        "alphagenome",
-        "bindcraft",
-        "bioemu",
-        "blast",
-        "boltz2",
-        "borzoi",
-        "caliby",
-        "ccd_lookup",
-        "chai1",
-        "cherimoya",
-        "codonfm",
-        "crispr_tracr_rna",
-        "deeppbs_specificity",
-        "dssp",
-        "enformer",
-        "esm2",
-        "esm3",
-        "esm_if1",
-        "esmc",
-        "esmfold",
-        "esmfold2",
-        "evo1",
-        "evo2",
-        "fampnn",
-        "foldmason",
-        "foldseek",
-        "freebindcraft",
-        "germinal",
-        "glm2",
-        "iglm",
-        "ipsae",
-        "ligandmpnn",
-        "mafft",
-        "malinois",
-        "meme",
-        "metal3d",
-        "minced",
-        "minerva",
-        "miranda",
-        "mmseqs2",
-        "mock_cli_multi_gpu_tool",
-        "mock_cli_tool",
-        "mock_cpu_tool",
-        "mock_jax_multi_gpu_tool",
-        "mock_jax_tool",
-        "mock_pytorch_multi_gpu_tool",
-        "mock_pytorch_tool",
-        "na_mpnn_specificity",
-        "netmhcpan",
-        "opendde",
-        "orfipy",
-        "pangolin",
-        "parade",
-        "primer3",
-        "prodigal",
-        "progen2",
-        "progen3",
-        "promoter_calculator",
-        "proteinmpnn",
-        "protenix",
-        "puffin",
-        "pyhmmer",
-        "pymol_rmsd",
-        "pyrosetta",
-        "rf3",
-        "rfd4",
-        "rfdiffusion3",
-        "segmasker",
-        "splice_transformer",
-        "spliceai",
-        "spliceai2",
-        "tmalign",
-        "usalign",
-        "viennarna",
-        "vina",
-        "x3dna",
-    }
-)
 
 
 @dataclass(frozen=True)
@@ -209,9 +119,8 @@ class CachePath:
 
 MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile | CachePath
 
-# What each migrated toolkit downloaded under the old layout. An entry is added in the same
-# commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
-# every migrated toolkit without an entry.
+# What each toolkit downloaded under the old layout. Every toolkit's old jax_cache/{toolkit}/
+# moves without an entry; toolkits that downloaded nothing have none.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
     "alphafold3": (WeightsDir("alphafold3"),),
     "bioemu": (HFRepo("microsoft/bioemu"),),
@@ -320,18 +229,6 @@ MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
 }
 
 
-def uses_toolkit_layout(toolkit: str) -> bool:
-    """Return whether ``toolkit`` stores its weights in the per-toolkit layout.
-
-    Args:
-        toolkit (str): Toolkit name.
-
-    Returns:
-        bool: ``True`` when the toolkit has been migrated.
-    """
-    return toolkit in MIGRATED_TOOLKITS
-
-
 def weights_key(toolkit: str) -> str:
     """Return the model-cache folder name for ``toolkit``.
 
@@ -355,15 +252,6 @@ def weights_key(toolkit: str) -> str:
     if not key:
         raise ValueError(f"weights_key.txt for toolkit {toolkit!r} is empty ({marker})")
     return key
-
-
-def migrated_names_env() -> dict[str, str]:
-    """Return the env var that tells ``resolve_weights_dir`` which names use ``{name}/weights``.
-
-    Returns:
-        dict[str, str]: ``PROTO_WEIGHTS_MIGRATED`` set to the comma-separated migrated toolkits.
-    """
-    return {MIGRATED_ENV_VAR: ",".join(sorted(MIGRATED_TOOLKITS))}
 
 
 def toolkit_cache_env(toolkit: str, cache_root: Path) -> dict[str, str]:
@@ -514,8 +402,22 @@ _migrated_roots: set[str] = set()
 _migrated_lock = threading.Lock()
 
 
+def toolkits_to_migrate(cache_root: Path) -> list[str]:
+    """Return every toolkit with something to move: a ``MIGRATIONS`` entry or an old JAX cache.
+
+    Args:
+        cache_root (Path): The model cache root.
+
+    Returns:
+        list[str]: Sorted toolkit names.
+    """
+    old_jax = cache_root / "jax_cache"
+    jax_toolkits = {p.name for p in old_jax.iterdir() if p.is_dir()} if old_jax.is_dir() else set()
+    return sorted(set(MIGRATIONS) | jax_toolkits)
+
+
 def migrate_all_once(cache_root: Path) -> None:
-    """Migrate every toolkit in ``MIGRATED_TOOLKITS`` at most once per cache root in this process.
+    """Migrate every toolkit's old paths at most once per cache root in this process.
 
     Run before any worker starts, not only the toolkit's own, because a toolkit may read another
     toolkit's weights folder. Each toolkit costs a few ``stat`` calls when nothing is left to move.
@@ -527,7 +429,7 @@ def migrate_all_once(cache_root: Path) -> None:
         if str(cache_root) in _migrated_roots:
             return
         _migrated_roots.add(str(cache_root))
-    for toolkit in sorted(MIGRATED_TOOLKITS):
+    for toolkit in toolkits_to_migrate(cache_root):
         try:
             migrate_toolkit(toolkit, cache_root)
         except OSError as exc:  # noqa: PERF203 -- one toolkit's failure must not stop the rest

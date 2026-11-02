@@ -5,7 +5,7 @@ Move model weights from the old flat model-cache layout into per-toolkit folders
 
 Workers run the same migration automatically the first time a migrated toolkit starts, so
 this script is only needed to migrate everything up front, or to preview the moves. It
-covers the toolkits in ``weights_layout.MIGRATED_TOOLKITS`` and acts on ``PROTO_MODEL_CACHE``
+covers every toolkit with an old path to move and acts on ``PROTO_MODEL_CACHE``
 (default ``{PROTO_HOME}/proto_model_cache``). ``IN_ENV`` and ``NONE`` modes have nothing to
 migrate.
 
@@ -23,7 +23,7 @@ import logging
 import sys
 from pathlib import Path
 
-from proto_tools.utils.weights_layout import MIGRATED_TOOLKITS, default_cache_root, migrate_toolkit
+from proto_tools.utils.weights_layout import default_cache_root, migrate_toolkit, toolkits_to_migrate
 
 logger = logging.getLogger("migrate_proto_home")
 
@@ -41,10 +41,7 @@ def main() -> int:
         logger.info("PROTO_MODEL_CACHE is IN_ENV or NONE; nothing to migrate")
         return 0
 
-    toolkits = args.toolkit or sorted(MIGRATED_TOOLKITS)
-    unknown = sorted(set(toolkits) - MIGRATED_TOOLKITS)
-    if unknown:
-        parser.error(f"not on the per-toolkit layout yet: {', '.join(unknown)}")
+    toolkits = args.toolkit or toolkits_to_migrate(cache_root)
 
     verb = "would move" if args.dry_run else "moved"
     total = 0

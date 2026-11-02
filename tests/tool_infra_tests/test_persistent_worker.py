@@ -847,8 +847,8 @@ def test_uv_pip_cache_user_override_preserved(monkeypatch, tmp_path: Path):
 @pytest.mark.parametrize(
     "model_cache, expected",
     [
-        (None, "{home}/proto_model_cache/jax_cache/mocktool"),
-        ("{tmp}/shared", "{tmp}/shared/jax_cache/mocktool"),
+        (None, "{home}/proto_model_cache/mocktool/jax_cache"),
+        ("{tmp}/shared", "{tmp}/shared/mocktool/jax_cache"),
         ("IN_ENV", "{tmp}/venv/jax_cache"),
         ("NONE", None),
     ],

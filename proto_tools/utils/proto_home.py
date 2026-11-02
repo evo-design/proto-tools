@@ -11,8 +11,10 @@ and ``pathlib`` are imported so it can be used anywhere without side effects.
 Layout under PROTO_HOME::
 
     PROTO_HOME/                   (default: ~/.proto/)
-    ├── proto_model_cache/        model weights (HF_HOME, TORCH_HOME, resolve_weights_dir)
-    │   └── jax_cache/{toolkit}/  compiled JAX programs (JAX_COMPILATION_CACHE_DIR)
+    ├── proto_model_cache/        model weights, one folder per toolkit
+    │   ├── {toolkit}/            huggingface/ (HF_HOME), torch/ (TORCH_HOME),
+    │   │                         jax_cache/ (JAX), weights/ (resolve_weights_dir)
+    │   └── databases/            provisioned MMseqs2 databases
     ├── proto_tool_envs/          micromamba-managed tool venvs
     ├── uv_cache/                 uv package download cache (UV_CACHE_DIR)
     ├── pip_cache/                pip HTTP cache (PIP_CACHE_DIR)

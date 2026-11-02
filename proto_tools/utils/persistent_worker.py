@@ -22,13 +22,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import IO, Any
 
-from proto_tools.utils.weights_layout import (
-    migrate_all_once,
-    migrated_names_env,
-    toolkit_cache_env,
-    uses_toolkit_layout,
-    weights_key,
-)
+from proto_tools.utils.weights_layout import migrate_all_once, toolkit_cache_env, weights_key
 
 logger = logging.getLogger(__name__)
 
@@ -425,9 +419,7 @@ def _jax_compilation_cache_dir(toolkit: str, cache_mode: str, tool_env_path: Pat
         return None
     if cache_mode == "IN_ENV":
         return str(Path(tool_env_path) / "jax_cache") if tool_env_path else None
-    if uses_toolkit_layout(toolkit):
-        return str(Path(cache_mode) / weights_key(toolkit) / "jax_cache")
-    return str(Path(cache_mode) / "jax_cache" / toolkit)
+    return str(Path(cache_mode) / weights_key(toolkit) / "jax_cache")
 
 
 def _build_subprocess_env(
@@ -567,11 +559,11 @@ def _build_subprocess_env(
         # Absolute or relative path → shared directory
         cache_path = Path(cache_mode)
         migrate_all_once(cache_path)
-        env.update(migrated_names_env())
-        if toolkit and uses_toolkit_layout(toolkit):
+        if toolkit:
             # Per-toolkit layout: every framework cache lives under {cache}/{weights_key}/
             env.update(toolkit_cache_env(toolkit, cache_path))
         else:
+            # A subprocess not tied to a toolkit gets a shared cache at the root
             env["HF_HOME"] = str(cache_path / "huggingface")
             if tool_env_path:
                 env["TORCH_HOME"] = str(cache_path / "torch")

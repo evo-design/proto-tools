@@ -31,11 +31,10 @@ def resolve_weights_dir(toolkit: str) -> str | None:
     Precedence:
         1. PROTO_{TOOL}_WEIGHTS_DIR (per-tool override, always wins)
         2. PROTO_MODEL_CACHE:
-           - (default): {PROTO_HOME}/proto_model_cache/{toolkit}/ (survives env rebuilds)
-           - "/absolute/path": /absolute/path/{toolkit}/  (shared directory)
-           In both, a name listed in PROTO_WEIGHTS_MIGRATED (set by the worker to the
-           toolkits on the per-toolkit layout) gets the ``weights/`` subfolder of that
-           directory, whichever toolkit is asking.
+           - (default): {PROTO_HOME}/proto_model_cache/{toolkit}/weights/ (survives env rebuilds)
+           - "/absolute/path": /absolute/path/{toolkit}/weights/  (shared directory)
+           (the ``weights/`` subfolder of the {toolkit}/ folder that also holds its
+           HF, torch, and JAX caches)
            - "IN_ENV": {TOOL_VENV_PATH}/model_weight_cache/ (legacy, per-venv)
            - "NONE": {VENV_PATH}/weights/ (pass-through, matches shell helper)
 
@@ -99,9 +98,7 @@ def resolve_weights_dir(toolkit: str) -> str | None:
         cache_dir = os.path.join(proto_home, "proto_model_cache")
 
     os.makedirs(cache_dir, exist_ok=True)
-    path = os.path.join(cache_dir, toolkit)
-    if toolkit in os.environ.get("PROTO_WEIGHTS_MIGRATED", "").split(","):
-        path = os.path.join(path, "weights")
+    path = os.path.join(cache_dir, toolkit, "weights")
     os.makedirs(path, exist_ok=True)
     return path
 
