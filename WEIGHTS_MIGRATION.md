@@ -52,7 +52,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 39 | `sequence_scoring/alphagenome` |  |  |  |  |  |  |
 | 40 | `sequence_scoring/borzoi` |  | borzoi | `huggingface/hub/models--johahi--{flashzoi,borzoi}-replicate-{0..3}`, `models--johahi--borzoi-replicate-{0..3}-mouse` (12 repos) | 673 MB (mouse rep 0) | ✅✅✅✅✅ | Human path uses flashzoi (CUDA); tested mouse replicate. |
 | 41 | `sequence_scoring/cherimoya` |  | cherimoya | `huggingface/hub/models--programmable-genomics--CATv1` (pinned revision) | 2 MB (1 fold) | ✅✅✅✅✅ | Triton kernels compile to ~/.triton/cache (not weights; cleaned by wipe). |
-| 42 | `sequence_scoring/deeppbs_specificity` |  |  |  |  |  |  |
+| 42 | `sequence_scoring/deeppbs_specificity` |  | deeppbs_specificity | `deeppbs_specificity/` = git clone root (setup.sh) incl. weights, configs, X3DNA/DSSR binaries | 425 MB | ✅✅✅✅✅ | Editable install keeps the old path, but run.py puts the current checkout first on PYTHONPATH, so step 3 ran from the moved checkout. |
 | 43 | `sequence_scoring/enformer` |  | enformer | `huggingface/hub/models--EleutherAI--enformer-official-rough` | 959 MB | ✅✅✅✅✅ |  |
 | 44 | `sequence_scoring/malinois` |  | malinois | `malinois/MODELS-malinois_artifacts__*.tar.gz` + extracted `malinois/malinois_artifacts/` (runtime zenodo) | 128 MB | ✅✅✅✅✅ | Tarball kept beside extraction (upstream behavior). Temp-dir fallback only when resolve returns None. |
 | 45 | `sequence_scoring/na_mpnn_specificity` |  | na_mpnn_specificity | `na_mpnn_specificity/` = git clone root (setup.sh); ckpt at models/specificity_model/s_70114.pt | 201 MB | ✅✅✅✅✅ | Whole clone moves into weights/. Top-level *.pt glob fallback in run.py still present. |

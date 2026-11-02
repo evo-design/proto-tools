@@ -56,6 +56,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "cherimoya",
         "codonfm",
         "crispr_tracr_rna",
+        "deeppbs_specificity",
         "dssp",
         "enformer",
         "esm2",
@@ -206,6 +207,7 @@ MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "deeppbs_specificity": (WeightsDir("deeppbs_specificity"),),
     "spliceai2": (WeightsDir("spliceai2"),),
     "evo1": (
         HFRepo("evo-design/evo-1.5-8k-base"),
