@@ -484,7 +484,7 @@ def test_document_reads_a_line_range_by_default(fake):
     assert fake.calls[1] == ("read_lines", (_CONTENT, 1, 2), {})
     assert document.access_kind == "excerpt"
     assert document.excerpt == "L1: Title\nL2: Abstract"
-    assert document.metadata == {"doi": "10.1/x"}
+    assert (document.paper.document_id, document.paper.doi) == ("PMC1", "10.1/x")
 
 
 def test_document_grep_parses_match_and_context_lines(fake):
@@ -559,9 +559,34 @@ def test_document_rejects_non_json_metadata(fake):
         )
 
 
-@pytest.mark.parametrize("document_id", ["PMC11754230", "bio_29a07e4e799b", "arx_2605.11347", "arx_2605.11347v2"])
-def test_document_id_accepts_every_paperclip_id_form(document_id):
-    assert PaperclipDocumentInput(document_id=document_id).document_id == document_id
+@pytest.mark.parametrize(
+    ("copied", "document_id"),
+    [
+        ("pmc11754230", "PMC11754230"),
+        ("https://pmc.ncbi.nlm.nih.gov/articles/PMC11754230/", "PMC11754230"),
+        ("https://paperclip.gxl.ai/citations/papers/bio_29a07e4e799b", "bio_29a07e4e799b"),
+        ("arx_2605.11347", "arx_2605.11347"),
+        ("arXiv:2605.11347v2", "arx_2605.11347v2"),
+        ("https://arxiv.org/pdf/2605.11347.pdf", "arx_2605.11347"),
+    ],
+)
+def test_document_id_accepts_ids_as_users_copy_them(copied, document_id):
+    assert PaperclipDocumentInput(document_id=copied).document_id == document_id
+
+
+def test_document_keeps_the_requested_id_over_the_one_in_meta_json(fake):
+    """The arXiv meta.json records 2605.11347; the paper is only reachable as arx_2605.11347."""
+    fake.files["/papers/arx_2605.11347/meta.json"] = json.dumps(
+        {"document_id": "2605.11347", "title": "Noise optimization", "source": "arxiv", "pub_date": "2026-10-20"}
+    )
+
+    paper = run_paperclip_document(
+        PaperclipDocumentInput(document_id="arx_2605.11347"),
+        PaperclipDocumentConfig(paperclip_api_key="pk", read="metadata"),
+    ).document.paper
+
+    assert (paper.document_id, paper.year) == ("arx_2605.11347", 2026)
+    assert paper.source_url == "https://paperclip.gxl.ai/citations/papers/arx_2605.11347"
 
 
 def test_document_id_cannot_escape_virtual_papers_directory():

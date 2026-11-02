@@ -70,6 +70,8 @@ Use these tools to collect source-backed design evidence and natural examples be
 
 #### Usage Tips
 
+- `document_id` takes a Paperclip id (`PMC11754230`, `bio_29a07e4e799b`, `arx_2605.11347`) or one as copied: lowercase `pmc...`, a PMC or Paperclip article link, or an arXiv id or link. Find a paper by DOI or PMID with `paperclip-literature-lookup` first.
+- The paper's citation details come back typed in `document.paper`, the same fields a search hit carries.
 - Prefer `read="lines"` (the default, first 100 lines) or `read="grep"` with a `pattern`. GXL advises against reading whole papers.
 - `read="full_text"` reads the paper in pages and returns it as `content` only when every line Paperclip reports for it came back (`line_count`); otherwise the text is kept as `content_preview`.
 - Set `PAPERCLIP_API_KEY` before retrieval, or `PAPERCLIP_TOKEN` for a bearer token; the config fields `paperclip_api_key` and `paperclip_token` take precedence. The tools do not read credentials saved by an interactive `paperclip login`.

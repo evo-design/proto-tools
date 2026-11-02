@@ -24,6 +24,10 @@ PaperclipSource = Literal["pmc", "papers", "abstracts", "biorxiv", "medrxiv", "a
 PaperclipLookupField = Literal["doi", "pmid", "pmc", "arxiv", "title", "author", "journal", "year"]
 _ID_PATTERN = r"PMC\d+|bio_[A-Za-z0-9]+|med_[A-Za-z0-9]+|arx_\d+\.\d+(?:v\d+)?"
 _DOCUMENT_ID = re.compile(rf"^(?:{_ID_PATTERN})$")
+# A Paperclip id inside a PMC or Paperclip article link, matched regardless of case.
+_DOCUMENT_ID_IN_LINK = re.compile(rf"(?<![A-Za-z0-9_])({_ID_PATTERN})(?![A-Za-z0-9])", re.IGNORECASE)
+# An arXiv id as arXiv prints it: 2605.11347, arXiv:2605.11347, or an arxiv.org/abs or /pdf link.
+_ARXIV_ID = re.compile(r"(?:arxiv:|arxiv\.org/(?:abs|pdf)/)?(\d{4}\.\d{4,5}(?:v\d+)?)(?:\.pdf)?$", re.IGNORECASE)
 _GREP_LINE = re.compile(r"^L(\d+)(:|-)\s?(.*)$")
 _PAPER_URL = "https://paperclip.gxl.ai/citations/papers/{document_id}"
 _SERVICE_URL = "https://paperclip.gxl.ai/"
@@ -85,29 +89,54 @@ class _JsonOutput(BaseToolOutput):
         )
 
 
-class PaperclipSearchHit(BaseModel):
-    """One normalized, citable Paperclip paper returned by search or lookup."""
+class PaperclipPaper(BaseModel):
+    """Citation details for one Paperclip paper.
+
+    Attributes:
+        document_id (str): Stable Paperclip document identifier.
+        title (str): Publication title.
+        authors (str | None): Author list as Paperclip formats it.
+        journal (str | None): Journal, or the preprint server for a preprint.
+        publication_date (str | None): Publication date, ``YYYY-MM-DD`` where known.
+        year (int | None): Publication year.
+        doi (str | None): Digital object identifier.
+        pmid (str | None): PubMed identifier.
+        pmcid (str | None): PubMed Central identifier.
+        source (str): Paperclip corpus, such as ``pmc``, ``biorxiv``, or ``arxiv``.
+        article_type (str | None): Article type, such as ``Review``, where Paperclip records one.
+        abstract (str | None): Abstract, when available.
+        source_url (str): Paperclip citation page for the paper.
+    """
 
     document_id: str = Field(title="Document ID", description="Stable Paperclip document identifier")
     title: str = Field(title="Title", description="Publication title")
-    authors: str | None = Field(default=None, title="Authors", description="Publication author text")
-    journal: str | None = Field(default=None, title="Journal", description="Journal or source title")
-    publication_date: str | None = Field(default=None, title="Publication Date", description="Publication date text")
+    authors: str | None = Field(default=None, title="Authors", description="Author list as Paperclip formats it")
+    journal: str | None = Field(default=None, title="Journal", description="Journal or preprint server")
+    publication_date: str | None = Field(default=None, title="Publication Date", description="Publication date")
     year: int | None = Field(default=None, title="Year", description="Publication year")
     doi: str | None = Field(default=None, title="DOI", description="Digital object identifier")
     pmid: str | None = Field(default=None, title="PMID", description="PubMed identifier")
     pmcid: str | None = Field(default=None, title="PMCID", description="PubMed Central identifier")
     source: str = Field(title="Source", description="Paperclip source corpus")
+    article_type: str | None = Field(default=None, title="Article Type", description="Article type, where recorded")
     abstract: str | None = Field(default=None, title="Abstract", description="Publication abstract when available")
+    source_url: str = Field(title="Source URL", description="Paperclip citation page for the paper")
+
+
+class PaperclipSearchHit(PaperclipPaper):
+    """One paper returned by search or lookup.
+
+    Attributes:
+        matched_text (str | None): Passage the search matched.
+        relevance_score (float | None): Paperclip relevance score.
+        access_kind (LiteratureAccessKind): Content granularity returned.
+    """
+
     matched_text: str | None = Field(default=None, title="Matched Text", description="Text fragment matched by search")
     relevance_score: float | None = Field(
         default=None, title="Relevance Score", description="Paperclip relevance score"
     )
     access_kind: LiteratureAccessKind = Field(title="Access Kind", description="Content granularity returned")
-    source_url: str = Field(title="Source URL", description="Paperclip citation page for the paper")
-    raw_metadata: dict[str, Any] = Field(
-        default_factory=dict, title="Raw Metadata", description="Unmodified Paperclip result", repr=False
-    )
 
 
 def _client(config: _PaperclipConfig) -> PaperclipClient:
@@ -124,30 +153,35 @@ def _year_from_date(value: Any) -> int | None:
     return int(value[:4]) if isinstance(value, str) and value[:4].isdigit() else None
 
 
+def _paper_fields(item: dict[str, Any], document_id: str) -> dict[str, Any]:
+    """Map a saved hit or a ``meta.json`` record onto the fields of ``PaperclipPaper``."""
+    pmid = item.get("pmid") or (item.get("citation_canonical_work") or {}).get("pmid")
+    return {
+        "document_id": document_id,
+        "title": str(item.get("title") or item.get("citation_title") or document_id),
+        "authors": item.get("authors"),
+        "journal": item.get("journal_title") or item.get("journal"),
+        "publication_date": item.get("pub_date"),
+        "year": item.get("pub_year") or _year_from_date(item.get("pub_date")),
+        "doi": item.get("doi") or item.get("citation_doi"),
+        "pmid": str(pmid) if pmid else None,
+        "pmcid": item.get("pmc_id"),
+        "source": str(item.get("source") or item.get("corpus") or "unknown"),
+        "article_type": item.get("article_type"),
+        "abstract": item.get("abstract"),
+        "source_url": _PAPER_URL.format(document_id=document_id),
+    }
+
+
 def _normalize_hit(item: dict[str, Any], operation: str) -> PaperclipSearchHit:
     document_id = str(item.get("document_id") or item.get("pmc_id") or "")
     if not document_id:
         raise ValueError(f"Paperclip {operation} result did not include a stable document_id")
-    abstract = item.get("abstract")
-    source = str(item.get("source") or item.get("corpus") or "unknown")
-    pmid = item.get("pmid") or (item.get("citation_canonical_work") or {}).get("pmid")
     return PaperclipSearchHit(
-        document_id=document_id,
-        title=str(item.get("title") or item.get("citation_title") or document_id),
-        authors=item.get("authors"),
-        journal=item.get("journal_title") or item.get("journal"),
-        publication_date=item.get("pub_date"),
-        year=item.get("pub_year") or _year_from_date(item.get("pub_date")),
-        doi=item.get("doi") or item.get("citation_doi"),
-        pmid=str(pmid) if pmid else None,
-        pmcid=item.get("pmc_id"),
-        source=source,
-        abstract=abstract,
+        **_paper_fields(item, document_id),
         matched_text=item.get("chunk_text"),
         relevance_score=item.get("rerank_score") if item.get("rerank_score") is not None else item.get("score"),
-        access_kind=LiteratureAccessKind.ABSTRACT if abstract else LiteratureAccessKind.METADATA,
-        source_url=_PAPER_URL.format(document_id=document_id),
-        raw_metadata=item,
+        access_kind=LiteratureAccessKind.ABSTRACT if item.get("abstract") else LiteratureAccessKind.METADATA,
     )
 
 
@@ -523,11 +557,28 @@ class PaperclipDocumentInput(BaseToolInput):
         description="Paperclip corpus identifier, such as PMC11754230",
     )
 
+    @field_validator("document_id", mode="before")
+    @classmethod
+    def _parse_document_id(cls, value: Any) -> Any:
+        """Read a Paperclip id out of an id or link as users copy it."""
+        if not isinstance(value, str):
+            return value
+        text = value.strip().rstrip("/")
+        if (match := _DOCUMENT_ID_IN_LINK.search(text)) is not None:
+            found = match.group(1)
+            return f"PMC{found[3:]}" if found.upper().startswith("PMC") else found[:4].lower() + found[4:]
+        if (arxiv := _ARXIV_ID.search(text)) is not None:
+            return f"arx_{arxiv.group(1)}"
+        return text
+
     @field_validator("document_id")
     @classmethod
     def _safe_document_id(cls, value: str) -> str:
         if not _DOCUMENT_ID.fullmatch(value):
-            raise ValueError("document_id must be a Paperclip paper identifier without a path")
+            raise ValueError(
+                "document_id must be a Paperclip paper identifier without a path, such as PMC11754230, "
+                "bio_29a07e4e799b, or an arXiv id; find a DOI or PMID with paperclip-literature-lookup"
+            )
         return value
 
 
@@ -582,10 +633,19 @@ class PaperclipLineMatch(BaseModel):
 
 
 class PaperclipDocument(BaseModel):
-    """Metadata for one paper and whichever part of its text was requested."""
+    """Citation details for one paper and whichever part of its text was requested.
 
-    document_id: str = Field(title="Document ID", description="Stable Paperclip document identifier")
-    metadata: dict[str, Any] = Field(title="Metadata", description="Paperclip publication metadata")
+    Attributes:
+        paper (PaperclipPaper): Citation details from the paper's ``meta.json``.
+        access_kind (LiteratureAccessKind): Content granularity returned.
+        excerpt (str | None): Requested line range, in ``lines`` mode.
+        matches (list[PaperclipLineMatch]): Matching and context lines, in ``grep`` mode.
+        content (str | None): Complete line-numbered full text, in ``full_text`` mode.
+        content_preview (str | None): Full text that came back incomplete.
+        line_count (int | None): Lines Paperclip reports for the full text.
+    """
+
+    paper: PaperclipPaper = Field(title="Paper", description="Citation details for the paper")
     access_kind: LiteratureAccessKind = Field(title="Access Kind", description="Content granularity returned")
     excerpt: str | None = Field(
         default=None, title="Excerpt", description="Requested line range as Paperclip returned it", repr=False
@@ -602,7 +662,6 @@ class PaperclipDocument(BaseModel):
     line_count: int | None = Field(
         default=None, title="Line Count", description="Lines Paperclip reports for the full text"
     )
-    source_url: str = Field(title="Source URL", description="Paperclip citation page for the paper")
 
 
 class PaperclipDocumentOutput(_JsonOutput):
@@ -679,11 +738,10 @@ def run_paperclip_document(
         ) from exc
     if not isinstance(metadata, dict):
         raise PaperclipCommandError(f"Paperclip metadata for {inputs.document_id} is not a JSON object")
+    # meta.json's own document_id drops the arx_ prefix from arXiv ids, so the requested id is kept.
     document = PaperclipDocument(
-        document_id=inputs.document_id,
-        metadata=metadata,
+        paper=PaperclipPaper(**_paper_fields(metadata, inputs.document_id)),
         access_kind=LiteratureAccessKind.METADATA,
-        source_url=_PAPER_URL.format(document_id=inputs.document_id),
     )
     if config.read == "lines":
         excerpt = client.read_lines(content_path, config.start_line, config.end_line)
