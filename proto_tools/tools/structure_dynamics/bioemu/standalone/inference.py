@@ -1,5 +1,6 @@
 """Standalone BioEmu inference implementation."""
 
+import hashlib
 import json
 import os
 import sys
@@ -13,13 +14,30 @@ from standalone_helpers import count_a3m_rows, get_logger, get_random_int, repor
 logger = get_logger(__name__)
 
 
+def _msa_cache_dir(cache_embeds_dir: str | None, msa_a3m: str | None) -> str | None:
+    """Embedding cache directory for this MSA: a sub-directory of the base cache per MSA hash.
+
+    BioEmu keys cached embeddings by sequence alone, so a shared directory would serve one MSA's
+    embeddings for another. Keying the directory by MSA keeps reuse correct and repeat calls cheap.
+    """
+    if not msa_a3m:
+        return cache_embeds_dir
+    if cache_embeds_dir is None:
+        import bioemu.get_embeds as get_embeds
+
+        cache_embeds_dir = get_embeds._get_default_embeds_dir()
+    root = os.path.expanduser(cache_embeds_dir)
+    return os.path.join(root, f"msa-{hashlib.sha256(msa_a3m.encode()).hexdigest()[:16]}")
+
+
 def _check_msa_source(
     sequence: str, msa_a3m: str | None, cache_embeds_dir: str | None, msa_host_url: str | None
 ) -> None:
-    """Warn when BioEmu will not use the MSA proto-tools supplied, and log the rows it loads.
+    """Warn when BioEmu would query its own MSA server, and log the rows it loads.
 
     ``get_colabfold_embeds`` returns embeddings cached under the sequence's hash without reading any
-    MSA, and with no MSA file it queries the ColabFold server itself.
+    MSA, so ``cache_embeds_dir`` must already be the MSA-specific directory from ``_msa_cache_dir``.
+    With no MSA file it queries the ColabFold server itself.
     """
     import bioemu.colabfold_inline.model_runner as model_runner
     import bioemu.get_embeds as get_embeds
@@ -27,11 +45,9 @@ def _check_msa_source(
     cache_dir = os.path.expanduser(cache_embeds_dir or get_embeds._get_default_embeds_dir())
     key = get_embeds.shahexencode(sequence)
     cached = all(os.path.exists(os.path.join(cache_dir, f"{key}_{part}.npy")) for part in ("single", "pair"))
-    if cached and msa_a3m:
-        logger.warning(
-            "bioemu: reusing embeddings cached for this sequence in %s; the supplied MSA is not read", cache_dir
-        )
-    elif not cached and not msa_a3m:
+    if cached:
+        logger.debug("bioemu: reusing embeddings cached for this MSA in %s", cache_dir)
+    elif not msa_a3m:
         logger.warning(
             "bioemu: no MSA supplied; BioEmu will query the ColabFold server (%s)", msa_host_url or "default"
         )
@@ -153,6 +169,7 @@ class BioEmuModel:
 
             base_seed = seed if seed is not None else get_random_int()
 
+            cache_embeds_dir = _msa_cache_dir(cache_embeds_dir, msa_a3m)
             _check_msa_source(sequence, msa_a3m, cache_embeds_dir, msa_host_url)
             existing_num_samples = count_samples_in_output_dir(output_path)
             for start_idx in tqdm(

@@ -166,8 +166,10 @@ class BioEmuConfig(StructurePredictionConfig):
             is 50 deterministic steps; ``heun`` is stochastic.
         denoiser_config (str | None): Path to a custom denoiser/steering YAML;
             overrides ``denoiser_type`` when set.
-        msa_host_url (str | None): Override the ColabFold MMseqs2 MSA server URL.
-        cache_embeds_dir (str | None): Directory to cache MSA embeddings across runs.
+        msa_host_url (str | None): Unused: proto-tools always supplies BioEmu's MSA, so BioEmu
+            never queries an MSA server. Kept for compatibility.
+        cache_embeds_dir (str | None): Directory to cache MSA embeddings across runs; each MSA
+            gets its own sub-directory, so a cached embedding is reused only for the same MSA.
         cache_so3_dir (str | None): Directory to cache SO3 precomputations across runs.
         output_dir (str | None): Optional directory for raw BioEmu outputs.
         msa_search_config (Mmseqs2HomologySearchConfig | None): MMseqs2 homology
@@ -215,12 +217,12 @@ class BioEmuConfig(StructurePredictionConfig):
     msa_host_url: str | None = ConfigField(
         title="MSA Host URL",
         default=None,
-        description="Override the ColabFold MMseqs2 MSA server URL",
+        description="Unused: proto-tools always supplies the MSA, so BioEmu never queries a server",
     )
     cache_embeds_dir: str | None = ConfigField(
         title="MSA Embeds Cache Dir",
         default=None,
-        description="Directory to cache MSA embeddings across runs",
+        description="Directory to cache MSA embeddings across runs, one sub-directory per MSA",
         include_in_key=False,
     )
     cache_so3_dir: str | None = ConfigField(
@@ -308,18 +310,15 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
 
     from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
 
-    # BioEmu is single-chain, so always read chain index 0.
     # Per-complex MSAs (index-aligned with complexes); keying by sequence would collide on duplicates.
-    msa_a3m_contents: list[str | None] = [None] * len(inputs.complexes)
-    if inputs.msas:
-        for cplx_idx, complex_ in enumerate(inputs.complexes):
-            seq = complex_.chain_sequences[0]
-            per_chain, _unpaired, _ = unwrap_complex_msas(inputs.msas[cplx_idx])
-            msa = per_chain.get(0)
-            if msa is not None:
-                msa_a3m_contents[cplx_idx] = msa.to_a3m_string()
-                if config.verbose:
-                    logger.info(f"Loaded MSA for sequence (length {len(seq)}): {len(msa)} homologs")
+    msa_a3m_contents: list[str] = []
+    for cplx_idx, complex_ in enumerate(inputs.complexes):
+        seq = complex_.chain_sequences[0]
+        per_chain, unpaired, _ = unwrap_complex_msas(inputs.msas[cplx_idx]) if inputs.msas else ({}, None, False)
+        msa = per_chain.get(0) or (unpaired or {}).get(0)
+        msa_a3m_contents.append(msa.to_a3m_string() if msa is not None else f">query\n{seq}\n")
+        if config.verbose:
+            logger.info(f"Loaded MSA for sequence (length {len(seq)}): {len(msa) if msa is not None else 1} rows")
 
     output = ToolInstance.dispatch(
         "bioemu",
