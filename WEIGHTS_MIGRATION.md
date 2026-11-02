@@ -67,7 +67,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 54 | `structure_alignment/usalign` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 55 | `structure_design/rfd4` |  | rfd4 | `huggingface/hub/models--nvidia--RFD4-Proteina` (pinned rev; config + model.safetensors only) | 2 GB | ✅✅✅✅✅ | No sub-model downloads (autoencoder bundled). Torch inductor compile cache in /tmp (not weights). |
 | 56 | `structure_design/rfdiffusion3` |  | rfdiffusion3 | `rfdiffusion3/rfd3_latest.ckpt` (setup.sh `foundry install`) | 3 GB | ✅✅✅✅✅ | No ~/.foundry or .env writes observed. |
-| 57 | `structure_dynamics/bioemu` |  |  |  |  |  |  |
+| 57 | `structure_dynamics/bioemu` |  | bioemu | `huggingface/hub/models--microsoft--bioemu`; previously `~/.cache/colabfold` (AF2 2021-07-14 params), `~/.bioemu_embeds_cache`, `~/sampling_so3_cache` | 3.1 GB (ckpt + AF2 2021 params) | ✅✅✅✅✅ | Code change: AF2 params, embeddings, and SO3 tables now default to bioemu/weights/{colabfold,embeds_cache,so3_cache}; 0 new files in ~ during verify. AF2 2021 params kept separate from alphafold2 (2022 release). Existing ~ copies left untouched. |
 | 58 | `structure_prediction/alphafold2` |  | alphafold2 | `alphafold2/params/*.npz` (setup.sh, 2022-12-06 tar) | 5.3 GB | ✅✅✅✅✅ | Shared with bindcraft, freebindcraft, germinal via proto_ensure_af2_params (15-file completeness check + .params_complete). |
 | 59 | `structure_prediction/alphafold3` |  |  |  |  |  |  |
 | 60 | `structure_prediction/boltz2` |  | boltz2 | `boltz2/{boltz2_conf.ckpt,boltz2_aff.ckpt,mols.tar,mols/}` (runtime, cache=resolve_weights_dir) | 7.6 GB | ✅✅✅✅✅ | Affinity ckpt always downloaded (upstream). 45k-file mols/ moved by directory rename. |
