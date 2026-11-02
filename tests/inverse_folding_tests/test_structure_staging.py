@@ -67,7 +67,7 @@ def _proteinmpnn_case(native):
     from proto_tools.tools.inverse_folding import ProteinMPNNSampleConfig, run_proteinmpnn_sample
 
     return (
-        "proteinmpnn.proteinmpnn_sample",
+        "proteinmpnn._sampling",
         run_proteinmpnn_sample,
         ProteinMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=0, device="cpu"),
         {"seq": [native], "score": [-1.0], "seqid": [1.0]},
@@ -167,7 +167,7 @@ def test_sample_tool_designs_every_residue_of_a_real_antibody(monkeypatch, antib
         }
 
     monkeypatch.setattr(
-        "proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample.ToolInstance.dispatch",
+        "proto_tools.tools.inverse_folding.proteinmpnn._sampling.ToolInstance.dispatch",
         staticmethod(fake_dispatch),
     )
     output = run_proteinmpnn_sample(

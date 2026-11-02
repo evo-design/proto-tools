@@ -75,6 +75,7 @@ class ProteinMPNNModel:
         verbose: bool = False,
         return_logits: bool = False,
         backbone_noise: float = 0.0,
+        homooligomer: bool = False,
     ) -> dict[str, Any]:
         """Sample protein sequences from the ProteinMPNN model.
 
@@ -91,6 +92,7 @@ class ProteinMPNNModel:
             verbose: Whether to print status messages
             return_logits: Whether to include logits in the output
             backbone_noise: Gaussian noise (A) added to backbone coordinates before each forward pass.
+            homooligomer: Tie corresponding positions across equal-length designed chains.
 
         Returns:
             Dictionary with keys: seq, score, seqid, and optionally logits
@@ -114,6 +116,7 @@ class ProteinMPNNModel:
             pdb_path,
             fix_pos=fix_pos,
             chain=",".join(chain_ids),
+            homooligomer=homooligomer,
             rm_aa=",".join(excluded_amino_acids) if excluded_amino_acids else None,
         )
 
@@ -428,6 +431,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
             return_logits=input_dict["return_logits"],
             backbone_noise=input_dict["backbone_noise"],
+            homooligomer=input_dict["homooligomer"],
         )
     if operation == "score":
         return _model.score(
