@@ -116,6 +116,7 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "promoter-calculator": ToolEntry("proto-tools-promoter-calculator", "PromoterCalculatorService", "calculate", False),
     "proteinmpnn-gradient": ToolEntry("proto-tools-proteinmpnn", "ProteinMPNNService", "gradient", True),
     "proteinmpnn-sample": ToolEntry("proto-tools-proteinmpnn", "ProteinMPNNService", "sample", True),
+    "proteinmpnn-sample-homooligomer": ToolEntry("proto-tools-proteinmpnn", "ProteinMPNNService", "sample_homooligomer", True),
     "proteinmpnn-score": ToolEntry("proto-tools-proteinmpnn", "ProteinMPNNService", "score", True),
     "protenix-prediction": ToolEntry("proto-tools-protenix", "ProtenixService", "predict", True),
     "puffin-interpretation": ToolEntry("proto-tools-puffin", "PuffinService", "interpret", True),
