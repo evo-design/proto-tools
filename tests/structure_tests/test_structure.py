@@ -585,6 +585,18 @@ def test_centroid_and_distances():
     assert all(d > 0 for d in dists)
 
 
+@pytest.mark.parametrize(
+    "function",
+    [pairwise_distances, adjacent_distances, get_centroid, distances_to_centroid],
+)
+def test_geometry_functions_reject_non_coordinate_matrices(function):
+    """Public geometry helpers reject bad shapes and types with runtime exceptions."""
+    with pytest.raises(ValueError, match=r"shape \(N, 3\).+\(2, 2\)"):
+        function(np.zeros((2, 2)))
+    with pytest.raises(TypeError, match=r"numpy\.ndarray"):
+        function([[0.0, 0.0, 0.0]])
+
+
 def test_pdb_file_to_atomarray_and_backbone():
     atoms = pdb_file_to_atomarray(str(_TEST_PDB_FILE))
     assert len(atoms) > 0

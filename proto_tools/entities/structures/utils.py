@@ -244,9 +244,22 @@ def _is_Nx3(array: np.ndarray) -> bool:
     return len(array.shape) == 2 and array.shape[1] == 3
 
 
+def _validate_coordinate_matrix(coordinates: np.ndarray) -> None:
+    """Require an ``(N, 3)`` coordinate matrix.
+
+    These helpers are public API callers reach with their own arrays, so the check
+    raises instead of asserting: ``python -O`` strips assertions, and a wrongly
+    shaped array then broadcasts into silently meaningless distances.
+    """
+    if not isinstance(coordinates, np.ndarray):
+        raise TypeError(f"coordinates must be a numpy.ndarray, got {type(coordinates).__name__}")
+    if not _is_Nx3(coordinates):
+        raise ValueError(f"coordinates must have shape (N, 3), got {coordinates.shape}")
+
+
 def pairwise_distances(coordinates: np.ndarray) -> np.ndarray:
     """Calculate pairwise distances between all coordinates."""
-    assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
+    _validate_coordinate_matrix(coordinates)
     m = coordinates[:, np.newaxis, :] - coordinates[np.newaxis, :, :]
     distance_matrix = np.linalg.norm(m, axis=-1)
     return distance_matrix[np.triu_indices(distance_matrix.shape[0], k=1)]  # type: ignore[no-any-return]
@@ -254,14 +267,14 @@ def pairwise_distances(coordinates: np.ndarray) -> np.ndarray:
 
 def adjacent_distances(coordinates: np.ndarray) -> np.ndarray:
     """Calculate distances between adjacent coordinates."""
-    assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
+    _validate_coordinate_matrix(coordinates)
     m = coordinates - np.roll(coordinates, shift=1, axis=0)
     return np.linalg.norm(m, axis=-1)  # type: ignore[no-any-return]
 
 
 def get_centroid(coordinates: np.ndarray) -> np.ndarray:
     """Calculate the centroid of coordinates."""
-    assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
+    _validate_coordinate_matrix(coordinates)
     return coordinates.mean(axis=0).reshape(1, 3)
 
 
@@ -270,7 +283,7 @@ def distances_to_centroid(coordinates: np.ndarray) -> np.ndarray:
 
     centroid of all coordinates.
     """
-    assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
+    _validate_coordinate_matrix(coordinates)
     centroid = get_centroid(coordinates)
     m = coordinates - centroid
     return np.linalg.norm(m, axis=-1)  # type: ignore[no-any-return]
