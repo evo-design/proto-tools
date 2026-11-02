@@ -43,6 +43,7 @@ LAYOUT_ENV_VALUE = "toolkit"
 # while their downloads are audited, and the gate is removed once every toolkit is migrated.
 MIGRATED_TOOLKITS: frozenset[str] = frozenset(
     {
+        "cherimoya",
         "enformer",
         "esm2",
         "esm_if1",
@@ -104,6 +105,7 @@ MigrationEntry = HFRepo | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "cherimoya": (HFRepo("programmable-genomics/CATv1"),),
     "splice_transformer": (HFRepo("brianhie/SpTransformer"),),
     "enformer": (HFRepo("EleutherAI/enformer-official-rough"),),
     "minerva": (

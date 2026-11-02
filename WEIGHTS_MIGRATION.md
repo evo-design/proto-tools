@@ -51,7 +51,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 38 | `sequence_alignment/mmseqs2` |  |  |  |  |  |  |
 | 39 | `sequence_scoring/alphagenome` |  |  |  |  |  |  |
 | 40 | `sequence_scoring/borzoi` |  |  |  |  |  |  |
-| 41 | `sequence_scoring/cherimoya` |  |  |  |  |  |  |
+| 41 | `sequence_scoring/cherimoya` |  | cherimoya | `huggingface/hub/models--programmable-genomics--CATv1` (pinned revision) | 2 MB (1 fold) | ✅✅✅✅✅ | Triton kernels compile to ~/.triton/cache (not weights; cleaned by wipe). |
 | 42 | `sequence_scoring/deeppbs_specificity` |  |  |  |  |  |  |
 | 43 | `sequence_scoring/enformer` |  | enformer | `huggingface/hub/models--EleutherAI--enformer-official-rough` | 959 MB | ✅✅✅✅✅ |  |
 | 44 | `sequence_scoring/malinois` |  |  |  |  |  |  |
