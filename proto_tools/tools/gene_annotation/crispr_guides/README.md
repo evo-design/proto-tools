@@ -7,7 +7,7 @@
 
 ## Overview
 
-CRISPR Guide Enumeration scans reference-oriented DNA intervals for protospacers adjacent to an IUPAC PAM grammar. It examines either or both reference strands and returns sequence-exact candidates, biological coordinates, context, checksums, and reference identifiers without scoring or selecting candidates.
+CRISPR Guide Enumeration scans reference-oriented DNA intervals for protospacers adjacent to an IUPAC PAM grammar. It examines either or both reference strands and returns sequence-exact candidates with biological coordinates and flanking context, without scoring or selecting them.
 
 ## Background
 
@@ -29,9 +29,9 @@ Use this operation to create an auditable candidate pool before applying on-targ
 
 - **Supply intervals in reference plus-strand orientation.** Set each region's 1-indexed `start`; the tool derives all plus- and minus-strand coordinates from that representation.
 - **Write the PAM in nuclease orientation.** Use `pam_side="three_prime"` for patterns such as SpCas9 `NGG`, or `pam_side="five_prime"` for patterns such as Cas12a `TTTV`.
-- **Treat `pam_strand` and `target_strand` distinctly.** `pam_strand` contains the returned oriented protospacer/PAM pattern; the guide binds the complementary `target_strand`.
-- **Fetch enough exterior sequence.** Edge candidates are retained with `context_complete=false`; `context_is_canonical` separately reports ambiguous flanking bases.
-- **Carry pinned reference provenance.** Populate `reference_id` and `reference_sha256`, and optionally verify each supplied interval with `expected_sequence_sha256`.
+- **`pam_strand` is the strand carrying the protospacer and PAM.** The guide RNA matches the protospacer and pairs with the opposite strand.
+- **Fetch enough exterior sequence.** A candidate near an interval edge keeps whatever flank is available, so its `context_sequence` is shorter than `context_5p + protospacer + PAM + context_3p`.
+- **Chain the output.** Under the defaults, `context_sequence` is the 30-nt window Rule Set 3 scores (4-nt flank, 20-nt protospacer, 3-nt PAM, 3-nt flank), and `protospacer` is what a mismatch-aware off-target search takes.
 - **Score downstream.** This tool intentionally performs no guide ranking, efficacy prediction, off-target search, or candidate selection.
 
 ## Toolkit Notes

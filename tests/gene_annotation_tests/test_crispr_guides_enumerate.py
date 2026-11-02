@@ -1,6 +1,5 @@
 """Tests for deterministic PAM-aware CRISPR guide enumeration."""
 
-import hashlib
 import time
 
 import pytest
@@ -39,21 +38,17 @@ def _reverse_complement(sequence: str) -> str:
     return sequence.translate(_COMPLEMENT)[::-1]
 
 
-def test_regions_normalize_and_sequence_checksum_is_verified() -> None:
+def test_one_region_normalizes_to_a_batch_of_uppercase_dna() -> None:
     sequence = f"AAAA{_GUIDE}TGGAAA"
-    digest = hashlib.sha256(sequence.encode()).hexdigest()
     inputs = CRISPRGuideEnumerationInput(
-        regions=CRISPRGuideRegion(
-            sequence_id="chr1", sequence=sequence.lower(), expected_sequence_sha256=digest.upper()
-        )
+        regions=CRISPRGuideRegion(sequence_id="chr1", sequence=f"{sequence[:10].lower()} {sequence[10:]}")
     )
 
     assert len(inputs.regions) == 1
     assert inputs.regions[0].sequence == sequence
-    assert inputs.regions[0].expected_sequence_sha256 == digest
 
-    with pytest.raises(ValidationError, match="does not match"):
-        CRISPRGuideRegion(sequence_id="chr1", sequence=sequence, expected_sequence_sha256="0" * 64)
+    with pytest.raises(ValidationError, match="invalid IUPAC DNA bases"):
+        CRISPRGuideRegion(sequence_id="chr1", sequence="ACGTX")
 
 
 def test_three_prime_pam_plus_strand_coordinates_and_rs3_context() -> None:
@@ -72,16 +67,12 @@ def test_three_prime_pam_plus_strand_coordinates_and_rs3_context() -> None:
     assert candidate.protospacer == _GUIDE
     assert candidate.pam == "TGG"
     assert candidate.pam_strand == "+"
-    assert candidate.target_strand == "-"
     assert (candidate.protospacer_start, candidate.protospacer_end) == (105, 124)
     assert (candidate.pam_start, candidate.pam_end) == (125, 127)
     assert (candidate.context_start, candidate.context_end) == (101, 130)
     assert candidate.context_sequence == sequence
-    assert candidate.context_complete
-    assert candidate.context_is_canonical
     assert len(candidate.context_sequence) == 30
-    assert result.metadata["selection_applied"] is False
-    assert result.metadata["scoring_applied"] is False
+    assert result.metadata["coordinate_system"] == "1-indexed-inclusive"
 
 
 def test_three_prime_pam_minus_strand_coordinates() -> None:
@@ -97,14 +88,13 @@ def test_three_prime_pam_minus_strand_coordinates() -> None:
     assert len(result.results[0].candidates) == 1
     assert candidate.protospacer == _GUIDE
     assert candidate.pam_strand == "-"
-    assert candidate.target_strand == "+"
     assert (candidate.protospacer_start, candidate.protospacer_end) == (107, 126)
     assert (candidate.pam_start, candidate.pam_end) == (104, 106)
     assert (candidate.context_start, candidate.context_end) == (101, 130)
     assert candidate.context_sequence == oriented
 
 
-def test_five_prime_pam_and_partial_context() -> None:
+def test_five_prime_pam_coordinates_and_edge_truncated_context() -> None:
     sequence = f"TTTA{_GUIDE}"
     result = run_crispr_guides_enumerate(
         CRISPRGuideEnumerationInput(regions=CRISPRGuideRegion(sequence_id="contig", sequence=sequence, start=11)),
@@ -116,9 +106,7 @@ def test_five_prime_pam_and_partial_context() -> None:
     assert (candidate.pam_start, candidate.pam_end) == (11, 14)
     assert (candidate.protospacer_start, candidate.protospacer_end) == (15, 34)
     assert candidate.context_sequence == sequence
-    assert not candidate.context_complete
-    assert candidate.context_5p_length == 0
-    assert candidate.context_3p_length == 0
+    assert (candidate.context_start, candidate.context_end) == (11, 34)
 
 
 @pytest.mark.parametrize(("pam", "expected_bases"), _IUPAC_EXPECTED.items())
@@ -147,7 +135,7 @@ def test_ambiguous_target_windows_are_not_emitted() -> None:
     assert result.results[0].ambiguous_windows_skipped > 0
 
 
-def test_ambiguous_exterior_context_is_annotated_without_removing_candidate() -> None:
+def test_ambiguous_exterior_context_does_not_remove_the_candidate() -> None:
     sequence = f"NAAA{_GUIDE}TGGAAA"
     result = run_crispr_guides_enumerate(
         CRISPRGuideEnumerationInput(regions=CRISPRGuideRegion(sequence_id="chr1", sequence=sequence)),
@@ -155,8 +143,7 @@ def test_ambiguous_exterior_context_is_annotated_without_removing_candidate() ->
     )
 
     assert len(result.results[0].candidates) == 1
-    assert result.results[0].candidates[0].context_complete
-    assert not result.results[0].candidates[0].context_is_canonical
+    assert result.results[0].candidates[0].context_sequence == sequence
 
 
 def test_batch_cardinality_and_csv_export(tmp_path) -> None:

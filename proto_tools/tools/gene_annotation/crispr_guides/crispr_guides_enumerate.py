@@ -1,14 +1,13 @@
 """Deterministic PAM-aware CRISPR guide enumeration."""
 
 import csv
-import hashlib
 import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField
@@ -47,22 +46,14 @@ class CRISPRGuideRegion(BaseModel):
         sequence_id (str): Reference record or contig identifier.
         sequence (str): DNA interval in reference plus-strand orientation.
         start (int): 1-indexed inclusive coordinate of the first base.
-        reference_id (str | None): Optional versioned assembly identifier.
-        reference_sha256 (str | None): Optional checksum of the source reference artifact.
-        expected_sequence_sha256 (str | None): Optional checksum of the normalized interval sequence.
+        reference_id (str | None): Optional assembly the coordinates refer to.
     """
 
     sequence_id: str = Field(title="Sequence Identifier", description="Reference record or contig identifier")
     sequence: str = Field(title="Sequence", description="DNA interval in reference plus-strand orientation")
     start: int = Field(default=1, ge=1, title="Start", description="1-indexed inclusive first-base coordinate")
     reference_id: str | None = Field(
-        default=None, title="Reference Identifier", description="Optional versioned assembly identifier"
-    )
-    reference_sha256: str | None = Field(
-        default=None, title="Reference SHA256", description="Optional checksum of the source reference artifact"
-    )
-    expected_sequence_sha256: str | None = Field(
-        default=None, title="Expected Sequence SHA256", description="Optional normalized-sequence checksum"
+        default=None, title="Reference Identifier", description="Optional assembly the coordinates refer to"
     )
 
     @field_validator("sequence")
@@ -76,25 +67,6 @@ class CRISPRGuideRegion(BaseModel):
         if invalid:
             raise ValueError(f"sequence contains invalid IUPAC DNA bases: {invalid}")
         return normalized
-
-    @field_validator("reference_sha256", "expected_sequence_sha256")
-    @classmethod
-    def normalize_checksum(cls, value: str | None) -> str | None:
-        """Normalize and validate an optional SHA256 digest."""
-        if value is None:
-            return None
-        normalized = value.strip().lower()
-        if len(normalized) != 64 or any(character not in "0123456789abcdef" for character in normalized):
-            raise ValueError("SHA256 values must contain exactly 64 hexadecimal characters")
-        return normalized
-
-    @model_validator(mode="after")
-    def verify_sequence_checksum(self) -> "CRISPRGuideRegion":
-        """Reject a sequence that does not match its expected digest."""
-        observed = hashlib.sha256(self.sequence.encode()).hexdigest()
-        if self.expected_sequence_sha256 is not None and observed != self.expected_sequence_sha256:
-            raise ValueError("sequence does not match expected_sequence_sha256")
-        return self
 
 
 class CRISPRGuideEnumerationInput(BaseToolInput):
@@ -133,7 +105,6 @@ class CRISPRGuideEnumerationConfig(BaseConfig):
         strands (Literal['both', 'plus', 'minus']): Reference PAM strands to scan.
         context_5p (int): Exterior 5-prime context bases to return.
         context_3p (int): Exterior 3-prime context bases to return.
-        nuclease (str): Descriptive nuclease identity retained as provenance.
     """
 
     pam: str = ConfigField(
@@ -154,9 +125,6 @@ class CRISPRGuideEnumerationConfig(BaseConfig):
     context_3p: int = ConfigField(
         default=3, ge=0, title="3-prime Context", description="Exterior 3-prime context bases to return"
     )
-    nuclease: str = ConfigField(
-        default="SpCas9", title="Nuclease", description="Descriptive nuclease identity retained as provenance"
-    )
 
     @field_validator("pam")
     @classmethod
@@ -174,16 +142,19 @@ class CRISPRGuideEnumerationConfig(BaseConfig):
 class CRISPRGuideCandidate(BaseModel):
     """One PAM-compatible protospacer with reference coordinates.
 
-    Coordinates are 1-indexed and inclusive. ``pam_strand`` identifies the
-    reference strand containing the oriented protospacer/PAM pattern;
-    ``target_strand`` is the complementary strand bound by the guide.
+    Coordinates are 1-indexed and inclusive. ``pam_strand`` is the reference
+    strand carrying the oriented protospacer and PAM; the guide RNA matches the
+    protospacer and pairs with the opposite strand.
+
+    ``context_sequence`` is the oriented target plus whatever exterior flank the
+    interval provides, so it is shorter than the requested span at an interval
+    edge, and it carries non-ACGT bases when the flanks do.
 
     Attributes:
         protospacer (str): PAM-free sequence in nuclease orientation.
         pam (str): Matched PAM sequence in nuclease orientation.
         pam_side (Literal['three_prime', 'five_prime']): PAM orientation.
-        pam_strand (Literal['+', '-']): Reference strand containing the PAM.
-        target_strand (Literal['+', '-']): Complementary strand bound by the guide.
+        pam_strand (Literal['+', '-']): Reference strand carrying the PAM.
         protospacer_start (int): Genomic protospacer start coordinate.
         protospacer_end (int): Genomic protospacer end coordinate.
         pam_start (int): Genomic PAM start coordinate.
@@ -191,19 +162,12 @@ class CRISPRGuideCandidate(BaseModel):
         context_sequence (str): Oriented exterior-context, protospacer, and PAM sequence.
         context_start (int): Genomic start coordinate of returned context.
         context_end (int): Genomic end coordinate of returned context.
-        context_complete (bool): Whether both requested exterior flanks were available.
-        context_is_canonical (bool): Whether returned context contains only A/C/G/T.
-        context_5p_length (int): Available exterior 5-prime context length.
-        context_3p_length (int): Available exterior 3-prime context length.
     """
 
     protospacer: str = Field(title="Protospacer", description="PAM-free sequence in nuclease orientation")
     pam: str = Field(title="PAM", description="Matched PAM sequence in nuclease orientation")
     pam_side: Literal["three_prime", "five_prime"] = Field(title="PAM Side", description="PAM orientation")
-    pam_strand: Literal["+", "-"] = Field(title="PAM Strand", description="Reference strand containing the PAM")
-    target_strand: Literal["+", "-"] = Field(
-        title="Target Strand", description="Complementary reference strand bound by the guide"
-    )
+    pam_strand: Literal["+", "-"] = Field(title="PAM Strand", description="Reference strand carrying the PAM")
     protospacer_start: int = Field(title="Protospacer Start", description="1-indexed inclusive genomic start")
     protospacer_end: int = Field(title="Protospacer End", description="1-indexed inclusive genomic end")
     pam_start: int = Field(title="PAM Start", description="1-indexed inclusive genomic start")
@@ -211,24 +175,16 @@ class CRISPRGuideCandidate(BaseModel):
     context_sequence: str = Field(title="Context Sequence", description="Oriented target with exterior context")
     context_start: int = Field(title="Context Start", description="1-indexed inclusive genomic context start")
     context_end: int = Field(title="Context End", description="1-indexed inclusive genomic context end")
-    context_complete: bool = Field(title="Context Complete", description="Whether requested flanks were available")
-    context_is_canonical: bool = Field(
-        title="Context Is Canonical", description="Whether returned context contains only A/C/G/T"
-    )
-    context_5p_length: int = Field(title="5-prime Context Length", description="Available exterior 5-prime bases")
-    context_3p_length: int = Field(title="3-prime Context Length", description="Available exterior 3-prime bases")
 
 
 class CRISPRGuideRegionResult(BaseModel):
-    """Guide candidates and provenance for one input interval.
+    """Guide candidates for one input interval.
 
     Attributes:
         sequence_id (str): Reference record or contig identifier.
         region_start (int): 1-indexed inclusive interval start.
         region_end (int): 1-indexed inclusive interval end.
-        sequence_sha256 (str): SHA256 of the normalized interval sequence.
-        reference_id (str | None): Optional versioned assembly identifier.
-        reference_sha256 (str | None): Optional source-reference checksum.
+        reference_id (str | None): Optional assembly the coordinates refer to.
         candidates (list[CRISPRGuideCandidate]): Deterministically ordered guide candidates.
         ambiguous_windows_skipped (int): Windows excluded for non-ACGT protospacer or PAM bases.
     """
@@ -236,10 +192,8 @@ class CRISPRGuideRegionResult(BaseModel):
     sequence_id: str = Field(title="Sequence Identifier", description="Reference record or contig identifier")
     region_start: int = Field(title="Region Start", description="1-indexed inclusive interval start")
     region_end: int = Field(title="Region End", description="1-indexed inclusive interval end")
-    sequence_sha256: str = Field(title="Sequence SHA256", description="SHA256 of the normalized interval sequence")
-    reference_id: str | None = Field(default=None, title="Reference Identifier", description="Assembly identifier")
-    reference_sha256: str | None = Field(
-        default=None, title="Reference SHA256", description="Source-reference checksum"
+    reference_id: str | None = Field(
+        default=None, title="Reference Identifier", description="Assembly the coordinates refer to"
     )
     candidates: list[CRISPRGuideCandidate] = Field(
         default_factory=list, title="Candidates", description="PAM-compatible protospacers"
@@ -260,7 +214,6 @@ class CRISPRGuideEnumerationOutput(BaseToolOutput):
         strands (Literal['both', 'plus', 'minus']): Scanned PAM-bearing strands.
         context_5p (int): Requested exterior 5-prime context.
         context_3p (int): Requested exterior 3-prime context.
-        nuclease (str): Descriptive nuclease identity.
     """
 
     results: list[CRISPRGuideRegionResult] = Field(title="Results", description="One result per input region")
@@ -270,7 +223,6 @@ class CRISPRGuideEnumerationOutput(BaseToolOutput):
     strands: Literal["both", "plus", "minus"] = Field(title="Strands", description="Scanned PAM strands")
     context_5p: int = Field(title="5-prime Context", description="Requested exterior 5-prime context")
     context_3p: int = Field(title="3-prime Context", description="Requested exterior 3-prime context")
-    nuclease: str = Field(title="Nuclease", description="Descriptive nuclease identity")
 
     def __len__(self) -> int:
         return len(self.results)
@@ -351,10 +303,8 @@ def _enumerate_strand(
             ambiguous_skipped += 1
             continue
 
-        requested_start = target_start - config.context_5p
-        requested_end = target_start + target_length + config.context_3p
-        context_start = max(0, requested_start)
-        context_end = min(len(sequence), requested_end)
+        context_start = max(0, target_start - config.context_5p)
+        context_end = min(len(sequence), target_start + target_length + config.context_3p)
         genomic_context = _reference_bounds(region, context_start, context_end, strand)
         genomic_protospacer = _reference_bounds(region, *protospacer_slice, strand)
         genomic_pam = _reference_bounds(region, *pam_slice, strand)
@@ -364,7 +314,6 @@ def _enumerate_strand(
                 pam=pam_sequence,
                 pam_side=config.pam_side,
                 pam_strand=strand,
-                target_strand="-" if strand == "+" else "+",
                 protospacer_start=genomic_protospacer[0],
                 protospacer_end=genomic_protospacer[1],
                 pam_start=genomic_pam[0],
@@ -372,10 +321,6 @@ def _enumerate_strand(
                 context_sequence=sequence[context_start:context_end],
                 context_start=genomic_context[0],
                 context_end=genomic_context[1],
-                context_complete=requested_start >= 0 and requested_end <= len(sequence),
-                context_is_canonical=not bool(set(sequence[context_start:context_end]) - set("ACGT")),
-                context_5p_length=target_start - context_start,
-                context_3p_length=context_end - (target_start + target_length),
             )
         )
     return candidates, ambiguous_skipped
@@ -415,7 +360,7 @@ def run_crispr_guides_enumerate(
         instance (Any): Reserved tool execution instance.
 
     Returns:
-        CRISPRGuideEnumerationOutput: One provenance-bearing candidate bundle per interval.
+        CRISPRGuideEnumerationOutput: One candidate bundle per interval.
     """
     results = []
     requested_strands: tuple[Literal["+", "-"], ...]
@@ -439,9 +384,7 @@ def run_crispr_guides_enumerate(
                 sequence_id=region.sequence_id,
                 region_start=region.start,
                 region_end=region.start + len(region.sequence) - 1,
-                sequence_sha256=hashlib.sha256(region.sequence.encode()).hexdigest(),
                 reference_id=region.reference_id,
-                reference_sha256=region.reference_sha256,
                 candidates=candidates,
                 ambiguous_windows_skipped=ambiguous_skipped,
             )
@@ -456,6 +399,5 @@ def run_crispr_guides_enumerate(
         strands=config.strands,
         context_5p=config.context_5p,
         context_3p=config.context_3p,
-        nuclease=config.nuclease,
-        metadata={"coordinate_system": "1-indexed-inclusive", "selection_applied": False, "scoring_applied": False},
+        metadata={"coordinate_system": "1-indexed-inclusive"},
     )
