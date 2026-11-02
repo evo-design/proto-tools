@@ -1662,12 +1662,14 @@ class ToolInstance:
 
         The foundation env is a shared micromamba environment at
         ``PROTO_HOME/.foundation_env/`` containing git, curl, make, cmake,
-        pkg-config, gcc, and gxx from conda-forge. Standalone tool setup
-        scripts get its ``bin/`` prepended to PATH so they can compile and
-        download regardless of the host system.
+        pkg-config, binutils, gcc, and gxx from conda-forge
+        (``foundation_env.FOUNDATION_TOOLS`` plus the compilers). Standalone tool
+        setup scripts get its ``bin/`` prepended to PATH so they can compile and
+        download regardless of the host system. An existing env missing one of
+        those tools (built before it was added) has the missing packages installed.
 
-        Skipped entirely when the host already provides those tools at a
-        recent enough version — see ``foundation_env.host_has_foundation_tools``.
+        Skipped entirely when the host already provides every one of those tools at
+        a recent enough version — see ``foundation_env.host_has_foundation_tools``.
         Override with ``PROTO_USE_FOUNDATION_ENV=1`` to force-install or ``=0``
         to force-skip (without probing).
 
@@ -1678,7 +1680,12 @@ class ToolInstance:
             Path | None: Path to the foundation env root, or ``None`` if the
                 host satisfies the contract and creation was skipped.
         """
-        from proto_tools.utils.foundation_env import MIN_FOUNDATION_GCC, host_has_foundation_tools
+        from proto_tools.utils.foundation_env import (
+            FOUNDATION_TOOLS,
+            MIN_FOUNDATION_GCC,
+            host_has_foundation_tools,
+            missing_foundation_packages,
+        )
 
         override = os.environ.get("PROTO_USE_FOUNDATION_ENV")
         if override == "0":
@@ -1691,7 +1698,7 @@ class ToolInstance:
         foundation_path = ToolInstance._get_foundation_env_path()
         marker = foundation_path / ".ready"
 
-        if marker.exists():
+        if marker.exists() and not missing_foundation_packages(foundation_path):
             return foundation_path
 
         from filelock import FileLock
@@ -1702,16 +1709,36 @@ class ToolInstance:
         lock = FileLock(foundation_path.parent / ".foundation_env.lock", timeout=600)
         with lock:
             # Re-check after acquiring lock - another process may have created it
-            if marker.exists():
+            missing = missing_foundation_packages(foundation_path) if marker.exists() else None
+            if missing == []:
                 return foundation_path
 
             mamba_bin = ToolInstance._ensure_micromamba()
             mamba_root = ToolInstance._get_micromamba_root()
+            mamba_env = {**os.environ, "MAMBA_ROOT_PREFIX": str(mamba_root)}
+
+            if missing:
+                logger.info("Adding %s to foundation environment at %s...", ", ".join(missing), foundation_path)
+                set_substatus("Updating foundation environment")
+                try:
+                    subprocess.run(
+                        [str(mamba_bin), "install", "-y", "-p", str(foundation_path), *missing, "-c", "conda-forge"],
+                        check=True,
+                        capture_output=True,
+                        env=mamba_env,
+                    )
+                except subprocess.CalledProcessError as e:
+                    detail = ToolInstance._called_process_detail(e)
+                    logger.error("Failed to update foundation environment:\n%s", detail)
+                    raise RuntimeError(
+                        f"foundation_env: micromamba install {' '.join(missing)} failed at {foundation_path} "
+                        f"(exit {e.returncode}): {' | '.join(detail.splitlines()) or '<no stderr>'}"
+                    ) from e
+                return foundation_path
 
             logger.info("Creating foundation environment at %s...", foundation_path)
             set_substatus("Setting up foundation environment (git, curl, gcc)")
 
-            mamba_env = {**os.environ, "MAMBA_ROOT_PREFIX": str(mamba_root)}
             # Pin to MIN_FOUNDATION_GCC as a floor - keeps the installed env at
             # least as new as the threshold we accept on the host, so behavior
             # matches whether tools fall through to the host or use this env.
@@ -1725,11 +1752,7 @@ class ToolInstance:
                         "-y",
                         "-p",
                         str(foundation_path),
-                        "git",
-                        "curl",
-                        "make",
-                        "cmake",
-                        "pkg-config",
+                        *FOUNDATION_TOOLS.values(),
                         gcc_pin,
                         gxx_pin,
                         "-c",

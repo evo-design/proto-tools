@@ -1913,6 +1913,7 @@ def _all_foundation_tools_present() -> dict[str, str]:
         "make": "/usr/bin/make",
         "cmake": "/usr/bin/cmake",
         "pkg-config": "/usr/bin/pkg-config",
+        "ar": "/usr/bin/ar",
         "gcc": "/usr/bin/gcc",
         "g++": "/usr/bin/g++",
     }
@@ -1969,12 +1970,13 @@ def test_host_probe_falls_through_when_gcc_too_old(monkeypatch, tmp_path):
     assert result == foundation_path
 
 
-def test_host_probe_falls_through_when_binary_missing(monkeypatch):
-    """Missing g++ → probe returns False even if gcc is present and modern."""
+@pytest.mark.parametrize("missing_tool", ["git", "curl", "make", "cmake", "pkg-config", "ar", "gcc", "g++"])
+def test_host_probe_falls_through_when_binary_missing(monkeypatch, missing_tool):
+    """Any one missing binary → probe returns False, so the foundation env is used."""
     from proto_tools.utils.foundation_env import MIN_FOUNDATION_GCC, host_has_foundation_tools
 
     monkeypatch.delenv("PROTO_USE_FOUNDATION_ENV", raising=False)
-    present = {**_all_foundation_tools_present(), "g++": None}
+    present = {**_all_foundation_tools_present(), missing_tool: None}
     with (
         patch("proto_tools.utils.foundation_env.shutil.which", side_effect=_fake_which(present)),
         patch("subprocess.run", side_effect=_fake_compiler_version(MIN_FOUNDATION_GCC)),
@@ -2014,6 +2016,49 @@ def test_use_env_var_one_forces_install_even_when_host_modern(monkeypatch, tmp_p
 
     assert install_called, "PROTO_USE_FOUNDATION_ENV=1 should force install"
     assert result == foundation_path
+
+
+def _ready_foundation_env(tmp_path, monkeypatch, tools):
+    """Build a fake ready foundation env under tmp_path whose bin/ holds ``tools``."""
+    monkeypatch.setenv("PROTO_USE_FOUNDATION_ENV", "1")
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    foundation_path = ToolInstance._get_foundation_env_path()
+    (foundation_path / "bin").mkdir(parents=True)
+    for tool in tools:
+        (foundation_path / "bin" / tool).touch()
+    (foundation_path / ".ready").touch()
+    return foundation_path
+
+
+def test_ready_foundation_env_missing_ar_installs_binutils(monkeypatch, tmp_path):
+    """A ready env built before ar joined the contract gets binutils installed, not recreated."""
+    foundation_path = _ready_foundation_env(tmp_path, monkeypatch, ["git", "curl", "make", "cmake", "pkg-config"])
+    commands = []
+
+    def _fake_run(cmd, *args, **kwargs):
+        commands.append(cmd)
+        return MagicMock(returncode=0)
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        patch.object(ToolInstance, "_ensure_micromamba", return_value=Path("/fake/mamba")),
+    ):
+        result = ToolInstance._ensure_foundation_env()
+
+    assert result == foundation_path
+    assert len(commands) == 1
+    assert commands[0][:5] == ["/fake/mamba", "install", "-y", "-p", str(foundation_path)]
+    assert "binutils" in commands[0]
+
+
+def test_ready_foundation_env_with_every_tool_runs_nothing(monkeypatch, tmp_path):
+    """A ready env that already has every foundation tool is returned without calling micromamba."""
+    from proto_tools.utils.foundation_env import FOUNDATION_TOOLS
+
+    foundation_path = _ready_foundation_env(tmp_path, monkeypatch, FOUNDATION_TOOLS)
+    with patch("subprocess.run") as mock_run:
+        assert ToolInstance._ensure_foundation_env() == foundation_path
+        mock_run.assert_not_called()
 
 
 # ── Tool-env path guard (conda binary-relocation safety) ─────────────────────
