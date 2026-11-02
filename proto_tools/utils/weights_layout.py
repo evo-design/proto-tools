@@ -55,6 +55,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "enformer",
         "esm2",
         "esm_if1",
+        "esmfold",
         "fampnn",
         "foldmason",
         "glm2",
@@ -166,6 +167,7 @@ MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "esmfold": (HFRepo("facebook/esmfold_v1"),),
     "na_mpnn_specificity": (WeightsDir("na_mpnn_specificity"),),
     "puffin": (WeightsDir("puffin"),),
     "rfdiffusion3": (WeightsDir("rfdiffusion3"),),

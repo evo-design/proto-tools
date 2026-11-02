@@ -72,7 +72,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 59 | `structure_prediction/alphafold3` |  |  |  |  |  |  |
 | 60 | `structure_prediction/boltz2` |  |  |  |  |  |  |
 | 61 | `structure_prediction/chai1` |  |  |  |  |  |  |
-| 62 | `structure_prediction/esmfold` |  |  |  |  |  |  |
+| 62 | `structure_prediction/esmfold` |  | esmfold | `huggingface/hub/models--facebook--esmfold_v1` (ESM2-3B bundled) | 8 GB | ✅✅✅✅✅ | No sub-model downloads (ESM2-3B is inside the repo). Step 3 wrote no new hub blobs: migrated copy loaded. |
 | 63 | `structure_prediction/esmfold2` | biohub_esm |  |  |  |  |  |
 | 64 | `structure_prediction/opendde` |  |  |  |  |  |  |
 | 65 | `structure_prediction/protenix` |  |  |  |  |  |  |
