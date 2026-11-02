@@ -145,6 +145,19 @@ if weights_dir:
 
 HF-based tools need no code changes. `persistent_worker.py` sets `HF_HOME` automatically.
 
+Use the shared helpers rather than writing download or path code in a tool:
+
+- `require_weights_dir(name)`: like `resolve_weights_dir`, but raises instead of returning `None`. Use it instead of falling back to a temp directory.
+- `download_weights(url, dest, sha256=..., md5=...)`: downloads once under a file lock, verifies the checksum, and renames into place, so concurrent workers on a shared cache never see a partial file. It refuses non-HTTPS URLs and sends `HF_TOKEN` only to `huggingface.co`. It is the Python counterpart of `proto_download_verified`.
+- `export_weights_dir(env_var, name, prepend=False)`: points a library's own location variable (`FOUNDRY_CHECKPOINT_DIRS`, `CHAI_DOWNLOADS_DIR`, `PROTENIX_ROOT_DIR`) at the weights directory. `prepend=True` keeps an existing search path after it.
+
+```python
+from standalone_helpers import download_weights, export_weights_dir, require_weights_dir
+
+export_weights_dir("FOUNDRY_CHECKPOINT_DIRS", "rf3", prepend=True)
+ckpt = download_weights(URL, Path(require_weights_dir("my_tool")) / "model.pt", sha256=SHA256)
+```
+
 For `setup.sh` scripts that download weights during environment setup, use the shared helpers from `standalone_helpers.sh` (resolved off `PATH`):
 
 ```bash

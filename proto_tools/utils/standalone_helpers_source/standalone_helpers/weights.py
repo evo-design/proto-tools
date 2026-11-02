@@ -1,11 +1,23 @@
-"""Weights directory resolution for standalone scripts.
+"""Weights location and download helpers for standalone scripts.
 
 Resolves the canonical location where a tool should store its model weights,
 following the ``PROTO_HOME`` / ``PROTO_MODEL_CACHE`` / ``PROTO_{TOOL}_WEIGHTS_DIR``
-precedence documented in ``notes/storage.md``.
+precedence documented in ``notes/storage.md``, hands that location to libraries
+that read their own environment variable, and downloads files into it safely.
 """
 
+import contextlib
+import fcntl
+import hashlib
 import os
+import stat
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections.abc import Iterator
+from pathlib import Path
 
 from .proto_logging import get_logger
 
@@ -90,3 +102,264 @@ def resolve_weights_dir(toolkit: str) -> str | None:
         path = os.path.join(path, "weights")
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def require_weights_dir(toolkit: str) -> str:
+    """Return ``resolve_weights_dir(toolkit)``, raising instead of returning ``None``.
+
+    Use this where a tool must download or read weights and has no sensible location of its own,
+    instead of falling back to a temp directory that silently re-downloads on every machine.
+
+    Args:
+        toolkit (str): The name whose weights directory to resolve.
+
+    Returns:
+        str: Absolute path string to the weights directory (created if missing).
+
+    Raises:
+        RuntimeError: If no directory can be resolved (``PROTO_MODEL_CACHE=NONE`` outside a venv).
+    """
+    path = resolve_weights_dir(toolkit)
+    if path is None:
+        raise RuntimeError(
+            f"{toolkit}: no weights directory (PROTO_MODEL_CACHE=NONE and no venv); "
+            f"set PROTO_{toolkit.upper()}_WEIGHTS_DIR"
+        )
+    return path
+
+
+def export_weights_dir(env_var: str, toolkit: str, *, prepend: bool = False) -> str:
+    """Point a library's own weights environment variable at the managed weights directory.
+
+    Libraries such as Foundry (``FOUNDRY_CHECKPOINT_DIRS``), Chai-1 (``CHAI_DOWNLOADS_DIR``), and
+    Protenix (``PROTENIX_ROOT_DIR``) read their download location from an environment variable.
+    Setting it through this helper keeps every toolkit on one rule: the managed directory wins,
+    and ``PROTO_{TOOLKIT}_WEIGHTS_DIR`` is the way to choose another location.
+
+    Args:
+        env_var (str): The library's environment variable.
+        toolkit (str): The name whose weights directory to resolve.
+        prepend (bool): For a search-path variable, put the managed directory first and keep any
+            directories already listed after it, instead of replacing the value.
+
+    Returns:
+        str: The managed weights directory now named by ``env_var``.
+    """
+    path = require_weights_dir(toolkit)
+    existing = os.environ.get(env_var, "")
+    if prepend and existing:
+        others = [p for p in existing.split(os.pathsep) if p and p != path]
+        os.environ[env_var] = os.pathsep.join([path, *others])
+    else:
+        os.environ[env_var] = path
+    return path
+
+
+LOCK_TIMEOUT_SECONDS = 600
+
+
+@contextlib.contextmanager
+def file_lock(lock_path: str | Path, timeout: float = LOCK_TIMEOUT_SECONDS) -> Iterator[None]:
+    """Hold an exclusive cross-process ``flock`` on ``lock_path`` so concurrent workers don't race.
+
+    The kernel releases the lock when its holder exits, so a crashed downloader leaves no stale
+    lock. The 0-byte lock file is never unlinked; deleting it would let a second process lock a
+    fresh inode while a third still holds the old one.
+
+    Args:
+        lock_path (str | Path): Lock file to create and lock.
+        timeout (float): Seconds to wait for the lock before giving up.
+
+    Raises:
+        TimeoutError: If the lock is not acquired within ``timeout`` seconds.
+    """
+    lock_path = Path(lock_path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+    try:
+        started = time.monotonic()
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as err:
+                if time.monotonic() - started > timeout:
+                    raise TimeoutError(f"timed out after {timeout:.0f}s waiting for lock {lock_path}") from err
+                time.sleep(1)
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def file_digest(path: str | Path, algorithm: str = "sha256") -> str:
+    """Return the hex digest of a file, read in 1 MiB chunks.
+
+    Args:
+        path (str | Path): File to hash.
+        algorithm (str): A ``hashlib`` algorithm name, e.g. ``"sha256"`` or ``"md5"``.
+
+    Returns:
+        str: Lowercase hex digest.
+    """
+    digest = hashlib.new(algorithm)
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_trusted_hf_url(url: str) -> bool:
+    """Return whether ``url`` is HTTPS on ``huggingface.co`` or a real subdomain (not ``evil-huggingface.co``)."""
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "https" and (host == "huggingface.co" or host.endswith(".huggingface.co"))
+
+
+def redact_url(url: str) -> str:
+    """Return ``url`` reduced to its origin so signed paths, queries, and userinfo stay out of logs.
+
+    Args:
+        url (str): URL that may carry credentials.
+
+    Returns:
+        str: Scheme and host (and port) with any path or query replaced by fixed markers.
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+        netloc = parsed.hostname or ""
+        if ":" in netloc:
+            netloc = f"[{netloc}]"
+        if parsed.port:  # accessing .port raises ValueError for a malformed port
+            netloc = f"{netloc}:{parsed.port}"
+    except ValueError:
+        return "<unparseable-url>"
+    cleaned = parsed._replace(
+        netloc=netloc,
+        path=("/<redacted-path>" if parsed.path else ""),
+        params="",
+        query=("REDACTED" if parsed.query else ""),
+        fragment="",
+    )
+    return urllib.parse.urlunparse(cleaned)
+
+
+class _SecureRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Refuse non-HTTPS redirects and drop ``Authorization`` once a hop leaves Hugging Face.
+
+    Weights are often unpickled after download, so an HTTPS-to-HTTP downgrade would let a network
+    attacker swap in an arbitrary pickle; stripping the token alone is not enough.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        if urllib.parse.urlparse(newurl).scheme != "https":
+            raise urllib.error.HTTPError(newurl, code, "refusing insecure (non-HTTPS) redirect", headers, fp)
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and not _is_trusted_hf_url(newurl):
+            new.headers.pop("Authorization", None)
+            new.unredirected_hdrs.pop("Authorization", None)
+        return new
+
+
+def _is_regular_file(path: Path) -> bool:
+    try:
+        return stat.S_ISREG(path.lstat().st_mode)
+    except FileNotFoundError:
+        return False
+
+
+def _shared_cache_file_mode(cache_dir: Path) -> int:
+    """Return an owner-writable mode readable by whoever may traverse ``cache_dir`` (shared team caches)."""
+    directory_mode = cache_dir.stat().st_mode
+    mode = stat.S_IRUSR | stat.S_IWUSR
+    if directory_mode & stat.S_IXGRP:
+        mode |= stat.S_IRGRP
+    if directory_mode & stat.S_IXOTH:
+        mode |= stat.S_IROTH
+    return mode
+
+
+def _verified(path: Path, sha256: str | None, md5: str | None) -> bool:
+    if not _is_regular_file(path):
+        return False
+    if sha256 and file_digest(path, "sha256") != sha256:
+        return False
+    return not (md5 and file_digest(path, "md5") != md5)
+
+
+def download_weights(
+    url: str,
+    dest: str | Path,
+    *,
+    sha256: str | None = None,
+    md5: str | None = None,
+    timeout: float = 120,
+    retries: int = 3,
+) -> Path:
+    """Download ``url`` to ``dest`` once, safely, for concurrent workers on a shared cache.
+
+    A ``dest`` that already exists (and matches the checksum, when one is given) is returned
+    without a request. Otherwise the download holds ``.{name}.download.lock`` beside ``dest``,
+    writes an exclusively created temp file, verifies it, and renames it into place, so readers
+    never see a partial file. ``HF_TOKEN`` is sent only to ``https://huggingface.co`` and is
+    dropped if a redirect leaves it; non-HTTPS URLs and redirects are refused. This is the
+    Python counterpart of ``proto_download_verified`` in ``standalone_helpers.sh``.
+
+    Args:
+        url (str): HTTPS URL to fetch.
+        dest (str | Path): Final file path; its parent is created.
+        sha256 (str | None): Expected SHA-256 hex digest.
+        md5 (str | None): Expected MD5 hex digest, for sources that only publish MD5.
+        timeout (float): Per-request socket timeout in seconds.
+        retries (int): Attempts for transient network errors (``URLError`` or HTTP 5xx).
+
+    Returns:
+        Path: ``dest``.
+
+    Raises:
+        ValueError: If ``url`` is not HTTPS.
+        RuntimeError: If the downloaded file does not match the expected checksum.
+    """
+    dest = Path(dest)
+    if urllib.parse.urlparse(url).scheme != "https":
+        raise ValueError(f"refusing non-HTTPS weights URL {redact_url(url)!r}")
+    if _verified(dest, sha256, md5):
+        return dest
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with file_lock(dest.parent / f".{dest.name}.download.lock"):
+        if _verified(dest, sha256, md5):
+            return dest
+        for attempt in range(1, retries + 1):
+            # mkstemp, not a predictable name: on a shared cache another user must not be able
+            # to preplant a symlink that this download would follow and truncate
+            fd, tmp_name = tempfile.mkstemp(prefix=f".{dest.name}.", suffix=".tmp", dir=dest.parent)
+            tmp = Path(tmp_name)
+            handle = os.fdopen(fd, "wb")
+            try:
+                logger.info("Downloading %s to %s", redact_url(url), dest)
+                request = urllib.request.Request(url)  # noqa: S310 -- scheme checked above (HTTPS only)
+                if _is_trusted_hf_url(url) and os.environ.get("HF_TOKEN"):
+                    request.add_header("Authorization", f"Bearer {os.environ['HF_TOKEN']}")
+                opener = urllib.request.build_opener(_SecureRedirectHandler())
+                with handle:
+                    with opener.open(request, timeout=timeout) as response:
+                        while chunk := response.read(1024 * 1024):
+                            handle.write(chunk)
+                    handle.flush()
+                    os.fchmod(handle.fileno(), _shared_cache_file_mode(dest.parent))
+                if not _verified(tmp, sha256, md5):
+                    raise RuntimeError(f"checksum mismatch for {redact_url(url)} (expected {sha256 or md5})")
+                os.replace(tmp, dest)
+                return dest
+            except (urllib.error.URLError, TimeoutError) as err:
+                is_client_error = isinstance(err, urllib.error.HTTPError) and err.code < 500
+                if is_client_error or attempt == retries:
+                    raise
+                logger.warning("Download of %s failed (%s); retry %d/%d", redact_url(url), err, attempt, retries - 1)
+                time.sleep(5 * attempt)
+            finally:
+                handle.close()
+                with contextlib.suppress(FileNotFoundError):
+                    tmp.unlink()
+    return dest

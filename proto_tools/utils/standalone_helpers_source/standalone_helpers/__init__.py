@@ -72,7 +72,15 @@ from .vocabulary import (
     RNA_NUCLEOTIDES,
     gather_indices,
 )
-from .weights import resolve_weights_dir
+from .weights import (
+    download_weights,
+    export_weights_dir,
+    file_digest,
+    file_lock,
+    redact_url,
+    require_weights_dir,
+    resolve_weights_dir,
+)
 
 __all__ = [
     # logging
@@ -124,5 +132,11 @@ __all__ = [
     # subprocess
     "run_teed",
     # weights
+    "download_weights",
+    "export_weights_dir",
+    "file_digest",
+    "file_lock",
+    "redact_url",
+    "require_weights_dir",
     "resolve_weights_dir",
 ]
