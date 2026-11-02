@@ -75,7 +75,7 @@ Use these tools to collect source-backed design evidence and natural examples be
 - `document_id` takes a Paperclip id (`PMC11754230`, `bio_29a07e4e799b`, `arx_2605.11347`) or one as copied: lowercase `pmc...`, a PMC or Paperclip article link, or an arXiv id or link. Find a paper by DOI or PMID with `paperclip-literature-lookup` first.
 - The paper's citation details come back typed in `document.paper`, the same fields a search hit carries.
 - Prefer `read="lines"` (the default, first 100 lines) or `read="grep"` with a `pattern`; `max_matches` (20 by default) caps how many matching lines a grep returns. GXL advises against reading whole papers.
-- `read="full_text"` returns the complete paper as `content`, read in pages past Paperclip's 50,000-character limit per reply. A long paper can run to 100,000 characters or more.
+- `read="full_text"` returns the complete paper as `content`, which can be long.
 - Set `PAPERCLIP_API_KEY` before retrieval, or `PAPERCLIP_TOKEN` for a bearer token; the config fields `paperclip_api_key` and `paperclip_token` take precedence. The tools do not read credentials saved by an interactive `paperclip login`.
 - `PAPERCLIP_BASE_URL` points the tools at a different Paperclip deployment.
 - Treat literature as evidence for candidate generation, not functional validation.
@@ -86,7 +86,6 @@ Use these tools to collect source-backed design evidence and natural examples be
 
 These notes apply to all four Paperclip tools.
 
-- **For interactive literature research, connect Paperclip's own MCP server instead.** It answers each call about as fast or faster, returns more compact replies written for agents to read, and offers far more than these four tools: claim-level evidence, SQL over the corpus, map and reduce over result sets, figure questions, and clinical trials, FDA documents, and patents. Set it up from the [Paperclip install guide](https://paperclip.gxl.ai/install) ([Claude Code instructions](https://paperclip.gxl.ai/install#install-claude-code)); it serves `https://paperclip.gxl.ai/mcp` with an `X-API-Key` header, using a key from [Paperclip's API keys page](https://paperclip.gxl.ai/keys).
-- **Use these tools when a program consumes the results**, since they return typed fields (DOI, PMID, year, journal, line-numbered matches, citation URLs) rather than formatted text; when you need a paper's complete text, since Paperclip's `cat` stops at 50,000 characters and `read="full_text"` reads past it; or when you want literature retrieval alongside other proto-tools tools through one connection, with each output recording its `tool_version`.
+- **For interactive or agentic work, use the Paperclip MCP server.** See the [Paperclip install guide](https://paperclip.gxl.ai/install) to connect it to your agent. These tools are for calling Paperclip from Python programs.
 - **Requires authenticated network access.** No literature database is bundled or synchronized locally; every call is an HTTPS request to the Paperclip service.
 - **Runs in process on CPU.** There is no environment to build and no worker to start; runtime is dominated by remote retrieval.
