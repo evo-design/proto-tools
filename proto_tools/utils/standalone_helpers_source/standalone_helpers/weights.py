@@ -302,7 +302,7 @@ def download_weights(
     A ``dest`` that already exists (and matches the checksum, when one is given) is returned
     without a request. Otherwise the download holds ``.{name}.download.lock`` beside ``dest``,
     writes an exclusively created temp file, verifies it, and renames it into place, so readers
-    never see a partial file. ``HF_TOKEN`` is sent only to ``https://huggingface.co`` and is
+    never see a partial file. ``HF_TOKEN`` (or ``HUGGING_FACE_HUB_TOKEN``) is sent only to ``https://huggingface.co`` and is
     dropped if a redirect leaves it; non-HTTPS URLs and redirects are refused. This is the
     Python counterpart of ``proto_download_verified`` in ``standalone_helpers.sh``.
 
@@ -339,8 +339,10 @@ def download_weights(
             try:
                 logger.info("Downloading %s to %s", redact_url(url), dest)
                 request = urllib.request.Request(url)  # noqa: S310 -- scheme checked above (HTTPS only)
-                if _is_trusted_hf_url(url) and os.environ.get("HF_TOKEN"):
-                    request.add_header("Authorization", f"Bearer {os.environ['HF_TOKEN']}")
+                # The worker resolves file-based tokens (hf auth login, git credentials) into HF_TOKEN
+                token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+                if token and _is_trusted_hf_url(url):
+                    request.add_header("Authorization", f"Bearer {token}")
                 opener = urllib.request.build_opener(_SecureRedirectHandler())
                 with handle:
                     with opener.open(request, timeout=timeout) as response:
