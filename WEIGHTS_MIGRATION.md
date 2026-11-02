@@ -76,7 +76,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 63 | `structure_prediction/esmfold2` | biohub_esm |  |  |  |  |  |
 | 64 | `structure_prediction/opendde` |  |  |  |  |  |  |
 | 65 | `structure_prediction/protenix` |  |  |  |  |  |  |
-| 66 | `structure_prediction/rf3` |  |  |  |  |  |  |
+| 66 | `structure_prediction/rf3` |  | rf3 | `rf3/rf3_foundry_01_24_latest_remapped.ckpt` (setup.sh `foundry install`) | 3 GB | ✅✅✅✅✅ | No ~/.foundry or .env writes observed. |
 | 67 | `structure_prediction/viennarna` |  |  |  |  |  |  |
 | 68 | `structure_prediction/x3dna` |  |  |  |  |  |  |
 | 69 | `structure_scoring/dssp` |  |  |  |  |  |  |
