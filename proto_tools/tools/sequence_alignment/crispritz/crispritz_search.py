@@ -12,7 +12,6 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField, ToolInstance
 
 CRISPRITZ_VERSION = "2.8.1"
-CRISPRITZ_COMMIT = "1b4cfca5059bb4fc3230b583badafe64494e2cce"
 IUPAC_DNA = set("ACGTRYSWKMBDHVN")
 
 
@@ -85,7 +84,6 @@ class CRISPRitzSearchConfig(BaseConfig):
     Attributes:
         pam (str): IUPAC PAM motif without protospacer bases.
         pam_side (Literal["three_prime", "five_prime"]): PAM position relative to the protospacer.
-        nuclease (str): Nuclease identity retained as provenance.
         max_mismatches (int): Inclusive substitution limit per hit.
         max_dna_bulges (int): Inclusive DNA-bulge limit per hit.
         max_rna_bulges (int): Inclusive RNA-bulge limit per hit.
@@ -97,9 +95,6 @@ class CRISPRitzSearchConfig(BaseConfig):
     pam: str = ConfigField(default="NGG", title="PAM", description="IUPAC PAM motif without protospacer bases")
     pam_side: Literal["three_prime", "five_prime"] = ConfigField(
         default="three_prime", title="PAM Side", description="PAM position relative to the protospacer"
-    )
-    nuclease: str = ConfigField(
-        default="SpCas9", title="Nuclease", description="Descriptive nuclease identity retained in provenance"
     )
     max_mismatches: int = ConfigField(
         default=4, ge=0, title="Maximum Mismatches", description="Inclusive substitution limit per hit"
@@ -136,14 +131,6 @@ class CRISPRitzSearchConfig(BaseConfig):
         return normalized
 
 
-class CRISPRitzReferenceFile(BaseModel):
-    """One FASTA source included in the indexed reference."""
-
-    path: str = Field(title="Path", description="Resolved source FASTA path")
-    sha256: str = Field(title="SHA256", description="SHA256 checksum of the source FASTA bytes")
-    size_bytes: int = Field(title="Size Bytes", description="Source FASTA size in bytes")
-
-
 class CRISPRitzHit(BaseModel):
     """One CRISPRitz target or off-target alignment."""
 
@@ -157,8 +144,8 @@ class CRISPRitzHit(BaseModel):
     guide_alignment: str = Field(title="Guide Alignment", description="CRISPRitz crRNA alignment")
     target_alignment: str = Field(title="Target Alignment", description="CRISPRitz genomic alignment")
     chromosome: str = Field(title="Chromosome", description="Reference FASTA record identifier")
-    position: int = Field(title="Position", description="Zero-based CRISPRitz genomic start coordinate")
-    cluster_position: int = Field(title="Cluster Position", description="Zero-based CRISPRitz cluster coordinate")
+    start: int = Field(title="Start", description="1-indexed inclusive genomic start of the aligned target")
+    end: int = Field(title="End", description="1-indexed inclusive genomic end of the aligned target")
     strand: Literal["+", "-"] = Field(title="Strand", description="Genomic target strand")
     mismatches: int = Field(title="Mismatches", description="Substitution count excluding bulges")
     bulge_size: int = Field(title="Bulge Size", description="Bulge length")
@@ -173,12 +160,8 @@ class CRISPRitzSearchOutput(BaseToolOutput):
         guides (list[str]): Normalized queried protospacers.
         reference_id (str | None): Optional reference accession.
         reference_sha256 (str): Combined reference FASTA checksum.
-        reference_files (list[CRISPRitzReferenceFile]): Checksummed reference files.
-        index_key (str): Content- and parameter-addressed index key.
         index_reused (bool): Whether a completed index was reused.
         crispritz_version (str): Pinned CRISPRitz version.
-        crispritz_commit (str): Verified CRISPRitz source revision.
-        nuclease (str): Caller-supplied nuclease identity.
         pam (str): IUPAC PAM motif.
         pam_side (Literal["three_prime", "five_prime"]): PAM orientation.
         max_mismatches (int): Search substitution limit.
@@ -191,14 +174,8 @@ class CRISPRitzSearchOutput(BaseToolOutput):
     guides: list[str] = Field(title="Guides", description="Normalized PAM-free queried protospacers")
     reference_id: str | None = Field(default=None, title="Reference Identifier", description="Reference accession")
     reference_sha256: str = Field(title="Reference SHA256", description="Combined reference FASTA checksum")
-    reference_files: list[CRISPRitzReferenceFile] = Field(
-        title="Reference Files", description="Checksummed source FASTA files"
-    )
-    index_key: str = Field(title="Index Key", description="Content- and parameter-addressed index key")
     index_reused: bool = Field(title="Index Reused", description="Whether an existing completed index was reused")
     crispritz_version: str = Field(title="CRISPRitz Version", description="Pinned upstream version")
-    crispritz_commit: str = Field(title="CRISPRitz Commit", description="Verified upstream source revision")
-    nuclease: str = Field(title="Nuclease", description="Caller-supplied nuclease identity")
     pam: str = Field(title="PAM", description="IUPAC PAM motif")
     pam_side: Literal["three_prime", "five_prime"] = Field(title="PAM Side", description="PAM orientation")
     max_mismatches: int = Field(title="Maximum Mismatches", description="Search substitution limit")
@@ -293,17 +270,13 @@ def run_crispritz_search(
         guides=inputs.guides,
         reference_id=inputs.reference_id,
         reference_sha256=payload["reference_sha256"],
-        reference_files=[CRISPRitzReferenceFile.model_validate(item) for item in payload["reference_files"]],
-        index_key=payload["index_key"],
         index_reused=payload["index_reused"],
         crispritz_version=CRISPRITZ_VERSION,
-        crispritz_commit=CRISPRITZ_COMMIT,
-        nuclease=config.nuclease,
         pam=config.pam,
         pam_side=config.pam_side,
         max_mismatches=config.max_mismatches,
         max_dna_bulges=config.max_dna_bulges,
         max_rna_bulges=config.max_rna_bulges,
         max_total_edits=config.max_total_edits,
-        metadata={"coordinate_system": "zero_based_crispritz_native"},
+        metadata={"coordinate_system": "1-indexed-inclusive"},
     )

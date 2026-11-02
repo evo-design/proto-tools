@@ -12,10 +12,8 @@ from proto_tools.tools.sequence_alignment.blast import (
     run_create_blast_db,
 )
 from proto_tools.tools.sequence_alignment.crispritz import (
-    CRISPRITZ_COMMIT,
     CRISPRITZ_VERSION,
     CRISPRitzHit,
-    CRISPRitzReferenceFile,
     CRISPRitzSearchConfig,
     CRISPRitzSearchInput,
     CRISPRitzSearchOutput,
@@ -59,10 +57,8 @@ __all__ = [
     "CreateBlastDbConfig",
     "CreateBlastDbOutput",
     # CRISPRitz
-    "CRISPRITZ_COMMIT",
     "CRISPRITZ_VERSION",
     "CRISPRitzHit",
-    "CRISPRitzReferenceFile",
     "CRISPRitzSearchInput",
     "CRISPRitzSearchConfig",
     "CRISPRitzSearchOutput",

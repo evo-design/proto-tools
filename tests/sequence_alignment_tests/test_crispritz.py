@@ -50,8 +50,8 @@ def test_wrapper_dispatches_batch_and_returns_typed_hits(monkeypatch, tmp_path: 
                     "guide_alignment": "GACTGCATTG-CATGACTGCANNN",
                     "target_alignment": "GACTGCATTGTCATGACTGCAAGG",
                     "chromosome": "chr1",
-                    "position": 798,
-                    "cluster_position": 799,
+                    "start": 799,
+                    "end": 822,
                     "strand": "+",
                     "mismatches": 0,
                     "bulge_size": 1,
@@ -59,8 +59,6 @@ def test_wrapper_dispatches_batch_and_returns_typed_hits(monkeypatch, tmp_path: 
                 }
             ],
             "reference_sha256": "a" * 64,
-            "reference_files": [{"path": "/ref.fna", "sha256": "a" * 64, "size_bytes": 100}],
-            "index_key": "b" * 64,
             "index_reused": False,
         }
 
@@ -78,9 +76,9 @@ def test_wrapper_dispatches_batch_and_returns_typed_hits(monkeypatch, tmp_path: 
     assert captured["payload"]["guides"] == inputs.guides
     assert captured["payload"]["max_total_edits"] == 3
     assert output.hits[0].bulge_type == "dna"
-    assert output.hits[0].position == 798
+    assert (output.hits[0].start, output.hits[0].end) == (799, 822)
     assert output.reference_id == "GCF_example.1"
-    assert output.metadata["coordinate_system"] == "zero_based_crispritz_native"
+    assert output.metadata["coordinate_system"] == "1-indexed-inclusive"
 
 
 def test_missing_reference_fails_before_tool_dispatch(monkeypatch, tmp_path: Path) -> None:
@@ -111,14 +109,10 @@ def test_reference_checksum_is_content_based(tmp_path: Path) -> None:
     first.write_text(">chr1\nACGT\n")
     second.write_bytes(first.read_bytes())
 
-    first_digest, first_files = _hash_references([first])
-    second_digest, second_files = _hash_references([second])
-
-    assert first_digest == second_digest
-    assert first_files[0]["sha256"] == second_files[0]["sha256"]
+    assert _hash_references([first]) == _hash_references([second])
 
 
-def test_parser_preserves_joint_bulge_type_and_zero_based_position(tmp_path: Path) -> None:
+def test_parser_preserves_joint_bulge_type_and_converts_to_1_indexed_coordinates(tmp_path: Path) -> None:
     targets = tmp_path / "result.targets.txt"
     targets.write_text(
         "#Bulge type\tcrRNA\tDNA\tChromosome\tPosition\tCluster Position\tDirection\tMismatches\tBulge Size\tTotal\n"
@@ -129,7 +123,7 @@ def test_parser_preserves_joint_bulge_type_and_zero_based_position(tmp_path: Pat
     assert hit["guide"] == "GACTGCATTGCATGACTGCA"
     assert hit["bulge_type"] == "dna_rna"
     assert hit["crispritz_bulge_type"] == "RNA,DNA"
-    assert hit["position"] == 0
+    assert (hit["start"], hit["end"]) == (1, 23)
 
 
 @pytest.mark.benchmark("crispritz-search")

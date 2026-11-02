@@ -657,7 +657,6 @@ from proto_tools.tools.rna_splicing import (
 
 # Sequence alignment tools
 from proto_tools.tools.sequence_alignment import (
-    CRISPRITZ_COMMIT,
     CRISPRITZ_VERSION,
     BlastSearchConfig,
     BlastSearchInput,
@@ -666,7 +665,6 @@ from proto_tools.tools.sequence_alignment import (
     CreateBlastDbInput,
     CreateBlastDbOutput,
     CRISPRitzHit,
-    CRISPRitzReferenceFile,
     CRISPRitzSearchConfig,
     CRISPRitzSearchInput,
     CRISPRitzSearchOutput,
@@ -1346,10 +1344,8 @@ __all__ = [
     "CreateBlastDbConfig",
     "CreateBlastDbOutput",
     # CRISPRitz
-    "CRISPRITZ_COMMIT",
     "CRISPRITZ_VERSION",
     "CRISPRitzHit",
-    "CRISPRitzReferenceFile",
     "CRISPRitzSearchInput",
     "CRISPRitzSearchConfig",
     "CRISPRitzSearchOutput",

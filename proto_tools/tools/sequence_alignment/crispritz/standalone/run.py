@@ -31,19 +31,17 @@ def _reference_files(value: str) -> list[Path]:
     raise ValueError("reference_fasta must be an existing .fa, .fasta, or .fna file or containing directory")
 
 
-def _hash_references(files: list[Path]) -> tuple[str, list[dict[str, Any]]]:
+def _hash_references(files: list[Path]) -> str:
+    """Return one digest over every source FASTA's contents and size."""
     combined = hashlib.sha256()
-    records = []
     for path in files:
         digest = hashlib.sha256()
         with path.open("rb") as handle:
             while chunk := handle.read(1024 * 1024):
                 digest.update(chunk)
-        hexdigest = digest.hexdigest()
-        combined.update(hexdigest.encode())
+        combined.update(digest.hexdigest().encode())
         combined.update(str(path.stat().st_size).encode())
-        records.append({"path": str(path), "sha256": hexdigest, "size_bytes": path.stat().st_size})
-    return combined.hexdigest(), records
+    return combined.hexdigest()
 
 
 def _write_record(header: str | None, sequence: list[str], directory: Path, index: int) -> None:
@@ -110,7 +108,7 @@ def _ensure_index(
     max_bulges: int,
     threads: int,
     cache_root: Path,
-) -> tuple[Path, str, bool]:
+) -> tuple[Path, bool]:
     pam_spec = (
         ("N" * guide_length + pam, len(pam)) if pam_side == "three_prime" else (pam + "N" * guide_length, -len(pam))
     )
@@ -133,7 +131,7 @@ def _ensure_index(
         fcntl.flock(lock, fcntl.LOCK_EX)
         manifest_path = destination / "manifest.json"
         if manifest_path.is_file() and json.loads(manifest_path.read_text()).get("key_material") == key_material:
-            return destination / "index", index_key, True
+            return destination / "index", True
         if destination.exists():
             shutil.rmtree(destination)
         staging = Path(tempfile.mkdtemp(prefix=f".{index_key}.", dir=cache_root))
@@ -156,7 +154,7 @@ def _ensure_index(
         except BaseException:
             shutil.rmtree(staging, ignore_errors=True)
             raise
-    return destination / "index", index_key, False
+    return destination / "index", False
 
 
 def _guide_from_alignment(alignment: str, pam_length: int, pam_side: str) -> str:
@@ -195,8 +193,8 @@ def _parse_hits(path: Path, pam_length: int, pam_side: str) -> list[dict[str, An
                     "guide_alignment": row["crRNA"],
                     "target_alignment": row["DNA"],
                     "chromosome": row["Chromosome"],
-                    "position": int(row["Position"]),
-                    "cluster_position": int(row["Cluster Position"]),
+                    "start": int(row["Position"]) + 1,
+                    "end": int(row["Position"]) + len(row["DNA"].replace("-", "")),
                     "strand": row["Direction"],
                     "mismatches": int(row["Mismatches"]),
                     "bulge_size": int(row["Bulge Size"]),
@@ -209,7 +207,7 @@ def _parse_hits(path: Path, pam_length: int, pam_side: str) -> list[dict[str, An
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Build or reuse the reference index and enumerate off-targets."""
     files = _reference_files(input_dict["reference_fasta"])
-    reference_sha256, reference_files = _hash_references(files)
+    reference_sha256 = _hash_references(files)
     guides = input_dict["guides"]
     pam = input_dict["pam"]
     pam_side = input_dict["pam_side"]
@@ -220,7 +218,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         if input_dict.get("index_cache_dir")
         else default_cache
     )
-    index_dir, index_key, index_reused = _ensure_index(
+    index_dir, index_reused = _ensure_index(
         files, reference_sha256, len(guides[0]), pam, pam_side, max_bulges, input_dict["threads"], cache_root
     )
     with tempfile.TemporaryDirectory(prefix="crispritz-search-") as temporary:
@@ -253,13 +251,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         ]
         _run(command, work)
         hits = _parse_hits(result_prefix.with_suffix(".targets.txt"), pam_length, pam_side)
-    return {
-        "hits": hits,
-        "reference_sha256": reference_sha256,
-        "reference_files": reference_files,
-        "index_key": index_key,
-        "index_reused": index_reused,
-    }
+    return {"hits": hits, "reference_sha256": reference_sha256, "index_reused": index_reused}
 
 
 def to_device(device: str) -> dict[str, Any]:

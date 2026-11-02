@@ -54,13 +54,17 @@ its private staging area and builds a CRISPRitz TST index under a cache key made
 from the reference checksum, guide length, PAM, PAM side, bulge capacity, and
 CRISPRitz version. No genome or curated sequence database ships with Proto.
 
+Setup compiles CRISPRitz from its pinned source with OpenMP, so Apple Silicon
+needs a compiler that supports `-fopenmp`; Apple's `clang++` does not without
+`libomp`. Linux builds with the system `g++`.
+
 ## Outputs
 
 Every upstream target row is returned, including aligned guide and genomic
 strings, explicit DNA/RNA bulge class and size, mismatch count, total edits,
-strand, chromosome, and CRISPRitz's zero-based position and cluster position.
-CRISPRitz 2.8 can also emit joint `RNA,DNA` alignments; these are represented as
-`dna_rna` while the unmodified upstream label remains available.
-The output also records per-file and combined reference checksums, index reuse,
-all search parameters, nuclease label, and pinned CRISPRitz version and source
-commit.
+strand, chromosome, and the aligned target's `start` and `end`, converted from
+CRISPRitz's zero-based coordinates to the 1-indexed inclusive convention used
+throughout Proto. CRISPRitz 2.8 can also emit joint `RNA,DNA` alignments; these
+are represented as `dna_rna` while the unmodified upstream label remains
+available. The output also records the combined reference checksum, index reuse,
+all search parameters, and the pinned CRISPRitz version.
