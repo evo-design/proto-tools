@@ -122,3 +122,17 @@ def msa_consumption(
             reasons[index] = f"{backend} skips the MSA of chains with {max_skipped_length} or fewer residues"
     sent = with_rows if sends_unpaired_only_chains else set(complex_msas.per_chain)
     return sent - set(reasons), reasons
+
+
+def describe_msa_conditioning(report: MSAConditioning) -> str:
+    """One-line summary of what each protein chain sent the backend, for logs."""
+    parts = []
+    for chain in report.chains:
+        if chain.status == "consumed":
+            rows = f"{chain.rows}+{chain.unpaired_rows}" if chain.unpaired_rows else f"{chain.rows}"
+            parts.append(f"{chain.chain_id}={rows} rows ({chain.requested_source}, {chain.mode})")
+        else:
+            parts.append(f"{chain.chain_id}={chain.status}")
+    selection = report.subsampling
+    cap = f" <= {selection.max_rows}" if selection.max_rows else ""
+    return f"{'; '.join(parts) or 'no protein chains'}; selection {selection.mode}{cap}"

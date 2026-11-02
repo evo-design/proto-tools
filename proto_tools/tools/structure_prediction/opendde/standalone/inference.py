@@ -154,6 +154,27 @@ def _extract_structure_and_scores(output_dir: str, include_pae_matrix: bool = Fa
 # ============================================================================
 
 
+def _warn_on_chains_without_msa(input_json_path: str) -> None:
+    """Warn when a protein chain lacks an MSA path: OpenDDE would then search its own server.
+
+    That search covers every protein chain and overwrites the paths proto-tools wrote.
+    """
+    with open(input_json_path) as f:
+        jobs = json.load(f)
+    for job in jobs if isinstance(jobs, list) else [jobs]:
+        missing = [
+            str(position)
+            for position, entry in enumerate(job["sequences"])
+            if "proteinChain" in entry
+            and not (entry["proteinChain"].get("unpairedMsaPath") or entry["proteinChain"].get("pairedMsaPath"))
+        ]
+        if missing:
+            logger.warning(
+                "opendde: protein chain(s) at position %s have no MSA path; OpenDDE will search its own server",
+                ", ".join(missing),
+            )
+
+
 class OpenDDEModel:
     """Wrapper for the ``opendde pred`` CLI (fresh subprocess per prediction)."""
 
@@ -335,8 +356,14 @@ class OpenDDEModel:
         assert self.root_dir is not None
         env["OPENDDE_ROOT_DIR"] = self.root_dir
 
+        if use_msa:
+            _warn_on_chains_without_msa(input_json_path)
         logger.debug("Executing OpenDDE: %s", " ".join(cmd))
-        returncode, _stdout, stderr = run_teed(cmd, env=env, verbose=verbose)
+        returncode, stdout, stderr = run_teed(cmd, env=env, verbose=verbose)
+        if "starting to update msa result" in f"{stdout}\n{stderr}" or os.path.isdir(
+            os.path.join(output_dir, job_name, "msa")
+        ):
+            logger.warning("opendde: OpenDDE ran its own MSA server search, replacing the MSAs proto-tools supplied")
 
         if returncode != 0:
             stderr_tail = " | ".join(stderr.strip().splitlines()) or "<no stderr>"

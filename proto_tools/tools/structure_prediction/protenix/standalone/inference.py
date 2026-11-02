@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger, retry_on_checkpoint_corruption
+from standalone_helpers import count_a3m_rows, get_logger, report_msa_rows_loaded, retry_on_checkpoint_corruption
 
 logger = get_logger(__name__)
 
@@ -126,6 +126,32 @@ def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None
         _validate_single_checkpoint(checkpoint_path)
 
 
+def _msa_rows_sent_by_job(input_json_path: str) -> dict[str, dict[str, int]]:
+    """MSA rows written per protein chain (keyed by position), per job; warn for chains without a path.
+
+    A protein chain without an MSA path runs without an MSA: proto-tools disables Protenix's own
+    server search, which would otherwise replace every chain's supplied MSA.
+    """
+    jobs = json.loads(Path(input_json_path).read_text())
+    base = Path(input_json_path).parent
+    sent_by_job: dict[str, dict[str, int]] = {}
+    for job in jobs if isinstance(jobs, list) else [jobs]:
+        sent: dict[str, int] = {}
+        for position, entry in enumerate(job["sequences"]):
+            chain = entry.get("proteinChain")
+            if chain is None:
+                continue
+            paths = [base / chain[key] for key in ("unpairedMsaPath", "pairedMsaPath") if chain.get(key)]
+            sent[str(position)] = max((count_a3m_rows(path.read_text()) for path in paths if path.exists()), default=0)
+        missing = sorted(chain for chain, rows in sent.items() if rows == 0)
+        if missing:
+            logger.warning(
+                "protenix: protein chain(s) at position %s have no MSA and will run query-only", ", ".join(missing)
+            )
+        sent_by_job[job["name"]] = sent
+    return sent_by_job
+
+
 class ProtenixModel:
     """Protenix model for biomolecular structure prediction.
 
@@ -139,6 +165,8 @@ class ProtenixModel:
         """Initialize Protenix model wrapper."""
         self._loaded = False
         self.runner: Any = None
+        # Job name -> {protein chain position: MSA rows proto-tools wrote}, for the loaded-rows log.
+        self._msa_rows_sent: dict[str, dict[str, int]] = {}
         self.device: str | None = None
         self._cache_key: tuple[Any, ...] | None = None
 
@@ -241,6 +269,7 @@ class ProtenixModel:
         prev_cwd = os.getcwd()
         os.chdir(working_dir)
         try:
+            self._msa_rows_sent = _msa_rows_sent_by_job(input_json_path) if use_msa else {}
             # proto-tools writes every chain's MSA path; use_msa=False here only stops Protenix
             # from searching its own server (which would overwrite them). The runner, built with
             # use_msa above, still featurizes the supplied MSAs.
@@ -333,6 +362,25 @@ class ProtenixModel:
             "metrics": metrics_out,
         }
 
+    def _log_loaded_msa_rows(self, runner: Any) -> None:
+        """Wrap ``runner.predict`` to log each sample's featurized MSA rows per protein chain once."""
+        from protenix.data.msa.msa_utils import MSA_GAP_IDX  # type: ignore[import-not-found]
+
+        predict = runner.predict
+        logged: set[str] = set()
+
+        def predict_logging_msa_rows(data: Any) -> Any:
+            sent = self._msa_rows_sent.get(data["sample_name"])
+            if sent is not None and data["sample_name"] not in logged:
+                logged.add(data["sample_name"])
+                features = data["input_feature_dict"]
+                msa, asym = features["msa"], features["asym_id"]
+                loaded = {chain: int((msa[:, asym == int(chain)] != MSA_GAP_IDX).any(dim=1).sum()) for chain in sent}
+                report_msa_rows_loaded("protenix", loaded, sent)
+            return predict(data)
+
+        runner.predict = predict_logging_msa_rows
+
     def load(
         self,
         *,
@@ -365,6 +413,7 @@ class ProtenixModel:
             triatt_kernel=kernel,
             need_atom_confidence=True,
         )
+        self._log_loaded_msa_rows(self.runner)
         self.device = str(self.runner.device)
         self._cache_key = (
             model_name,

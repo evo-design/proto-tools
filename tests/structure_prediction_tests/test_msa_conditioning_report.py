@@ -283,3 +283,17 @@ def test_rf3_reports_written_alignment_and_pairs_only_on_taxonomy_headers():
     )
     _, is_paired = rf3_written_msas(homodimer, ComplexMSAs(per_chain={0: tagged[0], 1: tagged[0]}))
     assert not is_paired
+
+
+def test_msa_summary_is_logged_at_debug(caplog):
+    """The per-structure MSA line stays out of default (INFO) output."""
+    import logging
+
+    structure = Structure(structure=_PDB, structure_format="pdb", source="tool-prediction")
+    chains = [Chain(sequence="AAA", entity_type="protein")]
+    msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=["AAA", "AAG"])}, source="colabfold_server")
+    with caplog.at_level(logging.DEBUG, logger="proto_tools"):
+        normalize_output_chain_ids(structure, chains, complex_msas=msas, report_msa=True)
+    [record] = [r for r in caplog.records if "MSA sent" in r.getMessage()]
+    assert record.levelno == logging.DEBUG
+    assert record.getMessage() == "tool-prediction MSA sent: A=2 rows (colabfold_server, unpaired); selection unknown"

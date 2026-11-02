@@ -6,7 +6,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger, is_checkpoint_corruption_error, retry_on_checkpoint_corruption
+from standalone_helpers import (
+    get_logger,
+    is_checkpoint_corruption_error,
+    report_msa_rows_loaded,
+    retry_on_checkpoint_corruption,
+)
 
 logger = get_logger(__name__)
 
@@ -66,6 +71,42 @@ def _install_checkpoint_cache() -> None:
 
     Boltz2.load_from_checkpoint = cached_load_from_checkpoint
     _checkpoint_cache_installed = True
+
+
+def _install_msa_row_logging() -> None:
+    """Wrap boltz's ``construct_paired_msa`` to log each chain's featurized and paired MSA rows.
+
+    ``process_msa_features`` looks the function up on its module, so patching the attribute takes
+    effect, including in forked DataLoader workers. Rows are counted unique because boltz appends
+    paired rows again as unpaired ones.
+    """
+    from boltz.data import const
+    from boltz.data.feature import featurizerv2
+
+    construct = featurizerv2.construct_paired_msa
+    if getattr(construct, "_logs_msa_rows", False):
+        return
+
+    def construct_logging_msa_rows(data: Any, random: Any, max_seqs: int, *args: Any, **kwargs: Any) -> Any:
+        msa, deletion, paired = construct(data, random, max_seqs, *args, **kwargs)
+        if max_seqs > 1:  # the affinity pass rebuilds a query-only MSA
+            gap = const.token_ids["-"]
+            asym = data.tokens["asym_id"]
+            loaded, sent, n_paired = {}, {}, {}
+            for chain_index in sorted({int(a) for a in asym}):
+                chain = data.structure.chains[chain_index]
+                if chain["mol_type"] != const.chain_type_ids["PROTEIN"]:
+                    continue
+                name, columns = str(chain["name"]), asym == chain_index
+                rows = msa[columns]
+                loaded[name] = int(rows[:, (rows != gap).any(dim=0)].unique(dim=1).shape[1])
+                sent[name] = len(data.msa[chain_index].sequences) if chain_index in data.msa else 0
+                n_paired[name] = max(int((paired[columns].amax(dim=0) > 0).sum()) - 1, 0)
+            report_msa_rows_loaded("boltz2", loaded, sent, n_paired)
+        return msa, deletion, paired
+
+    construct_logging_msa_rows._logs_msa_rows = True  # type: ignore[attr-defined]
+    featurizerv2.construct_paired_msa = construct_logging_msa_rows
 
 
 class Boltz2Model:
@@ -249,6 +290,7 @@ class Boltz2Model:
             kwargs["diffusion_samples_affinity"] = affinity["diffusion_samples_affinity"]
             kwargs["affinity_mw_correction"] = affinity["affinity_mw_correction"]
 
+        _install_msa_row_logging()
         try:
             retry_on_checkpoint_corruption(lambda: predict_cmd.callback(**kwargs), tool_name="boltz2", max_attempts=2)
         except RuntimeError as e:

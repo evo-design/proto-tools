@@ -11,6 +11,7 @@ from standalone_helpers import (
     get_random_int,
     is_cuda_oom,
     release_cuda_memory,
+    report_msa_rows_loaded,
     serialize_output,
     set_torch_seed,
 )
@@ -133,11 +134,33 @@ class ESMFold2Model:
             raise RuntimeError(f"esmfold2: HF weight load from {repo!r} failed: {e}") from e
 
         self.builder = ESMFold2InputBuilder()
+        self._log_loaded_msa_rows(self.builder)
         self.device = device
         self._loaded = True
 
         if verbose:
             logger.info("ESMFold2 model loaded successfully")
+
+    def _log_loaded_msa_rows(self, builder: Any) -> None:
+        """Wrap ``builder.prepare_input`` to log each protein chain's featurized MSA rows."""
+        from esm.models.esmfold2.constants import MSA_GAP_TOKEN_ID
+
+        prepare_input = builder.prepare_input
+
+        def prepare_input_logging_msa_rows(*args: Any, **kwargs: Any) -> Any:
+            features, chain_infos = prepare_input(*args, **kwargs)
+            sent = getattr(self, "_msa_rows_sent", {})
+            if any(rows for rows in sent.values()):
+                msa, asym = features["msa"][0], features["asym_id"][0]
+                loaded = {
+                    str(info.chain_id): int((msa[:, asym == info.asym_id] != MSA_GAP_TOKEN_ID).any(dim=1).sum())
+                    for info in chain_infos
+                    if str(info.chain_id) in sent
+                }
+                report_msa_rows_loaded("esmfold2", loaded, sent)
+            return features, chain_infos
+
+        builder.prepare_input = prepare_input_logging_msa_rows
 
     def to_device(self, device: str) -> None:
         """Move the loaded model to a different device."""
@@ -179,6 +202,11 @@ class ESMFold2Model:
         set_torch_seed(effective_seed)
 
         upstream_input = _build_upstream_input(chains, msas, msas_paired, unpaired_msas)
+        self._msa_rows_sent = {
+            str(chain["id"]): max(len((msas or {}).get(str(idx), [])), len((unpaired_msas or {}).get(str(idx), [])))
+            for idx, chain in enumerate(chains)
+            if chain.get("entity_type", "protein") == "protein"
+        }
 
         # Optional sampler overrides: upstream consumes them only when non-None.
         sampler_kwargs: dict[str, Any] = {}

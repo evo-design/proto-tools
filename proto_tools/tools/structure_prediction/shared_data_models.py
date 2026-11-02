@@ -899,7 +899,10 @@ def normalize_output_chain_ids(
         normalized = structure.with_renamed_chains(dict(zip(observed_ids, expected_ids, strict=True)))
 
     if report_msa:
-        from proto_tools.tools.structure_prediction.msa_reporting import build_msa_conditioning
+        from proto_tools.tools.structure_prediction.msa_reporting import (
+            build_msa_conditioning,
+            describe_msa_conditioning,
+        )
 
         normalized.msa_conditioning = build_msa_conditioning(
             chains,
@@ -909,6 +912,7 @@ def normalize_output_chain_ids(
             ignored_reasons=msa_ignored_reasons,
             paired=msa_paired,
         )
+        logger.debug("%s MSA sent: %s", structure.source, describe_msa_conditioning(normalized.msa_conditioning))
     return normalized
 
 

@@ -28,7 +28,15 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import AMINO_ACIDS_LIST, get_jax_memory_stats, get_logger, resolve_jax_device, serialize_output
+from standalone_helpers import (
+    AMINO_ACIDS_LIST,
+    count_a3m_rows,
+    get_jax_memory_stats,
+    get_logger,
+    report_msa_rows_loaded,
+    resolve_jax_device,
+    serialize_output,
+)
 from standalone_helpers.relaxation import resolve_temperature
 from standalone_helpers.vocabulary import gather_indices
 
@@ -389,6 +397,34 @@ def _build_combined_multimer_msa(
     return np.stack(combined_rows, axis=0), np.stack(combined_dels, axis=0)
 
 
+def _log_loaded_msa_rows(
+    af_model: Any,
+    complex_data: dict[str, Any],
+    msa_a3m_content: str | None,
+    per_chain_msas_a3m: list[str | None] | None,
+    unpaired_per_chain_msas_a3m: list[str | None] | None,
+) -> None:
+    """Log the MSA rows ColabDesign holds per chain (chain positions as keys) against the rows sent."""
+    import numpy as np
+
+    msa = np.asarray(af_model._inputs["msa"])
+    chains, lengths = complex_data["chains"], complex_data["seq_lengths"]
+    keys = [str(i) for i in range(len(chains))]
+    if per_chain_msas_a3m is None:  # monomer / homo-oligomer: one alignment tiled across copies
+        loaded = dict.fromkeys(keys, int((msa != _AA_GAP).any(axis=1).sum()))
+        sent = dict.fromkeys(keys, count_a3m_rows(msa_a3m_content))
+    else:
+        offsets = np.cumsum([0, *lengths])
+        loaded = {
+            key: int((msa[:, offsets[i] : offsets[i + 1]] != _AA_GAP).any(axis=1).sum()) for i, key in enumerate(keys)
+        }
+        unpaired = unpaired_per_chain_msas_a3m or [None] * len(chains)
+        sent = {
+            key: max(count_a3m_rows(per_chain_msas_a3m[i]), count_a3m_rows(unpaired[i])) for i, key in enumerate(keys)
+        }
+    report_msa_rows_loaded("alphafold2", loaded, sent)
+
+
 class AlphaFold2Model:
     """Persistent ColabDesign-backed AlphaFold2 worker."""
 
@@ -611,6 +647,10 @@ class AlphaFold2Model:
             is_paired=is_paired,
             unpaired_per_chain_msas_a3m=unpaired_per_chain_msas_a3m,
         )
+        if use_msa:
+            _log_loaded_msa_rows(
+                af_model, complex_data, msa_a3m_content, per_chain_msas_a3m, unpaired_per_chain_msas_a3m
+            )
 
         predict_kwargs: dict[str, Any] = {
             "num_recycles": num_recycles,

@@ -8,9 +8,46 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from standalone_helpers import get_logger, get_random_int, set_torch_seed
+from standalone_helpers import count_a3m_rows, get_logger, get_random_int, report_msa_rows_loaded, set_torch_seed
 
 logger = get_logger(__name__)
+
+
+def _check_msa_source(
+    sequence: str, msa_a3m: str | None, cache_embeds_dir: str | None, msa_host_url: str | None
+) -> None:
+    """Warn when BioEmu will not use the MSA proto-tools supplied, and log the rows it loads.
+
+    ``get_colabfold_embeds`` returns embeddings cached under the sequence's hash without reading any
+    MSA, and with no MSA file it queries the ColabFold server itself.
+    """
+    import bioemu.colabfold_inline.model_runner as model_runner
+    import bioemu.get_embeds as get_embeds
+
+    cache_dir = os.path.expanduser(cache_embeds_dir or get_embeds._get_default_embeds_dir())
+    key = get_embeds.shahexencode(sequence)
+    cached = all(os.path.exists(os.path.join(cache_dir, f"{key}_{part}.npy")) for part in ("single", "pair"))
+    if cached and msa_a3m:
+        logger.warning(
+            "bioemu: reusing embeddings cached for this sequence in %s; the supplied MSA is not read", cache_dir
+        )
+    elif not cached and not msa_a3m:
+        logger.warning(
+            "bioemu: no MSA supplied; BioEmu will query the ColabFold server (%s)", msa_host_url or "default"
+        )
+
+    build = model_runner.build_monomer_feature
+    if getattr(build, "_logs_msa_rows", False):
+        build = build._wrapped
+
+    def build_logging_msa_rows(*args: Any, **kwargs: Any) -> Any:
+        features = build(*args, **kwargs)
+        report_msa_rows_loaded("bioemu", {"A": int(features["msa"].shape[0])}, {"A": count_a3m_rows(msa_a3m)})
+        return features
+
+    build_logging_msa_rows._logs_msa_rows = True  # type: ignore[attr-defined]
+    build_logging_msa_rows._wrapped = build  # type: ignore[attr-defined]
+    model_runner.build_monomer_feature = build_logging_msa_rows
 
 
 class BioEmuModel:
@@ -116,6 +153,7 @@ class BioEmuModel:
 
             base_seed = seed if seed is not None else get_random_int()
 
+            _check_msa_source(sequence, msa_a3m, cache_embeds_dir, msa_host_url)
             existing_num_samples = count_samples_in_output_dir(output_path)
             for start_idx in tqdm(
                 range(existing_num_samples, num_samples, adjusted_batch_size),

@@ -53,6 +53,7 @@ from .device import (
     resolve_jax_device,
 )
 from .memory import get_jax_memory_stats, get_pytorch_memory_stats
+from .msa_usage import count_a3m_rows, report_msa_rows_loaded
 from .oom import GpuOutOfMemoryError, is_cuda_oom, oom_guard, raise_oom, release_cuda_memory
 from .recovery import is_checkpoint_corruption_error, retry_on_checkpoint_corruption
 
@@ -95,6 +96,9 @@ __all__ = [
     # memory
     "get_jax_memory_stats",
     "get_pytorch_memory_stats",
+    # msa usage
+    "count_a3m_rows",
+    "report_msa_rows_loaded",
     # oom
     "GpuOutOfMemoryError",
     "is_cuda_oom",

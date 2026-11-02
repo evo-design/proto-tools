@@ -415,3 +415,20 @@ def test_get_jax_memory_stats_reports_untracked_allocator(monkeypatch):
     device = SimpleNamespace(memory_stats=lambda: None, device_kind="gpu")
     monkeypatch.setitem(sys.modules, "jax", SimpleNamespace(devices=lambda: [device]))
     assert get_jax_memory_stats(0) == {"available": False, "framework": "jax", "reason": JAX_UNTRACKED_MEMORY_REASON}
+
+
+def test_msa_rows_report_warns_only_when_a_sent_alignment_never_loads(caplog):
+    """A chain sent rows but loaded only its query warns; query-only chains and partial loads do not."""
+    import logging
+
+    from proto_tools.utils.standalone_helpers_source.standalone_helpers.msa_usage import (
+        count_a3m_rows,
+        report_msa_rows_loaded,
+    )
+
+    assert count_a3m_rows(">q\nMKT\n>h1\nMKA\n") == 2
+    assert count_a3m_rows(None) == 0
+    with caplog.at_level(logging.INFO):
+        report_msa_rows_loaded("tool", loaded={"A": 1, "B": 1, "C": 40}, sent={"A": 120, "B": 1, "C": 120})
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings == ["tool: supplied MSA did not reach the model for chain(s) A; it loaded only the query"]
