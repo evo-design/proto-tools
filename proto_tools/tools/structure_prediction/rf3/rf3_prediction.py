@@ -11,7 +11,6 @@ from typing import Any, ClassVar
 from pydantic import model_validator
 
 from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
-from proto_tools.tools.structure_prediction.msa_plan import conditions_on_msa
 from proto_tools.tools.structure_prediction.rf3.helpers import (
     build_chain_a3m_paths,
     complex_to_rf3_json,
@@ -442,9 +441,5 @@ def run_rf3_prediction_on_complex(
         complex_msas=complex_msas,
         report_msa=True,
         msa_sent=msa_sent,
-        msa_subsampling=(
-            MSASubsampling(mode="stochastic", max_rows=RF3_N_MSA)
-            if conditions_on_msa(msa_sent)
-            else MSASubsampling(mode="none")
-        ),
+        msa_subsampling=MSASubsampling(mode="stochastic", max_rows=RF3_N_MSA),
     )

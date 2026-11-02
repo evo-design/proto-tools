@@ -1,4 +1,4 @@
-"""Requested and backend-effective MSA conditioning evidence."""
+"""The MSA rows a structure predictor sent its backend for each protein chain."""
 
 from typing import Literal, get_args
 

@@ -152,15 +152,13 @@ BOLTZ2_SUBSAMPLED_ROWS = 1024
 BOLTZ2_FEATURIZER_MAX_ROWS = 16384
 
 
-def boltz2_msa_subsampling(*, max_msa_seqs: int, subsample_msa: bool, has_msa: bool) -> MSASubsampling:
+def boltz2_msa_subsampling(*, max_msa_seqs: int, subsample_msa: bool) -> MSASubsampling:
     """Describe Boltz-2's MSA row selection for the conditioning report.
 
     boltz always keeps the first ``max_msa_seqs`` unique rows of each CSV, and at most 16384
     combined rows in its featurizer; ``subsample_msa`` then draws a random
     ``num_subsampled_msa`` of those per recycle.
     """
-    if not has_msa:
-        return MSASubsampling(mode="none")
     depth = min(max_msa_seqs, BOLTZ2_FEATURIZER_MAX_ROWS)
     if subsample_msa:
         return MSASubsampling(mode="stochastic", max_rows=min(depth, BOLTZ2_SUBSAMPLED_ROWS))

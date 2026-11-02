@@ -22,7 +22,6 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionInput,
     _row_to_base36_5,
     count_structure_tokens,
-    unwrap_complex_msas,
     write_paired_a3m_with_uniprot_headers,
 )
 from proto_tools.utils import run_preprocess
@@ -76,32 +75,6 @@ def _stub_mmseqs2_search(monkeypatch):
 
     monkeypatch.setattr(hs, "run_mmseqs2_homology_search", fake)
     return captured
-
-
-# ── unwrap_complex_msas ───────────────────────────────────────────────────────
-
-
-def test_unwrap_complex_msas_none():
-    assert unwrap_complex_msas(None) == ({}, None, False)
-
-
-def test_unwrap_complex_msas_unpaired():
-    msa = MSA(aligned_sequences=["AA", "AA"])
-    per_chain, unpaired, is_paired = unwrap_complex_msas(ComplexMSAs(per_chain={0: msa}, paired=False))
-    assert per_chain == {0: msa}
-    assert unpaired is None
-    assert is_paired is False
-
-
-def test_unwrap_complex_msas_paired():
-    msa = MSA(aligned_sequences=["AA", "AA"])
-    deep = MSA(aligned_sequences=["AA", "AA", "AA"])
-    per_chain, unpaired, is_paired = unwrap_complex_msas(
-        ComplexMSAs(per_chain={0: msa, 1: msa}, paired=True, unpaired_per_chain={0: deep, 1: deep})
-    )
-    assert set(per_chain) == {0, 1}
-    assert unpaired is not None and {m.num_sequences for m in unpaired.values()} == {3}
-    assert is_paired is True
 
 
 # ── Synthesized paired-MSA headers ────────────────────────────────────────────

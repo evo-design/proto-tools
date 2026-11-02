@@ -349,7 +349,5 @@ def run_boltz2_affinity_on_complex(
         complex_msas=complex_msas,
         report_msa=True,
         msa_sent=msa_sent,
-        msa_subsampling=boltz2_msa_subsampling(
-            max_msa_seqs=config.max_msa_seqs, subsample_msa=config.subsample_msa, has_msa=bool(chain_msa_paths)
-        ),
+        msa_subsampling=boltz2_msa_subsampling(max_msa_seqs=config.max_msa_seqs, subsample_msa=config.subsample_msa),
     )

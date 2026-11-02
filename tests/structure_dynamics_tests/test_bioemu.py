@@ -112,7 +112,6 @@ def test_config_passes_new_fields_to_dispatch():
         model_name="bioemu-v1.2",
         denoiser_type="heun",
         denoiser_config="steering.yaml",
-        msa_host_url="https://msa.example.com",
         cache_embeds_dir="embeds_cache",
         cache_so3_dir="so3_cache",
     )
@@ -135,7 +134,6 @@ def test_config_passes_new_fields_to_dispatch():
     assert payload["model_name"] == "bioemu-v1.2"
     assert payload["denoiser_type"] == "heun"
     assert payload["denoiser_config"] == "steering.yaml"
-    assert payload["msa_host_url"] == "https://msa.example.com"
     assert payload["cache_embeds_dir"] == "embeds_cache"
     assert payload["cache_so3_dir"] == "so3_cache"
 
@@ -209,7 +207,7 @@ print(len(computed))
 
 
 def test_config_cache_key_invariants():
-    """Cache dirs / output_dir excluded; msa_host_url INCLUDED (server change → different MSAs)."""
+    """Cache dirs / output_dir are excluded: storage settings don't affect the returned ensembles."""
     base = BioEmuConfig().cache_key()
 
     # Excluded — storage settings don't affect the returned ensembles
@@ -221,9 +219,6 @@ def test_config_cache_key_invariants():
         ).cache_key()
         == base
     )
-
-    # Included — different MSA server can produce different MSAs → different ensembles
-    assert BioEmuConfig(msa_host_url="https://other.example.com").cache_key() != base
 
 
 def test_all_frames_filtered_out_raises():

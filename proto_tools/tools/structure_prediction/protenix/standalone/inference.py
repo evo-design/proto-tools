@@ -126,8 +126,12 @@ def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None
         _validate_single_checkpoint(checkpoint_path)
 
 
-def _msa_rows_sent_by_job(input_json_path: str) -> dict[str, dict[str, int]]:
+def _msa_rows_sent_by_job(
+    input_json_path: str, chain_ids: dict[str, list[str]] | None = None
+) -> dict[str, dict[str, int]]:
     """MSA rows written per protein chain (keyed by position), per job; warn for chains without a path.
+
+    ``chain_ids`` maps a job name to its chain IDs in sequence order, naming chains in the warning.
 
     A protein chain without an MSA path runs without an MSA: proto-tools disables Protenix's own
     server search, which would otherwise replace every chain's supplied MSA.
@@ -143,11 +147,10 @@ def _msa_rows_sent_by_job(input_json_path: str) -> dict[str, dict[str, int]]:
                 continue
             paths = [base / chain[key] for key in ("unpairedMsaPath", "pairedMsaPath") if chain.get(key)]
             sent[str(position)] = max((count_a3m_rows(path.read_text()) for path in paths if path.exists()), default=0)
-        missing = sorted(chain for chain, rows in sent.items() if rows == 0)
+        labels = (chain_ids or {}).get(job["name"], [])
+        missing = [labels[int(p)] if int(p) < len(labels) else p for p, rows in sent.items() if rows == 0]
         if missing:
-            logger.warning(
-                "protenix: protein chain(s) at position %s have no MSA and will run query-only", ", ".join(missing)
-            )
+            logger.warning("protenix: protein chain(s) %s have no MSA and will run query-only", ", ".join(missing))
         sent_by_job[job["name"]] = sent
     return sent_by_job
 
@@ -167,6 +170,7 @@ class ProtenixModel:
         self.runner: Any = None
         # Job name -> {protein chain position: MSA rows proto-tools wrote}, for the loaded-rows log.
         self._msa_rows_sent: dict[str, dict[str, int]] = {}
+        self._msa_chain_ids: dict[str, list[str]] = {}
         self.device: str | None = None
         self._cache_key: tuple[Any, ...] | None = None
 
@@ -181,6 +185,7 @@ class ProtenixModel:
         num_diffusion_steps: int = 200,
         num_pairformer_cycles: int = 10,
         use_msa: bool = True,
+        chain_ids: dict[str, list[str]] | None = None,
         verbose: bool = False,
         include_pae_matrix: bool = False,
     ) -> list[dict[str, Any]]:
@@ -198,6 +203,7 @@ class ProtenixModel:
             num_diffusion_steps: Number of denoising steps
             num_pairformer_cycles: Number of Pairformer recycling iterations
             use_msa: Whether to use MSA features
+            chain_ids: Job name to its chain IDs in sequence order, labelling the MSA-rows log
             verbose: Whether to print status messages
             include_pae_matrix: Attach the full per-token PAE matrix.
 
@@ -269,7 +275,8 @@ class ProtenixModel:
         prev_cwd = os.getcwd()
         os.chdir(working_dir)
         try:
-            self._msa_rows_sent = _msa_rows_sent_by_job(input_json_path) if use_msa else {}
+            self._msa_rows_sent = _msa_rows_sent_by_job(input_json_path, chain_ids) if use_msa else {}
+            self._msa_chain_ids = chain_ids or {}
             # proto-tools writes every chain's MSA path; use_msa=False here only stops Protenix
             # from searching its own server (which would overwrite them). The runner, built with
             # use_msa above, still featurizes the supplied MSAs.
@@ -376,7 +383,13 @@ class ProtenixModel:
                 features = data["input_feature_dict"]
                 msa, asym = features["msa"], features["asym_id"]
                 loaded = {chain: int((msa[:, asym == int(chain)] != MSA_GAP_IDX).any(dim=1).sum()) for chain in sent}
-                report_msa_rows_loaded("protenix", loaded, sent)
+                labels = self._msa_chain_ids.get(data["sample_name"], [])
+                label = {position: labels[int(position)] for position in sent if int(position) < len(labels)}
+                report_msa_rows_loaded(
+                    "protenix",
+                    {label.get(k, k): v for k, v in loaded.items()},
+                    {label.get(k, k): v for k, v in sent.items()},
+                )
             return predict(data)
 
         runner.predict = predict_logging_msa_rows
@@ -486,6 +499,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             num_diffusion_steps=input_dict["num_diffusion_steps"],
             num_pairformer_cycles=input_dict["num_pairformer_cycles"],
             use_msa=input_dict["use_msa"],
+            chain_ids=input_dict.get("chain_ids"),
             verbose=input_dict["verbose"],
             include_pae_matrix=input_dict["include_pae_matrix"],
         )

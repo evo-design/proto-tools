@@ -280,8 +280,8 @@ class Structure(BaseModel):
         source (str | None): Optional source identifier (filepath or tool name).
         metrics (Metrics): Associated metrics (e.g., pLDDT, pTM scores,
             per-chain lists, pairwise matrices). None values are stripped at construction.
-        msa_conditioning (MSAConditioning | None): Requested and backend-effective alignment evidence;
-            None means unreported, not single-sequence prediction.
+        msa_conditioning (MSAConditioning | None): The MSA rows the predictor sent its backend per
+            protein chain; None means unreported, not single-sequence prediction.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -310,7 +310,7 @@ class Structure(BaseModel):
     msa_conditioning: MSAConditioning | None = Field(
         default=None,
         title="MSA Conditioning",
-        description="Requested and backend-effective per-chain MSA evidence; None means unreported.",
+        description="Per-chain MSA rows the predictor sent its backend; None means unreported.",
     )
 
     @model_validator(mode="before")

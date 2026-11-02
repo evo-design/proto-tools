@@ -11,7 +11,12 @@ from proto_tools.entities.structures.msa_conditioning import (
     MSAStatus,
     MSASubsampling,
 )
-from proto_tools.tools.structure_prediction.msa_plan import SentMSA, has_homolog_rows, protein_chain_msas
+from proto_tools.tools.structure_prediction.msa_plan import (
+    SentMSA,
+    conditions_on_msa,
+    has_homolog_rows,
+    protein_chain_msas,
+)
 from proto_tools.tools.structure_prediction.shared_data_models import Chain, ComplexMSAs
 
 
@@ -27,7 +32,8 @@ def build_msa_conditioning(
     A chain is ``consumed`` when the backend was sent rows beyond the query and uses them. A chain
     that was not is ``not_requested`` when the bundle asked nothing for it, ``no_hits`` when our own
     search found no homologs, and ``ignored`` otherwise. Requested chains are the bundle's
-    ``requested_chain_indices``, else the chains it carries rows for.
+    ``requested_chain_indices``, else the chains it carries rows for. ``subsampling`` is the
+    backend's row-selection policy; it is reported as ``none`` when nothing conditions on an MSA.
     """
     present = set(complex_msas.per_chain) | set(complex_msas.unpaired_per_chain or {}) if complex_msas else set()
     if complex_msas is not None and complex_msas.requested_chain_indices is not None:
@@ -66,10 +72,10 @@ def build_msa_conditioning(
                 else None,
             )
         )
-    return MSAConditioning(
-        chains=evidence,
-        subsampling=subsampling or MSASubsampling(mode="unknown" if requested else "none"),
-    )
+    # A backend's row-selection policy only applies when something conditions on an MSA.
+    if not conditions_on_msa(sent):
+        subsampling = MSASubsampling(mode="none")
+    return MSAConditioning(chains=evidence, subsampling=subsampling or MSASubsampling(mode="unknown"))
 
 
 def describe_msa_conditioning(report: MSAConditioning) -> str:

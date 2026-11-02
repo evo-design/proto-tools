@@ -33,7 +33,6 @@ from proto_tools.tools.structure_prediction.chai1.helpers import (
 )
 from proto_tools.tools.structure_prediction.msa_plan import (
     SentMSA,
-    conditions_on_msa,
     protein_chain_msas,
     unpaired_depth_rows,
 )
@@ -520,10 +519,8 @@ def run_chai1_on_complex(
         report_msa=True,
         msa_sent=msa_sent,
         msa_subsampling=(
-            MSASubsampling(mode="none")
-            if not conditions_on_msa(msa_sent)
             # chai-lab treats any positive value as a switch for its fixed 4096-row per-recycle draw.
-            else MSASubsampling(mode="stochastic", max_rows=CHAI1_RECYCLE_SUBSAMPLE_ROWS)
+            MSASubsampling(mode="stochastic", max_rows=CHAI1_RECYCLE_SUBSAMPLE_ROWS)
             if config.recycle_msa_subsample > 0
             # Every row is tagged uniref90, whose chai-lab quota keeps the first 10,000.
             else MSASubsampling(mode="deterministic", max_rows=CHAI1_UNIREF90_QUOTA_ROWS)

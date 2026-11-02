@@ -16,7 +16,6 @@ from logging import getLogger
 from typing import Any, ClassVar
 
 from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
-from proto_tools.tools.structure_prediction.msa_plan import conditions_on_msa
 from proto_tools.tools.structure_prediction.opendde.helpers import (
     build_chain_msa_paths,
     complex_to_opendde_json,
@@ -429,9 +428,5 @@ def run_opendde_on_complex(
         complex_msas=complex_msas,
         report_msa=True,
         msa_sent=msa_sent,
-        msa_subsampling=(
-            MSASubsampling(mode="stochastic", max_rows=OPENDDE_MSA_DEPTH)
-            if conditions_on_msa(msa_sent)
-            else MSASubsampling(mode="none")
-        ),
+        msa_subsampling=MSASubsampling(mode="stochastic", max_rows=OPENDDE_MSA_DEPTH),
     )

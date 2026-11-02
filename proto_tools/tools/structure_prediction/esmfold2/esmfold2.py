@@ -11,7 +11,6 @@ from pydantic import model_validator
 from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
 from proto_tools.tools.structure_prediction.msa_plan import (
     SentMSA,
-    conditions_on_msa,
     protein_chain_msas,
     unpaired_depth_rows,
 )
@@ -339,8 +338,6 @@ def _run_esmfold2_on_complex(
     Returns:
         Structure: Predicted structure with ``ESMFold2Metrics`` attached.
     """
-    from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
-
     if seed is None:
         seed = config.seed
     if config.verbose:
@@ -352,7 +349,9 @@ def _run_esmfold2_on_complex(
         _chain_to_payload(chain, chain_id) for chain, chain_id in zip(sp_complex.chains, chain_ids, strict=True)
     ]
 
-    per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(complex_msas)
+    per_chain_msas = complex_msas.per_chain if complex_msas is not None else {}
+    unpaired_per_chain = complex_msas.unpaired_per_chain if complex_msas is not None else None
+    is_paired = complex_msas is not None and complex_msas.paired
 
     # MSAs are only meaningful for the MSA-capable checkpoint.
     msa_payload: dict[str, list[str]] | None = None
@@ -420,11 +419,7 @@ def _run_esmfold2_on_complex(
         report_msa=True,
         msa_sent=msa_sent,
         # fold() draws a fresh random msa_max_depth-row subset (query kept) every loop.
-        msa_subsampling=(
-            MSASubsampling(mode="stochastic", max_rows=ESMFOLD2_MSA_MAX_DEPTH)
-            if conditions_on_msa(msa_sent)
-            else MSASubsampling(mode="none")
-        ),
+        msa_subsampling=MSASubsampling(mode="stochastic", max_rows=ESMFOLD2_MSA_MAX_DEPTH),
     )
 
 

@@ -166,8 +166,6 @@ class BioEmuConfig(StructurePredictionConfig):
             is 50 deterministic steps; ``heun`` is stochastic.
         denoiser_config (str | None): Path to a custom denoiser/steering YAML;
             overrides ``denoiser_type`` when set.
-        msa_host_url (str | None): Unused: proto-tools always supplies BioEmu's MSA, so BioEmu
-            never queries an MSA server. Kept for compatibility.
         cache_embeds_dir (str | None): Directory to cache MSA embeddings across runs; each MSA
             gets its own sub-directory, so a cached embedding is reused only for the same MSA.
         cache_so3_dir (str | None): Directory to cache SO3 precomputations across runs.
@@ -213,11 +211,6 @@ class BioEmuConfig(StructurePredictionConfig):
         default=None,
         description="Path to a custom denoiser/steering YAML; overrides denoiser_type when set",
         examples=["physical_steering.yaml"],
-    )
-    msa_host_url: str | None = ConfigField(
-        title="MSA Host URL",
-        default=None,
-        description="Unused: proto-tools always supplies the MSA, so BioEmu never queries a server",
     )
     cache_embeds_dir: str | None = ConfigField(
         title="MSA Embeds Cache Dir",
@@ -308,14 +301,14 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
     """Generate protein conformational ensembles using BioEmu."""
     logger.debug("Using local venv for BioEmu conformational sampling")
 
-    from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
+    from proto_tools.tools.structure_prediction.msa_plan import protein_chain_msas
 
     # Per-complex MSAs (index-aligned with complexes); keying by sequence would collide on duplicates.
     msa_a3m_contents: list[str] = []
     for cplx_idx, complex_ in enumerate(inputs.complexes):
         seq = complex_.chain_sequences[0]
-        per_chain, unpaired, _ = unwrap_complex_msas(inputs.msas[cplx_idx]) if inputs.msas else ({}, None, False)
-        msa = per_chain.get(0) or (unpaired or {}).get(0)
+        [chain] = protein_chain_msas(complex_.chains, inputs.msas[cplx_idx] if inputs.msas else None)
+        msa = chain.primary or chain.unpaired
         msa_a3m_contents.append(msa.to_a3m_string() if msa is not None else f">query\n{seq}\n")
         if config.verbose:
             logger.info(f"Loaded MSA for sequence (length {len(seq)}): {len(msa) if msa is not None else 1} rows")
@@ -332,7 +325,6 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
             "batch_size": config.batch_size,
             "denoiser_type": config.denoiser_type,
             "denoiser_config": config.denoiser_config,
-            "msa_host_url": config.msa_host_url,
             "cache_embeds_dir": config.cache_embeds_dir,
             "cache_so3_dir": config.cache_so3_dir,
             "device": config.device,

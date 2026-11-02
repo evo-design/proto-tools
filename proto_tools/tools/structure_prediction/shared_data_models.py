@@ -762,23 +762,6 @@ def _preprocess_structure_prediction_msas(
     return inputs.model_copy(update={"msas": msas_list})
 
 
-def unwrap_complex_msas(
-    complex_msas: "ComplexMSAs | None",
-) -> tuple[dict[int, MSA], dict[int, MSA] | None, bool]:
-    """Return ``(per_chain, unpaired_per_chain, is_paired)`` from a per-complex MSA bundle.
-
-    Uniform accessor for structure-prediction tools. ``per_chain`` is each chain's
-    primary MSA (the row-aligned paired set when ``is_paired``, else the unpaired set).
-    ``unpaired_per_chain`` is each chain's deep independent MSA retained alongside the
-    paired rows (``None`` when there is no separate unpaired set), letting predictors
-    with distinct unpaired/paired slots feed full per-chain depth. ``is_paired`` flags
-    whether ``per_chain`` is taxonomy-paired.
-    """
-    if complex_msas is None:
-        return {}, None, False
-    return complex_msas.per_chain, complex_msas.unpaired_per_chain, complex_msas.paired
-
-
 _BASE36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 

@@ -225,7 +225,7 @@ def test_boltz2_subsampling_reports_boltz_row_caps(max_msa_seqs, subsample_msa, 
     """The random draw is boltz's num_subsampled_msa, never more than the featurized depth."""
     from proto_tools.tools.structure_prediction.boltz2.helpers import boltz2_msa_subsampling
 
-    report = boltz2_msa_subsampling(max_msa_seqs=max_msa_seqs, subsample_msa=subsample_msa, has_msa=True)
+    report = boltz2_msa_subsampling(max_msa_seqs=max_msa_seqs, subsample_msa=subsample_msa)
     assert (report.mode, report.max_rows) == (mode, max_rows)
 
 

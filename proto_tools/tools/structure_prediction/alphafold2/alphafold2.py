@@ -19,6 +19,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionInput,
     StructurePredictionOutput,
     normalize_output_chain_ids,
+    resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -92,7 +93,8 @@ class AlphaFold2Input(StructurePredictionInput):
         """Prepare complexes for AlphaFold2 inference.
 
         Returns:
-            list[dict[str, Any]]: List of dicts with keys: complex_idx, chains, seq_lengths, num_chains, total_residues
+            list[dict[str, Any]]: List of dicts with keys: complex_idx, chains, chain_ids, seq_lengths,
+                num_chains, total_residues
         """
         prepared_complexes = []
         for comp_idx, comp in enumerate(self.complexes):
@@ -102,6 +104,7 @@ class AlphaFold2Input(StructurePredictionInput):
                 {
                     "complex_idx": comp_idx,
                     "chains": chain_sequences,
+                    "chain_ids": resolve_chain_ids(comp.chains),
                     "seq_lengths": seq_lengths,
                     "num_chains": comp.num_chains(),
                     "total_residues": comp.sum_of_chain_lengths(),
@@ -362,9 +365,12 @@ def run_alphafold2(
         unpaired_per_chain_msas_a3m: list[str | None] | None = None
         is_paired = False
         if inputs.msas:
-            from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
-
-            per_chain, unpaired_per_chain, is_paired = unwrap_complex_msas(inputs.msas[complex_data["complex_idx"]])
+            complex_msas = inputs.msas[complex_data["complex_idx"]]
+            per_chain, unpaired_per_chain, is_paired = (
+                complex_msas.per_chain,
+                complex_msas.unpaired_per_chain,
+                complex_msas.paired,
+            )
             num_chains = complex_data["num_chains"]
             is_homooligomer = num_chains > 1 and len(set(complex_data["chains"])) == 1
 
@@ -434,7 +440,6 @@ def run_alphafold2(
             source="alphafold2-prediction",
         )
         complex_msas = inputs.msas[complex_data["complex_idx"]] if inputs.msas else None
-        msa_dispatched = msa_a3m_content is not None or bool(per_chain_msas_a3m and any(per_chain_msas_a3m))
         msa_sent = _alphafold2_sent_msas(
             complex_msas, complex_data["num_chains"], per_chain_msas_a3m, unpaired_per_chain_msas_a3m
         )
@@ -445,11 +450,7 @@ def run_alphafold2(
                 complex_msas=complex_msas,
                 report_msa=True,
                 msa_sent=msa_sent,
-                msa_subsampling=(
-                    MSASubsampling(mode="stochastic", max_rows=512, max_extra_rows=1024)
-                    if msa_dispatched
-                    else MSASubsampling(mode="none")
-                ),
+                msa_subsampling=MSASubsampling(mode="stochastic", max_rows=512, max_extra_rows=1024),
             )
         )
 

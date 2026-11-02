@@ -404,12 +404,12 @@ def _log_loaded_msa_rows(
     per_chain_msas_a3m: list[str | None] | None,
     unpaired_per_chain_msas_a3m: list[str | None] | None,
 ) -> None:
-    """Log the MSA rows ColabDesign holds per chain (chain positions as keys) against the rows sent."""
+    """Log the MSA rows ColabDesign holds per chain against the rows sent, keyed by chain ID."""
     import numpy as np
 
     msa = np.asarray(af_model._inputs["msa"])
     chains, lengths = complex_data["chains"], complex_data["seq_lengths"]
-    keys = [str(i) for i in range(len(chains))]
+    keys = complex_data.get("chain_ids") or [str(i) for i in range(len(chains))]
     if per_chain_msas_a3m is None:  # monomer / homo-oligomer: one alignment tiled across copies
         loaded = dict.fromkeys(keys, int((msa != _AA_GAP).any(axis=1).sum()))
         sent = dict.fromkeys(keys, count_a3m_rows(msa_a3m_content))

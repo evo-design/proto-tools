@@ -22,7 +22,6 @@ from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.entities.structures.msa_conditioning import MSASubsampling
 from proto_tools.tools.structure_prediction.msa_plan import (
     SentMSA,
-    conditions_on_msa,
     protein_chain_msas,
     short_chain_reason,
 )
@@ -34,6 +33,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     chain_label,
     count_structure_tokens,
     normalize_output_chain_ids,
+    resolve_chain_ids,
     write_paired_a3m_with_uniprot_headers,
     write_query_only_a3m,
 )
@@ -527,6 +527,9 @@ def run_protenix(
             "num_pairformer_cycles": config.num_pairformer_cycles,
             "use_msa": config.use_msa,
             "include_pae_matrix": config.include_pae_matrix,
+            "chain_ids": {
+                f"protenix_job_{i}": resolve_chain_ids(complex_.chains) for i, complex_ in enumerate(inputs.complexes)
+            },
         }
 
         # Call the inference script (single batched call)
@@ -583,11 +586,7 @@ def run_protenix(
                 complex_msas=inputs.msas[dispatch_idx] if inputs.msas else None,
                 report_msa=True,
                 msa_sent=msa_sent,
-                msa_subsampling=(
-                    MSASubsampling(mode="stochastic", max_rows=PROTENIX_MSA_MAX_ROWS)
-                    if conditions_on_msa(msa_sent)
-                    else MSASubsampling(mode="none")
-                ),
+                msa_subsampling=MSASubsampling(mode="stochastic", max_rows=PROTENIX_MSA_MAX_ROWS),
             )
         )
 

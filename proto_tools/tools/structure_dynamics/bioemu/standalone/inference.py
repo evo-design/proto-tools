@@ -30,9 +30,7 @@ def _msa_cache_dir(cache_embeds_dir: str | None, msa_a3m: str | None) -> str | N
     return os.path.join(root, f"msa-{hashlib.sha256(msa_a3m.encode()).hexdigest()[:16]}")
 
 
-def _check_msa_source(
-    sequence: str, msa_a3m: str | None, cache_embeds_dir: str | None, msa_host_url: str | None
-) -> None:
+def _check_msa_source(sequence: str, msa_a3m: str | None, cache_embeds_dir: str | None) -> None:
     """Warn when BioEmu would query its own MSA server, and log the rows it loads.
 
     ``get_colabfold_embeds`` returns embeddings cached under the sequence's hash without reading any
@@ -48,9 +46,7 @@ def _check_msa_source(
     if cached:
         logger.debug("bioemu: reusing embeddings cached for this MSA in %s", cache_dir)
     elif not msa_a3m:
-        logger.warning(
-            "bioemu: no MSA supplied; BioEmu will query the ColabFold server (%s)", msa_host_url or "default"
-        )
+        logger.warning("bioemu: no MSA supplied; BioEmu will query the ColabFold server itself")
 
     build = model_runner.build_monomer_feature
     if getattr(build, "_logs_msa_rows", False):
@@ -93,7 +89,6 @@ class BioEmuModel:
         denoiser_type: str = "dpm",
         denoiser_config: str | None = None,
         msa_a3m: str | None = None,
-        msa_host_url: str | None = None,
         cache_embeds_dir: str | None = None,
         cache_so3_dir: str | None = None,
         device: str = "cuda",
@@ -170,7 +165,7 @@ class BioEmuModel:
             base_seed = seed if seed is not None else get_random_int()
 
             cache_embeds_dir = _msa_cache_dir(cache_embeds_dir, msa_a3m)
-            _check_msa_source(sequence, msa_a3m, cache_embeds_dir, msa_host_url)
+            _check_msa_source(sequence, msa_a3m, cache_embeds_dir)
             existing_num_samples = count_samples_in_output_dir(output_path)
             for start_idx in tqdm(
                 range(existing_num_samples, num_samples, adjusted_batch_size),
@@ -194,7 +189,6 @@ class BioEmuModel:
                     denoiser=denoiser,
                     cache_embeds_dir=cache_embeds_dir,
                     msa_file=msa_file,
-                    msa_host_url=msa_host_url,
                     fk_potentials=None,
                     steering_config=None,
                 )
@@ -357,7 +351,6 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
                 denoiser_type=input_data.get("denoiser_type", "dpm"),
                 denoiser_config=input_data.get("denoiser_config"),
                 msa_a3m=msa_a3m_contents[seq_idx],
-                msa_host_url=input_data.get("msa_host_url"),
                 cache_embeds_dir=input_data.get("cache_embeds_dir"),
                 cache_so3_dir=input_data.get("cache_so3_dir"),
                 device=input_data["device"],
