@@ -44,6 +44,25 @@ def test_rejects_missing_score(monkeypatch) -> None:
         run_rs3_score(RS3ScoreInput(sequences="GACGAAAGCGACAACGCGTTCATCCGGGCA"), RS3ScoreConfig())
 
 
+# ---------------------------------------------------------------------------
+# Integration tests
+
+
+@pytest.mark.integration
+def test_rs3_scores_a_known_active_guide_above_a_poly_a_guide() -> None:
+    """The real model ranks a screening-validated context above a poly-A one, per tracrRNA."""
+    active = "GACGAAAGCGACAACGCGTTCATCCGGGCA"
+    inert = "AAAAAAAAAAAAAAAAAAAAAAAACGGAAA"
+
+    for tracr in ("Hsu2013", "Chen2013"):
+        result = run_rs3_score(RS3ScoreInput(sequences=[active, inert]), RS3ScoreConfig(tracr_rna=tracr))
+
+        validate_output(result)
+        active_score, inert_score = (item.metrics.score for item in result.results)
+        assert active_score > inert_score
+        assert result.tracr_rna == tracr
+
+
 @pytest.mark.benchmark("rs3-score")
 @pytest.mark.slow
 def test_rs3_score_benchmark(request: pytest.FixtureRequest) -> None:
