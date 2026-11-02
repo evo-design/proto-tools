@@ -37,4 +37,5 @@ Use this tool to rank PAM-compatible SpCas9 guide candidates after exact target 
 
 - **Runs on CPU in an isolated Python 3.10 environment,** because the published package pins its training-era scikit-learn dependency.
 - **Batched.** One call scores many contexts and results preserve input order.
-- **Not available on Apple Silicon.** The pinned `lightgbm==3.3.5` ships no macOS arm64 wheel, so the environment build falls back to compiling it from source and needs `cmake` and `libomp`. Linux and hosted execution use the published wheels.
+- **Chaining from `crispr-guides-enumerate`.** Its `context_sequence` is this model's 30-nt window under the default flanks, but a candidate near an interval edge keeps a shorter context and flanks carry any non-ACGT reference bases. Filter to full-length ACGT contexts before scoring; both are rejected rather than silently scored.
+- **Not available on Apple Silicon.** The pinned `lightgbm==3.3.5` ships no macOS arm64 wheel, so setup exits early instead of falling back to a source build. Linux and hosted execution use the published wheels.
