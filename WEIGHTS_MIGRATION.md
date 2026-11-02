@@ -38,7 +38,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 25 | `masked_models/esm3` | biohub_esm |  |  |  |  |  |
 | 26 | `masked_models/esmc` | biohub_esm |  |  |  |  |  |
 | 27 | `masked_models/glm2` | glm2_base | glm2 | `huggingface/hub/models--tattabio--gLM2_{150M,650M}` | 582 MB (150M) | ✅✅✅✅✅ | Shared env glm2_base; separate weights folder from minerva (different repos). |
-| 28 | `masked_models/minerva` | glm2_base |  |  |  |  |  |
+| 28 | `masked_models/minerva` | glm2_base | minerva | `huggingface/hub/models--gbrixi--minerva-mlm{,-8k}` | 2 GB (mlm) | ✅✅✅✅✅ | Shared env glm2_base. |
 | 29 | `molecular_docking/vina` |  |  |  |  |  |  |
 | 30 | `orf_prediction/orfipy` |  |  |  |  |  |  |
 | 31 | `orf_prediction/prodigal` |  |  |  |  |  |  |
