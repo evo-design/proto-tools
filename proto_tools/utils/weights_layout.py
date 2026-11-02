@@ -66,6 +66,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "esmfold",
         "esmfold2",
         "evo1",
+        "evo2",
         "fampnn",
         "foldmason",
         "foldseek",
@@ -207,6 +208,19 @@ MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "evo2": (
+        *(
+            HFRepo(f"gbrixi/evo2_{name}_vllm")
+            for name in ("20b", "7b", "7b_base", "7b_262k", "1b_base", "7b_microviridae")
+        ),
+        *(
+            HFRepo(f"arcinstitute/evo2_{name}")
+            for name in ("40b", "7b", "20b", "40b_base", "7b_base", "1b_base", "7b_262k")
+        ),
+        HFRepo("evo-design/evo-2-7b-8k-microviridae"),
+        HFHomePath("evo2_vllm"),
+        HFHomePath("evo2_*.pt"),
+    ),
     "deeppbs_specificity": (WeightsDir("deeppbs_specificity"),),
     "spliceai2": (WeightsDir("spliceai2"),),
     "evo1": (
