@@ -45,7 +45,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 32 | `rna_splicing/pangolin` |  | - | — | — | ✅ traced (no weights) | Weights bundled in pip package (venv), not cache. spliceai-score genome uses databases/ (not traced). |
 | 33 | `rna_splicing/splice_transformer` |  | splice_transformer | `huggingface/hub/models--brianhie--SpTransformer` | 115 MB | ✅✅✅✅✅ | HF shared-blob store layout; materialized on migration. |
 | 34 | `rna_splicing/spliceai` |  | - | — | — | ✅ traced (no weights) | Weights bundled in pip package (venv), not cache. spliceai-score genome uses databases/ (not traced). |
-| 35 | `rna_splicing/spliceai2` |  |  |  |  |  |  |
+| 35 | `rna_splicing/spliceai2` |  | spliceai2 | `spliceai2/spliceai2_multispecies_13M_0{1,2}/model.ckpt` + `.cache/huggingface` (setup.sh hf_hub_download local_dir; gated) | 224 MB | ✅✅✅✅✅ | Gated illumina-ai/SpliceAI2 (user token has access). Genome for spliceai2-score lives in databases/ (unchanged). |
 | 36 | `sequence_alignment/blast` |  | - | — | — | ✅ traced (no weights) | No downloaded weights. Old-layout trace passed; new-layout re-run stopped while waiting on NCBI (issue #343). |
 | 37 | `sequence_alignment/mafft` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 38 | `sequence_alignment/mmseqs2` |  | - | — | — | ✅ traced (no weights) | No weights. Databases live in databases/ (PROTO_DATABASES_DIR); not downloaded here. |

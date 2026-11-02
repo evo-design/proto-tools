@@ -111,6 +111,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "segmasker",
         "splice_transformer",
         "spliceai",
+        "spliceai2",
         "tmalign",
         "usalign",
         "viennarna",
@@ -205,6 +206,7 @@ MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "spliceai2": (WeightsDir("spliceai2"),),
     "evo1": (
         HFRepo("evo-design/evo-1.5-8k-base"),
         HFRepo("togethercomputer/evo-1-8k-base"),
