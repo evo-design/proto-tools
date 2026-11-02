@@ -327,7 +327,8 @@ def _use_managed_caches(input_data: dict[str, Any]) -> tuple[str, str]:
 
     Upstream defaults are ``~/.bioemu_embeds_cache`` (embeddings), ``~/sampling_so3_cache`` (SO3
     lookup tables), and ``~/.cache/colabfold`` (the AF2 params the embeddings need, downloaded on
-    first use). Config values still win for the first two; the AF2 params have no config field.
+    first use). Config values still win for the first two; the AF2 params have no config field and
+    are read from the alphafold2 toolkit's shared copy (setup.sh: proto_ensure_af2_params).
 
     Args:
         input_data (dict[str, Any]): Dispatch payload.
@@ -341,9 +342,10 @@ def _use_managed_caches(input_data: dict[str, Any]) -> tuple[str, str]:
     from standalone_helpers import require_weights_dir
 
     weights = Path(require_weights_dir("bioemu"))
+    af2_weights = Path(require_weights_dir("alphafold2"))  # holds params/, the layout data_dir expects
     # get_colabfold_embeds imports get_embeddings at call time, so rebinding it here takes effect
     if not isinstance(model_runner.get_embeddings, functools.partial):
-        model_runner.get_embeddings = functools.partial(model_runner.get_embeddings, data_dir=weights / "colabfold")
+        model_runner.get_embeddings = functools.partial(model_runner.get_embeddings, data_dir=af2_weights)
     embeds_dir = input_data.get("cache_embeds_dir") or str(weights / "embeds_cache")
     so3_dir = input_data.get("cache_so3_dir") or str(weights / "so3_cache")
     return embeds_dir, so3_dir

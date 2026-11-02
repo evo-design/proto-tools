@@ -185,7 +185,7 @@ proto_resolve_weights_dir() {
 #
 # Make sure the AlphaFold2 parameters are in alphafold2's weights directory and
 # set AF2_PARAMS_DIR to that params/ folder. alphafold2, bindcraft, freebindcraft,
-# and germinal all read this one copy (~5.3 GB), so the version below is pinned in
+# germinal, and bioemu all read this one copy (~5.3 GB), so the version below is pinned in
 # one place (tests/style_consistency_tests/test_shared_weights_pins.py).
 #
 # The copy counts as complete when all 15 model files are present; a partial

@@ -1,7 +1,7 @@
 """Toolkits that share a model-cache folder must pin the same version of what they put there.
 
 Several toolkits read weights another toolkit downloads, so one copy serves both: bindcraft,
-freebindcraft, and germinal read ``alphafold2``'s AF2 params, and germinal reads ``chai1``'s Chai-1
+freebindcraft, germinal, and bioemu read ``alphafold2``'s AF2 params, and germinal reads ``chai1``'s Chai-1
 files and ``ablang``'s AbLang2 weights. The cache keys these folders by name, not version, so
 whichever toolkit downloads first decides what the others load. If one toolkit bumps its pin and
 the other doesn't, the second one silently loads weights for the wrong version.
@@ -36,6 +36,7 @@ _SHARED: dict[str, list[tuple[Path, str, bool]]] = {
                 "binder_design/bindcraft",
                 "binder_design/freebindcraft",
                 "binder_design/germinal",
+                "structure_dynamics/bioemu",
             )
         ),
     ],
