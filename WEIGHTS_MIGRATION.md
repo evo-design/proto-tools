@@ -43,7 +43,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 30 | `orf_prediction/orfipy` |  |  |  |  |  |  |
 | 31 | `orf_prediction/prodigal` |  |  |  |  |  |  |
 | 32 | `rna_splicing/pangolin` |  |  |  |  |  |  |
-| 33 | `rna_splicing/splice_transformer` |  |  |  |  |  |  |
+| 33 | `rna_splicing/splice_transformer` |  | splice_transformer | `huggingface/hub/models--brianhie--SpTransformer` | 115 MB | ✅✅✅✅✅ | HF shared-blob store layout; materialized on migration. |
 | 34 | `rna_splicing/spliceai` |  |  |  |  |  |  |
 | 35 | `rna_splicing/spliceai2` |  |  |  |  |  |  |
 | 36 | `sequence_alignment/blast` |  |  |  |  |  |  |

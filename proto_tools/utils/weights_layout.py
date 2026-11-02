@@ -42,7 +42,19 @@ LAYOUT_ENV_VALUE = "toolkit"
 # Toolkits switched to the per-toolkit layout. Transitional: toolkits are added one at a time
 # while their downloads are audited, and the gate is removed once every toolkit is migrated.
 MIGRATED_TOOLKITS: frozenset[str] = frozenset(
-    {"enformer", "esm2", "esm_if1", "fampnn", "glm2", "ligandmpnn", "metal3d", "minerva", "progen2", "progen3"}
+    {
+        "enformer",
+        "esm2",
+        "esm_if1",
+        "fampnn",
+        "glm2",
+        "ligandmpnn",
+        "metal3d",
+        "minerva",
+        "progen2",
+        "progen3",
+        "splice_transformer",
+    }
 )
 
 
@@ -92,6 +104,7 @@ MigrationEntry = HFRepo | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "splice_transformer": (HFRepo("brianhie/SpTransformer"),),
     "enformer": (HFRepo("EleutherAI/enformer-official-rough"),),
     "minerva": (
         HFRepo("gbrixi/minerva-mlm"),
