@@ -53,7 +53,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 40 | `sequence_scoring/borzoi` |  |  |  |  |  |  |
 | 41 | `sequence_scoring/cherimoya` |  |  |  |  |  |  |
 | 42 | `sequence_scoring/deeppbs_specificity` |  |  |  |  |  |  |
-| 43 | `sequence_scoring/enformer` |  |  |  |  |  |  |
+| 43 | `sequence_scoring/enformer` |  | enformer | `huggingface/hub/models--EleutherAI--enformer-official-rough` | 959 MB | ✅✅✅✅✅ |  |
 | 44 | `sequence_scoring/malinois` |  |  |  |  |  |  |
 | 45 | `sequence_scoring/na_mpnn_specificity` |  |  |  |  |  |  |
 | 46 | `sequence_scoring/parade` |  |  |  |  |  |  |
