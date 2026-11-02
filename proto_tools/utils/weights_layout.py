@@ -48,6 +48,7 @@ COMPILE_CACHE_VARS: dict[str, str] = {
     "TORCHINDUCTOR_CACHE_DIR": "torchinductor",  # /tmp/torchinductor_$USER
     "TORCH_EXTENSIONS_DIR": "torch_extensions",  # ~/.cache/torch_extensions
     "VLLM_CACHE_ROOT": "vllm",  # ~/.cache/vllm
+    "HUMMING_CACHE_DIR": "humming",  # ~/.humming/cache (humming-kernels JIT, used by evo2's vLLM)
     "FLASHINFER_WORKSPACE_BASE": "flashinfer",  # ~/.cache/flashinfer
     "CUPY_CACHE_DIR": "cupy",  # ~/.cupy/kernel_cache
     "NUMBA_CACHE_DIR": "numba",  # __pycache__ beside the source

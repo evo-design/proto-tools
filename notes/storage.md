@@ -99,7 +99,7 @@ Libraries that compile kernels on first use keep a cache of the results, by defa
 
 | Kind | Variables | Location |
 |---|---|---|
-| Built from one toolkit's model code, against its env's library versions | `TRITON_CACHE_DIR`, `TORCHINDUCTOR_CACHE_DIR`, `TORCH_EXTENSIONS_DIR`, `VLLM_CACHE_ROOT`, `FLASHINFER_WORKSPACE_BASE`, `CUPY_CACHE_DIR`, `NUMBA_CACHE_DIR` | `proto_model_cache/{toolkit}/compile_cache/` |
+| Built from one toolkit's model code, against its env's library versions | `TRITON_CACHE_DIR`, `TORCHINDUCTOR_CACHE_DIR`, `TORCH_EXTENSIONS_DIR`, `VLLM_CACHE_ROOT`, `HUMMING_CACHE_DIR`, `FLASHINFER_WORKSPACE_BASE`, `CUPY_CACHE_DIR`, `NUMBA_CACHE_DIR` | `proto_model_cache/{toolkit}/compile_cache/` |
 | General: the GPU driver's JIT cache and torch's generic kernels | `CUDA_CACHE_PATH`, `PYTORCH_KERNEL_CACHE_PATH` | `PROTO_HOME/compile_cache/` (per user) |
 
 Like the JAX cache, every entry is keyed on the GPU and library versions, so a mismatch recompiles rather than giving a wrong result, and any of these folders can be deleted at any time. A value you set for one of these variables in your shell is used as-is. `IN_ENV` mode keeps the toolkit-specific caches in `{venv}/compile_cache/`; `NONE` mode leaves every library's default.
