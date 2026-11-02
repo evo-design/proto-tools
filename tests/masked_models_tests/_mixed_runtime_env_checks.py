@@ -130,6 +130,16 @@ def _dispatch(runtime: MixedMLMRuntime, operation: str, **payload: Any) -> Any:
     return _decompress_result(runtime.dispatch({"operation": operation, "device": "cpu", **payload}), to_list=True)
 
 
+def _gradient(runtime: MixedMLMRuntime, sequence: str, logits: Any, **extra: Any) -> Any:
+    """Dispatch one gradient candidate and return that candidate's own result.
+
+    The worker takes a list of candidates under ``inputs`` and answers with one entry per
+    candidate under ``results``, so a check about a single sequence wraps and unwraps here
+    rather than repeating the batch shape at every call site.
+    """
+    return _dispatch(runtime, "gradient", inputs=[{"sequence": sequence, "logits": logits}], **extra)["results"][0]
+
+
 def _assert_gradient_respects_alphabets(gradient: np.ndarray) -> None:
     """Markers carry no gradient; protein rows touch only protein columns, DNA rows only DNA."""
     assert np.isfinite(gradient).all()
@@ -154,11 +164,10 @@ def check_score_matches_full_vocab_reference_and_gradient() -> None:
             logits = runtime.adapter.model(input_ids=masked).logits[0, position]
             log_probs.append(torch.log_softmax(logits, dim=-1)[ids[0, position]].item())
     _close(result["avg_log_likelihood"], float(np.mean(log_probs)))
-    gradient_result = _dispatch(
+    gradient_result = _gradient(
         runtime,
-        "gradient",
-        sequence=_LOCUS,
-        logits=one_hot_mixed_logits(_LOCUS, sharpness=1.0),
+        _LOCUS,
+        one_hot_mixed_logits(_LOCUS, sharpness=1.0),
         temperature=None,
         batch_size=2,
     )
@@ -172,18 +181,14 @@ def check_relaxed_gradient_matches_finite_difference() -> None:
     for batch_size in [1, 2, 8]:
         runtime = _make_runtime()
         logits = np.asarray(one_hot_mixed_logits("<+>M<+>a", sharpness=2.0))
-        payload = {"sequence": "<+>M<+>a", "logits": logits.tolist(), "temperature": 0.9, "batch_size": batch_size}
-        result = _dispatch(runtime, "gradient", **payload)
+        options = {"temperature": 0.9, "batch_size": batch_size}
+        result = _gradient(runtime, "<+>M<+>a", logits.tolist(), **options)
         losses = []
         epsilon = 0.01
         for delta in [epsilon, -epsilon]:
             perturbed = logits.copy()
             perturbed[3, 21] += delta
-            losses.append(
-                _dispatch(runtime, "gradient", **{**payload, "logits": perturbed.tolist(), "compute_gradient": False})[
-                    "loss"
-                ]
-            )
+            losses.append(_gradient(runtime, "<+>M<+>a", perturbed.tolist(), **options, compute_gradient=False)["loss"])
         numerical = (losses[0] - losses[1]) / (2 * epsilon)
         _close(result["gradient"][3][21], numerical, rel=0.01, abs_=3e-5)
 
@@ -193,11 +198,10 @@ def check_ste_uses_hard_context_and_soft_backward() -> None:
     for batch_size in [1, 2, 8]:
         runtime = _make_runtime()
         state = torch.tensor(one_hot_mixed_logits(_LOCUS, sharpness=0.7))
-        result = _dispatch(
+        result = _gradient(
             runtime,
-            "gradient",
-            sequence=_LOCUS,
-            logits=state.tolist(),
+            _LOCUS,
+            state.tolist(),
             temperature=temperature,
             batch_size=batch_size,
             hard=1.0,
@@ -249,7 +253,7 @@ def check_gradient_removes_embedding_hook_after_failure() -> None:
 
     runtime.adapter.forward = fail_forward
     with _expect(RuntimeError, r"synthetic forward failure"):
-        _dispatch(runtime, "gradient", sequence="+A+a", logits=one_hot_mixed_logits("+A+a"))
+        _gradient(runtime, "+A+a", one_hot_mixed_logits("+A+a"))
     assert not runtime.adapter.embedding_layer._forward_hooks
 
 
@@ -336,13 +340,21 @@ def check_sampling_is_independent_of_mask_mapping_order() -> None:
 def check_forward_only_returns_loss_without_a_gradient() -> None:
     """compute_gradient=False must return the same loss and vocabulary with gradient=None."""
     state = torch.tensor(one_hot_mixed_logits(_LOCUS, sharpness=0.7))
-    payload = {"sequence": _LOCUS, "logits": state.tolist(), "temperature": 0.8, "batch_size": 2, "hard": 1.0}
+    payload = {
+        "inputs": [{"sequence": _LOCUS, "logits": state.tolist()}],
+        "temperature": 0.8,
+        "batch_size": 2,
+        "hard": 1.0,
+    }
 
-    with_gradient = _dispatch(_make_runtime(), "gradient", **payload)
-    forward_only = _dispatch(_make_runtime(), "gradient", compute_gradient=False, **payload)
+    with_gradient = _dispatch(_make_runtime(), "gradient", **payload)["results"][0]
+    forward_only_payload = _dispatch(_make_runtime(), "gradient", compute_gradient=False, **payload)
+    forward_only = forward_only_payload["results"][0]
 
     assert forward_only["gradient"] is None, f"forward-only returned a gradient: {forward_only['gradient']}"
-    assert forward_only["vocab"] == list(MIXED_VOCAB), f"forward-only reported {forward_only['vocab'][:4]}"
+    assert forward_only_payload["vocab"] == list(MIXED_VOCAB), (
+        f"forward-only reported {forward_only_payload['vocab'][:4]}"
+    )
     _close(forward_only["loss"], with_gradient["loss"])
 
 
@@ -355,11 +367,17 @@ def check_gradient_is_unchanged_by_a_shuffled_native_vocabulary() -> None:
     identical, in proto's columns.
     """
     state = torch.tensor(one_hot_mixed_logits(_LOCUS, sharpness=0.7))
-    payload = {"sequence": _LOCUS, "logits": state.tolist(), "temperature": 0.8, "batch_size": 2, "hard": 1.0}
+    payload = {
+        "inputs": [{"sequence": _LOCUS, "logits": state.tolist()}],
+        "temperature": 0.8,
+        "batch_size": 2,
+        "hard": 1.0,
+    }
 
-    reference = _dispatch(_make_runtime(), "gradient", **payload)
+    reference_payload = _dispatch(_make_runtime(), "gradient", **payload)
     shuffled_runtime = _make_runtime(shuffle_seed=11)
-    shuffled = _dispatch(shuffled_runtime, "gradient", **payload)
+    shuffled_payload = _dispatch(shuffled_runtime, "gradient", **payload)
+    reference, shuffled = reference_payload["results"][0], shuffled_payload["results"][0]
 
     shuffled_vocab = shuffled_runtime.adapter.tokenizer.get_vocab()
     assert [shuffled_vocab[token] for token in MIXED_VOCAB] != list(range(len(MIXED_VOCAB))), (
@@ -370,8 +388,8 @@ def check_gradient_is_unchanged_by_a_shuffled_native_vocabulary() -> None:
         np.asarray(shuffled["gradient"]), np.asarray(reference["gradient"]), rtol=1e-6, atol=1e-9
     )
     _assert_gradient_respects_alphabets(np.asarray(shuffled["gradient"]))
-    for label, result in (("reference", reference), ("shuffled", shuffled)):
-        assert result["vocab"] == list(MIXED_VOCAB), f"{label} reported {result['vocab'][:4]}"
+    for label, answered in (("reference", reference_payload), ("shuffled", shuffled_payload)):
+        assert answered["vocab"] == list(MIXED_VOCAB), f"{label} reported {answered['vocab'][:4]}"
 
 
 CHECKS = [
