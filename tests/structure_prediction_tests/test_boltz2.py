@@ -111,9 +111,10 @@ def test_boltz2_writes_one_msa_per_unique_sequence(seqs, n_files):
 
 
 def test_build_chain_msa_paths_appends_deep_unpaired_with_key_minus_one(tmp_path):
-    """Paired rows keep row-index keys; deep unpaired rows append with key=-1 (depth, no pairing).
+    """Paired rows keep row-index keys; the query and deep unpaired rows get key=-1.
 
-    Boltz excludes ``key == -1`` rows from taxonomy pairing but keeps them as MSA depth.
+    Boltz excludes ``key == -1`` rows from taxonomy pairing but keeps them as MSA depth; it always
+    places the query first, so a query key would only add a duplicate query row.
     """
     import csv as _csv
 
@@ -137,12 +138,38 @@ def test_build_chain_msa_paths_appends_deep_unpaired_with_key_minus_one(tmp_path
     paths = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
 
     rows_a = list(_csv.DictReader(Path(paths["A"]).read_text().splitlines()))
-    assert [r["key"] for r in rows_a] == ["0", "1", "2", "-1", "-1"]  # 2 paired + 2 new unpaired
+    assert [r["key"] for r in rows_a] == ["-1", "1", "2", "-1", "-1"]  # query, 2 paired, 2 new unpaired
     seqs_a = [r["sequence"] for r in rows_a]
     assert "MKTAYIAKQW" in seqs_a and "MKTAYIAKQY" in seqs_a  # new depth present, overlap deduped
 
     rows_b = list(_csv.DictReader(Path(paths["B"]).read_text().splitlines()))
-    assert [r["key"] for r in rows_b] == ["0", "1", "2", "-1"]
+    assert [r["key"] for r in rows_b] == ["-1", "1", "2", "-1"]
+
+
+def test_build_chain_msa_paths_never_pairs_an_unpaired_bundle(tmp_path):
+    """Unpaired heterocomplex rows get key=-1: row-index keys would make boltz pair unrelated rows."""
+    import csv as _csv
+
+    query_a, query_b = "MKTAYIAKQR", "GSHMEELLSK"
+    cx = Complex(
+        chains=[
+            Chain(id="A", sequence=query_a, entity_type="protein"),
+            Chain(id="B", sequence=query_b, entity_type="protein"),
+        ]
+    )
+    msas = ComplexMSAs(
+        per_chain={
+            0: MSA(aligned_sequences=[query_a, "MKTAYIAKQA", "MKTAYIAKQE"]),
+            1: MSA(aligned_sequences=[query_b, "GSHMEELLSA"]),
+        },
+        paired=False,
+    )
+
+    paths = build_chain_msa_paths(cx, msas, str(tmp_path))
+
+    for chain_id, n_rows in (("A", 3), ("B", 2)):
+        rows = list(_csv.DictReader(Path(paths[chain_id]).read_text().splitlines()))
+        assert [r["key"] for r in rows] == ["-1"] * n_rows
 
 
 # ── Affinity: YAML emission & validator ─────────────────────────────────────
