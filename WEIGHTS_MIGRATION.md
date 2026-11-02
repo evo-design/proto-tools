@@ -17,7 +17,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 4 | `causal_models/evo1` |  |  |  |  |  |  |
 | 5 | `causal_models/evo2` |  |  |  |  |  |  |
 | 6 | `causal_models/iglm` |  |  |  |  |  |  |
-| 7 | `causal_models/progen2` |  |  |  |  |  |  |
+| 7 | `causal_models/progen2` |  | progen2 | `huggingface/hub/models--hugohrban--progen2-*` (7 repos) | 577 MB (small) | ✅✅✅✅✅ | trust_remote_code modules/ regenerated, not migrated. |
 | 8 | `causal_models/progen3` |  |  |  |  |  |  |
 | 9 | `database_retrieval/ccd_lookup` |  |  |  |  |  |  |
 | 10 | `epitope_prediction/netmhcpan` |  |  |  |  |  |  |
