@@ -346,3 +346,16 @@ def test_migrate_cache_path_into_shared_folder(tmp_path: Path, migrated):
     assert (tmp_path / "alphafold2" / "weights" / "params" / "model.npz").is_file()
     assert (tmp_path / "mocktool" / "weights" / "binaries" / "tool").is_file()
     assert not (tmp_path / "mocktool" / "weights" / "params").exists()
+
+
+def test_migrate_drops_empty_old_folder(tmp_path: Path, migrated, caplog):
+    """An empty old folder is removed instead of colliding with an existing shared folder."""
+    migrated(CachePath("mocktool/params", "alphafold2/weights/params"))
+    (tmp_path / "mocktool" / "params").mkdir(parents=True)
+    _touch(tmp_path / "alphafold2" / "weights" / "params" / "model.npz")
+
+    with caplog.at_level(logging.WARNING, logger="proto_tools.utils.weights_layout"):
+        assert migrate_toolkit("mocktool", tmp_path) == []
+
+    assert not (tmp_path / "mocktool" / "params").exists()
+    assert "already exists" not in caplog.text

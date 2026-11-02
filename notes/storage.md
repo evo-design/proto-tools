@@ -151,6 +151,8 @@ Use the shared helpers rather than writing download or path code in a tool:
 - `download_weights(url, dest, sha256=..., md5=...)`: downloads once under a file lock, verifies the checksum, and renames into place, so concurrent workers on a shared cache never see a partial file. It refuses non-HTTPS URLs and sends `HF_TOKEN` only to `huggingface.co`. It is the Python counterpart of `proto_download_verified`.
 - `export_weights_dir(env_var, name, prepend=False)`: points a library's own location variable (`FOUNDRY_CHECKPOINT_DIRS`, `CHAI_DOWNLOADS_DIR`, `PROTENIX_ROOT_DIR`) at the weights directory. `prepend=True` keeps an existing search path after it.
 
+When toolkits share weights, one `setup.sh` helper owns the download so every toolkit gets the same pinned files: `proto_ensure_af2_params` (alphafold2, bindcraft, freebindcraft, germinal) and `proto_ensure_chai1_weights` (chai1, germinal). `tests/style_consistency_tests/test_shared_weights_pins.py` fails if toolkits sharing a folder pin different versions.
+
 ```python
 from standalone_helpers import download_weights, export_weights_dir, require_weights_dir
 

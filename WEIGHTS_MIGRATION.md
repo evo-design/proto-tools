@@ -11,9 +11,9 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 
 | # | Toolkit | Shared env | Weights key | Old location(s) | Size | Steps 1-5 | Notes |
 |---|---|---|---|---|---|---|---|
-| 1 | `binder_design/bindcraft` |  |  |  |  |  |  |
-| 2 | `binder_design/freebindcraft` |  |  |  |  |  |  |
-| 3 | `binder_design/germinal` |  |  |  |  |  |  |
+| 1 | `binder_design/bindcraft` |  | — (reads alphafold2) | alphafold2 params | — | ✅✅✅✅✅ | Previously re-downloaded AF2 over alphafold2 copy (sentinel mismatch); now shares it. resolve_weights_dir("alphafold2") follows requested name. |
+| 2 | `binder_design/freebindcraft` |  | — (reads alphafold2) | alphafold2 params | — | ✅✅✅✅✅ | Same as bindcraft. |
+| 3 | `binder_design/germinal` |  | germinal (+ alphafold2, chai1, ablang) | `germinal/{binaries,params,.params_redirect}`; Chai-1 + AbLang2 weights were inside the venv | 336 KB own + shared | ✅✅✅✅✅ | Reads alphafold2 params, chai1 folder (setup.sh proto_ensure_chai1_weights, HF-pinned) and ablang folder (download_archive + link_to_cache); ablang2 pinned 0.2.1. DAlphaBall link repointed on load. Tested with Config.minimal. |
 | 4 | `causal_models/evo1` |  |  |  |  |  |  |
 | 5 | `causal_models/evo2` |  |  |  |  |  |  |
 | 6 | `causal_models/iglm` |  | - | — | — | ✅ traced (no weights) | Weights ship in the iglm wheel (venv); only HF hub/version.txt touched. |
@@ -68,7 +68,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 55 | `structure_design/rfd4` |  | rfd4 | `huggingface/hub/models--nvidia--RFD4-Proteina` (pinned rev; config + model.safetensors only) | 2 GB | ✅✅✅✅✅ | No sub-model downloads (autoencoder bundled). Torch inductor compile cache in /tmp (not weights). |
 | 56 | `structure_design/rfdiffusion3` |  | rfdiffusion3 | `rfdiffusion3/rfd3_latest.ckpt` (setup.sh `foundry install`) | 3 GB | ✅✅✅✅✅ | No ~/.foundry or .env writes observed. |
 | 57 | `structure_dynamics/bioemu` |  |  |  |  |  |  |
-| 58 | `structure_prediction/alphafold2` |  |  |  |  |  |  |
+| 58 | `structure_prediction/alphafold2` |  | alphafold2 | `alphafold2/params/*.npz` (setup.sh, 2022-12-06 tar) | 5.3 GB | ✅✅✅✅✅ | Shared with bindcraft, freebindcraft, germinal via proto_ensure_af2_params (15-file completeness check + .params_complete). |
 | 59 | `structure_prediction/alphafold3` |  |  |  |  |  |  |
 | 60 | `structure_prediction/boltz2` |  | boltz2 | `boltz2/{boltz2_conf.ckpt,boltz2_aff.ckpt,mols.tar,mols/}` (runtime, cache=resolve_weights_dir) | 7.6 GB | ✅✅✅✅✅ | Affinity ckpt always downloaded (upstream). 45k-file mols/ moved by directory rename. |
 | 61 | `structure_prediction/chai1` |  | chai1 | `chai1/{models_v2/*.pt,conformers_v1.apkl,esm/traced_sdpa_esm2_t36_3B_UR50D_fp16.pt}` (setup.sh, sha-pinned) | 6.6 GB | ✅✅✅✅✅ | Sub-model: traced ESM2-3B in esm/ (same folder). Now uses export_weights_dir. germinal will share this folder. |

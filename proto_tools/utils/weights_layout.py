@@ -45,6 +45,8 @@ MIGRATED_ENV_VAR = "PROTO_WEIGHTS_MIGRATED"
 MIGRATED_TOOLKITS: frozenset[str] = frozenset(
     {
         "ablang",
+        "alphafold2",
+        "bindcraft",
         "blast",
         "boltz2",
         "borzoi",
@@ -65,6 +67,8 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "fampnn",
         "foldmason",
         "foldseek",
+        "freebindcraft",
+        "germinal",
         "glm2",
         "iglm",
         "ipsae",
@@ -193,6 +197,11 @@ MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "germinal": (
+        CachePath("germinal/params", "alphafold2/weights/params"),
+        WeightsDir("germinal"),
+    ),
+    "alphafold2": (WeightsDir("alphafold2"),),
     "ablang": (WeightsDir("ablang"),),
     "foldseek": (WeightsDir("foldseek"),),
     "boltz2": (WeightsDir("boltz2"),),
@@ -436,6 +445,11 @@ def migrate_toolkit(toolkit: str, cache_root: Path, *, dry_run: bool = False) ->
         moved = []
         for old, new in _planned_moves(toolkit, cache_root):
             if not old.exists() and not old.is_symlink():
+                continue
+            if old.is_dir() and not old.is_symlink() and not any(old.iterdir()):
+                # An empty folder an old setup.sh created carries nothing to move
+                if not dry_run:
+                    old.rmdir()
                 continue
             if new.exists():
                 logger.warning("%s: not migrating %s, %s already exists; remove one of them", toolkit, old, new)

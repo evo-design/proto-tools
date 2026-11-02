@@ -145,9 +145,8 @@ proto_install_cuda_toolkit() {
 # Priority:
 #   1. PROTO_{TOOL_NAME}_WEIGHTS_DIR (per-tool override)
 #   2. PROTO_MODEL_CACHE:
-#      - (default/unset): {PROTO_HOME}/proto_model_cache/{toolkit}
-#      - /absolute/path:  /absolute/path/{toolkit} (shared directory)
-#        (both get a weights/ subfolder when <toolkit> is in PROTO_WEIGHTS_MIGRATED)
+#      - (default/unset): {PROTO_HOME}/proto_model_cache/{toolkit}/weights
+#      - /absolute/path:  /absolute/path/{toolkit}/weights (shared directory)
 #      - IN_ENV:          {VENV_PATH}/model_weight_cache (legacy, per-venv)
 #      - NONE:            {VENV_PATH}/weights (fallback)
 #
@@ -171,18 +170,112 @@ proto_resolve_weights_dir() {
     elif [ "${PROTO_MODEL_CACHE:-}" = "NONE" ]; then
         WEIGHTS_DIR="${VENV_PATH}/weights"
     elif [ -n "${PROTO_MODEL_CACHE:-}" ]; then
-        WEIGHTS_DIR="${PROTO_MODEL_CACHE}/${toolkit}"
+        WEIGHTS_DIR="${PROTO_MODEL_CACHE}/${toolkit}/weights"
     else
         # Default: PROTO_HOME/proto_model_cache/ directory
         local _proto_home="${PROTO_HOME:-$HOME/.proto}"
-        WEIGHTS_DIR="${_proto_home}/proto_model_cache/${toolkit}"
-    fi
-    if [ -z "$override" ] && [ "${PROTO_MODEL_CACHE:-}" != "IN_ENV" ] && [ "${PROTO_MODEL_CACHE:-}" != "NONE" ]; then
-        case ",${PROTO_WEIGHTS_MIGRATED:-}," in
-            *",${toolkit},"*) WEIGHTS_DIR="${WEIGHTS_DIR}/weights" ;;
-        esac
+        WEIGHTS_DIR="${_proto_home}/proto_model_cache/${toolkit}/weights"
     fi
     mkdir -p "$WEIGHTS_DIR"
+}
+
+
+# ---------------------------------------------------------------------------
+# proto_ensure_af2_params
+#
+# Make sure the AlphaFold2 parameters are in alphafold2's weights directory and
+# set AF2_PARAMS_DIR to that params/ folder. alphafold2, bindcraft, freebindcraft,
+# and germinal all read this one copy (~5.3 GB), so the version below is pinned in
+# one place (tests/style_consistency_tests/test_shared_weights_pins.py).
+#
+# The copy counts as complete when all 15 model files are present; a partial
+# extraction is downloaded again. .params_complete records a verified copy.
+#
+# Example:
+#   proto_ensure_af2_params
+#   echo "AF2 params at: $AF2_PARAMS_DIR"
+#
+# Reference: tools/structure_prediction/alphafold2/standalone/setup.sh
+# ---------------------------------------------------------------------------
+proto_ensure_af2_params() {
+    proto_resolve_weights_dir alphafold2
+    AF2_PARAMS_DIR="${WEIGHTS_DIR}/params"
+    mkdir -p "$AF2_PARAMS_DIR"
+
+    _proto_af2_params_complete() {
+        local model variant
+        for model in 1 2 3 4 5; do
+            for variant in "" "_ptm" "_multimer_v3"; do
+                [ -s "${AF2_PARAMS_DIR}/params_model_${model}${variant}.npz" ] || return 1
+            done
+        done
+    }
+
+    if [ -f "${AF2_PARAMS_DIR}/.params_complete" ] || _proto_af2_params_complete; then
+        touch "${AF2_PARAMS_DIR}/.params_complete"
+        echo "AlphaFold2 parameters already present at ${AF2_PARAMS_DIR}"
+        return 0
+    fi
+
+    echo "Downloading AlphaFold2 parameters (~5.3 GB) into ${AF2_PARAMS_DIR}..."
+    curl -fsSL https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar | tar x -C "$AF2_PARAMS_DIR"
+    if ! _proto_af2_params_complete; then
+        echo "ERROR: AlphaFold2 parameter download into ${AF2_PARAMS_DIR} is incomplete" >&2
+        return 1
+    fi
+    touch "${AF2_PARAMS_DIR}/.params_complete"
+}
+
+
+
+# ---------------------------------------------------------------------------
+# proto_ensure_chai1_weights
+#
+# Stage Chai-1's weights into the chai1 toolkit's weights directory and set
+# CHAI1_WEIGHTS_DIR to it. chai1 and germinal both point CHAI_DOWNLOADS_DIR there,
+# so chai_lab never falls back to its own (flaky) downloader. Every file is
+# sha256-pinned, so both toolkits load exactly the same weights.
+#
+# Example:
+#   proto_ensure_chai1_weights
+#   echo "Chai-1 weights at: $CHAI1_WEIGHTS_DIR"
+#
+# Reference: tools/structure_prediction/chai1/standalone/setup.sh
+# ---------------------------------------------------------------------------
+proto_ensure_chai1_weights() {
+    proto_resolve_weights_dir chai1
+    CHAI1_WEIGHTS_DIR="$WEIGHTS_DIR"
+    local HF_BASE CHAI_ASSETS COMPONENT
+
+    # The model components come from Chai Discovery's HuggingFace repo, pinned to a commit. These
+    # match chai_lab's own downloads byte for byte; the digests are the files' HuggingFace LFS ids.
+    HF_BASE="https://huggingface.co/chaidiscovery/chai-1/resolve/9e998997951bbc1680f83939be7f0f4ef16187b2"
+    local -A COMPONENT_SHA256=(
+        ["feature_embedding.pt"]="58600fb282827ee105b4bf33845c2eb2dce2a7d2ba7582951f76c9290c66c019"
+        ["bond_loss_input_proj.pt"]="98f3b2e415d11e460a684cdbfc213ca80447308022b1953cc5326ad468948851"
+        ["token_embedder.pt"]="60cada19fd9c77d8298131a00368d162b6bc7d3c836dd36c715db04d21f7bbde"
+        ["trunk.pt"]="b7a08e104455f76491088a5eeaea9bb95a08168c48969b0b892971346e51ccbc"
+        ["diffusion_module.pt"]="bd77cf4095ad6b8a4eae7e390d01d24be1ebd819922ca3f28e8744f9945c9cad"
+        ["confidence_head.pt"]="82a4ac9f934fdd0e73870150f508cecbe010c1383234bdadcaa70d57323deb6b"
+    )
+    mkdir -p "${CHAI1_WEIGHTS_DIR}/models_v2" "${CHAI1_WEIGHTS_DIR}/esm"
+    for COMPONENT in "${!COMPONENT_SHA256[@]}"; do
+        proto_download_verified \
+            "${HF_BASE}/${COMPONENT}" \
+            "${CHAI1_WEIGHTS_DIR}/models_v2/${COMPONENT}" \
+            "${COMPONENT_SHA256[$COMPONENT]}"
+    done
+
+    # The ligand conformer cache and the traced ESM2 encoder are published only on Chai's CDN.
+    CHAI_ASSETS="https://chaiassets.com/chai1-inference-depencencies"
+    proto_download_verified \
+        "${CHAI_ASSETS}/conformers_v1.apkl" \
+        "${CHAI1_WEIGHTS_DIR}/conformers_v1.apkl" \
+        "f2161256b565bbd84198da8b3e3d3978ae2f179f778d0995cd135c4c0c57c41f"
+    proto_download_verified \
+        "${CHAI_ASSETS}/esm2/traced_sdpa_esm2_t36_3B_UR50D_fp16.pt" \
+        "${CHAI1_WEIGHTS_DIR}/esm/traced_sdpa_esm2_t36_3B_UR50D_fp16.pt" \
+        "074673b97e1c1ff9c3cf949294749dd446ad1c83cee50a466b4841bb4d89c27a"
 }
 
 
@@ -501,7 +594,9 @@ _proto_download_verified_locked() {
     echo "Downloading $(basename "$dest")..."
     _proto_remove_stale_temps "$dest"
     tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
-    if ! curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
+    # Retry transient failures: some upstream CDNs drop large transfers intermittently
+    if ! curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
+        --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
         rm -f "$tmp"
         echo "ERROR: failed to download ${url}" >&2
         return 1

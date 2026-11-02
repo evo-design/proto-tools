@@ -10,18 +10,7 @@ proto_install_cuda_toolkit "${ALPHAFOLD2_CUDA_TOOLKIT_CONSTRAINT:-}"
 echo "Installing JAX, ColabDesign, and deps..."
 uv pip install -r requirements.txt
 
-# Download AF2 parameters (~3.5GB)
-proto_resolve_weights_dir alphafold2
-WEIGHTS_DIR="${WEIGHTS_DIR}/params"
-mkdir -p "$WEIGHTS_DIR"
-PARAMS_DIR="$WEIGHTS_DIR"
-if [ ! -d "$PARAMS_DIR" ] || [ -z "$(ls -A "$PARAMS_DIR"/*.npz 2>/dev/null)" ]; then
-    echo "Downloading AlphaFold2 parameters (~3.5GB)..."
-    mkdir -p "$PARAMS_DIR"
-    curl -fsSL https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar | tar x -C "$PARAMS_DIR"
-    echo "AlphaFold2 parameters downloaded to $PARAMS_DIR"
-else
-    echo "AlphaFold2 parameters already present at $PARAMS_DIR"
-fi
+# AF2 parameters (~5.3 GB), shared with bindcraft, freebindcraft, and germinal
+proto_ensure_af2_params
 
 echo "AlphaFold2 (ColabDesign) setup complete!"
