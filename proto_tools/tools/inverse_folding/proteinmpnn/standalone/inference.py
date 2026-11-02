@@ -431,7 +431,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
             return_logits=input_dict["return_logits"],
             backbone_noise=input_dict["backbone_noise"],
-            homooligomer=input_dict.get("homooligomer", False),
+            homooligomer=input_dict["homooligomer"],
         )
     if operation == "score":
         return _model.score(

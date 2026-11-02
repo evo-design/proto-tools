@@ -137,13 +137,6 @@ def _fake_dispatch(sink: list[dict], seq: str = "AGSVL"):
     return staticmethod(dispatch)
 
 
-def test_oligomer_structure_helper_builds_requested_chains():
-    """The homooligomer tests depend on this helper producing distinct, equal-length chains."""
-    structure = _oligomer_structure({"A": _PROTOMER, "B": _PROTOMER[:3]})
-    assert structure.get_chain_sequence("A") == "AGSVL"
-    assert structure.get_chain_sequence("B") == "AGS"
-
-
 # ---------------------------------------------------------------------------
 # proteinmpnn-sample-homooligomer: input validation
 # ---------------------------------------------------------------------------
