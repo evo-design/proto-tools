@@ -11,7 +11,7 @@ CRISPR Guide Enumeration scans reference-oriented DNA intervals for protospacers
 
 ## Background
 
-RNA-guided CRISPR nucleases recognize a protospacer together with a nuclease-specific protospacer-adjacent motif (PAM). The PAM's sequence and position relative to the protospacer vary by nuclease, so the operation accepts both an IUPAC PAM grammar and an explicit five-prime or three-prime orientation. The default `NGG` three-prime PAM and 20-nt protospacer describe SpCas9-style enumeration [Jinek et al. (2012)](https://doi.org/10.1126/science.1225829).
+RNA-guided CRISPR nucleases recognize a protospacer together with a nuclease-specific protospacer-adjacent motif (PAM). The PAM's sequence and position relative to the protospacer vary by nuclease, so the operation accepts both an IUPAC PAM grammar and an explicit five-prime or three-prime orientation. The default `NGG` three-prime PAM and 20-nt protospacer describe SpCas9-style enumeration.
 
 This implementation performs deterministic string matching rather than efficacy or off-target prediction. It uses standard [IUPAC-IUB nucleic-acid ambiguity symbols](https://iupac.qmul.ac.uk/misc/naabb.html) for the PAM grammar, but emits only candidates whose complete protospacer and observed PAM contain canonical A/C/G/T bases. Returned coordinates are always 1-indexed and inclusive, regardless of PAM strand.
 
