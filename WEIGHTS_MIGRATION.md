@@ -28,7 +28,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 15 | `gene_annotation/promoter_calculator` |  |  |  |  |  |  |
 | 16 | `gene_annotation/pyhmmer` |  |  |  |  |  |  |
 | 17 | `inverse_folding/caliby` |  |  |  |  |  |  |
-| 18 | `inverse_folding/esm_if1` |  |  |  |  |  |  |
+| 18 | `inverse_folding/esm_if1` |  | esm_if1 | `esm_if1/{esm_if1_gvp4_t16_142M_UR50.pt,paired_weights.pt}` (setup.sh curl) | 2 GB (2 files) | ✅✅✅✅✅ | Setup-time download; step 4 rebuilt env. |
 | 19 | `inverse_folding/fampnn` |  | fampnn | `fampnn/*.pt` (setup.sh via `proto_resolve_weights_dir`) | 113 MB (3 files) | ✅✅✅✅✅ | Downloaded at env build, so step 4 rebuilds the env. Fresh download sha256-matches the migrated tree. |
 | 20 | `inverse_folding/ligandmpnn` |  | ligandmpnn | `ligandmpnn/*.pt` (setup.sh `foundry install`), `ligandmpnn/legacy/<commit>/` (runtime, original model) | 10 MB | ✅✅✅✅✅ | Foundry reads FOUNDRY_CHECKPOINT_DIRS=resolve_weights_dir. Legacy path not exercised by example; same WeightsDir covers it. |
 | 21 | `inverse_folding/proteinmpnn` |  |  |  |  |  |  |
