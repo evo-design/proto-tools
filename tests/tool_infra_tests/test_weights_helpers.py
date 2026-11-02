@@ -1,7 +1,9 @@
 """Tests for the standalone weights download and env-export helpers."""
 
+import fcntl
 import hashlib
 import io
+import logging
 import os
 import urllib.error
 import urllib.request
@@ -14,6 +16,7 @@ from proto_tools.utils.standalone_helpers_source.standalone_helpers.weights impo
     _SecureRedirectHandler,
     download_weights,
     export_weights_dir,
+    file_lock,
     redact_url,
     require_weights_dir,
 )
@@ -173,3 +176,111 @@ def test_require_weights_dir_raises_without_location(monkeypatch):
 
     with pytest.raises(RuntimeError, match="PROTO_MYTOOL_WEIGHTS_DIR"):
         require_weights_dir("mytool")
+
+
+class _InterruptingOpener:
+    """An opener whose response read raises ``KeyboardInterrupt`` mid-download."""
+
+    def open(self, request: urllib.request.Request, timeout: float) -> "_InterruptingOpener":
+        return self
+
+    def __enter__(self) -> "_InterruptingOpener":
+        return self
+
+    def __exit__(self, *args: object) -> bool:
+        return False
+
+    def read(self, _size: int) -> bytes:
+        raise KeyboardInterrupt
+
+
+def test_download_lock_excludes_and_releases(tmp_path: Path):
+    """A held flock blocks a second holder until released; the lock file is kept."""
+    lock_path = tmp_path / "d.lock"
+    blocker = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+    try:
+        fcntl.flock(blocker, fcntl.LOCK_EX)
+        with pytest.raises(TimeoutError), file_lock(lock_path, timeout=0):
+            pass
+    finally:
+        fcntl.flock(blocker, fcntl.LOCK_UN)
+        os.close(blocker)
+
+    with file_lock(lock_path):
+        assert lock_path.exists()
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        ("https://host.co/x.ckpt", "https://host.co/<redacted-path>"),
+        ("https://[::1]:8443/x.ckpt", "https://[::1]:8443/<redacted-path>"),
+        ("https://user:secret@host.co:8443/x.ckpt#frag", "https://host.co:8443/<redacted-path>"),
+        ("https://example.com:99999/x.ckpt", "<unparseable-url>"),
+    ],
+)
+def test_redact_url_edge_cases(url, expected):
+    """IPv6 hosts and ports survive; userinfo and fragments don't; a bad port is not echoed."""
+    assert redact_url(url) == expected
+
+
+def test_url_secrets_absent_from_log_and_error(tmp_path: Path, opener: _FakeOpener):
+    """Credentials carried in a URL's path or query never reach a log line or exception."""
+    records: list[str] = []
+
+    class _Handler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record.getMessage())
+
+    handler = _Handler()
+    weights.logger.addHandler(handler)
+    url = "https://downloads.example/private/PATH_TOKEN/model.ckpt?token=QUERY_TOKEN"
+    try:
+        with pytest.raises(RuntimeError) as err:
+            download_weights(url, tmp_path / "model.ckpt", md5="0" * 32)
+    finally:
+        weights.logger.removeHandler(handler)
+
+    rendered = str(err.value) + "\n".join(records)
+    assert "downloads.example" in rendered
+    assert "PATH_TOKEN" not in rendered and "QUERY_TOKEN" not in rendered
+
+
+def test_download_ignores_planted_temp_symlink(tmp_path: Path, opener: _FakeOpener):
+    """A symlink planted at a guessable temp name cannot redirect the write; shared-cache mode applies."""
+    victim = tmp_path / "victim.txt"
+    victim.write_bytes(b"safe")
+    planted = tmp_path / f".model.ckpt.{os.getpid()}.tmp"
+    planted.symlink_to(victim)
+    tmp_path.chmod(0o770)
+
+    dest = download_weights("https://example.com/model.ckpt", tmp_path / "model.ckpt")
+
+    assert dest.read_bytes() == _PAYLOAD
+    assert dest.stat().st_mode & 0o777 == 0o640
+    assert victim.read_bytes() == b"safe"
+
+
+def test_download_replaces_destination_symlink(tmp_path: Path, opener: _FakeOpener):
+    """A symlink at ``dest`` is never accepted as a cache hit; it is replaced by the real file."""
+    victim = tmp_path / "attacker.ckpt"
+    victim.write_bytes(b"attacker-controlled-pickle")
+    dest = tmp_path / "model.ckpt"
+    dest.symlink_to(victim)
+
+    download_weights("https://example.com/model.ckpt", dest)
+
+    assert not dest.is_symlink()
+    assert dest.read_bytes() == _PAYLOAD
+    assert victim.read_bytes() == b"attacker-controlled-pickle"
+
+
+def test_download_interrupt_leaves_no_temp_file(monkeypatch, tmp_path: Path):
+    """An interrupted read removes its temp file and never creates ``dest``."""
+    monkeypatch.setattr(weights.urllib.request, "build_opener", lambda *handlers: _InterruptingOpener())
+
+    with pytest.raises(KeyboardInterrupt):
+        download_weights("https://example.com/model.ckpt", tmp_path / "model.ckpt")
+
+    assert list(tmp_path.glob(".model.ckpt.*.tmp")) == []
+    assert not (tmp_path / "model.ckpt").exists()

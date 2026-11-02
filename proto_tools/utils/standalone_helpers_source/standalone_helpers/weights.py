@@ -175,7 +175,7 @@ def file_lock(lock_path: str | Path, timeout: float = LOCK_TIMEOUT_SECONDS) -> I
     """
     lock_path = Path(lock_path)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o666)
     try:
         started = time.monotonic()
         while True:
