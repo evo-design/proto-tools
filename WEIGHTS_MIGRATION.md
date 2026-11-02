@@ -18,7 +18,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 5 | `causal_models/evo2` |  |  |  |  |  |  |
 | 6 | `causal_models/iglm` |  |  |  |  |  |  |
 | 7 | `causal_models/progen2` |  | progen2 | `huggingface/hub/models--hugohrban--progen2-*` (7 repos) | 577 MB (small) | ✅✅✅✅✅ | trust_remote_code modules/ regenerated, not migrated. |
-| 8 | `causal_models/progen3` |  |  |  |  |  |  |
+| 8 | `causal_models/progen3` |  | progen3 | `huggingface/hub/models--Profluent-Bio--progen3-*` (6 repos) | 215 MB (112m) | ✅✅✅✅✅ | Hardcodes cuda:0; the CLI forces cpu locally, so runs go through the registry. Final GPU run loaded from new layout. |
 | 9 | `database_retrieval/ccd_lookup` |  |  |  |  |  |  |
 | 10 | `epitope_prediction/netmhcpan` |  |  |  |  |  |  |
 | 11 | `gene_annotation/crispr_tracr_rna` |  |  |  |  |  |  |
