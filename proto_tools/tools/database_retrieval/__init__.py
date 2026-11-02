@@ -100,6 +100,32 @@ from proto_tools.tools.database_retrieval.ncbi import (
     run_ncbi_reference_bundle,
 )
 
+# Paperclip literature retrieval
+from proto_tools.tools.database_retrieval.paperclip import (
+    LiteratureAccessKind,
+    PaperclipDocument,
+    PaperclipDocumentConfig,
+    PaperclipDocumentInput,
+    PaperclipDocumentOutput,
+    PaperclipGrepConfig,
+    PaperclipGrepInput,
+    PaperclipGrepMatch,
+    PaperclipGrepOutput,
+    PaperclipLineMatch,
+    PaperclipLookupConfig,
+    PaperclipLookupInput,
+    PaperclipLookupOutput,
+    PaperclipPaper,
+    PaperclipSearchConfig,
+    PaperclipSearchHit,
+    PaperclipSearchInput,
+    PaperclipSearchOutput,
+    run_paperclip_document,
+    run_paperclip_grep,
+    run_paperclip_lookup,
+    run_paperclip_search,
+)
+
 # PDB tools
 from proto_tools.tools.database_retrieval.pdb import (
     PdbChain,
@@ -264,6 +290,29 @@ __all__ = [
     "NCBIReferenceBundleInput",
     "NCBIReferenceBundleOutput",
     "run_ncbi_reference_bundle",
+    # Paperclip literature retrieval
+    "LiteratureAccessKind",
+    "PaperclipDocument",
+    "PaperclipDocumentConfig",
+    "PaperclipDocumentInput",
+    "PaperclipDocumentOutput",
+    "PaperclipSearchConfig",
+    "PaperclipSearchHit",
+    "PaperclipSearchInput",
+    "PaperclipSearchOutput",
+    "run_paperclip_document",
+    "PaperclipGrepConfig",
+    "PaperclipGrepInput",
+    "PaperclipGrepMatch",
+    "PaperclipGrepOutput",
+    "PaperclipLineMatch",
+    "PaperclipLookupConfig",
+    "PaperclipLookupInput",
+    "PaperclipLookupOutput",
+    "PaperclipPaper",
+    "run_paperclip_grep",
+    "run_paperclip_lookup",
+    "run_paperclip_search",
     # UniProt fetch
     "UniProtFetchConfig",
     "UniProtFetchInput",

@@ -101,6 +101,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/database_retrieval/ensembl/">ensembl/</a>
 ├── <a href="proto_tools/tools/database_retrieval/interproscan/">interproscan/</a>
 ├── <a href="proto_tools/tools/database_retrieval/ncbi/">ncbi/</a>
+├── <a href="proto_tools/tools/database_retrieval/paperclip/">paperclip/</a>
 ├── <a href="proto_tools/tools/database_retrieval/pdb/">pdb/</a>
 ├── <a href="proto_tools/tools/database_retrieval/pubchem/">pubchem/</a>
 ├── <a href="proto_tools/tools/database_retrieval/rfam/">rfam/</a>
