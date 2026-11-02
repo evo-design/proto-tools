@@ -20,7 +20,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 7 | `causal_models/progen2` |  | progen2 | `huggingface/hub/models--hugohrban--progen2-*` (7 repos) | 577 MB (small) | ✅✅✅✅✅ | trust_remote_code modules/ regenerated, not migrated. |
 | 8 | `causal_models/progen3` |  | progen3 | `huggingface/hub/models--Profluent-Bio--progen3-*` (6 repos) | 215 MB (112m) | ✅✅✅✅✅ | Hardcodes cuda:0; the CLI forces cpu locally, so runs go through the registry. Final GPU run loaded from new layout. |
 | 9 | `database_retrieval/ccd_lookup` |  | ccd_lookup | `ccd_lookup/{components.cif,ccd_index.json}` (setup.sh) | 506 MB | ✅✅✅✅✅ | components.cif sha-matches; index differs only by the CIF mtime stamp it records (rename preserves mtime, so migrated index stays valid). |
-| 10 | `epitope_prediction/netmhcpan` |  |  |  |  |  |  |
+| 10 | `epitope_prediction/netmhcpan` |  | netmhcpan | `netmhcpan/<os>_<arch>/` = user-provided netMHCpan-4.2 (manual, DTU license) | — | ✅ migration + resolution simulated | Licensed manual install. Simulated install migrates to netmhcpan/weights/ and resolves. SETUP.md path updated. NETMHCPAN_HOME/NMHOME still take precedence (documented). |
 | 11 | `gene_annotation/crispr_tracr_rna` |  | - | — | — | ✅ traced (no weights) | Models (gdrive) extracted into venv at setup, not cache. |
 | 12 | `gene_annotation/meme` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 13 | `gene_annotation/minced` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
@@ -78,7 +78,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 65 | `structure_prediction/protenix` |  | protenix | `protenix/checkpoint/*.pt` + `protenix/common/` (runtime via PROTENIX_ROOT_DIR) | 7.8 GB (base_default + mini_esm) | ✅✅✅✅✅ | Sub-model confirmed: mini_esm pulls esm2_t36_3B_UR50D{,-contact-regression}.pt into checkpoint/ (not torch hub); migrates and reloads. Now uses export_weights_dir. |
 | 66 | `structure_prediction/rf3` |  | rf3 | `rf3/rf3_foundry_01_24_latest_remapped.ckpt` (setup.sh `foundry install`) | 3 GB | ✅✅✅✅✅ | No ~/.foundry or .env writes observed. |
 | 67 | `structure_prediction/viennarna` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
-| 68 | `structure_prediction/x3dna` |  |  |  |  |  |  |
+| 68 | `structure_prediction/x3dna` |  | x3dna | `x3dna/` = user-provided X3DNA v2.4 root (manual, gated) | — | ✅ migration + resolution simulated | Licensed manual install, cannot download. Simulated install migrates to x3dna/weights/ and is found by setup.sh and run.py. SETUP.md path updated. $X3DNA env var still takes precedence (documented). |
 | 69 | `structure_scoring/dssp` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 70 | `structure_scoring/ipsae` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 71 | `structure_scoring/metal3d` |  | metal3d | `metal3d/*.pth` (setup.sh, 3 files) | 42 MB | ✅✅✅✅✅ | Load log confirms weights/ path. |

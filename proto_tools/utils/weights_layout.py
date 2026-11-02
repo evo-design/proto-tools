@@ -92,6 +92,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "mock_pytorch_multi_gpu_tool",
         "mock_pytorch_tool",
         "na_mpnn_specificity",
+        "netmhcpan",
         "opendde",
         "orfipy",
         "pangolin",
@@ -118,6 +119,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "usalign",
         "viennarna",
         "vina",
+        "x3dna",
     }
 )
 
@@ -208,6 +210,8 @@ MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "netmhcpan": (WeightsDir("netmhcpan"),),
+    "x3dna": (WeightsDir("x3dna"),),
     "evo2": (
         *(
             HFRepo(f"gbrixi/evo2_{name}_vllm")

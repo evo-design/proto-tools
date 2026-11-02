@@ -49,7 +49,7 @@ is needed**:
 
 ```bash
 # Resolve the cache location the tool reads from (default ~/.proto/proto_model_cache):
-NETMHCPAN_CACHE="${PROTO_MODEL_CACHE:-${PROTO_HOME:-$HOME/.proto}/proto_model_cache}/netmhcpan"
+NETMHCPAN_CACHE="${PROTO_MODEL_CACHE:-${PROTO_HOME:-$HOME/.proto}/proto_model_cache}/netmhcpan/weights"
 mkdir -p "$NETMHCPAN_CACHE"
 cp -a ~/netmhcpan/netMHCpan-4.2/. "$NETMHCPAN_CACHE/"
 ```
