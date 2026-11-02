@@ -88,6 +88,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "pymol_rmsd",
         "pyrosetta",
         "rf3",
+        "rfd4",
         "rfdiffusion3",
         "segmasker",
         "splice_transformer",
@@ -170,6 +171,7 @@ MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "rfd4": (HFRepo("nvidia/RFD4-Proteina"),),
     "esmc": (
         *(HFRepo(f"biohub/ESMC-{size}") for size in ("300M", "600M", "6B")),
         HFRepoPattern("models--biohub--ESMC-*-sae-*"),
