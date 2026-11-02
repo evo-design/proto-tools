@@ -16,17 +16,17 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 3 | `binder_design/germinal` |  |  |  |  |  |  |
 | 4 | `causal_models/evo1` |  |  |  |  |  |  |
 | 5 | `causal_models/evo2` |  |  |  |  |  |  |
-| 6 | `causal_models/iglm` |  |  |  |  |  |  |
+| 6 | `causal_models/iglm` |  | - | — | — | ✅ traced (no weights) | Weights ship in the iglm wheel (venv); only HF hub/version.txt touched. |
 | 7 | `causal_models/progen2` |  | progen2 | `huggingface/hub/models--hugohrban--progen2-*` (7 repos) | 577 MB (small) | ✅✅✅✅✅ | trust_remote_code modules/ regenerated, not migrated. |
 | 8 | `causal_models/progen3` |  | progen3 | `huggingface/hub/models--Profluent-Bio--progen3-*` (6 repos) | 215 MB (112m) | ✅✅✅✅✅ | Hardcodes cuda:0; the CLI forces cpu locally, so runs go through the registry. Final GPU run loaded from new layout. |
 | 9 | `database_retrieval/ccd_lookup` |  | ccd_lookup | `ccd_lookup/{components.cif,ccd_index.json}` (setup.sh) | 506 MB | ✅✅✅✅✅ | components.cif sha-matches; index differs only by the CIF mtime stamp it records (rename preserves mtime, so migrated index stays valid). |
 | 10 | `epitope_prediction/netmhcpan` |  |  |  |  |  |  |
-| 11 | `gene_annotation/crispr_tracr_rna` |  |  |  |  |  |  |
-| 12 | `gene_annotation/meme` |  |  |  |  |  |  |
-| 13 | `gene_annotation/minced` |  |  |  |  |  |  |
-| 14 | `gene_annotation/miranda` |  |  |  |  |  |  |
-| 15 | `gene_annotation/promoter_calculator` |  |  |  |  |  |  |
-| 16 | `gene_annotation/pyhmmer` |  |  |  |  |  |  |
+| 11 | `gene_annotation/crispr_tracr_rna` |  | - | — | — | ✅ traced (no weights) | Models (gdrive) extracted into venv at setup, not cache. |
+| 12 | `gene_annotation/meme` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 13 | `gene_annotation/minced` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 14 | `gene_annotation/miranda` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 15 | `gene_annotation/promoter_calculator` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 16 | `gene_annotation/pyhmmer` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 17 | `inverse_folding/caliby` |  | caliby | `caliby/caliby/*.ckpt` (8) + `caliby/.cache/huggingface` (setup.sh hf_hub_download local_dir) | 541 MB | ✅✅✅✅✅ | Ckpts sha-match; only local_dir .metadata timestamps differ. |
 | 18 | `inverse_folding/esm_if1` |  | esm_if1 | `esm_if1/{esm_if1_gvp4_t16_142M_UR50.pt,paired_weights.pt}` (setup.sh curl) | 2 GB (2 files) | ✅✅✅✅✅ | Setup-time download; step 4 rebuilt env. |
 | 19 | `inverse_folding/fampnn` |  | fampnn | `fampnn/*.pt` (setup.sh via `proto_resolve_weights_dir`) | 113 MB (3 files) | ✅✅✅✅✅ | Downloaded at env build, so step 4 rebuilds the env. Fresh download sha256-matches the migrated tree. |
@@ -39,16 +39,16 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 26 | `masked_models/esmc` | biohub_esm | esmc | `huggingface/hub/models--biohub--ESMC-{300M,600M,6B}` + SAE family `models--biohub--ESMC-*-sae-*` (HFRepoPattern) + legacy `esmc-*-2024-12` | 1.1 GB (300M + 1 SAE) | ✅✅✅✅✅ | Sub-model confirmed: esmc-sae-features pulls an SAE repo; both migrate and reload. Shared env biohub_esm. |
 | 27 | `masked_models/glm2` | glm2_base | glm2 | `huggingface/hub/models--tattabio--gLM2_{150M,650M}` | 582 MB (150M) | ✅✅✅✅✅ | Shared env glm2_base; separate weights folder from minerva (different repos). |
 | 28 | `masked_models/minerva` | glm2_base | minerva | `huggingface/hub/models--gbrixi--minerva-mlm{,-8k}` | 2 GB (mlm) | ✅✅✅✅✅ | Shared env glm2_base. |
-| 29 | `molecular_docking/vina` |  |  |  |  |  |  |
-| 30 | `orf_prediction/orfipy` |  |  |  |  |  |  |
-| 31 | `orf_prediction/prodigal` |  |  |  |  |  |  |
-| 32 | `rna_splicing/pangolin` |  |  |  |  |  |  |
+| 29 | `molecular_docking/vina` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 30 | `orf_prediction/orfipy` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 31 | `orf_prediction/prodigal` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 32 | `rna_splicing/pangolin` |  | - | — | — | ✅ traced (no weights) | Weights bundled in pip package (venv), not cache. spliceai-score genome uses databases/ (not traced). |
 | 33 | `rna_splicing/splice_transformer` |  | splice_transformer | `huggingface/hub/models--brianhie--SpTransformer` | 115 MB | ✅✅✅✅✅ | HF shared-blob store layout; materialized on migration. |
-| 34 | `rna_splicing/spliceai` |  |  |  |  |  |  |
+| 34 | `rna_splicing/spliceai` |  | - | — | — | ✅ traced (no weights) | Weights bundled in pip package (venv), not cache. spliceai-score genome uses databases/ (not traced). |
 | 35 | `rna_splicing/spliceai2` |  |  |  |  |  |  |
-| 36 | `sequence_alignment/blast` |  |  |  |  |  |  |
-| 37 | `sequence_alignment/mafft` |  |  |  |  |  |  |
-| 38 | `sequence_alignment/mmseqs2` |  |  |  |  |  |  |
+| 36 | `sequence_alignment/blast` |  | - | — | — | ✅ traced (no weights) | No downloaded weights. Old-layout trace passed; new-layout re-run stopped while waiting on NCBI (issue #343). |
+| 37 | `sequence_alignment/mafft` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 38 | `sequence_alignment/mmseqs2` |  | - | — | — | ✅ traced (no weights) | No weights. Databases live in databases/ (PROTO_DATABASES_DIR); not downloaded here. |
 | 39 | `sequence_scoring/alphagenome` |  |  |  |  |  |  |
 | 40 | `sequence_scoring/borzoi` |  | borzoi | `huggingface/hub/models--johahi--{flashzoi,borzoi}-replicate-{0..3}`, `models--johahi--borzoi-replicate-{0..3}-mouse` (12 repos) | 673 MB (mouse rep 0) | ✅✅✅✅✅ | Human path uses flashzoi (CUDA); tested mouse replicate. |
 | 41 | `sequence_scoring/cherimoya` |  | cherimoya | `huggingface/hub/models--programmable-genomics--CATv1` (pinned revision) | 2 MB (1 fold) | ✅✅✅✅✅ | Triton kernels compile to ~/.triton/cache (not weights; cleaned by wipe). |
@@ -57,14 +57,14 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 44 | `sequence_scoring/malinois` |  | malinois | `malinois/MODELS-malinois_artifacts__*.tar.gz` + extracted `malinois/malinois_artifacts/` (runtime zenodo) | 128 MB | ✅✅✅✅✅ | Tarball kept beside extraction (upstream behavior). Temp-dir fallback only when resolve returns None. |
 | 45 | `sequence_scoring/na_mpnn_specificity` |  | na_mpnn_specificity | `na_mpnn_specificity/` = git clone root (setup.sh); ckpt at models/specificity_model/s_70114.pt | 201 MB | ✅✅✅✅✅ | Whole clone moves into weights/. Top-level *.pt glob fallback in run.py still present. |
 | 46 | `sequence_scoring/parade` |  | parade | `parade/*.ckpt` (runtime, MD5-checked GitHub raw) | 3 MB (utr5) | ✅✅✅✅✅ | Temp-dir fallback only when resolve_weights_dir returns None. |
-| 47 | `sequence_scoring/primer3` |  |  |  |  |  |  |
+| 47 | `sequence_scoring/primer3` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 48 | `sequence_scoring/puffin` |  | puffin | `puffin/puffin_repo/` (setup.sh git clone; weights at resources/puffin.pth) | 5 MB | ✅✅✅✅✅ | Separate pre-existing bug: env lacks `six` (selene_sdk import fails); installed by hand for testing only. |
-| 49 | `sequence_scoring/segmasker` |  |  |  |  |  |  |
-| 50 | `structure_alignment/foldmason` |  |  |  |  |  |  |
+| 49 | `sequence_scoring/segmasker` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 50 | `structure_alignment/foldmason` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 51 | `structure_alignment/foldseek` |  | foldseek | `foldseek/prostt5/{weights/prostt5-f16.gguf,.proto-ready}` (runtime, FASTA inputs only) | 2 GB | ✅✅✅✅✅ | Sub-model: ProstT5 only for FASTA input; verified with FASTA input. Separate bug: FASTA-mode easy-cluster then fails (issue filed). |
-| 52 | `structure_alignment/pymol_rmsd` |  |  |  |  |  |  |
-| 53 | `structure_alignment/tmalign` |  |  |  |  |  |  |
-| 54 | `structure_alignment/usalign` |  |  |  |  |  |  |
+| 52 | `structure_alignment/pymol_rmsd` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 53 | `structure_alignment/tmalign` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 54 | `structure_alignment/usalign` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 55 | `structure_design/rfd4` |  | rfd4 | `huggingface/hub/models--nvidia--RFD4-Proteina` (pinned rev; config + model.safetensors only) | 2 GB | ✅✅✅✅✅ | No sub-model downloads (autoencoder bundled). Torch inductor compile cache in /tmp (not weights). |
 | 56 | `structure_design/rfdiffusion3` |  | rfdiffusion3 | `rfdiffusion3/rfd3_latest.ckpt` (setup.sh `foundry install`) | 3 GB | ✅✅✅✅✅ | No ~/.foundry or .env writes observed. |
 | 57 | `structure_dynamics/bioemu` |  |  |  |  |  |  |
@@ -77,12 +77,12 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 64 | `structure_prediction/opendde` |  | opendde | `opendde/checkpoint/*.pt` + `opendde/common/` (setup.sh hf_hub_download local_dir) + HF ref stub | 5.6 GB | ✅✅✅✅✅ | No sub-model downloads. OPENDDE_ROOT_DIR stays a documented override for user-provided assets. |
 | 65 | `structure_prediction/protenix` |  | protenix | `protenix/checkpoint/*.pt` + `protenix/common/` (runtime via PROTENIX_ROOT_DIR) | 7.8 GB (base_default + mini_esm) | ✅✅✅✅✅ | Sub-model confirmed: mini_esm pulls esm2_t36_3B_UR50D{,-contact-regression}.pt into checkpoint/ (not torch hub); migrates and reloads. Now uses export_weights_dir. |
 | 66 | `structure_prediction/rf3` |  | rf3 | `rf3/rf3_foundry_01_24_latest_remapped.ckpt` (setup.sh `foundry install`) | 3 GB | ✅✅✅✅✅ | No ~/.foundry or .env writes observed. |
-| 67 | `structure_prediction/viennarna` |  |  |  |  |  |  |
+| 67 | `structure_prediction/viennarna` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 68 | `structure_prediction/x3dna` |  |  |  |  |  |  |
-| 69 | `structure_scoring/dssp` |  |  |  |  |  |  |
-| 70 | `structure_scoring/ipsae` |  |  |  |  |  |  |
+| 69 | `structure_scoring/dssp` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
+| 70 | `structure_scoring/ipsae` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 71 | `structure_scoring/metal3d` |  | metal3d | `metal3d/*.pth` (setup.sh, 3 files) | 42 MB | ✅✅✅✅✅ | Load log confirms weights/ path. |
-| 72 | `structure_scoring/pyrosetta` |  |  |  |  |  |  |
+| 72 | `structure_scoring/pyrosetta` |  | - | — | — | ✅ traced (no weights) | Rosetta DB inside conda package (venv); nothing in cache. |
 | 73 | `testing/mock_cli_multi_gpu_tool` |  |  |  |  |  |  |
 | 74 | `testing/mock_cli_tool` |  |  |  |  |  |  |
 | 75 | `testing/mock_cpu_tool` |  |  |  |  |  |  |
