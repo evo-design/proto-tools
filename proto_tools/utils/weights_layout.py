@@ -41,7 +41,7 @@ LAYOUT_ENV_VALUE = "toolkit"
 
 # Toolkits switched to the per-toolkit layout. Transitional: toolkits are added one at a time
 # while their downloads are audited, and the gate is removed once every toolkit is migrated.
-MIGRATED_TOOLKITS: frozenset[str] = frozenset({"fampnn"})
+MIGRATED_TOOLKITS: frozenset[str] = frozenset({"esm2", "fampnn"})
 
 
 @dataclass(frozen=True)
@@ -90,6 +90,19 @@ MigrationEntry = HFRepo | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "esm2": (
+        *(
+            HFRepo(f"fredzzp/{ckpt}")
+            for ckpt in (
+                "esm2_t6_8M_UR50D",
+                "esm2_t12_35M_UR50D",
+                "esm2_t30_150M_UR50D",
+                "esm2_t33_650M_UR50D",
+                "esm2_t36_3B_UR50D",
+            )
+        ),
+        HFRepo("facebook/esm2_t48_15B_UR50D"),
+    ),
     "fampnn": (WeightsDir("fampnn"),),
 }
 
@@ -187,6 +200,44 @@ def _planned_moves(toolkit: str, cache_root: Path) -> list[tuple[Path, Path]]:
     return moves
 
 
+def _materialize_shared_blobs(repo_dir: Path) -> None:
+    """Replace a hub repo's links into the cache-wide shared blob store with regular files.
+
+    ``huggingface_hub`` >= 1.x stores Xet files once at ``hub/blobs/<xx>/<hash>`` and links each
+    repo's ``blobs/<etag>`` to it with a relative symlink, which breaks when the repo moves to
+    another hub. Each payload is hard-linked into the repo (copied across filesystems), giving
+    the classic per-repo layout every ``huggingface_hub`` version reads, and the repo is dropped
+    from the store's ``.refs`` manifest; a store entry with no references left is deleted.
+
+    Args:
+        repo_dir (Path): A ``models--org--name`` folder inside a hub cache.
+    """
+    blobs = repo_dir / "blobs"
+    if not blobs.is_dir():
+        return
+    for link in sorted(blobs.iterdir()):
+        if not link.is_symlink():
+            continue
+        payload = (blobs / os.readlink(link)).resolve()
+        if not payload.is_file():
+            continue
+        tmp = link.with_name(f"{link.name}.migrating")
+        try:
+            os.link(payload, tmp)
+        except OSError:
+            shutil.copy2(payload, tmp)
+        os.replace(tmp, link)
+        manifest = payload.with_name(f"{payload.name}.refs")
+        ref = f"{repo_dir.name}/blobs/{link.name}"
+        refs = [r for r in manifest.read_text().splitlines() if r.strip()] if manifest.is_file() else [ref]
+        remaining = [r for r in refs if r != ref]
+        if remaining:
+            manifest.write_text("".join(f"{r}\n" for r in remaining))
+        else:
+            for stale in (payload, manifest, payload.with_name(f"{payload.name}.lock")):
+                stale.unlink(missing_ok=True)
+
+
 def migrate_toolkit(toolkit: str, cache_root: Path, *, dry_run: bool = False) -> list[tuple[Path, Path]]:
     """Move ``toolkit``'s weights from the old flat layout into its per-toolkit folder.
 
@@ -212,6 +263,8 @@ def migrate_toolkit(toolkit: str, cache_root: Path, *, dry_run: bool = False) ->
                 logger.warning("%s: not migrating %s, %s already exists; remove one of them", toolkit, old, new)
                 continue
             if not dry_run:
+                if old.parent.name == "hub":
+                    _materialize_shared_blobs(old)
                 new.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(old), str(new))
                 logger.info("%s: migrated %s -> %s", toolkit, old, new)

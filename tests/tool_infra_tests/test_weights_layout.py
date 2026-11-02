@@ -233,3 +233,49 @@ def test_migrate_shared_key_moves_into_shared_folder(tmp_path: Path, migrated, k
     migrate_toolkit("mocktool", tmp_path)
 
     assert (tmp_path / "esm2" / "huggingface" / "hub" / "models--org--model" / "w.bin").is_file()
+
+
+def _shared_blob_repo(hub: Path, repo: str, etag: str, xet_hash: str) -> Path:
+    """Lay out a hub repo whose blob links into the shared store, as huggingface_hub 1.x does."""
+    payload = _touch(hub / "blobs" / xet_hash[:2] / xet_hash, "weights")
+    _touch(hub / "blobs" / ".huggingface-shared-blobs", "1\n")
+    repo_blobs = hub / repo / "blobs"
+    repo_blobs.mkdir(parents=True)
+    (repo_blobs / etag).symlink_to(Path("..", "..", "blobs", xet_hash[:2], xet_hash))
+    snapshot = hub / repo / "snapshots" / "rev"
+    snapshot.mkdir(parents=True)
+    (snapshot / "model.safetensors").symlink_to(Path("..", "..", "blobs", etag))
+    manifest = payload.with_name(f"{xet_hash}.refs")
+    manifest.write_text(
+        manifest.read_text() + f"{repo}/blobs/{etag}\n" if manifest.exists() else f"{repo}/blobs/{etag}\n"
+    )
+    return payload
+
+
+def test_migrate_hf_repo_with_shared_blobs(tmp_path: Path, migrated):
+    """Moved repos keep readable weights when their blobs lived in the cache-wide shared store."""
+    migrated(HFRepo("org/model"))
+    hub = tmp_path / "huggingface" / "hub"
+    xet_hash = "ab" + "0" * 62
+    payload = _shared_blob_repo(hub, "models--org--model", "e1", xet_hash)
+    _shared_blob_repo(hub, "models--org--other", "e2", xet_hash)
+
+    migrate_toolkit("mocktool", tmp_path)
+
+    moved = tmp_path / "mocktool" / "huggingface" / "hub" / "models--org--model"
+    assert (moved / "snapshots" / "rev" / "model.safetensors").read_text() == "weights"
+    # The other repo still references the shared payload, so it stays, minus our manifest entry
+    assert payload.read_text() == "weights"
+    assert payload.with_name(f"{xet_hash}.refs").read_text() == "models--org--other/blobs/e2\n"
+
+
+def test_migrate_drops_unreferenced_shared_blob(tmp_path: Path, migrated):
+    """A shared payload referenced only by the moved repo is removed from the old store."""
+    migrated(HFRepo("org/model"))
+    xet_hash = "cd" + "0" * 62
+    payload = _shared_blob_repo(tmp_path / "huggingface" / "hub", "models--org--model", "e1", xet_hash)
+
+    migrate_toolkit("mocktool", tmp_path)
+
+    assert not payload.exists()
+    assert not payload.with_name(f"{xet_hash}.refs").exists()

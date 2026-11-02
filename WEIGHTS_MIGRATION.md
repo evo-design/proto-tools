@@ -34,7 +34,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 21 | `inverse_folding/proteinmpnn` |  |  |  |  |  |  |
 | 22 | `masked_models/ablang` |  |  |  |  |  |  |
 | 23 | `masked_models/codonfm` |  |  |  |  |  |  |
-| 24 | `masked_models/esm2` |  |  |  |  |  |  |
+| 24 | `masked_models/esm2` |  | esm2 | `huggingface/hub/models--fredzzp--esm2_*` (5 repos), `models--facebook--esm2_t48_15B_UR50D` | 30 MB (8M test ckpt) | ✅✅✅✅✅ | HF hub 1.x shared-blob store: migration materializes repo blobs (hard links) before moving. Weights fetched at runtime, env kept for step 4. |
 | 25 | `masked_models/esm3` | biohub_esm |  |  |  |  |  |
 | 26 | `masked_models/esmc` | biohub_esm |  |  |  |  |  |
 | 27 | `masked_models/glm2` | glm2_base |  |  |  |  |  |
