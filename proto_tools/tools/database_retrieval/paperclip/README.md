@@ -7,7 +7,7 @@
 
 ## Overview
 
-[Paperclip](https://paperclip.gxl.ai/) is a hosted literature search and retrieval service from [GXL](https://gxl.ai/) covering more than 3.4 million papers and preprints. This toolkit exposes four tools over the Paperclip API that follow GXL's recommended workflow, namely `paperclip-literature-search` (find papers by topic), `paperclip-literature-lookup` (find papers by DOI, PMID, or another metadata field), `paperclip-literature-grep` (find papers whose full text mentions exact text), and `paperclip-literature-document` (read part of one paper). All four run on CPU in process and need only network access and a Paperclip API key.
+[Paperclip](https://paperclip.gxl.ai/) is a hosted literature search and retrieval service from [GXL](https://gxl.ai/) covering more than 12 million papers and preprints. This toolkit exposes four tools over the Paperclip API that follow GXL's recommended workflow, namely `paperclip-literature-search` (find papers by topic), `paperclip-literature-lookup` (find papers by DOI, PMID, or another metadata field), `paperclip-literature-grep` (find papers whose full text mentions exact text), and `paperclip-literature-document` (read part of one paper). All four run on CPU in process and need only network access and a Paperclip API key.
 
 ## Background
 
@@ -18,6 +18,7 @@ GXL recommends finding papers first, then reading only the parts that matter. Se
 ### Learning Resources
 
 - [Paperclip documentation](https://paperclip.gxl.ai/docs) (GXL) - official guide to the corpora, search options, and the command-line client.
+- [Paperclip install guide](https://paperclip.gxl.ai/install) (GXL) - connecting Paperclip's MCP server to Claude Code, Claude Desktop, Codex, Cursor, and other agents.
 
 ## Tools
 
@@ -33,6 +34,7 @@ Use search to find natural sequences, experimental context, and design methods r
 
 - For general biomedical literature, search `pmc`, the default. Use `papers` to cover PMC, bioRxiv, medRxiv, and arXiv together.
 - Narrow results with `year`, `journal`, `author`, or `article_type` rather than adding those words to the query.
+- Set `include_abstracts=False` for a compact hit list to triage, then read the promising papers with `paperclip-literature-document`.
 - Up to 100 hits, a smaller `limit` returns a prefix of a larger one, as long as the Paperclip index has not been updated in between.
 
 ### Paperclip Literature Lookup (`paperclip-literature-lookup`)
@@ -72,8 +74,8 @@ Use these tools to collect source-backed design evidence and natural examples be
 
 - `document_id` takes a Paperclip id (`PMC11754230`, `bio_29a07e4e799b`, `arx_2605.11347`) or one as copied: lowercase `pmc...`, a PMC or Paperclip article link, or an arXiv id or link. Find a paper by DOI or PMID with `paperclip-literature-lookup` first.
 - The paper's citation details come back typed in `document.paper`, the same fields a search hit carries.
-- Prefer `read="lines"` (the default, first 100 lines) or `read="grep"` with a `pattern`. GXL advises against reading whole papers.
-- `read="full_text"` reads the paper in pages and returns it as `content` only when every line Paperclip reports for it came back (`line_count`); otherwise the text is kept as `content_preview`.
+- Prefer `read="lines"` (the default, first 100 lines) or `read="grep"` with a `pattern`; `max_matches` (20 by default) caps how many matching lines a grep returns. GXL advises against reading whole papers.
+- `read="full_text"` returns the complete paper as `content`, read in pages past Paperclip's 50,000-character limit per reply. A long paper can run to 100,000 characters or more.
 - Set `PAPERCLIP_API_KEY` before retrieval, or `PAPERCLIP_TOKEN` for a bearer token; the config fields `paperclip_api_key` and `paperclip_token` take precedence. The tools do not read credentials saved by an interactive `paperclip login`.
 - `PAPERCLIP_BASE_URL` points the tools at a different Paperclip deployment.
 - Treat literature as evidence for candidate generation, not functional validation.
@@ -84,5 +86,7 @@ Use these tools to collect source-backed design evidence and natural examples be
 
 These notes apply to all four Paperclip tools.
 
+- **For interactive literature research, connect Paperclip's own MCP server instead.** It answers each call about as fast or faster, returns more compact replies written for agents to read, and offers far more than these four tools: claim-level evidence, SQL over the corpus, map and reduce over result sets, figure questions, and clinical trials, FDA documents, and patents. Set it up from the [Paperclip install guide](https://paperclip.gxl.ai/install) ([Claude Code instructions](https://paperclip.gxl.ai/install#install-claude-code)); it serves `https://paperclip.gxl.ai/mcp` with an `X-API-Key` header, using a key from [Paperclip's API keys page](https://paperclip.gxl.ai/keys).
+- **Use these tools when a program consumes the results**, since they return typed fields (DOI, PMID, year, journal, line-numbered matches, citation URLs) rather than formatted text; when you need a paper's complete text, since Paperclip's `cat` stops at 50,000 characters and `read="full_text"` reads past it; or when you want literature retrieval alongside other proto-tools tools through one connection, with each output recording its `tool_version`.
 - **Requires authenticated network access.** No literature database is bundled or synchronized locally; every call is an HTTPS request to the Paperclip service.
 - **Runs in process on CPU.** There is no environment to build and no worker to start; runtime is dominated by remote retrieval.

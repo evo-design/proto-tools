@@ -99,7 +99,6 @@ class _FakeClient:
         *,
         files: dict[str, str] | None = None,
         lines: list[str] | None = None,
-        line_count: int = 0,
         grep_output: str = "",
         grep_result_id: str | None = None,
         results: dict[str, list[dict[str, Any]]] | None = None,
@@ -107,7 +106,6 @@ class _FakeClient:
         self.kwargs: dict[str, Any] = {}
         self.files = files or {}
         self.lines = lines or []
-        self.count = line_count
         self.grep_output = grep_output
         self.grep_result_id = grep_result_id
         self.results = results or {}
@@ -137,10 +135,6 @@ class _FakeClient:
     def read_lines(self, path: str, start: int, end: int) -> list[str]:
         self.calls.append(("read_lines", (path, start, end), {}))
         return self.lines
-
-    def line_count(self, path: str) -> int:
-        self.calls.append(("line_count", (path,), {}))
-        return self.count
 
     def operations(self) -> list[str]:
         return [name for name, _, _ in self.calls]
@@ -322,18 +316,6 @@ def test_read_lines_refuses_a_line_longer_than_one_read():
         client.read_lines(_CONTENT, 1, 2)
 
 
-def test_line_count_reads_the_preview_hint_or_counts_a_short_file():
-    preview = (
-        "L1: Title\nL2: Journal\n\n[467 more lines not shown]\n"
-        f"  cat --lines 5-472 {_CONTENT}    # lines after this preview\n"
-    )
-    client, _ = _client({_key("cat", path=_CONTENT): _mcp_reply(preview)})
-    assert client.line_count(_CONTENT) == 472
-
-    short, _ = _client({_key("cat", path=_CONTENT): _mcp_reply("L1: a\nL2: b\n")})
-    assert short.line_count(_CONTENT) == 2
-
-
 @pytest.mark.parametrize(
     ("status", "exc_type", "fragment"),
     [
@@ -416,6 +398,17 @@ def test_search_normalizes_citable_hits(fake):
     assert second.access_kind == "metadata"
 
 
+def test_search_can_leave_out_abstracts(fake):
+    fake.saved_result = ("s_1", [{"document_id": "PMC1", "source": "pmc", "abstract": "A long abstract."}])
+
+    (hit,) = run_paperclip_search(
+        PaperclipSearchInput(query="x"), PaperclipSearchConfig(paperclip_api_key="pk", include_abstracts=False)
+    ).hits
+
+    assert hit.abstract is None
+    assert hit.access_kind == "metadata"
+
+
 def test_search_rejects_hits_without_a_document_id(fake):
     fake.saved_result = ("s_1", [{"title": "anonymous"}])
     with pytest.raises(ValueError, match="stable document_id"):
@@ -481,7 +474,7 @@ def test_document_reads_a_line_range_by_default(fake):
         PaperclipDocumentInput(document_id="PMC1"), PaperclipDocumentConfig(paperclip_api_key="pk", end_line=2)
     ).document
 
-    assert fake.calls[1] == ("read_lines", (_CONTENT, 1, 2), {})
+    assert ("read_lines", (_CONTENT, 1, 2), {}) in fake.calls
     assert document.access_kind == "excerpt"
     assert document.excerpt == "L1: Title\nL2: Abstract"
     assert (document.paper.document_id, document.paper.doi) == ("PMC1", "10.1/x")
@@ -495,7 +488,8 @@ def test_document_grep_parses_match_and_context_lines(fake):
         PaperclipDocumentConfig(paperclip_api_key="pk", read="grep", pattern="IC50", context_lines=1),
     ).document
 
-    assert fake.calls[1] == ("grep", ("IC50", _CONTENT), {"ignore_case": False, "context_lines": 1})
+    grep_call = next(call for call in fake.calls if call[0] == "grep")
+    assert grep_call == ("grep", ("IC50", _CONTENT), {"ignore_case": False, "max_matches": 20, "context_lines": 1})
     assert [(m.line_number, m.text, m.is_match) for m in document.matches] == [
         (44, "context before", False),
         (45, "the IC50 was 3 nM", True),
@@ -522,25 +516,16 @@ def test_document_config_rejects_inconsistent_read_settings(overrides: dict[str,
         PaperclipDocumentConfig(**overrides)
 
 
-@pytest.mark.parametrize(
-    ("returned", "access_kind"),
-    [(["L1: one", "L2: two", "L3: three"], "full_text"), (["L1: one", "L2: two"], "inaccessible")],
-)
-def test_document_full_text_is_complete_only_with_every_reported_line(fake, returned, access_kind):
-    fake.count = 3
-    fake.lines = returned
+def test_document_full_text_reads_to_the_end_of_the_file(fake):
+    fake.lines = ["L1: one", "L2: two", "L3: three"]
 
     document = run_paperclip_document(
         PaperclipDocumentInput(document_id="PMC1"), PaperclipDocumentConfig(paperclip_api_key="pk", read="full_text")
     ).document
 
-    assert fake.calls[2] == ("read_lines", (_CONTENT, 1, 3), {})
-    assert document.access_kind == access_kind
-    assert document.line_count == 3
-    text = "\n".join(returned)
-    assert (document.content, document.content_preview) == (
-        (text, None) if access_kind == "full_text" else (None, text)
-    )
+    assert ("read_lines", (_CONTENT, 1, paperclip_client.LAST_LINE), {}) in fake.calls
+    assert document.access_kind == "full_text"
+    assert (document.content, document.line_count) == ("L1: one\nL2: two\nL3: three", 3)
 
 
 def test_document_metadata_mode_reads_only_metadata(fake):

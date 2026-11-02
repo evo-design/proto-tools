@@ -21,6 +21,7 @@ import logging
 import os
 import re
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -40,8 +41,10 @@ _RESULT_ID = re.compile(r"\b([smr]_[0-9a-f]{4,})\b")
 _NUMBERED_LINE = re.compile(r"^L(\d+):")
 #: ``cat`` appends this when a reply reaches its character limit, possibly mid-line.
 _TRUNCATED = "[output truncated at"
-#: A ``cat`` preview ends with a hint naming the file's last line: ``cat --lines 5-472 <path>``.
-_PREVIEW_LAST_LINE = re.compile(r"cat --lines \d+-(\d+) ")
+#: Upper bound for "to the end of the file"; a reply that is not cut off has reached the end.
+LAST_LINE = 10_000_000
+#: Concurrent requests for the per-paper reads of one lookup.
+_LOOKUP_WORKERS = 8
 #: A lookup hit's identifier line: ``PMC11754230 · Frontiers in Immunology · 2025``.
 _LOOKUP_ID_LINE = re.compile(r"^\s+(\S+) · ", re.MULTILINE)
 
@@ -235,8 +238,13 @@ class PaperclipClient:
         result = self.call("lookup", {"field": field, "value": value, "limit": limit})
         if result.result_id is not None:
             return result.result_id, self.fetch_result_papers(result.result_id)
-        document_ids = list(dict.fromkeys(_LOOKUP_ID_LINE.findall(result.output)))
-        return None, [json.loads(self.read_file(f"/papers/{document_id}/meta.json")) for document_id in document_ids]
+        paths = [
+            f"/papers/{document_id}/meta.json" for document_id in dict.fromkeys(_LOOKUP_ID_LINE.findall(result.output))
+        ]
+        if not paths:
+            return None, []
+        with ThreadPoolExecutor(max_workers=min(_LOOKUP_WORKERS, len(paths))) as pool:
+            return None, [json.loads(text) for text in pool.map(self.read_file, paths)]
 
     def grep(
         self,
@@ -268,8 +276,9 @@ class PaperclipClient:
     def read_lines(self, path: str, start: int, end: int) -> list[str]:
         """Return lines ``start`` through ``end`` (1-indexed, inclusive) as ``L<n>: text`` strings.
 
-        Stops early at the end of the file. A reply cut off at Paperclip's character limit loses
-        its last, possibly partial, line, and reading resumes from that line.
+        Stops early at the end of the file, so ``end=LAST_LINE`` reads the rest of it. A reply cut
+        off at Paperclip's character limit loses its last, possibly partial, line, and reading
+        resumes from that line; a reply that is not cut off holds everything left in the range.
         """
         lines: list[str] = []
         next_line = start
@@ -292,11 +301,3 @@ class PaperclipClient:
             if not truncated:
                 break
         return lines
-
-    def line_count(self, path: str) -> int:
-        """Return how many lines a paper file has, from the hint ending ``cat``'s preview."""
-        output = self.call("cat", {"path": path}).output
-        match = _PREVIEW_LAST_LINE.search(output)
-        if match is not None:
-            return int(match.group(1))
-        return sum(1 for raw in output.splitlines() if _NUMBERED_LINE.match(raw))

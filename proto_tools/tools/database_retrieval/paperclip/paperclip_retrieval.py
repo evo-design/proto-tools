@@ -10,13 +10,18 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from proto_tools.tools.database_retrieval.paperclip.paperclip_client import PaperclipClient, PaperclipCommandError
+from proto_tools.tools.database_retrieval.paperclip.paperclip_client import (
+    LAST_LINE,
+    PaperclipClient,
+    PaperclipCommandError,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField
 
@@ -173,15 +178,18 @@ def _paper_fields(item: dict[str, Any], document_id: str) -> dict[str, Any]:
     }
 
 
-def _normalize_hit(item: dict[str, Any], operation: str) -> PaperclipSearchHit:
+def _normalize_hit(item: dict[str, Any], operation: str, *, include_abstract: bool) -> PaperclipSearchHit:
     document_id = str(item.get("document_id") or item.get("pmc_id") or "")
     if not document_id:
         raise ValueError(f"Paperclip {operation} result did not include a stable document_id")
+    fields = _paper_fields(item, document_id)
+    if not include_abstract:
+        fields["abstract"] = None
     return PaperclipSearchHit(
-        **_paper_fields(item, document_id),
+        **fields,
         matched_text=item.get("chunk_text"),
         relevance_score=item.get("rerank_score") if item.get("rerank_score") is not None else item.get("score"),
-        access_kind=LiteratureAccessKind.ABSTRACT if item.get("abstract") else LiteratureAccessKind.METADATA,
+        access_kind=LiteratureAccessKind.ABSTRACT if fields["abstract"] else LiteratureAccessKind.METADATA,
     )
 
 
@@ -221,6 +229,7 @@ class PaperclipSearchConfig(_PaperclipConfig):
         journal (str | None): Only return papers from this journal.
         author (str | None): Only return papers by this author.
         article_type (str | None): Only return papers of this article type.
+        include_abstracts (bool): Whether each hit carries its abstract.
     """
 
     sources: list[PaperclipSource] = ConfigField(
@@ -240,6 +249,11 @@ class PaperclipSearchConfig(_PaperclipConfig):
     author: str | None = ConfigField(default=None, title="Author", description="Only return papers by this author")
     article_type: str | None = ConfigField(
         default=None, title="Article Type", description="Only return papers of this article type"
+    )
+    include_abstracts: bool = ConfigField(
+        default=True,
+        title="Include Abstracts",
+        description="Return each hit's abstract; turn off for a compact list to triage",
     )
 
     @field_validator("sources")
@@ -316,7 +330,7 @@ def run_paperclip_search(
         query=inputs.query,
         sources=list(config.sources),
         result_id=result_id,
-        hits=[_normalize_hit(item, "search") for item in papers],
+        hits=[_normalize_hit(item, "search", include_abstract=config.include_abstracts) for item in papers],
     )
 
 
@@ -346,9 +360,15 @@ class PaperclipLookupConfig(_PaperclipConfig):
             defaults to ``PAPERCLIP_TOKEN``.
         timeout_seconds (float): Maximum duration of one service operation.
         limit (int): Maximum number of returned papers.
+        include_abstracts (bool): Whether each hit carries its abstract.
     """
 
     limit: int = ConfigField(default=10, ge=1, le=100, title="Result Limit", description="Maximum papers returned")
+    include_abstracts: bool = ConfigField(
+        default=True,
+        title="Include Abstracts",
+        description="Return each hit's abstract; turn off for a compact list to triage",
+    )
 
 
 class PaperclipLookupOutput(_JsonOutput):
@@ -405,7 +425,7 @@ def run_paperclip_lookup(
         field=inputs.field,
         value=inputs.value,
         result_id=result_id,
-        hits=[_normalize_hit(item, "lookup") for item in papers],
+        hits=[_normalize_hit(item, "lookup", include_abstract=config.include_abstracts) for item in papers],
     )
 
 
@@ -595,6 +615,7 @@ class PaperclipDocumentConfig(_PaperclipConfig):
         end_line (int): Last line to read in ``lines`` mode (1-indexed, inclusive).
         pattern (str | None): Regular expression to find in ``grep`` mode.
         context_lines (int): Lines of context around each ``grep`` match.
+        max_matches (int): Most matching lines returned in ``grep`` mode.
         ignore_case (bool): Whether ``grep`` matching ignores case.
     """
 
@@ -610,6 +631,9 @@ class PaperclipDocumentConfig(_PaperclipConfig):
     )
     context_lines: int = ConfigField(
         default=0, ge=0, le=20, title="Context Lines", description="Lines of context around each grep match"
+    )
+    max_matches: int = ConfigField(
+        default=20, ge=1, le=500, title="Max Matches", description="Most matching lines returned in grep mode"
     )
     ignore_case: bool = ConfigField(
         default=False, title="Ignore Case", description="Match grep patterns regardless of case"
@@ -641,8 +665,7 @@ class PaperclipDocument(BaseModel):
         excerpt (str | None): Requested line range, in ``lines`` mode.
         matches (list[PaperclipLineMatch]): Matching and context lines, in ``grep`` mode.
         content (str | None): Complete line-numbered full text, in ``full_text`` mode.
-        content_preview (str | None): Full text that came back incomplete.
-        line_count (int | None): Lines Paperclip reports for the full text.
+        line_count (int | None): Lines in the full text, in ``full_text`` mode.
     """
 
     paper: PaperclipPaper = Field(title="Paper", description="Citation details for the paper")
@@ -656,12 +679,7 @@ class PaperclipDocument(BaseModel):
     content: str | None = Field(
         default=None, title="Content", description="Complete line-numbered full text", repr=False
     )
-    content_preview: str | None = Field(
-        default=None, title="Content Preview", description="Incomplete full text returned by Paperclip", repr=False
-    )
-    line_count: int | None = Field(
-        default=None, title="Line Count", description="Lines Paperclip reports for the full text"
-    )
+    line_count: int | None = Field(default=None, title="Line Count", description="Lines in the full text")
 
 
 class PaperclipDocumentOutput(_JsonOutput):
@@ -692,6 +710,21 @@ def _parse_grep_lines(output: str) -> list[PaperclipLineMatch]:
     return matches
 
 
+def _read_content(client: PaperclipClient, content_path: str, config: PaperclipDocumentConfig) -> list[str] | str:
+    """Read the part of a paper's line-numbered text that ``config.read`` asks for."""
+    if config.read == "lines":
+        return client.read_lines(content_path, config.start_line, config.end_line)
+    if config.read == "grep":
+        return client.grep(
+            config.pattern or "",
+            content_path,
+            ignore_case=config.ignore_case,
+            max_matches=config.max_matches,
+            context_lines=config.context_lines,
+        ).output
+    return client.read_lines(content_path, 1, LAST_LINE)
+
+
 @tool(
     key="paperclip-literature-document",
     local_only=(
@@ -713,9 +746,8 @@ def run_paperclip_document(
     """Read one paper's metadata and the requested part of its line-numbered text.
 
     ``lines`` mode reads a line range and ``grep`` mode returns the lines matching a pattern, which
-    is how GXL recommends reading a paper. ``full_text`` reads the whole paper in pages and labels
-    it complete only when every line Paperclip reports was returned; anything shorter is kept as a
-    preview.
+    is how GXL recommends reading a paper. ``full_text`` reads the whole paper in pages, which
+    GXL advises against for context-limited agents.
 
     Args:
         inputs (PaperclipDocumentInput): The Paperclip document identifier.
@@ -729,7 +761,12 @@ def run_paperclip_document(
     client = _client(config)
     paper_dir = f"/papers/{inputs.document_id}"
     content_path = f"{paper_dir}/content.lines"
-    metadata_output = client.read_file(f"{paper_dir}/meta.json")
+    # The metadata and the requested text are independent reads, so they are fetched together.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        metadata_read = pool.submit(client.read_file, f"{paper_dir}/meta.json")
+        content_read = pool.submit(_read_content, client, content_path, config) if config.read != "metadata" else None
+        metadata_output = metadata_read.result()
+        content = content_read.result() if content_read is not None else None
     try:
         metadata = json.loads(metadata_output)
     except ValueError as exc:
@@ -744,29 +781,20 @@ def run_paperclip_document(
         access_kind=LiteratureAccessKind.METADATA,
     )
     if config.read == "lines":
-        excerpt = client.read_lines(content_path, config.start_line, config.end_line)
-        if excerpt:
-            document.excerpt = "\n".join(excerpt)
+        if content:
+            document.excerpt = "\n".join(content)
             document.access_kind = LiteratureAccessKind.EXCERPT
         else:
             document.access_kind = LiteratureAccessKind.INACCESSIBLE
     elif config.read == "grep":
-        pattern = config.pattern or ""
-        output = client.grep(
-            pattern, content_path, ignore_case=config.ignore_case, context_lines=config.context_lines
-        ).output
-        document.matches = _parse_grep_lines(output)
+        document.matches = _parse_grep_lines(str(content))
         if document.matches:
             document.access_kind = LiteratureAccessKind.EXCERPT
     elif config.read == "full_text":
-        document.line_count = client.line_count(content_path)
-        lines = client.read_lines(content_path, 1, document.line_count) if document.line_count else []
-        if lines and len(lines) == document.line_count:
-            document.content = "\n".join(lines)
+        if content:
+            document.content = "\n".join(content)
+            document.line_count = len(content)
             document.access_kind = LiteratureAccessKind.FULL_TEXT
-        elif lines:
-            document.content_preview = "\n".join(lines)
-            document.access_kind = LiteratureAccessKind.INACCESSIBLE
         else:
             document.access_kind = LiteratureAccessKind.INACCESSIBLE
     return PaperclipDocumentOutput(document=document)
