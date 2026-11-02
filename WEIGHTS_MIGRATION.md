@@ -33,7 +33,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 20 | `inverse_folding/ligandmpnn` |  | ligandmpnn | `ligandmpnn/*.pt` (setup.sh `foundry install`), `ligandmpnn/legacy/<commit>/` (runtime, original model) | 10 MB | ✅✅✅✅✅ | Foundry reads FOUNDRY_CHECKPOINT_DIRS=resolve_weights_dir. Legacy path not exercised by example; same WeightsDir covers it. |
 | 21 | `inverse_folding/proteinmpnn` |  |  |  |  |  |  |
 | 22 | `masked_models/ablang` |  |  |  |  |  |  |
-| 23 | `masked_models/codonfm` |  |  |  |  |  |  |
+| 23 | `masked_models/codonfm` |  | codonfm | `codonfm/codonfm-{ckpt}-{hash8}/` (runtime urllib from HF resolve URLs) | 293 MB (80m) | ✅✅✅✅✅ | Not the HF hub cache; WeightsDir. Temp-dir fallback only when resolve_weights_dir returns None (NONE mode without venv). |
 | 24 | `masked_models/esm2` |  | esm2 | `huggingface/hub/models--fredzzp--esm2_*` (5 repos), `models--facebook--esm2_t48_15B_UR50D` | 30 MB (8M test ckpt) | ✅✅✅✅✅ | HF hub 1.x shared-blob store: migration materializes repo blobs (hard links) before moving. Weights fetched at runtime, env kept for step 4. |
 | 25 | `masked_models/esm3` | biohub_esm |  |  |  |  |  |
 | 26 | `masked_models/esmc` | biohub_esm |  |  |  |  |  |
