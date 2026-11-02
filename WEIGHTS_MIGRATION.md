@@ -74,7 +74,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 61 | `structure_prediction/chai1` |  |  |  |  |  |  |
 | 62 | `structure_prediction/esmfold` |  | esmfold | `huggingface/hub/models--facebook--esmfold_v1` (ESM2-3B bundled) | 8 GB | ✅✅✅✅✅ | No sub-model downloads (ESM2-3B is inside the repo). Step 3 wrote no new hub blobs: migrated copy loaded. |
 | 63 | `structure_prediction/esmfold2` | biohub_esm | esmfold2 | `huggingface/hub/models--biohub--ESMFold2-Fast` + `models--biohub--ESMFold2` (ccd.pkl sub-load, even for Fast) | 25 GB (fast + ccd) | ✅✅✅✅✅ | Sub-model confirmed: ccd.pkl (398 MB) from biohub/ESMFold2 always. Shared env biohub_esm. |
-| 64 | `structure_prediction/opendde` |  |  |  |  |  |  |
+| 64 | `structure_prediction/opendde` |  | opendde | `opendde/checkpoint/*.pt` + `opendde/common/` (setup.sh hf_hub_download local_dir) + HF ref stub | 5.6 GB | ✅✅✅✅✅ | No sub-model downloads. OPENDDE_ROOT_DIR stays a documented override for user-provided assets. |
 | 65 | `structure_prediction/protenix` |  | protenix | `protenix/checkpoint/*.pt` + `protenix/common/` (runtime via PROTENIX_ROOT_DIR) | 7.8 GB (base_default + mini_esm) | ✅✅✅✅✅ | Sub-model confirmed: mini_esm pulls esm2_t36_3B_UR50D{,-contact-regression}.pt into checkpoint/ (not torch hub); migrates and reloads. Now uses export_weights_dir. |
 | 66 | `structure_prediction/rf3` |  | rf3 | `rf3/rf3_foundry_01_24_latest_remapped.ckpt` (setup.sh `foundry install`) | 3 GB | ✅✅✅✅✅ | No ~/.foundry or .env writes observed. |
 | 67 | `structure_prediction/viennarna` |  |  |  |  |  |  |
