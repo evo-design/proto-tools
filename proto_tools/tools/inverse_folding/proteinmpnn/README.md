@@ -44,7 +44,7 @@ Use this to redesign or stabilize a natural protein, or to generate sequences fo
 
 ### ProteinMPNN Homooligomer Sampling (`proteinmpnn-sample-homooligomer`)
 
-Designs a symmetric homooligomer by tying corresponding positions across the protomer chains during decoding. A single protomer sequence is sampled while the whole oligomer is in context, then returned on every protomer, so the interface residues are chosen against the partners they actually pack against.
+Designs a symmetric homooligomer by tying corresponding positions across the protomer chains during decoding. A single protomer sequence is sampled with every tied protomer in context, then returned on all of them, so the interface residues are chosen against the partners they actually pack against.
 
 #### Applications
 
@@ -55,7 +55,8 @@ Use this for any C-symmetric assembly — homodimers, homotrimers, designed cage
 - **Selections are per protomer, not per chain.** `protomer_chains` lists the chains to tie (at least two, all the same length) and `protomer_fixed_positions` is a flat list of 1-indexed positions *within one protomer*, applied to all of them. There is deliberately no per-chain `fixed_positions`: because tied decoding averages the per-position biases across the tied group, a position fixed on only some protomers would silently fix it on all of them, and conflicting per-chain choices would resolve arbitrarily.
 - **`temperature` is not comparable to `proteinmpnn-sample`.** Tying averages the per-protomer logits together with their Gumbel noise, so effective sampling noise falls by roughly `1/sqrt(n)` for an `n`-mer. An `n`-mer at a given temperature is less diverse than a monomer at the same setting; raise `temperature` to compensate.
 - **Equal length is not the same as homooligomer.** Protomers that match in length but differ in sequence are accepted as a pseudo-symmetric assembly, with a warning, since one sequence will be imposed on all of them. If you meant to design those chains independently, use `proteinmpnn-sample`.
-- **Chains outside `protomer_chains` are context, not design targets.** They are carried through unchanged with `redesigned=False`, exactly as in `proteinmpnn-sample`.
+- **Only the chains you list reach the model.** Chains outside `protomer_chains` are copied into the output unchanged with `redesigned=False`, but they do *not* condition the design — ProteinMPNN is given only the selected chains, so a partner or scaffold chain you leave out is invisible to it. List every chain that should inform the design. (This matches `proteinmpnn-sample`, where unselected chains are likewise excluded from the model.)
+- **Protomers must share residue numbering.** Staging renumbers each chain 1..N over its *observed* residues, so two protomers whose unresolved gaps fall in different places would tie position `i` to different structural residues. Mismatched numbering is rejected rather than warned about. Protomers numbered in separate ranges (`1..`, `101..`) are fine; it is the pattern of gaps that must agree.
 
 ### ProteinMPNN Scoring (`proteinmpnn-score`)
 

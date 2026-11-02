@@ -30,6 +30,49 @@ from proto_tools.utils.progress import progress_bar
 logger = logging.getLogger(__name__)
 
 
+def _residue_offsets(residue_ids: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    """Residue numbering of one chain, relative to its own first residue.
+
+    Protomers of a real oligomer are often numbered in separate ranges (101.., 201..),
+    which is fine. What must match is the *shape* of the numbering: the gaps and
+    insertion codes, since those are what staging's 1..N renumbering collapses.
+
+    Args:
+        residue_ids (list[tuple[int, str]]): ``(number, insertion_code)`` per observed residue.
+
+    Returns:
+        list[tuple[int, str]]: Offsets from the chain's first residue number, with codes.
+    """
+    if not residue_ids:
+        return []
+    first = residue_ids[0][0]
+    return [(number - first, code) for number, code in residue_ids]
+
+
+def _summarize(residue_ids: list[tuple[int, str]]) -> str:
+    """Render a chain's observed residue numbering compactly for an error message.
+
+    Args:
+        residue_ids (list[tuple[int, str]]): ``(number, insertion_code)`` per observed residue.
+
+    Returns:
+        str: Contiguous runs as ``start-end``, comma separated, e.g. ``"1-12,14-30"``.
+    """
+    if not residue_ids:
+        return "(none)"
+    labels = [f"{number}{code}".strip() for number, code in residue_ids]
+    runs: list[str] = []
+    start_index = 0
+    for index in range(1, len(residue_ids) + 1):
+        contiguous = index < len(residue_ids) and residue_ids[index][0] == residue_ids[index - 1][0] + 1
+        if contiguous:
+            continue
+        end_index = index - 1
+        runs.append(labels[start_index] if start_index == end_index else f"{labels[start_index]}-{labels[end_index]}")
+        start_index = index
+    return ",".join(runs)
+
+
 # ============================================================================
 # Data Models
 # ============================================================================
@@ -73,13 +116,37 @@ class ProteinMPNNHomooligomerStructureInput(StructureInputBase):
     def _validate_protomers(self) -> Self:
         """Reject selections that cannot be tied, and warn on non-identical protomers."""
         chain_ids = self.protomer_chain_ids
-        sequences = {cid: self.structure.get_chain_sequence(cid) for cid in chain_ids}
-        lengths = {cid: len(seq) for cid, seq in sequences.items()}
 
         if len(chain_ids) < 2:
-            raise ValueError(f"protomer_chains needs at least two chains to tie; got {chain_ids}")
+            raise ValueError(
+                f"protomer_chains needs at least two distinct chains to tie; got {chain_ids}. "
+                "Tying replicates one sampled sequence across chains that already exist in the "
+                "structure; it cannot build an oligomer out of a single chain."
+            )
+        # Keyed lookups below would collapse a repeat, so a duplicate would otherwise sail through
+        # every check and hand ColabDesign the same chain twice, superimposed on itself.
+        duplicates = sorted({cid for cid in chain_ids if chain_ids.count(cid) > 1})
+        if duplicates:
+            raise ValueError(f"protomer_chains must name distinct chains; {duplicates} repeated in {chain_ids}")
+
+        sequences = {cid: self.structure.get_chain_sequence(cid) for cid in chain_ids}
+        lengths = {cid: len(seq) for cid, seq in sequences.items()}
         if len(set(lengths.values())) != 1:
             raise ValueError(f"protomer_chains must all be the same length; got {lengths}")
+
+        # Staging renumbers each chain 1..N over its *observed* residues, so protomers whose gaps
+        # fall in different places are equal length yet tie position i to different structural
+        # residues. Compare the residue numbering, not just the sequence, or that passes silently.
+        residue_ids = self.structure.get_chain_residue_ids()
+        offsets = {cid: _residue_offsets(residue_ids[cid]) for cid in chain_ids}
+        if len({tuple(v) for v in offsets.values()}) != 1:
+            summary = {cid: _summarize(residue_ids[cid]) for cid in chain_ids}
+            raise ValueError(
+                "protomer_chains must share residue numbering to be tied, but their observed "
+                f"residues differ: {summary}. Tied position i would mean a different residue on "
+                "each protomer. Renumber the protomers consistently, or trim them to the "
+                "residues all of them resolve."
+            )
 
         protomer_length = next(iter(lengths.values()))
         if self.protomer_fixed_positions is not None:
@@ -94,9 +161,11 @@ class ProteinMPNNHomooligomerStructureInput(StructureInputBase):
         # protomers differ in sequence is legitimate; it is just rarely what was intended.
         if len(set(sequences.values())) != 1:
             logger.warning(
-                "Protomer chains %s are equal length but not sequence-identical, so this is a "
-                "pseudo-symmetric assembly. One sequence will be sampled and applied to all of "
-                "them. Use proteinmpnn-sample to design these chains independently.",
+                "Protomer chains %s are equal length and equally numbered but not "
+                "sequence-identical, so this is a pseudo-symmetric assembly. One sequence will be "
+                "sampled and applied to all of them, and any protomer_fixed_positions resolve to "
+                "an arbitrary one of the competing native residues. Use proteinmpnn-sample to "
+                "design these chains independently.",
                 chain_ids,
             )
         return self
@@ -223,10 +292,14 @@ def run_proteinmpnn_sample_homooligomer(
     """Design a symmetric homooligomer by tying corresponding protomer positions.
 
     Ties corresponding positions across the protomer chains during decoding, so a single
-    protomer sequence is sampled while the whole oligomer is in context and then returned
-    on every protomer. The alternative — designing one protomer against placeholder
-    partner sequences and copying the result — chooses a sequence the model never saw in
-    its own interface.
+    protomer sequence is sampled with every tied protomer in context and then returned on
+    all of them. The alternative — designing one protomer against placeholder partner
+    sequences and copying the result — chooses a sequence the model never saw in its own
+    interface.
+
+    Only the chains named in ``protomer_chains`` reach the model. Any other chain in the
+    structure is copied into the output unchanged but does **not** condition the design,
+    so list every chain that should inform it.
 
     Args:
         inputs (ProteinMPNNHomooligomerSampleInput): Oligomer backbones, each with its
@@ -240,8 +313,9 @@ def run_proteinmpnn_sample_homooligomer(
             complete complex carrying the same sampled sequence on every protomer.
 
     Note:
-        Chains outside ``protomer_chains`` are carried through unchanged with
-        ``redesigned=False``, exactly as in ``proteinmpnn-sample``.
+        Chains outside ``protomer_chains`` are carried into the output unchanged with
+        ``redesigned=False``, but they are not given to the model, so they do not condition
+        the design. This matches ``proteinmpnn-sample``.
     """
     design_sets = []
 

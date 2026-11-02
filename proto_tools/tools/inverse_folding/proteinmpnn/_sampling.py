@@ -96,10 +96,17 @@ def split_chain_segments(raw_seq: str, chain_ids: list[str], *, tied: bool) -> l
             to ``chain_ids``.
     """
     segments = raw_seq.split("/")
-    # Tied decoding collapses the oligomer to a single protomer segment (ColabDesign's
-    # _get_seq keeps only seq.split("/")[0]), so broadcast it back across the chains.
-    if tied and len(segments) == 1:
-        segments = segments * len(chain_ids)
+    if tied:
+        # Tied decoding always collapses the oligomer to exactly one protomer segment
+        # (ColabDesign's _get_seq keeps only seq.split("/")[0]), so anything else means the
+        # tie did not happen. Accepting a per-chain split here would silently return
+        # independently designed protomers from a tool whose whole promise is that they match.
+        if len(segments) != 1:
+            raise ValueError(
+                f"Tied ProteinMPNN decoding must return exactly one protomer segment, but got "
+                f"{len(segments)} for protomer chains {chain_ids}. Raw sequence: {raw_seq!r}."
+            )
+        return segments * len(chain_ids)
     if len(segments) != len(chain_ids):
         raise ValueError(
             f"ProteinMPNN returned {len(segments)} sequence segment(s) but "

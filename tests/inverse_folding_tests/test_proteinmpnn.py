@@ -93,11 +93,14 @@ ATOM      4  O   XXX A   1       1.246   2.390   0.000  1.00  0.00           O
 _PROTOMER = ["ALA", "GLY", "SER", "VAL", "LEU"]
 
 
-def _oligomer_structure(chains: dict[str, list[str]]) -> Structure:
-    """Build a multi-chain structure from explicit per-chain residue names.
+def _oligomer_structure(chains: dict[str, list[str] | list[tuple[int, str]]]) -> Structure:
+    """Build a multi-chain structure from explicit per-chain residues.
 
     Args:
-        chains (dict[str, list[str]]): Chain ID to its three-letter residue names.
+        chains (dict[str, list[str] | list[tuple[int, str]]]): Chain ID to either its
+            three-letter residue names (numbered 1..N) or explicit
+            ``(residue_number, residue_name)`` pairs, which is how a test spells a gap
+            or a chain numbered in its own range.
 
     Returns:
         Structure: Chains laid out side by side so each is a separate polymer.
@@ -105,13 +108,14 @@ def _oligomer_structure(chains: dict[str, list[str]]) -> Structure:
     lines: list[str] = []
     serial = 1
     for chain_id, residues in chains.items():
-        for index, resname in enumerate(residues, start=1):
+        numbered = [r if isinstance(r, tuple) else (i, r) for i, r in enumerate(residues, start=1)]
+        for number, resname in numbered:
             for line in _RESIDUE_TEMPLATE.splitlines():
-                x = float(line[30:38]) + 4.0 * index
+                x = float(line[30:38]) + 4.0 * number
                 y = float(line[38:46]) + 8.0 * (ord(chain_id) - ord("A"))
                 lines.append(
                     f"{line[:6]}{serial:5d}{line[11:17]}{resname:>3s}{line[20:21]}"
-                    f"{chain_id}{index:4d}{line[26:30]}{x:8.3f}{y:8.3f}{line[46:]}"
+                    f"{chain_id}{number:4d}{line[26:30]}{x:8.3f}{y:8.3f}{line[46:]}"
                 )
                 serial += 1
     return Structure(structure="\n".join([*lines, "END", ""]))
@@ -143,7 +147,7 @@ def _fake_dispatch(sink: list[dict], seq: str = "AGSVL"):
 def test_homooligomer_input_rejects_single_chain():
     """One chain has nothing to tie to."""
     structure = _oligomer_structure({"A": _PROTOMER, "B": _PROTOMER})
-    with pytest.raises(ValidationError, match="at least two chains"):
+    with pytest.raises(ValidationError, match="at least two distinct chains"):
         ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A"])
 
 
@@ -154,12 +158,73 @@ def test_homooligomer_input_rejects_unequal_protomer_lengths():
         ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "B"])
 
 
-def test_homooligomer_input_rejects_out_of_range_fixed_positions():
+def test_homooligomer_input_rejects_duplicate_protomer_chains():
+    """A repeated chain would be handed to the model twice, superimposed on itself.
+
+    The single-chain error invites exactly this ("needs at least two chains"), and the
+    length and sequence checks are keyed by chain ID, so a repeat collapses and passes
+    all of them silently.
+    """
+    structure = _oligomer_structure({"A": _PROTOMER, "B": _PROTOMER})
+    with pytest.raises(ValidationError, match=r"must name distinct chains; \['A'\]"):
+        ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "A"])
+
+
+def test_homooligomer_input_rejects_protomers_with_gaps_in_different_places():
+    """Equal observed length is not enough: staging renumbers 1..N over observed residues.
+
+    Full protomer A-G-G-A; chain A is missing residue 2 and chain B residue 3. Both
+    observe "AGA", so a sequence-only check accepts them, but tied position 2 would be
+    original residue 3 on A and residue 2 on B.
+    """
+    structure = _oligomer_structure(
+        {
+            "A": [(1, "ALA"), (3, "GLY"), (4, "ALA")],
+            "B": [(1, "ALA"), (2, "GLY"), (4, "ALA")],
+        }
+    )
+    assert len(set(structure.get_chain_sequences().values())) == 1, "sequences must match for this to bite"
+    with pytest.raises(ValidationError, match="must share residue numbering"):
+        ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "B"])
+
+
+def test_homooligomer_input_accepts_protomers_numbered_in_separate_ranges():
+    """Author numbering per protomer (1.., 101..) is normal and must not be rejected."""
+    structure = _oligomer_structure(
+        {
+            "A": [(i, n) for i, n in enumerate(_PROTOMER, start=1)],
+            "B": [(100 + i, n) for i, n in enumerate(_PROTOMER, start=1)],
+        }
+    )
+    inp = ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "B"])
+    assert inp.protomer_chain_ids == ["A", "B"]
+
+
+def test_homooligomer_input_accepts_protomers_with_matching_gaps():
+    """A gap resolved identically in every protomer still ties position-for-position."""
+    residues = [(1, "ALA"), (3, "GLY"), (4, "ALA")]
+    structure = _oligomer_structure({"A": residues, "B": residues})
+    inp = ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "B"])
+    assert inp.protomer_length == 3
+
+
+@pytest.mark.parametrize("position", [1, 5])
+def test_homooligomer_input_accepts_fixed_positions_at_the_protomer_bounds(position):
+    """1 and the protomer length are both valid; an off-by-one here is silent otherwise."""
+    structure = _oligomer_structure({"A": _PROTOMER, "B": _PROTOMER})
+    inp = ProteinMPNNHomooligomerStructureInput(
+        structure=structure, protomer_chains=["A", "B"], protomer_fixed_positions=[position]
+    )
+    assert inp.fixed_positions.chains == {"A": [position], "B": [position]}
+
+
+@pytest.mark.parametrize("position", [0, 6, -1])
+def test_homooligomer_input_rejects_fixed_positions_outside_the_protomer(position):
     """Fixed positions are 1-indexed within one protomer, not across the assembly."""
     structure = _oligomer_structure({"A": _PROTOMER, "B": _PROTOMER})
-    with pytest.raises(ValidationError, match=r"\[7\] fall outside the 1\.\.5 protomer"):
+    with pytest.raises(ValidationError, match=r"fall outside the 1\.\.5 protomer"):
         ProteinMPNNHomooligomerStructureInput(
-            structure=structure, protomer_chains=["A", "B"], protomer_fixed_positions=[2, 7]
+            structure=structure, protomer_chains=["A", "B"], protomer_fixed_positions=[position]
         )
 
 
@@ -210,14 +275,20 @@ def test_homooligomer_run_ties_and_broadcasts_the_protomer_sequence(monkeypatch)
     assert [chain.sequence for chain in design.chains] == ["AGSVL"] * 3
 
 
-def test_homooligomer_run_rejects_a_mismatched_segment_count(monkeypatch):
-    """A worker returning neither one segment nor one per chain is a hard error."""
-    sent: list[dict] = []
-    monkeypatch.setattr(ToolInstance, "dispatch", _fake_dispatch(sent, seq="AGSVL/AGSVL"))
+@pytest.mark.parametrize("n_chains", [2, 3])
+def test_homooligomer_run_rejects_any_segment_count_but_one(monkeypatch, n_chains):
+    """Tied decoding always collapses to one segment, so anything else means it did not happen.
 
-    with pytest.raises(ValueError, match="returned 2 sequence segment"):
+    The 2-chain case is the dangerous one: a per-chain split matches the protomer count,
+    so a laxer check would accept two *independently designed* protomers from the tool
+    whose entire promise is that they are identical.
+    """
+    sent: list[dict] = []
+    monkeypatch.setattr(ToolInstance, "dispatch", _fake_dispatch(sent, seq="AGSVL/WWWWW"))
+
+    with pytest.raises(ValueError, match="must return exactly one protomer segment, but got 2"):
         run_proteinmpnn_sample_homooligomer(
-            _homooligomer_input(3),
+            _homooligomer_input(n_chains),
             ProteinMPNNHomooligomerSampleConfig(num_sequences_per_structure=1, seed=42),
         )
 
