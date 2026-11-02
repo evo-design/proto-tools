@@ -73,10 +73,12 @@ from .vocabulary import (
     gather_indices,
 )
 from .weights import (
+    download_archive,
     download_weights,
     export_weights_dir,
     file_digest,
     file_lock,
+    link_to_cache,
     redact_url,
     require_weights_dir,
     resolve_weights_dir,
@@ -132,10 +134,12 @@ __all__ = [
     # subprocess
     "run_teed",
     # weights
+    "download_archive",
     "download_weights",
     "export_weights_dir",
     "file_digest",
     "file_lock",
+    "link_to_cache",
     "redact_url",
     "require_weights_dir",
     "resolve_weights_dir",

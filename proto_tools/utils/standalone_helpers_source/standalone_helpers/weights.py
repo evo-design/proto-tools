@@ -10,6 +10,7 @@ import contextlib
 import fcntl
 import hashlib
 import os
+import shutil
 import stat
 import tempfile
 import time
@@ -366,3 +367,100 @@ def download_weights(
                 with contextlib.suppress(FileNotFoundError):
                     tmp.unlink()
     return dest
+
+
+def download_archive(
+    url: str,
+    dest_dir: str | Path,
+    *,
+    marker: str,
+    sha256: str | None = None,
+    md5: str | None = None,
+) -> Path:
+    """Download and unpack an archive into ``dest_dir`` once, so readers never see a partial tree.
+
+    ``dest_dir`` counts as complete when ``dest_dir / marker`` exists. Otherwise, under a lock, the
+    archive is fetched with ``download_weights``, unpacked into a temp directory beside
+    ``dest_dir``, checked for ``marker``, and renamed into place; the archive is then deleted.
+
+    Args:
+        url (str): HTTPS URL of a ``.tar``, ``.tar.gz``, ``.tgz``, or ``.zip`` archive.
+        dest_dir (str | Path): Directory that receives the archive's contents.
+        marker (str): Path, relative to ``dest_dir``, that exists once unpacking succeeded.
+        sha256 (str | None): Expected SHA-256 of the archive.
+        md5 (str | None): Expected MD5 of the archive.
+
+    Returns:
+        Path: ``dest_dir``.
+
+    Raises:
+        RuntimeError: If the unpacked archive does not contain ``marker``.
+    """
+    dest_dir = Path(dest_dir)
+    if (dest_dir / marker).exists():
+        return dest_dir
+    dest_dir.parent.mkdir(parents=True, exist_ok=True)
+    with file_lock(dest_dir.parent / f".{dest_dir.name}.extract.lock"):
+        if (dest_dir / marker).exists():
+            return dest_dir
+        name = Path(urllib.parse.urlparse(url).path).name
+        archive = download_weights(url, dest_dir.parent / f".{dest_dir.name}.{name}", sha256=sha256, md5=md5)
+        staging = Path(tempfile.mkdtemp(prefix=f".{dest_dir.name}.", dir=dest_dir.parent))
+        try:
+            fmt = _archive_format(name)
+            try:
+                # "data" refuses absolute paths, ../ escapes, and device files in the archive
+                shutil.unpack_archive(str(archive), str(staging), format=fmt, filter="data")
+            except TypeError:  # Python without extraction filters (< 3.12 and unpatched)
+                shutil.unpack_archive(str(archive), str(staging), format=fmt)
+            if not (staging / marker).exists():
+                raise RuntimeError(f"archive from {redact_url(url)} does not contain {marker}")
+            # Anything already at dest_dir is an incomplete earlier extraction: it lacks the marker
+            if dest_dir.is_dir() and not dest_dir.is_symlink():
+                shutil.rmtree(dest_dir)
+            elif dest_dir.exists() or dest_dir.is_symlink():
+                dest_dir.unlink()
+            os.replace(staging, dest_dir)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+            archive.unlink(missing_ok=True)
+    return dest_dir
+
+
+def _archive_format(name: str) -> str:
+    """Return the ``shutil.unpack_archive`` format for an archive filename."""
+    if name.endswith((".tar.gz", ".tgz")):
+        return "gztar"
+    if name.endswith(".tar"):
+        return "tar"
+    if name.endswith(".zip"):
+        return "zip"
+    raise ValueError(f"unsupported archive type: {name}")
+
+
+def link_to_cache(link: str | Path, target: str | Path) -> Path:
+    """Make ``link`` a symlink to ``target``, replacing a stale link or a directory in its place.
+
+    For libraries that only look for weights at a hardcoded path inside their installed package:
+    the files stay in the managed cache, and the package path points at them. A link left over
+    from before a cache move is repointed.
+
+    Args:
+        link (str | Path): The path the library reads, e.g. ``site-packages/lib/model-weights``.
+        target (str | Path): The weights directory in the managed cache.
+
+    Returns:
+        Path: ``link``.
+    """
+    link, target = Path(link), Path(target)
+    if link.is_symlink():
+        if Path(os.readlink(link)) == target:
+            return link
+        link.unlink()
+    elif link.is_dir():
+        shutil.rmtree(link)
+    elif link.exists():
+        link.unlink()
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(target)
+    return link

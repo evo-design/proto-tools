@@ -5,6 +5,7 @@ import hashlib
 import io
 import logging
 import os
+import tarfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -14,9 +15,11 @@ import pytest
 from proto_tools.utils.standalone_helpers_source.standalone_helpers import weights
 from proto_tools.utils.standalone_helpers_source.standalone_helpers.weights import (
     _SecureRedirectHandler,
+    download_archive,
     download_weights,
     export_weights_dir,
     file_lock,
+    link_to_cache,
     redact_url,
     require_weights_dir,
 )
@@ -284,3 +287,71 @@ def test_download_interrupt_leaves_no_temp_file(monkeypatch, tmp_path: Path):
 
     assert list(tmp_path.glob(".model.ckpt.*.tmp")) == []
     assert not (tmp_path / "model.ckpt").exists()
+
+
+def _tar_gz_bytes(files: dict[str, bytes]) -> bytes:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
+def test_download_archive_unpacks_once(monkeypatch, tmp_path: Path, opener: _FakeOpener):
+    """The archive is fetched and unpacked once; the marker makes later calls free."""
+    archive = _tar_gz_bytes({"model.pt": b"w", "vocab.txt": b"v"})
+    monkeypatch.setattr(
+        opener, "open", lambda request, timeout: (opener.requests.append(request), io.BytesIO(archive))[1]
+    )
+    dest = tmp_path / "model-weights"
+
+    assert download_archive("https://example.org/w.tar.gz", dest, marker="model.pt") == dest
+    download_archive("https://example.org/w.tar.gz", dest, marker="model.pt")
+
+    assert (dest / "model.pt").read_bytes() == b"w"
+    assert len(opener.requests) == 1
+    assert sorted(p.name for p in tmp_path.iterdir() if not p.name.endswith(".lock")) == ["model-weights"]
+
+
+def test_download_archive_replaces_incomplete_extraction(monkeypatch, tmp_path: Path, opener: _FakeOpener):
+    """A directory without the marker is a failed earlier attempt and is replaced."""
+    archive = _tar_gz_bytes({"model.pt": b"w"})
+    monkeypatch.setattr(opener, "open", lambda request, timeout: io.BytesIO(archive))
+    dest = tmp_path / "model-weights"
+    (dest / "partial").mkdir(parents=True)
+
+    download_archive("https://example.org/w.tar.gz", dest, marker="model.pt")
+
+    assert sorted(p.name for p in dest.iterdir()) == ["model.pt"]
+
+
+def test_download_archive_missing_marker_raises(monkeypatch, tmp_path: Path, opener: _FakeOpener):
+    """An archive without the expected file never becomes ``dest_dir``."""
+    archive = _tar_gz_bytes({"other.pt": b"w"})
+    monkeypatch.setattr(opener, "open", lambda request, timeout: io.BytesIO(archive))
+
+    with pytest.raises(RuntimeError, match=r"does not contain model\.pt"):
+        download_archive("https://example.org/w.tar.gz", tmp_path / "model-weights", marker="model.pt")
+    assert not (tmp_path / "model-weights").exists()
+
+
+@pytest.mark.parametrize("existing", ["stale_link", "directory", "none", "correct_link"])
+def test_link_to_cache_repoints(tmp_path: Path, existing):
+    """The package path ends up a symlink to the cache whatever was there before."""
+    target = tmp_path / "cache" / "weights"
+    target.mkdir(parents=True)
+    link = tmp_path / "site-packages" / "lib" / "model-weights"
+    link.parent.mkdir(parents=True)
+    if existing == "stale_link":
+        link.symlink_to(tmp_path / "old-cache")
+    elif existing == "directory":
+        (link / "model.pt").parent.mkdir()
+        (link / "model.pt").write_bytes(b"in-package copy")
+    elif existing == "correct_link":
+        link.symlink_to(target)
+
+    link_to_cache(link, target)
+
+    assert link.is_symlink() and link.resolve() == target.resolve()
