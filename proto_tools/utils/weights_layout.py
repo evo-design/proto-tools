@@ -62,6 +62,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "parade",
         "progen2",
         "progen3",
+        "proteinmpnn",
         "puffin",
         "rf3",
         "rfdiffusion3",
