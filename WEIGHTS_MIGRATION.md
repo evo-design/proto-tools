@@ -14,7 +14,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 1 | `binder_design/bindcraft` |  | — (reads alphafold2) | alphafold2 params | — | ✅✅✅✅✅ | Previously re-downloaded AF2 over alphafold2 copy (sentinel mismatch); now shares it. resolve_weights_dir("alphafold2") follows requested name. |
 | 2 | `binder_design/freebindcraft` |  | — (reads alphafold2) | alphafold2 params | — | ✅✅✅✅✅ | Same as bindcraft. |
 | 3 | `binder_design/germinal` |  | germinal (+ alphafold2, chai1, ablang) | `germinal/{binaries,params,.params_redirect}`; Chai-1 + AbLang2 weights were inside the venv | 336 KB own + shared | ✅✅✅✅✅ | Reads alphafold2 params, chai1 folder (setup.sh proto_ensure_chai1_weights, HF-pinned) and ablang folder (download_archive + link_to_cache); ablang2 pinned 0.2.1. DAlphaBall link repointed on load. Tested with Config.minimal. |
-| 4 | `causal_models/evo1` |  |  |  |  |  |  |
+| 4 | `causal_models/evo1` |  | evo1 | `huggingface/hub/models--{togethercomputer/evo-1-8k-base,togethercomputer/evo-1-131k-base,evo-design/evo-1.5-8k-base,LongSafari/evo-1-8k-crispr,LongSafari/evo-1-8k-transposon}` (base models at rev 1.1_fix) | 12 GB (8k-base) | ✅✅✅✅✅ | Repo map read from installed evo-model. HF shared-blob store (3 shards) materialized on migration; step 3 wrote no new blobs. |
 | 5 | `causal_models/evo2` |  |  |  |  |  |  |
 | 6 | `causal_models/iglm` |  | - | — | — | ✅ traced (no weights) | Weights ship in the iglm wheel (venv); only HF hub/version.txt touched. |
 | 7 | `causal_models/progen2` |  | progen2 | `huggingface/hub/models--hugohrban--progen2-*` (7 repos) | 577 MB (small) | ✅✅✅✅✅ | trust_remote_code modules/ regenerated, not migrated. |
