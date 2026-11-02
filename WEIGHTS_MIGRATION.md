@@ -36,7 +36,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 23 | `masked_models/codonfm` |  | codonfm | `codonfm/codonfm-{ckpt}-{hash8}/` (runtime urllib from HF resolve URLs) | 293 MB (80m) | ✅✅✅✅✅ | Not the HF hub cache; WeightsDir. Temp-dir fallback only when resolve_weights_dir returns None (NONE mode without venv). |
 | 24 | `masked_models/esm2` |  | esm2 | `huggingface/hub/models--fredzzp--esm2_*` (5 repos), `models--facebook--esm2_t48_15B_UR50D` | 30 MB (8M test ckpt) | ✅✅✅✅✅ | HF hub 1.x shared-blob store: migration materializes repo blobs (hard links) before moving. Weights fetched at runtime, env kept for step 4. |
 | 25 | `masked_models/esm3` | biohub_esm | esm3 | `huggingface/hub/models--biohub--esm3-sm-open-v1` (full snapshot) | 5 GB | ✅✅✅✅✅ | Sub-models (structure encoder/decoder, function decoder, tokenizer data) are all in the same repo snapshot. Shared env biohub_esm. |
-| 26 | `masked_models/esmc` | biohub_esm |  |  |  |  |  |
+| 26 | `masked_models/esmc` | biohub_esm | esmc | `huggingface/hub/models--biohub--ESMC-{300M,600M,6B}` + SAE family `models--biohub--ESMC-*-sae-*` (HFRepoPattern) + legacy `esmc-*-2024-12` | 1.1 GB (300M + 1 SAE) | ✅✅✅✅✅ | Sub-model confirmed: esmc-sae-features pulls an SAE repo; both migrate and reload. Shared env biohub_esm. |
 | 27 | `masked_models/glm2` | glm2_base | glm2 | `huggingface/hub/models--tattabio--gLM2_{150M,650M}` | 582 MB (150M) | ✅✅✅✅✅ | Shared env glm2_base; separate weights folder from minerva (different repos). |
 | 28 | `masked_models/minerva` | glm2_base | minerva | `huggingface/hub/models--gbrixi--minerva-mlm{,-8k}` | 2 GB (mlm) | ✅✅✅✅✅ | Shared env glm2_base. |
 | 29 | `molecular_docking/vina` |  |  |  |  |  |  |
