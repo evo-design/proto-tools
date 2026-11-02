@@ -46,6 +46,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
     {
         "ablang",
         "alphafold2",
+        "alphafold3",
         "alphagenome",
         "bindcraft",
         "bioemu",
@@ -212,6 +213,7 @@ MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "alphafold3": (WeightsDir("alphafold3"),),
     "bioemu": (HFRepo("microsoft/bioemu"),),
     "alphagenome": (
         HFRepo("google/alphagenome-all-folds"),
