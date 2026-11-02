@@ -1,15 +1,17 @@
 """Foundation env host-probe helpers.
 
 The foundation env (a shared micromamba env with git, curl, make, cmake,
-pkg-config, gcc, gxx) is provisioned by ``ToolInstance._ensure_foundation_env``
-only when the host can't satisfy those dependencies on its own. This module
-owns the probe logic and the minimum-version constant that decides "satisfies".
+pkg-config, binutils, gcc, gxx) is provisioned by
+``ToolInstance._ensure_foundation_env`` only when the host can't satisfy those
+dependencies on its own. This module owns the tool list, the probe logic, and the
+minimum-version constant that decides "satisfies".
 """
 
 import logging
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +21,24 @@ logger = logging.getLogger(__name__)
 # 4.8.5) whose compilers fail to build modern C++ tools.
 MIN_FOUNDATION_GCC = 11
 
+# Binaries setup scripts may call, and the conda-forge package providing each. gcc/g++
+# are probed separately for their version. ``ar`` is here because CMake needs it to
+# link static libraries (AlphaFold3's build) and the gcc package no longer brings it.
+FOUNDATION_TOOLS: dict[str, str] = {
+    "git": "git",
+    "curl": "curl",
+    "make": "make",
+    "cmake": "cmake",
+    "pkg-config": "pkg-config",
+    "ar": "binutils",
+}
+
 
 def host_has_foundation_tools() -> bool:
-    """Return True if the host already provides git, curl, make, cmake, pkg-config, and gcc/g++ >= MIN_FOUNDATION_GCC.
+    """Return True if the host provides every ``FOUNDATION_TOOLS`` binary and gcc/g++ >= MIN_FOUNDATION_GCC.
 
-    Probes ``shutil.which`` for each binary and parses the major version
+    The foundation env is skipped only when nothing is missing. Probes
+    ``shutil.which`` for each binary and parses the major version
     from ``gcc --version`` / ``g++ --version``. Returns False (and logs the
     reason) on any of: missing binary, gcc/g++ too old, or unparseable
     version output.
@@ -31,7 +46,7 @@ def host_has_foundation_tools() -> bool:
     Returns:
         bool: True iff the host satisfies the foundation env contract.
     """
-    for tool in ("git", "curl", "make", "cmake", "pkg-config"):
+    for tool in FOUNDATION_TOOLS:
         if shutil.which(tool) is None:
             logger.debug("Foundation env probe: %s not on PATH", tool)
             return False
@@ -61,3 +76,19 @@ def host_has_foundation_tools() -> bool:
             return False
 
     return True
+
+
+def missing_foundation_packages(foundation_path: Path) -> list[str]:
+    """Return the packages whose ``FOUNDATION_TOOLS`` binary is absent from a built foundation env.
+
+    An env created before a tool joined ``FOUNDATION_TOOLS`` (``ar`` was added later)
+    lacks it; ``ToolInstance._ensure_foundation_env`` installs these into the env.
+
+    Args:
+        foundation_path (Path): Root of the foundation env.
+
+    Returns:
+        list[str]: conda-forge package names to install, empty when the env is complete.
+    """
+    bin_dir = foundation_path / "bin"
+    return [package for tool, package in FOUNDATION_TOOLS.items() if not (bin_dir / tool).exists()]

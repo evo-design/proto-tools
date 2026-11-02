@@ -185,9 +185,9 @@ Each tool's `standalone/env_vars.txt` supports three sections:
 - `JAX_COMPILATION_CACHE_DIR`: a per-toolkit directory beside the model weights, so JAX tools reuse compiled programs across processes (see [storage.md](storage.md#jax-compilation-cache)). A tool opts out with an empty `JAX_COMPILATION_CACHE_DIR=` under `[set]`
 - `LD_LIBRARY_PATH`: tool-specific `[set]` paths > parent `LD_LIBRARY_PATH` entries > `$CONDA_PREFIX/lib` (the latter two are skipped when `LD_LIBRARY_PATH` is in `[no_passthrough]`, in which case just the host's `libcuda.so.1` dir is appended)
 
-## Foundation Environment (git, curl, make, cmake, pkg-config, gcc, g++)
+## Foundation Environment (git, curl, make, cmake, pkg-config, ar, gcc, g++)
 
-`setup.sh` scripts assume `git`, `curl`, `make`, `cmake`, `pkg-config`, `gcc`, and `g++` are on `PATH` (tools like `bindcraft`/`pyrosetta` compile DAlphaBall via `make`, and AlphaFold3 builds a C++ extension). When the host already provides all of them with `gcc`/`g++` major version `>= MIN_FOUNDATION_GCC`, `ToolInstance._ensure_foundation_env` is a no-op. Otherwise it provisions a shared micromamba env at `PROTO_HOME/.foundation_env/` (`git curl make cmake pkg-config`, pinning `gcc>=MIN_FOUNDATION_GCC` / `gxx>=MIN_FOUNDATION_GCC`) and prepends its `bin/` to the setup script's `PATH`. Set `PROTO_USE_FOUNDATION_ENV=1` to force-install or `=0` to force-skip the probe.
+`setup.sh` scripts assume `git`, `curl`, `make`, `cmake`, `pkg-config`, `ar`, `gcc`, and `g++` are on `PATH` (tools like `bindcraft`/`pyrosetta` compile DAlphaBall via `make`, and AlphaFold3 builds a C++ extension whose CMake build needs `ar` for static libraries). The list lives in `foundation_env.FOUNDATION_TOOLS`. When the host already provides every one of them with `gcc`/`g++` major version `>= MIN_FOUNDATION_GCC`, `ToolInstance._ensure_foundation_env` is a no-op. Otherwise it provisions a shared micromamba env at `PROTO_HOME/.foundation_env/` (`git curl make cmake pkg-config binutils`, pinning `gcc>=MIN_FOUNDATION_GCC` / `gxx>=MIN_FOUNDATION_GCC`) and prepends its `bin/` to the setup script's `PATH`. An existing foundation env missing one of these tools gets just the missing packages installed into it. Set `PROTO_USE_FOUNDATION_ENV=1` to force-install or `=0` to force-skip the probe.
 
 ## GCC/nvcc Compatibility for CUDA JIT Tools
 
