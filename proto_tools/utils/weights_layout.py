@@ -43,6 +43,7 @@ LAYOUT_ENV_VALUE = "toolkit"
 # while their downloads are audited, and the gate is removed once every toolkit is migrated.
 MIGRATED_TOOLKITS: frozenset[str] = frozenset(
     {
+        "borzoi",
         "cherimoya",
         "enformer",
         "esm2",
@@ -105,6 +106,13 @@ MigrationEntry = HFRepo | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "borzoi": (
+        *(
+            HFRepo(f"johahi/{name}-replicate-{rep}{suffix}")
+            for name, suffix in (("flashzoi", ""), ("borzoi", ""), ("borzoi", "-mouse"))
+            for rep in range(4)
+        ),
+    ),
     "cherimoya": (HFRepo("programmable-genomics/CATv1"),),
     "splice_transformer": (HFRepo("brianhie/SpTransformer"),),
     "enformer": (HFRepo("EleutherAI/enformer-official-rough"),),
