@@ -83,10 +83,10 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 70 | `structure_scoring/ipsae` |  | - | — | — | ✅ traced (no weights) | No downloaded weights (traced twice: old + new layout). |
 | 71 | `structure_scoring/metal3d` |  | metal3d | `metal3d/*.pth` (setup.sh, 3 files) | 42 MB | ✅✅✅✅✅ | Load log confirms weights/ path. |
 | 72 | `structure_scoring/pyrosetta` |  | - | — | — | ✅ traced (no weights) | Rosetta DB inside conda package (venv); nothing in cache. |
-| 73 | `testing/mock_cli_multi_gpu_tool` |  |  |  |  |  |  |
-| 74 | `testing/mock_cli_tool` |  |  |  |  |  |  |
-| 75 | `testing/mock_cpu_tool` |  |  |  |  |  |  |
-| 76 | `testing/mock_jax_multi_gpu_tool` |  |  |  |  |  |  |
-| 77 | `testing/mock_jax_tool` |  |  |  |  |  |  |
-| 78 | `testing/mock_pytorch_multi_gpu_tool` |  |  |  |  |  |  |
-| 79 | `testing/mock_pytorch_tool` |  |  |  |  |  |  |
+| 73 | `testing/mock_cli_multi_gpu_tool` |  | - | — | — | ✅ traced (no weights) | Test fixture; no weights. JAX mocks write their compile cache to <toolkit>/jax_cache. |
+| 74 | `testing/mock_cli_tool` |  | - | — | — | ✅ traced (no weights) | Test fixture; no weights. JAX mocks write their compile cache to <toolkit>/jax_cache. |
+| 75 | `testing/mock_cpu_tool` |  | - | — | — | ✅ traced (no weights) | Test fixture; no weights. JAX mocks write their compile cache to <toolkit>/jax_cache. |
+| 76 | `testing/mock_jax_multi_gpu_tool` |  | - | — | — | ✅ traced (no weights) | Test fixture; no weights. JAX mocks write their compile cache to <toolkit>/jax_cache. |
+| 77 | `testing/mock_jax_tool` |  | - | — | — | ✅ traced (no weights) | Test fixture; no weights. JAX mocks write their compile cache to <toolkit>/jax_cache. |
+| 78 | `testing/mock_pytorch_multi_gpu_tool` |  | - | — | — | ✅ traced (no weights) | Test fixture; no weights. JAX mocks write their compile cache to <toolkit>/jax_cache. |
+| 79 | `testing/mock_pytorch_tool` |  | - | — | — | ✅ traced (no weights) | Test fixture; no weights. JAX mocks write their compile cache to <toolkit>/jax_cache. |
