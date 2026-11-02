@@ -23,7 +23,7 @@ GXL recommends finding papers first, then reading only the parts that matter. Se
 
 ### Paperclip Literature Search (`paperclip-literature-search`)
 
-Finds papers by topic, ranking them by a mix of keyword and meaning-based matching. Each hit carries its citation details, abstract, matched passage, and citation URL (`source_url`).
+Finds papers by topic. Each hit carries its citation details, abstract, matched passage, and citation URL (`source_url`).
 
 #### Applications
 
@@ -33,7 +33,6 @@ Use search to find natural sequences, experimental context, and design methods r
 
 - For general biomedical literature, search `pmc`, the default. Use `papers` to cover PMC, bioRxiv, medRxiv, and arXiv together.
 - Narrow results with `year`, `journal`, `author`, or `article_type` rather than adding those words to the query.
-- For cross-domain method analogues, set `ranking="analogical"` and use a full abstract or a one-sentence description of the method as the query, not topic keywords.
 - Up to 100 hits, a smaller `limit` returns a prefix of a larger one, as long as the Paperclip index has not been updated in between.
 
 ### Paperclip Literature Lookup (`paperclip-literature-lookup`)
@@ -50,7 +49,7 @@ Use lookup to open a paper that another tool already identified, such as a PMID 
 
 ### Paperclip Literature Grep (`paperclip-literature-grep`)
 
-Searches the full text of every paper for a regular expression and returns the matching lines and the papers they came from.
+Searches the full text of every paper for a regular expression and returns each matching paragraph with the paper and corpus it came from.
 
 #### Applications
 
@@ -72,9 +71,9 @@ Use these tools to collect source-backed design evidence and natural examples be
 #### Usage Tips
 
 - Prefer `read="lines"` (the default, first 100 lines) or `read="grep"` with a `pattern`. GXL advises against reading whole papers.
-- `read="full_text"` returns the complete text only when its length matches the size Paperclip reports; otherwise the text is kept as `content_preview`.
+- `read="full_text"` reads the paper in pages and returns it as `content` only when every line Paperclip reports for it came back (`line_count`); otherwise the text is kept as `content_preview`.
 - Set `PAPERCLIP_API_KEY` before retrieval, or `PAPERCLIP_TOKEN` for a bearer token; the config fields `paperclip_api_key` and `paperclip_token` take precedence. The tools do not read credentials saved by an interactive `paperclip login`.
-- `PAPERCLIP_BASE_URL` points the tools at a different Paperclip deployment, such as the direct `https://mcp.paperclip.gxl.ai` origin.
+- `PAPERCLIP_BASE_URL` points the tools at a different Paperclip deployment.
 - Treat literature as evidence for candidate generation, not functional validation.
 
 ## Toolkit Notes

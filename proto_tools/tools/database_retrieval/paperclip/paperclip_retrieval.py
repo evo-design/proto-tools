@@ -21,11 +21,9 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField
 
 PaperclipSource = Literal["pmc", "papers", "abstracts", "biorxiv", "medrxiv", "arxiv"]
-PaperclipRanking = Literal["hybrid", "bm25", "vector", "analogical"]
 PaperclipLookupField = Literal["doi", "pmid", "pmc", "arxiv", "title", "author", "journal", "year"]
-_ID_PATTERN = r"PMC\d+|bio_[A-Za-z0-9]+|med_[A-Za-z0-9]+|arx_[A-Za-z0-9]+"
+_ID_PATTERN = r"PMC\d+|bio_[A-Za-z0-9]+|med_[A-Za-z0-9]+|arx_\d+\.\d+(?:v\d+)?"
 _DOCUMENT_ID = re.compile(rf"^(?:{_ID_PATTERN})$")
-_DOCUMENT_ID_IN_TEXT = re.compile(rf"\b({_ID_PATTERN})\b")
 _GREP_LINE = re.compile(r"^L(\d+)(:|-)\s?(.*)$")
 _PAPER_URL = "https://paperclip.gxl.ai/citations/papers/{document_id}"
 _SERVICE_URL = "https://paperclip.gxl.ai/"
@@ -121,6 +119,11 @@ def _client(config: _PaperclipConfig) -> PaperclipClient:
     )
 
 
+def _year_from_date(value: Any) -> int | None:
+    """Read the year from a ``YYYY-MM-DD`` date, which some saved results carry instead of a year."""
+    return int(value[:4]) if isinstance(value, str) and value[:4].isdigit() else None
+
+
 def _normalize_hit(item: dict[str, Any], operation: str) -> PaperclipSearchHit:
     document_id = str(item.get("document_id") or item.get("pmc_id") or "")
     if not document_id:
@@ -132,9 +135,9 @@ def _normalize_hit(item: dict[str, Any], operation: str) -> PaperclipSearchHit:
         document_id=document_id,
         title=str(item.get("title") or item.get("citation_title") or document_id),
         authors=item.get("authors"),
-        journal=item.get("journal_title"),
+        journal=item.get("journal_title") or item.get("journal"),
         publication_date=item.get("pub_date"),
-        year=item.get("pub_year"),
+        year=item.get("pub_year") or _year_from_date(item.get("pub_date")),
         doi=item.get("doi") or item.get("citation_doi"),
         pmid=str(pmid) if pmid else None,
         pmcid=item.get("pmc_id"),
@@ -169,7 +172,7 @@ class PaperclipSearchInput(BaseToolInput):
 
 
 class PaperclipSearchConfig(_PaperclipConfig):
-    """Paperclip corpus selection, ranking, and metadata filters.
+    """Paperclip corpus selection and metadata filters.
 
     Attributes:
         paperclip_api_key (str | None): Paperclip API key; defaults to ``PAPERCLIP_API_KEY``.
@@ -178,7 +181,6 @@ class PaperclipSearchConfig(_PaperclipConfig):
         timeout_seconds (float): Maximum duration of one service operation.
         sources (list[PaperclipSource]): Literature corpora to search.
         limit (int): Maximum number of returned hits.
-        ranking (PaperclipRanking | None): Ranking mode; None uses Paperclip's hybrid default.
         exact (bool): Whether to use exact-text search.
         since (str | None): Optional date lower bound for PMC, bioRxiv, and arXiv.
         year (int | None): Only return papers published in this year.
@@ -193,11 +195,6 @@ class PaperclipSearchConfig(_PaperclipConfig):
         description="Paperclip corpora to search; 'papers' covers all four full-text corpora",
     )
     limit: int = ConfigField(default=10, ge=1, le=100, title="Result Limit", description="Maximum search hits")
-    ranking: PaperclipRanking | None = ConfigField(
-        default=None,
-        title="Ranking",
-        description="Ranking mode; analogical finds cross-domain method analogues from an abstract",
-    )
     exact: bool = ConfigField(default=False, title="Exact Search", description="Use Paperclip exact-text search")
     since: str | None = ConfigField(
         default=None,
@@ -263,7 +260,7 @@ def run_paperclip_search(
 
     Args:
         inputs (PaperclipSearchInput): The literature query.
-        config (PaperclipSearchConfig): Corpus selection, ranking, filters, and client settings.
+        config (PaperclipSearchConfig): Corpus selection, filters, and client settings.
         instance (Any): Unused; the tool runs in process.
 
     Returns:
@@ -274,7 +271,6 @@ def run_paperclip_search(
         inputs.query,
         sources=config.sources,
         limit=config.limit,
-        ranking=config.ranking,
         exact=config.exact,
         since=config.since,
         year=config.year,
@@ -407,12 +403,14 @@ class PaperclipGrepConfig(_PaperclipConfig):
         paperclip_token (str | None): Paperclip bearer token, used when no API key is set;
             defaults to ``PAPERCLIP_TOKEN``.
         timeout_seconds (float): Maximum duration of one service operation.
-        max_matches (int): Maximum matching lines returned.
+        max_matches (int): Maximum matching paragraphs returned.
         ignore_case (bool): Whether matching ignores case.
         exhaustive (bool): Whether to give the scan its full time budget.
     """
 
-    max_matches: int = ConfigField(default=50, ge=1, le=1000, title="Max Matches", description="Maximum matching lines")
+    max_matches: int = ConfigField(
+        default=50, ge=1, le=1000, title="Max Matches", description="Maximum matching paragraphs"
+    )
     ignore_case: bool = ConfigField(default=False, title="Ignore Case", description="Match regardless of case")
     exhaustive: bool = ConfigField(
         default=False,
@@ -421,24 +419,34 @@ class PaperclipGrepConfig(_PaperclipConfig):
     )
 
 
+class PaperclipGrepMatch(BaseModel):
+    """One paragraph matching a corpus grep.
+
+    Attributes:
+        document_id (str): Paper the paragraph is from.
+        source (str): Corpus the paper belongs to, such as ``pmc`` or ``arxiv``.
+        text (str): The matching paragraph.
+    """
+
+    document_id: str = Field(title="Document ID", description="Paper the paragraph is from")
+    source: str = Field(title="Source", description="Corpus the paper belongs to")
+    text: str = Field(title="Text", description="The matching paragraph")
+
+
 class PaperclipGrepOutput(_JsonOutput):
-    """Lines matching a pattern across the Paperclip paper corpus.
+    """Paragraphs matching a pattern across the Paperclip paper corpus.
 
     Attributes:
         pattern (str): Submitted regular expression.
         result_id (str | None): Paperclip result identifier, when one was saved.
-        document_ids (list[str]): Papers with at least one match, in order of first match.
-        lines (list[str]): Matching lines exactly as Paperclip returned them.
+        matches (list[PaperclipGrepMatch]): Matching paragraphs, grouped by paper in match order.
         source_url (str): Paperclip service the corpus was searched on.
     """
 
     pattern: str = Field(title="Pattern", description="Submitted regular expression")
     result_id: str | None = Field(default=None, title="Result ID", description="Paperclip result identifier")
-    document_ids: list[str] = Field(
-        default_factory=list, title="Document IDs", description="Papers with a match, in order of first match"
-    )
-    lines: list[str] = Field(
-        default_factory=list, title="Lines", description="Matching lines exactly as Paperclip returned them"
+    matches: list[PaperclipGrepMatch] = Field(
+        default_factory=list, title="Matches", description="Matching paragraphs, grouped by paper in match order"
     )
     source_url: str = Field(title="Source URL", description="Paperclip service the corpus was searched on")
 
@@ -476,26 +484,25 @@ def run_paperclip_grep(
         instance (Any): Unused; the tool runs in process.
 
     Returns:
-        PaperclipGrepOutput: Matching lines and the papers they came from.
+        PaperclipGrepOutput: Matching paragraphs and the papers they came from.
     """
     del instance
-    result = _client(config).grep(
+    client = _client(config)
+    result = client.grep(
         inputs.pattern,
         "/papers/",
         ignore_case=config.ignore_case,
         max_matches=config.max_matches,
         exhaustive=config.exhaustive,
     )
-    lines = [line for line in result.output.splitlines() if line.strip()]
-    document_ids = list(
-        dict.fromkeys(match.group(1) for line in lines for match in _DOCUMENT_ID_IN_TEXT.finditer(line))
-    )
+    papers = client.fetch_result_papers(result.result_id) if result.result_id is not None else []
+    matches = [
+        PaperclipGrepMatch(document_id=paper["document_id"], source=match["source"], text=match["content"])
+        for paper in papers
+        for match in paper["matches"]
+    ]
     return PaperclipGrepOutput(
-        pattern=inputs.pattern,
-        result_id=result.result_id,
-        document_ids=document_ids,
-        lines=lines,
-        source_url=_SERVICE_URL,
+        pattern=inputs.pattern, result_id=result.result_id, matches=matches, source_url=_SERVICE_URL
     )
 
 
@@ -592,8 +599,8 @@ class PaperclipDocument(BaseModel):
     content_preview: str | None = Field(
         default=None, title="Content Preview", description="Incomplete full text returned by Paperclip", repr=False
     )
-    expected_content_bytes: int | None = Field(
-        default=None, title="Expected Content Bytes", description="Full-text byte count Paperclip reports"
+    line_count: int | None = Field(
+        default=None, title="Line Count", description="Lines Paperclip reports for the full text"
     )
     source_url: str = Field(title="Source URL", description="Paperclip citation page for the paper")
 
@@ -647,9 +654,9 @@ def run_paperclip_document(
     """Read one paper's metadata and the requested part of its line-numbered text.
 
     ``lines`` mode reads a line range and ``grep`` mode returns the lines matching a pattern, which
-    is how GXL recommends reading a paper. ``full_text`` reads the whole paper and labels it
-    complete only when its length matches the byte count Paperclip reports; anything shorter is
-    kept as a preview.
+    is how GXL recommends reading a paper. ``full_text`` reads the whole paper in pages and labels
+    it complete only when every line Paperclip reports was returned; anything shorter is kept as a
+    preview.
 
     Args:
         inputs (PaperclipDocumentInput): The Paperclip document identifier.
@@ -680,8 +687,8 @@ def run_paperclip_document(
     )
     if config.read == "lines":
         excerpt = client.read_lines(content_path, config.start_line, config.end_line)
-        if excerpt.strip():
-            document.excerpt = excerpt
+        if excerpt:
+            document.excerpt = "\n".join(excerpt)
             document.access_kind = LiteratureAccessKind.EXCERPT
         else:
             document.access_kind = LiteratureAccessKind.INACCESSIBLE
@@ -694,15 +701,14 @@ def run_paperclip_document(
         if document.matches:
             document.access_kind = LiteratureAccessKind.EXCERPT
     elif config.read == "full_text":
-        content_output = client.read_file(content_path)
-        if content_output.strip():
-            document.expected_content_bytes = client.byte_count(content_path)
-            if document.expected_content_bytes == len(content_output.encode("utf-8")):
-                document.content = content_output
-                document.access_kind = LiteratureAccessKind.FULL_TEXT
-            else:
-                document.content_preview = content_output
-                document.access_kind = LiteratureAccessKind.INACCESSIBLE
+        document.line_count = client.line_count(content_path)
+        lines = client.read_lines(content_path, 1, document.line_count) if document.line_count else []
+        if lines and len(lines) == document.line_count:
+            document.content = "\n".join(lines)
+            document.access_kind = LiteratureAccessKind.FULL_TEXT
+        elif lines:
+            document.content_preview = "\n".join(lines)
+            document.access_kind = LiteratureAccessKind.INACCESSIBLE
         else:
             document.access_kind = LiteratureAccessKind.INACCESSIBLE
     return PaperclipDocumentOutput(document=document)

@@ -1,32 +1,28 @@
 """Minimal HTTP client for the hosted Paperclip literature service.
 
-Paperclip runs entirely on GXL's servers. The official ``gxl-paperclip`` package is a thin
-client that formats a CLI-style command string and posts it to the service, so this module
-speaks that same wire protocol directly with ``requests`` and needs no extra dependency:
+Paperclip runs entirely on GXL's servers and exposes each operation as a tool on its MCP
+endpoint, so this module calls those tools directly with ``requests`` and needs no extra
+dependency:
 
-- Commands go to the MCP endpoint as a JSON-RPC ``tools/call`` on the ``paperclip`` tool, with
-  an ``X-API-Key`` or ``Authorization: Bearer`` header. The reply is a list of text blocks.
-- A search reply names a saved result id; the structured hit list is then read from
-  ``/api/cli/results/{result_id}``.
-- Paper metadata and full text are files under ``/papers/{document_id}/`` in the service's
-  virtual filesystem, read with ``cat`` and measured with ``wc``.
-
-Only the commands the Paperclip tools use are wrapped here: ``search`` and ``lookup`` (which
-save their hits on the server), ``grep`` over one paper or a whole corpus, and ``cat``, ``sed``,
-and ``wc`` for reading paper files.
+- Each operation is a JSON-RPC ``tools/call`` to ``{base_url}/mcp`` naming one Paperclip tool
+  (``search``, ``lookup``, ``grep``, ``cat``) with typed arguments, authenticated with an
+  ``X-API-Key`` or ``Authorization: Bearer`` header. The reply is formatted text.
+- A search, a multi-hit lookup, and a corpus grep name a saved result id in that text; the
+  structured hits are read from ``/api/cli/results/{result_id}``.
+- Paper metadata and line-numbered text are files under ``/papers/{document_id}/``. ``cat``
+  returns ``L<n>: text`` lines and stops at 50,000 characters, so long ranges are read in pages.
 """
 
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
 import re
-import shlex
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlparse
 
 import requests
 
@@ -38,8 +34,16 @@ DEFAULT_BASE_URL = "https://paperclip.gxl.ai"
 USER_AGENT = "proto-tools/paperclip-literature-v1"
 _HTTP_RETRIES = 2
 _BACKOFF_SECONDS = 1.0
-#: Saved-result ids look like ``s_1a2b3c`` (search), ``m_...`` (map), ``r_...`` (results).
+#: Saved-result ids look like ``s_1a2b3c`` (search, lookup, grep), ``m_...`` (map), ``r_...``.
 _RESULT_ID = re.compile(r"\b([smr]_[0-9a-f]{4,})\b")
+#: One line of a paper as ``cat`` and in-paper ``grep`` return it.
+_NUMBERED_LINE = re.compile(r"^L(\d+):")
+#: ``cat`` appends this when a reply reaches its character limit, possibly mid-line.
+_TRUNCATED = "[output truncated at"
+#: A ``cat`` preview ends with a hint naming the file's last line: ``cat --lines 5-472 <path>``.
+_PREVIEW_LAST_LINE = re.compile(r"cat --lines \d+-(\d+) ")
+#: A lookup hit's identifier line: ``PMC11754230 · Frontiers in Immunology · 2025``.
+_LOOKUP_ID_LINE = re.compile(r"^\s+(\S+) · ", re.MULTILINE)
 
 
 class PaperclipError(RuntimeError):
@@ -51,21 +55,21 @@ class PaperclipAuthError(PaperclipError):
 
 
 class PaperclipCommandError(PaperclipError):
-    """The service ran the command but reported a failure."""
+    """The service ran the tool but reported a failure."""
 
 
 @dataclass
-class PaperclipCommandResult:
-    """Text output of one Paperclip command."""
+class PaperclipToolResult:
+    """Text output of one Paperclip tool call."""
 
-    command: str
+    tool: str
     output: str
     result_id: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 
 class PaperclipClient:
-    """Authenticated client for the Paperclip command endpoint.
+    """Authenticated client for the Paperclip MCP endpoint.
 
     Authenticates with ``api_key`` when given, else ``token`` as a bearer token; the tool
     config resolves both from ``PAPERCLIP_API_KEY`` and ``PAPERCLIP_TOKEN``. The
@@ -96,17 +100,17 @@ class PaperclipClient:
             http_retries=_HTTP_RETRIES,
             backoff_seconds=_BACKOFF_SECONDS,
             user_agent=USER_AGENT,
+            allowed_methods=["GET", "POST"],
         )
         self._call_id = 0
 
-    @property
-    def command_url(self) -> str:
-        """JSON-RPC endpoint; the direct ``mcp.`` origin serves it at ``/papers``."""
-        host = urlparse(self.base_url).hostname or ""
-        return f"{self.base_url}/papers" if host.startswith("mcp.") else f"{self.base_url}/mcp"
-
     def _headers(self) -> dict[str, str]:
-        return {"Content-Type": "application/json", "User-Agent": USER_AGENT, **self._auth_header}
+        return {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "User-Agent": USER_AGENT,
+            **self._auth_header,
+        }
 
     def _raise_for_status(self, response: requests.Response, what: str) -> None:
         status = response.status_code
@@ -129,63 +133,48 @@ class PaperclipClient:
             raise PaperclipError(f"Paperclip rate limit reached for {what} (HTTP 429): {detail or ''}".rstrip())
         raise PaperclipError(f"Paperclip returned HTTP {status} for {what}: {response.text[:500]}")
 
-    def execute(self, command: str, args: Sequence[str] = ()) -> PaperclipCommandResult:
-        """Run one Paperclip command and return its complete, un-rendered text output."""
-        full_command = shlex.join([command, *args])
+    def call(self, tool: str, arguments: dict[str, Any]) -> PaperclipToolResult:
+        """Call one Paperclip tool; arguments that are None or False are left out."""
+        sent = {key: value for key, value in arguments.items() if value is not None and value is not False}
+        what = f"{tool} {json.dumps(sent)}"
         self._call_id += 1
         payload = {
             "jsonrpc": "2.0",
             "id": self._call_id,
             "method": "tools/call",
-            "params": {
-                "name": "paperclip",
-                "arguments": {
-                    "command": full_command,
-                    "description": full_command[:80],
-                    # Return the whole output rather than the CLI's preview, without ANSI colour.
-                    "skip_truncation": True,
-                    "plain": True,
-                    "no_color": True,
-                },
-            },
+            "params": {"name": tool, "arguments": sent},
         }
         response = request_with_retry(
             lambda: self._session.post(
-                self.command_url, json=payload, headers=self._headers(), timeout=self.timeout_seconds
+                f"{self.base_url}/mcp", json=payload, headers=self._headers(), timeout=self.timeout_seconds
             ),
             retries=_HTTP_RETRIES,
             backoff_seconds=_BACKOFF_SECONDS,
         )
-        self._raise_for_status(response, f"command {full_command!r}")
+        self._raise_for_status(response, what)
         try:
             data = response.json()
         except ValueError as exc:
-            raise PaperclipError(f"Paperclip returned non-JSON output for command {full_command!r}") from exc
+            raise PaperclipError(f"Paperclip returned non-JSON output for {what}") from exc
         if not isinstance(data, dict):
-            raise PaperclipError(f"Paperclip returned an unexpected reply for command {full_command!r}")
+            raise PaperclipError(f"Paperclip returned an unexpected reply for {what}")
         error = data.get("error")
         if error is not None:
             message = error.get("message", "unknown error") if isinstance(error, dict) else str(error)
-            raise PaperclipCommandError(f"Paperclip command {full_command!r} failed: {message}")
+            raise PaperclipCommandError(f"Paperclip {what} failed: {message}")
         result = data.get("result") or {}
-        texts = [
+        output = "\n".join(
             block.get("text", "")
             for block in result.get("content", []) or []
             if isinstance(block, dict) and block.get("type") == "text"
-        ]
-        output = "\n".join(texts)
-        if result.get("isError"):
-            raise PaperclipCommandError(f"Paperclip command {full_command!r} failed: {output[:500]}")
-        match = _RESULT_ID.search(output)
-        return PaperclipCommandResult(
-            command=full_command,
-            output=output,
-            result_id=match.group(1) if match else None,
-            raw=data,
         )
+        if result.get("isError"):
+            raise PaperclipCommandError(f"Paperclip {what} failed: {output[:500]}")
+        match = _RESULT_ID.search(output)
+        return PaperclipToolResult(tool=tool, output=output, result_id=match.group(1) if match else None, raw=data)
 
     def fetch_result_papers(self, result_id: str) -> list[dict[str, Any]]:
-        """Read the structured hit list saved under a search result id."""
+        """Read the structured hit list saved under a result id."""
         url = f"{self.base_url}/api/cli/results/{result_id}"
         response = request_with_retry(
             lambda: self._session.get(url, headers=self._headers(), timeout=self.timeout_seconds),
@@ -205,22 +194,12 @@ class PaperclipClient:
             papers = result_data.get("results")
         return [paper for paper in papers if isinstance(paper, dict)] if isinstance(papers, list) else []
 
-    def _saved_result(self, command: str, args: Sequence[str]) -> tuple[str | None, list[dict[str, Any]]]:
-        """Run a command that saves its hits on the server; return the result id and those hits."""
-        result = self.execute(command, args)
-        if result.result_id is None:
-            if result.output.strip():
-                logger.warning("Paperclip %s returned output without a saved result id: %.200s", command, result.output)
-            return None, []
-        return result.result_id, self.fetch_result_papers(result.result_id)
-
     def search(
         self,
         query: str,
         *,
         sources: Sequence[str],
         limit: int,
-        ranking: str | None = None,
         exact: bool = False,
         since: str | None = None,
         year: int | None = None,
@@ -229,26 +208,35 @@ class PaperclipClient:
         article_type: str | None = None,
     ) -> tuple[str | None, list[dict[str, Any]]]:
         """Search the selected corpora; return the saved result id and its structured hits."""
-        args: list[str] = []
-        if exact:
-            args.append("-e")
-        args += [query, "-n", str(limit), "-s", ",".join(sources)]
-        optional = {
-            "--ranking": ranking,
-            "--since": since,
-            "--year": None if year is None else str(year),
-            "--journal": journal,
-            "--author": author,
-            "--article-type": article_type,
-        }
-        for flag, value in optional.items():
-            if value:
-                args += [flag, value]
-        return self._saved_result("search", args)
+        result = self.call(
+            "search",
+            {
+                "query": query,
+                "source": ",".join(sources),
+                "limit": limit,
+                "exact": exact,
+                "since": since,
+                "year": None if year is None else str(year),
+                "journal": journal,
+                "author": author,
+                "article_type": article_type,
+            },
+        )
+        if result.result_id is None:
+            return None, []
+        return result.result_id, self.fetch_result_papers(result.result_id)
 
     def lookup(self, field: str, value: str, *, limit: int) -> tuple[str | None, list[dict[str, Any]]]:
-        """Find papers by one metadata field; return the saved result id and its structured hits."""
-        return self._saved_result("lookup", [field, value, "-n", str(limit)])
+        """Find papers by one metadata field; return the saved result id, if any, and the hits.
+
+        Paperclip saves a result only for some lookups. Without one, each listed paper's
+        ``meta.json`` stands in for its saved hit.
+        """
+        result = self.call("lookup", {"field": field, "value": value, "limit": limit})
+        if result.result_id is not None:
+            return result.result_id, self.fetch_result_papers(result.result_id)
+        document_ids = list(dict.fromkeys(_LOOKUP_ID_LINE.findall(result.output)))
+        return None, [json.loads(self.read_file(f"/papers/{document_id}/meta.json")) for document_id in document_ids]
 
     def grep(
         self,
@@ -259,30 +247,56 @@ class PaperclipClient:
         max_matches: int | None = None,
         context_lines: int = 0,
         exhaustive: bool = False,
-    ) -> PaperclipCommandResult:
+    ) -> PaperclipToolResult:
         """Run a regular-expression search over one file or a whole corpus directory."""
-        args: list[str] = []
-        if ignore_case:
-            args.append("-i")
-        if max_matches is not None:
-            args += ["-m", str(max_matches)]
-        if context_lines:
-            args += ["-B", str(context_lines), "-A", str(context_lines)]
-        if exhaustive:
-            args.append("--exhaustive")
-        return self.execute("grep", [*args, pattern, path])
+        return self.call(
+            "grep",
+            {
+                "pattern": pattern,
+                "path": path,
+                "ignore_case": ignore_case,
+                "max_count": max_matches,
+                "context": context_lines or None,
+                "exhaustive": exhaustive,
+            },
+        )
 
     def read_file(self, path: str) -> str:
-        """Return the complete text of a file in Paperclip's virtual filesystem."""
-        return self.execute("cat", [path]).output
+        """Return the text of a small file, such as a paper's ``meta.json``."""
+        return self.call("cat", {"path": path}).output
 
-    def read_lines(self, path: str, start: int, end: int) -> str:
-        """Return lines ``start`` through ``end`` (1-indexed, inclusive) of a file."""
-        return self.execute("sed", ["-n", f"{start},{end}p", path]).output
+    def read_lines(self, path: str, start: int, end: int) -> list[str]:
+        """Return lines ``start`` through ``end`` (1-indexed, inclusive) as ``L<n>: text`` strings.
 
-    def byte_count(self, path: str) -> int | None:
-        """Return the size in bytes that Paperclip reports for a file, or None if unparseable."""
-        fields = self.execute("wc", [path]).output.split()
-        if len(fields) < 3 or not fields[2].isdigit():
-            return None
-        return int(fields[2])
+        Stops early at the end of the file. A reply cut off at Paperclip's character limit loses
+        its last, possibly partial, line, and reading resumes from that line.
+        """
+        lines: list[str] = []
+        next_line = start
+        while next_line <= end:
+            output = self.call("cat", {"path": path, "lines": f"{next_line}-{end}"}).output
+            truncated = _TRUNCATED in output
+            numbered = [
+                (int(match.group(1)), raw)
+                for raw in output.splitlines()
+                if (match := _NUMBERED_LINE.match(raw)) is not None
+            ]
+            if truncated:
+                numbered = numbered[:-1]
+            if not numbered:
+                if truncated:
+                    raise PaperclipError(f"{path} line {next_line} is longer than one Paperclip read returns")
+                break
+            lines.extend(raw for _, raw in numbered)
+            next_line = numbered[-1][0] + 1
+            if not truncated:
+                break
+        return lines
+
+    def line_count(self, path: str) -> int:
+        """Return how many lines a paper file has, from the hint ending ``cat``'s preview."""
+        output = self.call("cat", {"path": path}).output
+        match = _PREVIEW_LAST_LINE.search(output)
+        if match is not None:
+            return int(match.group(1))
+        return sum(1 for raw in output.splitlines() if _NUMBERED_LINE.match(raw))
