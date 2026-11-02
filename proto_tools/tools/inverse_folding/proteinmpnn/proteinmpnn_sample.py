@@ -8,9 +8,13 @@ import random
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-import numpy as np
 from pydantic import Field, field_validator
 
+from proto_tools.tools.inverse_folding.proteinmpnn._sampling import (
+    collect_samples,
+    looks_like_homooligomer,
+    split_chain_segments,
+)
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -20,7 +24,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingStructureInput,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
+from proto_tools.utils import AminoAcid, ConfigField
 from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.sequence import normalize_excluded_amino_acids
 from proto_tools.utils.tool_io import Metrics, MetricSpec
@@ -53,8 +57,6 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
             yields more diverse, robust designs at some cost to native-sequence recovery. ``"abmpnn"``
             is antibody-optimized; ``"soluble"`` is soluble-protein-trained.
         backbone_noise (float): Gaussian noise (Å) added to backbone coordinates before each forward pass.
-        homooligomer (bool): Tie corresponding positions across equal-length redesigned chains so one
-            protomer sequence is sampled in the full oligomeric backbone context.
     """
 
     model_choice: Literal["proteinmpnn", "v_48_002", "v_48_010", "v_48_030", "abmpnn", "soluble"] = ConfigField(
@@ -75,11 +77,6 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         default=None,
         description="Single-letter codes of amino acids to exclude (e.g. ['C'] to forbid cysteine)",
         examples=[["C"]],
-    )
-    homooligomer: bool = ConfigField(
-        title="Tie Homooligomer Chains",
-        default=False,
-        description="Tie corresponding positions across equal-length redesigned chains",
     )
 
     @field_validator("excluded_amino_acids", mode="before")
@@ -230,6 +227,8 @@ def run_proteinmpnn_sample(
     base_seed = config.seed if config.seed is not None else config.get_random_int()
     # Draw a fresh seed per chunk so identical structures across inputs do not collide.
     seed_rng = random.Random(base_seed)  # noqa: S311 -- non-cryptographic
+    # One nudge per call, not one per structure, so a large batch stays readable.
+    warned_homooligomer = False
 
     for inp in progress_bar(
         inputs.inputs,
@@ -237,63 +236,31 @@ def run_proteinmpnn_sample(
         unit="structure",
         disable=not config.verbose,
     ):
-        all_seqs: list[str] = []
-        all_perp: list[float] = []
-        all_seq_recovery: list[float] = []
-        remaining = config.num_sequences_per_structure
-        # Staged once per input and reused across chunks, numbered 1..N per chain so ProteinMPNN,
-        # which addresses residues by number alone, sees every insertion-coded residue.
-        with inp.staged() as staged:
-            redesign_ids = inp.chain_ids_to_redesign
-            if config.homooligomer:
-                chain_lengths = [len(inp.structure.get_chain_sequence(cid)) for cid in redesign_ids]
-                if len(redesign_ids) < 2 or len(set(chain_lengths)) != 1:
-                    raise ValueError(
-                        "homooligomer=True requires at least two equal-length chains_to_redesign; "
-                        f"got {dict(zip(redesign_ids, chain_lengths, strict=True))}"
-                    )
-            while remaining > 0:
-                chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
-                input_dict = {
-                    "operation": "sample",
-                    "pdb_path": str(staged.path),
-                    "chain_ids": staged.chains(inp.chain_ids_to_redesign),
-                    "batch_size": chunk,
-                    "temperature": config.temperature,
-                    "fixed_positions": staged.positions(inp.fixed_positions),
-                    "excluded_amino_acids": config.excluded_amino_acids,
-                    "seed": seed_rng.randint(0, 2**31 - 1),
-                    "device": config.device,
-                    "model_choice": config.model_choice,
-                    "verbose": config.verbose,
-                    "return_logits": False,
-                    "backbone_noise": config.backbone_noise,
-                    "homooligomer": config.homooligomer,
-                }
-                result = ToolInstance.dispatch(
-                    "proteinmpnn",
-                    input_dict,
-                    instance=instance,
-                    config=config,
-                )
-                all_seqs.extend(result["seq"])
-                all_perp.extend(np.exp(result["score"]).tolist())
-                all_seq_recovery.extend(result["seqid"])
-                remaining -= chunk  # type: ignore[operator]
-
         redesign_ids = inp.chain_ids_to_redesign
+        if not warned_homooligomer and looks_like_homooligomer(inp.structure, redesign_ids):
+            warned_homooligomer = True
+            logger.warning(
+                "Chains %s are sequence-identical, so this looks like a homooligomer. "
+                "proteinmpnn-sample designs each chain independently against placeholder "
+                "partner sequences; proteinmpnn-sample-homooligomer ties corresponding "
+                "positions instead, sampling one protomer in the full complex context.",
+                redesign_ids,
+            )
+
+        all_seqs, all_perp, all_seq_recovery = collect_samples(
+            inp,
+            config,
+            chain_ids=redesign_ids,
+            fixed_positions=inp.fixed_positions,
+            homooligomer=False,
+            seed_rng=seed_rng,
+            instance=instance,
+        )
+
         complexes: list[ProteinMPNNDesign] = []
         for raw_seq, perp, recovery in zip(all_seqs, all_perp, all_seq_recovery, strict=True):
             # Segments are the redesigned chains in chain_ids_to_redesign order.
-            segments = raw_seq.split("/")
-            if config.homooligomer and len(segments) == 1:
-                segments = segments * len(redesign_ids)
-            if len(segments) != len(redesign_ids):
-                raise ValueError(
-                    f"ProteinMPNN returned {len(segments)} sequence segment(s) but "
-                    f"{len(redesign_ids)} chain(s) were requested for redesign "
-                    f"({redesign_ids}). Raw sequence: {raw_seq!r}."
-                )
+            segments = split_chain_segments(raw_seq, redesign_ids, tied=False)
             complexes.append(
                 ProteinMPNNDesign.from_design(
                     inp.structure,
