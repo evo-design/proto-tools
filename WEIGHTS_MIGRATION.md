@@ -37,7 +37,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 24 | `masked_models/esm2` |  | esm2 | `huggingface/hub/models--fredzzp--esm2_*` (5 repos), `models--facebook--esm2_t48_15B_UR50D` | 30 MB (8M test ckpt) | ✅✅✅✅✅ | HF hub 1.x shared-blob store: migration materializes repo blobs (hard links) before moving. Weights fetched at runtime, env kept for step 4. |
 | 25 | `masked_models/esm3` | biohub_esm |  |  |  |  |  |
 | 26 | `masked_models/esmc` | biohub_esm |  |  |  |  |  |
-| 27 | `masked_models/glm2` | glm2_base |  |  |  |  |  |
+| 27 | `masked_models/glm2` | glm2_base | glm2 | `huggingface/hub/models--tattabio--gLM2_{150M,650M}` | 582 MB (150M) | ✅✅✅✅✅ | Shared env glm2_base; separate weights folder from minerva (different repos). |
 | 28 | `masked_models/minerva` | glm2_base |  |  |  |  |  |
 | 29 | `molecular_docking/vina` |  |  |  |  |  |  |
 | 30 | `orf_prediction/orfipy` |  |  |  |  |  |  |
