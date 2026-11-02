@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.entities.structures import BFactorType, Structure, is_valid_structure
+from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure, is_valid_structure
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
     AlphaFold2GradientCandidate,
@@ -477,6 +477,8 @@ def test_prediction_dispatch_contract(monkeypatch):
     # Structure.per_residue_plddt must normalize 0-100 B-factors to [0, 1].
     plddt = structure.per_residue_plddt
     assert plddt is not None and all(0.0 <= v <= 1.0 for v in plddt)
+    assert structure.msa_conditioning.chains[0].status == "not_requested"
+    assert structure.msa_conditioning.subsampling.mode == "none"
 
 
 def test_heteromultimer_msa_dispatch_payload(monkeypatch):
@@ -500,7 +502,7 @@ def test_heteromultimer_msa_dispatch_payload(monkeypatch):
     msa_b = MSA.from_fasta_string(">qB\nGARYTW\n>hB1\nGARYTM\n")
     complex_msas = ComplexMSAs(per_chain={0: msa_a, 1: msa_b}, paired=True)
 
-    run_alphafold2(
+    result = run_alphafold2(
         AlphaFold2Input(complexes=[["MKTLAV", "GARYTW"]], msas=[complex_msas]),
         AlphaFold2Config(use_msa=False, device="cpu"),
     )
@@ -514,6 +516,10 @@ def test_heteromultimer_msa_dispatch_payload(monkeypatch):
     assert per_chain_a3m is not None and len(per_chain_a3m) == 2, "two-chain complex → two A3Ms"
     assert per_chain_a3m[0] is not None and "MKTLAV" in per_chain_a3m[0]
     assert per_chain_a3m[1] is not None and "GARYTW" in per_chain_a3m[1]
+    report = result.structures[0].msa_conditioning
+    assert [chain.status for chain in report.chains] == ["consumed", "consumed"]
+    assert report.pairing_mode == "paired"
+    assert report.subsampling == MSASubsampling(mode="stochastic", max_rows=512, max_extra_rows=1024)
 
 
 def test_heteromultimer_paired_dispatch_carries_deep_unpaired_a3m(monkeypatch):

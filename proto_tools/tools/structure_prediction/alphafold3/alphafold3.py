@@ -16,9 +16,14 @@ from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
+# MSA rows the Evoformer keeps after shuffling the featurized MSA (its Config.num_msa).
+ALPHAFOLD3_NUM_MSA = 1024
+
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.msa import MSA
+from proto_tools.entities.structures.msa_conditioning import MSASubsampling
 from proto_tools.entities.structures.structure import BFactorType, Structure
+from proto_tools.tools.structure_prediction.msa_reporting import msa_consumption
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Complex,
     MSAStructurePredictionConfig,
@@ -26,6 +31,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionOutput,
     normalize_output_chain_ids,
     resolve_chain_ids,
+    unwrap_complex_msas,
     write_paired_a3m_with_uniprot_headers,
 )
 from proto_tools.tools.tool_registry import tool
@@ -314,8 +320,6 @@ def run_alphafold3(
 
             # Write pre-computed MSAs to A3M files (per-complex slice).
             if inputs.msas:
-                from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
-
                 per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(inputs.msas[dispatch_idx])
                 if per_chain_msas:
                     input_json = _assign_msas_to_input_json(
@@ -359,7 +363,25 @@ def run_alphafold3(
                 metrics=metrics,
                 source="alphafold3-prediction",
             )
-            output_structures.append(normalize_output_chain_ids(structure, comp.chains))
+            complex_msas = inputs.msas[dispatch_idx] if inputs.msas else None
+            msa_consumed, msa_ignored_reasons = msa_consumption(
+                comp.chains, complex_msas, backend="AlphaFold3", max_skipped_length=4
+            )
+            output_structures.append(
+                normalize_output_chain_ids(
+                    structure,
+                    comp.chains,
+                    complex_msas=complex_msas,
+                    report_msa=True,
+                    msa_consumed=msa_consumed,
+                    msa_ignored_reasons=msa_ignored_reasons,
+                    msa_subsampling=(
+                        MSASubsampling(mode="stochastic", max_rows=ALPHAFOLD3_NUM_MSA)
+                        if msa_consumed
+                        else MSASubsampling(mode="none")
+                    ),
+                )
+            )
 
     return AlphaFold3Output(
         structures=output_structures,

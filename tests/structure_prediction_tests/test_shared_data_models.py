@@ -151,12 +151,20 @@ def test_write_paired_a3m_species_tokens_align_across_chains(tmp_path):
 # ── MSA preprocessing orchestration ───────────────────────────────────────────
 
 
-def test_preprocess_single_chain_is_unpaired(monkeypatch):
-    """A single protein chain issues one unpaired query and yields a plain per-chain dict."""
+@pytest.mark.parametrize(
+    ("search_mode", "expected_source"),
+    [("remote", "colabfold_server"), ("local", "local_mmseqs2"), (None, "colabfold_server")],
+)
+def test_preprocess_single_chain_is_unpaired(monkeypatch, search_mode, expected_source):
+    """A single protein chain issues one unpaired query, tagged with the search that produced it.
+
+    ``None`` is every predictor's default ``msa_search_config``: the search tool's defaults apply.
+    """
     captured = _stub_mmseqs2_search(monkeypatch)
     inputs = _SPInput(complexes=[_protein_complex(_SEQ_A)])
+    config = Mmseqs2HomologySearchConfig(search_mode=search_mode) if search_mode else None
 
-    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
+    out = sdm._preprocess_structure_prediction_msas(inputs, config, verbose=0)
 
     assert len(captured["queries"]) == 1
     assert not isinstance(captured["queries"][0], list)  # singleton group
@@ -164,6 +172,37 @@ def test_preprocess_single_chain_is_unpaired(monkeypatch):
     assert isinstance(entry, ComplexMSAs)
     assert not entry.paired
     assert set(entry.per_chain) == {0}
+    assert entry.source == expected_source
+    assert entry.requested_chain_indices == [0]
+
+
+def test_preprocess_preserves_completed_search_with_no_hits(monkeypatch):
+    """A no-hit search remains explicit so backends cannot mistake it for no request."""
+
+    def fake(search_input, config):
+        return hs.Mmseqs2HomologySearchOutput(
+            results=[
+                hs.Mmseqs2HomologySearchResult(
+                    sequence_ids=[query.sequence_id],
+                    msas=[None],
+                    paired_msas=[None],
+                    datasets_searched=["stub"],
+                    num_homologs_found=[0],
+                )
+                for query in search_input.queries
+            ]
+        )
+
+    monkeypatch.setattr(hs, "run_mmseqs2_homology_search", fake)
+    inputs = _SPInput(complexes=[_protein_complex(_SEQ_A)])
+
+    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
+
+    assert out.msas is not None
+    assert len(out.msas) == 1
+    assert out.msas[0].per_chain == {}
+    assert out.msas[0].source == "colabfold_server"
+    assert out.msas[0].requested_chain_indices == [0]
 
 
 def test_preprocess_homomultimer_broadcasts_single_msa(monkeypatch):

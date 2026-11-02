@@ -25,7 +25,9 @@ from proto_tools.tools.structure_prediction import (
     run_boltz2_affinity,
 )
 from proto_tools.tools.structure_prediction.boltz2.boltz2 import run_boltz2_on_complex
+from proto_tools.tools.structure_prediction.boltz2.boltz2_affinity import run_boltz2_affinity_on_complex
 from proto_tools.tools.structure_prediction.boltz2.helpers import build_chain_msa_paths, complex_to_yaml
+from tests._structure_fixtures import synthetic_cif
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
@@ -248,6 +250,73 @@ def test_affinity_validator_rejects_invalid_input(kwargs, match):
         Boltz2AffinityInput(**kwargs)
 
 
+def test_boltz2_prediction_reports_msa_subsampling(monkeypatch):
+    """Prediction exposes requested rows and the configured stochastic row cap."""
+    sequence = "MKTAYIAKQR"
+    complex_ = Complex(chains=[Chain(sequence=sequence, entity_type="protein")])
+    complex_msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[sequence, sequence, sequence])})
+
+    def fake_dispatch(*args, **kwargs):
+        return {
+            "structure_cif_output": synthetic_cif(["A"]),
+            "metrics": {
+                "confidence_score": 0.8,
+                "ptm": 0.7,
+                "iptm": 0.0,
+                "chains_ptm": [0.7],
+                "pair_chains_iptm": [[0.0]],
+                "avg_pae": 1.0,
+                "pae": None,
+            },
+        }
+
+    monkeypatch.setattr("proto_tools.tools.structure_prediction.boltz2.boltz2.ToolInstance.dispatch", fake_dispatch)
+    structure = run_boltz2_on_complex(
+        Boltz2Config(use_msa=True, max_msa_seqs=64, subsample_msa=True),
+        complex_,
+        complex_msas=complex_msas,
+    )
+
+    report = structure.msa_conditioning
+    assert report.chains[0].status == "consumed"
+    assert report.chains[0].rows == 3
+    assert report.subsampling.mode == "stochastic"
+    assert report.subsampling.max_rows == 64
+
+
+def test_boltz2_affinity_reports_msa_conditioning(monkeypatch):
+    """Affinity now returns the same MSA evidence contract as structure prediction."""
+    sequence = "MKTAYIAKQR"
+    complex_ = Complex(chains=[Chain(sequence=sequence, entity_type="protein"), Fragment(ccd_code="ATP")])
+    complex_msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[sequence, sequence])})
+
+    def fake_dispatch(*args, **kwargs):
+        return {
+            "structure_cif_output": synthetic_cif(["A"]),
+            "affinity_metrics": {
+                "affinity_pred_value": -1.2,
+                "affinity_probability_binary": 0.75,
+            },
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.boltz2.boltz2_affinity.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+    structure = run_boltz2_affinity_on_complex(
+        Boltz2AffinityConfig(use_msa=True, max_msa_seqs=32, subsample_msa=False),
+        complex_,
+        binder_chain_id="B",
+        complex_msas=complex_msas,
+    )
+
+    report = structure.msa_conditioning
+    assert report.coverage == "full"
+    assert report.chains[0].status == "consumed"
+    assert report.subsampling.mode == "deterministic"
+    assert report.subsampling.max_rows == 32
+
+
 # ── PAE matrix surfacing ────────────────────────────────────────────────────
 
 
@@ -425,3 +494,21 @@ def test_boltz2_reload_on_change_restarts_worker_only_for_load_fields(caplog):
         with caplog.at_level(logging.INFO, logger="proto_tools.utils.tool_instance"):
             assert run_boltz2(inputs, Boltz2Config(**base, step_scale=1.0, max_msa_seqs=64)).success
         assert "restarting worker" not in caplog.text.lower()
+
+
+@pytest.mark.integration
+def test_boltz2_reported_msa_caps_match_boltz():
+    """Boltz accepts the pinned num_subsampled_msa, and its featurizer caps rows where we report."""
+    from proto_tools.tools.structure_prediction.boltz2.helpers import BOLTZ2_FEATURIZER_MAX_ROWS
+    from proto_tools.utils import run_in_env
+
+    code = (
+        "import inspect\n"
+        "from boltz.data.feature.featurizerv2 import construct_paired_msa\n"
+        "from boltz.main import predict\n"
+        "print('num_subsampled_msa' in inspect.signature(predict.callback).parameters)\n"
+        "print(inspect.signature(construct_paired_msa).parameters['max_total'].default)\n"
+    )
+    accepts_pin, max_total = run_in_env("boltz2", code=code, timeout=1800).strip().splitlines()[-2:]
+    assert accepts_pin == "True"
+    assert int(max_total) == BOLTZ2_FEATURIZER_MAX_ROWS

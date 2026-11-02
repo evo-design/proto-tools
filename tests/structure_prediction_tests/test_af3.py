@@ -417,3 +417,13 @@ def test_alphafold3_benchmark(request):
     assert len(result.structures) == 1
     assert is_valid_structure(result.structures[0].structure_cif)
     assert_metrics_in_spec(result)
+
+
+@pytest.mark.integration
+def test_alphafold3_reported_msa_depth_matches_evoformer():
+    """The report's 1024-row cap is the installed Evoformer's num_msa."""
+    from proto_tools.tools.structure_prediction.alphafold3.alphafold3 import ALPHAFOLD3_NUM_MSA
+    from proto_tools.utils import run_in_env
+
+    code = "from alphafold3.model.network.evoformer import Evoformer\nprint(Evoformer.Config().num_msa)"
+    assert int(run_in_env("alphafold3", code=code, timeout=1800).strip().splitlines()[-1]) == ALPHAFOLD3_NUM_MSA

@@ -110,6 +110,19 @@ def test_esmfold_predict_propagates_non_oom_errors():
             run_esmfold(inputs=inputs, config=ESMFoldConfig(num_recycles=1))
 
 
+def test_esmfold_reports_supplied_msa_as_ignored():
+    """ESMFold is single-sequence: supplied rows are ignored, unsupplied chains not requested."""
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.esmfold.esmfold import _esmfold_msa_conditioning
+    from proto_tools.tools.structure_prediction.shared_data_models import Chain, ComplexMSAs
+
+    chains = [Chain(sequence="MKTAY", entity_type="protein"), Chain(sequence="MKTAQ", entity_type="protein")]
+    report = _esmfold_msa_conditioning(chains, ComplexMSAs(per_chain={0: MSA(aligned_sequences=["MKTAY", "MKTAA"])}))
+    assert [chain.status for chain in report.chains] == ["ignored", "not_requested"]
+    assert report.chains[0].ignored_reason == "ESMFold is a single-sequence model"
+    assert report.subsampling.mode == "none"
+
+
 def test_esmfold_gradient_input_validation():
     """Gradient input validates target-chain/logit shape before dispatch."""
     logits = one_hot_protein_logits("MKTL", sharpness=2.0)

@@ -7,12 +7,12 @@ MSA CSV file writing and YAML input generation.
 import csv
 import hashlib
 import os
-import warnings
 from logging import getLogger
 from typing import Any
 
 from proto_tools.entities.complex import chain_label
 from proto_tools.entities.ligands import Fragment
+from proto_tools.entities.structures.msa_conditioning import MSASubsampling
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     Complex,
@@ -100,10 +100,10 @@ def build_chain_msa_paths(
     _, protein_chain_ids = sp_complex.extract_protein_chains()
     for chain_id in protein_chain_ids:
         if chain_id not in chain_msa_paths:
-            warnings.warn(
-                f"No homologs found for chain {chain_id} - setting msa='empty'.",
-                UserWarning,
-                stacklevel=2,
+            logger.info(
+                "Chain %s has no supplied homolog alignment; using query-only input for this chain. "
+                "Other chains may still use MSAs; inspect structure.msa_conditioning.",
+                chain_id,
             )
     return chain_msa_paths
 
@@ -155,3 +155,24 @@ def complex_to_yaml(
         payload["properties"] = [{"affinity": {"binder": affinity_binder_chain_id}}]
 
     return str(yaml.dump(payload, sort_keys=False, default_flow_style=False))
+
+
+# Rows boltz randomly keeps per recycle when subsample_msa is on; passed as num_subsampled_msa.
+BOLTZ2_SUBSAMPLED_ROWS = 1024
+# boltz's featurizer keeps at most this many rows of the combined MSA, whatever max_msa_seqs is.
+BOLTZ2_FEATURIZER_MAX_ROWS = 16384
+
+
+def boltz2_msa_subsampling(*, max_msa_seqs: int, subsample_msa: bool, has_msa: bool) -> MSASubsampling:
+    """Describe Boltz-2's MSA row selection for the conditioning report.
+
+    boltz always keeps the first ``max_msa_seqs`` unique rows of each CSV, and at most 16384
+    combined rows in its featurizer; ``subsample_msa`` then draws a random
+    ``num_subsampled_msa`` of those per recycle.
+    """
+    if not has_msa:
+        return MSASubsampling(mode="none")
+    depth = min(max_msa_seqs, BOLTZ2_FEATURIZER_MAX_ROWS)
+    if subsample_msa:
+        return MSASubsampling(mode="stochastic", max_rows=min(depth, BOLTZ2_SUBSAMPLED_ROWS))
+    return MSASubsampling(mode="deterministic", max_rows=depth)

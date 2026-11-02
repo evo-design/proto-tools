@@ -14,6 +14,12 @@ from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
+# chai-lab's per-recycle subsample size (subsample_and_reorder_msa_feats_n_mask select_n_rows).
+CHAI1_RECYCLE_SUBSAMPLE_ROWS = 4096
+# chai-lab's row quota for the uniref90 source every written MSA row is tagged with.
+CHAI1_UNIREF90_QUOTA_ROWS = 10_000
+
+from proto_tools.entities.structures import MSASubsampling
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.chai1.helpers import (
     complex_to_fasta,
@@ -23,6 +29,7 @@ from proto_tools.tools.structure_prediction.chai1.helpers import (
 from proto_tools.tools.structure_prediction.chai1.helpers import (
     hash_sequence as _hash_sequence,
 )
+from proto_tools.tools.structure_prediction.msa_reporting import msa_consumption
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     Complex,
@@ -163,8 +170,9 @@ class Chai1Config(MSAStructurePredictionConfig):
         low_memory (bool): Stream MSA + template features per sample to reduce
             peak GPU memory at the cost of speed. Default: True.
 
-        recycle_msa_subsample (int): Stochastically subsample MSA across recycles
-            for diversity. 0 disables (default).
+        recycle_msa_subsample (int): Any positive value turns on chai-lab's random
+            4096-row MSA subsample on every recycle, for diversity; the value itself
+            sets no depth. 0 disables (default).
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
             for protein chains using MMseqs2 homology search. Supplied MSAs are always
@@ -235,7 +243,7 @@ class Chai1Config(MSAStructurePredictionConfig):
         title="Recycle MSA Subsample",
         default=0,
         ge=0,
-        description="Randomly subsample the MSA across recycles for diversity. 0 disables.",
+        description="Positive enables chai-lab's random 4096-row MSA subsample per recycle; 0 disables.",
     )
     timeout: int | None = ConfigField(
         title="Timeout",
@@ -509,4 +517,21 @@ def run_chai1_on_complex(
         metrics=Chai1Metrics(**result["metrics"]),
         source="chai1-prediction",
     )
-    return normalize_output_chain_ids(structure, comp.chains)
+    msa_consumed, msa_ignored_reasons = msa_consumption(comp.chains, complex_msas, backend="Chai-1")
+    return normalize_output_chain_ids(
+        structure,
+        comp.chains,
+        complex_msas=complex_msas,
+        report_msa=True,
+        msa_consumed=msa_consumed,
+        msa_ignored_reasons=msa_ignored_reasons,
+        msa_subsampling=(
+            MSASubsampling(mode="none")
+            if not msa_consumed
+            # chai-lab treats any positive value as a switch for its fixed 4096-row per-recycle draw.
+            else MSASubsampling(mode="stochastic", max_rows=CHAI1_RECYCLE_SUBSAMPLE_ROWS)
+            if config.recycle_msa_subsample > 0
+            # Every row is tagged uniref90, whose chai-lab quota keeps the first 10,000.
+            else MSASubsampling(mode="deterministic", max_rows=CHAI1_UNIREF90_QUOTA_ROWS)
+        ),
+    )

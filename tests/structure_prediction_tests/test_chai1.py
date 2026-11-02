@@ -10,16 +10,21 @@ and its token-budget validator. The shared structure-token counter is tested in
 
 import pytest
 
+from proto_tools.entities.msa import MSA
 from proto_tools.entities.structures import is_valid_structure
 from proto_tools.tools.structure_prediction import (
     Chai1Config,
     Chai1Input,
     run_chai1,
 )
+from proto_tools.tools.structure_prediction.chai1.chai1 import run_chai1_on_complex
 from proto_tools.tools.structure_prediction.chai1.helpers import count_chai1_tokens
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
+    Complex,
+    ComplexMSAs,
 )
+from tests._structure_fixtures import synthetic_cif
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
@@ -90,6 +95,38 @@ def test_chai1_env_parses_msa_pqt(tmp_path):
     assert output.strip().splitlines()[-1] == "3"
 
 
+def test_chai1_reports_recycle_msa_subsampling(monkeypatch):
+    """Any positive recycle_msa_subsample reports chai-lab's fixed 4096-row per-recycle draw."""
+    sequence = "MKTAYIAKQR"
+    complex_ = Complex(chains=[Chain(sequence=sequence, entity_type="protein")])
+    complex_msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[sequence, sequence])})
+
+    def fake_dispatch(*args, **kwargs):
+        return {
+            "cif_output": synthetic_cif(["A"]),
+            "metrics": {
+                "avg_plddt": 0.8,
+                "ptm": 0.7,
+                "iptm": 0.0,
+                "avg_pae": 1.0,
+                "pae": None,
+                "confidence_score": 0.75,
+            },
+        }
+
+    monkeypatch.setattr("proto_tools.tools.structure_prediction.chai1.chai1.ToolInstance.dispatch", fake_dispatch)
+    structure = run_chai1_on_complex(
+        complex_,
+        Chai1Config(use_msa=True, recycle_msa_subsample=32),
+        complex_msas=complex_msas,
+    )
+
+    report = structure.msa_conditioning
+    assert report.chains[0].status == "consumed"
+    assert report.subsampling.mode == "stochastic"
+    assert report.subsampling.max_rows == 4096
+
+
 @pytest.mark.benchmark("chai1-prediction")
 @pytest.mark.slow
 @pytest.mark.uses_gpu
@@ -121,3 +158,23 @@ def test_count_chai1_tokens_glycan_sums_sugar_heavy_atoms():
         Chain(sequence="MAN(6-1 FUC)(4-1 MAN)", entity_type="glycan"),
     ]
     assert count_chai1_tokens(chains) == 4 + 12 + 11 + 12  # protein 4 + MAN 12 + FUC 11 + MAN 12
+
+
+@pytest.mark.integration
+def test_chai1_reported_msa_caps_match_chai_lab():
+    """chai-lab's per-recycle draw and uniref90 quota are the rows the report claims."""
+    from proto_tools.tools.structure_prediction.chai1.chai1 import (
+        CHAI1_RECYCLE_SUBSAMPLE_ROWS,
+        CHAI1_UNIREF90_QUOTA_ROWS,
+    )
+    from proto_tools.utils import run_in_env
+
+    code = (
+        "import inspect\n"
+        "from chai_lab.data.dataset.msas.utils import subsample_and_reorder_msa_feats_n_mask as subsample\n"
+        "from chai_lab.data.parsing.msas.data_source import MSADataSource, msa_dataset_source_to_quota\n"
+        "print(inspect.signature(subsample).parameters['select_n_rows'].default)\n"
+        "print(msa_dataset_source_to_quota[MSADataSource.UNIREF90])\n"
+    )
+    select_n_rows, quota = run_in_env("chai1", code=code, timeout=1800).strip().splitlines()[-2:]
+    assert (int(select_n_rows), int(quota)) == (CHAI1_RECYCLE_SUBSAMPLE_ROWS, CHAI1_UNIREF90_QUOTA_ROWS)

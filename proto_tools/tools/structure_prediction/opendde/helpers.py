@@ -10,6 +10,7 @@ from typing import Any
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.msa import MSA
+from proto_tools.entities.structures.msa_conditioning import MSA_SEARCH_SOURCES
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     Complex,
@@ -17,6 +18,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     resolve_chain_ids,
     unwrap_complex_msas,
     write_paired_a3m_with_uniprot_headers,
+    write_query_only_a3m,
 )
 
 logger = getLogger(__name__)
@@ -46,7 +48,9 @@ def build_chain_msa_paths(
       ``write_paired_a3m_with_uniprot_headers`` — OpenDDE's ``_UNIPROT_REGEX`` then
       extracts a per-row species id and ``MSAPairingEngine.pair_chains_by_species``
       engages cross-chain pairing (same AF3/Protenix lineage). Single-sequence
-      chains are omitted and fall back to single-sequence mode.
+      chains are omitted and fall back to single-sequence mode. A generated
+      no-hit result instead receives an explicit query-only A3M, preventing a
+      second implicit search inside OpenDDE.
 
     Args:
         sp_complex (Complex): Complex whose protein chains are being aligned.
@@ -62,7 +66,12 @@ def build_chain_msa_paths(
     per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(complex_msas)
     unpaired_paths: dict[str, str] = {}
     paired_paths: dict[str, str] = {}
-    if not per_chain_msas:
+    generated_no_hit_indices = (
+        set(complex_msas.requested_chain_indices or [])
+        if complex_msas is not None and complex_msas.source in MSA_SEARCH_SOURCES
+        else set()
+    )
+    if not per_chain_msas and not generated_no_hit_indices:
         return unpaired_paths, paired_paths
 
     msa_dir = os.path.join(temp_dir, "msas")
@@ -84,6 +93,12 @@ def build_chain_msa_paths(
                 unpaired_msa.to_a3m_file(a3m_path, query_index=0)
                 seq_to_a3m[seq] = a3m_path
             unpaired_paths[chain_id] = a3m_path
+        elif ch_idx in generated_no_hit_indices:
+            a3m_path = os.path.join(msa_dir, f"chain_{chain_id}_{ch_idx}.a3m")
+            write_query_only_a3m(chain.sequence, a3m_path)
+            unpaired_paths[chain_id] = a3m_path
+            if verbose:
+                logger.info("Assigned query-only MSA to chain %s after a completed no-hit search", chain_id)
 
         # Paired set is taxonomy-aligned by row; emit it with pairing-engaging UniProt headers.
         if is_paired:

@@ -19,7 +19,10 @@ from pydantic import model_validator
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import BFactorType, Structure
+from proto_tools.entities.structures.msa_conditioning import MSA_SEARCH_SOURCES, MSASubsampling
+from proto_tools.tools.structure_prediction.msa_reporting import msa_consumption
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    Chain,
     Complex,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
@@ -29,6 +32,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     normalize_output_chain_ids,
     unwrap_complex_msas,
     write_paired_a3m_with_uniprot_headers,
+    write_query_only_a3m,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
@@ -36,6 +40,9 @@ from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
+
+# MSA rows Protenix keeps (data_configs["msa"]["max_size"]); it draws a random row count from them per pass.
+PROTENIX_MSA_MAX_ROWS = 16384
 
 ProtenixModelName = Literal[
     "protenix_base_default_v1.0.0",
@@ -534,7 +541,7 @@ def run_protenix(
 
     # Parse results for each complex
     results = []
-    for comp, job_result in zip(inputs.complexes, output_data["results"], strict=True):
+    for dispatch_idx, (comp, job_result) in enumerate(zip(inputs.complexes, output_data["results"], strict=True)):
         raw_metrics = job_result.get("metrics", {})
 
         def _maybe_float(key: str, scale: float = 1.0, raw: dict[str, Any] = raw_metrics) -> float | None:
@@ -566,7 +573,25 @@ def run_protenix(
             metrics=metrics,
             source="protenix-prediction",
         )
-        results.append(normalize_output_chain_ids(structure, comp.chains))
+        complex_msas = inputs.msas[dispatch_idx] if inputs.msas else None
+        msa_consumed, msa_ignored_reasons = msa_consumption(
+            comp.chains, complex_msas, backend="Protenix", max_skipped_length=4
+        )
+        results.append(
+            normalize_output_chain_ids(
+                structure,
+                comp.chains,
+                complex_msas=complex_msas,
+                report_msa=True,
+                msa_consumed=msa_consumed,
+                msa_ignored_reasons=msa_ignored_reasons,
+                msa_subsampling=(
+                    MSASubsampling(mode="stochastic", max_rows=PROTENIX_MSA_MAX_ROWS)
+                    if msa_consumed
+                    else MSASubsampling(mode="none")
+                ),
+            )
+        )
 
     return ProtenixOutput(structures=results)
 
@@ -613,10 +638,11 @@ def _write_msas_to_batch_json(
 
     for job_idx, job in enumerate(batch_json):
         sp_complex = inputs.complexes[job_idx]
-        per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(inputs.msas[job_idx])
+        complex_msas = inputs.msas[job_idx]
+        per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(complex_msas)
 
         protein_chain_indices = [
-            i for i, ch in enumerate(sp_complex.chains) if hasattr(ch, "entity_type") and ch.entity_type == "protein"
+            i for i, ch in enumerate(sp_complex.chains) if isinstance(ch, Chain) and ch.entity_type == "protein"
         ]
         if not protein_chain_indices:
             continue
@@ -625,15 +651,32 @@ def _write_msas_to_batch_json(
         # Map chain_idx -> a3m path written for that chain.
         chain_idx_to_path: dict[int, str] = {}
         chain_idx_to_paired_path: dict[int, str] = {}
+        generated_no_hit_indices = (
+            set(complex_msas.requested_chain_indices or []) if complex_msas.source in MSA_SEARCH_SOURCES else set()
+        )
         for chain_idx in protein_chain_indices:
-            msa = per_chain_msas.get(chain_idx)
-            if msa is None:
+            chain = sp_complex.chains[chain_idx]
+            if not isinstance(chain, Chain):
                 continue
-            chain_id = (
-                sp_complex.chains[chain_idx].id
-                if getattr(sp_complex.chains[chain_idx], "id", None)
-                else chain_label(chain_idx)
-            )
+            msa = per_chain_msas.get(chain_idx)
+            chain_id = chain.id if chain.id is not None else chain_label(chain_idx)
+            a3m_path = os.path.join(msa_dir, f"job_{job_idx}_chain_{chain_id}_{chain_idx}.a3m")
+            if msa is None:
+                if chain_idx not in generated_no_hit_indices:
+                    continue
+                # MMseqs2 legitimately returns no MSA for de novo sequences.  Protenix
+                # treats an absent path as a request to contact its remote MSA server,
+                # which violates a completed local-preprocessing decision and can poll
+                # indefinitely.  Its input format accepts a one-row A3M, so make the
+                # no-homolog state explicit instead.
+                write_query_only_a3m(chain.sequence, a3m_path)
+                chain_idx_to_path[chain_idx] = a3m_path
+                if config.verbose:
+                    logger.info(
+                        f"Assigned query-only MSA to chain {chain_id} in complex {job_idx} "
+                        "because homology search returned no hits"
+                    )
+                continue
             # unpairedMsaPath gets each chain's deep unpaired MSA when available, else the
             # primary MSA; Protenix block-diagonalizes the unpaired rows itself (AF3-style).
             unpaired_msa = (unpaired_per_chain or {}).get(chain_idx)
@@ -663,5 +706,6 @@ def _write_msas_to_batch_json(
             if path is None:
                 continue
             seq_entry["proteinChain"]["unpairedMsaPath"] = path
-            if is_paired:
-                seq_entry["proteinChain"]["pairedMsaPath"] = chain_idx_to_paired_path[chain_idx]
+            paired_path = chain_idx_to_paired_path.get(chain_idx)
+            if is_paired and paired_path is not None:
+                seq_entry["proteinChain"]["pairedMsaPath"] = paired_path

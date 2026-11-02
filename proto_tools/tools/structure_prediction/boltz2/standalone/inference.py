@@ -97,6 +97,7 @@ class Boltz2Model:
         step_scale: float = 1.5,
         max_msa_seqs: int = 8192,
         subsample_msa: bool = False,
+        num_subsampled_msa: int = 1024,
         num_workers: int = 4,
         seed: int | None = None,
         verbose: bool = False,
@@ -114,6 +115,7 @@ class Boltz2Model:
             step_scale: Diffusion step size; lower = more sample diversity
             max_msa_seqs: Cap on MSA depth fed into the model
             subsample_msa: Stochastically subsample MSA each call
+            num_subsampled_msa: Rows kept per recycle when ``subsample_msa`` is on
             num_workers: Number of workers for prediction
             seed: Random seed forwarded to boltz. None leaves the boltz default
                 (unseeded) in place.
@@ -133,6 +135,7 @@ class Boltz2Model:
             step_scale=step_scale,
             max_msa_seqs=max_msa_seqs,
             subsample_msa=subsample_msa,
+            num_subsampled_msa=num_subsampled_msa,
             num_workers=num_workers,
             seed=seed,
             verbose=verbose,
@@ -150,6 +153,7 @@ class Boltz2Model:
         step_scale: float = 1.5,
         max_msa_seqs: int = 8192,
         subsample_msa: bool = False,
+        num_subsampled_msa: int = 1024,
         num_workers: int = 4,
         seed: int | None = None,
         verbose: bool = False,
@@ -173,6 +177,7 @@ class Boltz2Model:
             step_scale=step_scale,
             max_msa_seqs=max_msa_seqs,
             subsample_msa=subsample_msa,
+            num_subsampled_msa=num_subsampled_msa,
             num_workers=num_workers,
             seed=seed,
             verbose=verbose,
@@ -197,6 +202,7 @@ class Boltz2Model:
         step_scale: float,
         max_msa_seqs: int,
         subsample_msa: bool,
+        num_subsampled_msa: int,
         num_workers: int,
         seed: int | None,
         verbose: bool,  # noqa: ARG002 -- boltz logs through its own logger
@@ -233,6 +239,7 @@ class Boltz2Model:
             "step_scale": step_scale,
             "max_msa_seqs": max_msa_seqs,
             "subsample_msa": subsample_msa,
+            "num_subsampled_msa": num_subsampled_msa,
             "num_workers": num_workers,
             "output_format": "mmcif",
             "seed": seed,
@@ -336,6 +343,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             step_scale=input_dict["step_scale"],
             max_msa_seqs=input_dict["max_msa_seqs"],
             subsample_msa=input_dict["subsample_msa"],
+            num_subsampled_msa=input_dict["num_subsampled_msa"],
             num_workers=input_dict["num_workers"],
             seed=input_dict["seed"],
             verbose=input_dict["verbose"],
@@ -352,6 +360,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             step_scale=input_dict["step_scale"],
             max_msa_seqs=input_dict["max_msa_seqs"],
             subsample_msa=input_dict["subsample_msa"],
+            num_subsampled_msa=input_dict["num_subsampled_msa"],
             num_workers=input_dict["num_workers"],
             seed=input_dict["seed"],
             verbose=input_dict["verbose"],

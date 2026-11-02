@@ -9,13 +9,16 @@ from typing import Any, ClassVar
 
 from pydantic import field_validator, model_validator
 
+from proto_tools.entities.structures.msa_conditioning import MSASubsampling
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Complex,
+    ComplexMSAs,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
     normalize_output_chain_ids,
+    unwrap_complex_msas,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -242,6 +245,42 @@ def example_input() -> Any:
     return AlphaFold2Input(complexes=["MKTL"])  # type: ignore[list-item]
 
 
+def _alphafold2_msa_consumption(
+    complex_msas: ComplexMSAs | None,
+    num_chains: int,
+    per_chain_msas_a3m: list[str | None] | None,
+    unpaired_per_chain_msas_a3m: list[str | None] | None,
+) -> tuple[set[int], dict[int, str]]:
+    """Return the chain indices whose alignment reached ColabDesign, and why the rest did not.
+
+    Heteromers send each chain's own A3M; the standalone stacks the deep unpaired rows beneath
+    them only for paired MSAs. Monomers and homo-oligomers send only chain 0's alignment, which
+    ColabDesign tiles across every copy, so another chain's own rows are consumed only when they
+    match chain 0's.
+    """
+    if complex_msas is None:
+        return set(), {}
+    per_chain, unpaired_per_chain, is_paired = unwrap_complex_msas(complex_msas)
+    with_rows = set(per_chain) | set(unpaired_per_chain or {})
+    if per_chain_msas_a3m is not None:
+        consumed = {i for i, a3m in enumerate(per_chain_msas_a3m) if a3m}
+        if is_paired and consumed:
+            consumed |= {i for i, a3m in enumerate(unpaired_per_chain_msas_a3m or []) if a3m}
+        reason = "AlphaFold2 adds a heteromer's unpaired rows only beneath paired primary alignments"
+        return consumed, dict.fromkeys(with_rows - consumed, reason)
+    chain0 = per_chain.get(0)
+    if chain0 is None:
+        reason = "AlphaFold2 folds monomers and homo-oligomers from chain 0's alignment; chain 0 had none"
+        return set(), dict.fromkeys(with_rows, reason)
+    consumed = {
+        i
+        for i in range(num_chains)
+        if (msa := per_chain.get(i)) is not None and msa.aligned_sequences == chain0.aligned_sequences
+    }
+    reason = "ColabDesign tiles chain 0's alignment across homo-oligomer copies; this chain's own rows are unused"
+    return consumed, dict.fromkeys(with_rows - consumed, reason)
+
+
 @tool(
     key="alphafold2-prediction",
     label="AlphaFold2 Structure Prediction",
@@ -390,7 +429,26 @@ def run_alphafold2(
             metrics=metrics,
             source="alphafold2-prediction",
         )
-        structure_outputs.append(normalize_output_chain_ids(structure, comp.chains))
+        complex_msas = inputs.msas[complex_data["complex_idx"]] if inputs.msas else None
+        msa_dispatched = msa_a3m_content is not None or bool(per_chain_msas_a3m and any(per_chain_msas_a3m))
+        msa_consumed, msa_ignored_reasons = _alphafold2_msa_consumption(
+            complex_msas, complex_data["num_chains"], per_chain_msas_a3m, unpaired_per_chain_msas_a3m
+        )
+        structure_outputs.append(
+            normalize_output_chain_ids(
+                structure,
+                comp.chains,
+                complex_msas=complex_msas,
+                report_msa=True,
+                msa_consumed=msa_consumed,
+                msa_ignored_reasons=msa_ignored_reasons,
+                msa_subsampling=(
+                    MSASubsampling(mode="stochastic", max_rows=512, max_extra_rows=1024)
+                    if msa_dispatched
+                    else MSASubsampling(mode="none")
+                ),
+            )
+        )
 
     return AlphaFold2Output(
         structures=structure_outputs,

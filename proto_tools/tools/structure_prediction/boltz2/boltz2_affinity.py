@@ -10,7 +10,13 @@ from pydantic import model_validator
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import BFactorType, SingleChainSelection, Structure
 from proto_tools.tools.structure_prediction.boltz2.boltz2 import Boltz2Config
-from proto_tools.tools.structure_prediction.boltz2.helpers import build_chain_msa_paths, complex_to_yaml
+from proto_tools.tools.structure_prediction.boltz2.helpers import (
+    BOLTZ2_SUBSAMPLED_ROWS,
+    boltz2_msa_subsampling,
+    build_chain_msa_paths,
+    complex_to_yaml,
+)
+from proto_tools.tools.structure_prediction.msa_reporting import msa_consumption
 from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionInput,
     StructurePredictionOutput,
@@ -317,6 +323,7 @@ def run_boltz2_affinity_on_complex(
             "step_scale": config.step_scale,
             "max_msa_seqs": config.max_msa_seqs,
             "subsample_msa": config.subsample_msa,
+            "num_subsampled_msa": BOLTZ2_SUBSAMPLED_ROWS,
             "num_workers": config.num_workers,
             "device": config.device,
             "verbose": config.verbose,
@@ -339,4 +346,15 @@ def run_boltz2_affinity_on_complex(
         metrics=Boltz2AffinityMetrics(**metrics_dict),
         source="boltz2-affinity",
     )
-    return normalize_output_chain_ids(structure, sp_complex.chains)
+    msa_consumed, msa_ignored_reasons = msa_consumption(sp_complex.chains, complex_msas, backend="Boltz-2")
+    return normalize_output_chain_ids(
+        structure,
+        sp_complex.chains,
+        complex_msas=complex_msas,
+        report_msa=True,
+        msa_consumed=msa_consumed,
+        msa_ignored_reasons=msa_ignored_reasons,
+        msa_subsampling=boltz2_msa_subsampling(
+            max_msa_seqs=config.max_msa_seqs, subsample_msa=config.subsample_msa, has_msa=bool(chain_msa_paths)
+        ),
+    )

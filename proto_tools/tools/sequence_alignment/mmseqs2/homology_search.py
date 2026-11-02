@@ -685,6 +685,11 @@ def _remote_paired_group(
         paired_out = paired_future.result()
         try:
             unpaired_out: dict[str, Any] | None = unpaired_future.result()
+            if unpaired_out is not None and not unpaired_out.get("success", False):
+                logger.warning(
+                    "MSA unpaired-depth search failed; paired result retained. Details: %s",
+                    unpaired_out.get("errors", "unknown error"),
+                )
         except Exception as exc:  # unpaired depth is best-effort; never break a paired result
             logger.warning("mmseqs2-homology-search: remote unpaired search failed (%s); using paired only", exc)
             unpaired_out = None

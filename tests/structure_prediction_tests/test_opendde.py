@@ -159,6 +159,33 @@ def test_opendde_build_chain_msa_paths_emits_species_paired_headers(tmp_path):
     assert len(set(species_a)) == len(species_a)  # distinct per row (row-index encoded)
 
 
+def test_opendde_generated_no_hit_writes_query_only_msa(tmp_path):
+    """A completed no-hit search cannot trigger OpenDDE's implicit remote search."""
+    sequence = "MKTAYIAKQR"
+    cx = Complex(chains=[Chain(id="T", sequence=sequence, entity_type="protein")])
+    complex_msas = ComplexMSAs(
+        per_chain={},
+        source="colabfold_server",
+        requested_chain_indices=[0],
+    )
+
+    unpaired_paths, paired_paths = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
+
+    assert paired_paths == {}
+    assert set(unpaired_paths) == {"T"}
+    assert Path(unpaired_paths["T"]).read_text() == f">query\n{sequence}\n"
+
+
+def test_opendde_empty_supplied_bundle_does_not_claim_no_hit(tmp_path):
+    """An empty supplied bundle has no completed-search provenance to synthesize."""
+    cx = Complex(chains=[Chain(sequence="MKTAYIAKQR", entity_type="protein")])
+
+    unpaired_paths, paired_paths = build_chain_msa_paths(cx, ComplexMSAs(per_chain={}), str(tmp_path))
+
+    assert unpaired_paths == {}
+    assert paired_paths == {}
+
+
 def test_opendde_protein_modifications_prefixed_ptm():
     """Protein PTMs serialize as CCD_-prefixed ptmType / ptmPosition."""
     chains = [Chain(sequence="MVLSPADKTN", entity_type="protein", modifications=[(4, "SEP")])]
@@ -567,3 +594,12 @@ def test_opendde_benchmark(request):
     assert len(result.structures) == 1
     assert is_valid_structure(result.structures[0].structure_cif)
     assert_metrics_in_spec(result)
+
+
+@pytest.mark.integration
+def test_opendde_reported_msa_depth_matches_data_config():
+    from proto_tools.tools.structure_prediction.opendde.opendde import OPENDDE_MSA_DEPTH
+    from proto_tools.utils import run_in_env
+
+    code = "from opendde.config.data import data_configs\nprint(data_configs['msa']['msa_depth'])"
+    assert int(run_in_env("opendde", code=code, timeout=1800).strip().splitlines()[-1]) == OPENDDE_MSA_DEPTH

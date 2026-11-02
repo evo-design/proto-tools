@@ -8,7 +8,7 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import model_validator
 
-from proto_tools.entities.structures import BFactorType, Structure
+from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
@@ -22,6 +22,9 @@ from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
+
+# MSA rows ESMFold2 randomly keeps per loop; passed to fold() as msa_max_depth.
+ESMFOLD2_MSA_MAX_DEPTH = 1024
 
 
 # ============================================================================
@@ -366,6 +369,7 @@ def _run_esmfold2_on_complex(
         "noise_scale": config.noise_scale,
         "max_inference_sigma": config.max_inference_sigma,
         "early_exit": config.early_exit,
+        "msa_max_depth": ESMFOLD2_MSA_MAX_DEPTH,
         "include_pae_matrix": config.include_pae_matrix,
         "device": config.device,
         "verbose": config.verbose,
@@ -398,7 +402,33 @@ def _run_esmfold2_on_complex(
         metrics=ESMFold2Metrics(**metrics_dict),
         source="esmfold2-prediction",
     )
-    return normalize_output_chain_ids(structure, sp_complex.chains)
+    with_rows = set(per_chain_msas) | set((unpaired_per_chain or {}).keys())
+    if config.model_checkpoint == "esmfold2-fast":
+        # No MSA payload is built for the single-sequence checkpoint.
+        msa_consumed: set[int] = set()
+        msa_ignored_reasons = dict.fromkeys(
+            with_rows, "proto-tools sends no MSA to esmfold2-fast, a single-sequence checkpoint"
+        )
+    else:
+        # The worker appends a chain's unpaired rows only beneath its primary alignment.
+        msa_consumed = set(per_chain_msas)
+        msa_ignored_reasons = dict.fromkeys(
+            with_rows - msa_consumed, "ESMFold2 is sent a chain's unpaired rows only with its primary alignment"
+        )
+    return normalize_output_chain_ids(
+        structure,
+        sp_complex.chains,
+        complex_msas=complex_msas,
+        report_msa=True,
+        msa_consumed=msa_consumed,
+        msa_ignored_reasons=msa_ignored_reasons,
+        # fold() draws a fresh random msa_max_depth-row subset (query kept) every loop.
+        msa_subsampling=(
+            MSASubsampling(mode="stochastic", max_rows=ESMFOLD2_MSA_MAX_DEPTH)
+            if msa_consumed
+            else MSASubsampling(mode="none")
+        ),
+    )
 
 
 def _chain_to_payload(chain: Any, chain_id: str) -> dict[str, Any]:

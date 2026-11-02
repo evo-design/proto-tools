@@ -96,6 +96,45 @@ def test_protenix_unpaired_msa_path_gets_deep_per_chain_unpaired(tmp_path):
         assert paired_rows == 2, f"pairedMsaPath should carry the paired set, got {paired_rows}"
 
 
+def test_protenix_generated_no_hit_writes_query_only_msa(tmp_path):
+    """A completed no-hit search cannot trigger Protenix's implicit remote search."""
+    from pathlib import Path
+
+    from proto_tools.tools.structure_prediction.protenix.protenix import _write_msas_to_batch_json
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+
+    sequence = "MKTAYIAKQR"
+    inputs = ProtenixInput(
+        complexes=[Complex(chains=[Chain(sequence=sequence, entity_type="protein")])],
+        msas=[ComplexMSAs(per_chain={}, source="colabfold_server", requested_chain_indices=[0])],
+    )
+    batch_json = [{"sequences": [{"proteinChain": {}}]}]
+
+    _write_msas_to_batch_json(batch_json, inputs, ProtenixConfig(), str(tmp_path))
+
+    protein = batch_json[0]["sequences"][0]["proteinChain"]
+    assert Path(protein["unpairedMsaPath"]).read_text() == f">query\n{sequence}\n"
+    assert "pairedMsaPath" not in protein
+
+
+def test_protenix_empty_supplied_bundle_does_not_claim_no_hit(tmp_path):
+    """An empty supplied bundle has no completed-search provenance to synthesize."""
+    from proto_tools.tools.structure_prediction.protenix.protenix import _write_msas_to_batch_json
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+
+    inputs = ProtenixInput(
+        complexes=[Complex(chains=[Chain(sequence="MKTAYIAKQR", entity_type="protein")])],
+        msas=[ComplexMSAs(per_chain={})],
+    )
+    batch_json = [{"sequences": [{"proteinChain": {}}]}]
+
+    _write_msas_to_batch_json(batch_json, inputs, ProtenixConfig(), str(tmp_path))
+
+    protein = batch_json[0]["sequences"][0]["proteinChain"]
+    assert "unpairedMsaPath" not in protein
+    assert "pairedMsaPath" not in protein
+
+
 # ── protenix-v2 token limit (no GPU) ─────────────────────────────────────────
 
 
@@ -310,3 +349,12 @@ def test_protenix_benchmark(request):
     assert len(result.structures) == 1
     assert is_valid_structure(result.structures[0].structure_cif)
     assert_metrics_in_spec(result)
+
+
+@pytest.mark.integration
+def test_protenix_reported_msa_depth_matches_data_config():
+    from proto_tools.tools.structure_prediction.protenix.protenix import PROTENIX_MSA_MAX_ROWS
+    from proto_tools.utils import run_in_env
+
+    code = "from configs.configs_data import data_configs\nprint(data_configs['msa']['max_size']['test'])"
+    assert int(run_in_env("protenix", code=code, timeout=1800).strip().splitlines()[-1]) == PROTENIX_MSA_MAX_ROWS

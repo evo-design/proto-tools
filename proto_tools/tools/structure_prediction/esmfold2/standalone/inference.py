@@ -162,6 +162,7 @@ class ESMFold2Model:
         noise_scale: float | None,
         max_inference_sigma: float | None,
         early_exit: bool,
+        msa_max_depth: int,
         include_pae_matrix: bool,
         device: str,
         verbose: bool,
@@ -201,6 +202,7 @@ class ESMFold2Model:
                         num_diffusion_samples=diffusion_samples,
                         seed=effective_seed,
                         early_exit=early_exit,
+                        msa_max_depth=msa_max_depth,
                         **sampler_kwargs,
                     )
                     break
@@ -277,6 +279,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             noise_scale=input_dict.get("noise_scale"),
             max_inference_sigma=input_dict.get("max_inference_sigma"),
             early_exit=input_dict.get("early_exit", False),
+            msa_max_depth=input_dict["msa_max_depth"],
             include_pae_matrix=input_dict["include_pae_matrix"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],

@@ -8,7 +8,7 @@ when set, else positional ``chain_label(i)``; PDB tools are single-character onl
 """
 
 import logging
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -22,6 +22,7 @@ from proto_tools.entities.complex import chain_label as chain_label
 from proto_tools.entities.ligands import Fragment, count_heavy_atoms_for_ccd
 from proto_tools.entities.msa import MSA, PairedMSA
 from proto_tools.entities.structures import Structure
+from proto_tools.entities.structures.msa_conditioning import MSABundleSource, MSASearchSource, MSASubsampling
 from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
     Mmseqs2HomologySearchConfig,
 )
@@ -72,6 +73,11 @@ class ComplexMSAs(BaseModel):
         unpaired_per_chain (dict[int, MSA] | None): For paired heterocomplexes only,
             each chain's deep *unpaired* MSA (independent homologs), retained alongside
             the paired rows so predictors can use full per-chain depth. ``None`` otherwise.
+        source (MSABundleSource): Where the bundle came from: ``supplied`` by the caller,
+            ``colabfold_server`` (ColabFold's hosted MSA API), ``local_mmseqs2`` (MMseqs2 against a
+            local database).
+        requested_chain_indices (list[int] | None): Protein-chain indices for which
+            an MSA was requested. None derives them from the chains with rows.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -82,6 +88,16 @@ class ComplexMSAs(BaseModel):
         default=None,
         title="Unpaired Per-Chain MSAs",
         description="Deep per-chain unpaired MSAs retained alongside paired rows; set only for paired heterocomplexes.",
+    )
+    source: MSABundleSource = Field(
+        default="supplied",
+        title="Source",
+        description="Bundle origin: caller-supplied, ColabFold server, or local MMseqs2 search.",
+    )
+    requested_chain_indices: list[int] | None = Field(
+        default=None,
+        title="Requested Chain Indices",
+        description="Protein-chain indices for which an MSA was requested; None derives them from present rows.",
     )
 
     @model_validator(mode="after")
@@ -617,9 +633,13 @@ def _preprocess_structure_prediction_msas(
         return inputs
 
     from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
+        Mmseqs2HomologySearchConfig,
         Mmseqs2HomologySearchInput,
         run_mmseqs2_homology_search,
     )
+
+    # Predictor configs default msa_search_config to None, meaning the search tool's defaults.
+    msa_search_config = msa_search_config or Mmseqs2HomologySearchConfig()
 
     # Build query groups + per-complex reassembly plan: heterocomplex chains → one paired group;
     # single-chain / homo-multimer → unpaired queries deduped by sequence. Every query carries a
@@ -656,6 +676,10 @@ def _preprocess_structure_prediction_msas(
     if not queries_input:
         return inputs
 
+    search_source: MSASearchSource = (
+        "colabfold_server" if msa_search_config.search_mode == "remote" else "local_mmseqs2"
+    )
+
     if verbose:
         n_paired = sum(1 for _, qi in complex_plans if qi is not None)
         logger.info(
@@ -681,10 +705,13 @@ def _preprocess_structure_prediction_msas(
         if msa is not None:
             seq_to_msa[seq] = msa
 
-    # Reassemble per-complex MSAs parallel to inputs.complexes, one ComplexMSAs each.
+    # Reassemble one bundle per complex. Keep an explicit empty bundle when a
+    # completed search found no homologs: dropping it would erase the difference
+    # between "not requested" and "requested with no hits" before dispatch.
     msas_list: list[ComplexMSAs] = []
     for protein_chains, paired_query_idx in complex_plans:
         per_chain: dict[int, MSA] = {}
+        requested_chain_indices = [chain_idx for chain_idx, _sequence in protein_chains]
         if paired_query_idx is not None:
             paired_result = results[paired_query_idx]
             # Prefer the row-aligned paired MSAs; fall back to the unpaired set (paired=False)
@@ -706,16 +733,30 @@ def _preprocess_structure_prediction_msas(
             for (ch_idx, _seq), msa in zip(protein_chains, chain_msas, strict=True):
                 if msa is not None:
                     per_chain[ch_idx] = msa
-            msas_list.append(ComplexMSAs(per_chain=per_chain, paired=paired, unpaired_per_chain=unpaired_per_chain))
+            msas_list.append(
+                ComplexMSAs(
+                    per_chain=per_chain,
+                    paired=paired,
+                    unpaired_per_chain=unpaired_per_chain,
+                    source=search_source,
+                    requested_chain_indices=requested_chain_indices,
+                )
+            )
         else:
             for ch_idx, seq in protein_chains:
                 msa = seq_to_msa.get(seq)
                 if msa is not None:
                     per_chain[ch_idx] = msa
-            msas_list.append(ComplexMSAs(per_chain=per_chain, paired=False))
+            msas_list.append(
+                ComplexMSAs(
+                    per_chain=per_chain,
+                    paired=False,
+                    source=search_source,
+                    requested_chain_indices=requested_chain_indices,
+                )
+            )
 
-    has_any = any(m.per_chain for m in msas_list)
-    return inputs.model_copy(update={"msas": msas_list}) if has_any else inputs
+    return inputs.model_copy(update={"msas": msas_list})
 
 
 def unwrap_complex_msas(
@@ -771,6 +812,21 @@ def write_paired_a3m_with_uniprot_headers(msa: MSA, paired_a3m_path: str) -> Non
         f.write("\n".join(lines) + "\n")
 
 
+def write_query_only_a3m(sequence: str, a3m_path: str) -> None:
+    """Write an explicit one-row A3M for a completed search with no homolog hits.
+
+    The ordinary :class:`MSA` entity intentionally requires at least two rows,
+    while several predictor input formats accept a query-only A3M to suppress
+    their own implicit remote search.
+
+    Args:
+        sequence (str): Ungapped protein query sequence.
+        a3m_path (str): Destination path for the query-only A3M.
+    """
+    with open(a3m_path, "w") as f:
+        f.write(f">query\n{sequence}\n")
+
+
 def resolve_chain_ids(chains: Sequence[Chain | Fragment]) -> list[str]:
     """Per-chain IDs in order: explicit ``chain.id`` when set, else ``chain_label(i)``.
 
@@ -801,7 +857,17 @@ def resolve_chain_ids(chains: Sequence[Chain | Fragment]) -> list[str]:
     return ids
 
 
-def normalize_output_chain_ids(structure: Structure, chains: Sequence[Chain | Fragment]) -> Structure:
+def normalize_output_chain_ids(
+    structure: Structure,
+    chains: Sequence[Chain | Fragment],
+    *,
+    complex_msas: ComplexMSAs | None = None,
+    report_msa: bool = False,
+    msa_consumed: bool | Collection[int] = True,
+    msa_subsampling: MSASubsampling | None = None,
+    msa_ignored_reasons: Mapping[int, str] | None = None,
+    msa_paired: bool | None = None,
+) -> Structure:
     """Remap a predicted structure's polymer chain IDs to ``resolve_chain_ids(chains)``.
 
     Predictors may emit positional or entity-derived names that differ from the
@@ -812,23 +878,38 @@ def normalize_output_chain_ids(structure: Structure, chains: Sequence[Chain | Fr
     (some predictors — RF3, for example — emit ligand chains classified as
     "polymer" by gemmi, appending them after the real polymer chains), or on
     count mismatch.
+
+    When ``report_msa`` is true, attach the MSA conditioning report built from
+    ``complex_msas`` and the predictor's ``msa_*`` description of what its backend consumes.
     """
     expected_ids = [
         cid for chain, cid in zip(chains, resolve_chain_ids(chains), strict=True) if chain.entity_type != "ligand"
     ]
     observed_ids = structure.get_chain_ids()
-    if observed_ids == expected_ids:
-        return structure
-    if observed_ids[: len(expected_ids)] == expected_ids:
-        return structure
-    if len(observed_ids) != len(expected_ids):
+    if observed_ids == expected_ids or observed_ids[: len(expected_ids)] == expected_ids:
+        normalized = structure
+    elif len(observed_ids) != len(expected_ids):
         logger.warning(
             "structure prediction returned %d polymer chain(s) but input had %d; leaving chain IDs unchanged.",
             len(observed_ids),
             len(expected_ids),
         )
-        return structure
-    return structure.with_renamed_chains(dict(zip(observed_ids, expected_ids, strict=True)))
+        normalized = structure
+    else:
+        normalized = structure.with_renamed_chains(dict(zip(observed_ids, expected_ids, strict=True)))
+
+    if report_msa:
+        from proto_tools.tools.structure_prediction.msa_reporting import build_msa_conditioning
+
+        normalized.msa_conditioning = build_msa_conditioning(
+            chains,
+            complex_msas,
+            consumed=msa_consumed,
+            subsampling=msa_subsampling,
+            ignored_reasons=msa_ignored_reasons,
+            paired=msa_paired,
+        )
+    return normalized
 
 
 # ============================================================================

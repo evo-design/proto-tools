@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from proto_tools.entities.complex import Chain
 
 from proto_tools.entities.ligands.ccd_utils import get_canonical_component, is_valid_ccd_code
+from proto_tools.entities.structures.msa_conditioning import MSAConditioning
 from proto_tools.entities.structures.utils import (
     _serialize_gemmi,
     convert_cif_str_to_pdb_str,
@@ -279,6 +280,8 @@ class Structure(BaseModel):
         source (str | None): Optional source identifier (filepath or tool name).
         metrics (Metrics): Associated metrics (e.g., pLDDT, pTM scores,
             per-chain lists, pairwise matrices). None values are stripped at construction.
+        msa_conditioning (MSAConditioning | None): Requested and backend-effective alignment evidence;
+            None means unreported, not single-sequence prediction.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -304,6 +307,11 @@ class Structure(BaseModel):
     )
 
     _gemmi_struct: Any = PrivateAttr(default=None)
+    msa_conditioning: MSAConditioning | None = Field(
+        default=None,
+        title="MSA Conditioning",
+        description="Requested and backend-effective per-chain MSA evidence; None means unreported.",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -338,6 +346,8 @@ class Structure(BaseModel):
                 data["b_factor_type"] = inner.b_factor_type
             if data.get("metrics") is None:
                 data["metrics"] = inner.metrics
+            if data.get("msa_conditioning") is None:
+                data["msa_conditioning"] = inner.msa_conditioning
             structure_value = data["structure"]
 
         # If structure is an http(s) URL, fetch its content transparently (mirrors the path branch).
@@ -687,6 +697,7 @@ class Structure(BaseModel):
             b_factor_type=self.b_factor_type,
             source=self.source,
             metrics=self.metrics.model_copy(deep=True),
+            msa_conditioning=self.msa_conditioning.model_copy(deep=True) if self.msa_conditioning else None,
         )
 
     def with_renamed_chains(self, mapping: dict[str, str]) -> Structure:
@@ -743,6 +754,7 @@ class Structure(BaseModel):
             b_factor_type=self.b_factor_type,
             source=self.source,
             metrics=self.metrics.model_copy(deep=True),
+            msa_conditioning=self.msa_conditioning.model_copy(deep=True) if self.msa_conditioning else None,
         )
 
     @classmethod
@@ -1358,6 +1370,7 @@ class Structure(BaseModel):
             b_factor_type=self.b_factor_type,
             source=self.source,
             metrics=self.metrics.model_copy(deep=True),
+            msa_conditioning=self.msa_conditioning.model_copy(deep=True) if self.msa_conditioning else None,
         )
 
     @property

@@ -19,6 +19,8 @@ from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
+from proto_tools.entities.ligands import Fragment
+from proto_tools.entities.structures.msa_conditioning import MSAConditioning, MSASubsampling
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.esmfold.helpers import (
     relabel_chains as _relabel_chains,
@@ -26,9 +28,11 @@ from proto_tools.tools.structure_prediction.esmfold.helpers import (
 from proto_tools.tools.structure_prediction.esmfold.helpers import (
     split_into_safe_batches as _split_into_safe_batches,
 )
+from proto_tools.tools.structure_prediction.msa_reporting import build_msa_conditioning
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     Complex,
+    ComplexMSAs,
     StructureGradientResult,
     StructurePredictionConfig,
     StructurePredictionInput,
@@ -682,6 +686,9 @@ def run_esmfold(
                     pae=result.get("pae"),
                 ),
                 source="esmfold-prediction",
+                msa_conditioning=_esmfold_msa_conditioning(
+                    comp.chains, inputs.msas[metadata["complex_idx"]] if inputs.msas else None
+                ),
             )
         )
 
@@ -691,6 +698,18 @@ def run_esmfold(
             "num_complexes": len(structure_outputs),
             "total_chains": sum(s.num_chains for s in structure_outputs),
         },
+    )
+
+
+def _esmfold_msa_conditioning(chains: list[Chain | Fragment], complex_msas: ComplexMSAs | None) -> MSAConditioning:
+    """Report supplied MSAs as ignored: ESMFold folds from the single sequence alone."""
+    with_rows = set(complex_msas.per_chain) | set(complex_msas.unpaired_per_chain or {}) if complex_msas else set()
+    return build_msa_conditioning(
+        chains,
+        complex_msas,
+        consumed=False,
+        subsampling=MSASubsampling(mode="none"),
+        ignored_reasons=dict.fromkeys(with_rows, "ESMFold is a single-sequence model"),
     )
 
 

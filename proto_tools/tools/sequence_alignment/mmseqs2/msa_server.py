@@ -61,15 +61,35 @@ def _request(method: str, url: str, user_agent: str, **kwargs: Any) -> requests.
     """
     headers = {"User-Agent": user_agent, **kwargs.pop("headers", {})}
     last: Exception | None = None
+    endpoint = url.split("?", 1)[0]
     for attempt in range(_MAX_REQUEST_ATTEMPTS):
         try:
-            return requests.request(method, url, headers=headers, timeout=_REQUEST_TIMEOUT_SECONDS, **kwargs)
+            response = requests.request(method, url, headers=headers, timeout=_REQUEST_TIMEOUT_SECONDS, **kwargs)
+            if attempt:
+                logger.info(
+                    "MSA request recovered: %s %s, attempt %d/%d, HTTP %d",
+                    method,
+                    endpoint,
+                    attempt + 1,
+                    _MAX_REQUEST_ATTEMPTS,
+                    response.status_code,
+                )
+            return response
         except requests.RequestException as exc:  # noqa: PERF203 -- retry loop
             last = exc
             if attempt < _MAX_REQUEST_ATTEMPTS - 1:
-                logger.warning("MSA server unreachable (%s), retrying", type(exc).__name__)
+                logger.info(
+                    "MSA request %s %s: %s on attempt %d/%d; retrying, search not yet failed",
+                    method,
+                    endpoint,
+                    type(exc).__name__,
+                    attempt + 1,
+                    _MAX_REQUEST_ATTEMPTS,
+                )
                 _sleep_with_jitter(_POLL_INTERVAL_SECONDS * 2**attempt)
-    raise RuntimeError(f"MSA server unreachable after {_MAX_REQUEST_ATTEMPTS} attempts: {last}") from last
+    raise RuntimeError(
+        f"MSA server unreachable after {_MAX_REQUEST_ATTEMPTS} attempts ({method} {endpoint}): {last}"
+    ) from last
 
 
 def search_mode(use_env: bool, use_pairing: bool, pairing_strategy: str = "greedy") -> str:

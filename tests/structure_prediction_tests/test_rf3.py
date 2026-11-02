@@ -203,3 +203,21 @@ def test_rf3_prediction_benchmark(request: pytest.FixtureRequest) -> None:
     for structure in result.structures:
         assert is_valid_structure(structure.structure_cif)
     assert_metrics_in_spec(result)
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_rf3_reported_msa_depth_matches_checkpoint_config():
+    """Foundry builds RF3's inference pipeline from the checkpoint's first validation transform."""
+    from proto_tools.tools.structure_prediction.rf3.rf3_prediction import RF3_N_MSA
+    from proto_tools.utils import run_in_env
+
+    code = (
+        "from pathlib import Path\n"
+        "import torch\n"
+        "from standalone_helpers import resolve_weights_dir\n"
+        "[ckpt] = Path(resolve_weights_dir('rf3')).glob('*.ckpt')\n"
+        "cfg = torch.load(ckpt, 'cpu', weights_only=False, mmap=True)['train_cfg']\n"
+        "print(next(iter(cfg.datasets.val.values())).dataset.transform.n_msa)\n"
+    )
+    assert int(run_in_env("rf3", code=code, timeout=1800).strip().splitlines()[-1]) == RF3_N_MSA

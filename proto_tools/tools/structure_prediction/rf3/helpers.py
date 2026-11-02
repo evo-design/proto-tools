@@ -8,12 +8,12 @@ files where RF3 can read them.
 import hashlib
 import json
 import os
-import warnings
 from logging import getLogger
 from typing import Any
 
 from proto_tools.entities.complex import chain_label
 from proto_tools.entities.ligands import Fragment
+from proto_tools.entities.msa import MSA
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     Complex,
@@ -48,8 +48,7 @@ def build_chain_a3m_paths(
     Returns:
         dict[str, str]: Mapping from chain ID (``"A"``, ``"B"``, …) to the
             ``.a3m`` file path on disk. Protein chains with no MSA are omitted
-            and a UserWarning is emitted (RF3 falls back to single-sequence
-            mode for those chains).
+            and an INFO message identifies query-only input for those chains.
     """
     per_chain_msas, unpaired_per_chain, _is_paired = unwrap_complex_msas(complex_msas)
     chain_a3m_paths: dict[str, str] = {}
@@ -63,9 +62,8 @@ def build_chain_a3m_paths(
             msa = per_chain_msas.get(ch_idx)
             if msa is None:
                 continue
-            # RF3 pairs by tax_id parsed from the a3m headers, so feed the deep
-            # per-chain unpaired MSA when present: it carries full per-chain depth
-            # plus the UniRef TaxID= headers RF3 uses to re-pair across chains.
+            # Feed the deep per-chain unpaired MSA when present for full per-chain depth. RF3
+            # re-pairs across chains only by TaxID= in the a3m headers, which ColabFold rows lack.
             a3m_msa = (unpaired_per_chain or {}).get(ch_idx) or msa
             chain_id = chain.id if chain.id is not None else chain_label(ch_idx)
             seq = chain.sequence
@@ -81,10 +79,10 @@ def build_chain_a3m_paths(
     _, protein_chain_ids = sp_complex.extract_protein_chains()
     for chain_id in protein_chain_ids:
         if chain_id not in chain_a3m_paths:
-            warnings.warn(
-                f"No homologs found for chain {chain_id} - rf3 will fall back to single-sequence mode.",
-                UserWarning,
-                stacklevel=2,
+            logger.info(
+                "Chain %s has no supplied homolog alignment; using query-only input for this chain. "
+                "Other chains may still use MSAs; inspect structure.msa_conditioning.",
+                chain_id,
             )
     return chain_a3m_paths
 
@@ -144,3 +142,32 @@ def complex_to_rf3_json(
             components.append(entry)
 
     return json.dumps([{"name": name, "components": components}], indent=2)
+
+
+def _has_taxonomy_headers(msa: MSA) -> bool:
+    """Whether any non-query row carries the ``TaxID=`` header RF3 (atomworks) pairs on."""
+    return any("TaxID=" in sequence_id for sequence_id in msa.sequence_ids[1:])
+
+
+def rf3_written_msas(sp_complex: Complex, complex_msas: ComplexMSAs | None) -> tuple[ComplexMSAs | None, bool]:
+    """Describe the alignment ``build_chain_a3m_paths`` writes for each chain, and whether RF3 pairs it.
+
+    RF3 gets one a3m per chain with primary rows: the deep unpaired MSA when present, else the
+    primary one. It pairs rows across chains only by ``TaxID=`` headers, so the rows count as paired
+    only when at least two distinct chain sequences carry them. The returned bundle is unpaired
+    because the written a3ms need not share a row count.
+    """
+    if complex_msas is None:
+        return None, False
+    per_chain, unpaired_per_chain, _ = unwrap_complex_msas(complex_msas)
+    written = {index: (unpaired_per_chain or {}).get(index) or msa for index, msa in per_chain.items()}
+    requested = complex_msas.requested_chain_indices
+    if requested is None:
+        requested = sorted(set(per_chain) | set(unpaired_per_chain or {}))
+    tagged_sequences = {
+        chain.sequence
+        for index, msa in written.items()
+        if isinstance(chain := sp_complex.chains[index], Chain) and _has_taxonomy_headers(msa)
+    }
+    bundle = ComplexMSAs(per_chain=written, source=complex_msas.source, requested_chain_indices=requested)
+    return bundle, len(tagged_sequences) >= 2

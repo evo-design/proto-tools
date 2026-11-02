@@ -15,7 +15,8 @@ import tempfile
 from logging import getLogger
 from typing import Any, ClassVar
 
-from proto_tools.entities.structures import BFactorType, Structure
+from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
+from proto_tools.tools.structure_prediction.msa_reporting import msa_consumption
 from proto_tools.tools.structure_prediction.opendde.helpers import (
     build_chain_msa_paths,
     complex_to_opendde_json,
@@ -35,6 +36,9 @@ from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
+
+# MSA rows OpenDDE keeps from its reshuffled pool on every pass (data_configs["msa"]["msa_depth"]).
+OPENDDE_MSA_DEPTH = 1280
 
 # Bundled model names auto-downloaded by setup.sh; other model_checkpoint values are user paths.
 _BUNDLED_MODELS: frozenset[str] = frozenset({"opendde_v1", "opendde_abag"})
@@ -418,4 +422,19 @@ def run_opendde_on_complex(
         metrics=OpenDDEMetrics(**metrics_dict),
         source="opendde-prediction",
     )
-    return normalize_output_chain_ids(structure, sp_complex.chains)
+    msa_consumed, msa_ignored_reasons = msa_consumption(
+        sp_complex.chains, complex_msas, backend="OpenDDE", max_skipped_length=4
+    )
+    return normalize_output_chain_ids(
+        structure,
+        sp_complex.chains,
+        complex_msas=complex_msas,
+        report_msa=True,
+        msa_consumed=msa_consumed,
+        msa_ignored_reasons=msa_ignored_reasons,
+        msa_subsampling=(
+            MSASubsampling(mode="stochastic", max_rows=OPENDDE_MSA_DEPTH)
+            if msa_consumed
+            else MSASubsampling(mode="none")
+        ),
+    )
