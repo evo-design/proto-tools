@@ -67,33 +67,30 @@ class PaperclipCommandResult:
 class PaperclipClient:
     """Authenticated client for the Paperclip command endpoint.
 
-    Credentials resolve in order: an explicit ``api_key``, an explicit ``bearer_token``, then
-    the ``PAPERCLIP_API_KEY`` and ``PAPERCLIP_BEARER_TOKEN`` environment variables.
-    ``PAPERCLIP_BASE_URL`` overrides the service origin when ``base_url`` is not given.
+    Authenticates with ``api_key`` when given, else ``token`` as a bearer token; the tool
+    config resolves both from ``PAPERCLIP_API_KEY`` and ``PAPERCLIP_TOKEN``. The
+    ``PAPERCLIP_BASE_URL`` environment variable overrides the service origin.
     """
 
     def __init__(
         self,
         *,
         api_key: str | None = None,
-        bearer_token: str | None = None,
-        base_url: str | None = None,
+        token: str | None = None,
         timeout_seconds: float = 120.0,
         session: requests.Session | None = None,
     ) -> None:
         """Resolve credentials and the service origin, then prepare a retrying HTTP session."""
-        api_key = (api_key or os.environ.get("PAPERCLIP_API_KEY") or "").strip()
-        bearer_token = (bearer_token or os.environ.get("PAPERCLIP_BEARER_TOKEN") or "").strip()
         if api_key:
             self._auth_header = {"X-API-Key": api_key}
-        elif bearer_token:
-            self._auth_header = {"Authorization": f"Bearer {bearer_token}"}
+        elif token:
+            self._auth_header = {"Authorization": f"Bearer {token}"}
         else:
             raise PaperclipAuthError(
-                "Paperclip credentials are required: set PAPERCLIP_API_KEY (or PAPERCLIP_BEARER_TOKEN), "
+                "Paperclip credentials are required: set PAPERCLIP_API_KEY (or PAPERCLIP_TOKEN), "
                 "or pass paperclip_api_key in the tool config."
             )
-        self.base_url = (base_url or os.environ.get("PAPERCLIP_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
+        self.base_url = os.environ.get("PAPERCLIP_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
         self.timeout_seconds = timeout_seconds
         self._session = session or build_http_session(
             http_retries=_HTTP_RETRIES,

@@ -73,7 +73,8 @@ Use these tools to collect source-backed design evidence and natural examples be
 
 - Prefer `read="lines"` (the default, first 100 lines) or `read="grep"` with a `pattern`. GXL advises against reading whole papers.
 - `read="full_text"` returns the complete text only when its length matches the size Paperclip reports; otherwise the text is kept as `content_preview`.
-- Set `PAPERCLIP_API_KEY` before retrieval; the tools do not read credentials saved by an interactive `paperclip login`.
+- Set `PAPERCLIP_API_KEY` before retrieval, or `PAPERCLIP_TOKEN` for a bearer token; the config fields `paperclip_api_key` and `paperclip_token` take precedence. The tools do not read credentials saved by an interactive `paperclip login`.
+- `PAPERCLIP_BASE_URL` points the tools at a different Paperclip deployment, such as the direct `https://mcp.paperclip.gxl.ai` origin.
 - Treat literature as evidence for candidate generation, not functional validation.
 
 ## Toolkit Notes

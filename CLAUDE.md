@@ -131,6 +131,13 @@ Rules that affect behavior:
   requires a module-level import.
 - Tools with heavy dependencies use `standalone/` or shared environments. See
   `notes/tool-environments.md`.
+- Credentials (API keys, tokens, account emails and passwords) are
+  `ConfigField(credential="TOOLKIT_NAME")` fields named `{toolkit}_{name}`,
+  such as `paperclip_api_key` and `PAPERCLIP_API_KEY`. Client code takes them
+  from the config and never reads credential environment variables itself.
+- A service URL override (`PAPERCLIP_BASE_URL`, `GI_BASE_URL`) is an
+  environment variable read where the request is built. It is never a
+  `ConfigField` and never a credential.
 
 ## Runtime API
 

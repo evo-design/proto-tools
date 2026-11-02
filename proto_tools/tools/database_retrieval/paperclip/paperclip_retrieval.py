@@ -9,7 +9,6 @@ pattern) rather than its whole full text.
 from __future__ import annotations
 
 import json
-import os
 import re
 from enum import Enum
 from pathlib import Path
@@ -46,20 +45,21 @@ class _PaperclipConfig(BaseConfig):
     """Shared Paperclip client settings.
 
     Attributes:
-        paperclip_base_url (str | None): Optional Paperclip service override.
-        paperclip_api_key (str | None): Optional API key; falls back to the environment.
+        paperclip_api_key (str | None): Paperclip API key; defaults to ``PAPERCLIP_API_KEY``.
+        paperclip_token (str | None): Paperclip bearer token, used when no API key is set;
+            defaults to ``PAPERCLIP_TOKEN``.
         timeout_seconds (float): Maximum duration of one service operation.
     """
 
-    paperclip_base_url: str | None = ConfigField(
-        default_factory=lambda: os.environ.get("PAPERCLIP_BASE_URL"),
-        title="Paperclip Base URL",
-        description="Optional Paperclip service override",
-    )
     paperclip_api_key: str | None = ConfigField(
         title="Paperclip API Key",
-        description="Optional API key; the client also accepts $PAPERCLIP_BEARER_TOKEN.",
+        description="Paperclip API key.",
         credential="PAPERCLIP_API_KEY",
+    )
+    paperclip_token: str | None = ConfigField(
+        title="Paperclip Token",
+        description="Paperclip bearer token, used when no API key is set.",
+        credential="PAPERCLIP_TOKEN",
     )
     timeout_seconds: float = ConfigField(
         default=120.0,
@@ -116,7 +116,7 @@ def _client(config: _PaperclipConfig) -> PaperclipClient:
     """Build the authenticated service client from the tool config."""
     return PaperclipClient(
         api_key=config.paperclip_api_key,
-        base_url=config.paperclip_base_url,
+        token=config.paperclip_token,
         timeout_seconds=config.timeout_seconds,
     )
 
@@ -172,8 +172,9 @@ class PaperclipSearchConfig(_PaperclipConfig):
     """Paperclip corpus selection, ranking, and metadata filters.
 
     Attributes:
-        paperclip_base_url (str | None): Optional Paperclip service override.
-        paperclip_api_key (str | None): Optional API key; falls back to the environment.
+        paperclip_api_key (str | None): Paperclip API key; defaults to ``PAPERCLIP_API_KEY``.
+        paperclip_token (str | None): Paperclip bearer token, used when no API key is set;
+            defaults to ``PAPERCLIP_TOKEN``.
         timeout_seconds (float): Maximum duration of one service operation.
         sources (list[PaperclipSource]): Literature corpora to search.
         limit (int): Maximum number of returned hits.
@@ -310,8 +311,9 @@ class PaperclipLookupConfig(_PaperclipConfig):
     """Settings for Paperclip metadata lookup.
 
     Attributes:
-        paperclip_base_url (str | None): Optional Paperclip service override.
-        paperclip_api_key (str | None): Optional API key; falls back to the environment.
+        paperclip_api_key (str | None): Paperclip API key; defaults to ``PAPERCLIP_API_KEY``.
+        paperclip_token (str | None): Paperclip bearer token, used when no API key is set;
+            defaults to ``PAPERCLIP_TOKEN``.
         timeout_seconds (float): Maximum duration of one service operation.
         limit (int): Maximum number of returned papers.
     """
@@ -401,8 +403,9 @@ class PaperclipGrepConfig(_PaperclipConfig):
     """Settings for corpus-wide Paperclip grep.
 
     Attributes:
-        paperclip_base_url (str | None): Optional Paperclip service override.
-        paperclip_api_key (str | None): Optional API key; falls back to the environment.
+        paperclip_api_key (str | None): Paperclip API key; defaults to ``PAPERCLIP_API_KEY``.
+        paperclip_token (str | None): Paperclip bearer token, used when no API key is set;
+            defaults to ``PAPERCLIP_TOKEN``.
         timeout_seconds (float): Maximum duration of one service operation.
         max_matches (int): Maximum matching lines returned.
         ignore_case (bool): Whether matching ignores case.
@@ -525,8 +528,9 @@ class PaperclipDocumentConfig(_PaperclipConfig):
     """Which part of a Paperclip paper to read.
 
     Attributes:
-        paperclip_base_url (str | None): Optional Paperclip service override.
-        paperclip_api_key (str | None): Optional API key; falls back to the environment.
+        paperclip_api_key (str | None): Paperclip API key; defaults to ``PAPERCLIP_API_KEY``.
+        paperclip_token (str | None): Paperclip bearer token, used when no API key is set;
+            defaults to ``PAPERCLIP_TOKEN``.
         timeout_seconds (float): Maximum duration of one service operation.
         read (Literal["metadata", "lines", "grep", "full_text"]): What to read beyond metadata.
         start_line (int): First line to read in ``lines`` mode (1-indexed, inclusive).

@@ -134,7 +134,7 @@ def _install_fake_client(monkeypatch, fake: _FakeClient) -> None:
 
 @pytest.fixture(autouse=True)
 def _no_ambient_credentials(monkeypatch):
-    for name in ("PAPERCLIP_API_KEY", "PAPERCLIP_BEARER_TOKEN", "PAPERCLIP_BASE_URL"):
+    for name in ("PAPERCLIP_API_KEY", "PAPERCLIP_TOKEN", "PAPERCLIP_BASE_URL"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(paperclip_client, "_BACKOFF_SECONDS", 0.0)
 
@@ -149,10 +149,9 @@ def test_client_requires_credentials():
         PaperclipClient(session=_FakeSession())
 
 
-def test_client_prefers_explicit_api_key_and_sends_it_as_header(monkeypatch):
-    monkeypatch.setenv("PAPERCLIP_BEARER_TOKEN", "env-bearer")
+def test_client_prefers_the_api_key_and_sends_it_as_header():
     session = _FakeSession(commands={"wc /papers/PMC1/content.lines": _mcp_reply("1 2 8 /papers/PMC1/content.lines")})
-    client = PaperclipClient(api_key="pk_test", session=session)
+    client = PaperclipClient(api_key="pk_test", token="tok", session=session)
 
     assert client.byte_count("/papers/PMC1/content.lines") == 8
     headers = session.posts[0]["headers"]
@@ -160,24 +159,20 @@ def test_client_prefers_explicit_api_key_and_sends_it_as_header(monkeypatch):
     assert "Authorization" not in headers
 
 
-def test_client_falls_back_to_bearer_token_from_environment(monkeypatch):
-    monkeypatch.setenv("PAPERCLIP_BEARER_TOKEN", "env-bearer")
+def test_config_token_from_environment_is_sent_as_bearer(monkeypatch):
+    monkeypatch.setenv("PAPERCLIP_TOKEN", "env-token")
     session = _FakeSession(commands={"cat /papers/PMC1/meta.json": _mcp_reply("{}")})
-    PaperclipClient(session=session).read_file("/papers/PMC1/meta.json")
+    config = paperclip_retrieval.PaperclipDocumentConfig()
+    client = PaperclipClient(api_key=config.paperclip_api_key, token=config.paperclip_token, session=session)
+    client.read_file("/papers/PMC1/meta.json")
 
-    assert session.posts[0]["headers"]["Authorization"] == "Bearer env-bearer"
+    assert session.posts[0]["headers"]["Authorization"] == "Bearer env-token"
 
 
-def test_client_routes_to_mcp_on_the_public_origin_and_papers_on_the_mcp_origin():
+def test_client_routes_to_mcp_on_the_public_origin_and_papers_on_the_mcp_origin(monkeypatch):
     assert PaperclipClient(api_key="k", session=_FakeSession()).command_url == "https://paperclip.gxl.ai/mcp"
-    direct = PaperclipClient(api_key="k", base_url="https://mcp.paperclip.gxl.ai/", session=_FakeSession())
-    assert direct.command_url == "https://mcp.paperclip.gxl.ai/papers"
-
-
-def test_client_reads_base_url_from_environment(monkeypatch):
-    monkeypatch.setenv("PAPERCLIP_BASE_URL", "https://paperclip.example/")
-    client = PaperclipClient(api_key="k", session=_FakeSession())
-    assert client.base_url == "https://paperclip.example"
+    monkeypatch.setenv("PAPERCLIP_BASE_URL", "https://mcp.paperclip.gxl.ai/")
+    assert PaperclipClient(api_key="k", session=_FakeSession()).command_url == "https://mcp.paperclip.gxl.ai/papers"
 
 
 # ---------------------------------------------------------------------------
