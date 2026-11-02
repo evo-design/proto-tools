@@ -16,7 +16,7 @@ from logging import getLogger
 from typing import Any, ClassVar
 
 from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
-from proto_tools.tools.structure_prediction.msa_reporting import msa_consumption
+from proto_tools.tools.structure_prediction.msa_plan import conditions_on_msa
 from proto_tools.tools.structure_prediction.opendde.helpers import (
     build_chain_msa_paths,
     complex_to_opendde_json,
@@ -362,7 +362,7 @@ def run_opendde_on_complex(
         os.makedirs(output_dir)
 
         # Use supplied/auto-generated MSAs when present (unpaired + paired MsaPath); else single-sequence.
-        chain_msa_paths, chain_paired_msa_paths = build_chain_msa_paths(
+        chain_msa_paths, chain_paired_msa_paths, msa_sent = build_chain_msa_paths(
             sp_complex, complex_msas, temp_dir, verbose=config.verbose
         )
         input_json = complex_to_opendde_json(
@@ -423,19 +423,15 @@ def run_opendde_on_complex(
         metrics=OpenDDEMetrics(**metrics_dict),
         source="opendde-prediction",
     )
-    msa_consumed, msa_ignored_reasons = msa_consumption(
-        sp_complex.chains, complex_msas, backend="OpenDDE", max_skipped_length=4, sends_unpaired_only_chains=True
-    )
     return normalize_output_chain_ids(
         structure,
         sp_complex.chains,
         complex_msas=complex_msas,
         report_msa=True,
-        msa_consumed=msa_consumed,
-        msa_ignored_reasons=msa_ignored_reasons,
+        msa_sent=msa_sent,
         msa_subsampling=(
             MSASubsampling(mode="stochastic", max_rows=OPENDDE_MSA_DEPTH)
-            if msa_consumed
+            if conditions_on_msa(msa_sent)
             else MSASubsampling(mode="none")
         ),
     )

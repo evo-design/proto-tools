@@ -15,15 +15,15 @@ MSAMode = Literal["none", "paired", "unpaired"]
 
 
 class ChainMSAConditioning(BaseModel):
-    """Alignment evidence for one protein chain, before model-side subsampling.
+    """The MSA rows sent to the backend for one protein chain, before its own subsampling.
 
     Attributes:
         chain_index (int): Zero-based position in the input complex.
         chain_id (str): Explicit input ID, or its positional chain label.
         status (MSAStatus): Whether an MSA was not requested, found no homologs, or was
             consumed or ignored by the backend.
-        rows (int): Primary alignment rows, including the query.
-        unpaired_rows (int): Additional unpaired alignment rows, including the query.
+        rows (int): Primary rows sent to the backend, including the query.
+        unpaired_rows (int): Unpaired homolog rows sent alongside the primary rows, query excluded.
         requested_source (MSARequestedSource):
             Where rows came from: supplied, a ColabFold server or local MMseqs2 search, or none.
         mode (MSAMode): Whether the chain's rows are paired across chains, unpaired, or absent.
@@ -35,8 +35,14 @@ class ChainMSAConditioning(BaseModel):
     status: MSAStatus = Field(
         title="Status", description="Whether the MSA was not requested, found no hits, or was consumed or ignored."
     )
-    rows: int = Field(ge=0, title="Rows", description="Primary alignment rows, including query, before subsampling.")
-    unpaired_rows: int = Field(ge=0, title="Unpaired Rows", description="Additional unpaired rows, including query.")
+    rows: int = Field(
+        ge=0, title="Rows", description="Primary rows sent to the backend, including the query, before its subsampling."
+    )
+    unpaired_rows: int = Field(
+        ge=0,
+        title="Unpaired Rows",
+        description="Unpaired homolog rows sent alongside the primary rows, query excluded.",
+    )
     requested_source: MSARequestedSource = Field(
         title="Requested Source", description="Origin of the chain's MSA rows, or none when not requested."
     )
@@ -103,7 +109,9 @@ class MSAConditioning(BaseModel):
         """Whether every, some, or no protein chain was conditioned on rows beyond its query."""
         if not self.chains:
             return "not_applicable"
-        covered = sum(chain.status == "consumed" and max(chain.rows, chain.unpaired_rows) > 1 for chain in self.chains)
+        covered = sum(
+            chain.status == "consumed" and (chain.rows > 1 or chain.unpaired_rows > 0) for chain in self.chains
+        )
         return "none" if not covered else "full" if covered == len(self.chains) else "partial"
 
     @computed_field  # type: ignore[prop-decorator]

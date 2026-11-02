@@ -11,6 +11,7 @@ from pydantic import field_validator, model_validator
 
 from proto_tools.entities.structures.msa_conditioning import MSASubsampling
 from proto_tools.entities.structures.structure import BFactorType, Structure
+from proto_tools.tools.structure_prediction.msa_plan import SentMSA
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Complex,
     ComplexMSAs,
@@ -18,7 +19,6 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionInput,
     StructurePredictionOutput,
     normalize_output_chain_ids,
-    unwrap_complex_msas,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -245,40 +245,44 @@ def example_input() -> Any:
     return AlphaFold2Input(complexes=["MKTL"])  # type: ignore[list-item]
 
 
-def _alphafold2_msa_consumption(
+def _alphafold2_sent_msas(
     complex_msas: ComplexMSAs | None,
     num_chains: int,
     per_chain_msas_a3m: list[str | None] | None,
     unpaired_per_chain_msas_a3m: list[str | None] | None,
-) -> tuple[set[int], dict[int, str]]:
-    """Return the chain indices whose alignment reached ColabDesign, and why the rest did not.
+) -> dict[int, SentMSA]:
+    """The rows ColabDesign receives per chain from this request's payload.
 
     Heteromers send each chain's own A3M; the standalone stacks the deep unpaired rows beneath
-    them only for paired MSAs. Monomers and homo-oligomers send only chain 0's alignment, which
-    ColabDesign tiles across every copy, so another chain's own rows are consumed only when they
-    match chain 0's.
+    them only for paired MSAs. Monomers and homo-oligomers send chain 0's alignment, which
+    ColabDesign tiles across every copy.
     """
     if complex_msas is None:
-        return set(), {}
-    per_chain, unpaired_per_chain, is_paired = unwrap_complex_msas(complex_msas)
-    with_rows = set(per_chain) | set(unpaired_per_chain or {})
+        return {}
+    with_rows = set(complex_msas.per_chain) | set(complex_msas.unpaired_per_chain or {})
     if per_chain_msas_a3m is not None:
-        consumed = {i for i, a3m in enumerate(per_chain_msas_a3m) if a3m}
-        if is_paired and consumed:
-            consumed |= {i for i, a3m in enumerate(unpaired_per_chain_msas_a3m or []) if a3m}
+        primary, unpaired = complex_msas.per_chain, complex_msas.unpaired_per_chain or {}
+        unpaired_sent = unpaired_per_chain_msas_a3m or [None] * num_chains
+        stacks_unpaired = complex_msas.paired and any(per_chain_msas_a3m)
+        sent = {
+            i: SentMSA(
+                rows=len(primary[i]) if a3m else 0,
+                # The standalone appends each chain's unpaired rows below its query, not the query itself.
+                unpaired_rows=len(unpaired[i]) - 1 if stacks_unpaired and unpaired_sent[i] else 0,
+                paired=complex_msas.paired and bool(a3m),
+            )
+            for i, a3m in enumerate(per_chain_msas_a3m)
+        }
         reason = "AlphaFold2 adds a heteromer's unpaired rows only beneath paired primary alignments"
-        return consumed, dict.fromkeys(with_rows - consumed, reason)
-    chain0 = per_chain.get(0)
+        for i in with_rows:
+            if not (sent[i].rows or sent[i].unpaired_rows):
+                sent[i] = SentMSA(ignored_reason=reason)
+        return sent
+    chain0 = complex_msas.per_chain.get(0)
     if chain0 is None:
         reason = "AlphaFold2 folds monomers and homo-oligomers from chain 0's alignment; chain 0 had none"
-        return set(), dict.fromkeys(with_rows, reason)
-    consumed = {
-        i
-        for i in range(num_chains)
-        if (msa := per_chain.get(i)) is not None and msa.aligned_sequences == chain0.aligned_sequences
-    }
-    reason = "ColabDesign tiles chain 0's alignment across homo-oligomer copies; this chain's own rows are unused"
-    return consumed, dict.fromkeys(with_rows - consumed, reason)
+        return {i: SentMSA(ignored_reason=reason) for i in with_rows}
+    return {i: SentMSA(rows=len(chain0)) for i in range(num_chains)}
 
 
 @tool(
@@ -431,7 +435,7 @@ def run_alphafold2(
         )
         complex_msas = inputs.msas[complex_data["complex_idx"]] if inputs.msas else None
         msa_dispatched = msa_a3m_content is not None or bool(per_chain_msas_a3m and any(per_chain_msas_a3m))
-        msa_consumed, msa_ignored_reasons = _alphafold2_msa_consumption(
+        msa_sent = _alphafold2_sent_msas(
             complex_msas, complex_data["num_chains"], per_chain_msas_a3m, unpaired_per_chain_msas_a3m
         )
         structure_outputs.append(
@@ -440,8 +444,7 @@ def run_alphafold2(
                 comp.chains,
                 complex_msas=complex_msas,
                 report_msa=True,
-                msa_consumed=msa_consumed,
-                msa_ignored_reasons=msa_ignored_reasons,
+                msa_sent=msa_sent,
                 msa_subsampling=(
                     MSASubsampling(mode="stochastic", max_rows=512, max_extra_rows=1024)
                     if msa_dispatched

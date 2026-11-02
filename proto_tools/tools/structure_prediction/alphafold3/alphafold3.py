@@ -18,13 +18,16 @@ logger = logging.getLogger(__name__)
 
 # MSA rows the Evoformer keeps after shuffling the featurized MSA (its Config.num_msa).
 ALPHAFOLD3_NUM_MSA = 1024
+# AlphaFold3 is written a chain's MSA only alongside its primary alignment.
+_UNPAIRED_ONLY_REASON = "only unpaired rows were supplied; AlphaFold3 is sent a chain's primary alignment"
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.msa import MSA
 from proto_tools.entities.structures.msa_conditioning import MSASubsampling
 from proto_tools.entities.structures.structure import BFactorType, Structure
-from proto_tools.tools.structure_prediction.msa_reporting import msa_consumption
+from proto_tools.tools.structure_prediction.msa_plan import SentMSA, conditions_on_msa, short_chain_reason
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    Chain,
     Complex,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
@@ -319,12 +322,15 @@ def run_alphafold3(
             os.makedirs(input_dir, exist_ok=True)
 
             # Write pre-computed MSAs to A3M files (per-complex slice).
+            msa_sent: dict[int, SentMSA] = {}
             if inputs.msas:
                 per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(inputs.msas[dispatch_idx])
                 if per_chain_msas:
-                    input_json = _assign_msas_to_input_json(
+                    input_json, msa_sent = _assign_msas_to_input_json(
                         input_json, per_chain_msas, unpaired_per_chain, is_paired, comp, input_dir, config.verbose
                     )
+                else:
+                    msa_sent = dict.fromkeys(unpaired_per_chain or {}, SentMSA(ignored_reason=_UNPAIRED_ONLY_REASON))
 
             # Write input JSON to file for worker protocol
             input_json_path = os.path.join(input_dir, f"{config.name}_{dispatch_idx}.json")
@@ -363,21 +369,16 @@ def run_alphafold3(
                 metrics=metrics,
                 source="alphafold3-prediction",
             )
-            complex_msas = inputs.msas[dispatch_idx] if inputs.msas else None
-            msa_consumed, msa_ignored_reasons = msa_consumption(
-                comp.chains, complex_msas, backend="AlphaFold3", max_skipped_length=4
-            )
             output_structures.append(
                 normalize_output_chain_ids(
                     structure,
                     comp.chains,
-                    complex_msas=complex_msas,
+                    complex_msas=inputs.msas[dispatch_idx] if inputs.msas else None,
                     report_msa=True,
-                    msa_consumed=msa_consumed,
-                    msa_ignored_reasons=msa_ignored_reasons,
+                    msa_sent=msa_sent,
                     msa_subsampling=(
                         MSASubsampling(mode="stochastic", max_rows=ALPHAFOLD3_NUM_MSA)
-                        if msa_consumed
+                        if conditions_on_msa(msa_sent)
                         else MSASubsampling(mode="none")
                     ),
                 )
@@ -403,7 +404,7 @@ def _assign_msas_to_input_json(
     sp_complex: Complex,
     input_dir: str,
     verbose: int = 0,
-) -> AlphaFold3JSON:
+) -> tuple[AlphaFold3JSON, dict[int, SentMSA]]:
     """Write pre-computed MSAs to A3M files and assign paths to input JSON.
 
     AF3 takes a separate ``unpairedMsaPath`` and ``pairedMsaPath`` per protein chain
@@ -428,16 +429,19 @@ def _assign_msas_to_input_json(
         verbose (int): Verbosity level (truthy = log progress).
 
     Returns:
-        AlphaFold3JSON: Updated input_json_data with MSA paths populated.
+        tuple[AlphaFold3JSON, dict[int, SentMSA]]: The input JSON with MSA paths populated, and
+            the rows written per protein chain index.
     """
     msa_dir = os.path.join(input_dir, "msas")
     os.makedirs(msa_dir, exist_ok=True)
 
     # Map protein-only seq_entry positions back to chain indices in sp_complex.chains.
-    protein_chains_idx = [
-        i for i, ch in enumerate(sp_complex.chains) if hasattr(ch, "entity_type") and ch.entity_type == "protein"
-    ]
+    protein_chains = {
+        i: ch for i, ch in enumerate(sp_complex.chains) if isinstance(ch, Chain) and ch.entity_type == "protein"
+    }
+    protein_chains_idx = list(protein_chains)
     n_protein_chains = len(protein_chains_idx)
+    sent: dict[int, SentMSA] = {}
 
     protein_seq_entry_iter = (s for s in input_json_data["sequences"] if "protein" in s)
     for proto_pos, seq_entry in enumerate(protein_seq_entry_iter):
@@ -446,6 +450,8 @@ def _assign_msas_to_input_json(
         chain_idx = protein_chains_idx[proto_pos]
         msa = per_chain_msas.get(chain_idx)
         if msa is None:
+            if chain_idx in (unpaired_per_chain or {}):
+                sent[chain_idx] = SentMSA(ignored_reason=_UNPAIRED_ONLY_REASON)
             continue
 
         chain_id = seq_entry["protein"]["id"]
@@ -466,12 +472,18 @@ def _assign_msas_to_input_json(
             write_paired_a3m_with_uniprot_headers(msa, paired_a3m_path)
             seq_entry["protein"]["pairedMsaPath"] = os.path.relpath(paired_a3m_path, input_dir)
 
+        sent[chain_idx] = SentMSA(
+            rows=len(msa) if is_paired else len(unpaired_msa),
+            unpaired_rows=len(unpaired_msa) - 1 if is_paired else 0,
+            paired=is_paired,
+            ignored_reason=short_chain_reason(protein_chains[chain_idx], "AlphaFold3"),
+        )
         if verbose:
             logger.info(
                 f"Assigned MSA to chain {chain_id} (unpaired {len(unpaired_msa)} / paired {len(msa)} sequences)"
             )
 
-    return input_json_data
+    return input_json_data, sent
 
 
 def _create_input_json_from_complex(

@@ -9,7 +9,15 @@ from typing import Any, ClassVar, Literal
 from pydantic import model_validator
 
 from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
+from proto_tools.tools.structure_prediction.msa_plan import (
+    SentMSA,
+    conditions_on_msa,
+    protein_chain_msas,
+    unpaired_depth_rows,
+)
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    Complex,
+    ComplexMSAs,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
@@ -17,7 +25,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField, ToolInstance
+from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
 from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
@@ -25,6 +33,8 @@ logger = getLogger(__name__)
 
 # MSA rows ESMFold2 randomly keeps per loop; passed to fold() as msa_max_depth.
 ESMFOLD2_MSA_MAX_DEPTH = 1024
+_FAST_REASON = "proto-tools sends no MSA to esmfold2-fast, a single-sequence checkpoint"
+_UNPAIRED_ONLY_REASON = "ESMFold2 is sent a chain's unpaired rows only with its primary alignment"
 
 
 # ============================================================================
@@ -402,33 +412,42 @@ def _run_esmfold2_on_complex(
         metrics=ESMFold2Metrics(**metrics_dict),
         source="esmfold2-prediction",
     )
-    with_rows = set(per_chain_msas) | set((unpaired_per_chain or {}).keys())
-    if config.model_checkpoint == "esmfold2-fast":
-        # No MSA payload is built for the single-sequence checkpoint.
-        msa_consumed: set[int] = set()
-        msa_ignored_reasons = dict.fromkeys(
-            with_rows, "proto-tools sends no MSA to esmfold2-fast, a single-sequence checkpoint"
-        )
-    else:
-        # The worker appends a chain's unpaired rows only beneath its primary alignment.
-        msa_consumed = set(per_chain_msas)
-        msa_ignored_reasons = dict.fromkeys(
-            with_rows - msa_consumed, "ESMFold2 is sent a chain's unpaired rows only with its primary alignment"
-        )
+    msa_sent = _esmfold2_sent_msas(config.model_checkpoint, sp_complex, complex_msas)
     return normalize_output_chain_ids(
         structure,
         sp_complex.chains,
         complex_msas=complex_msas,
         report_msa=True,
-        msa_consumed=msa_consumed,
-        msa_ignored_reasons=msa_ignored_reasons,
+        msa_sent=msa_sent,
         # fold() draws a fresh random msa_max_depth-row subset (query kept) every loop.
         msa_subsampling=(
             MSASubsampling(mode="stochastic", max_rows=ESMFOLD2_MSA_MAX_DEPTH)
-            if msa_consumed
+            if conditions_on_msa(msa_sent)
             else MSASubsampling(mode="none")
         ),
     )
+
+
+def _esmfold2_sent_msas(checkpoint: str, sp_complex: Complex, complex_msas: ComplexMSAs | None) -> dict[int, SentMSA]:
+    """The rows the ESMFold2 worker folds per protein chain.
+
+    No MSA payload is built for the single-sequence ``esmfold2-fast``. Otherwise the worker sends a
+    chain's primary rows with its deep unpaired rows appended (de-duplicated) beneath them.
+    """
+    sent: dict[int, SentMSA] = {}
+    for chain in protein_chain_msas(sp_complex.chains, complex_msas):
+        if checkpoint == "esmfold2-fast":
+            if chain.primary is not None or chain.unpaired is not None:
+                sent[chain.index] = SentMSA(ignored_reason=_FAST_REASON)
+        elif chain.primary is not None:
+            rows, _ids = extract_msa_sequences(chain.primary, 0)
+            depth = unpaired_depth_rows(rows, chain.unpaired)
+            sent[chain.index] = SentMSA(
+                rows=len(rows), unpaired_rows=len(depth), paired=complex_msas is not None and complex_msas.paired
+            )
+        elif chain.unpaired is not None:
+            sent[chain.index] = SentMSA(ignored_reason=_UNPAIRED_ONLY_REASON)
+    return sent
 
 
 def _chain_to_payload(chain: Any, chain_id: str) -> dict[str, Any]:

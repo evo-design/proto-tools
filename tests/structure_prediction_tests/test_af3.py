@@ -232,7 +232,7 @@ def test_af3_unpaired_msa_path_gets_deep_per_chain_unpaired(tmp_path):
     unpaired = {i: MSA(aligned_sequences=[s, s, s, s, s]) for i, s in enumerate([seq_a, seq_b])}  # 5 rows
     input_json = {"sequences": [{"protein": {"id": "A"}}, {"protein": {"id": "B"}}]}
 
-    out = _assign_msas_to_input_json(input_json, paired, unpaired, True, cx, str(tmp_path), verbose=0)
+    out, _sent = _assign_msas_to_input_json(input_json, paired, unpaired, True, cx, str(tmp_path), verbose=0)
 
     for entry in out["sequences"]:
         prot = entry["protein"]
@@ -252,7 +252,7 @@ def test_af3_unpaired_falls_back_to_paired_when_no_separate_unpaired(tmp_path):
     paired = {i: MSA(aligned_sequences=[s, s, s]) for i, s in enumerate([seq_a, seq_b])}  # 3 rows
     input_json = {"sequences": [{"protein": {"id": "A"}}, {"protein": {"id": "B"}}]}
 
-    out = _assign_msas_to_input_json(input_json, paired, None, True, cx, str(tmp_path), verbose=0)
+    out, _sent = _assign_msas_to_input_json(input_json, paired, None, True, cx, str(tmp_path), verbose=0)
 
     for entry in out["sequences"]:
         prot = entry["protein"]

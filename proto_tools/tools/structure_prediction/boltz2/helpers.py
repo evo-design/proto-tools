@@ -10,19 +10,21 @@ import os
 from logging import getLogger
 from typing import Any
 
-from proto_tools.entities.complex import chain_label
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures.msa_conditioning import MSASubsampling
+from proto_tools.tools.structure_prediction.msa_plan import SentMSA, protein_chain_msas, unpaired_depth_rows
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     Complex,
     ComplexMSAs,
     resolve_chain_ids,
-    unwrap_complex_msas,
 )
 from proto_tools.utils import extract_msa_sequences
 
 logger = getLogger(__name__)
+
+# Boltz-2 is written a chain's CSV only from its primary alignment.
+_UNPAIRED_ONLY_REASON = "only unpaired rows were supplied; Boltz-2 is sent a chain's primary alignment"
 
 
 def write_msa_csv(aligned_sequences: list[Any], csv_path: str, keys: list[int]) -> None:
@@ -48,7 +50,7 @@ def build_chain_msa_paths(
     complex_msas: "ComplexMSAs | None",
     temp_dir: str,
     verbose: int = 0,
-) -> dict[str, str]:
+) -> tuple[dict[str, str], dict[int, SentMSA]]:
     """Map each protein chain ID to its MSA CSV, one sha256-named file per unique sequence.
 
     boltz requires identical chains to share a single MSA file. Boltz reads the CSV ``key``
@@ -58,53 +60,41 @@ def build_chain_msa_paths(
     query gets ``-1`` in both cases: boltz always places it first, and a key would only add a
     duplicate query row. The deep per-chain unpaired MSA, when present, is appended with
     ``key=-1`` so Boltz keeps it as depth without pairing.
-    """
-    per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(complex_msas)
-    chain_msa_paths: dict[str, str] = {}
-    if per_chain_msas:
-        msa_dir = os.path.join(temp_dir, "msas")
-        os.makedirs(msa_dir, exist_ok=True)
-        seq_to_csv: dict[str, str] = {}
-        for ch_idx, chain in enumerate(sp_complex.chains):
-            if not (isinstance(chain, Chain) and chain.entity_type == "protein"):
-                continue
-            msa = per_chain_msas.get(ch_idx)
-            if msa is None:
-                continue
-            chain_id = chain.id if chain.id is not None else chain_label(ch_idx)
-            seq = chain.sequence
-            csv_path = seq_to_csv.get(seq)
-            if csv_path is None:
-                csv_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.csv")
-                sequences, _ids = extract_msa_sequences(msa, 0)
-                keys = [-1] + (list(range(1, len(sequences))) if is_paired else [-1] * (len(sequences) - 1))
-                unpaired_msa = (unpaired_per_chain or {}).get(ch_idx)
-                if unpaired_msa is not None:
-                    # Append the deep unpaired rows for depth, skipping the query and
-                    # any sequence already among the paired rows; key=-1 = no pairing.
-                    u_seqs, _u_ids = extract_msa_sequences(unpaired_msa, 0)
-                    seen = set(sequences)
-                    for u_seq in u_seqs[1:]:
-                        if u_seq in seen:
-                            continue
-                        seen.add(u_seq)
-                        sequences.append(u_seq)
-                        keys.append(-1)
-                write_msa_csv(sequences, csv_path, keys=keys)
-                seq_to_csv[seq] = csv_path
-            chain_msa_paths[chain_id] = csv_path
-            if verbose:
-                logger.info(f"Assigned MSA to chain {chain_id} ({len(msa)} sequences)")
 
-    _, protein_chain_ids = sp_complex.extract_protein_chains()
-    for chain_id in protein_chain_ids:
-        if chain_id not in chain_msa_paths:
+    Returns:
+        tuple[dict[str, str], dict[int, SentMSA]]: Chain ID to CSV path, and the rows written
+            per protein chain index. Chains without a primary alignment get no CSV.
+    """
+    if complex_msas is None:
+        return {}, {}
+    is_paired = complex_msas.paired
+    chain_msa_paths: dict[str, str] = {}
+    sent: dict[int, SentMSA] = {}
+    written: dict[str, tuple[str, SentMSA]] = {}
+    for chain in protein_chain_msas(sp_complex.chains, complex_msas):
+        if chain.primary is None:
+            if chain.unpaired is not None:
+                sent[chain.index] = SentMSA(ignored_reason=_UNPAIRED_ONLY_REASON)
             logger.info(
                 "Chain %s has no supplied homolog alignment; using query-only input for this chain. "
                 "Other chains may still use MSAs; inspect structure.msa_conditioning.",
-                chain_id,
+                chain.chain_id,
             )
-    return chain_msa_paths
+            continue
+        seq = chain.chain.sequence
+        if seq not in written:
+            msa_dir = os.path.join(temp_dir, "msas")
+            os.makedirs(msa_dir, exist_ok=True)
+            csv_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.csv")
+            sequences, _ids = extract_msa_sequences(chain.primary, 0)
+            keys = [-1] + (list(range(1, len(sequences))) if is_paired else [-1] * (len(sequences) - 1))
+            depth = [row for row, _id in unpaired_depth_rows(sequences, chain.unpaired)]
+            write_msa_csv(sequences + depth, csv_path, keys=keys + [-1] * len(depth))
+            written[seq] = (csv_path, SentMSA(rows=len(sequences), unpaired_rows=len(depth), paired=is_paired))
+        chain_msa_paths[chain.chain_id], sent[chain.index] = written[seq]
+        if verbose:
+            logger.info(f"Assigned MSA to chain {chain.chain_id} ({len(chain.primary)} sequences)")
+    return chain_msa_paths, sent
 
 
 def complex_to_yaml(

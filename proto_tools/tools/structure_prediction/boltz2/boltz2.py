@@ -21,7 +21,6 @@ from proto_tools.tools.structure_prediction.boltz2.helpers import (
     build_chain_msa_paths,
     complex_to_yaml,
 )
-from proto_tools.tools.structure_prediction.msa_reporting import msa_consumption
 from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
@@ -455,9 +454,7 @@ def run_boltz2_on_complex(
 
         # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied
         # by the caller (always respected regardless of use_msa).
-        chain_msa_paths: dict[str, str] | None = None
-        if complex_msas is not None:
-            chain_msa_paths = build_chain_msa_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
+        chain_msa_paths, msa_sent = build_chain_msa_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
 
         yaml_content = complex_to_yaml(sp_complex.chains, chain_msa_paths=chain_msa_paths)
 
@@ -515,14 +512,12 @@ def run_boltz2_on_complex(
         metrics=Boltz2Metrics(**metrics_dict),
         source="boltz2-prediction",
     )
-    msa_consumed, msa_ignored_reasons = msa_consumption(sp_complex.chains, complex_msas, backend="Boltz-2")
     return normalize_output_chain_ids(
         structure,
         sp_complex.chains,
         complex_msas=complex_msas,
         report_msa=True,
-        msa_consumed=msa_consumed,
-        msa_ignored_reasons=msa_ignored_reasons,
+        msa_sent=msa_sent,
         msa_subsampling=boltz2_msa_subsampling(
             max_msa_seqs=config.max_msa_seqs, subsample_msa=config.subsample_msa, has_msa=bool(chain_msa_paths)
         ),

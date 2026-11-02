@@ -97,7 +97,7 @@ def test_build_chain_a3m_paths_feeds_deep_unpaired_msa(tmp_path):
     unpaired = {i: MSA(aligned_sequences=[s, s, s, s, s]) for i, s in enumerate([seq_a, seq_b])}  # 5 rows
     complex_msas = ComplexMSAs(per_chain=paired, paired=True, unpaired_per_chain=unpaired)
 
-    paths = build_chain_a3m_paths(cx, complex_msas, str(tmp_path))
+    paths, _sent = build_chain_a3m_paths(cx, complex_msas, str(tmp_path))
 
     for chain_id in ("A", "B"):
         rows = Path(paths[chain_id]).read_text().count(">")
@@ -114,7 +114,7 @@ def test_build_chain_a3m_paths_falls_back_to_per_chain_when_no_unpaired(tmp_path
     cx = Complex(chains=[Chain(id="A", sequence=seq, entity_type="protein")])
     complex_msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[seq, seq, seq])}, paired=False)
 
-    paths = build_chain_a3m_paths(cx, complex_msas, str(tmp_path))
+    paths, _sent = build_chain_a3m_paths(cx, complex_msas, str(tmp_path))
 
     assert Path(paths["A"]).read_text().count(">") == 3
 

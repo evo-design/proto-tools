@@ -1,6 +1,6 @@
-"""Build truthful requested-versus-effective MSA conditioning reports."""
+"""Build MSA conditioning reports from what each predictor's writer sent its backend."""
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures.msa_conditioning import (
@@ -8,120 +8,68 @@ from proto_tools.entities.structures.msa_conditioning import (
     ChainMSAConditioning,
     MSAConditioning,
     MSAMode,
-    MSARequestedSource,
     MSAStatus,
     MSASubsampling,
 )
-from proto_tools.tools.structure_prediction.shared_data_models import Chain, ComplexMSAs, resolve_chain_ids
+from proto_tools.tools.structure_prediction.msa_plan import SentMSA, has_homolog_rows, protein_chain_msas
+from proto_tools.tools.structure_prediction.shared_data_models import Chain, ComplexMSAs
 
 
 def build_msa_conditioning(
     chains: Sequence[Chain | Fragment],
     complex_msas: ComplexMSAs | None,
+    sent: Mapping[int, SentMSA],
     *,
-    consumed: bool | Collection[int] = True,
     subsampling: MSASubsampling | None = None,
-    ignored_reasons: Mapping[int, str] | None = None,
-    paired: bool | None = None,
 ) -> MSAConditioning:
-    """Describe each protein chain's requested MSA and whether the backend consumes it.
+    """Describe each protein chain's MSA from the rows its writer sent the backend.
 
-    Requested chains are the bundle's ``requested_chain_indices``, else the chains it
-    carries rows for. ``consumed`` names the chains whose rows the backend featurizes.
-    ``paired`` overrides the bundle's flag for a backend that pairs rows its own way.
+    A chain is ``consumed`` when the backend was sent rows beyond the query and uses them. A chain
+    that was not is ``not_requested`` when the bundle asked nothing for it, ``no_hits`` when our own
+    search found no homologs, and ``ignored`` otherwise. Requested chains are the bundle's
+    ``requested_chain_indices``, else the chains it carries rows for.
     """
-    protein_indices = [
-        index for index, chain in enumerate(chains) if isinstance(chain, Chain) and chain.entity_type == "protein"
-    ]
-    chain_ids = resolve_chain_ids(chains)
-    present_indices: set[int] = set()
-    if complex_msas is not None:
-        present_indices.update(complex_msas.per_chain)
-        present_indices.update((complex_msas.unpaired_per_chain or {}).keys())
-
+    present = set(complex_msas.per_chain) | set(complex_msas.unpaired_per_chain or {}) if complex_msas else set()
     if complex_msas is not None and complex_msas.requested_chain_indices is not None:
-        requested_indices = set(complex_msas.requested_chain_indices)
+        requested = set(complex_msas.requested_chain_indices)
     else:
-        requested_indices = present_indices
-
-    consumed_indices = set(protein_indices) if consumed is True else set() if consumed is False else set(consumed)
-    source: MSARequestedSource = complex_msas.source if complex_msas is not None else "none"
-    ignored_reasons = ignored_reasons or {}
+        requested = present
+    source = complex_msas.source if complex_msas is not None else "none"
 
     evidence: list[ChainMSAConditioning] = []
-    for index in protein_indices:
-        primary = complex_msas.per_chain.get(index) if complex_msas is not None else None
-        unpaired = (complex_msas.unpaired_per_chain or {}).get(index) if complex_msas is not None else None
-        rows = len(primary) if primary is not None else 0
-        unpaired_rows = len(unpaired) if unpaired is not None else 0
-        is_requested = index in requested_indices
-        is_consumed = index in consumed_indices
-
+    for chain in protein_chain_msas(chains, complex_msas):
+        record = sent.get(chain.index, SentMSA())
+        bundle_rows = max(len(chain.primary or []), len(chain.unpaired or []))
         status: MSAStatus
-        if not is_requested:
-            status = "not_requested"
-        elif source in MSA_SEARCH_SOURCES and max(rows, unpaired_rows) <= 1:
-            status = "no_hits"
-        elif not is_consumed or max(rows, unpaired_rows) == 0:
-            status = "ignored"
-        else:
+        if record.ignored_reason is None and has_homolog_rows(record):
             status = "consumed"
-
-        mode: MSAMode
-        is_paired = paired if paired is not None else complex_msas is not None and complex_msas.paired
-        if is_paired and rows:
-            mode = "paired"
-        elif rows or unpaired_rows:
-            mode = "unpaired"
+        elif chain.index not in requested:
+            status = "not_requested"
+        elif source in MSA_SEARCH_SOURCES and bundle_rows <= 1:
+            status = "no_hits"
         else:
-            mode = "none"
-
+            status = "ignored"
+        mode: MSAMode = (
+            "paired" if record.paired and record.rows > 1 else "unpaired" if has_homolog_rows(record) else "none"
+        )
         evidence.append(
             ChainMSAConditioning(
-                chain_index=index,
-                chain_id=chain_ids[index],
+                chain_index=chain.index,
+                chain_id=chain.chain_id,
                 status=status,
-                rows=rows,
-                unpaired_rows=unpaired_rows,
-                requested_source=source if is_requested else "none",
+                rows=record.rows,
+                unpaired_rows=record.unpaired_rows,
+                requested_source=source if status != "not_requested" else "none",
                 mode=mode,
-                ignored_reason=ignored_reasons.get(index) if status == "ignored" else None,
+                ignored_reason=(record.ignored_reason or "no alignment rows reached the backend")
+                if status == "ignored"
+                else None,
             )
         )
-
     return MSAConditioning(
         chains=evidence,
-        subsampling=subsampling or MSASubsampling(mode="unknown" if requested_indices else "none"),
+        subsampling=subsampling or MSASubsampling(mode="unknown" if requested else "none"),
     )
-
-
-def msa_consumption(
-    chains: Sequence[Chain | Fragment],
-    complex_msas: ComplexMSAs | None,
-    *,
-    backend: str,
-    max_skipped_length: int | None = None,
-    sends_unpaired_only_chains: bool = False,
-) -> tuple[set[int], dict[int, str]]:
-    """Consumed chain indices and ignored reasons for the alignments a backend's writer sends.
-
-    Most writers emit one file per chain from ``per_chain``, so a chain with only unpaired rows
-    is never seen; ``sends_unpaired_only_chains`` marks writers (Protenix, OpenDDE) that send
-    those rows instead. AlphaFold3, Protenix, and OpenDDE also featurize no MSA for chains of
-    ``max_skipped_length`` or fewer residues.
-    """
-    if complex_msas is None:
-        return set(), {}
-    reasons: dict[int, str] = {}
-    with_rows = set(complex_msas.per_chain) | set(complex_msas.unpaired_per_chain or {})
-    for index in with_rows:
-        chain = chains[index]
-        if index not in complex_msas.per_chain and not sends_unpaired_only_chains:
-            reasons[index] = f"only unpaired rows were supplied; {backend} is sent a chain's primary alignment"
-        elif max_skipped_length is not None and isinstance(chain, Chain) and len(chain.sequence) <= max_skipped_length:
-            reasons[index] = f"{backend} skips the MSA of chains with {max_skipped_length} or fewer residues"
-    sent = with_rows if sends_unpaired_only_chains else set(complex_msas.per_chain)
-    return sent - set(reasons), reasons
 
 
 def describe_msa_conditioning(report: MSAConditioning) -> str:

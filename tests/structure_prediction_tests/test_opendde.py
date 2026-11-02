@@ -137,7 +137,7 @@ def test_opendde_build_chain_msa_paths_emits_species_paired_headers(tmp_path):
     }
     complex_msas = ComplexMSAs(per_chain=paired, paired=True)
 
-    unpaired_paths, paired_paths = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
+    unpaired_paths, paired_paths, _sent = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
 
     # Both chains get an unpaired AND a paired A3M.
     assert set(unpaired_paths) == {"A", "B"}
@@ -166,7 +166,7 @@ def test_opendde_partial_supplied_bundle_gives_every_chain_an_msa_path(tmp_path)
     cx = Complex(chains=[Chain(sequence=target, entity_type="protein"), Chain(sequence=binder, entity_type="protein")])
     msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[target, "MKTAYIAKQA", "MKTAYIAKQE"])})
 
-    unpaired_paths, _ = build_chain_msa_paths(cx, msas, str(tmp_path))
+    unpaired_paths, _paired, _sent = build_chain_msa_paths(cx, msas, str(tmp_path))
 
     assert {chain_id: Path(path).read_text().count(">") for chain_id, path in unpaired_paths.items()} == {
         "A": 3,
@@ -183,7 +183,7 @@ def test_opendde_does_not_search_for_a_partial_supplied_bundle(tmp_path):
     target, binder = "MKTAYIAKQR", "GSHMLEDPVD"
     cx = Complex(chains=[Chain(sequence=target, entity_type="protein"), Chain(sequence=binder, entity_type="protein")])
     msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[target, "MKTAYIAKQA"])})
-    unpaired_paths, paired_paths = build_chain_msa_paths(cx, msas, str(tmp_path))
+    unpaired_paths, paired_paths, _sent = build_chain_msa_paths(cx, msas, str(tmp_path))
     job_path = tmp_path / "job.json"
     job_path.write_text(json.dumps(complex_to_opendde_json(cx.chains, "job", [0], unpaired_paths, paired_paths)))
 

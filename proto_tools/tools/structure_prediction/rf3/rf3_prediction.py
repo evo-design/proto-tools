@@ -11,11 +11,10 @@ from typing import Any, ClassVar
 from pydantic import model_validator
 
 from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
-from proto_tools.tools.structure_prediction.msa_reporting import msa_consumption
+from proto_tools.tools.structure_prediction.msa_plan import conditions_on_msa
 from proto_tools.tools.structure_prediction.rf3.helpers import (
     build_chain_a3m_paths,
     complex_to_rf3_json,
-    rf3_written_msas,
 )
 from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
@@ -379,9 +378,7 @@ def run_rf3_prediction_on_complex(
         os.makedirs(output_dir)
 
         # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied by the caller (always respected regardless of use_msa).
-        chain_msa_paths: dict[str, str] | None = None
-        if complex_msas is not None:
-            chain_msa_paths = build_chain_a3m_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
+        chain_msa_paths, msa_sent = build_chain_a3m_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
 
         json_payload = complex_to_rf3_json(
             sp_complex.chains,
@@ -439,19 +436,15 @@ def run_rf3_prediction_on_complex(
         metrics=RF3Metrics(**metrics_kwargs),
         source="rf3-prediction",
     )
-    written_msas, msa_paired = rf3_written_msas(sp_complex, complex_msas)
-    msa_consumed, msa_ignored_reasons = msa_consumption(sp_complex.chains, complex_msas, backend="RF3")
     return normalize_output_chain_ids(
         structure,
         sp_complex.chains,
-        complex_msas=written_msas,
+        complex_msas=complex_msas,
         report_msa=True,
-        msa_consumed=msa_consumed,
-        msa_ignored_reasons=msa_ignored_reasons,
-        msa_paired=msa_paired,
+        msa_sent=msa_sent,
         msa_subsampling=(
             MSASubsampling(mode="stochastic", max_rows=RF3_N_MSA)
-            if written_msas and written_msas.per_chain
+            if conditions_on_msa(msa_sent)
             else MSASubsampling(mode="none")
         ),
     )

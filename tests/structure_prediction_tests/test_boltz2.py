@@ -135,7 +135,7 @@ def test_build_chain_msa_paths_appends_deep_unpaired_with_key_minus_one(tmp_path
     }
     complex_msas = ComplexMSAs(per_chain=paired, paired=True, unpaired_per_chain=unpaired)
 
-    paths = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
+    paths, _sent = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
 
     rows_a = list(_csv.DictReader(Path(paths["A"]).read_text().splitlines()))
     assert [r["key"] for r in rows_a] == ["-1", "1", "2", "-1", "-1"]  # query, 2 paired, 2 new unpaired
@@ -165,7 +165,7 @@ def test_build_chain_msa_paths_never_pairs_an_unpaired_bundle(tmp_path):
         paired=False,
     )
 
-    paths = build_chain_msa_paths(cx, msas, str(tmp_path))
+    paths, _sent = build_chain_msa_paths(cx, msas, str(tmp_path))
 
     for chain_id, n_rows in (("A", 3), ("B", 2)):
         rows = list(_csv.DictReader(Path(paths[chain_id]).read_text().splitlines()))

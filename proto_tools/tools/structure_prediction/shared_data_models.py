@@ -8,9 +8,9 @@ when set, else positional ``chain_label(i)``; PDB tools are single-character onl
 """
 
 import logging
-from collections.abc import Collection, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -36,6 +36,9 @@ from proto_tools.utils import (
     detect_sequence_type,
     format_sequence_for_error,
 )
+
+if TYPE_CHECKING:
+    from proto_tools.tools.structure_prediction.msa_plan import SentMSA
 
 logger = logging.getLogger(__name__)
 
@@ -863,10 +866,8 @@ def normalize_output_chain_ids(
     *,
     complex_msas: ComplexMSAs | None = None,
     report_msa: bool = False,
-    msa_consumed: bool | Collection[int] = True,
+    msa_sent: "Mapping[int, SentMSA] | None" = None,
     msa_subsampling: MSASubsampling | None = None,
-    msa_ignored_reasons: Mapping[int, str] | None = None,
-    msa_paired: bool | None = None,
 ) -> Structure:
     """Remap a predicted structure's polymer chain IDs to ``resolve_chain_ids(chains)``.
 
@@ -879,8 +880,8 @@ def normalize_output_chain_ids(
     "polymer" by gemmi, appending them after the real polymer chains), or on
     count mismatch.
 
-    When ``report_msa`` is true, attach the MSA conditioning report built from
-    ``complex_msas`` and the predictor's ``msa_*`` description of what its backend consumes.
+    When ``report_msa`` is true, attach the MSA conditioning report built from ``complex_msas``
+    and ``msa_sent``, the writer's per-chain record of the rows it sent the backend.
     """
     expected_ids = [
         cid for chain, cid in zip(chains, resolve_chain_ids(chains), strict=True) if chain.entity_type != "ligand"
@@ -905,12 +906,7 @@ def normalize_output_chain_ids(
         )
 
         normalized.msa_conditioning = build_msa_conditioning(
-            chains,
-            complex_msas,
-            consumed=msa_consumed,
-            subsampling=msa_subsampling,
-            ignored_reasons=msa_ignored_reasons,
-            paired=msa_paired,
+            chains, complex_msas, msa_sent or {}, subsampling=msa_subsampling
         )
         logger.debug("%s MSA sent: %s", structure.source, describe_msa_conditioning(normalized.msa_conditioning))
     return normalized
