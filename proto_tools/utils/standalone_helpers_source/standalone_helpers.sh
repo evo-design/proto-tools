@@ -147,7 +147,7 @@ proto_install_cuda_toolkit() {
 #   2. PROTO_MODEL_CACHE:
 #      - (default/unset): {PROTO_HOME}/proto_model_cache/{toolkit}
 #      - /absolute/path:  /absolute/path/{toolkit} (shared directory)
-#        (both get a weights/ subfolder when PROTO_WEIGHTS_LAYOUT=toolkit)
+#        (both get a weights/ subfolder when <toolkit> is in PROTO_WEIGHTS_MIGRATED)
 #      - IN_ENV:          {VENV_PATH}/model_weight_cache (legacy, per-venv)
 #      - NONE:            {VENV_PATH}/weights (fallback)
 #
@@ -177,9 +177,10 @@ proto_resolve_weights_dir() {
         local _proto_home="${PROTO_HOME:-$HOME/.proto}"
         WEIGHTS_DIR="${_proto_home}/proto_model_cache/${toolkit}"
     fi
-    if [ -z "$override" ] && [ "${PROTO_WEIGHTS_LAYOUT:-}" = "toolkit" ] \
-        && [ "${PROTO_MODEL_CACHE:-}" != "IN_ENV" ] && [ "${PROTO_MODEL_CACHE:-}" != "NONE" ]; then
-        WEIGHTS_DIR="${WEIGHTS_DIR}/weights"
+    if [ -z "$override" ] && [ "${PROTO_MODEL_CACHE:-}" != "IN_ENV" ] && [ "${PROTO_MODEL_CACHE:-}" != "NONE" ]; then
+        case ",${PROTO_WEIGHTS_MIGRATED:-}," in
+            *",${toolkit},"*) WEIGHTS_DIR="${WEIGHTS_DIR}/weights" ;;
+        esac
     fi
     mkdir -p "$WEIGHTS_DIR"
 }

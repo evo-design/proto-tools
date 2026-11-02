@@ -11,7 +11,15 @@ from proto_tools.utils import weights_layout
 from proto_tools.utils.persistent_worker import _build_subprocess_env
 from proto_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
 from proto_tools.utils.tool_instance import ToolInstance
-from proto_tools.utils.weights_layout import HFRepo, TorchHubFile, WeightsDir, migrate_toolkit, weights_key
+from proto_tools.utils.weights_layout import (
+    HFHomePath,
+    HFRepo,
+    HFRepoPattern,
+    TorchHubFile,
+    WeightsDir,
+    migrate_toolkit,
+    weights_key,
+)
 
 _HELPERS_SH = Path(weights_layout.__file__).parent / "standalone_helpers_source" / "standalone_helpers.sh"
 
@@ -79,18 +87,18 @@ def test_migrated_toolkit_caches_live_in_its_folder(monkeypatch, tmp_path: Path,
     assert env["HF_HOME"] == str(folder / "huggingface")
     assert env["TORCH_HOME"] == str(folder / "torch")
     assert env["JAX_COMPILATION_CACHE_DIR"] == str(folder / "jax_cache")
-    assert env["PROTO_WEIGHTS_LAYOUT"] == "toolkit"
+    assert env["PROTO_WEIGHTS_MIGRATED"] == "mocktool"
 
 
 def test_unmigrated_toolkit_keeps_flat_layout(monkeypatch, tmp_path: Path, migrated):
-    """Toolkits not yet migrated keep the shared HF cache and get no layout marker."""
+    """Toolkits not yet migrated keep the shared HF cache, but still learn which names are migrated."""
     migrated(toolkit="othertool")
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
 
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path / "venv", toolkit="mocktool")
 
     assert env["HF_HOME"] == str(tmp_path / "huggingface")
-    assert "PROTO_WEIGHTS_LAYOUT" not in env
+    assert env["PROTO_WEIGHTS_MIGRATED"] == "othertool"
 
 
 @pytest.mark.parametrize("mode", ["IN_ENV", "NONE"])
@@ -102,7 +110,7 @@ def test_in_env_and_none_modes_ignore_layout(monkeypatch, tmp_path: Path, migrat
 
     env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path / "venv", toolkit="mocktool")
 
-    assert "PROTO_WEIGHTS_LAYOUT" not in env
+    assert "PROTO_WEIGHTS_MIGRATED" not in env
     expected_hf = str(tmp_path / "venv" / "cache" / "huggingface") if mode == "IN_ENV" else None
     assert env.get("HF_HOME") == expected_hf
 
@@ -121,7 +129,7 @@ def test_user_jax_cache_beats_toolkit_layout(monkeypatch, tmp_path: Path, migrat
 def test_worker_env_migrates_old_weights(monkeypatch, tmp_path: Path, migrated):
     """Building a migrated toolkit's env moves its old weights before the subprocess starts."""
     migrated(HFRepo("org/model"))
-    monkeypatch.setattr(weights_layout, "_migrated_this_process", set())
+    monkeypatch.setattr(weights_layout, "_migrated_roots", set())
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
     _touch(tmp_path / "huggingface" / "hub" / "models--org--model" / "config.json")
 
@@ -148,7 +156,7 @@ def test_resolve_weights_dir_toolkit_layout(monkeypatch, tmp_path: Path, explici
     else:
         monkeypatch.delenv("PROTO_MODEL_CACHE", raising=False)
         cache = tmp_path / "home" / "proto_model_cache"
-    monkeypatch.setenv("PROTO_WEIGHTS_LAYOUT", "toolkit")
+    monkeypatch.setenv("PROTO_WEIGHTS_MIGRATED", "esm2,fampnn")
     monkeypatch.delenv("PROTO_FAMPNN_WEIGHTS_DIR", raising=False)
 
     expected = str(cache / "fampnn" / "weights")
@@ -156,9 +164,36 @@ def test_resolve_weights_dir_toolkit_layout(monkeypatch, tmp_path: Path, explici
     assert _shell_weights_dir(dict(os.environ), "fampnn") == expected
 
 
+def test_resolve_weights_dir_follows_requested_name(monkeypatch, tmp_path: Path):
+    """The weights/ subfolder depends on the name asked for, so bindcraft reading alphafold2 finds it."""
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
+    monkeypatch.setenv("PROTO_WEIGHTS_MIGRATED", "alphafold2")
+    for name in ("alphafold2", "bindcraft"):
+        monkeypatch.delenv(f"PROTO_{name.upper()}_WEIGHTS_DIR", raising=False)
+    env = dict(os.environ)
+
+    assert resolve_weights_dir("alphafold2") == str(tmp_path / "alphafold2" / "weights")
+    assert resolve_weights_dir("bindcraft") == str(tmp_path / "bindcraft")
+    assert _shell_weights_dir(env, "alphafold2") == str(tmp_path / "alphafold2" / "weights")
+    # A name that merely contains a migrated name is not migrated
+    assert _shell_weights_dir(env, "alphafold") == str(tmp_path / "alphafold")
+
+
+def test_unmigrated_worker_migrates_other_toolkits(monkeypatch, tmp_path: Path, migrated):
+    """Any worker start migrates every migrated toolkit, so a reader of another's folder finds it moved."""
+    migrated(WeightsDir("mocktool"))
+    monkeypatch.setattr(weights_layout, "_migrated_roots", set())
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
+    _touch(tmp_path / "mocktool" / "params" / "model.npz")
+
+    _build_subprocess_env(device="cpu", toolkit="othertool")
+
+    assert (tmp_path / "mocktool" / "weights" / "params" / "model.npz").is_file()
+
+
 def test_resolve_weights_dir_override_ignores_layout(monkeypatch, tmp_path: Path):
     """PROTO_{TOOL}_WEIGHTS_DIR is used as given, with no weights/ appended."""
-    monkeypatch.setenv("PROTO_WEIGHTS_LAYOUT", "toolkit")
+    monkeypatch.setenv("PROTO_WEIGHTS_MIGRATED", "fampnn")
     monkeypatch.setenv("PROTO_FAMPNN_WEIGHTS_DIR", str(tmp_path / "mine"))
 
     assert resolve_weights_dir("fampnn") == str(tmp_path / "mine")
@@ -279,3 +314,21 @@ def test_migrate_drops_unreferenced_shared_blob(tmp_path: Path, migrated):
 
     assert not payload.exists()
     assert not payload.with_name(f"{xet_hash}.refs").exists()
+
+
+def test_migrate_hf_repo_pattern_and_hf_home_path(tmp_path: Path, migrated):
+    """Repo families match by glob, and library caches kept beside hub/ move with HF_HOME."""
+    migrated(HFRepoPattern("models--org--sae-*"), HFHomePath("evo2_vllm"))
+    hub = tmp_path / "huggingface" / "hub"
+    _touch(hub / "models--org--sae-k64" / "w.bin")
+    _touch(hub / "models--org--sae-k128" / "w.bin")
+    _touch(hub / "models--org--base" / "w.bin")
+    _touch(tmp_path / "huggingface" / "evo2_vllm" / "evo2_40b_hf" / "model.safetensors")
+
+    migrate_toolkit("mocktool", tmp_path)
+
+    new_hf = tmp_path / "mocktool" / "huggingface"
+    assert (new_hf / "hub" / "models--org--sae-k64" / "w.bin").is_file()
+    assert (new_hf / "hub" / "models--org--sae-k128" / "w.bin").is_file()
+    assert (new_hf / "evo2_vllm" / "evo2_40b_hf" / "model.safetensors").is_file()
+    assert (hub / "models--org--base" / "w.bin").is_file()

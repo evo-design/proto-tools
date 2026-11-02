@@ -32,8 +32,9 @@ def resolve_weights_dir(toolkit: str) -> str | None:
         2. PROTO_MODEL_CACHE:
            - (default): {PROTO_HOME}/proto_model_cache/{toolkit}/ (survives env rebuilds)
            - "/absolute/path": /absolute/path/{toolkit}/  (shared directory)
-           In both, a toolkit on the per-toolkit layout (PROTO_WEIGHTS_LAYOUT=toolkit,
-           set by the worker) gets the ``weights/`` subfolder of that directory.
+           In both, a name listed in PROTO_WEIGHTS_MIGRATED (set by the worker to the
+           toolkits on the per-toolkit layout) gets the ``weights/`` subfolder of that
+           directory, whichever toolkit is asking.
            - "IN_ENV": {TOOL_VENV_PATH}/model_weight_cache/ (legacy, per-venv)
            - "NONE": {VENV_PATH}/weights/ (pass-through, matches shell helper)
 
@@ -98,7 +99,7 @@ def resolve_weights_dir(toolkit: str) -> str | None:
 
     os.makedirs(cache_dir, exist_ok=True)
     path = os.path.join(cache_dir, toolkit)
-    if os.environ.get("PROTO_WEIGHTS_LAYOUT") == "toolkit":
+    if toolkit in os.environ.get("PROTO_WEIGHTS_MIGRATED", "").split(","):
         path = os.path.join(path, "weights")
     os.makedirs(path, exist_ok=True)
     return path

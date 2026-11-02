@@ -15,9 +15,10 @@ toolkit's folder, so toolkits that load the same checkpoints share one copy.
 
 The old layout put ``huggingface/``, ``torch/``, and ``jax_cache/{toolkit}/`` at the cache
 root, and ``resolve_weights_dir(name)`` files directly in ``{name}/``. Each migrated toolkit
-lists what it owns in ``MIGRATIONS``; ``migrate_toolkit`` moves those paths into the new
-layout the first time the toolkit's worker starts. ``scripts/migrate_proto_home.py`` runs
-the same moves by hand. ``IN_ENV`` and ``NONE`` modes are not affected.
+lists what it owns in ``MIGRATIONS``; the first worker a process starts moves every migrated
+toolkit's paths into the new layout, so a toolkit that reads another's weights (bindcraft
+reading alphafold2's) never finds them half-moved. ``scripts/migrate_proto_home.py`` runs the
+same moves by hand. ``IN_ENV`` and ``NONE`` modes are not affected.
 """
 
 import contextlib
@@ -35,9 +36,9 @@ logger = logging.getLogger(__name__)
 # Subfolders of a toolkit folder that belong to the new layout.
 LAYOUT_SUBDIRS = ("huggingface", "torch", "jax_cache", "weights")
 
-# Set in the subprocess env so the standalone weights helpers resolve {name}/weights.
-LAYOUT_ENV_VAR = "PROTO_WEIGHTS_LAYOUT"
-LAYOUT_ENV_VALUE = "toolkit"
+# Set in the subprocess env to the comma-separated migrated toolkits, so the standalone weights
+# helpers resolve {name}/weights for exactly those names, whichever toolkit is asking.
+MIGRATED_ENV_VAR = "PROTO_WEIGHTS_MIGRATED"
 
 # Toolkits switched to the per-toolkit layout. Transitional: toolkits are added one at a time
 # while their downloads are audited, and the gate is removed once every toolkit is migrated.
@@ -109,7 +110,31 @@ class TorchHubFile:
     relpath: str
 
 
-MigrationEntry = HFRepo | WeightsDir | TorchHubFile
+@dataclass(frozen=True)
+class HFRepoPattern:
+    """Hub repos in the old shared cache whose folder names match a glob.
+
+    For repo families too large to list, e.g. ``"models--biohub--ESMC-*-sae-*"``.
+
+    Attributes:
+        pattern (str): Glob matched against ``huggingface/hub/`` folder names.
+    """
+
+    pattern: str
+
+
+@dataclass(frozen=True)
+class HFHomePath:
+    """A non-repo path a library keeps under the old shared ``HF_HOME``, e.g. ``"evo2_vllm"``.
+
+    Attributes:
+        relpath (str): Path or glob relative to the old ``HF_HOME``.
+    """
+
+    relpath: str
+
+
+MigrationEntry = HFRepo | HFRepoPattern | HFHomePath | WeightsDir | TorchHubFile
 
 # What each migrated toolkit downloaded under the old layout. An entry is added in the same
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
@@ -206,6 +231,15 @@ def weights_key(toolkit: str) -> str:
     return key
 
 
+def migrated_names_env() -> dict[str, str]:
+    """Return the env var that tells ``resolve_weights_dir`` which names use ``{name}/weights``.
+
+    Returns:
+        dict[str, str]: ``PROTO_WEIGHTS_MIGRATED`` set to the comma-separated migrated toolkits.
+    """
+    return {MIGRATED_ENV_VAR: ",".join(sorted(MIGRATED_TOOLKITS))}
+
+
 def toolkit_cache_env(toolkit: str, cache_root: Path) -> dict[str, str]:
     """Return the env vars that point the HF and torch caches at ``toolkit``'s folder.
 
@@ -217,12 +251,10 @@ def toolkit_cache_env(toolkit: str, cache_root: Path) -> dict[str, str]:
         cache_root (Path): The model cache root (``PROTO_MODEL_CACHE`` path mode).
 
     Returns:
-        dict[str, str]: ``HF_HOME``, ``TORCH_HOME``, and the layout marker read by
-            ``resolve_weights_dir``.
+        dict[str, str]: ``HF_HOME`` and ``TORCH_HOME``.
     """
     folder = cache_root / weights_key(toolkit)
     return {
-        LAYOUT_ENV_VAR: LAYOUT_ENV_VALUE,
         "HF_HOME": str(folder / "huggingface"),
         "TORCH_HOME": str(folder / "torch"),
     }
@@ -248,6 +280,17 @@ def _planned_moves(toolkit: str, cache_root: Path) -> list[tuple[Path, Path]]:
         if isinstance(entry, HFRepo):
             hub = Path("huggingface") / "hub" / entry.cache_dirname
             moves.append((cache_root / hub, folder / hub))
+        elif isinstance(entry, HFRepoPattern):
+            old_hub = cache_root / "huggingface" / "hub"
+            moves.extend(
+                (repo, folder / "huggingface" / "hub" / repo.name) for repo in sorted(old_hub.glob(entry.pattern))
+            )
+        elif isinstance(entry, HFHomePath):
+            old_home = cache_root / "huggingface"
+            moves.extend(
+                (path, folder / "huggingface" / path.relative_to(old_home))
+                for path in sorted(old_home.glob(entry.relpath))
+            )
         elif isinstance(entry, TorchHubFile):
             moves.append((cache_root / "torch" / entry.relpath, folder / "torch" / entry.relpath))
         else:
@@ -334,27 +377,29 @@ def migrate_toolkit(toolkit: str, cache_root: Path, *, dry_run: bool = False) ->
         return moved
 
 
-_migrated_this_process: set[tuple[str, str]] = set()
+_migrated_roots: set[str] = set()
 _migrated_lock = threading.Lock()
 
 
-def migrate_toolkit_once(toolkit: str, cache_root: Path) -> None:
-    """Run ``migrate_toolkit`` at most once per toolkit and cache root in this process.
+def migrate_all_once(cache_root: Path) -> None:
+    """Migrate every toolkit in ``MIGRATED_TOOLKITS`` at most once per cache root in this process.
+
+    Run before any worker starts, not only the toolkit's own, because a toolkit may read another
+    toolkit's weights folder. Each toolkit costs a few ``stat`` calls when nothing is left to move.
 
     Args:
-        toolkit (str): Toolkit name.
         cache_root (Path): The model cache root.
     """
-    marker = (toolkit, str(cache_root))
     with _migrated_lock:
-        if marker in _migrated_this_process:
+        if str(cache_root) in _migrated_roots:
             return
-        _migrated_this_process.add(marker)
-    try:
-        migrate_toolkit(toolkit, cache_root)
-    except OSError as exc:
-        # A shared cache may be read-only for this user; the tool then downloads to the new layout
-        logger.warning("%s: weights migration skipped (%s); old weights stay in place", toolkit, exc)
+        _migrated_roots.add(str(cache_root))
+    for toolkit in sorted(MIGRATED_TOOLKITS):
+        try:
+            migrate_toolkit(toolkit, cache_root)
+        except OSError as exc:  # noqa: PERF203 -- one toolkit's failure must not stop the rest
+            # A shared cache may be read-only for this user; the tool then downloads to the new layout
+            logger.warning("%s: weights migration skipped (%s); old weights stay in place", toolkit, exc)
 
 
 def default_cache_root() -> Path | None:

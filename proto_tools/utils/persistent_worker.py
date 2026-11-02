@@ -22,7 +22,13 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import IO, Any
 
-from proto_tools.utils.weights_layout import migrate_toolkit_once, toolkit_cache_env, uses_toolkit_layout, weights_key
+from proto_tools.utils.weights_layout import (
+    migrate_all_once,
+    migrated_names_env,
+    toolkit_cache_env,
+    uses_toolkit_layout,
+    weights_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -557,17 +563,18 @@ def _build_subprocess_env(
             env["TORCH_HOME"] = str(Path(tool_env_path) / "cache" / "torch")
     elif cache_mode == "NONE":
         pass  # HF_HOME already copied from parent via _BASE_PASSTHROUGH
-    elif toolkit and uses_toolkit_layout(toolkit):
-        # Per-toolkit layout: every framework cache lives under {cache}/{weights_key}/
-        cache_path = Path(cache_mode)
-        migrate_toolkit_once(toolkit, cache_path)
-        env.update(toolkit_cache_env(toolkit, cache_path))
     else:
         # Absolute or relative path → shared directory
         cache_path = Path(cache_mode)
-        env["HF_HOME"] = str(cache_path / "huggingface")
-        if tool_env_path:
-            env["TORCH_HOME"] = str(cache_path / "torch")
+        migrate_all_once(cache_path)
+        env.update(migrated_names_env())
+        if toolkit and uses_toolkit_layout(toolkit):
+            # Per-toolkit layout: every framework cache lives under {cache}/{weights_key}/
+            env.update(toolkit_cache_env(toolkit, cache_path))
+        else:
+            env["HF_HOME"] = str(cache_path / "huggingface")
+            if tool_env_path:
+                env["TORCH_HOME"] = str(cache_path / "torch")
 
     if toolkit and "JAX_COMPILATION_CACHE_DIR" not in env:
         jax_cache = _jax_compilation_cache_dir(toolkit, cache_mode, tool_env_path)
