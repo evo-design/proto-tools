@@ -815,10 +815,14 @@ def run_tool(
     # Without the check a setting the device cannot honour -- a custom checkpoint on Proto, a
     # local database on any remote worker -- reaches a container and fails there instead.
     #
-    # Asked before _dispatch, where the wrapper asks it after local_only. The order is visible
-    # only for a tool that is both local_only and refuses the device by config, which none is
-    # today: such a tool would be refused here and run in-process by a direct call.
-    if is_remote(device) and (reason := cfg.remote_unsupported_reason(device)) is not None:
+    # A call answered in this process never reaches a remote worker, so the refusal does not
+    # apply; _dispatch runs it here, as a direct call through the wrapper does. A tool that is
+    # local_only and refuses remote devices by config (ncbi-reference-bundle) relies on this.
+    if (
+        is_remote(device)
+        and not runs_in_process(tool_key)
+        and (reason := cfg.remote_unsupported_reason(device)) is not None
+    ):
         return {"ok": False, "error": reason, "not_supported_on": device}
     try:
         result, ran_on = _dispatch(

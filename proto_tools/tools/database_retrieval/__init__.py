@@ -77,6 +77,7 @@ from proto_tools.tools.database_retrieval.interproscan import (
 
 # NCBI Entrez tools
 from proto_tools.tools.database_retrieval.ncbi import (
+    NCBIAssemblySummary,
     NCBIDatabase,
     NCBIEfetchConfig,
     NCBIEfetchInput,
@@ -89,10 +90,14 @@ from proto_tools.tools.database_retrieval.ncbi import (
     NCBIEsummaryOutput,
     NCBIFastaRecord,
     NCBIFetchConfig,
+    NCBIReferenceBundleConfig,
+    NCBIReferenceBundleInput,
+    NCBIReferenceBundleOutput,
     NCBISequenceDatabase,
     run_ncbi_efetch,
     run_ncbi_esearch,
     run_ncbi_esummary,
+    run_ncbi_reference_bundle,
 )
 
 # PDB tools
@@ -254,6 +259,11 @@ __all__ = [
     "NCBIEfetchInput",
     "NCBIEfetchOutput",
     "run_ncbi_efetch",
+    "NCBIAssemblySummary",
+    "NCBIReferenceBundleConfig",
+    "NCBIReferenceBundleInput",
+    "NCBIReferenceBundleOutput",
+    "run_ncbi_reference_bundle",
     # UniProt fetch
     "UniProtFetchConfig",
     "UniProtFetchInput",

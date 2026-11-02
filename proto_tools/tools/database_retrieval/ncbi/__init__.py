@@ -18,6 +18,13 @@ from proto_tools.tools.database_retrieval.ncbi.esummary import (
     NCBIEsummaryOutput,
     run_ncbi_esummary,
 )
+from proto_tools.tools.database_retrieval.ncbi.reference_bundle import (
+    NCBIAssemblySummary,
+    NCBIReferenceBundleConfig,
+    NCBIReferenceBundleInput,
+    NCBIReferenceBundleOutput,
+    run_ncbi_reference_bundle,
+)
 from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     NCBIDatabase,
     NCBIFastaRecord,
@@ -42,4 +49,9 @@ __all__ = [
     "NCBIEfetchInput",
     "NCBIEfetchOutput",
     "run_ncbi_efetch",
+    "NCBIAssemblySummary",
+    "NCBIReferenceBundleConfig",
+    "NCBIReferenceBundleInput",
+    "NCBIReferenceBundleOutput",
+    "run_ncbi_reference_bundle",
 ]
