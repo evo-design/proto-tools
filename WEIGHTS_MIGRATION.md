@@ -66,7 +66,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 53 | `structure_alignment/tmalign` |  |  |  |  |  |  |
 | 54 | `structure_alignment/usalign` |  |  |  |  |  |  |
 | 55 | `structure_design/rfd4` |  |  |  |  |  |  |
-| 56 | `structure_design/rfdiffusion3` |  |  |  |  |  |  |
+| 56 | `structure_design/rfdiffusion3` |  | rfdiffusion3 | `rfdiffusion3/rfd3_latest.ckpt` (setup.sh `foundry install`) | 3 GB | ✅✅✅✅✅ | No ~/.foundry or .env writes observed. |
 | 57 | `structure_dynamics/bioemu` |  |  |  |  |  |  |
 | 58 | `structure_prediction/alphafold2` |  |  |  |  |  |  |
 | 59 | `structure_prediction/alphafold3` |  |  |  |  |  |  |

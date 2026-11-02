@@ -61,6 +61,7 @@ MIGRATED_TOOLKITS: frozenset[str] = frozenset(
         "progen2",
         "progen3",
         "rf3",
+        "rfdiffusion3",
         "splice_transformer",
     }
 )
@@ -112,6 +113,7 @@ MigrationEntry = HFRepo | WeightsDir | TorchHubFile
 # commit that adds the toolkit to MIGRATED_TOOLKITS. The old jax_cache/{toolkit}/ moves for
 # every migrated toolkit without an entry.
 MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
+    "rfdiffusion3": (WeightsDir("rfdiffusion3"),),
     "rf3": (WeightsDir("rf3"),),
     "ccd_lookup": (WeightsDir("ccd_lookup"),),
     "caliby": (WeightsDir("caliby"),),
