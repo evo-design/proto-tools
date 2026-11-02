@@ -2,6 +2,8 @@
 
 # Paperclip
 
+![Paperclip](https://proto-bio.github.io/proto-assets/images/tool/paperclip/hero.png)
+
 > [!NOTE]
 > **License:** Paperclip retrieves data from literature records returned by Paperclip, distributed under source-specific terms. Attribution to literature records returned by Paperclip is required when the data is redistributed. The client wrapper code is MIT-licensed. Please refer to [the data terms](https://paperclip.gxl.ai/) for full terms.
 
