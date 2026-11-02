@@ -1383,8 +1383,7 @@ __all__ = [
     "normalize_alleles",
     "run_netmhcpan_peptides",
     "run_netmhcpan_protein",
-    # CRISPRtracrRNA
-    # CRISPR tools
+    # CRISPRGuides
     "CRISPRGuideCandidate",
     "CRISPRGuideEnumerationConfig",
     "CRISPRGuideEnumerationInput",
@@ -1392,6 +1391,7 @@ __all__ = [
     "CRISPRGuideRegion",
     "CRISPRGuideRegionResult",
     "run_crispr_guides_enumerate",
+    # CRISPRtracrRNA
     "CrisprTracrRNAConfig",
     "CrisprTracrRNAInput",
     "CrisprTracrRNAOutput",
