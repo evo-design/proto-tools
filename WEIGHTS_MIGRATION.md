@@ -61,7 +61,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 48 | `sequence_scoring/puffin` |  | puffin | `puffin/puffin_repo/` (setup.sh git clone; weights at resources/puffin.pth) | 5 MB | ✅✅✅✅✅ | Separate pre-existing bug: env lacks `six` (selene_sdk import fails); installed by hand for testing only. |
 | 49 | `sequence_scoring/segmasker` |  |  |  |  |  |  |
 | 50 | `structure_alignment/foldmason` |  |  |  |  |  |  |
-| 51 | `structure_alignment/foldseek` |  |  |  |  |  |  |
+| 51 | `structure_alignment/foldseek` |  | foldseek | `foldseek/prostt5/{weights/prostt5-f16.gguf,.proto-ready}` (runtime, FASTA inputs only) | 2 GB | ✅✅✅✅✅ | Sub-model: ProstT5 only for FASTA input; verified with FASTA input. Separate bug: FASTA-mode easy-cluster then fails (issue filed). |
 | 52 | `structure_alignment/pymol_rmsd` |  |  |  |  |  |  |
 | 53 | `structure_alignment/tmalign` |  |  |  |  |  |  |
 | 54 | `structure_alignment/usalign` |  |  |  |  |  |  |
