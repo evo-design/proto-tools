@@ -23,9 +23,11 @@ PROTO_HOME/                   (default: ~/.proto/)
 │   │   ├── huggingface/      HF_HOME for this toolkit
 │   │   ├── torch/            TORCH_HOME for this toolkit
 │   │   ├── jax_cache/        compiled JAX programs (JAX_COMPILATION_CACHE_DIR)
+│   │   ├── compile_cache/    the toolkit's Triton, TorchInductor, vLLM, ... kernels
 │   │   └── weights/          everything else the toolkit downloads (resolve_weights_dir)
 │   └── databases/            provisioned MMseqs2 databases (override: PROTO_DATABASES_DIR)
 ├── proto_tool_envs/          micromamba-managed tool venvs
+├── compile_cache/            driver-level caches shared by every tool (CUDA_CACHE_PATH, ...)
 ├── uv_cache/                 uv package download cache (UV_CACHE_DIR)
 ├── pip_cache/                pip HTTP cache (PIP_CACHE_DIR)
 └── .micromamba/              micromamba binary + package cache
@@ -90,6 +92,17 @@ JAX_COMPILATION_CACHE_DIR=
 Leave the value truly empty. JAX treats an empty value as "off", but a space makes it write cache files into the working directory.
 
 A cached model only matches the GPU type and JAX version that compiled it, so a mismatch just triggers a fresh compile, never a wrong result. That also makes the cache safe to share between users on the same model cache. It grows as you run new input sizes, GPUs, and JAX versions; you can delete any toolkit's `jax_cache/` at any time, and the next run recompiles.
+
+## Compile caches
+
+Libraries that compile kernels on first use keep a cache of the results, by default in your home directory or `/tmp`. proto-tools points each one under `PROTO_HOME` instead, so a tool's disk use stays where you can see and delete it:
+
+| Kind | Variables | Location |
+|---|---|---|
+| Built from one toolkit's model code, against its env's library versions | `TRITON_CACHE_DIR`, `TORCHINDUCTOR_CACHE_DIR`, `TORCH_EXTENSIONS_DIR`, `VLLM_CACHE_ROOT`, `FLASHINFER_WORKSPACE_BASE`, `CUPY_CACHE_DIR`, `NUMBA_CACHE_DIR` | `proto_model_cache/{toolkit}/compile_cache/` |
+| General: the GPU driver's JIT cache and torch's generic kernels | `CUDA_CACHE_PATH`, `PYTORCH_KERNEL_CACHE_PATH` | `PROTO_HOME/compile_cache/` (per user) |
+
+Like the JAX cache, every entry is keyed on the GPU and library versions, so a mismatch recompiles rather than giving a wrong result, and any of these folders can be deleted at any time. A value you set for one of these variables in your shell is used as-is. `IN_ENV` mode keeps the toolkit-specific caches in `{venv}/compile_cache/`; `NONE` mode leaves every library's default.
 
 ## Modes
 

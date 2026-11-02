@@ -8,6 +8,7 @@ Every framework cache a toolkit writes to lands in one folder named by its weigh
     ├── huggingface/   HF_HOME
     ├── torch/         TORCH_HOME
     ├── jax_cache/     JAX_COMPILATION_CACHE_DIR
+    ├── compile_cache/ Triton, TorchInductor, vLLM, ... (COMPILE_CACHE_VARS)
     └── weights/       resolve_weights_dir()
 
 The weights key is the toolkit name unless ``standalone/weights_key.txt`` names another
@@ -34,7 +35,30 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Subfolders of a toolkit folder that belong to the new layout.
-LAYOUT_SUBDIRS = ("huggingface", "torch", "jax_cache", "weights")
+LAYOUT_SUBDIRS = ("huggingface", "torch", "jax_cache", "compile_cache", "weights")
+
+# JIT and compile caches that libraries keep in ~ or /tmp by default. Every entry is a cache:
+# deleting it only costs a recompile.
+#
+# Toolkit-specific: artifacts compiled from the toolkit's own model code against its env's library
+# versions, so they go in the toolkit's compile_cache/. Extensions are keyed by name, so sharing
+# them across envs with different torch versions would load the wrong build.
+COMPILE_CACHE_VARS: dict[str, str] = {
+    "TRITON_CACHE_DIR": "triton",  # ~/.triton/cache
+    "TORCHINDUCTOR_CACHE_DIR": "torchinductor",  # /tmp/torchinductor_$USER
+    "TORCH_EXTENSIONS_DIR": "torch_extensions",  # ~/.cache/torch_extensions
+    "VLLM_CACHE_ROOT": "vllm",  # ~/.cache/vllm
+    "FLASHINFER_WORKSPACE_BASE": "flashinfer",  # ~/.cache/flashinfer
+    "CUPY_CACHE_DIR": "cupy",  # ~/.cupy/kernel_cache
+    "NUMBA_CACHE_DIR": "numba",  # __pycache__ beside the source
+}
+
+# General: depend on the GPU driver and generic kernels, not on any model, so one per-user copy
+# under PROTO_HOME/compile_cache/ serves every toolkit (not PROTO_MODEL_CACHE, which teams share).
+GENERAL_COMPILE_CACHE_VARS: dict[str, str] = {
+    "CUDA_CACHE_PATH": "cuda",  # ~/.nv/ComputeCache: the driver's JIT cache for any CUDA code
+    "PYTORCH_KERNEL_CACHE_PATH": "torch_kernels",  # ~/.cache/torch/kernels
+}
 
 
 @dataclass(frozen=True)
@@ -252,6 +276,19 @@ def weights_key(toolkit: str) -> str:
     if not key:
         raise ValueError(f"weights_key.txt for toolkit {toolkit!r} is empty ({marker})")
     return key
+
+
+def compile_cache_env(base: Path, variables: dict[str, str] = COMPILE_CACHE_VARS) -> dict[str, str]:
+    """Return compile-cache variables pointed at subfolders of ``base``.
+
+    Args:
+        base (Path): A ``compile_cache/`` folder (the toolkit's, or ``PROTO_HOME``'s for general ones).
+        variables (dict[str, str]): Variable to subfolder name.
+
+    Returns:
+        dict[str, str]: Environment variable to directory.
+    """
+    return {var: str(base / sub) for var, sub in variables.items()}
 
 
 def toolkit_cache_env(toolkit: str, cache_root: Path) -> dict[str, str]:

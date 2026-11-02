@@ -339,3 +339,46 @@ def test_toolkits_to_migrate_includes_old_jax_caches(tmp_path: Path, migrated):
     migrate_toolkit("jaxtool", tmp_path)
 
     assert (tmp_path / "jaxtool" / "jax_cache" / "entry").is_file()
+
+
+# ── compile caches ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "mode, expected",
+    [("{tmp}/cache", "{tmp}/cache/mocktool/compile_cache"), ("IN_ENV", "{tmp}/venv/compile_cache"), ("NONE", None)],
+)
+def test_compile_caches_follow_model_cache(monkeypatch, tmp_path: Path, mode, expected):
+    """Triton, TorchInductor, CUDA, vLLM, ... caches go in the toolkit folder; NONE leaves them alone."""
+    monkeypatch.setenv("PROTO_MODEL_CACHE", mode.format(tmp=tmp_path))
+    for var in weights_layout.COMPILE_CACHE_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+    env = _build_subprocess_env(device="cpu", tool_env_path=tmp_path / "venv", toolkit="mocktool")
+
+    for var, sub in weights_layout.COMPILE_CACHE_VARS.items():
+        assert env.get(var) == (expected and f"{expected.format(tmp=tmp_path)}/{sub}")
+
+
+def test_user_compile_cache_wins(monkeypatch, tmp_path: Path):
+    """A compile-cache location the user set in their shell is passed through, in every mode."""
+    monkeypatch.setenv("TRITON_CACHE_DIR", "/custom/triton")
+    for mode in (str(tmp_path), "NONE"):
+        monkeypatch.setenv("PROTO_MODEL_CACHE", mode)
+        env = _build_subprocess_env(device="cpu", toolkit="mocktool")
+        assert env["TRITON_CACHE_DIR"] == "/custom/triton"
+
+
+@pytest.mark.parametrize("mode", ["{tmp}/cache", "IN_ENV", "NONE"])
+def test_general_compile_caches_are_shared_under_proto_home(monkeypatch, tmp_path: Path, mode):
+    """Driver-level caches (CUDA JIT) are one per-user folder, not per toolkit; NONE leaves them alone."""
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("PROTO_MODEL_CACHE", mode.format(tmp=tmp_path))
+    for var in weights_layout.GENERAL_COMPILE_CACHE_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+    envs = [_build_subprocess_env(device="cpu", tool_env_path=tmp_path / "venv", toolkit=tk) for tk in ("a", "b")]
+
+    for var, sub in weights_layout.GENERAL_COMPILE_CACHE_VARS.items():
+        expected = None if mode == "NONE" else str((tmp_path / "home").resolve() / "compile_cache" / sub)
+        assert envs[0].get(var) == envs[1].get(var) == expected

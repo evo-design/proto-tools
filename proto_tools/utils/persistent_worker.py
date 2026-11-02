@@ -22,7 +22,14 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import IO, Any
 
-from proto_tools.utils.weights_layout import migrate_all_once, toolkit_cache_env, weights_key
+from proto_tools.utils.weights_layout import (
+    COMPILE_CACHE_VARS,
+    GENERAL_COMPILE_CACHE_VARS,
+    compile_cache_env,
+    migrate_all_once,
+    toolkit_cache_env,
+    weights_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -422,6 +429,28 @@ def _jax_compilation_cache_dir(toolkit: str, cache_mode: str, tool_env_path: Pat
     return str(Path(cache_mode) / weights_key(toolkit) / "jax_cache")
 
 
+def _compile_cache_dir(toolkit: str, cache_mode: str, tool_env_path: Path | str | None) -> Path | None:
+    """Return the folder for ``toolkit``'s JIT and compile caches, or ``None`` to leave them alone.
+
+    Follows ``PROTO_MODEL_CACHE`` like the JAX cache: ``{cache}/{weights_key}/compile_cache`` in path
+    mode, ``{venv}/compile_cache`` in ``IN_ENV`` mode, and nothing in ``NONE`` mode, where the
+    libraries keep their own defaults.
+
+    Args:
+        toolkit (str): Toolkit name.
+        cache_mode (str): Resolved ``PROTO_MODEL_CACHE`` value: a directory, ``"IN_ENV"``, or ``"NONE"``.
+        tool_env_path (Path | str | None): The tool's venv, used by ``IN_ENV`` mode.
+
+    Returns:
+        Path | None: The compile-cache folder, or ``None``.
+    """
+    if cache_mode == "NONE":
+        return None
+    if cache_mode == "IN_ENV":
+        return Path(tool_env_path) / "compile_cache" if tool_env_path else None
+    return Path(cache_mode) / weights_key(toolkit) / "compile_cache"
+
+
 def _build_subprocess_env(
     device: str = "cpu",
     tool_env_path: Path | str | None = None,
@@ -572,6 +601,18 @@ def _build_subprocess_env(
         jax_cache = _jax_compilation_cache_dir(toolkit, cache_mode, tool_env_path)
         if jax_cache:
             env["JAX_COMPILATION_CACHE_DIR"] = jax_cache
+
+    # JIT/compile caches go under PROTO_HOME rather than ~ or /tmp: toolkit-specific ones in the
+    # toolkit's folder, general ones (CUDA driver JIT) in one per-user folder. A value the user set
+    # in their shell still wins; NONE mode leaves the library defaults.
+    compile_dir = _compile_cache_dir(toolkit, cache_mode, tool_env_path) if toolkit else None
+    defaults = compile_cache_env(compile_dir) if compile_dir is not None else {}
+    if cache_mode != "NONE":
+        defaults |= compile_cache_env(get_proto_home() / "compile_cache", GENERAL_COMPILE_CACHE_VARS)
+    for var in (*COMPILE_CACHE_VARS, *GENERAL_COMPILE_CACHE_VARS):
+        value = os.environ.get(var) or defaults.get(var)
+        if value:
+            env[var] = value
 
     # Inject compute environment detection (hardware-aware PyTorch/JAX specs)
     from proto_tools.utils.compute_deps import detect_compute_environment
