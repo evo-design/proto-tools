@@ -19,6 +19,11 @@ from tests.conftest import benchmark_twice
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 
+def _reverse_complement(sequence: str) -> str:
+    """Return the reverse complement of a DNA sequence."""
+    return sequence.translate(str.maketrans("ACGT", "TGCA"))[::-1]
+
+
 def test_input_contract_normalizes_rna_and_rejects_nonuniform_guides() -> None:
     inputs = CRISPRitzSearchInput(guides="ACGU", reference_fasta="reference.fna")
     assert inputs.guides == ["ACGT"]
@@ -124,6 +129,27 @@ def test_parser_preserves_joint_bulge_type_and_converts_to_1_indexed_coordinates
     assert hit["bulge_type"] == "dna_rna"
     assert hit["crispritz_bulge_type"] == "RNA,DNA"
     assert (hit["start"], hit["end"]) == (1, 23)
+
+
+@pytest.mark.integration
+def test_minus_strand_hit_lands_on_the_expected_reference_bases(tmp_path: Path) -> None:
+    """Search a reference whose only exact target sits on the minus strand."""
+    guide = "GACTGCATTGCATGACTGCA"
+    minus_site = "CCA" + _reverse_complement(guide)
+    sequence = "TTTT" + minus_site + "TTTT"
+    reference = tmp_path / "reference.fasta"
+    reference.write_text(f">synthetic_chr\n{sequence}\n")
+
+    result = run_crispritz_search(
+        CRISPRitzSearchInput(guides=[guide], reference_fasta=str(reference)),
+        CRISPRitzSearchConfig(max_mismatches=0, max_dna_bulges=0, max_rna_bulges=0),
+    )
+
+    exact = [hit for hit in result.hits if hit.total_edits == 0]
+    assert [hit.strand for hit in exact] == ["-"]
+    [hit] = exact
+    assert (hit.start, hit.end) == (5, 27)
+    assert _reverse_complement(sequence[hit.start - 1 : hit.end]) == f"{guide}TGG"
 
 
 @pytest.mark.benchmark("crispritz-search")
