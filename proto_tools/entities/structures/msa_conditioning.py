@@ -122,3 +122,14 @@ class MSAConditioning(BaseModel):
         if not modes:
             return "none"
         return modes.pop() if len(modes) == 1 else "mixed"
+
+    def with_renamed_chains(self, mapping: dict[str, str]) -> "MSAConditioning":
+        """A copy whose chain IDs follow a structure's chain rename (``old -> new``)."""
+        chains = [
+            chain.model_copy(update={"chain_id": mapping.get(chain.chain_id, chain.chain_id)}) for chain in self.chains
+        ]
+        return self.model_copy(update={"chains": chains}, deep=True)
+
+    def select_chains(self, chain_ids: set[str]) -> "MSAConditioning":
+        """A copy reporting only the given chains, for a structure cut down to them."""
+        return self.model_copy(update={"chains": [c for c in self.chains if c.chain_id in chain_ids]}, deep=True)

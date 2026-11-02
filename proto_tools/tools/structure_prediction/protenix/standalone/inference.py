@@ -374,12 +374,11 @@ class ProtenixModel:
         from protenix.data.msa.msa_utils import MSA_GAP_IDX  # type: ignore[import-not-found]
 
         predict = runner.predict
-        logged: set[str] = set()
 
         def predict_logging_msa_rows(data: Any) -> Any:
-            sent = self._msa_rows_sent.get(data["sample_name"])
-            if sent is not None and data["sample_name"] not in logged:
-                logged.add(data["sample_name"])
+            # Popped so each call logs a job once; job names repeat across calls to a cached worker.
+            sent = self._msa_rows_sent.pop(data["sample_name"], None)
+            if sent is not None:
                 features = data["input_feature_dict"]
                 msa, asym = features["msa"], features["asym_id"]
                 loaded = {chain: int((msa[:, asym == int(chain)] != MSA_GAP_IDX).any(dim=1).sum()) for chain in sent}

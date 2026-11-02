@@ -697,7 +697,7 @@ class Structure(BaseModel):
             b_factor_type=self.b_factor_type,
             source=self.source,
             metrics=self.metrics.model_copy(deep=True),
-            msa_conditioning=self.msa_conditioning.model_copy(deep=True) if self.msa_conditioning else None,
+            msa_conditioning=self.msa_conditioning.select_chains(keep) if self.msa_conditioning else None,
         )
 
     def with_renamed_chains(self, mapping: dict[str, str]) -> Structure:
@@ -754,7 +754,7 @@ class Structure(BaseModel):
             b_factor_type=self.b_factor_type,
             source=self.source,
             metrics=self.metrics.model_copy(deep=True),
-            msa_conditioning=self.msa_conditioning.model_copy(deep=True) if self.msa_conditioning else None,
+            msa_conditioning=self.msa_conditioning.with_renamed_chains(mapping) if self.msa_conditioning else None,
         )
 
     @classmethod

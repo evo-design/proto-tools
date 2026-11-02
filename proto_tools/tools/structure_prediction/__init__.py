@@ -48,6 +48,7 @@ from proto_tools.tools.structure_prediction.esmfold2 import (
     ESMFold2Output,
     run_esmfold2,
 )
+from proto_tools.tools.structure_prediction.msa_plan import SentMSA
 from proto_tools.tools.structure_prediction.msa_reporting import build_msa_conditioning
 from proto_tools.tools.structure_prediction.opendde import (
     OpenDDEConfig,
@@ -170,6 +171,7 @@ __all__ = [
     "StructurePredictionConfig",
     "StructurePredictionInput",
     "StructurePredictionOutput",
+    "SentMSA",
     "build_msa_conditioning",
     # Dispatch
     "predict_structures",

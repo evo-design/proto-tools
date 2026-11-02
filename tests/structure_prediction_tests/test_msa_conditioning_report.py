@@ -68,6 +68,26 @@ def test_ignored_alignment_does_not_condition_the_structure():
     assert report.chains[0].ignored_reason == "no alignment rows reached the backend"
 
 
+def test_unused_homolog_rows_warn_once_without_failing(caplog, monkeypatch):
+    """A sweep that hands every predictor the same MSAs is warned once per reason, not stopped."""
+    import logging
+
+    from proto_tools.tools.structure_prediction import msa_reporting
+
+    monkeypatch.setattr(msa_reporting, "_WARNED_UNUSED", set())
+    chains = [Chain(sequence="AAA", entity_type="protein", id=chain_id) for chain_id in "ABC"]
+    msas = ComplexMSAs(per_chain={0: _msa("AAA", "AAG"), 1: _msa("AAA", "AAT")}, requested_chain_indices=[0, 1, 2])
+    sent = {0: SentMSA(ignored_reason="single-sequence model"), 1: SentMSA(rows=2)}
+    with caplog.at_level(logging.DEBUG, logger="proto_tools"):
+        report = build_msa_conditioning(chains, msas, sent, tool="tool-prediction")
+        build_msa_conditioning(chains, msas, sent, tool="tool-prediction")
+    assert [chain.status for chain in report.chains] == ["ignored", "consumed", "ignored"]
+    # Chain C was requested but carried no rows, so nothing went unused; the repeat drops to DEBUG.
+    records = [r for r in caplog.records if "were not used" in r.getMessage()]
+    assert [r.levelno for r in records] == [logging.WARNING, logging.DEBUG]
+    assert records[0].getMessage() == "tool-prediction: MSA rows for chain(s) A were not used: single-sequence model"
+
+
 def test_nonprotein_complex_has_not_applicable_msa_conditioning():
     report = build_msa_conditioning([Chain(sequence="ACGT", entity_type="dna")], None, {})
     assert (report.coverage, report.chains, report.subsampling.mode) == ("not_applicable", [], "none")
@@ -197,19 +217,23 @@ def test_boltz2_records_appended_depth_and_identical_chains_share_a_file(tmp_pat
     assert sent == {0: SentMSA(rows=2, unpaired_rows=1, paired=True), 1: SentMSA(rows=2, unpaired_rows=1, paired=True)}
 
 
-def test_structure_transforms_keep_the_conditioning_report():
+def test_structure_transforms_carry_the_conditioning_report_for_their_chains():
+    """Renames relabel the report's chains and selections drop the chains they remove."""
+    from tests._structure_fixtures import synthetic_cif
+
     structure = normalize_output_chain_ids(
-        Structure(structure=_PDB, structure_format="pdb"),
-        [Chain(sequence="AAA", entity_type="protein")],
-        complex_msas=ComplexMSAs(per_chain={0: MSA(aligned_sequences=["AAA", "AAG"])}),
+        Structure(structure=synthetic_cif(["A", "B"]), structure_format="cif"),
+        [Chain(sequence="AAA", entity_type="protein"), Chain(sequence="GGG", entity_type="protein")],
+        complex_msas=ComplexMSAs(per_chain={0: _msa("AAA", "AAG"), 1: _msa("GGG", "GGA")}),
         report_msa=True,
+        msa_sent={0: SentMSA(rows=2), 1: SentMSA(rows=2)},
     )
-    for derived in (
-        structure.select_chains("A"),
-        structure.with_renamed_chains({"A": "B"}),
-        Structure(structure=structure),
-    ):
-        assert derived.msa_conditioning == structure.msa_conditioning
+    assert Structure(structure=structure).msa_conditioning == structure.msa_conditioning
+    renamed = structure.with_renamed_chains({"A": "X"}).msa_conditioning
+    assert [chain.chain_id for chain in renamed.chains] == ["X", "B"]
+    selected = structure.select_chains("B").msa_conditioning
+    assert [(chain.chain_index, chain.chain_id) for chain in selected.chains] == [(1, "B")]
+    assert selected.coverage == "full"
 
 
 @pytest.mark.parametrize(

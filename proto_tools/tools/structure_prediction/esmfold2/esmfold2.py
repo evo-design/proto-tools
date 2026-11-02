@@ -361,8 +361,6 @@ def _run_esmfold2_on_complex(
         # Deep per-chain unpaired MSAs ride alongside the paired rows for block-diagonal depth.
         if unpaired_per_chain:
             unpaired_payload = _serialize_msas_for_worker(unpaired_per_chain)
-    elif config.model_checkpoint == "esmfold2-fast" and per_chain_msas:
-        logger.warning("ESMFold2-Fast is single-sequence; ignoring supplied MSAs.")
 
     input_data: dict[str, Any] = {
         "operation": "predict",

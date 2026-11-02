@@ -312,7 +312,7 @@ def test_boltz2_prediction_reports_msa_subsampling(monkeypatch):
 
 
 def test_boltz2_affinity_reports_msa_conditioning(monkeypatch):
-    """Affinity now returns the same MSA evidence contract as structure prediction."""
+    """Affinity attaches the same MSA conditioning report as structure prediction."""
     sequence = "MKTAYIAKQR"
     complex_ = Complex(chains=[Chain(sequence=sequence, entity_type="protein"), Fragment(ccd_code="ATP")])
     complex_msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[sequence, sequence])})

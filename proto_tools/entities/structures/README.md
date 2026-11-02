@@ -75,6 +75,7 @@ pLDDT is often stored in the B-factor column of structure files.
 | `b_factor_type` | `BFactorType` | What the B-factor column represents (default: `UNSPECIFIED`) |
 | `metrics` | `Dict[str, float] \| None` | Optional metrics dictionary (e.g., scores, confidence) |
 | `source` | `str \| None` | Optional source identifier |
+| `msa_conditioning` | `MSAConditioning \| None` | Set by MSA-capable predictors: per protein chain, the MSA rows sent to the model and whether they were used. `None` means no report was attached, not that no MSA was used. |
 
 **Loading from file:**
 

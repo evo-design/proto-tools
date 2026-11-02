@@ -103,7 +103,8 @@ def build_chain_msa_paths(
             paired_paths[chain_id] = paired_path
         sent[ch_idx] = SentMSA(
             rows=len(paired_msa) if paired_msa is not None else file_rows,
-            unpaired_rows=file_rows - 1 if paired else 0,
+            # Without a deep unpaired MSA the unpaired file repeats the paired rows: no extra depth.
+            unpaired_rows=file_rows - 1 if paired and chain.unpaired is not None else 0,
             paired=paired,
             ignored_reason=short_chain_reason(chain.chain, "OpenDDE"),
         )

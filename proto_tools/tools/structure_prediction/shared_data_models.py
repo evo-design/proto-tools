@@ -557,12 +557,12 @@ class StructurePredictionOutput(BaseToolOutput):
 # Shared preprocessing
 # ============================================================================
 def _validate_complex_msas_match_chains(complexes: list[Complex], msas: list[ComplexMSAs]) -> None:
-    """Validate that each pre-supplied per-chain MSA's query row matches its chain.
+    """Validate that each pre-supplied MSA's query row matches its chain.
 
     Pre-supplied MSAs (``StructurePredictionInput.msas``) bypass ColabFold search and
     its query-row remap, so a mis-keyed MSA would be folded onto the wrong chain. Each
-    ``per_chain[ch_idx]`` must reference a protein chain at ``complexes[i].chains[ch_idx]``
-    and carry that chain's sequence as its first (query) row.
+    ``per_chain[ch_idx]`` and ``unpaired_per_chain[ch_idx]`` must reference a protein chain at
+    ``complexes[i].chains[ch_idx]`` and carry that chain's sequence as its first (query) row.
 
     Args:
         complexes (list[Complex]): Complexes the MSAs were supplied for.
@@ -575,7 +575,8 @@ def _validate_complex_msas_match_chains(complexes: list[Complex], msas: list[Com
     if len(msas) != len(complexes):
         raise ValueError(f"Pre-supplied msas length ({len(msas)}) does not match complexes length ({len(complexes)}).")
     for comp_idx, (comp, complex_msas) in enumerate(zip(complexes, msas, strict=True)):
-        for ch_idx, msa in complex_msas.per_chain.items():
+        keyed = [*complex_msas.per_chain.items(), *(complex_msas.unpaired_per_chain or {}).items()]
+        for ch_idx, msa in keyed:
             if ch_idx >= len(comp.chains):
                 raise ValueError(
                     f"Pre-supplied MSA for complex {comp_idx} references chain index {ch_idx}, "
@@ -889,7 +890,7 @@ def normalize_output_chain_ids(
         )
 
         normalized.msa_conditioning = build_msa_conditioning(
-            chains, complex_msas, msa_sent or {}, subsampling=msa_subsampling
+            chains, complex_msas, msa_sent or {}, subsampling=msa_subsampling, tool=structure.source
         )
         logger.debug("%s MSA sent: %s", structure.source, describe_msa_conditioning(normalized.msa_conditioning))
     return normalized

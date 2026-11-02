@@ -292,10 +292,11 @@ def test_preprocess_heterocomplex_unpaired_none_when_search_omits_it(monkeypatch
     assert out.msas[0].unpaired_per_chain is None
 
 
-def test_validate_complex_msas_rejects_wrong_query_row():
-    """A pre-supplied MSA whose query row is not the chain sequence is rejected."""
+@pytest.mark.parametrize("field", ["per_chain", "unpaired_per_chain"])
+def test_validate_complex_msas_rejects_wrong_query_row(field):
+    """A pre-supplied MSA, primary or deep unpaired, whose query row is not its chain is rejected."""
     complexes = [_protein_complex(_SEQ_A)]
-    msas = [ComplexMSAs(per_chain={0: MSA(aligned_sequences=[_SEQ_B, _SEQ_B])})]
+    msas = [ComplexMSAs(**{"per_chain": {}, field: {0: MSA(aligned_sequences=[_SEQ_B, _SEQ_B])}})]
 
     with pytest.raises(ValueError, match="has query row"):
         sdm._validate_complex_msas_match_chains(complexes, msas)

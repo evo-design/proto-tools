@@ -1,5 +1,6 @@
 """Build MSA conditioning reports from what each predictor's writer sent its backend."""
 
+import logging
 from collections.abc import Mapping, Sequence
 
 from proto_tools.entities.ligands import Fragment
@@ -19,6 +20,11 @@ from proto_tools.tools.structure_prediction.msa_plan import (
 )
 from proto_tools.tools.structure_prediction.shared_data_models import Chain, ComplexMSAs
 
+logger = logging.getLogger(__name__)
+
+# (tool, reason) pairs already warned about; repeats log at DEBUG so batches and sweeps warn once.
+_WARNED_UNUSED: set[tuple[str | None, str]] = set()
+
 
 def build_msa_conditioning(
     chains: Sequence[Chain | Fragment],
@@ -26,6 +32,7 @@ def build_msa_conditioning(
     sent: Mapping[int, SentMSA],
     *,
     subsampling: MSASubsampling | None = None,
+    tool: str | None = None,
 ) -> MSAConditioning:
     """Describe each protein chain's MSA from the rows its writer sent the backend.
 
@@ -34,6 +41,8 @@ def build_msa_conditioning(
     search found no homologs, and ``ignored`` otherwise. Requested chains are the bundle's
     ``requested_chain_indices``, else the chains it carries rows for. ``subsampling`` is the
     backend's row-selection policy; it is reported as ``none`` when nothing conditions on an MSA.
+    Homolog rows a chain had but the backend did not use are logged as a warning naming ``tool``,
+    once per tool and reason per process; repeats log at DEBUG.
     """
     present = set(complex_msas.per_chain) | set(complex_msas.unpaired_per_chain or {}) if complex_msas else set()
     if complex_msas is not None and complex_msas.requested_chain_indices is not None:
@@ -43,6 +52,7 @@ def build_msa_conditioning(
     source = complex_msas.source if complex_msas is not None else "none"
 
     evidence: list[ChainMSAConditioning] = []
+    unused: list[tuple[str, str]] = []
     for chain in protein_chain_msas(chains, complex_msas):
         record = sent.get(chain.index, SentMSA())
         bundle_rows = max(len(chain.primary or []), len(chain.unpaired or []))
@@ -55,6 +65,9 @@ def build_msa_conditioning(
             status = "no_hits"
         else:
             status = "ignored"
+        reason = record.ignored_reason or "no alignment rows reached the backend"
+        if status == "ignored" and bundle_rows > 1:
+            unused.append((chain.chain_id, reason))
         mode: MSAMode = (
             "paired" if record.paired and record.rows > 1 else "unpaired" if has_homolog_rows(record) else "none"
         )
@@ -67,10 +80,15 @@ def build_msa_conditioning(
                 unpaired_rows=record.unpaired_rows,
                 requested_source=source if status != "not_requested" else "none",
                 mode=mode,
-                ignored_reason=(record.ignored_reason or "no alignment rows reached the backend")
-                if status == "ignored"
-                else None,
+                ignored_reason=reason if status == "ignored" else None,
             )
+        )
+    for reason in dict.fromkeys(reason for _chain_id, reason in unused):
+        chain_ids = ", ".join(chain_id for chain_id, chain_reason in unused if chain_reason == reason)
+        level = logging.DEBUG if (tool, reason) in _WARNED_UNUSED else logging.WARNING
+        _WARNED_UNUSED.add((tool, reason))
+        logger.log(
+            level, "%sMSA rows for chain(s) %s were not used: %s", f"{tool}: " if tool else "", chain_ids, reason
         )
     # A backend's row-selection policy only applies when something conditions on an MSA.
     if not conditions_on_msa(sent):

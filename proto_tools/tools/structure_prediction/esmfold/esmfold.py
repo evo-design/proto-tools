@@ -249,7 +249,7 @@ class ESMFoldConfig(StructurePredictionConfig):
         not architectural; the batch is auto-halved on CUDA OOM).
         Unlike AlphaFold-based models, ESMFold does not use MSAs, making it much
         faster but potentially less accurate for some targets. A precomputed
-        ``msas`` input is ignored and logs a single warning.
+        ``msas`` input is ignored and logs a warning.
     """
 
     residue_idx_offset: int = ConfigField(
@@ -275,17 +275,6 @@ class ESMFoldConfig(StructurePredictionConfig):
         ge=1,
         description="Iterative refinement passes through ESMFold. Higher = more accurate but slower.",
     )
-
-    def preprocess(self, inputs: ESMFoldInput) -> ESMFoldInput:  # type: ignore[override]
-        """Warn once if MSAs were supplied (ESMFold ignores them), then no-op."""
-        # ESMFoldGradientConfig inherits this; its input has no msas field.
-        msas = getattr(inputs, "msas", None)
-        if msas:
-            logger.warning(
-                "ESMFold is single-sequence and does not use MSAs; the %d supplied MSA(s) were ignored.",
-                len(msas),
-            )
-        return inputs
 
 
 class ESMFoldGradientCandidate(BaseModel):
@@ -710,7 +699,9 @@ def _esmfold_msa_conditioning(chains: list[Chain | Fragment], complex_msas: Comp
         for chain in protein_chain_msas(chains, complex_msas)
         if chain.primary is not None or chain.unpaired is not None
     }
-    return build_msa_conditioning(chains, complex_msas, sent, subsampling=MSASubsampling(mode="none"))
+    return build_msa_conditioning(
+        chains, complex_msas, sent, subsampling=MSASubsampling(mode="none"), tool="esmfold-prediction"
+    )
 
 
 @tool(

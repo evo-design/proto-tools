@@ -471,7 +471,8 @@ def _assign_msas_to_input_json(
 
         sent[chain_idx] = SentMSA(
             rows=len(msa) if is_paired else len(unpaired_msa),
-            unpaired_rows=len(unpaired_msa) - 1 if is_paired else 0,
+            # Without a deep unpaired MSA the unpaired file repeats the paired rows: no extra depth.
+            unpaired_rows=len(unpaired_msa) - 1 if is_paired and unpaired_msa is not msa else 0,
             paired=is_paired,
             ignored_reason=short_chain_reason(protein_chains[chain_idx], "AlphaFold3"),
         )

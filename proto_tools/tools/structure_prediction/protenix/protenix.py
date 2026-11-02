@@ -681,7 +681,8 @@ def _write_msas_to_batch_json(
                 chain_idx_to_paired_path[chain_idx] = paired_a3m_path
             sent_by_job[job_idx][chain_idx] = SentMSA(
                 rows=len(msa) if is_paired else len(unpaired_msa),
-                unpaired_rows=len(unpaired_msa) - 1 if is_paired else 0,
+                # Without a deep unpaired MSA the unpaired file repeats the paired rows: no extra depth.
+                unpaired_rows=len(unpaired_msa) - 1 if is_paired and chain.unpaired is not None else 0,
                 paired=is_paired,
                 ignored_reason=short,
             )

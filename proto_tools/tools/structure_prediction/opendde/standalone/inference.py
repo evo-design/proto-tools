@@ -312,7 +312,7 @@ class OpenDDEModel:
             num_samples (int): Independent diffusion samples (``--sample``).
             num_steps (int): Diffusion denoising steps (``--step``).
             num_cycles (int): Recycling iterations (``--cycle``).
-            use_msa (bool): Run OpenDDE's internal MSA search (``--use_msa``).
+            use_msa (bool): Featurize the supplied MSA files (``--use_msa``); every chain has one.
             use_template (bool): Run OpenDDE's template pipeline (``--use_template``).
             use_rna_msa (bool): Run OpenDDE's RNA MSA pipeline (``--use_rna_msa``).
             seed (int): Random seed (``--seeds``).

@@ -94,7 +94,7 @@ def test_esmfold2_payload_carries_deep_unpaired_msas():
 
 
 def test_esmfold2_full_checkpoint_reports_random_1024_row_draw(monkeypatch):
-    """The MSA checkpoint consumes primary rows under fold()'s default msa_max_depth=1024."""
+    """The MSA checkpoint consumes primary rows under the pinned 1024-row msa_max_depth draw."""
     from proto_tools.entities.msa import MSA
     from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import _run_esmfold2_on_complex
     from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
