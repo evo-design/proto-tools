@@ -58,7 +58,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 45 | `sequence_scoring/na_mpnn_specificity` |  |  |  |  |  |  |
 | 46 | `sequence_scoring/parade` |  | parade | `parade/*.ckpt` (runtime, MD5-checked GitHub raw) | 3 MB (utr5) | ✅✅✅✅✅ | Temp-dir fallback only when resolve_weights_dir returns None. |
 | 47 | `sequence_scoring/primer3` |  |  |  |  |  |  |
-| 48 | `sequence_scoring/puffin` |  |  |  |  |  |  |
+| 48 | `sequence_scoring/puffin` |  | puffin | `puffin/puffin_repo/` (setup.sh git clone; weights at resources/puffin.pth) | 5 MB | ✅✅✅✅✅ | Separate pre-existing bug: env lacks `six` (selene_sdk import fails); installed by hand for testing only. |
 | 49 | `sequence_scoring/segmasker` |  |  |  |  |  |  |
 | 50 | `structure_alignment/foldmason` |  |  |  |  |  |  |
 | 51 | `structure_alignment/foldseek` |  |  |  |  |  |  |
