@@ -30,7 +30,7 @@ Trace: `python scripts/trace_weight_writes.py -- proto-tools run <tool> --exampl
 | 17 | `inverse_folding/caliby` |  |  |  |  |  |  |
 | 18 | `inverse_folding/esm_if1` |  |  |  |  |  |  |
 | 19 | `inverse_folding/fampnn` |  | fampnn | `fampnn/*.pt` (setup.sh via `proto_resolve_weights_dir`) | 113 MB (3 files) | ✅✅✅✅✅ | Downloaded at env build, so step 4 rebuilds the env. Fresh download sha256-matches the migrated tree. |
-| 20 | `inverse_folding/ligandmpnn` |  |  |  |  |  |  |
+| 20 | `inverse_folding/ligandmpnn` |  | ligandmpnn | `ligandmpnn/*.pt` (setup.sh `foundry install`), `ligandmpnn/legacy/<commit>/` (runtime, original model) | 10 MB | ✅✅✅✅✅ | Foundry reads FOUNDRY_CHECKPOINT_DIRS=resolve_weights_dir. Legacy path not exercised by example; same WeightsDir covers it. |
 | 21 | `inverse_folding/proteinmpnn` |  |  |  |  |  |  |
 | 22 | `masked_models/ablang` |  |  |  |  |  |  |
 | 23 | `masked_models/codonfm` |  |  |  |  |  |  |

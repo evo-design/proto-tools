@@ -41,7 +41,7 @@ LAYOUT_ENV_VALUE = "toolkit"
 
 # Toolkits switched to the per-toolkit layout. Transitional: toolkits are added one at a time
 # while their downloads are audited, and the gate is removed once every toolkit is migrated.
-MIGRATED_TOOLKITS: frozenset[str] = frozenset({"esm2", "fampnn"})
+MIGRATED_TOOLKITS: frozenset[str] = frozenset({"esm2", "fampnn", "ligandmpnn"})
 
 
 @dataclass(frozen=True)
@@ -104,6 +104,7 @@ MIGRATIONS: dict[str, tuple[MigrationEntry, ...]] = {
         HFRepo("facebook/esm2_t48_15B_UR50D"),
     ),
     "fampnn": (WeightsDir("fampnn"),),
+    "ligandmpnn": (WeightsDir("ligandmpnn"),),
 }
 
 
