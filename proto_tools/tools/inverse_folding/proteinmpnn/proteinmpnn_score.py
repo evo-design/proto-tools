@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
+from proto_tools.tools.inverse_folding.proteinmpnn._constraints import restrict_sequence_to_readable
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
@@ -197,7 +198,13 @@ def run_proteinmpnn_score(
                 "operation": "score",
                 "pdb_path": str(pdb_path),
                 "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
-                "sequence": sequence_structure_pair.sequence,
+                "sequence": restrict_sequence_to_readable(
+                    sequence_structure_pair.structure,
+                    sequence_structure_pair.structure.get_chain_ids(),
+                    sequence_structure_pair.sequence,
+                    tool="proteinmpnn-score",
+                    allow_excluded=not config.return_logits,
+                ),
                 "seed": seed,
                 "fixed_positions": (
                     sequence_structure_pair.fixed_positions.to_residue_numbers(sequence_structure_pair.structure)

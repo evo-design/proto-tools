@@ -478,3 +478,43 @@ def test_tied_protomers_fixed_to_the_same_amino_acid_are_accepted():
     require_compatible_fixed_residues(
         structure, ["A", "B"], {"A": [2], "B": [2]}, tool="proteinmpnn-sample-homooligomer"
     )
+
+
+# ── scoring ─────────────────────────────────────────────────────────────────
+
+
+def test_scoring_trims_the_sequence_to_the_processed_positions(caplog):
+    """A scored sequence covers every observed residue; the model parses fewer."""
+    from proto_tools.tools.inverse_folding.proteinmpnn._constraints import restrict_sequence_to_readable
+
+    structure = get_gfp_structure()
+    native = structure.get_chain_sequence("A")
+    with caplog.at_level(logging.WARNING):
+        trimmed = restrict_sequence_to_readable(structure, ["A"], native, tool="proteinmpnn-score")
+
+    assert len(native) == 228 and len(trimmed) == 227
+    assert trimmed == native[:63] + native[64:], "only the chromophore is dropped"
+    assert "position 64 (CRO)" in caplog.text
+
+
+def test_scoring_refuses_logits_it_cannot_align():
+    """Logits are declared one row per sequence position, so a trimmed sequence breaks that."""
+    from proto_tools.tools.inverse_folding.proteinmpnn._constraints import restrict_sequence_to_readable
+
+    structure = get_gfp_structure()
+    with pytest.raises(ValueError, match="per-position logits cannot be aligned"):
+        restrict_sequence_to_readable(
+            structure,
+            ["A"],
+            structure.get_chain_sequence("A"),
+            tool="proteinmpnn-score",
+            allow_excluded=False,
+        )
+
+
+def test_scoring_rejects_a_sequence_that_does_not_cover_the_chain():
+    """A length mismatch against the structure is the caller's error, not the parser's."""
+    from proto_tools.tools.inverse_folding.proteinmpnn._constraints import restrict_sequence_to_readable
+
+    with pytest.raises(ValueError, match="but chains"):
+        restrict_sequence_to_readable(get_gfp_structure(), ["A"], "MVLS", tool="proteinmpnn-score")

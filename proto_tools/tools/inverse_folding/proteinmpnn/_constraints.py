@@ -216,3 +216,72 @@ def require_compatible_fixed_residues(
                 f"different residues ({detail}). Tied design produces one shared sequence, so a "
                 "fixed position must hold the same residue in every protomer."
             )
+
+
+def restrict_sequence_to_readable(
+    structure: Structure,
+    chain_ids: list[str],
+    sequence: str,
+    *,
+    tool: str,
+    allow_excluded: bool = True,
+) -> str:
+    """Drop the characters at positions ProteinMPNN's parser excludes.
+
+    A scored sequence covers every observed residue, but the model only parses the residues in
+    its own mapping, so the two lengths disagree whenever a chain holds a modified residue or
+    one missing a backbone N. Trimming keeps the sequence aligned with what is scored.
+
+    Args:
+        structure (Structure): The structure being scored against.
+        chain_ids (list[str]): Chains in the order the sequence concatenates them.
+        sequence (str): One character per observed residue across ``chain_ids``.
+        tool (str): Tool key named in the warning.
+        allow_excluded (bool): When false, excluded positions are an error rather than a
+            warning. Callers asking for per-position logits need them, since logits are
+            declared as one row per sequence position and cannot describe a trimmed sequence.
+
+    Returns:
+        str: The sequence restricted to the positions the model processes.
+
+    Raises:
+        ValueError: If ``sequence`` does not cover the chains' observed residues, or if a
+            position is excluded and ``allow_excluded`` is false.
+    """
+    readable = proteinmpnn_readable_positions(structure)
+    residues = structure.get_chain_residue_atoms()
+    expected = sum(len(residues.get(chain_id, ())) for chain_id in chain_ids)
+    if len(sequence) != expected:
+        raise ValueError(
+            f"{tool}: the sequence has {len(sequence)} residues but chains {chain_ids} hold "
+            f"{expected}. Each chain's residues must appear in order."
+        )
+
+    kept: list[str] = []
+    dropped: dict[str, list[int]] = {}
+    offset = 0
+    for chain_id in chain_ids:
+        total = len(residues.get(chain_id, ()))
+        processed = set(readable.get(chain_id, ()))
+        kept.extend(sequence[offset + p - 1] for p in range(1, total + 1) if p in processed)
+        excluded = [p for p in range(1, total + 1) if p not in processed]
+        if excluded:
+            dropped[chain_id] = excluded
+        offset += total
+
+    for chain_id, excluded in dropped.items():
+        chain_residues = residues[chain_id]
+        named = ", ".join(f"{p} ({chain_residues[p - 1].name})" for p in excluded)
+        if not allow_excluded:
+            raise ValueError(
+                f"{tool}: Chain {chain_id}, position {named} is excluded by the model's structure "
+                "parser, so per-position logits cannot be aligned to the input sequence. Score "
+                "without return_logits, or remove the excluded residues from the structure."
+            )
+        logger.warning(
+            "%s: Chain %s, position %s is excluded by the model's structure parser and is not included in the score.",
+            tool,
+            chain_id,
+            named,
+        )
+    return "".join(kept)
