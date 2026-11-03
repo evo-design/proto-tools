@@ -460,12 +460,27 @@ def test_from_design_without_readable_positions_keeps_the_strict_contract(modifi
         _MetricDesign.from_design(modified_gapped, {"A": "MKTAYIA"}, {"A"}, tool="test-sample", include_ligands=False)
 
 
-def test_from_design_rejects_a_count_matching_neither_contract(modified_gapped):
-    """A count fitting neither the chain nor the readable set errors, naming both."""
-    with pytest.raises(ValueError, match="expected to read 7 of them"):
+def test_from_design_requires_the_design_to_match_a_declared_rule_exactly(modified_gapped):
+    """A declared rule is authoritative, so any other length is an error, not a fallback.
+
+    A full-length design is rejected too: if the rule says the model reads 7 of 8 residues and
+    8 come back, the rule no longer matches the model, and guessing which 8 positions the
+    design covers is how a misaligned sequence gets through looking plausible.
+    """
+    with pytest.raises(ValueError, match="rule says it reads 7 of that chain's 8 residues"):
         _MetricDesign.from_design(
             modified_gapped,
             {"A": "MKT"},
+            {"A"},
+            tool="test-sample",
+            include_ligands=False,
+            readable_positions={"A": [1, 2, 3, 4, 5, 6, 8]},
+        )
+
+    with pytest.raises(ValueError, match="rule says it reads 7 of that chain's 8 residues"):
+        _MetricDesign.from_design(
+            modified_gapped,
+            {"A": "MKTAYIAK"},  # full chain length, but the rule says 7 are readable
             {"A"},
             tool="test-sample",
             include_ligands=False,

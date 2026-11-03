@@ -454,38 +454,40 @@ class DesignedComplex(Complex):
             if isinstance(entry, Chain) and entry.id in sequences:
                 sequence = sequences[entry.id]
                 readable = (readable_positions or {}).get(entry.id)
-                if len(sequence) != len(entry.sequence) and readable is not None and len(sequence) == len(readable):
-                    # The model skipped residues it cannot represent -- a chromophore, a
-                    # residue with no backbone N. Place the design on the positions it did
-                    # read: dropping or shifting the others would misalign everything after
-                    # the first skip, which looks like a plausible sequence rather than a bug.
+                if readable is not None:
+                    # A declared rule is authoritative: the model returns one residue per position
+                    # the rule says it reads, always. Accepting any other length would mean
+                    # guessing which positions the design covers, and a wrong guess misaligns
+                    # every residue after the first skipped one -- a plausible-looking sequence
+                    # rather than an error. A mismatch means the rule no longer matches the model.
+                    if len(sequence) != len(readable):
+                        raise ValueError(
+                            f"{tool}: the model returned {len(sequence)} residues for chain "
+                            f"{entry.id}, but this toolkit's readable_positions rule says it reads "
+                            f"{len(readable)} of that chain's {len(entry.sequence)} residues. The "
+                            "design cannot be placed back on the chain unless those agree. The rule "
+                            "most likely no longer matches the installed version of the model."
+                        )
                     sequence = _splice_design(entry.sequence, sequence, readable)
                     skipped = [p for p in range(1, len(entry.sequence) + 1) if p not in set(readable)]
-                    logger.warning(
-                        "%s: this model does not read chain %s %s %s from the structure file. "
-                        "The output keeps the input residue there, including its CCD code, rather "
-                        "than a designed amino acid. Every other position in the chain was designed.",
-                        tool,
-                        entry.id,
-                        "positions" if len(skipped) > 1 else "position",
-                        ", ".join(str(position) for position in skipped),
-                    )
-                if len(sequence) != len(entry.sequence):
+                    if skipped:
+                        logger.warning(
+                            "%s: this model does not read chain %s %s %s from the structure file. "
+                            "The output keeps the input residue there, including its CCD code, "
+                            "rather than a designed amino acid. Every other position in the chain "
+                            "was designed.",
+                            tool,
+                            entry.id,
+                            "positions" if len(skipped) > 1 else "position",
+                            ", ".join(str(position) for position in skipped),
+                        )
+                elif len(sequence) != len(entry.sequence):
                     raise ValueError(
                         f"{tool}: the model returned {len(sequence)} residues for chain {entry.id}, "
-                        f"but that chain has {len(entry.sequence)}"
-                        + (
-                            f" and this model was expected to read {len(readable)} of them. Since "
-                            f"{len(sequence)} matches neither, the design cannot be placed back on the "
-                            "chain without guessing which residues it covers. The toolkit's "
-                            "readable_positions rule most likely no longer matches the model — check it "
-                            "against the version currently installed."
-                            if readable is not None
-                            else ". Models skip residues they cannot read, such as a chromophore or a "
-                            "residue missing backbone atoms, and which ones differs by model. This "
-                            "toolkit has not declared a readable_positions rule, so the design cannot "
-                            "be placed back on the chain."
-                        )
+                        f"but that chain has {len(entry.sequence)}. Models skip residues they cannot "
+                        "read, such as a chromophore or a residue missing backbone atoms, and which "
+                        "ones differs by model. This toolkit has not declared a readable_positions "
+                        "rule, so the design cannot be placed back on the chain."
                     )
                 # A position the model did not read keeps the input's residue, so it also keeps
                 # the CCD code saying what that residue is. Without this the chain reports a bare
