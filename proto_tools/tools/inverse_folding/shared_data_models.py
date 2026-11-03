@@ -186,30 +186,6 @@ def summarize_positions(structure: Any, chain_id: str, positions: Sequence[int],
     return ", ".join(labelled) + (f", and {remainder} more" if remainder > 0 else "")
 
 
-def readable_subset(selection: Any, readable: dict[str, list[int]]) -> Any:
-    """Drop positions the model excludes from a residue selection bound for the worker.
-
-    Positions are matched by residue number, not by index, so removing one does not shift the
-    rest. An excluded position has no counterpart in the model's parsed structure and would
-    fail to resolve there.
-
-    Args:
-        selection (Any): A ``ResidueSelection``, or ``None``.
-        readable (dict[str, list[int]]): Positions the model processes, per chain ID.
-
-    Returns:
-        Any: A selection holding only processed positions, or ``None`` if nothing remains.
-    """
-    if selection is None:
-        return None
-    kept = {
-        chain_id: [p for p in positions if p in set(readable.get(chain_id, ()))]
-        for chain_id, positions in selection.chains.items()
-    }
-    kept = {chain_id: positions for chain_id, positions in kept.items() if positions}
-    return type(selection)(chains=kept) if kept else None
-
-
 def validate_residue_mapping(readable: dict[str, list[int]], structure: Any) -> None:
     """Reject a malformed residue mapping before anything relies on it.
 
@@ -283,35 +259,6 @@ class InverseFoldingConfig(BaseConfig):
         """
         del inp
         return None
-
-    def check_fixed_positions(self, inp: Any, readable: dict[str, list[int]]) -> None:
-        """Warn about fixed positions the model excludes; they are preserved anyway.
-
-        An excluded residue keeps its input identity in the output, so asking for it to stay
-        unchanged is already satisfied. It is redundant rather than wrong.
-
-        Args:
-            inp (Any): One structure input.
-            readable (dict[str, list[int]]): Positions the model processes, per chain ID.
-        """
-        selection = getattr(inp, "fixed_positions", None)
-        if selection is None:
-            return
-        for chain_id, positions in selection.chains.items():
-            excluded = sorted(set(positions) - set(readable.get(chain_id, ())))
-            if excluded:
-                logger.warning(
-                    "%s: Chain %s, position %s is excluded by the model's structure parser. "
-                    "The residue will be preserved unchanged in the output. Listing it in "
-                    "fixed_positions is unnecessary.",
-                    self.tool_key_for_messages(),
-                    chain_id,
-                    summarize_positions(inp.structure, chain_id, excluded),
-                )
-
-    def tool_key_for_messages(self) -> str:
-        """Tool key to name in diagnostics; overridden where the config serves one tool."""
-        return type(self).__name__
 
     @model_validator(mode="after")
     def resolve_batch_size(self) -> Any:
@@ -504,6 +451,11 @@ class DesignedComplex(Complex):
             if isinstance(entry, Chain) and entry.id in sequences:
                 sequence = sequences[entry.id]
                 readable = (readable_positions or {}).get(entry.id)
+                if readable_positions is not None and readable is None:
+                    raise ValueError(
+                        f"{tool}: Chain {entry.id} was redesigned but is missing from the residue "
+                        "mapping, so the returned sequence cannot be aligned to the structure."
+                    )
                 if readable is not None:
                     # A declared rule is authoritative: the model returns one residue per position
                     # the rule says it reads, always. Accepting any other length would mean
@@ -519,18 +471,6 @@ class DesignedComplex(Complex):
                             "most likely no longer matches the installed version of the model."
                         )
                     sequence = _splice_design(entry.sequence, sequence, readable)
-                    skipped = [p for p in range(1, len(entry.sequence) + 1) if p not in set(readable)]
-                    if skipped:
-                        logger.warning(
-                            "%s: this model does not read chain %s %s %s from the structure file. "
-                            "The output keeps the input residue there, including its CCD code, "
-                            "rather than a designed amino acid. Every other position in the chain "
-                            "was designed.",
-                            tool,
-                            entry.id,
-                            "positions" if len(skipped) > 1 else "position",
-                            ", ".join(str(position) for position in skipped),
-                        )
                 elif len(sequence) != len(entry.sequence):
                     raise ValueError(
                         f"{tool}: the model returned {len(sequence)} residues for chain {entry.id}, "

@@ -14,6 +14,10 @@ from pydantic import Field, model_validator
 from typing_extensions import Self
 
 from proto_tools.entities.structures.selection import ChainSelection, ResidueSelection, StructureInputBase
+from proto_tools.tools.inverse_folding.proteinmpnn._constraints import (
+    require_matching_protomers,
+    resolve_constraints,
+)
 from proto_tools.tools.inverse_folding.proteinmpnn._sampling import collect_samples, split_chain_segments
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
     ProteinMPNNDesign,
@@ -22,12 +26,15 @@ from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
     ProteinMPNNSampleConfig,
     ProteinMPNNSampleOutput,
 )
+from proto_tools.tools.inverse_folding.shared_data_models import validate_residue_mapping
 from proto_tools.tools.inverse_folding.structure_staging import StagedStructure, staged_structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolInput, InputField
 from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
+
+_TOOL_KEY = "proteinmpnn-sample-homooligomer"
 
 
 def _residue_offsets(residue_ids: list[tuple[int, str]]) -> list[tuple[int, str]]:
@@ -330,12 +337,16 @@ def run_proteinmpnn_sample_homooligomer(
         disable=not config.verbose,
     ):
         protomer_ids = inp.protomer_chain_ids
+        # `fixed_positions` broadcasts the per-protomer selection to every protomer chain.
+        constraints = resolve_constraints(inp.structure, protomer_ids, inp.fixed_positions, tool=_TOOL_KEY)
+        validate_residue_mapping(constraints.readable, inp.structure)
+        require_matching_protomers(inp.structure, protomer_ids, constraints.readable, tool=_TOOL_KEY)
 
         all_seqs, all_perp, all_seq_recovery = collect_samples(
             inp,
             config,
             chain_ids=protomer_ids,
-            fixed_positions=inp.fixed_positions,
+            fixed_positions=constraints.worker_fixed,
             homooligomer=True,
             seed_rng=seed_rng,
             instance=instance,
@@ -349,9 +360,10 @@ def run_proteinmpnn_sample_homooligomer(
                     inp.structure,
                     dict(zip(protomer_ids, segments, strict=True)),
                     set(protomer_ids),
-                    tool="proteinmpnn-sample-homooligomer",
+                    tool=_TOOL_KEY,
                     include_ligands=False,
-                    readable_positions=config.readable_positions(inp),
+                    readable_positions=constraints.readable,
+                    fixed_positions=constraints.effective_fixed,
                     metrics=ProteinMPNNDesignMetrics(perplexity=perp, sequence_recovery=recovery),
                 )
             )

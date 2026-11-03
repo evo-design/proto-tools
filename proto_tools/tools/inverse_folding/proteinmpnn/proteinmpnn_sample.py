@@ -10,6 +10,7 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator
 
+from proto_tools.tools.inverse_folding.proteinmpnn._constraints import resolve_constraints
 from proto_tools.tools.inverse_folding.proteinmpnn._readable import proteinmpnn_readable_positions
 from proto_tools.tools.inverse_folding.proteinmpnn._sampling import (
     collect_samples,
@@ -91,25 +92,6 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
             dict[str, list[int]]: Ascending readable positions per chain ID.
         """
         return proteinmpnn_readable_positions(inp.structure)
-
-    def tool_key_for_messages(self) -> str:
-        """Tool key named in diagnostics."""
-        return "proteinmpnn-sample"
-
-    def preprocess(self, inputs: Any) -> Any:
-        """Check each structure's fixed positions against what this model processes.
-
-        Args:
-            inputs (Any): Tool inputs to prepare.
-
-        Returns:
-            Any: The inputs, unchanged.
-        """
-        for inp in inputs.inputs:
-            readable = self.readable_positions(inp)
-            validate_residue_mapping(readable, inp.structure)
-            self.check_fixed_positions(inp, readable)
-        return inputs
 
     @field_validator("excluded_amino_acids", mode="before")
     @classmethod
@@ -279,11 +261,15 @@ def run_proteinmpnn_sample(
                 redesign_ids,
             )
 
+        # Resolved once per structure: dispatch, reconstruction and warnings share one answer.
+        constraints = resolve_constraints(inp.structure, redesign_ids, inp.fixed_positions, tool="proteinmpnn-sample")
+        validate_residue_mapping(constraints.readable, inp.structure)
+
         all_seqs, all_perp, all_seq_recovery = collect_samples(
             inp,
             config,
             chain_ids=redesign_ids,
-            fixed_positions=inp.fixed_positions,
+            fixed_positions=constraints.worker_fixed,
             homooligomer=False,
             seed_rng=seed_rng,
             instance=instance,
@@ -300,7 +286,8 @@ def run_proteinmpnn_sample(
                     set(redesign_ids),
                     tool="proteinmpnn-sample",
                     include_ligands=False,
-                    readable_positions=config.readable_positions(inp),
+                    readable_positions=constraints.readable,
+                    fixed_positions=constraints.effective_fixed,
                     metrics=ProteinMPNNDesignMetrics(perplexity=perp, sequence_recovery=recovery),
                 )
             )
