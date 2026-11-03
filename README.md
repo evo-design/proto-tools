@@ -147,6 +147,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 └── <a href="proto_tools/tools/rna_splicing/spliceai2/">spliceai2/</a>
 <a href="proto_tools/tools/sequence_alignment/">sequence_alignment/</a>             # Sequence search and multiple sequence alignment
 ├── <a href="proto_tools/tools/sequence_alignment/blast/">blast/</a>
+├── <a href="proto_tools/tools/sequence_alignment/crispritz/">crispritz/</a>
 ├── <a href="proto_tools/tools/sequence_alignment/mafft/">mafft/</a>
 └── <a href="proto_tools/tools/sequence_alignment/mmseqs2/">mmseqs2/</a>
 <a href="proto_tools/tools/sequence_scoring/">sequence_scoring/</a>               # Genomic and regulatory scoring
