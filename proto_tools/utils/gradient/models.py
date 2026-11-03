@@ -7,15 +7,15 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from pathlib import Path
-from typing import Any, ClassVar, cast, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.utils.base_config import BaseConfig, ConfigField
-from proto_tools.utils.gradient.metadata import GradientMetadata, gradient_l2_norm, input_fingerprint
+from proto_tools.utils.gradient.metadata import GradientMetadata
 from proto_tools.utils.gradient.terms import (
     DifferentiableTerm,
     GroupedTermCatalog,
@@ -23,7 +23,6 @@ from proto_tools.utils.gradient.terms import (
     TermGradient,
     _is_term_class,
     _validate_term_catalog,
-    resolve_terms,
 )
 from proto_tools.utils.sequence_logits import (
     NucleotideSequenceLogits,
@@ -32,6 +31,9 @@ from proto_tools.utils.sequence_logits import (
     iter_sequence_logits,
 )
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, InputField
+
+if TYPE_CHECKING:
+    from proto_tools.utils.gradient.objectives import GoalsArgument, ObjectiveResult, WeightsArgument
 
 
 def coerce_to_item_list(value: Any) -> Any:
@@ -532,6 +534,31 @@ class GradientResult(BaseModel):
         description="Metrics reported for this item alongside its objective value.",
     )
 
+    def compose(
+        self,
+        goals: GoalsArgument | None = None,
+        weights: WeightsArgument | None = None,
+        *,
+        strict: bool = True,
+    ) -> ObjectiveResult:
+        """Combine this item's raw gradient terms into one minimizable objective.
+
+        Args:
+            goals (GoalsArgument | None): Goal per term, keyed by the term itself or by its id.
+                A term left out follows its advisory direction, which requires it to have one.
+            weights (WeightsArgument | None): Non-negative weight per term, keyed the same way,
+                defaulting to 1.0.
+            strict (bool): Whether gradients taken at different points are incompatible.
+
+        Returns:
+            ObjectiveResult: The composed ``objective_loss`` and its gradient, with per-term
+                diagnostics.
+        """
+        # Imported here because composition builds on this module's models.
+        from proto_tools.utils.gradient.objectives import compose_gradients
+
+        return compose_gradients(self, goals=goals, weights=weights, strict=strict)
+
 
 class GradientOutput(BaseToolOutput):
     """Gradients of a backend objective with respect to one or more relaxed sequence states.
@@ -614,21 +641,75 @@ class GradientOutput(BaseToolOutput):
         json_path.write_text(json.dumps(payload, indent=2))
 
 
+def attach_intrinsic_term(
+    payload: MutableMapping[str, Any],
+    term: DifferentiableTerm,
+    *,
+    matrices: Sequence[Sequence[Sequence[float]]],
+    temperature: float | None,
+    description: str,
+    positions: Sequence[Sequence[int] | None] | None = None,
+    hard: float = 0.0,
+    soft: float = 1.0,
+) -> None:
+    """Give every item in a worker payload the one term its tool differentiates.
+
+    A tool with a single intrinsic objective reports that objective as its item ``loss`` and its
+    derivative as the item ``gradient``, which is exactly the term's value and raw gradient. This
+    reshapes such a payload in place, before it is validated into an output model, so the tool
+    itself needs no per-item loop.
+
+    The differentiated matrices are passed in rather than read off an input, because only the
+    tool knows what it actually differentiated: a model that concatenates two chains into one
+    matrix differentiates that matrix, not either field it was built from.
+
+    Args:
+        payload (MutableMapping[str, Any]): Worker payload holding a ``results`` list and the
+            ``vocab`` its gradients are columned by.
+        term (DifferentiableTerm): The term describing the quantity, shared by every item.
+        matrices (Sequence[Sequence[Sequence[float]]]): The relaxed state each item was
+            differentiated at, in item order.
+        temperature (float | None): The input's temperature, which fixes the coordinate space.
+        description (str): What the scalar measures.
+        positions (Sequence[Sequence[int] | None] | None): 1-indexed input position per row for
+            each item, where a tool relaxes a window inside a longer context.
+        hard (float): Straight-through coefficient in force.
+        soft (float): Relaxation blend in force.
+
+    Raises:
+        ValueError: If a matrix was not supplied for every item.
+    """
+    items = payload["results"]
+    if len(matrices) != len(items):
+        raise ValueError(f"attach_intrinsic_term got {len(matrices)} matrices for {len(items)} items")
+    rows = positions if positions is not None else [None] * len(items)
+    for item, matrix, item_positions in zip(items, matrices, rows, strict=True):
+        item["terms"] = [
+            TermGradient(
+                term=term,
+                term_value=item["loss"],
+                gradient=item["gradient"],
+                metadata=GradientMetadata.from_input(
+                    matrix,
+                    vocab=payload["vocab"],
+                    temperature=temperature,
+                    description=description,
+                    positions=item_positions,
+                    hard=hard,
+                    soft=soft,
+                ),
+            )
+        ]
+
+
 __all__ = [
     "BatchedNucleotideGradientInput",
-    "RelaxationConfig",
-    "DifferentiableTerm",
     "GradientConfig",
     "GradientInput",
     "GradientOutput",
     "GradientResult",
-    "GradientMetadata",
-    "GroupedTermCatalog",
-    "TermCatalog",
-    "TermGradient",
-    "coerce_to_item_list",
-    "gradient_l2_norm",
-    "input_fingerprint",
-    "resolve_terms",
     "ProteinGradientInput",
+    "RelaxationConfig",
+    "attach_intrinsic_term",
+    "coerce_to_item_list",
 ]

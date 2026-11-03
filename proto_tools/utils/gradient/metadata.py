@@ -50,6 +50,7 @@ class GradientMetadata(BaseModel):
     Attributes:
         description (str): What the scalar measures.
         units (str | None): Physical units where the quantity has them, such as ``"angstroms"``.
+            Declared by the term class as ``UNITS`` and copied in, so a caller cannot state it.
         suggested_optimization_direction (Directionality): Which way this quantity is generally
             better, as advisory metadata. Copied from the term's class-level declaration, so a
             caller cannot state it. It never affects the sign of the returned gradient.
@@ -108,7 +109,6 @@ class GradientMetadata(BaseModel):
         vocab: Sequence[str],
         temperature: float | None,
         description: str = "",
-        units: str | None = None,
         positions: Sequence[int] | None = None,
         hard: float = 0.0,
         soft: float = 1.0,
@@ -120,7 +120,6 @@ class GradientMetadata(BaseModel):
             vocab (Sequence[str]): Column identity and order.
             temperature (float | None): The input's temperature, which fixes the coordinate space.
             description (str): What the scalar measures.
-            units (str | None): Physical units of the value, where it has them.
             positions (Sequence[int] | None): 1-indexed input position per row, where the rows are
                 not simply ``1..L``.
             hard (float): Straight-through coefficient in force.
@@ -131,7 +130,6 @@ class GradientMetadata(BaseModel):
         """
         return cls(
             description=description,
-            units=units,
             vocab=list(vocab),
             coordinate_space="probabilities" if temperature is None else "logits",
             length=len(matrix),

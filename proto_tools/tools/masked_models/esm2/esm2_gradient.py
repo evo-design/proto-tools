@@ -1,25 +1,28 @@
 """ESM2 masked pseudo-log-likelihood gradient tool."""
 
 import logging
-from typing import Any
+from typing import Any, ClassVar, Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.tools.masked_models.esm2.esm2_sample import ESM2_MODEL_CHECKPOINTS
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
+    DifferentiableTerm,
     GradientInput,
     GradientOutput,
     InputField,
     ProteinSequenceLogits,
     RelaxationConfig,
     ToolInstance,
+    attach_intrinsic_term,
     coerce_to_item_list,
     one_hot_protein_logits,
 )
 from proto_tools.utils.device import RemoteDevice
+from proto_tools.utils.tool_io import Directionality
 
 logger = logging.getLogger(__name__)
 
@@ -63,14 +66,37 @@ class ESM2GradientInput(GradientInput):
         return self
 
 
+class ESM2MaskedPLLTerm(DifferentiableTerm):
+    """ESM2's masked pseudo-log-likelihood: the mean NLL over amino-acid positions.
+
+    The tool exposes this one scalar, so the term carries no selectors beyond the identifier
+    naming what it is.
+
+    Attributes:
+        id (Literal["masked_pll"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: A mean negative log-likelihood is better the smaller it is.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
+
+    #: Nats, averaged over the amino-acid positions the mean is taken across.
+    UNITS: ClassVar[str] = "nats per position"
+
+    id: Literal["masked_pll"] = Field(
+        default="masked_pll",
+        title="Term ID",
+        description="Identifies this quantity as ESM2's masked pseudo-log-likelihood.",
+    )
+
+
 class ESM2GradientOutput(GradientOutput):
     """ESM2 masked PLL output; gradient is optional in forward-only mode.
 
     Attributes:
-        results (list[GradientResult]): One per input item, in input order, each holding that
-            item's gradient w.r.t. its logits (``None`` in forward-only mode), its mean negative
-            log-likelihood over AA positions, and its log-likelihood, perplexity, sequence length
-            and objective details.
+        results (list[GradientResult]): One per input item, in input order. Contains a single
+            masked-PLL term carrying that item's mean negative log-likelihood over AA positions
+            and its raw gradient w.r.t. its logits (``None`` in forward-only mode), plus
+            log-likelihood, perplexity, sequence length and objective details in ``metrics``.
         vocab (list[str]): Amino-acid column ordering for the input logits.
     """
 
@@ -171,5 +197,15 @@ def run_esm2_gradient(
         },
         instance=instance,
         config=config,
+    )
+
+    attach_intrinsic_term(
+        result,
+        ESM2MaskedPLLTerm(),
+        matrices=[matrix.root for matrix in inputs.inputs],
+        temperature=inputs.temperature,
+        description="Mean masked negative log-likelihood over amino-acid positions",
+        soft=config.soft,
+        hard=config.hard,
     )
     return ESM2GradientOutput(**result)

@@ -61,6 +61,7 @@ from proto_tools.tools.masked_models.esm2 import (
     ESM2GradientConfig,
     ESM2GradientInput,
     ESM2GradientOutput,
+    ESM2MaskedPLLTerm,
     ESM2SampleConfig,
     ESM2SampleInput,
     ESM2SampleOutput,
@@ -311,6 +312,7 @@ __all__ = [
     "run_esm2_gradient",
     "ESM2GradientInput",
     "ESM2GradientConfig",
+    "ESM2MaskedPLLTerm",
     "ESM2GradientOutput",
     # ESM2 - Sampling
     "run_esm2_sample",

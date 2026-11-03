@@ -11,13 +11,17 @@ raw derivative of that value.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import ClassVar, Literal, TypeGuard, cast, get_args, get_origin
+from typing import TYPE_CHECKING, ClassVar, Literal, TypeGuard, cast, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from typing_extensions import Self
 
 from proto_tools.utils.gradient.metadata import GradientMetadata, gradient_l2_norm
 from proto_tools.utils.tool_io import Directionality
+
+if TYPE_CHECKING:
+    from proto_tools.utils.gradient.goals import Goal, GoalDirection
+    from proto_tools.utils.gradient.objectives import ObjectiveResult
 
 
 class DifferentiableTerm(BaseModel):
@@ -62,6 +66,9 @@ class DifferentiableTerm(BaseModel):
 
     # Which way this quantity is generally better; the gradient copies it into its metadata.
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
+
+    # Units the quantity is measured in: a property of the quantity, copied into its metadata.
+    UNITS: ClassVar[str | None] = None
 
     id: str = Field(
         title="Term ID",
@@ -130,15 +137,34 @@ class TermGradient(BaseModel):
 
     @model_validator(mode="after")
     def fill_derived_fields(self) -> Self:
-        """Fill the gradient norm, and take the advisory direction from the term that was asked for."""
+        """Fill the gradient norm, and take the advisory direction and units from the term asked for."""
         if self.metadata is not None and self.metadata.suggested_optimization_direction == "context-dependent":
             # The term class declares the direction; metadata is where consumers read it.
             direction = type(self.term).SUGGESTED_OPTIMIZATION_DIRECTION
             if direction != "context-dependent":
                 self.metadata = self.metadata.model_copy(update={"suggested_optimization_direction": direction})
+        if self.metadata is not None and self.metadata.units is None and type(self.term).UNITS is not None:
+            # Same reasoning as the direction: the quantity owns its units, not the caller.
+            self.metadata = self.metadata.model_copy(update={"units": type(self.term).UNITS})
         if self.gradient is not None and self.grad_l2_norm is None:
             self.grad_l2_norm = gradient_l2_norm(self.gradient)
         return self
+
+    def apply_goal(self, goal: Goal | GoalDirection | None = None) -> ObjectiveResult:
+        """Turn this one raw gradient into a minimizable objective.
+
+        Args:
+            goal (Goal | GoalDirection | None): What to ask of this quantity. Omit it to follow
+                the advisory direction, which requires the quantity to have one.
+
+        Returns:
+            ObjectiveResult: The goal's loss at this term's value as ``objective_loss``, with the
+                matching gradient.
+        """
+        # Imported here because composition builds on this module's models.
+        from proto_tools.utils.gradient.objectives import compose_terms
+
+        return compose_terms([self], goals=[goal])
 
 
 def _is_term_class(value: object) -> TypeGuard[type[DifferentiableTerm]]:

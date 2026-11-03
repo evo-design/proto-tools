@@ -87,6 +87,7 @@ class ErrorTerm(DifferentiableTerm):
     """A term that takes no selectors and is better when smaller, in physical units."""
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
+    UNITS: ClassVar[str] = "angstroms"
 
     id: Literal["pae"] = Field(
         default="pae",
@@ -280,14 +281,14 @@ def test_a_gradient_reports_the_raw_value_and_derivative_unchanged() -> None:
         term=ErrorTerm(),
         term_value=4.75,
         gradient=[[0.5, -0.25]],
-        metadata=_metadata(vocab=("A", "C"), matrix=[[0.5, 0.5]], units="angstroms"),
+        metadata=_metadata(vocab=("A", "C"), matrix=[[0.5, 0.5]]),
     )
 
     assert answer.term_value == 4.75, "no direction, weight or transform touches the value"
     assert answer.gradient == [[0.5, -0.25]], "and none touches the sign of the derivative"
     assert answer.metadata is not None
     assert answer.metadata.suggested_optimization_direction == "lower", "advisory only"
-    assert answer.metadata.units == "angstroms"
+    assert answer.metadata.units == "angstroms", "the term class declares the units, not the caller"
 
 
 def test_the_term_class_supplies_the_advisory_direction() -> None:
@@ -548,7 +549,7 @@ def test_two_parameterless_quantities_read_back_as_their_own_classes() -> None:
                         term=ErrorTerm(),
                         term_value=4.75,
                         gradient=[[0.0, -0.2, 0.0, 0.0]],
-                        metadata=_metadata(matrix=[[0.25] * 4], description="mean PAE", units="angstroms"),
+                        metadata=_metadata(matrix=[[0.25] * 4], description="mean PAE"),
                     ),
                 ],
             )

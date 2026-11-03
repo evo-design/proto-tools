@@ -126,6 +126,69 @@ def test_esm2_gradient_forward_mode_dispatch_contract(monkeypatch):
     assert result.results[0].loss == 0.5
     assert result.results[0].metrics["avg_log_likelihood"] == -0.5
 
+    # Forward-only keeps the term's value and drops only its derivative
+    (term,) = result.results[0].terms
+    assert term.term_value == 0.5
+    assert term.gradient is None
+    assert term.grad_l2_norm is None
+
+
+def test_esm2_gradient_exposes_one_intrinsic_term(monkeypatch):
+    """ESM2 differentiates a single quantity, so it reports exactly one self-describing term."""
+    gradient = [[0.3] * 20, [-0.4] * 20]
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        return {
+            "results": [{"gradient": gradient, "loss": 0.5, "metrics": {}} for _ in payload["items"]],
+            "vocab": AMINO_ACIDS_LIST,
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.masked_models.esm2.esm2_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    result = run_esm2_gradient(
+        ESM2GradientInput(inputs=[[0.0] * 20] * 2),
+        ESM2GradientConfig(device="cpu"),
+    )
+    (term,) = result.results[0].terms
+
+    assert term.term.id == "masked_pll"
+    assert term.metadata.suggested_optimization_direction == "lower", "a mean NLL is better smaller"
+    assert term.term_value == 0.5, "the term's value is the masked PLL the worker reported"
+    assert term.gradient == gradient, "the term carries the raw gradient, unweighted and unsigned"
+    assert term.grad_l2_norm == pytest.approx(math.sqrt(20 * (0.3**2 + 0.4**2)))
+
+    # The advisory direction resolves a goal on its own, so composing needs no arguments
+    composed = result.results[0].compose()
+    assert composed.objective_loss == pytest.approx(0.5)
+    assert composed.gradient == gradient
+    assert composed.contributions[0].dloss_dvalue == 1.0, "the advisory 'lower' resolved to minimize"
+
+
+def test_esm2_gradient_term_survives_serialization(monkeypatch):
+    """The term identifier and direction round-trip, so an exported result stays interpretable."""
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        return {
+            "results": [{"gradient": [[0.1] * 20], "loss": 0.5, "metrics": {}} for _ in payload["items"]],
+            "vocab": AMINO_ACIDS_LIST,
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.masked_models.esm2.esm2_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    result = run_esm2_gradient(ESM2GradientInput(inputs=[[0.0] * 20]), ESM2GradientConfig(device="cpu"))
+    restored = ESM2GradientOutput.model_validate(result.model_dump())
+    (term,) = restored.results[0].terms
+
+    assert term.term.id == "masked_pll"
+    assert term.metadata.suggested_optimization_direction == "lower"
+    assert term.term_value == 0.5
+
 
 # ---------------------------------------------------------------------------
 # Integration tests
@@ -154,6 +217,10 @@ def test_esm2_gradient_single_sequence():
     assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-result.results[0].loss, rel=1e-6)
     assert result.results[0].metrics["perplexity"] == pytest.approx(math.exp(result.results[0].loss), rel=1e-6)
     assert result.vocab == AMINO_ACIDS_LIST
+
+    # The real model produces exactly one term, identified as the quantity ESM2 differentiates
+    (term,) = result.results[0].terms
+    assert term.term.id == "masked_pll"
 
 
 @pytest.mark.uses_gpu
