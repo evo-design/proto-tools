@@ -1,23 +1,26 @@
 """ESM C masked pseudo-log-likelihood gradient tool."""
 
 import logging
-from typing import Any
+from typing import Any, ClassVar, Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 
 from proto_tools.tools.masked_models.esmc.esmc_embeddings import ESMC_MODEL_CHECKPOINTS
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
+    DifferentiableTerm,
     GradientInput,
     GradientOutput,
     InputField,
     ProteinSequenceLogits,
     RelaxationConfig,
     ToolInstance,
+    attach_intrinsic_term,
     coerce_to_item_list,
     one_hot_protein_logits,
 )
+from proto_tools.utils.tool_io import Directionality
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +47,29 @@ class ESMCGradientInput(GradientInput):
     def normalize_items(cls, value: Any) -> Any:
         """Accept one relaxed state as well as a list of them."""
         return coerce_to_item_list(value)
+
+
+class ESMCMaskedPLLTerm(DifferentiableTerm):
+    """ESM C's one differentiable quantity: the masked pseudo-log-likelihood.
+
+    The tool exposes a single scalar, so the term carries no selectors beyond the identifier
+    naming what it is.
+
+    Attributes:
+        id (Literal["masked_pll"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: A mean negative log-likelihood is better the smaller it is.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
+
+    #: Nats, averaged over the amino-acid positions the mean is taken across.
+    UNITS: ClassVar[str] = "nats per position"
+
+    id: Literal["masked_pll"] = Field(
+        default="masked_pll",
+        title="Term ID",
+        description="Identifies this quantity as ESM C's masked pseudo-log-likelihood.",
+    )
 
 
 class ESMCGradientOutput(GradientOutput):
@@ -145,5 +171,14 @@ def run_esmc_gradient(
         },
         instance=instance,
         config=config,
+    )
+    attach_intrinsic_term(
+        result,
+        ESMCMaskedPLLTerm(),
+        matrices=[matrix.root for matrix in inputs.inputs],
+        temperature=inputs.temperature,
+        soft=config.soft,
+        hard=config.hard,
+        description="Mean masked negative log-likelihood over amino-acid positions",
     )
     return ESMCGradientOutput(**result)

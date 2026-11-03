@@ -504,13 +504,18 @@ class GradientResult(BaseModel):
     selectors narrows the field to its own ``TermGradient`` subclass, because Pydantic serializes
     against the declared type and a base-typed term would lose them.
 
+    ``loss`` and ``gradient`` are the pre-term surface, populated only by tools that have not
+    migrated yet and removed once none remain. Nothing reports both.
+
     Attributes:
         terms (list[TermGradient]): One entry per differentiated quantity requested for this item,
             in the order requested, each carrying its own raw value and raw gradient. Empty on a
             tool that has not yet migrated to per-term gradients.
-        gradient (list[list[float]] | None): Gradient for this item, an ``(L, V)`` matrix
-            matching its input shape and column order, or ``None`` in forward-only mode.
-        loss (float): This item's own objective value; no batch mean or total.
+        gradient (list[list[float]] | None): Pre-term gradient for this item, an ``(L, V)`` matrix
+            matching its input shape and column order. ``None`` on a migrated tool, and in
+            forward-only mode.
+        loss (float | None): Pre-term objective value for this item; no batch mean or total.
+            ``None`` on a migrated tool, which reports its scalar as a term value instead.
         metrics (dict[str, Any]): Metrics for this item alone.
     """
 
@@ -522,11 +527,12 @@ class GradientResult(BaseModel):
     gradient: list[list[float]] | None = Field(
         default=None,
         title="Gradient",
-        description="Gradient of this item's loss w.r.t. its input logits; matches its shape and column order",
+        description="Pre-term gradient w.r.t. this item's input logits; None on a tool reporting terms.",
     )
-    loss: float = Field(
+    loss: float | None = Field(
+        default=None,
         title="Loss",
-        description="This item's objective; lower is better (typically a positive negative log-likelihood)",
+        description="Pre-term objective for this item; None on a tool reporting terms.",
     )
     metrics: dict[str, Any] = Field(
         default_factory=dict,
@@ -659,6 +665,9 @@ def attach_intrinsic_term(
     reshapes such a payload in place, before it is validated into an output model, so the tool
     itself needs no per-item loop.
 
+    Both per-item keys are consumed rather than left behind, so a migrated tool carries its
+    scalar and its gradient in exactly one place.
+
     The differentiated matrices are passed in rather than read off an input, because only the
     tool knows what it actually differentiated: a model that concatenates two chains into one
     matrix differentiates that matrix, not either field it was built from.
@@ -684,11 +693,12 @@ def attach_intrinsic_term(
         raise ValueError(f"attach_intrinsic_term got {len(matrices)} matrices for {len(items)} items")
     rows = positions if positions is not None else [None] * len(items)
     for item, matrix, item_positions in zip(items, matrices, rows, strict=True):
+        # Moved, not copied: the term becomes the single place this item's scalar and gradient live
         item["terms"] = [
             TermGradient(
                 term=term,
-                term_value=item["loss"],
-                gradient=item["gradient"],
+                term_value=item.pop("loss"),
+                gradient=item.pop("gradient"),
                 metadata=GradientMetadata.from_input(
                     matrix,
                     vocab=payload["vocab"],

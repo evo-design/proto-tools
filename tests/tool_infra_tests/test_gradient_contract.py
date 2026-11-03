@@ -446,7 +446,7 @@ def test_gradient_batch_fans_out_across_pool_slots(monkeypatch: pytest.MonkeyPat
         ToolInstance.clear_all()
 
     assert len(output.results) == item_count, "one result per item"
-    assert [result.loss for result in output.results] == [float(index) for index in range(item_count)], (
+    assert [result.terms[0].term_value for result in output.results] == [float(index) for index in range(item_count)], (
         "results must come back in input order"
     )
     assert len(partitions) > 1, f"the batch was not split across workers: {partitions}"

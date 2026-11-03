@@ -7,6 +7,7 @@ from proto_tools.tools.masked_models.ablang import (
     AbLangGradientConfig,
     AbLangGradientInput,
     AbLangGradientOutput,
+    AbLangMaskedPLLTerm,
     AbLangSampleConfig,
     AbLangSampleInput,
     AbLangSampleOutput,
@@ -35,6 +36,7 @@ from proto_tools.tools.masked_models.codonfm import (
     CodonFMGradientConfig,
     CodonFMGradientInput,
     CodonFMGradientOutput,
+    CodonFMMaskedPLLTerm,
     CodonFMMutation,
     CodonFMMutationResult,
     CodonFMSampleConfig,
@@ -94,6 +96,7 @@ from proto_tools.tools.masked_models.esmc import (
     ESMCGradientConfig,
     ESMCGradientInput,
     ESMCGradientOutput,
+    ESMCMaskedPLLTerm,
     ESMCSAEFeaturesConfig,
     ESMCSAEFeaturesInput,
     ESMCSAEFeaturesOutput,
@@ -250,6 +253,7 @@ __all__ = [
     "run_ablang_embeddings",
     # AbLang - Gradient
     "AbLangGradientConfig",
+    "AbLangMaskedPLLTerm",
     "AbLangGradientInput",
     "AbLangGradientOutput",
     "run_ablang_gradient",
@@ -294,6 +298,7 @@ __all__ = [
     "run_codonfm_score",
     # CodonFM - Gradient
     "CodonFMGradientConfig",
+    "CodonFMMaskedPLLTerm",
     "CodonFMGradientInput",
     "CodonFMGradientOutput",
     "run_codonfm_gradient",
@@ -346,6 +351,7 @@ __all__ = [
     "ESMCEmbeddingsOutput",
     # ESM C - SAE Features
     "ESMCGradientConfig",
+    "ESMCMaskedPLLTerm",
     "ESMCGradientInput",
     "ESMCGradientOutput",
     "run_esmc_gradient",

@@ -90,14 +90,14 @@ def test_esmc_gradient_single_sequence():
 
     assert result.tool_id == "esmc-gradient"
     (candidate,) = result.results
-    assert candidate.gradient is not None
-    assert len(candidate.gradient) == 24
-    assert all(len(row) == 20 for row in candidate.gradient)
-    assert all(math.isfinite(value) for row in candidate.gradient for value in row)
-    assert any(value != 0.0 for row in candidate.gradient for value in row)
-    assert candidate.loss > 0 and math.isfinite(candidate.loss)
-    assert candidate.metrics["avg_log_likelihood"] == pytest.approx(-candidate.loss, rel=1e-6)
-    assert candidate.metrics["perplexity"] == pytest.approx(math.exp(candidate.loss), rel=1e-6)
+    assert candidate.terms[0].gradient is not None
+    assert len(candidate.terms[0].gradient) == 24
+    assert all(len(row) == 20 for row in candidate.terms[0].gradient)
+    assert all(math.isfinite(value) for row in candidate.terms[0].gradient for value in row)
+    assert any(value != 0.0 for row in candidate.terms[0].gradient for value in row)
+    assert candidate.terms[0].term_value > 0 and math.isfinite(candidate.terms[0].term_value)
+    assert candidate.metrics["avg_log_likelihood"] == pytest.approx(-candidate.terms[0].term_value, rel=1e-6)
+    assert candidate.metrics["perplexity"] == pytest.approx(math.exp(candidate.terms[0].term_value), rel=1e-6)
     assert candidate.metrics["sequence_length"] == 24
     assert candidate.metrics["objective"] == "masked_pll"
     assert result.vocab == AMINO_ACIDS_LIST
@@ -111,9 +111,11 @@ def test_esmc_gradient_forward_mode_matches_backward_loss():
     backward = run_esmc_gradient(inputs, ESMCGradientConfig())
     forward = run_esmc_gradient(inputs, ESMCGradientConfig(compute_gradient=False))
 
-    assert forward.results[0].gradient is None
-    assert backward.results[0].gradient is not None
-    assert forward.results[0].loss == pytest.approx(backward.results[0].loss, rel=2e-5, abs=2e-5)
+    assert forward.results[0].terms[0].gradient is None
+    assert backward.results[0].terms[0].gradient is not None
+    assert forward.results[0].terms[0].term_value == pytest.approx(
+        backward.results[0].terms[0].term_value, rel=2e-5, abs=2e-5
+    )
 
 
 @pytest.mark.uses_gpu
@@ -139,11 +141,12 @@ def test_esmc_gradient_matches_finite_difference():
                 ESMCGradientConfig(compute_gradient=False),
             )
             .results[0]
-            .loss
+            .terms[0]
+            .term_value
         )
 
     derivative = (losses[0] - losses[1]) / (2 * epsilon)
-    assert analytic.results[0].gradient[3][7] == pytest.approx(derivative, rel=0.05, abs=5e-4)
+    assert analytic.results[0].terms[0].gradient[3][7] == pytest.approx(derivative, rel=0.05, abs=5e-4)
 
 
 @pytest.mark.uses_gpu
@@ -161,9 +164,9 @@ def test_esmc_gradient_batch_matches_individual_evaluations():
 
     assert len(batched.results) == len(candidates)
     for index, (together, alone) in enumerate(zip(batched.results, singles, strict=True)):
-        assert together.loss == pytest.approx(alone.results[0].loss, rel=1e-5, abs=1e-6), (
-            f"candidate {index} scored differently in a batch"
-        )
+        assert together.terms[0].term_value == pytest.approx(
+            alone.results[0].terms[0].term_value, rel=1e-5, abs=1e-6
+        ), f"candidate {index} scored differently in a batch"
 
 
 @pytest.mark.benchmark("esmc-gradient")
@@ -187,7 +190,7 @@ def test_esmc_gradient_benchmark(request: pytest.FixtureRequest) -> None:
 
     assert result.tool_id == "esmc-gradient"
     (candidate,) = result.results
-    assert candidate.gradient is not None
-    assert len(candidate.gradient) == 300
-    assert all(len(row) == 20 for row in candidate.gradient)
-    assert candidate.loss > 0
+    assert candidate.terms[0].gradient is not None
+    assert len(candidate.terms[0].gradient) == 300
+    assert all(len(row) == 20 for row in candidate.terms[0].gradient)
+    assert candidate.terms[0].term_value > 0

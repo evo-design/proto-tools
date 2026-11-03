@@ -171,8 +171,8 @@ def test_ablang_forward_mode_dispatch_contract(monkeypatch):
     )
 
     assert captured["payload"]["compute_gradient"] is False
-    assert result.results[0].gradient is None
-    assert result.results[0].loss == 0.5
+    assert result.results[0].terms[0].gradient is None
+    assert result.results[0].terms[0].term_value == 0.5
     assert result.results[0].metrics["avg_log_likelihood"] == -0.5
 
 
@@ -208,17 +208,21 @@ def test_compute_gradient_dispatch(paired: bool) -> None:
     )
     validate_output(result)
 
-    assert result.results[0].gradient is not None
-    assert len(result.results[0].gradient) == expected_len
-    assert all(len(row) == 20 for row in result.results[0].gradient)
-    assert all(math.isfinite(v) for row in result.results[0].gradient for v in row)
-    assert result.results[0].loss > 0
-    assert math.isfinite(result.results[0].loss)
-    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-result.results[0].loss, rel=1e-6)
-    assert result.results[0].metrics["log_likelihood"] == pytest.approx(
-        -result.results[0].loss * expected_len, rel=1e-6
+    assert result.results[0].terms[0].gradient is not None
+    assert len(result.results[0].terms[0].gradient) == expected_len
+    assert all(len(row) == 20 for row in result.results[0].terms[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].terms[0].gradient for v in row)
+    assert result.results[0].terms[0].term_value > 0
+    assert math.isfinite(result.results[0].terms[0].term_value)
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(
+        -result.results[0].terms[0].term_value, rel=1e-6
     )
-    assert result.results[0].metrics["perplexity"] == pytest.approx(math.exp(result.results[0].loss), rel=1e-6)
+    assert result.results[0].metrics["log_likelihood"] == pytest.approx(
+        -result.results[0].terms[0].term_value * expected_len, rel=1e-6
+    )
+    assert result.results[0].metrics["perplexity"] == pytest.approx(
+        math.exp(result.results[0].terms[0].term_value), rel=1e-6
+    )
     assert result.results[0].metrics["sequence_length"] == expected_len
     assert result.vocab == _CANONICAL_VOCAB
 
@@ -451,7 +455,10 @@ def test_mixed_batch_gives_the_same_results_on_one_worker_and_two(monkeypatch: p
         finally:
             DeviceManager.reset_instance()
             _ToolInstance.clear_all()
-        return [result.loss for result in output.results], [result.metrics["model_choice"] for result in output.results]
+        return (
+            [result.terms[0].term_value for result in output.results],
+            [result.metrics["model_choice"] for result in output.results],
+        )
 
     partition_sizes.clear()
     one_worker = run_with(1)
@@ -485,7 +492,7 @@ def test_gradient_matches_finite_difference() -> None:
             AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=matrix)),
             AbLangGradientConfig(compute_gradient=with_gradient),
         )
-        return output.results[0].loss, output.results[0].gradient
+        return output.results[0].terms[0].term_value, output.results[0].terms[0].gradient
 
     _, gradient = evaluate(base, with_gradient=True)
     plus = [list(matrix_row) for matrix_row in base]
@@ -529,11 +536,11 @@ def test_mixed_batch_matches_individual_evaluations() -> None:
 
     assert len(mixed.results) == len(antibodies)
     for index, (batched, single) in enumerate(zip(mixed.results, singles, strict=True)):
-        assert batched.loss == pytest.approx(single.results[0].loss, rel=1e-5, abs=1e-6), (
-            f"item {index} scored differently in a mixed batch"
-        )
-        assert batched.gradient is not None and single.results[0].gradient is not None
-        for row, expected_row in zip(batched.gradient, single.results[0].gradient, strict=True):
+        assert batched.terms[0].term_value == pytest.approx(
+            single.results[0].terms[0].term_value, rel=1e-5, abs=1e-6
+        ), f"item {index} scored differently in a mixed batch"
+        assert batched.terms[0].gradient is not None and single.results[0].terms[0].gradient is not None
+        for row, expected_row in zip(batched.terms[0].gradient, single.results[0].terms[0].gradient, strict=True):
             assert row == pytest.approx(expected_row, rel=1e-4, abs=1e-6), f"item {index} gradient differs"
 
 
@@ -843,16 +850,18 @@ def test_ablang_gradient_single_chain():
     validate_output(result)
 
     assert result.tool_id == "ablang-gradient"
-    assert len(result.results[0].gradient) == seq_len
-    assert all(len(row) == 20 for row in result.results[0].gradient)
-    assert all(math.isfinite(v) for row in result.results[0].gradient for v in row)
-    assert any(v != 0.0 for row in result.results[0].gradient for v in row)
-    assert math.isfinite(result.results[0].loss) and result.results[0].loss > 0
+    assert len(result.results[0].terms[0].gradient) == seq_len
+    assert all(len(row) == 20 for row in result.results[0].terms[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].terms[0].gradient for v in row)
+    assert any(v != 0.0 for row in result.results[0].terms[0].gradient for v in row)
+    assert math.isfinite(result.results[0].terms[0].term_value) and result.results[0].terms[0].term_value > 0
     assert result.vocab == _CANONICAL_VOCAB
     assert result.results[0].metrics["sequence_length"] == seq_len
     assert result.results[0].metrics["model_choice"] == "ablang1-heavy"
     assert result.results[0].metrics["objective"] == "masked_pll"
-    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-result.results[0].loss, rel=1e-6)
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(
+        -result.results[0].terms[0].term_value, rel=1e-6
+    )
 
 
 @pytest.mark.uses_gpu
@@ -870,10 +879,10 @@ def test_ablang_gradient_paired_chains():
     validate_output(result)
 
     assert result.tool_id == "ablang-gradient"
-    assert len(result.results[0].gradient) == heavy_len + light_len
-    assert all(len(row) == 20 for row in result.results[0].gradient)
-    assert all(math.isfinite(v) for row in result.results[0].gradient for v in row)
-    assert any(v != 0.0 for row in result.results[0].gradient for v in row)
+    assert len(result.results[0].terms[0].gradient) == heavy_len + light_len
+    assert all(len(row) == 20 for row in result.results[0].terms[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].terms[0].gradient for v in row)
+    assert any(v != 0.0 for row in result.results[0].terms[0].gradient for v in row)
     assert result.vocab == _CANONICAL_VOCAB
     assert result.results[0].metrics["sequence_length"] == heavy_len + light_len
     assert result.results[0].metrics["model_choice"] == "ablang2-paired"
@@ -898,9 +907,9 @@ def test_ablang_gradient_forward_mode_matches_backward_loss():
     validate_output(backward)
     validate_output(forward)
 
-    assert backward.results[0].gradient is not None
-    assert forward.results[0].gradient is None
-    assert forward.results[0].loss == pytest.approx(backward.results[0].loss, rel=1e-5)
+    assert backward.results[0].terms[0].gradient is not None
+    assert forward.results[0].terms[0].gradient is None
+    assert forward.results[0].terms[0].term_value == pytest.approx(backward.results[0].terms[0].term_value, rel=1e-5)
     assert forward.results[0].metrics["log_likelihood"] == pytest.approx(
         backward.results[0].metrics["log_likelihood"], rel=1e-5
     )
@@ -920,7 +929,8 @@ def test_ablang_gradient_descent_reduces_loss():
 
     lr = 10.0
     stepped_logits = [
-        [initial_logits[i][j] - lr * result_0.results[0].gradient[i][j] for j in range(20)] for i in range(seq_len)
+        [initial_logits[i][j] - lr * result_0.results[0].terms[0].gradient[i][j] for j in range(20)]
+        for i in range(seq_len)
     ]
 
     result_1 = run_ablang_gradient(
@@ -928,7 +938,7 @@ def test_ablang_gradient_descent_reduces_loss():
         AbLangGradientConfig(seed=42),
     )
 
-    assert result_1.results[0].loss < result_0.results[0].loss
+    assert result_1.results[0].terms[0].term_value < result_0.results[0].terms[0].term_value
 
 
 @pytest.mark.uses_gpu
@@ -947,8 +957,10 @@ def test_ablang_gradient_batch_size_equivalence(batch_size: int) -> None:
         AbLangGradientConfig(seed=42, batch_size=batch_size),
     )
 
-    assert result.results[0].loss == pytest.approx(ref.results[0].loss, rel=1e-4, abs=1e-6)
-    for row_r, row_ref in zip(result.results[0].gradient, ref.results[0].gradient, strict=True):
+    assert result.results[0].terms[0].term_value == pytest.approx(
+        ref.results[0].terms[0].term_value, rel=1e-4, abs=1e-6
+    )
+    for row_r, row_ref in zip(result.results[0].terms[0].gradient, ref.results[0].terms[0].gradient, strict=True):
         for v_r, v_ref in zip(row_r, row_ref, strict=True):
             assert v_r == pytest.approx(v_ref, rel=1e-4, abs=1e-6)
 
@@ -1120,9 +1132,9 @@ def test_ablang_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     assert result.tool_id == "ablang-gradient"
     (item,) = result.results
     # Each item's gradient is a flat (Lh + Ll, 20) matrix — chains concatenated.
-    assert item.gradient is not None
-    assert len(item.gradient) == total_len
-    assert all(len(row) == 20 for row in item.gradient)
-    assert all(math.isfinite(v) for row in item.gradient for v in row)
+    assert item.terms[0].gradient is not None
+    assert len(item.terms[0].gradient) == total_len
+    assert all(len(row) == 20 for row in item.terms[0].gradient)
+    assert all(math.isfinite(v) for row in item.terms[0].gradient for v in row)
     assert item.metrics["sequence_length"] == total_len
     assert item.metrics["model_choice"] == "ablang2-paired"

@@ -411,6 +411,7 @@ from proto_tools.tools.masked_models import (
     AbLangGradientConfig,
     AbLangGradientInput,
     AbLangGradientOutput,
+    AbLangMaskedPLLTerm,
     AbLangSampleConfig,
     AbLangSampleInput,
     AbLangSampleOutput,
@@ -430,6 +431,7 @@ from proto_tools.tools.masked_models import (
     CodonFMGradientConfig,
     CodonFMGradientInput,
     CodonFMGradientOutput,
+    CodonFMMaskedPLLTerm,
     CodonFMMutation,
     CodonFMMutationResult,
     CodonFMSampleConfig,
@@ -468,6 +470,7 @@ from proto_tools.tools.masked_models import (
     ESMCGradientConfig,
     ESMCGradientInput,
     ESMCGradientOutput,
+    ESMCMaskedPLLTerm,
     ESMCSAEFeaturesConfig,
     ESMCSAEFeaturesInput,
     ESMCSAEFeaturesOutput,
@@ -2156,6 +2159,7 @@ __all__ = [
     "run_ablang_embeddings",
     # Masked models - AbLang Gradient
     "AbLangGradientConfig",
+    "AbLangMaskedPLLTerm",
     "AbLangGradientInput",
     "AbLangGradientOutput",
     "run_ablang_gradient",
@@ -2194,6 +2198,7 @@ __all__ = [
     "run_codonfm_embeddings",
     # Masked models - CodonFM Gradient
     "CodonFMGradientConfig",
+    "CodonFMMaskedPLLTerm",
     "CodonFMGradientInput",
     "CodonFMGradientOutput",
     "run_codonfm_gradient",
@@ -2248,6 +2253,7 @@ __all__ = [
     "run_esmc_gradient",
     "ESMCGradientInput",
     "ESMCGradientConfig",
+    "ESMCMaskedPLLTerm",
     "ESMCGradientOutput",
     # Masked models - ESM C SAE Features
     "run_esmc_sae_features",

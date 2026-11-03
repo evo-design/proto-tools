@@ -18,7 +18,12 @@ from pydantic import Field, ValidationError
 
 from proto_tools.utils.base_config import ConfigField
 from proto_tools.utils.gradient.metadata import GradientMetadata, gradient_l2_norm
-from proto_tools.utils.gradient.models import GradientConfig, GradientOutput, GradientResult
+from proto_tools.utils.gradient.models import (
+    GradientConfig,
+    GradientOutput,
+    GradientResult,
+    attach_intrinsic_term,
+)
 from proto_tools.utils.gradient.terms import (
     DifferentiableTerm,
     GroupedTermCatalog,
@@ -774,3 +779,74 @@ def test_relaxation_is_recorded_but_never_blocks() -> None:
 
     assert surrogate.hard == 1.0
     assert exact.incompatibility_with(surrogate) is None
+
+
+# ── Intrinsic terms ───────────────────────────────────────────────────────────
+
+
+def test_attach_intrinsic_term_moves_the_scalar_and_gradient_into_the_term() -> None:
+    """A single-objective tool reports its scalar once: in the term, not beside it.
+
+    The helper is shared by every tool with one intrinsic quantity, so the contract is pinned
+    here rather than in each of their suites.
+    """
+    payload: dict[str, object] = {
+        "results": [
+            {"loss": 1.5, "gradient": [[0.1, 0.2]], "metrics": {"designed": 1}},
+            {"loss": 2.5, "gradient": [[0.3, 0.4]], "metrics": {}},
+        ],
+        "vocab": ["A", "C"],
+    }
+
+    attach_intrinsic_term(
+        payload,
+        ErrorTerm(),
+        matrices=[[[0.5, 0.5]], [[0.25, 0.75]]],
+        temperature=1.0,
+        description="mean predicted error",
+    )
+
+    first, second = payload["results"]  # type: ignore[index]
+    assert [item["terms"][0].term_value for item in (first, second)] == [1.5, 2.5]
+    assert first["terms"][0].gradient == [[0.1, 0.2]]
+    assert "loss" not in first and "gradient" not in first, "moved into the term, not copied beside it"
+    assert first["metrics"] == {"designed": 1}, "the item's own metrics are left alone"
+
+
+def test_attach_intrinsic_term_describes_each_item_with_its_own_state() -> None:
+    """Metadata comes from the matrix that item was differentiated at, not a shared one."""
+    payload: dict[str, object] = {
+        "results": [
+            {"loss": 1.0, "gradient": [[0.1, 0.2]], "metrics": {}},
+            {"loss": 1.0, "gradient": [[0.1, 0.2]], "metrics": {}},
+        ],
+        "vocab": ["A", "C"],
+    }
+
+    attach_intrinsic_term(
+        payload,
+        ErrorTerm(),
+        matrices=[[[0.5, 0.5]], [[0.25, 0.75]]],
+        temperature=1.0,
+        description="mean predicted error",
+        positions=[[7], None],
+    )
+
+    first, second = (item["terms"][0].metadata for item in payload["results"])  # type: ignore[index]
+    assert first.input_fingerprint != second.input_fingerprint, "different states, different points"
+    assert first.positions == [7] and second.positions is None
+    assert first.units == "angstroms", "units come from the term class, not the call"
+
+
+def test_attach_intrinsic_term_requires_a_matrix_per_item() -> None:
+    """One matrix short would describe an item's gradient with another item's state."""
+    payload: dict[str, object] = {"results": [{"loss": 1.0, "gradient": [[0.1]], "metrics": {}}], "vocab": ["A"]}
+
+    with pytest.raises(ValueError, match="2 matrices for 1 items"):
+        attach_intrinsic_term(
+            payload,
+            ErrorTerm(),
+            matrices=[[[1.0]], [[1.0]]],
+            temperature=1.0,
+            description="mean predicted error",
+        )

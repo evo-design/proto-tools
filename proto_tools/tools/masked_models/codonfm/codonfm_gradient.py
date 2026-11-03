@@ -1,9 +1,9 @@
 """CodonFM (Encodon) masked pseudo-log-likelihood gradient for relaxed coding sequences."""
 
 import math
-from typing import Any
+from typing import Any, ClassVar, Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
@@ -18,13 +18,15 @@ from proto_tools.tools.masked_models.codonfm.shared_data_models import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
+    DifferentiableTerm,
     GradientInput,
     GradientOutput,
     RelaxationConfig,
     ToolInstance,
+    attach_intrinsic_term,
     coerce_to_item_list,
 )
-from proto_tools.utils.tool_io import InputField
+from proto_tools.utils.tool_io import Directionality, InputField
 
 # Encodon caps sequences at (2048 - 2) codons (CLS/SEP); the differentiable state is per-codon.
 CODONFM_MAX_CODONS = CODONFM_MAX_NT // 3
@@ -67,6 +69,29 @@ class CodonFMGradientInput(GradientInput):
                     f"inputs[{index}] has length {len(matrix)}."
                 )
         return self
+
+
+class CodonFMMaskedPLLTerm(DifferentiableTerm):
+    """CodonFM's one differentiable quantity: the codon-level masked pseudo-log-likelihood.
+
+    The tool exposes a single scalar, so the term carries no selectors beyond the identifier
+    naming what it is.
+
+    Attributes:
+        id (Literal["codon_masked_pll"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: A mean negative log-likelihood is better the smaller it is.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
+
+    #: Nats, averaged over the codon positions the mean is taken across.
+    UNITS: ClassVar[str] = "nats per codon"
+
+    id: Literal["codon_masked_pll"] = Field(
+        default="codon_masked_pll",
+        title="Term ID",
+        description="Identifies this quantity as CodonFM's codon-level masked pseudo-log-likelihood.",
+    )
 
 
 class CodonFMGradientOutput(GradientOutput):
@@ -200,4 +225,13 @@ def run_codonfm_gradient(
         elif gradient is not None:
             raise ValueError("CodonFM returned a gradient when compute_gradient=False")
     result["metadata"] = {"model_checkpoint": config.model_checkpoint}
+    attach_intrinsic_term(
+        result,
+        CodonFMMaskedPLLTerm(),
+        matrices=[matrix.root for matrix in inputs.inputs],
+        temperature=inputs.temperature,
+        soft=config.soft,
+        hard=config.hard,
+        description="Mean masked negative log-likelihood over codon positions",
+    )
     return CodonFMGradientOutput(**result)

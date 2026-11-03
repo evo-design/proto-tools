@@ -10,6 +10,7 @@ from proto_tools.tools.masked_models.esmc.esmc_gradient import (
     ESMCGradientConfig,
     ESMCGradientInput,
     ESMCGradientOutput,
+    ESMCMaskedPLLTerm,
     run_esmc_gradient,
 )
 from proto_tools.tools.masked_models.esmc.esmc_sae_features import (
@@ -34,6 +35,7 @@ __all__ = [
     "run_esmc_embeddings",
     # Gradient
     "ESMCGradientConfig",
+    "ESMCMaskedPLLTerm",
     "ESMCGradientInput",
     "ESMCGradientOutput",
     "run_esmc_gradient",

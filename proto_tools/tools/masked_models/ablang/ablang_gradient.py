@@ -3,24 +3,26 @@
 import logging
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, ClassVar, Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 
 from proto_tools.entities.antibody import AntibodyLogits
 from proto_tools.tools.masked_models.ablang.ablang_embeddings import _resolve_model_choice
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
+    DifferentiableTerm,
     GradientInput,
     GradientOutput,
     ProteinSequenceLogits,
     RelaxationConfig,
     ToolInstance,
+    attach_intrinsic_term,
     coerce_to_item_list,
     one_hot_protein_logits,
 )
-from proto_tools.utils.tool_io import InputField
+from proto_tools.utils.tool_io import Directionality, InputField
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +109,29 @@ class AbLangGradientInput(GradientInput):
             for spec in specs
         ]
         return cls(inputs=antibodies, temperature=temperature, **fields)
+
+
+class AbLangMaskedPLLTerm(DifferentiableTerm):
+    """AbLang's one differentiable quantity: the masked pseudo-log-likelihood.
+
+    The tool exposes a single scalar, so the term carries no selectors beyond the identifier
+    naming what it is.
+
+    Attributes:
+        id (Literal["masked_pll"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: A mean negative log-likelihood is better the smaller it is.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
+
+    #: Nats, averaged over the amino-acid positions the mean is taken across.
+    UNITS: ClassVar[str] = "nats per position"
+
+    id: Literal["masked_pll"] = Field(
+        default="masked_pll",
+        title="Term ID",
+        description="Identifies this quantity as AbLang's masked pseudo-log-likelihood.",
+    )
 
 
 class AbLangGradientOutput(GradientOutput):
@@ -224,5 +249,14 @@ def run_ablang_gradient(
         payload,
         instance=instance,
         config=config,
+    )
+    attach_intrinsic_term(
+        result,
+        AbLangMaskedPLLTerm(),
+        matrices=[item["logits"] for item in items],
+        temperature=inputs.temperature,
+        soft=config.soft,
+        hard=config.hard,
+        description="Mean masked negative log-likelihood over amino-acid positions",
     )
     return AbLangGradientOutput(**result)

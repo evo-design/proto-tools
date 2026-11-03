@@ -23,6 +23,7 @@ from proto_tools.tools.masked_models.codonfm.codonfm_gradient import (
     CodonFMGradientConfig,
     CodonFMGradientInput,
     CodonFMGradientOutput,
+    CodonFMMaskedPLLTerm,
     run_codonfm_gradient,
 )
 from proto_tools.tools.masked_models.codonfm.codonfm_sample import (
@@ -67,6 +68,7 @@ __all__ = [
     "CodonFMFitnessOutput",
     "CodonFMFitnessResult",
     "CodonFMGradientConfig",
+    "CodonFMMaskedPLLTerm",
     "CodonFMGradientInput",
     "CodonFMGradientOutput",
     "CodonFMMutation",
