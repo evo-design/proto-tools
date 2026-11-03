@@ -41,7 +41,7 @@ def _filename_from_url(url: str) -> str:
 def _download_artifact(url: str, expected_md5: str | None, cache_dir: Path) -> Path:
     if not url:
         raise FileNotFoundError("malinois: artifact_path is unavailable and artifact_url is empty")
-    return download_weights(url, cache_dir / _filename_from_url(url), md5=expected_md5 or None)
+    return Path(download_weights(url, cache_dir / _filename_from_url(url), md5=expected_md5 or None))
 
 
 def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:

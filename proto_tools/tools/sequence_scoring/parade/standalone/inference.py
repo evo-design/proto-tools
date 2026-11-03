@@ -35,7 +35,7 @@ def _download_checkpoint(url: str, expected_md5: str, filename: str, cache_dir: 
         or not filename.endswith(".ckpt")
     ):
         raise ValueError("parade: checkpoint_filename must be a .ckpt basename without path separators")
-    return download_weights(url, cache_dir / filename, md5=expected_md5 or None)
+    return Path(download_weights(url, cache_dir / filename, md5=expected_md5 or None))
 
 
 def _resolve_checkpoint(input_dict: dict[str, Any]) -> str:

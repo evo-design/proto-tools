@@ -49,8 +49,8 @@ def _stage_ablang_weights(model_choice: str) -> Path:
     import ablang2
 
     url, weight_file = _ABLANG_MODEL_INFO[model_choice]
-    cache_dir = download_archive(
-        url, Path(require_weights_dir("ablang")) / f"model-weights-{model_choice}", marker=weight_file
+    cache_dir = Path(
+        download_archive(url, Path(require_weights_dir("ablang")) / f"model-weights-{model_choice}", marker=weight_file)
     )
     link_to_cache(Path(os.path.dirname(ablang2.__file__)) / f"model-weights-{model_choice}", cache_dir)
     return cache_dir
