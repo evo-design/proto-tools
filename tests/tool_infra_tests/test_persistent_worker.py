@@ -781,6 +781,21 @@ def test_worker_path_omits_foundation_bin_when_unused(tmp_path: Path, monkeypatc
     assert not any(part.endswith(".foundation_env/bin") for part in path)
 
 
+@pytest.mark.parametrize(
+    "var",
+    [
+        "PROTO_LOCK_POLL_SECONDS",
+        "PROTO_LOCK_STALL_SECONDS",
+        "PROTO_LOCK_TIMEOUT_SECONDS",
+        "PROTO_DOWNLOAD_STALL_SECONDS",
+    ],
+)
+def test_download_lock_settings_reach_setup_scripts(monkeypatch, var):
+    """The shared-download wait settings a user exports reach setup.sh and workers."""
+    monkeypatch.setenv(var, "1234")
+    assert _build_subprocess_env(device="cpu").get(var) == "1234"
+
+
 def test_base_whitelist_vars_present(monkeypatch):
     """Whitelisted vars should be passed through when set."""
     monkeypatch.setenv("HOME", "/home/test")
