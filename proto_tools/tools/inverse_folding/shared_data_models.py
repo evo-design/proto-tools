@@ -167,7 +167,86 @@ class InverseFoldingInput(BaseToolInput):
     )
 
 
-class InverseFoldingConfig(BaseConfig):
+class ReadableResiduesMixin:
+    """Config mixin: declare which residues this model reads, and check selections against it.
+
+    Structure-reading models disagree about modified residues. ProteinMPNN rewrites the 53
+    residues in ColabDesign's ``MODRES`` table from ``HETATM`` to ``ATOM`` and then drops
+    anything lacking a backbone ``N``; ESM-IF1 ignores the record type and keeps only names
+    biotite can map to one letter; LigandMPNN uses two different rules depending on
+    ``model_choice``. A single repository-wide rule is therefore wrong for everyone, and a
+    rule derived from the staged file cannot see the config at all.
+
+    A toolkit overrides :meth:`readable_positions` with its own model's rule. Returning
+    ``None`` -- the default -- means "no rule declared", and nothing is checked, which is
+    how a toolkit that has not been migrated keeps its current behaviour.
+
+    The check runs in ``preprocess``, so a selection the model cannot honour fails before
+    anything is staged or dispatched, rather than as an assertion from inside the model.
+    """
+
+    def readable_positions(self, inp: Any) -> dict[str, list[int]] | None:
+        """Positions this model will actually read, 1-indexed, per chain.
+
+        Args:
+            inp (Any): One structure input, exposing ``structure``.
+
+        Returns:
+            dict[str, list[int]] | None: Ascending positions per chain ID, or ``None`` when
+                the toolkit declares no rule.
+        """
+        del inp  # the base declares no rule; overrides read the structure off it
+        return None
+
+    def preprocess(self, inputs: BaseToolInput) -> "BaseToolInput | tuple[BaseToolInput, Any]":
+        """Reject position selections the model cannot read, then defer to the base hook.
+
+        Args:
+            inputs (BaseToolInput): Tool inputs to prepare.
+
+        Returns:
+            BaseToolInput | tuple[BaseToolInput, Any]: Whatever the base hook returns.
+        """
+        for inp in getattr(inputs, "inputs", None) or []:
+            readable = self.readable_positions(inp)
+            if readable is not None:
+                _reject_unreadable_selections(inp, readable)
+        # Cooperative call into BaseConfig.preprocess; untyped here because the mixin
+        # deliberately does not inherit it, so Pydantic builds configs from BaseConfig alone.
+        return super().preprocess(inputs)  # type: ignore[no-any-return,misc]
+
+
+def _reject_unreadable_selections(inp: Any, readable: dict[str, list[int]]) -> None:
+    """Raise if any per-position selection on ``inp`` names a position the model cannot read.
+
+    Walks the input's own fields rather than taking a list of names, so a toolkit that adds
+    another position selection is covered without touching this code. Both a plain
+    ``{chain: [positions]}`` selection and one keyed by position, such as Caliby's
+    ``pinned_residues``, are read the same way, since iterating the inner mapping yields
+    its positions.
+
+    Args:
+        inp (Any): One structure input.
+        readable (dict[str, list[int]]): Positions the model can read, per chain ID.
+
+    Raises:
+        ValueError: If a selected position is not one the model reads.
+    """
+    for name in type(inp).model_fields:
+        chains = getattr(getattr(inp, name, None), "chains", None)
+        if not isinstance(chains, dict):
+            continue  # ChainSelection holds a list of chain IDs, not per-chain positions
+        for chain_id, positions in chains.items():
+            unreadable = sorted(p for p in positions if p not in set(readable.get(chain_id, ())))
+            if unreadable:
+                raise ValueError(
+                    f"{name} {unreadable} on chain {chain_id} name residues this model does not "
+                    "read, so it cannot honour them. This is usually a modified residue, such as "
+                    "a chromophore, or a residue missing the backbone atoms the model requires."
+                )
+
+
+class InverseFoldingConfig(ReadableResiduesMixin, BaseConfig):
     """Base configuration for inverse folding models.
 
     Contains model hyperparameters for sequence generation. Structure-specific
@@ -224,6 +303,28 @@ class InverseFoldingConfig(BaseConfig):
         include_in_key=False,
         examples=["cuda", "cpu"],
     )
+
+
+def _splice_design(native: str, designed: str, positions: list[int]) -> str:
+    """Place a model's residues at the positions it read, keeping the input's elsewhere.
+
+    Args:
+        native (str): The chain's input sequence, one character per polymer residue.
+        designed (str): The model's sequence, one character per entry of ``positions``.
+        positions (list[int]): 1-indexed positions of ``native`` the model read, ascending.
+
+    Returns:
+        str: ``native`` with the designed residues substituted at ``positions``.
+
+    Raises:
+        ValueError: If a position falls outside ``native``.
+    """
+    spliced = list(native)
+    for position, residue in zip(positions, designed, strict=True):
+        if not 1 <= position <= len(native):
+            raise ValueError(f"readable position {position} falls outside a chain of {len(native)} residues")
+        spliced[position - 1] = residue
+    return "".join(spliced)
 
 
 class DesignedComplex(Complex):
@@ -287,6 +388,7 @@ class DesignedComplex(Complex):
         *,
         tool: str,
         include_ligands: bool,
+        readable_positions: dict[str, list[int]] | None = None,
         **fields: Any,
     ) -> Self:
         """Build a design from its input structure and the model's redesigned sequences.
@@ -303,6 +405,12 @@ class DesignedComplex(Complex):
             tool (str): Tool key, named in errors.
             include_ligands (bool): Whether the input's ligands are kept as ``Fragment``
                 entries; true only for models that condition on ligands.
+            readable_positions (dict[str, list[int]] | None): Per chain, the 1-indexed
+                positions this model reads, from ``Config.readable_positions``. A model that
+                skips a modified residue returns one residue per readable position rather
+                than one per polymer residue; the design is then placed on those positions
+                and the skipped residues keep their input identity. ``None`` requires one
+                residue per polymer residue.
             fields (Any): Remaining fields of the subclass, such as ``metrics``.
 
         Returns:
@@ -325,6 +433,13 @@ class DesignedComplex(Complex):
         for entry in native:
             if isinstance(entry, Chain) and entry.id in sequences:
                 sequence = sequences[entry.id]
+                readable = (readable_positions or {}).get(entry.id)
+                if len(sequence) != len(entry.sequence) and readable is not None and len(sequence) == len(readable):
+                    # The model skipped residues it cannot represent -- a chromophore, a
+                    # residue with no backbone N. Place the design on the positions it did
+                    # read: dropping or shifting the others would misalign everything after
+                    # the first skip, which looks like a plausible sequence rather than a bug.
+                    sequence = _splice_design(entry.sequence, sequence, readable)
                 if len(sequence) != len(entry.sequence):
                     raise ValueError(
                         f"{tool}: designed chain {entry.id} has {len(sequence)} residues but the input "
@@ -332,6 +447,12 @@ class DesignedComplex(Complex):
                         "residues than the chain holds; which residues a model skips differs by model, and "
                         "commonly includes non-standard residues such as selenomethionine and residues "
                         "missing backbone atoms."
+                        + (
+                            f" This model was expected to read {len(readable)} of them; if that count "
+                            "is wrong, the toolkit's readable_positions rule needs correcting."
+                            if readable is not None
+                            else ""
+                        )
                     )
                 chains.append(Chain(id=entry.id, sequence=sequence, entity_type="protein"))
             else:

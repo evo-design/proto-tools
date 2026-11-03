@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from enum import Enum
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -256,6 +256,21 @@ def _detect_plddt_from_metadata(content: Any, fmt: Any) -> BFactorType | None:
     if fmt == "cif" and "_ma_qa_metric" in content and "pLDDT" in content:
         return BFactorType.PLDDT
     return None
+
+
+class ResidueAtoms(NamedTuple):
+    """One polymer residue's identity and atom content, as a structure reader sees it.
+
+    Attributes:
+        name (str): Residue name, e.g. ``"ALA"``, ``"MSE"``, ``"CRO"``.
+        is_hetatm (bool): Whether the residue is written as ``HETATM`` rather than ``ATOM``.
+            A modified residue is part of the polymer yet still carries this flag.
+        atom_names (tuple[str, ...]): Atom names present on the residue, in file order.
+    """
+
+    name: str
+    is_hetatm: bool
+    atom_names: tuple[str, ...]
 
 
 class Structure(BaseModel):
@@ -1271,6 +1286,47 @@ class Structure(BaseModel):
             raise ValueError(f"Chain '{chain_id}' has no polymer residues")
         return {
             chain.name: [(residue.seqid.num, residue.seqid.icode.strip()) for residue in chain.get_polymer()]  # type: ignore[misc]
+            for chain in chains
+        }
+
+    def get_chain_residue_atoms(self, chain_id: str | None = None) -> dict[str, list[ResidueAtoms]]:
+        """Get each polymer residue's name, heteroatom flag, and atom names, in chain order.
+
+        Structure-reading models disagree about which residues they parse, and each keys on
+        some combination of these three things: ProteinMPNN rewrites a known modified residue
+        from ``HETATM`` to ``ATOM`` and then drops anything without a backbone ``N``, ESM-IF1
+        ignores the flag and goes by residue name alone, FAMPNN needs at least one recognized
+        atom name. This exposes the raw facts so each toolkit can answer for its own model.
+
+        Entries line up 1:1 with :meth:`get_chain_residue_ids`, so index ``i`` is 1-indexed
+        position ``i + 1``.
+
+        Args:
+            chain_id (str | None): Chain to read, or ``None`` for every polymer chain.
+
+        Returns:
+            dict[str, list[ResidueAtoms]]: Chain ID to its polymer residues, first model only.
+
+        Raises:
+            ValueError: If ``chain_id`` is given but has no polymer residues.
+
+        Examples:
+            >>> gfp.get_chain_residue_atoms("A")["A"][63]
+            ResidueAtoms(name='CRO', is_hetatm=True, atom_names=('N1', 'CA1', 'C1', ...))
+        """
+        self.gemmi_struct.setup_entities()
+        chains = [chain for chain in self.gemmi_struct[0] if chain.get_polymer() and chain_id in (None, chain.name)]
+        if chain_id is not None and not chains:
+            raise ValueError(f"Chain '{chain_id}' has no polymer residues")
+        return {
+            chain.name: [
+                ResidueAtoms(
+                    name=residue.name,
+                    is_hetatm=residue.het_flag == "H",
+                    atom_names=tuple(atom.name for atom in residue),
+                )
+                for residue in chain.get_polymer()
+            ]
             for chain in chains
         }
 

@@ -351,6 +351,7 @@ def run_proteinmpnn_sample_homooligomer(
                     set(protomer_ids),
                     tool="proteinmpnn-sample-homooligomer",
                     include_ligands=False,
+                    readable_positions=config.readable_positions(inp),
                     metrics=ProteinMPNNDesignMetrics(perplexity=perp, sequence_recovery=recovery),
                 )
             )

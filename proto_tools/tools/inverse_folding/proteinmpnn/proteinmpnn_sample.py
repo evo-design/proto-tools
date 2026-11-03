@@ -10,6 +10,7 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator
 
+from proto_tools.tools.inverse_folding.proteinmpnn._readable import proteinmpnn_readable_positions
 from proto_tools.tools.inverse_folding.proteinmpnn._sampling import (
     collect_samples,
     looks_like_homooligomer,
@@ -78,6 +79,17 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         description="Single-letter codes of amino acids to exclude (e.g. ['C'] to forbid cysteine)",
         examples=[["C"]],
     )
+
+    def readable_positions(self, inp: Any) -> dict[str, list[int]]:
+        """Positions ProteinMPNN reads, which excludes unlisted modified residues.
+
+        Args:
+            inp (Any): One structure input.
+
+        Returns:
+            dict[str, list[int]]: Ascending readable positions per chain ID.
+        """
+        return proteinmpnn_readable_positions(inp.structure)
 
     @field_validator("excluded_amino_acids", mode="before")
     @classmethod
@@ -268,6 +280,7 @@ def run_proteinmpnn_sample(
                     set(redesign_ids),
                     tool="proteinmpnn-sample",
                     include_ligands=False,
+                    readable_positions=config.readable_positions(inp),
                     metrics=ProteinMPNNDesignMetrics(perplexity=perp, sequence_recovery=recovery),
                 )
             )
