@@ -407,7 +407,6 @@ def test_a_single_term_gradient_needs_no_list() -> None:
 def test_a_result_contributes_every_term_it_carries() -> None:
     """Composing an evaluated item means composing what it returned, without naming each term."""
     result = GradientResult(
-        loss=0.0,
         terms=[
             answer(2.0, [[1.0, 0.0]], name="a", kind=LowerIsBetterTerm),
             answer(5.0, [[0.0, 1.0]], name="b", kind=LowerIsBetterTerm),
@@ -422,9 +421,8 @@ def test_a_result_contributes_every_term_it_carries() -> None:
 
 def test_several_results_flatten_in_the_order_they_were_given() -> None:
     """Each result keeps its internal order, and the results keep theirs."""
-    first = GradientResult(loss=0.0, terms=[answer(1.0, [[1.0, 0.0]], name="a", kind=LowerIsBetterTerm)])
+    first = GradientResult(terms=[answer(1.0, [[1.0, 0.0]], name="a", kind=LowerIsBetterTerm)])
     second = GradientResult(
-        loss=0.0,
         terms=[
             answer(2.0, [[0.0, 1.0]], name="b", kind=LowerIsBetterTerm),
             answer(3.0, [[1.0, 1.0]], name="c", kind=LowerIsBetterTerm),
@@ -439,7 +437,7 @@ def test_several_results_flatten_in_the_order_they_were_given() -> None:
 def test_terms_and_results_may_be_mixed() -> None:
     """A quantity named on its own composes beside everything another item returned."""
     loose = answer(1.0, [[1.0, 0.0]], name="loose", kind=LowerIsBetterTerm)
-    result = GradientResult(loss=0.0, terms=[answer(2.0, [[0.0, 1.0]], name="held", kind=LowerIsBetterTerm)])
+    result = GradientResult(terms=[answer(2.0, [[0.0, 1.0]], name="held", kind=LowerIsBetterTerm)])
 
     objective = compose_terms([loose, result])
 
@@ -454,11 +452,9 @@ def test_two_models_compose_end_to_end_through_string_keys() -> None:
     different the quantities are. The term left out of both dictionaries takes the defaults.
     """
     one_model = GradientResult(
-        loss=0.0,
         terms=[answer(2.0, [[1.0, 0.0]], term=ActivityTerm(cell_type="HepG2"))],
     )
     another_model = GradientResult(
-        loss=0.0,
         terms=[
             answer(0.8, [[0.0, 1.0]], term=ConfidenceTerm()),
             answer(4.0, [[1.0, 1.0]], name="extra", kind=LowerIsBetterTerm),
@@ -533,7 +529,7 @@ def test_a_key_that_is_neither_a_term_nor_an_id_is_a_type_error() -> None:
 
 def test_positional_goals_and_weights_are_refused_for_a_result() -> None:
     """The order of terms inside a result is not part of its contract, so it cannot be relied on."""
-    result = GradientResult(loss=0.0, terms=[answer(1.0, [[1.0]], kind=LowerIsBetterTerm)])
+    result = GradientResult(terms=[answer(1.0, [[1.0]], kind=LowerIsBetterTerm)])
 
     with pytest.raises(ValueError, match="goals must be a mapping when a GradientResult is composed"):
         compose_terms(result, goals=[MinimizeGoal()])
@@ -716,7 +712,7 @@ def test_mismatched_gradient_shapes_are_rejected() -> None:
 
 def test_result_methods_delegate_to_the_shared_implementation() -> None:
     """``compose`` and ``apply_goal`` are discoverable entry points, not a second implementation."""
-    result = GradientResult(loss=0.0, terms=[answer(3.0, [[1.0, -2.0]], kind=LowerIsBetterTerm)])
+    result = GradientResult(terms=[answer(3.0, [[1.0, -2.0]], kind=LowerIsBetterTerm)])
 
     composed = result.compose()
     assert composed.objective_loss == pytest.approx(3.0)

@@ -274,56 +274,39 @@ class CherimoyaWorker:
                 parts.append(_one_hot([input_dict["context_right"]], device).expand(batch, -1, -1))
             X = torch.cat(parts, dim=2)
 
-            sample_losses = torch.zeros(batch, device=device)
-            term_rows: list[list[dict[str, Any]]] = [[] for _ in range(batch)]
-            for term in input_dict["loss_terms"]:
+            # One backward per quantity, each reporting the derivative of that read count.
+            requested = input_dict["gradient_terms"]
+            terms: list[dict[str, Any]] = []
+            for position, term in enumerate(requested):
                 probs, counts, _ = _aggregate([loaded[i] for i in term["checkpoints"]], X, rc)
-                if term["quantity"] == "log_counts":
+                if term["id"] == "log_counts":
                     value = counts
                 else:
                     value = torch.log1p(probs[:, span[0] : span[1]].sum(dim=-1) * torch.expm1(counts))
-                sigmoid = torch.sigmoid((value - term["sigmoid_center"]) / term["sigmoid_scale"])
-                score = 1.0 - sigmoid if term["direction"] == "max" else sigmoid
-                weighted = score * float(term["weight"])
-                sample_losses = sample_losses + weighted
-                for j, (v, s, w) in enumerate(
-                    zip(
-                        value.detach().cpu().tolist(),
-                        score.detach().cpu().tolist(),
-                        weighted.detach().cpu().tolist(),
-                        strict=True,
-                    )
-                ):
-                    term_rows[j].append(
-                        {
-                            "model": term["model"],
-                            "folds": term["folds"],
-                            "quantity": term["quantity"],
-                            "direction": term["direction"],
-                            "value": v,
-                            "sigmoid_center": term["sigmoid_center"],
-                            "sigmoid_scale": term["sigmoid_scale"],
-                            "score": s,
-                            "weight": term["weight"],
-                            "weighted_score": w,
-                        }
-                    )
 
-            total = sample_losses.sum()
-            gradient = None
-            if compute_gradient:
-                total.backward()
-                if logits.grad is None:
-                    raise RuntimeError("cherimoya: missing logits gradient")
-                gradient = logits.grad.detach().cpu().tolist()
+                entry: dict[str, Any] = {
+                    "id": term["id"],
+                    "model": term["model"],
+                    "folds": term["folds"],
+                    "values": [float(v) for v in value.detach().cpu().tolist()],
+                    "gradients": None,
+                }
 
-        losses = [float(value) for value in sample_losses.detach().cpu().tolist()]
+                if compute_gradient:
+                    # Samples are independent, so summing only batches the backward pass.
+                    (gradient,) = torch.autograd.grad(value.sum(), logits, retain_graph=(position < len(requested) - 1))
+                    if gradient is None:
+                        raise RuntimeError(f"cherimoya: missing gradient for term {term['id']!r} after backward")
+                    # Off the device before the next term's forward, so peak memory holds one
+                    entry["gradients"] = gradient.detach().cpu().tolist()
+                    del gradient
+
+                terms.append(entry)
+                del value, probs, counts
+
         return {
-            "gradient": gradient,
-            "loss": float(sum(losses)),
+            "terms": terms,
             "metrics": {
-                "losses": losses,
-                "loss_terms": term_rows,
                 "batch_size": batch,
                 "temperature": temperature,
                 "soft": input_dict["soft"],

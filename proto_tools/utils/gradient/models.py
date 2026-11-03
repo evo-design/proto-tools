@@ -11,7 +11,7 @@ from collections.abc import Mapping, MutableMapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.utils.base_config import BaseConfig, ConfigField
@@ -504,35 +504,20 @@ class GradientResult(BaseModel):
     selectors narrows the field to its own ``TermGradient`` subclass, because Pydantic serializes
     against the declared type and a base-typed term would lose them.
 
-    ``loss`` and ``gradient`` are the pre-term surface, populated only by tools that have not
-    migrated yet and removed once none remain. Nothing reports both.
-
     Attributes:
         terms (list[TermGradient]): One entry per differentiated quantity requested for this item,
-            in the order requested, each carrying its own raw value and raw gradient. Empty on a
-            tool that has not yet migrated to per-term gradients.
-        gradient (list[list[float]] | None): Pre-term gradient for this item, an ``(L, V)`` matrix
-            matching its input shape and column order. ``None`` on a migrated tool, and in
-            forward-only mode.
-        loss (float | None): Pre-term objective value for this item; no batch mean or total.
-            ``None`` on a migrated tool, which reports its scalar as a term value instead.
+            in the order requested, each carrying its own raw value and raw gradient.
         metrics (dict[str, Any]): Metrics for this item alone.
     """
+
+    # Every quantity is reported as a term. A tool passing a pre-term loss= or gradient= is
+    # rejected rather than silently returning no terms at all.
+    model_config = ConfigDict(extra="forbid")
 
     terms: list[TermGradient] = Field(
         default_factory=list,
         title="Terms",
         description="One gradient per differentiated quantity, in the order requested.",
-    )
-    gradient: list[list[float]] | None = Field(
-        default=None,
-        title="Gradient",
-        description="Pre-term gradient w.r.t. this item's input logits; None on a tool reporting terms.",
-    )
-    loss: float | None = Field(
-        default=None,
-        title="Loss",
-        description="Pre-term objective for this item; None on a tool reporting terms.",
     )
     metrics: dict[str, Any] = Field(
         default_factory=dict,

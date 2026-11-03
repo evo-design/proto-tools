@@ -171,14 +171,21 @@ def test_cherimoya_checkpoint_specs_expand_folds(tmp_path: Path) -> None:
     assert specs[2]["source"] == str(tmp_path / "x.torch")
 
 
-def test_cherimoya_gradient_loss_terms_reject_unknown_keys() -> None:
-    """A misspelled loss-term key is an error, not a silently ignored field."""
-    from proto_tools.tools.sequence_scoring.cherimoya import CherimoyaGradientConfig
+def test_cherimoya_gradient_terms_reject_unknown_keys() -> None:
+    """A misspelled term key is an error, not a silently ignored field."""
+    from proto_tools.tools.sequence_scoring.cherimoya import CherimoyaGradientConfig, CherimoyaLogCountsTerm
 
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        CherimoyaGradientConfig(loss_terms=[{"model": _HEPG2_DNASE, "dirction": "min"}])
-    with pytest.raises(ValidationError, match="only used by loss terms with quantity='log_target_counts'"):
+        CherimoyaGradientConfig(gradient_terms=[{"id": "log_counts", "model": _HEPG2_DNASE, "flds": [0]}])
+    with pytest.raises(ValidationError, match="only used by gradient terms named 'log_target_counts'"):
         CherimoyaGradientConfig(target_start=10)
+    with pytest.raises(ValidationError, match="more than once"):
+        CherimoyaGradientConfig(
+            gradient_terms=[
+                CherimoyaLogCountsTerm(model=_HEPG2_DNASE, folds=[0]),
+                CherimoyaLogCountsTerm(model=_HEPG2_DNASE, folds=[0]),
+            ]
+        )
 
 
 # ── Wrappers (dispatch mocked) ────────────────────────────────────────────────
@@ -292,7 +299,8 @@ def test_cherimoya_gradient_loads_shared_checkpoints_once(monkeypatch: pytest.Mo
     from proto_tools.tools.sequence_scoring.cherimoya import (
         CherimoyaGradientConfig,
         CherimoyaGradientInput,
-        CherimoyaGradientLossTerm,
+        CherimoyaLogCountsTerm,
+        CherimoyaLogTargetCountsTerm,
         run_cherimoya_gradient,
     )
 
@@ -301,9 +309,17 @@ def test_cherimoya_gradient_loads_shared_checkpoints_once(monkeypatch: pytest.Mo
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         payloads.append(payload)
         return {
-            "gradient": [[[0.0] * 4] * 200],
-            "loss": 0.5,
-            "metrics": {"losses": [0.5], "loss_terms": [[]]},
+            "terms": [
+                {
+                    "id": term["id"],
+                    "model": term["model"],
+                    "folds": term["folds"],
+                    "values": [0.5 + index],
+                    "gradients": [[[0.1 * (index + 1)] * 4] * 200],
+                }
+                for index, term in enumerate(payload["gradient_terms"])
+            ],
+            "metrics": {"batch_size": 1},
             "vocab": ["A", "C", "G", "T"],
             "applied": _fake_applied(payload),
         }
@@ -316,10 +332,10 @@ def test_cherimoya_gradient_loads_shared_checkpoints_once(monkeypatch: pytest.Mo
             context_right="C" * 957,
             target_start=50,
             target_end=150,
-            loss_terms=[
-                CherimoyaGradientLossTerm(model=_K562_DNASE, folds=[0], quantity="log_target_counts"),
-                CherimoyaGradientLossTerm(model=_HEPG2_DNASE, direction="min"),
-                CherimoyaGradientLossTerm(model=_K562_DNASE, folds=[0, 1]),
+            gradient_terms=[
+                CherimoyaLogTargetCountsTerm(model=_K562_DNASE, folds=[0]),
+                CherimoyaLogCountsTerm(model=_HEPG2_DNASE),
+                CherimoyaLogCountsTerm(model=_K562_DNASE, folds=[0, 1]),
             ],
         ),
     )
@@ -330,13 +346,21 @@ def test_cherimoya_gradient_loads_shared_checkpoints_once(monkeypatch: pytest.Mo
         (_K562_DNASE, 1),
         (_HEPG2_DNASE, 0),
     ]
-    assert [term["checkpoints"] for term in payload["loss_terms"]] == [[0], [2], [0, 1]]
+    assert [term["checkpoints"] for term in payload["gradient_terms"]] == [[0], [2], [0, 1]]
     assert payload["target_span"] == (450, 550)
     assert [info.model for info in result.models] == [_K562_DNASE, _HEPG2_DNASE]
     assert len(result.results) == 1
-    assert result.results[0].loss == 0.5
-    assert result.results[0].metrics["loss"] == 0.5
-    assert result.results[0].gradient == [[0.0] * 4] * 200
+
+    # Each requested quantity comes back as its own term, carrying its own selectors
+    terms = result.results[0].terms
+    assert [(term.term.id, term.term.model, term.term.folds) for term in terms] == [
+        ("log_target_counts", _K562_DNASE, [0]),
+        ("log_counts", _HEPG2_DNASE, [0]),
+        ("log_counts", _K562_DNASE, [0, 1]),
+    ]
+    assert [term.term_value for term in terms] == [0.5, 1.5, 2.5]
+    assert terms[0].metadata is not None
+    assert terms[0].metadata.positions == terms[1].metadata.positions, "one basis shared across a sample's terms"
     assert result.vocab == ["A", "C", "G", "T"]
 
 
@@ -345,7 +369,7 @@ def test_cherimoya_gradient_validates_window_geometry() -> None:
     from proto_tools.tools.sequence_scoring.cherimoya import (
         CherimoyaGradientConfig,
         CherimoyaGradientInput,
-        CherimoyaGradientLossTerm,
+        CherimoyaLogTargetCountsTerm,
         run_cherimoya_gradient,
     )
 
@@ -354,7 +378,7 @@ def test_cherimoya_gradient_validates_window_geometry() -> None:
     with pytest.raises(ValueError, match="central 1,000 bp output window"):
         run_cherimoya_gradient(
             CherimoyaGradientInput(inputs=[[[0.0] * 4] * 2114]),
-            CherimoyaGradientConfig(loss_terms=[CherimoyaGradientLossTerm(quantity="log_target_counts")]),
+            CherimoyaGradientConfig(gradient_terms=[CherimoyaLogTargetCountsTerm()]),
         )
 
 
@@ -458,7 +482,8 @@ def test_cherimoya_gradient_matches_score_and_finite_differences() -> None:
     from proto_tools.tools.sequence_scoring.cherimoya import (
         CherimoyaGradientConfig,
         CherimoyaGradientInput,
-        CherimoyaGradientLossTerm,
+        CherimoyaLogCountsTerm,
+        CherimoyaLogTargetCountsTerm,
         CherimoyaScoreConfig,
         CherimoyaScoreInput,
         run_cherimoya_gradient,
@@ -467,10 +492,10 @@ def test_cherimoya_gradient_matches_score_and_finite_differences() -> None:
 
     hs2 = _hs2()
     left, design, right = hs2[:957], hs2[957:1157], hs2[1157:]
-    term = CherimoyaGradientLossTerm(model=_K562_DNASE, direction="max", sigmoid_center=7.0)
-    targeted = CherimoyaGradientLossTerm(model=_K562_DNASE, quantity="log_target_counts", sigmoid_center=6.0)
+    term = CherimoyaLogCountsTerm(model=_K562_DNASE)
+    targeted = CherimoyaLogTargetCountsTerm(model=_K562_DNASE)
     config = CherimoyaGradientConfig(
-        context_left=left, context_right=right, loss_terms=[term, targeted], deterministic=True
+        context_left=left, context_right=right, gradient_terms=[term, targeted], deterministic=True
     )
     score = run_cherimoya_score(CherimoyaScoreInput(sequences=[hs2]), CherimoyaScoreConfig())
     span = run_cherimoya_score(
@@ -479,25 +504,23 @@ def test_cherimoya_gradient_matches_score_and_finite_differences() -> None:
     )
 
     sharp = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[_one_hot_logits(design, 30.0)]), config)
-    window, target = sharp.results[0].metrics["loss_terms"]
-    assert window["value"] == pytest.approx(score.results[0].scores[0]["log_counts"], abs=1e-3)
+    window, target = sharp.results[0].terms
+    assert window.term_value == pytest.approx(score.results[0].scores[0]["log_counts"], abs=1e-3)
     assert span.results[0].output_start == 557
-    assert target["value"] == pytest.approx(math.log1p(span.results[0].scores[0]["target_counts"]), abs=1e-3)
+    assert target.term_value == pytest.approx(math.log1p(span.results[0].scores[0]["target_counts"]), abs=1e-3)
 
-    # Soft logits put the K562 value near 4.4; a steep sigmoid there keeps gradients far above
-    # the float32 noise in a differenced loss.
+    # The term reports the raw log count, so the differenced quantity is that value itself.
     logits = _one_hot_logits(design, 2.0)
-    steep = config.model_copy(
-        update={"loss_terms": [term.model_copy(update={"sigmoid_center": 4.4, "sigmoid_scale": 0.25})]}
-    )
-    first = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[logits]), steep)
-    second = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[logits]), steep)
+    one_term = config.model_copy(update={"gradient_terms": [term]})
+    first = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[logits]), one_term)
+    second = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[logits]), one_term)
     validate_output(first)
-    gradient = first.results[0].gradient
+    (activity,) = first.results[0].terms
+    gradient = activity.gradient
     assert gradient is not None
-    assert gradient == second.results[0].gradient
+    assert gradient == second.results[0].terms[0].gradient, "deterministic=True must repeat bit-identically"
 
-    forward_only = steep.model_copy(update={"compute_gradient": False})
+    forward_only = one_term.model_copy(update={"compute_gradient": False})
     largest = sorted(
         ((abs(value), position, column) for position, row in enumerate(gradient) for column, value in enumerate(row)),
         reverse=True,
@@ -508,9 +531,9 @@ def test_cherimoya_gradient_matches_score_and_finite_differences() -> None:
         minus = [row[:] for row in logits]
         plus[position][column] += eps
         minus[position][column] -= eps
-        loss_plus = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[plus]), forward_only).results[0].loss
-        loss_minus = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[minus]), forward_only).results[0].loss
-        numeric = (loss_plus - loss_minus) / (2 * eps)
+        value_plus = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[plus]), forward_only)
+        value_minus = run_cherimoya_gradient(CherimoyaGradientInput(inputs=[minus]), forward_only)
+        numeric = (value_plus.results[0].terms[0].term_value - value_minus.results[0].terms[0].term_value) / (2 * eps)
         assert gradient[position][column] == pytest.approx(numeric, rel=0.02)
 
 
@@ -600,7 +623,7 @@ def test_cherimoya_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     from proto_tools.tools.sequence_scoring.cherimoya import (
         CherimoyaGradientConfig,
         CherimoyaGradientInput,
-        CherimoyaGradientLossTerm,
+        CherimoyaLogCountsTerm,
         run_cherimoya_gradient,
     )
 
@@ -611,14 +634,16 @@ def test_cherimoya_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     config = CherimoyaGradientConfig(
         context_left=hs2[:957],
         context_right=hs2[1157:],
-        loss_terms=[
-            CherimoyaGradientLossTerm(model=_K562_DNASE, direction="max"),
-            CherimoyaGradientLossTerm(model=_HEPG2_DNASE, direction="min"),
+        gradient_terms=[
+            CherimoyaLogCountsTerm(model=_K562_DNASE),
+            CherimoyaLogCountsTerm(model=_HEPG2_DNASE),
         ],
     )
 
     result = benchmark_twice(request, "cherimoya", lambda: run_cherimoya_gradient(inputs, config))
     validate_output(result)
     assert len(result.results) == 64
-    assert all(item.gradient is not None for item in result.results)
-    assert all(math.isfinite(value) for item in result.results for row in item.gradient for value in row)
+    for item in result.results:
+        assert [term.term.model for term in item.terms] == [_K562_DNASE, _HEPG2_DNASE]
+        assert all(term.gradient is not None for term in item.terms)
+        assert all(math.isfinite(value) for term in item.terms for row in term.gradient for value in row)

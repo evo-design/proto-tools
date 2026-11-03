@@ -1,11 +1,11 @@
 """Differentiable Cherimoya accessibility objectives for relaxed DNA logits."""
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 
 from proto_tools.tools.sequence_scoring.cherimoya.catalog import (
     CHERIMOYA_CONTEXT,
@@ -30,41 +30,38 @@ from proto_tools.utils import (
     DNA_NUCLEOTIDES,
     BatchedNucleotideGradientInput,
     ConfigField,
+    DifferentiableTerm,
+    GradientConfig,
+    GradientMetadata,
     GradientOutput,
     GradientResult,
     NucleotideSequenceLogits,
-    RelaxationConfig,
+    TermCatalog,
+    TermGradient,
     ToolInstance,
+    resolve_terms,
 )
 from proto_tools.utils.device import RemoteDevice
-from proto_tools.utils.tool_io import Metrics, MetricSpec
-
-CherimoyaQuantity = Literal["log_counts", "log_target_counts"]
-CherimoyaObjectiveDirection = Literal["max", "min"]
+from proto_tools.utils.tool_io import Directionality
 
 
-class CherimoyaGradientLossTerm(BaseModel):
-    """One differentiable Cherimoya objective term.
+class CherimoyaCountsTerm(DifferentiableTerm):
+    """Shared selectors for a differentiable Cherimoya read-count quantity.
 
-    Both quantities are natural-log read counts, which depend on each experiment's
-    sequencing depth, so set ``sigmoid_center`` per model and quantity. The default 4.5 is
-    the median fold 0 ``log_counts`` of the default model (ENCSR000EOT, K562 DNase-seq) over
-    5,000 sampled hg38 SCREEN cCREs; a target span shorter than 1,000 bp holds fewer reads.
+    Both quantities are natural-log read counts, which depend on each experiment's sequencing
+    depth. The value reported is that log count itself, in its own units; a bounded objective
+    over it is a goal the caller composes, and the centre it should saturate around is
+    experiment-specific. For the default model (ENCSR000EOT, K562 DNase-seq) the median fold 0
+    ``log_counts`` over 5,000 sampled hg38 SCREEN cCREs is 4.5; a target span shorter than
+    1,000 bp holds fewer reads.
 
     Attributes:
         model (str): ENCODE experiment accession or local ``.torch`` checkpoint path.
         folds (list[CherimoyaFold]): Folds averaged for this term (ignored for a checkpoint path).
-        quantity (CherimoyaQuantity): ``"log_counts"``, ln(reads + 1) over the 1,000 bp output
-            window, or ``"log_target_counts"``, ln(expected reads + 1) in the config's target span.
-        direction (CherimoyaObjectiveDirection): ``"max"`` minimizes
-            ``1 - sigmoid((value - center) / scale)``; ``"min"`` minimizes
-            ``sigmoid((value - center) / scale)``.
-        weight (float): Non-negative scalar applied before terms are summed.
-        sigmoid_center (float): Value of ``quantity`` where the sigmoid is 0.5.
-        sigmoid_scale (float): Positive scale of the sigmoid in ``quantity`` units.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    #: Whether more signal is wanted depends on whether the experiment is a target or an off-target.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
 
     model: str = Field(
         default=DEFAULT_CHERIMOYA_MODEL, title="Model", description="ENCODE experiment accession or .torch path"
@@ -72,20 +69,69 @@ class CherimoyaGradientLossTerm(BaseModel):
     folds: list[CherimoyaFold] = Field(
         default=[0], min_length=1, title="Folds", description="Folds averaged for this term"
     )
-    quantity: CherimoyaQuantity = Field(
+
+
+class CherimoyaLogCountsTerm(CherimoyaCountsTerm):
+    """ln(reads + 1) predicted over Cherimoya's full 1,000 bp output window.
+
+    Attributes:
+        id (Literal["log_counts"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Predicted ln(reads + 1) over Cherimoya's full output window"
+
+    id: Literal["log_counts"] = Field(
         default="log_counts",
-        title="Quantity",
-        description="ln(reads + 1) over the output window (log_counts) or the target span (log_target_counts)",
+        title="Term ID",
+        description="Identifies this quantity as ln(reads + 1) over the full output window.",
     )
-    direction: CherimoyaObjectiveDirection = Field(
-        default="max", title="Direction", description="Whether to maximize ('max') or minimize ('min') the quantity"
+
+
+class CherimoyaLogTargetCountsTerm(CherimoyaCountsTerm):
+    """ln(expected reads + 1) predicted inside the config's target span.
+
+    Requires ``target_start``/``target_end`` on the config to name a span; without them the
+    span is the whole designed segment.
+
+    Attributes:
+        id (Literal["log_target_counts"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Predicted ln(expected reads + 1) inside the target span"
+
+    id: Literal["log_target_counts"] = Field(
+        default="log_target_counts",
+        title="Term ID",
+        description="Identifies this quantity as ln(expected reads + 1) inside the target span.",
     )
-    weight: float = Field(default=1.0, ge=0.0, title="Weight", description="Relative weight of this term (>= 0)")
-    sigmoid_center: float = Field(
-        default=4.5, title="Sigmoid Center", description="Quantity value at the sigmoid midpoint; set per model"
+
+
+class CherimoyaTermGradient(TermGradient):
+    """One Cherimoya read-count quantity and its raw gradient.
+
+    Attributes:
+        term (CherimoyaLogCountsTerm | CherimoyaLogTargetCountsTerm): The model-and-quantity
+            selector this gradient answers.
+    """
+
+    term: CherimoyaLogCountsTerm | CherimoyaLogTargetCountsTerm = Field(
+        title="Term", description="Model-and-quantity selector answered."
     )
-    sigmoid_scale: float = Field(
-        default=1.0, gt=0.0, title="Sigmoid Scale", description="Sigmoid steepness in quantity units"
+
+
+class CherimoyaGradientResult(GradientResult):
+    """One evaluated sample and every Cherimoya quantity differentiated for it.
+
+    Attributes:
+        terms (list[CherimoyaTermGradient]): One entry per requested term, in the order requested.
+    """
+
+    terms: list[CherimoyaTermGradient] = Field(  # type: ignore[assignment]  # narrows the element type
+        default_factory=list,
+        title="Terms",
+        description="One gradient per requested model-and-quantity, in the order requested.",
     )
 
 
@@ -103,15 +149,16 @@ class CherimoyaGradientInput(BatchedNucleotideGradientInput):
     """
 
 
-class CherimoyaGradientConfig(RelaxationConfig):
+class CherimoyaGradientConfig(GradientConfig):
     """Configuration for differentiable Cherimoya objectives.
 
     The model input is ``context_left + designed segment + context_right``, which must be
     2,114 bp. Only the designed segment is differentiated.
 
     Attributes:
-        collection (CherimoyaCollectionKey): Collection the accessions in ``loss_terms`` come from.
-        loss_terms (list[CherimoyaGradientLossTerm]): Objective terms summed into one loss.
+        collection (CherimoyaCollectionKey): Collection the accessions in ``gradient_terms`` come from.
+        gradient_terms (list[CherimoyaLogCountsTerm | CherimoyaLogTargetCountsTerm]): Quantities to
+            differentiate, by name or as instances.
         context_left (str): Fixed DNA placed before the designed segment.
         context_right (str): Fixed DNA placed after the designed segment.
         target_start (int | None): Start of the ``log_target_counts`` span, relative to the
@@ -135,17 +182,22 @@ class CherimoyaGradientConfig(RelaxationConfig):
         description="Device to run Cherimoya on",
         include_in_key=False,
     )
+    TERMS: ClassVar[TermCatalog] = {
+        "log_counts": CherimoyaLogCountsTerm,
+        "log_target_counts": CherimoyaLogTargetCountsTerm,
+    }
+
     collection: CherimoyaCollectionKey = ConfigField(
         title="Collection",
         default="catv1",
-        description="Model collection the accessions in loss_terms come from.",
+        description="Model collection the accessions in gradient_terms come from.",
     )
-    loss_terms: list[CherimoyaGradientLossTerm] = ConfigField(
-        default_factory=lambda: [CherimoyaGradientLossTerm()],
+    gradient_terms: list[CherimoyaLogCountsTerm | CherimoyaLogTargetCountsTerm] = ConfigField(
+        default_factory=lambda: [CherimoyaLogCountsTerm()],
         min_length=1,
         max_length=MAX_CHERIMOYA_MODELS,
-        title="Loss Terms",
-        description="Per-model Cherimoya objectives summed before backpropagation.",
+        title="Gradient Terms",
+        description="Cherimoya read-count quantities to differentiate, by name or as instances.",
     )
     context_left: str = ConfigField(
         title="Left Context",
@@ -191,11 +243,23 @@ class CherimoyaGradientConfig(RelaxationConfig):
         """Validate and uppercase fixed context DNA."""
         return validate_dna_sequence(value) if value else value
 
-    @field_validator("loss_terms")
+    @field_validator("gradient_terms", mode="before")
     @classmethod
-    def resolve_term_models(
-        cls, terms: list[CherimoyaGradientLossTerm], info: ValidationInfo
-    ) -> list[CherimoyaGradientLossTerm]:
+    def resolve_gradient_terms(cls, value: Any) -> Any:
+        """Accept a term by name or class, leaving an already-built instance as it is."""
+        if not isinstance(value, list):
+            return value
+        catalog = cls.supported_terms()
+        return [
+            resolve_terms([entry], catalog)[0]  # type: ignore[arg-type]
+            if isinstance(entry, str | type)
+            else entry
+            for entry in value
+        ]
+
+    @field_validator("gradient_terms")
+    @classmethod
+    def resolve_term_models(cls, terms: list[Any], info: ValidationInfo) -> list[Any]:
         """Resolve each term's model and folds against the collection."""
         collection = info.data.get("collection", "catv1")
         resolved = []
@@ -209,87 +273,100 @@ class CherimoyaGradientConfig(RelaxationConfig):
         """Require target_end after target_start, and a term that uses the span when either is set."""
         if self.target_start is not None and self.target_end is not None and self.target_end <= self.target_start:
             raise ValueError("target_end must be greater than target_start")
-        targeted = any(term.quantity == "log_target_counts" for term in self.loss_terms)
+        targeted = any(term.id == "log_target_counts" for term in self.gradient_terms)
         if (self.target_start is not None or self.target_end is not None) and not targeted:
-            raise ValueError("target_start/target_end are only used by loss terms with quantity='log_target_counts'")
+            raise ValueError("target_start/target_end are only used by gradient terms named 'log_target_counts'")
+        asked = [(term.id, term.model, tuple(term.folds)) for term in self.gradient_terms]
+        repeated = sorted({item for item in asked if asked.count(item) > 1})
+        if repeated:
+            raise ValueError(f"gradient_terms names the same quantity, model and folds more than once: {repeated}")
         return self
 
     def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """Checkpoint paths name local files that a remote worker does not have."""
-        paths = sorted({term.model for term in self.loss_terms if is_checkpoint_path(term.model)})
+        paths = sorted({term.model for term in self.gradient_terms if is_checkpoint_path(term.model)})
         if paths:
-            return f"loss_terms models {paths} are local checkpoint files not available on device='{device}'."
+            return f"gradient_terms models {paths} are local checkpoint files not available on device='{device}'."
         return None
-
-
-class CherimoyaGradientSampleMetrics(Metrics):
-    """Per-sample differentiable Cherimoya objective metrics.
-
-    Metrics documented in ``metric_spec``:
-        loss (float): Weighted scalar objective value for one sample.
-
-    Attributes:
-        loss_terms (list[dict[str, Any]]): Per-term model, quantity value, sigmoid
-            transform, and weighted score for this sample.
-    """
-
-    metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "loss": {
-            "availability": "always",
-            "type": "float",
-            "min": 0.0,
-            "max": None,
-            "description": "Weighted scalar Cherimoya objective value for one sample.",
-            "better_values_are": "lower",
-        },
-    }
-    primary_metric: str | None = Field(
-        default="loss",
-        title="Primary Metric",
-        description="Headline metric used to rank results.",
-    )
-    loss_terms: list[dict[str, Any]] = Field(
-        default_factory=list,
-        title="Loss Terms",
-        description="Per-objective-term values and transform metadata for this sample.",
-    )
 
 
 class CherimoyaGradientOutput(GradientOutput):
     """Differentiable Cherimoya objective output.
 
     Attributes:
-        results (list[GradientResult]): One per input item, in input order, each holding that
-            sample's own gradient, weighted sigmoid objective, and per-term values.
+        results (list[CherimoyaGradientResult]): One per input item, in input order, each
+            holding that sample's requested read-count quantities and their raw gradients
+            (``None`` in forward-only mode).
         vocab (list[str]): DNA column ordering for logits and gradient.
         models (list[CherimoyaModelInfo]): Provenance of each model the terms used.
     """
 
+    results: list[CherimoyaGradientResult] = Field(  # type: ignore[assignment]  # narrows the element type
+        title="Results",
+        description="One result per input item, in input order, each carrying its read-count quantities.",
+    )
     models: list[CherimoyaModelInfo] = Field(
-        default_factory=list, title="Models", description="Provenance of each model the loss terms used"
+        default_factory=list, title="Models", description="Provenance of each model the gradient terms used"
     )
 
     @classmethod
-    def from_batch(cls, payload: Mapping[str, Any], models: list[CherimoyaModelInfo]) -> "CherimoyaGradientOutput":
+    def from_batch(
+        cls,
+        payload: Mapping[str, Any],
+        models: list[CherimoyaModelInfo],
+        *,
+        matrices: Sequence[Sequence[Sequence[float]]],
+        temperature: float | None,
+        soft: float = 1.0,
+        hard: float = 0.0,
+    ) -> "CherimoyaGradientOutput":
         """Unbatch one worker payload into per-sample results.
 
-        The worker evaluates the batch in one vectorized pass and reports a stacked ``(B, L, 4)``
-        gradient with per-sample losses and term values, so this splits them back into one result
-        per designed segment.
+        The worker reports one entry per requested quantity, each holding that quantity's value
+        and gradient for every sample, so this transposes terms x samples into one result per
+        designed segment.
 
         Args:
             payload (Mapping[str, Any]): Worker payload for the whole batch.
-            models (list[CherimoyaModelInfo]): Provenance of each model the loss terms used.
+            models (list[CherimoyaModelInfo]): Provenance of each model the gradient terms used.
+            matrices (Sequence[Sequence[Sequence[float]]]): The relaxed segment each sample was
+                differentiated at, in input order. Every term's gradient for one sample is a
+                derivative with respect to the same state, which is what lets them be combined.
+            temperature (float | None): The input's temperature, which fixes the coordinate space.
+            soft (float): Relaxation blend in force.
+            hard (float): Straight-through coefficient in force.
 
         Returns:
             CherimoyaGradientOutput: One result per sample, in input order.
         """
-        metrics = payload["metrics"]
-        gradients = payload["gradient"] or [None] * len(metrics["losses"])
-        results = []
-        for gradient, loss, term_rows in zip(gradients, metrics["losses"], metrics["loss_terms"], strict=True):
-            sample = CherimoyaGradientSampleMetrics.model_validate({"loss": float(loss), "loss_terms": term_rows})
-            results.append(GradientResult(gradient=gradient, loss=float(loss), metrics=sample.model_dump()))
+        entries = list(payload["terms"])
+        batch_size = int(payload["metrics"]["batch_size"])
+        # The config's catalog is the one place the ids are declared; narrow it to the two
+        # concrete classes, since the shared base pins no id of its own.
+        term_classes = cast(
+            dict[str, type[CherimoyaLogCountsTerm | CherimoyaLogTargetCountsTerm]],
+            CherimoyaGradientConfig.supported_terms(),
+        )
+        results = [
+            CherimoyaGradientResult(
+                terms=[
+                    CherimoyaTermGradient(
+                        term=term_classes[entry["id"]](model=entry["model"], folds=entry["folds"]),
+                        term_value=float(entry["values"][index]),
+                        gradient=entry["gradients"][index] if entry["gradients"] else None,
+                        metadata=GradientMetadata.from_input(
+                            matrices[index],
+                            vocab=payload["vocab"],
+                            temperature=temperature,
+                            soft=soft,
+                            hard=hard,
+                        ),
+                    )
+                    for entry in entries
+                ]
+            )
+            for index in range(batch_size)
+        ]
         return cls(results=results, vocab=payload["vocab"], models=models)
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
@@ -309,7 +386,7 @@ def example_input() -> Any:
 
 def _target_span(config: CherimoyaGradientConfig, length: int) -> tuple[int, int] | None:
     """Return the target span in output-window coordinates, or None when no term needs it."""
-    if all(term.quantity != "log_target_counts" for term in config.loss_terms):
+    if all(term.id != "log_target_counts" for term in config.gradient_terms):
         return None
     start = len(config.context_left) + (config.target_start or 0) - CHERIMOYA_OUTPUT_FLANK
     end = len(config.context_left) + (config.target_end or length) - CHERIMOYA_OUTPUT_FLANK
@@ -331,7 +408,6 @@ def _target_span(config: CherimoyaGradientConfig, length: int) -> tuple[int, int
     input_class=CherimoyaGradientInput,
     config_class=CherimoyaGradientConfig,
     output_class=CherimoyaGradientOutput,
-    metrics_class=CherimoyaGradientSampleMetrics,
     description="Compute differentiable Cherimoya accessibility losses and gradients for relaxed DNA logits",
     uses_gpu=True,
     example_input=example_input,
@@ -363,10 +439,12 @@ def run_cherimoya_gradient(
     target_span = _target_span(config, length)
 
     # Each checkpoint is loaded once even when several terms share a model.
-    models = list(dict.fromkeys(term.model for term in config.loss_terms))
+    models = list(dict.fromkeys(term.model for term in config.gradient_terms))
     specs: list[dict[str, Any]] = []
     for model in models:
-        folds = list(dict.fromkeys(fold for term in config.loss_terms if term.model == model for fold in term.folds))
+        folds = list(
+            dict.fromkeys(fold for term in config.gradient_terms if term.model == model for fold in term.folds)
+        )
         specs.extend(checkpoint_specs([model], folds, config.collection))
     index = {(spec["model"], spec["fold"]): i for i, spec in enumerate(specs)}
     terms = [
@@ -378,7 +456,7 @@ def run_cherimoya_gradient(
                 for spec in checkpoint_specs([term.model], list(term.folds), config.collection)
             ],
         }
-        for term in config.loss_terms
+        for term in config.gradient_terms
     ]
 
     result = ToolInstance.dispatch(
@@ -388,7 +466,7 @@ def run_cherimoya_gradient(
             "logits": [item.root for item in inputs.inputs],
             "temperature": inputs.temperature,
             "checkpoints": specs,
-            "loss_terms": terms,
+            "gradient_terms": terms,
             "context_left": config.context_left,
             "context_right": config.context_right,
             "target_span": target_span,
@@ -403,4 +481,11 @@ def run_cherimoya_gradient(
         instance=instance,
         config=config,
     )
-    return CherimoyaGradientOutput.from_batch(result, model_infos(models, config.collection, specs, result["applied"]))
+    return CherimoyaGradientOutput.from_batch(
+        result,
+        model_infos(models, config.collection, specs, result["applied"]),
+        matrices=[item.root for item in inputs.inputs],
+        temperature=inputs.temperature,
+        soft=config.soft,
+        hard=config.hard,
+    )

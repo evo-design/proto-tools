@@ -68,16 +68,18 @@ Use this tool to see where accessibility falls within an element, compare the pr
 
 ### Cherimoya Gradient (`cherimoya-gradient`)
 
-Computes a weighted differentiable accessibility objective over one or more models and, by default, returns its gradient with respect to batched relaxed DNA logits.
+Reports Cherimoya's predicted read counts for one or more models and, by default, each one's own gradient with respect to batched relaxed DNA logits. Two quantities are available: `log_counts` over the full output window and `log_target_counts` inside the configured target span.
 
 #### Applications
 
-Use this tool inside gradient-based DNA design loops, for example to raise accessibility in one biosample while lowering it in others. It is designed for optimizer calls rather than final biological validation.
+Use this tool inside gradient-based DNA design loops, for example to raise accessibility in one biosample while lowering it in others: request a term per model, then compose a goal per term. It is designed for optimizer calls rather than final biological validation.
 
 #### Usage Tips
 
 - **Context fills the window.** `context_left`, the designed logits, and `context_right` must total 2,114 bp; only the designed segment receives a gradient.
-- **Set the sigmoid per model.** Both quantities are ln(reads + 1), `log_counts` over the output window and `log_target_counts` over `target_start`..`target_end`, and both depend on each experiment's depth; the default `sigmoid_center` of 4.5 is the median `log_counts` of the default model over hg38 cCREs.
+- **The value is the raw log count, not a bounded transform of it.** Both quantities are ln(reads + 1) — `log_counts` over the output window, `log_target_counts` over `target_start`..`target_end` — and the gradient beside each is that count's own derivative. The saturating objective this tool used to compute internally is now a goal: `SigmoidGoal(direction="maximize", center=..., scale=...)` reproduces the former `direction="max"`, and a weight on the goal balances models against each other.
+- **Pick the goal's centre per model.** Read counts depend on each experiment's sequencing depth, so a centre that saturates sensibly for one model will not for another. For the default model over hg38 cCREs the median `log_counts` is 4.5, which was the old `sigmoid_center` default; a target span shorter than 1,000 bp holds fewer reads.
+- **Each requested quantity is its own forward and backward.** Terms naming different models or folds load and run their own checkpoints, so asking for K terms costs K evaluations; terms are not fused into one objective.
 - **Use `deterministic=True` for reproducible gradients.** The default Triton kernels are faster but do not repeat bit-for-bit on GPU.
 
 ## Toolkit Notes

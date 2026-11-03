@@ -367,15 +367,12 @@ def test_a_narrowed_gradient_round_trips_with_its_selectors_intact() -> None:
 def test_a_base_typed_term_keeps_its_kind_but_loses_its_selectors() -> None:
     """Pydantic serializes against the declared type: the ID is declared there, the selectors are not."""
     dumped = GradientResult(
-        loss=0.0,
         terms=[CellTermGradient(term=CellActivityTerm(cell_type="K562"), term_value=1.0)],
     ).model_dump()
 
     assert dumped["terms"][0]["term"] == {"id": "activity"}, "the kind survives, the selectors do not"
 
-    restored = CellGradientResult.model_validate(
-        {"loss": 0.0, "terms": [{"term": {"cell_type": "K562"}, "term_value": 1.0}]}
-    )
+    restored = CellGradientResult.model_validate({"terms": [{"term": {"cell_type": "K562"}, "term_value": 1.0}]})
     assert restored.terms[0].term.cell_type == "K562", "narrowing is what preserves selectors"
 
 
@@ -385,7 +382,6 @@ def test_the_full_output_nesting_round_trips() -> None:
         vocab=["A", "C", "G", "T"],
         results=[
             CellGradientResult(
-                loss=0.0,
                 terms=[
                     CellTermGradient(
                         term=CellActivityTerm(cell_type="K562"),
@@ -410,7 +406,6 @@ def test_requested_order_is_the_returned_order() -> None:
     """Terms come back in the order they were asked for, which is how a caller lines them up."""
     requested = [CellActivityTerm(cell_type=name) for name in ("HepG2", "K562", "Jurkat")]
     result = CellGradientResult(
-        loss=0.0,
         terms=[CellTermGradient(term=term, term_value=float(index)) for index, term in enumerate(requested)],
     )
 
@@ -419,10 +414,10 @@ def test_requested_order_is_the_returned_order() -> None:
     assert [answer.term.cell_type for answer in restored.terms] == ["HepG2", "K562", "Jurkat"]
 
 
-def test_an_unmigrated_result_still_validates() -> None:
-    """``terms`` is empty on a tool that still reports one pre-composed objective."""
-    unmigrated = GradientResult(loss=0.5, gradient=[[0.1, 0.2]])
-    assert unmigrated.terms == []
+def test_a_pre_term_result_is_rejected_rather_than_silently_emptied() -> None:
+    """Without extra="forbid" a stale tool would return no terms and look like it worked."""
+    with pytest.raises(ValidationError):
+        GradientResult(loss=0.5, gradient=[[0.1, 0.2]])
 
 
 # ── The ID contract ───────────────────────────────────────────────────────────
@@ -546,7 +541,6 @@ def test_two_parameterless_quantities_read_back_as_their_own_classes() -> None:
         vocab=["A", "C", "G", "T"],
         results=[
             PredictionGradientResult(
-                loss=0.0,
                 terms=[
                     PredictionTermGradient(
                         term=ConfidenceTerm(),
@@ -587,7 +581,6 @@ def test_a_parameterized_term_keeps_its_selectors_through_json() -> None:
         vocab=["A", "C", "G", "T"],
         results=[
             CellGradientResult(
-                loss=0.0,
                 terms=[
                     CellTermGradient(term=CellActivityTerm(cell_type=name), term_value=float(index))
                     for index, name in enumerate(("HepG2", "Jurkat"))
