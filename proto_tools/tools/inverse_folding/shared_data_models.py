@@ -259,8 +259,10 @@ def _reject_unreadable_selections(inp: Any, readable: dict[str, list[int]]) -> N
                 f"does not read from the structure file. {name} sets the amino acid at a position "
                 "to stay as it is while the rest of the chain is redesigned. This model leaves "
                 f"{them} out of the structure it builds, so it has no amino acid there to keep or "
-                f"change. The current amino acid appears unchanged in the output whether or not "
-                f"{they_are} listed. Remove {them} from {name}."
+                "change. The output keeps the input residue at "
+                f"{'these positions' if many else 'this position'}, "
+                f"including its CCD code, whether or not {they_are} listed in {name}. "
+                f"Remove {them} from {name}."
             )
 
 
@@ -461,13 +463,12 @@ class DesignedComplex(Complex):
                     skipped = [p for p in range(1, len(entry.sequence) + 1) if p not in set(readable)]
                     logger.warning(
                         "%s: this model does not read chain %s %s %s from the structure file. "
-                        "%s current amino acid appears unchanged in the output instead of a "
-                        "designed one. Every other position in the chain was designed.",
+                        "The output keeps the input residue there, including its CCD code, rather "
+                        "than a designed amino acid. Every other position in the chain was designed.",
                         tool,
                         entry.id,
                         "positions" if len(skipped) > 1 else "position",
                         ", ".join(str(position) for position in skipped),
-                        "Their" if len(skipped) > 1 else "Its",
                     )
                 if len(sequence) != len(entry.sequence):
                     raise ValueError(
@@ -486,7 +487,16 @@ class DesignedComplex(Complex):
                             "be placed back on the chain."
                         )
                     )
-                chains.append(Chain(id=entry.id, sequence=sequence, entity_type="protein"))
+                # A position the model did not read keeps the input's residue, so it also keeps
+                # the CCD code saying what that residue is. Without this the chain reports a bare
+                # "X" and the output no longer records that position 64 of GFP is a CRO
+                # chromophore. Designed positions carry no modification: the model emits a
+                # standard amino acid there.
+                # With no declared rule the model read every position, so nothing is preserved and
+                # the chain behaves exactly as it does without this feature.
+                kept = set(range(1, len(entry.sequence) + 1)) - set(readable) if readable is not None else set()
+                preserved = [m for m in getattr(entry, "modifications", None) or [] if m.position in kept]
+                chains.append(Chain(id=entry.id, sequence=sequence, entity_type="protein", modifications=preserved))
             else:
                 chains.append(entry)
         flags = [isinstance(entry, Chain) and entry.id in designed for entry in chains]

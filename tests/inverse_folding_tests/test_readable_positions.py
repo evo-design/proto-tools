@@ -119,3 +119,40 @@ def test_a_toolkit_declaring_no_rule_validates_nothing():
         inputs=[InverseFoldingStructureInput(structure=structure, fixed_positions={"A": [64]})]
     )
     config.preprocess(inputs)  # must not raise
+
+
+def test_an_unread_residue_keeps_its_ccd_code_in_the_output():
+    """The preserved residue must still say it is a CRO chromophore, not a bare "X".
+
+    Its one-letter code is ``X`` either way, so without the CCD code the output loses the only
+    record of what the residue actually is, and anything downstream sees an unknown residue.
+    """
+    from proto_tools.entities.complex import Complex
+    from proto_tools.tools.inverse_folding.shared_data_models import DesignedComplex
+
+    structure = get_gfp_structure()
+    readable = ProteinMPNNSampleConfig().readable_positions(InverseFoldingStructureInput(structure=structure))
+    native = Complex.from_structure(structure, include_ligands=False).chains[0]
+    assert [m.modification_code for m in native.modifications] == ["CRO"], "input records the chromophore"
+
+    design = DesignedComplex.from_design(
+        structure,
+        {"A": "W" * len(readable["A"])},
+        {"A"},
+        tool="proteinmpnn-sample",
+        include_ligands=False,
+        readable_positions=readable,
+    )
+
+    chain = design.chains[0]
+    assert chain.sequence[63] == "X"
+    assert [(m.position, m.modification_code) for m in chain.modifications] == [(64, "CRO")]
+
+
+def test_a_designed_position_carries_no_modification():
+    """Designed positions hold standard amino acids, so keeping a CCD code there would lie."""
+    from proto_tools.tools.inverse_folding.shared_data_models import DesignedComplex
+
+    structure = get_gfp_structure()
+    design = DesignedComplex.from_design(structure, {"A": "W" * 228}, {"A"}, tool="test-sample", include_ligands=False)
+    assert design.chains[0].modifications == []
