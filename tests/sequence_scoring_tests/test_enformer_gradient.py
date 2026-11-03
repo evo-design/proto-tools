@@ -7,10 +7,10 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.tools import (
+    EnformerActivityTerm,
     EnformerGradientCandidate,
     EnformerGradientConfig,
     EnformerGradientInput,
-    EnformerGradientLossTerm,
     EnformerGradientOutput,
     run_enformer_gradient,
 )
@@ -54,10 +54,18 @@ def test_enformer_gradient_candidate_requires_aligned_positions():
         EnformerGradientCandidate(sequence=_context(), positions=[ENFORMER_CONTEXT + 1], logits=[[0.25] * 4])
 
 
-def test_enformer_gradient_loss_term_rejects_inverted_bin_span():
+def test_enformer_gradient_term_rejects_inverted_bin_span():
     """A term's bin span must be ordered, otherwise the mean would cover nothing."""
     with pytest.raises(ValidationError, match="precedes"):
-        EnformerGradientLossTerm(bin_start=100, bin_end=10)
+        EnformerActivityTerm(bin_start=100, bin_end=10)
+
+
+def test_enformer_gradient_rejects_the_same_quantity_twice():
+    """One track and bin span is one quantity; asking for it twice is a mistake, not a doubling."""
+    with pytest.raises(ValidationError, match="more than once"):
+        EnformerGradientConfig(
+            gradient_terms=[EnformerActivityTerm(track=3), EnformerActivityTerm(track=3)],
+        )
 
 
 def test_enformer_gradient_input_normalizes_a_single_candidate():
@@ -80,9 +88,15 @@ def test_enformer_gradient_dispatch_contract(monkeypatch):
         return {
             "results": [
                 {
-                    "gradient": [[0.0] * 4] * len(item["positions"]),
-                    "loss": -1.5,
-                    "metrics": {"loss": -1.5, "designed_positions": len(item["positions"]), "loss_terms": []},
+                    "terms": [
+                        {
+                            "term": {k: term[k] for k in ("track", "bin_start", "bin_end")},
+                            "value": 1.5 + index,
+                            "gradient": [[0.1 * (index + 1)] * 4] * len(item["positions"]),
+                        }
+                        for index, term in enumerate(payload["gradient_terms"])
+                    ],
+                    "metrics": {"designed_positions": len(item["positions"])},
                 }
                 for item in payload["items"]
             ],
@@ -97,9 +111,9 @@ def test_enformer_gradient_dispatch_contract(monkeypatch):
     result = run_enformer_gradient(
         EnformerGradientInput(inputs=[_candidate(4), _candidate(2)], temperature=0.7),
         EnformerGradientConfig(
-            loss_terms=[
-                EnformerGradientLossTerm(track=11, bin_start=400, bin_end=410, direction="max", weight=2.0),
-                EnformerGradientLossTerm(track=12, direction="min"),
+            gradient_terms=[
+                EnformerActivityTerm(track=11, bin_start=400, bin_end=410),
+                EnformerActivityTerm(track=12),
             ],
             device="cuda",
         ),
@@ -112,12 +126,26 @@ def test_enformer_gradient_dispatch_contract(monkeypatch):
     assert payload["items"][0]["positions"][0] == CENTER
     assert len(payload["items"][0]["sequence"]) == ENFORMER_CONTEXT
     assert payload["temperature"] == 0.7
-    assert [term["track"] for term in payload["loss_terms"]] == [11, 12]
-    assert payload["loss_terms"][0]["weight"] == 2.0
-    assert payload["loss_terms"][1]["bin_end"] == ENFORMER_OUTPUT
+    assert [term["track"] for term in payload["gradient_terms"]] == [11, 12]
+    assert payload["gradient_terms"][1]["bin_end"] == ENFORMER_OUTPUT
     assert payload["species"] == "human"
     assert len(result.results) == 2
     assert result.vocab == ["A", "C", "G", "T"]
+
+    # Each track comes back as its own term, carrying the selectors it was asked for
+    first, second = result.results[0].terms
+    assert [(t.term.track, t.term.bin_start, t.term.bin_end) for t in (first, second)] == [
+        (11, 400, 410),
+        (12, 1, ENFORMER_OUTPUT),
+    ]
+    assert (first.term_value, second.term_value) == (1.5, 2.5)
+    assert first.metadata is not None
+    assert first.metadata.positions == result.results[0].terms[1].metadata.positions
+    assert first.metadata.positions[0] == CENTER, "metadata records where in the context the rows sit"
+
+    # A track can be a target or an off-target, so the tool declines to guess a direction
+    with pytest.raises(ValueError, match="needs an explicit goal"):
+        result.results[0].compose()
 
 
 # ── Integration ───────────────────────────────────────────────────────────────
@@ -129,58 +157,39 @@ def test_enformer_gradient_single_candidate():
     """A real checkpoint returns a finite gradient covering only the designed positions."""
     result = run_enformer_gradient(
         EnformerGradientInput(inputs=_candidate(8)),
-        EnformerGradientConfig(loss_terms=[EnformerGradientLossTerm(track=0, bin_start=440, bin_end=456)]),
+        EnformerGradientConfig(gradient_terms=[EnformerActivityTerm(track=0, bin_start=440, bin_end=456)]),
     )
     validate_output(result)
 
     assert result.tool_id == "enformer-gradient"
     (candidate,) = result.results
-    assert candidate.gradient is not None
-    assert len(candidate.gradient) == 8, "one gradient row per designed position"
-    assert all(len(row) == 4 for row in candidate.gradient)
-    assert all(math.isfinite(value) for row in candidate.gradient for value in row)
-    assert any(value != 0.0 for row in candidate.gradient for value in row)
-    assert math.isfinite(candidate.loss)
+    (activity,) = candidate.terms
+    assert activity.gradient is not None
+    assert len(activity.gradient) == 8, "one gradient row per designed position"
+    assert all(len(row) == 4 for row in activity.gradient)
+    assert all(math.isfinite(value) for row in activity.gradient for value in row)
+    assert any(value != 0.0 for row in activity.gradient for value in row)
+    assert math.isfinite(activity.term_value)
+    assert activity.term.track == 0
     assert candidate.metrics["designed_positions"] == 8
-    (term,) = candidate.metrics["loss_terms"]
-    assert term["track"] == 0
-    assert math.isfinite(term["mean_activity"])
     assert result.vocab == ["A", "C", "G", "T"]
 
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-def test_enformer_gradient_direction_flips_the_objective_sign():
-    """`max` and `min` on the same track differ only in the sign of the objective."""
+def test_enformer_gradient_forward_mode_matches_backward_activity():
+    """compute_gradient=False returns the same activity without a gradient."""
     inputs = EnformerGradientInput(inputs=_candidate(4))
-    term = {"track": 0, "bin_start": 440, "bin_end": 456}
+    terms = [EnformerActivityTerm(track=0, bin_start=440, bin_end=456)]
 
-    maximize = run_enformer_gradient(
-        inputs, EnformerGradientConfig(loss_terms=[EnformerGradientLossTerm(**term, direction="max")])
-    )
-    minimize = run_enformer_gradient(
-        inputs, EnformerGradientConfig(loss_terms=[EnformerGradientLossTerm(**term, direction="min")])
-    )
+    backward = run_enformer_gradient(inputs, EnformerGradientConfig(gradient_terms=terms))
+    forward = run_enformer_gradient(inputs, EnformerGradientConfig(gradient_terms=terms, compute_gradient=False))
 
-    assert maximize.results[0].loss == pytest.approx(-minimize.results[0].loss, rel=1e-5, abs=1e-6)
-    assert maximize.results[0].metrics["loss_terms"][0]["mean_activity"] == pytest.approx(
-        minimize.results[0].metrics["loss_terms"][0]["mean_activity"], rel=1e-5
-    )
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-def test_enformer_gradient_forward_mode_matches_backward_loss():
-    """compute_gradient=False returns the same objective without a gradient."""
-    inputs = EnformerGradientInput(inputs=_candidate(4))
-    terms = [EnformerGradientLossTerm(track=0, bin_start=440, bin_end=456)]
-
-    backward = run_enformer_gradient(inputs, EnformerGradientConfig(loss_terms=terms))
-    forward = run_enformer_gradient(inputs, EnformerGradientConfig(loss_terms=terms, compute_gradient=False))
-
-    assert forward.results[0].gradient is None
-    assert backward.results[0].gradient is not None
-    assert forward.results[0].loss == pytest.approx(backward.results[0].loss, rel=1e-4, abs=1e-5)
+    (with_gradient,) = backward.results[0].terms
+    (without,) = forward.results[0].terms
+    assert without.gradient is None
+    assert with_gradient.gradient is not None
+    assert without.term_value == pytest.approx(with_gradient.term_value, rel=1e-4, abs=1e-5)
 
 
 @pytest.mark.benchmark("enformer-gradient")
@@ -189,7 +198,7 @@ def test_enformer_gradient_forward_mode_matches_backward_loss():
 def test_enformer_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark enformer-gradient: one backward pass over the full 196,608 bp context (cold + warm)."""
     inputs = EnformerGradientInput(inputs=_candidate(16))
-    config = EnformerGradientConfig(loss_terms=[EnformerGradientLossTerm(track=0, bin_start=440, bin_end=456)])
+    config = EnformerGradientConfig(gradient_terms=[EnformerActivityTerm(track=0, bin_start=440, bin_end=456)])
 
     result = benchmark_twice(request, "enformer", lambda: run_enformer_gradient(inputs, config))
     validate_output(result)
@@ -197,5 +206,6 @@ def test_enformer_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     assert isinstance(result, EnformerGradientOutput)
     assert result.tool_id == "enformer-gradient"
     (candidate,) = result.results
-    assert candidate.gradient is not None
-    assert len(candidate.gradient) == 16
+    (activity,) = candidate.terms
+    assert activity.gradient is not None
+    assert len(activity.gradient) == 16

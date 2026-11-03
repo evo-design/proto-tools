@@ -110,7 +110,7 @@ class EnformerModel:
         positions: list[int],
         logits_list: list[list[float]],
         *,
-        loss_terms: list[dict[str, Any]],
+        gradient_terms: list[dict[str, Any]],
         species: str,
         temperature: float | None = None,
         soft: float = 1.0,
@@ -119,7 +119,7 @@ class EnformerModel:
         device: str = "cuda",
         verbose: bool = False,
     ) -> dict[str, Any]:
-        """Weighted track-and-bin objective gradient for relaxed positions in an Enformer context.
+        """Per-track activity and gradient for relaxed positions in an Enformer context.
 
         Enformer's forward accepts a float one-hot of shape ``(batch, length, 4)`` directly, so the
         relaxed distribution is written into the designed rows and differentiated through without
@@ -129,7 +129,7 @@ class EnformerModel:
             sequence: Full ``ENFORMER_CONTEXT`` bp context window.
             positions: 1-indexed inclusive context positions the relaxed rows map to.
             logits_list: Relaxed state, shape ``(len(positions), 4)`` in ``A,C,G,T`` order.
-            loss_terms: Objective terms, each with track, bin_start, bin_end, direction, weight.
+            gradient_terms: Quantities to differentiate, each with track, bin_start, bin_end.
             species: Species output head to read tracks from.
             temperature: Optional softmax temperature; ``None`` uses the rows as probabilities.
             soft: Blend from the raw input matrix (0) to softmax probabilities (1).
@@ -139,7 +139,8 @@ class EnformerModel:
             verbose: Whether to log status messages.
 
         Returns:
-            dict[str, Any]: Gradient (or ``None``), weighted loss, per-term metrics, and vocab.
+            dict[str, Any]: One entry per requested quantity with its raw mean activity and
+                gradient (or ``None``), plus per-candidate metrics and the vocab.
 
         Raises:
             ValueError: If the context length, positions, rows, or a track index do not line up.
@@ -182,45 +183,33 @@ class EnformerModel:
                 raise ValueError(f"enformer: unknown species head {species!r}; have {sorted(output)}")
             tracks = output[species]
 
-            total = torch.zeros((), device=self.device, dtype=torch.float32)
-            term_metrics: list[dict[str, Any]] = []
-            for term in loss_terms:
+            # One backward per track, sharing one forward graph retained until the last.
+            terms: list[dict[str, Any]] = []
+            for position, term in enumerate(gradient_terms):
                 track = int(term["track"])
                 start = int(term["bin_start"]) - 1
                 end = int(term["bin_end"])
                 if track >= tracks.shape[-1]:
                     raise ValueError(f"enformer: track {track} is out of range for {tracks.shape[-1]} tracks")
                 activity = tracks[0, start:end, track].float().mean()
-                signed = -activity if term["direction"] == "max" else activity
-                weighted = float(term["weight"]) * signed
-                total = total + weighted
-                term_metrics.append(
+
+                gradient_value: list[list[float]] | None = None
+                if backprop:
+                    retain = position < len(gradient_terms) - 1
+                    grad = torch.autograd.grad(activity, seq_dist, retain_graph=retain, allow_unused=False)[0]
+                    gradient_value = grad.detach().cpu().tolist()
+
+                terms.append(
                     {
-                        "track": track,
-                        "bin_start": int(term["bin_start"]),
-                        "bin_end": int(term["bin_end"]),
-                        "direction": term["direction"],
-                        "weight": float(term["weight"]),
-                        "mean_activity": float(activity.item()),
-                        "weighted_score": float(weighted.item()),
+                        "term": {"track": track, "bin_start": int(term["bin_start"]), "bin_end": int(term["bin_end"])},
+                        "value": float(activity.item()),
+                        "gradient": gradient_value,
                     }
                 )
 
-            gradient_value: list[list[float]] | None = None
-            if backprop:
-                total.backward()
-                if seq_dist.grad is None:
-                    raise RuntimeError("enformer: missing relaxed-state gradient after backward")
-                gradient_value = seq_dist.grad.detach().cpu().tolist()
-
         return {
-            "gradient": gradient_value,
-            "loss": float(total.item()),
-            "metrics": {
-                "loss": float(total.item()),
-                "designed_positions": len(positions),
-                "loss_terms": term_metrics,
-            },
+            "terms": terms,
+            "metrics": {"designed_positions": len(positions)},
             "vocab": ["A", "C", "G", "T"],
         }
 
@@ -267,7 +256,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 sequence=item["sequence"],
                 positions=item["positions"],
                 logits_list=item["logits"],
-                loss_terms=input_dict["loss_terms"],
+                gradient_terms=input_dict["gradient_terms"],
                 species=input_dict["species"],
                 temperature=resolve_temperature(input_dict["temperature"]),
                 soft=float(input_dict.get("soft", 1.0)),
@@ -279,7 +268,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             for item in input_dict["items"]
         ]
         return {
-            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
+            "results": [{key: result[key] for key in ("terms", "metrics")} for result in results],
             "vocab": results[0]["vocab"],
         }
 

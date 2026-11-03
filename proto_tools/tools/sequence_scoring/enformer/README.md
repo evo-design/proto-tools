@@ -43,17 +43,17 @@ This tool is appropriate for analyses that relate noncoding DNA sequence to pred
 
 ### Enformer Gradient (`enformer-gradient`)
 
-Scores a weighted objective over Enformer's predicted track activity and returns its derivative with respect to a relaxed distribution over selected positions. Each objective term names an output track and a span of 32 bp output bins, a direction, and a weight; the terms are signed so the summed objective is always minimized.
+Reports Enformer's predicted track activity and its derivative with respect to a relaxed distribution over selected positions, one quantity at a time. Each requested term names an output track and a span of 128 bp output bins, and comes back with its own mean activity and its own raw gradient.
 
 #### Applications
 
-This is the differentiable form of Enformer prediction, intended as an objective inside a regulatory-sequence design loop: an optimizer holds a relaxed distribution over the bases it is allowed to change, asks for the gradient, and steps those bases toward sequences with the activity profile the terms describe — raising a track over an enhancer window, or raising one cell type while suppressing another. Setting `compute_gradient=False` turns it into a forward-only objective score for ranking candidates.
+This is the differentiable form of Enformer prediction, intended as an objective inside a regulatory-sequence design loop: an optimizer holds a relaxed distribution over the bases it is allowed to change, asks for the gradients, and combines them into whatever objective it wants — raising a track over an enhancer window, or raising one cell type while suppressing another — then steps those bases accordingly. Setting `compute_gradient=False` turns it into a forward-only activity score for ranking candidates.
 
 #### Usage Tips
 
 - **Each candidate carries the whole context and only the designed positions.** Enformer reads a fixed 196,608 bp window, but a design problem usually varies a small part of it. A candidate bundles the full context `sequence`, the 1-indexed `positions` whose bases are relaxed, and a `(len(positions), 4)` `logits` matrix aligned to them, so the returned gradient covers only those positions while the surrounding context still reaches the model.
 - **Bin spans are 1-indexed and inclusive** over the 896 output bins, each covering 128 bp. A term's score is the mean activity across its span, so widening the span smooths the objective.
-- **`direction` fixes the sign, `weight` the balance.** `"max"` minimizes negative activity, `"min"` minimizes activity. Combine opposing terms to express specificity.
+- **Several tracks share one forward pass.** Each requested quantity gets its own backward over that shared graph, so asking for K tracks costs one forward and K backwards rather than K of each.
 - **`max_chunk_size` is 1.** A forward pass over a 196,608 bp context plus its backward pass is already large, so candidates are dispatched one at a time and fan out across devices rather than batching within a worker.
 - **`species` picks the output head.** Human exposes 5,313 tracks, mouse 1,643; a term's `track` indexes the selected head.
 
