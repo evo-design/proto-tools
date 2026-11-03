@@ -254,6 +254,12 @@ from proto_tools.tools.epitope_prediction import (
 # Gene annotation tools
 from proto_tools.tools.gene_annotation import (
     CrisprArray,
+    CRISPRGuideCandidate,
+    CRISPRGuideEnumerationConfig,
+    CRISPRGuideEnumerationInput,
+    CRISPRGuideEnumerationOutput,
+    CRISPRGuideRegion,
+    CRISPRGuideRegionResult,
     CrisprRepeatSpacer,
     CrisprTracrRNAConfig,
     CrisprTracrRNAInput,
@@ -295,6 +301,7 @@ from proto_tools.tools.gene_annotation import (
     PyPhmmerConfig,
     PyPhmmerInput,
     PyPhmmerOutput,
+    run_crispr_guides_enumerate,
     run_crispr_tracr_rna,
     run_meme_fimo_scan,
     run_minced,
@@ -1460,6 +1467,14 @@ __all__ = [
     "normalize_alleles",
     "run_netmhcpan_peptides",
     "run_netmhcpan_protein",
+    # CRISPRGuides
+    "CRISPRGuideCandidate",
+    "CRISPRGuideEnumerationConfig",
+    "CRISPRGuideEnumerationInput",
+    "CRISPRGuideEnumerationOutput",
+    "CRISPRGuideRegion",
+    "CRISPRGuideRegionResult",
+    "run_crispr_guides_enumerate",
     # CRISPRtracrRNA
     "CrisprTracrRNAConfig",
     "CrisprTracrRNAInput",
