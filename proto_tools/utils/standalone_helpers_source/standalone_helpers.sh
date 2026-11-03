@@ -320,14 +320,23 @@ proto_sha256() {
 #
 # Run <command> (a program or shell function) while holding an exclusive flock on
 # <lock_file>, so setup scripts that share a model cache take turns on a download
-# instead of writing the same files at once. The kernel drops the lock when the
-# holder exits, so a crashed run leaves no stale lock; the 0-byte lock file is kept
-# (deleting it would let two processes lock different inodes). <command> runs in a
-# subshell, so variables it sets do not reach the caller. Waits up to
-# $PROTO_LOCK_TIMEOUT_SECONDS (default 3600, enough to wait out someone else's
-# multi-GB download), then fails. Lock files are named like standalone_helpers'
-# Python ones, e.g. ".<file>.download.lock" beside the file. Without flock(1)
-# (macOS), <command> runs unlocked.
+# instead of writing the same files at once. This works across processes and, on
+# the shared filesystems tested (Lustre $SCRATCH), across nodes. Returns
+# <command>'s exit status.
+#
+# - The kernel drops the lock when the holder exits, even on kill -9, so a crashed
+#   run leaves no stale lock. The 0-byte lock file is kept: deleting it would let
+#   two processes lock different inodes.
+# - Re-entrant: a <command> that takes the same <lock_file> again (a helper calling
+#   a helper) runs without waiting on itself. Different lock files nest normally.
+# - <command> runs in a subshell, so variables it sets do not reach the caller.
+# - Waits up to $PROTO_LOCK_TIMEOUT_SECONDS (default 3600, long enough to wait out
+#   someone else's multi-GB download), then fails.
+# - Without flock(1) (macOS), <command> runs unlocked, as before locking existed.
+#
+# Name lock files like standalone_helpers' Python ones, ".<file>.download.lock"
+# beside a file or ".<dir>.extract.lock" beside a directory, so bash and Python
+# callers for the same target wait for each other.
 #
 # Example:
 #   proto_with_lock "${WEIGHTS_DIR}/.params.extract.lock" _fetch_params
@@ -335,18 +344,38 @@ proto_sha256() {
 proto_with_lock() {
     local lock="$1"
     shift
+    case ":${_PROTO_HELD_LOCKS:-}:" in
+        *":${lock}:"*)
+            "$@"
+            return
+            ;;
+    esac
     mkdir -p "$(dirname "$lock")"
     if ! command -v flock >/dev/null 2>&1; then
         "$@"
         return
     fi
+    # fd 199 rather than a low number a setup.sh might already use; each nested
+    # call's subshell gets its own, so an outer lock stays held
     (
-        if ! flock -x -w "${PROTO_LOCK_TIMEOUT_SECONDS:-3600}" 9; then
+        if ! flock -x -w "${PROTO_LOCK_TIMEOUT_SECONDS:-3600}" 199; then
             echo "ERROR: timed out waiting for lock ${lock}" >&2
             exit 1
         fi
+        export _PROTO_HELD_LOCKS="${_PROTO_HELD_LOCKS:+${_PROTO_HELD_LOCKS}:}${lock}"
         "$@"
-    ) 9>>"$lock"
+    ) 199>>"$lock"
+}
+
+
+# Remove temp files a killed earlier download of <dest> left behind. Only call it
+# while holding <dest>'s lock: no other downloader of <dest> can be running then.
+_proto_remove_stale_temps() {
+    local dest="$1" stale
+    for stale in "$(dirname "$dest")/.$(basename "$dest")".*.tmp; do
+        [ -e "$stale" ] && rm -f "$stale"
+    done
+    return 0
 }
 
 
@@ -369,7 +398,12 @@ proto_with_lock() {
 # Reference: tools/structure_scoring/metal3d/standalone/setup.sh
 # ---------------------------------------------------------------------------
 proto_download_verified() {
-    local dest="$2"
+    local dest="$2" expected="$3"
+    # A verified file needs no lock, so read-only caches keep working
+    if [ "$(proto_sha256 "$dest")" = "$expected" ]; then
+        echo "$(basename "$dest") already present and verified."
+        return 0
+    fi
     mkdir -p "$(dirname "$dest")"
     proto_with_lock "$(dirname "$dest")/.$(basename "$dest").download.lock" _proto_download_verified_locked "$@"
 }
@@ -388,6 +422,7 @@ _proto_download_verified_locked() {
     fi
 
     echo "Downloading $(basename "$dest")..."
+    _proto_remove_stale_temps "$dest"
     tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
     if ! curl -fsSL -o "$tmp" "$url"; then
         rm -f "$tmp"
@@ -439,6 +474,11 @@ sys.exit(0 if looks_like_zip and not zipfile.is_zipfile(sys.argv[1]) else 1)
 # ---------------------------------------------------------------------------
 proto_download() {
     local dest="$2"
+    # A complete file needs no lock, so read-only caches keep working
+    if [ -s "$dest" ] && ! proto_is_truncated_zip "$dest"; then
+        echo "$(basename "$dest") already present."
+        return 0
+    fi
     mkdir -p "$(dirname "$dest")"
     proto_with_lock "$(dirname "$dest")/.$(basename "$dest").download.lock" _proto_download_locked "$@"
 }
@@ -456,6 +496,7 @@ _proto_download_locked() {
     fi
 
     echo "Downloading $(basename "$dest")..."
+    _proto_remove_stale_temps "$dest"
     tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
     if ! curl -fsSL -o "$tmp" "$url"; then
         rm -f "$tmp"
@@ -481,6 +522,11 @@ _proto_download_locked() {
 # ---------------------------------------------------------------------------
 proto_download_archive() {
     local dest_dir="$2"
+    # A completed extraction needs no lock, so read-only caches keep working
+    if [ -f "${dest_dir}/.proto_download_complete" ]; then
+        echo "$(basename "$dest_dir") already present."
+        return 0
+    fi
     mkdir -p "$(dirname "$dest_dir")"
     proto_with_lock "$(dirname "$dest_dir")/.$(basename "$dest_dir").extract.lock" _proto_download_archive_locked "$@"
 }

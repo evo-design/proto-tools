@@ -195,3 +195,139 @@ def test_concurrent_archive_downloads_extract_once(tmp_path: Path) -> None:
     assert [rc for rc, _ in results] == [0, 0, 0, 0]
     assert sum("Downloading and extracting" in out for _, out in results) == 1
     assert (dest / "params_model_1.npz").read_bytes() == _zip_bytes()
+
+
+@_needs_flock
+def test_with_lock_passes_exit_status_and_releases_on_failure(tmp_path: Path) -> None:
+    """A failing command fails the call (so set -e setups abort) without keeping the lock."""
+    failed = _run(f'proto_with_lock "{tmp_path}/.lock" bash -c "exit 7"')
+    assert failed.returncode == 7
+    after = _run_concurrently(f'proto_with_lock "{tmp_path}/.lock" true', 1, env={"PROTO_LOCK_TIMEOUT_SECONDS": "1"})
+    assert after[0][0] == 0
+
+
+@_needs_flock
+def test_with_lock_is_released_when_holder_is_killed(tmp_path: Path) -> None:
+    """Killing the holder with kill -9 frees the lock: the kernel drops flocks of dead processes."""
+    marker = tmp_path / "holding"
+    holder = subprocess.Popen(
+        [
+            "bash",
+            "-c",
+            f'source "{_HELPERS}"; proto_with_lock "{tmp_path}/.lock" bash -c \'touch "{marker}"; sleep 60\'',
+        ],
+        start_new_session=True,
+    )
+    try:
+        for _ in range(50):
+            if marker.exists():
+                break
+            subprocess.run(["sleep", "0.1"], check=True)
+        assert marker.exists()
+        os.killpg(holder.pid, 9)
+        holder.wait()
+        waiter = _run_concurrently(
+            f'proto_with_lock "{tmp_path}/.lock" true', 1, env={"PROTO_LOCK_TIMEOUT_SECONDS": "5"}
+        )
+    finally:
+        if holder.poll() is None:
+            os.killpg(holder.pid, 9)
+    assert waiter[0][0] == 0
+
+
+@_needs_flock
+def test_with_lock_is_reentrant(tmp_path: Path) -> None:
+    """Taking a lock already held by this call chain runs straight through instead of deadlocking."""
+    nested = f'proto_with_lock "{tmp_path}/.lock" proto_with_lock "{tmp_path}/.lock" echo inner'
+    result = _run_concurrently(nested, 1, env={"PROTO_LOCK_TIMEOUT_SECONDS": "2"})
+    assert result[0] == (0, "inner\n")
+
+
+@_needs_flock
+def test_with_lock_keeps_outer_lock_while_nesting_another(tmp_path: Path) -> None:
+    """An inner lock on a different file does not release the outer one."""
+    outer, inner = tmp_path / ".outer.lock", tmp_path / ".inner.lock"
+    holder = subprocess.Popen(
+        [
+            "bash",
+            "-c",
+            f'source "{_HELPERS}"; proto_with_lock "{outer}" proto_with_lock "{inner}" bash -c \'touch "{tmp_path}/go"; sleep 2\'',
+        ]
+    )
+    try:
+        for _ in range(50):
+            if (tmp_path / "go").exists():
+                break
+            subprocess.run(["sleep", "0.1"], check=True)
+        probe = subprocess.run(["flock", "-n", str(outer), "true"], check=False)
+    finally:
+        holder.wait()
+    assert probe.returncode != 0, "outer lock was free while the inner one was held"
+
+
+def test_with_lock_runs_unlocked_without_flock(tmp_path: Path) -> None:
+    """Without flock(1) (macOS), the command still runs, unlocked as before."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for tool in ("bash", "dirname", "mkdir", "basename"):
+        (bin_dir / tool).symlink_to(shutil.which(tool))
+    result = subprocess.run(
+        ["bash", "-c", f'source "{_HELPERS}"; proto_with_lock "{tmp_path}/.lock" echo ran'],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={"PATH": str(bin_dir)},
+    )
+    assert (result.returncode, result.stdout) == (0, "ran\n")
+
+
+@_needs_flock
+def test_verified_download_skips_lock_for_present_file(tmp_path: Path, source: Path) -> None:
+    """A verified file in a read-only cache is accepted without creating a lock file."""
+    cache = tmp_path / "readonly"
+    cache.mkdir()
+    dest = cache / "model.pt"
+    dest.write_bytes(source.read_bytes())
+    sha = hashlib.sha256(source.read_bytes()).hexdigest()
+    cache.chmod(0o555)
+    try:
+        result = _run(f'proto_download_verified "file://{source}" "{dest}" "{sha}"')
+    finally:
+        cache.chmod(0o755)
+    assert result.returncode == 0, result.stderr
+    assert "already present and verified" in result.stdout
+    assert sorted(p.name for p in cache.iterdir()) == ["model.pt"]
+
+
+@pytest.mark.parametrize("helper", ["proto_download", "proto_download_verified"])
+def test_download_removes_temps_left_by_a_killed_run(tmp_path: Path, source: Path, helper: str) -> None:
+    """A temp file from a download that was killed mid-transfer is cleaned up by the next one."""
+    dest = tmp_path / "weights" / "model.pt"
+    dest.parent.mkdir()
+    stale = dest.parent / ".model.pt.Ab12Cd.tmp"
+    stale.write_bytes(b"partial transfer")
+    sha = hashlib.sha256(source.read_bytes()).hexdigest()
+    args = f'"file://{source}" "{dest}"' + (f' "{sha}"' if helper == "proto_download_verified" else "")
+    assert _run(f"{helper} {args}").returncode == 0
+    assert dest.read_bytes() == source.read_bytes()
+    assert not stale.exists()
+
+
+@_needs_flock
+def test_different_files_in_one_folder_download_in_parallel(tmp_path: Path) -> None:
+    """Locks are per target file: holding one file's lock does not block a sibling's download."""
+    source = tmp_path / "remote" / "b.pt"
+    source.parent.mkdir()
+    source.write_bytes(_zip_bytes())
+    weights = tmp_path / "weights"
+    weights.mkdir()
+    holder = subprocess.Popen(["flock", "-x", str(weights / ".a.pt.download.lock"), "sleep", "5"])
+    try:
+        subprocess.run(["sleep", "0.3"], check=True)
+        result = _run_concurrently(
+            f'proto_download "file://{source}" "{weights}/b.pt"', 1, env={"PROTO_LOCK_TIMEOUT_SECONDS": "1"}
+        )
+    finally:
+        holder.kill()
+    assert result[0][0] == 0
+    assert (weights / "b.pt").read_bytes() == _zip_bytes()

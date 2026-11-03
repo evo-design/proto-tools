@@ -94,10 +94,12 @@ For teams sharing weights across collaborators, set `PROTO_MODEL_CACHE` to a sha
 # as different users may have different CUDA versions, library paths, etc.)
 export PROTO_HOME=~/.proto
 
-# Shared with collaborators: just model weights (safe for concurrent access;
-# HuggingFace uses file locks internally to handle simultaneous downloads)
+# Shared with collaborators: just model weights (safe for concurrent access:
+# HuggingFace and the setup.sh download helpers lock simultaneous downloads)
 export PROTO_MODEL_CACHE=/shared/team/model_weights
 ```
+
+Concurrent setups that need the same file (two jobs, or two toolkits that share weights) take turns: the first downloads, the rest wait and then find it verified. The `setup.sh` helpers use `flock`, which works across nodes on filesystems that support it; this was tested across nodes on Sherlock's Lustre `$SCRATCH`. Without `flock(1)`, as on macOS, downloads run unlocked.
 
 Do **not** share `PROTO_HOME` itself across users, because tool environments are user-specific and should remain per-user. Only model weights (`PROTO_MODEL_CACHE`) are safe to share.
 
@@ -143,14 +145,16 @@ if weights_dir:
 
 HF-based tools need no code changes. `persistent_worker.py` sets `HF_HOME` automatically.
 
-For `setup.sh` scripts that download weights during environment setup, use the shared helper from `standalone_helpers.sh` (resolved off `PATH`):
+For `setup.sh` scripts that download weights during environment setup, use the shared helpers from `standalone_helpers.sh` (resolved off `PATH`):
 
 ```bash
 source standalone_helpers.sh
 proto_resolve_weights_dir my_tool
 # $WEIGHTS_DIR is now set and the directory created
-wget -q -O "$WEIGHTS_DIR/model.pt" "https://example.com/model.pt"
+proto_download_verified "https://example.com/model.pt" "$WEIGHTS_DIR/model.pt" "$MODEL_SHA256"
 ```
+
+`proto_download_verified` (checksum known), `proto_download` (no checksum), and `proto_download_archive` (tar into a directory) each lock their target, download into a temp file of their own, and move it into place only when complete, so concurrent setups sharing the cache never see or clobber a partial file. A file that is already present skips the lock, so read-only caches keep working. Wrap any other step that writes shared files in `proto_with_lock <lock_file> <command...>`; name the lock `.<file>.download.lock` beside a file or `.<dir>.extract.lock` beside a directory, matching the Python helpers, so bash and Python callers for the same target wait for each other. The wait is capped by `PROTO_LOCK_TIMEOUT_SECONDS` (default 3600).
 
 ## Exceptions
 
