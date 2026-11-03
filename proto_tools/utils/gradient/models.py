@@ -653,7 +653,6 @@ def attach_intrinsic_term(
     *,
     matrices: Sequence[Sequence[Sequence[float]]],
     temperature: float | None,
-    description: str,
     positions: Sequence[Sequence[int] | None] | None = None,
     hard: float = 0.0,
     soft: float = 1.0,
@@ -679,7 +678,6 @@ def attach_intrinsic_term(
         matrices (Sequence[Sequence[Sequence[float]]]): The relaxed state each item was
             differentiated at, in item order.
         temperature (float | None): The input's temperature, which fixes the coordinate space.
-        description (str): What the scalar measures.
         positions (Sequence[Sequence[int] | None] | None): 1-indexed input position per row for
             each item, where a tool relaxes a window inside a longer context.
         hard (float): Straight-through coefficient in force.
@@ -703,7 +701,6 @@ def attach_intrinsic_term(
                     matrix,
                     vocab=payload["vocab"],
                     temperature=temperature,
-                    description=description,
                     positions=item_positions,
                     hard=hard,
                     soft=soft,

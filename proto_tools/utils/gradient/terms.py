@@ -70,6 +70,9 @@ class DifferentiableTerm(BaseModel):
     # Units the quantity is measured in: a property of the quantity, copied into its metadata.
     UNITS: ClassVar[str | None] = None
 
+    # What the quantity measures; copied into metadata the same way, so no caller states it.
+    DESCRIPTION: ClassVar[str] = ""
+
     id: str = Field(
         title="Term ID",
         description="Which kind of quantity this is; fixed by the term class, shared by its instances.",
@@ -137,7 +140,7 @@ class TermGradient(BaseModel):
 
     @model_validator(mode="after")
     def fill_derived_fields(self) -> Self:
-        """Fill the gradient norm, and take the advisory direction and units from the term asked for."""
+        """Fill the gradient norm, and take the direction, units and description from the term."""
         if self.metadata is not None and self.metadata.suggested_optimization_direction == "context-dependent":
             # The term class declares the direction; metadata is where consumers read it.
             direction = type(self.term).SUGGESTED_OPTIMIZATION_DIRECTION
@@ -146,6 +149,9 @@ class TermGradient(BaseModel):
         if self.metadata is not None and self.metadata.units is None and type(self.term).UNITS is not None:
             # Same reasoning as the direction: the quantity owns its units, not the caller.
             self.metadata = self.metadata.model_copy(update={"units": type(self.term).UNITS})
+        if self.metadata is not None and not self.metadata.description and type(self.term).DESCRIPTION:
+            # Same reasoning again: what the quantity measures is fixed by the quantity.
+            self.metadata = self.metadata.model_copy(update={"description": type(self.term).DESCRIPTION})
         if self.gradient is not None and self.grad_l2_norm is None:
             self.grad_l2_norm = gradient_l2_norm(self.gradient)
         return self

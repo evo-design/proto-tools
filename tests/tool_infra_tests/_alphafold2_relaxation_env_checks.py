@@ -4,16 +4,13 @@ Checks that ColabDesign's own ``soft_seq`` implements the shared relaxation cont
 
 AlphaFold2 relaxes its sequence inside ColabDesign rather than through
 ``standalone_helpers.relaxation``, so this suite pins ColabDesign's blend to the same formula
-the shared helpers implement, on both backends the tool can load: upstream ColabDesign and the
-Germinal fork (alpha scaling plus a persistent bias). It needs no model weights and no GPU —
+the shared helpers implement. It needs no model weights and no GPU —
 ``soft_seq`` is pure arithmetic over a sequence state. Plain asserts, one line of status per
 check, non-zero exit on any failure (which ``run_in_env`` surfaces as ``RuntimeError``).
 """
 
 from __future__ import annotations
 
-import os
-import sys
 import traceback
 from collections.abc import Callable
 from functools import partial
@@ -32,25 +29,8 @@ BLEND_GRID = tuple((soft, hard) for soft in (0.0, 0.25, 0.5, 1.0) for hard in (0
 BIAS = [[0.3, -0.2, 0.1, 0.05], [-0.1, 0.4, 0.0, 0.2], [0.2, 0.2, -0.3, 0.1]]
 
 
-def _germinal_dir() -> str:
-    """Where the tool's setup.sh installs the Germinal ColabDesign fork."""
-    return os.path.join(
-        os.environ.get("TOOL_VENV_PATH", os.environ.get("VIRTUAL_ENV", "")), "data", "colabdesign_germinal"
-    )
-
-
-def _load_soft_seq(backend: str) -> Any:
-    """Import ``soft_seq`` from one backend, swapping sys.path the way the tool does."""
-    germinal_dir = _germinal_dir()
-    if backend == "germinal":
-        if not os.path.isdir(germinal_dir):
-            raise RuntimeError(f"Germinal ColabDesign not found at {germinal_dir}; run setup.sh")
-        sys.path.insert(0, germinal_dir)
-    elif germinal_dir in sys.path:
-        sys.path.remove(germinal_dir)
-    for name in [name for name in sys.modules if name.startswith("colabdesign")]:
-        del sys.modules[name]
-
+def _load_soft_seq() -> Any:
+    """Import ColabDesign's ``soft_seq``, the blend AlphaFold2 actually runs."""
     from colabdesign.shared.model import soft_seq
 
     return soft_seq
@@ -92,9 +72,9 @@ def _pseudo_and_gradient(soft_seq: Any, state: Any, *, alpha: float, bias: Any, 
     return _value_and_gradient(lambda x: soft_seq(x, bias, opt)["pseudo"], state)
 
 
-def _check_backend(backend: str) -> None:
-    """Assert one backend's blend matches the contract over the grid, forward and backward."""
-    soft_seq = _load_soft_seq(backend)
+def _check_blend() -> None:
+    """Assert ColabDesign's blend matches the contract over the grid, forward and backward."""
+    soft_seq = _load_soft_seq()
     state = jnp.asarray(LOGITS)
     bias = jnp.asarray(BIAS)
 
@@ -104,21 +84,16 @@ def _check_backend(backend: str) -> None:
 
             contract = partial(_contract, alpha=alpha, bias=bias_term, temperature=TEMPERATURE, soft=soft, hard=hard)
             expected_value, expected_gradient = _value_and_gradient(contract, state)
-            label = f"{backend} alpha={alpha} bias={bias_term is not None} soft={soft} hard={hard}"
+            label = f"alpha={alpha} bias={bias_term is not None} soft={soft} hard={hard}"
             assert jnp.allclose(value, expected_value, atol=1e-12), f"{label} forward: {value} != {expected_value}"
             assert jnp.allclose(gradient, expected_gradient, atol=1e-10), (
                 f"{label} gradient: {gradient} != {expected_gradient}"
             )
 
 
-def check_base_backend_matches_the_contract() -> None:
-    """Upstream ColabDesign's pseudo sequence must equal the contract at every blend."""
-    _check_backend("base")
-
-
-def check_germinal_backend_matches_the_contract() -> None:
-    """The Germinal fork must equal the contract too, alpha scaling and bias included."""
-    _check_backend("germinal")
+def check_colabdesign_matches_the_contract() -> None:
+    """ColabDesign's pseudo sequence must equal the contract at every blend."""
+    _check_blend()
 
 
 def check_the_tools_own_opt_matches_the_shared_helper() -> None:
@@ -126,30 +101,29 @@ def check_the_tools_own_opt_matches_the_shared_helper() -> None:
 
     This is the tie between AlphaFold2 and the helper every other backend calls, and it runs
     through ``_relaxation_opt`` rather than a hand-built dict: ColabDesign defaults ``alpha`` to
-    2.0 on both backends, which would halve the effective temperature and silently break
-    ``from_probabilities``. Checking the formula alone would not notice.
+    2.0, which would halve the effective temperature and silently break ``from_probabilities``.
+    Checking the formula alone would not notice.
     """
-    for backend in ("base", "germinal"):
-        soft_seq = _load_soft_seq(backend)
-        state = jnp.asarray(LOGITS)
+    soft_seq = _load_soft_seq()
+    state = jnp.asarray(LOGITS)
 
-        for soft, hard in BLEND_GRID:
-            opt = _relaxation_opt(temperature=TEMPERATURE, soft=soft, hard=hard)
-            assert opt["alpha"] == 1.0, f"{backend}: the tool left alpha at {opt['alpha']}"
-            value, gradient = _pseudo_with_opt(soft_seq, state, opt=opt)
+    for soft, hard in BLEND_GRID:
+        opt = _relaxation_opt(temperature=TEMPERATURE, soft=soft, hard=hard)
+        assert opt["alpha"] == 1.0, f"the tool left alpha at {opt['alpha']}"
+        value, gradient = _pseudo_with_opt(soft_seq, state, opt=opt)
 
-            shared = partial(relaxed_sequence_jax, temperature=TEMPERATURE, soft=soft, hard=hard)
-            expected_value, expected_gradient = _value_and_gradient(shared, state)
-            label = f"{backend} soft={soft} hard={hard}"
-            assert jnp.allclose(value, expected_value, atol=1e-12), f"{label} forward: {value} != {expected_value}"
-            assert jnp.allclose(gradient, expected_gradient, atol=1e-10), (
-                f"{label} gradient: {gradient} != {expected_gradient}"
-            )
+        shared = partial(relaxed_sequence_jax, temperature=TEMPERATURE, soft=soft, hard=hard)
+        expected_value, expected_gradient = _value_and_gradient(shared, state)
+        label = f"soft={soft} hard={hard}"
+        assert jnp.allclose(value, expected_value, atol=1e-12), f"{label} forward: {value} != {expected_value}"
+        assert jnp.allclose(gradient, expected_gradient, atol=1e-10), (
+            f"{label} gradient: {gradient} != {expected_gradient}"
+        )
 
 
 def check_probability_mode_opt_selects_the_raw_input_branch() -> None:
     """The opt the tool builds for temperature=None must forward the distribution unchanged."""
-    soft_seq = _load_soft_seq("base")
+    soft_seq = _load_soft_seq()
     probabilities = jnp.asarray([[0.7, 0.2, 0.05, 0.05], [0.1, 0.1, 0.1, 0.7], [0.25, 0.25, 0.25, 0.25]])
 
     opt = _relaxation_opt(temperature=None, soft=1.0, hard=1.0)
@@ -168,7 +142,7 @@ def check_from_probabilities_round_trips_through_soft_seq() -> None:
     the model would see ``softmax(2 log p)``, which is ``p**2`` renormalized: a silent distortion
     that grows with how peaked ``p`` is.
     """
-    soft_seq = _load_soft_seq("base")
+    soft_seq = _load_soft_seq()
     probabilities = jnp.asarray([[0.7, 0.2, 0.05, 0.05], [0.1, 0.1, 0.1, 0.7], [0.25, 0.25, 0.25, 0.25]])
     logits = TEMPERATURE * jnp.log(probabilities)
 
@@ -187,7 +161,7 @@ def check_a_bias_shifts_the_reconstructed_distribution_predictably() -> None:
     ``bias_redesign`` are for — so reconstruction is exact only without one. Pinning the exact
     relationship keeps that documented rather than assumed.
     """
-    soft_seq = _load_soft_seq("base")
+    soft_seq = _load_soft_seq()
     probabilities = jnp.asarray([[0.7, 0.2, 0.05, 0.05], [0.1, 0.1, 0.1, 0.7], [0.25, 0.25, 0.25, 0.25]])
     logits = TEMPERATURE * jnp.log(probabilities)
     bias = jnp.asarray(BIAS)
@@ -207,7 +181,7 @@ def check_probability_mode_passes_the_distribution_through() -> None:
     selects the raw input branch. The gradient must then be probability-space: the upstream
     cotangent, unchanged.
     """
-    soft_seq = _load_soft_seq("base")
+    soft_seq = _load_soft_seq()
     probabilities = jnp.asarray([[0.7, 0.2, 0.05, 0.05], [0.1, 0.1, 0.1, 0.7], [0.25, 0.25, 0.25, 0.25]])
     upstream = jnp.asarray(UPSTREAM)
 
@@ -218,8 +192,7 @@ def check_probability_mode_passes_the_distribution_through() -> None:
 
 
 CHECKS: tuple[Callable[[], None], ...] = (
-    check_base_backend_matches_the_contract,
-    check_germinal_backend_matches_the_contract,
+    check_colabdesign_matches_the_contract,
     check_the_tools_own_opt_matches_the_shared_helper,
     check_probability_mode_opt_selects_the_raw_input_branch,
     check_from_probabilities_round_trips_through_soft_seq,

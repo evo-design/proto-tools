@@ -23,12 +23,8 @@ logger = get_logger(__name__)
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
 # ESMFold PAE head maximum: 31 bins at 1.025 A spacing, used to normalize PAE loss to [0, 1].
-#: What each confidence quantity measures; its units are declared on the term class.
-_CONFIDENCE_QUANTITIES: dict[str, str] = {
-    "plddt": "Mean predicted local distance difference test over modelled residues",
-    "ptm": "Predicted TM-score for the complex",
-    "pae": "Mean predicted aligned error over residue pairs",
-}
+#: Quantities this worker differentiates; what each measures is on the term class.
+_CONFIDENCE_QUANTITIES: frozenset[str] = frozenset({"plddt", "ptm", "pae"})
 # ESMFold's own residue order, matching transformers' openfold_utils.residue_constants.restypes.
 # Its embedding is 0-based, the same basis as _sequence_to_aatype; padding_idx=0 shifts nothing.
 ESMFOLD_AMINO_ACIDS: list[str] = list("ARNDCQEGHILKMFPSTWYV")
@@ -204,7 +200,6 @@ class ESMFoldModel:
                             "id": name,
                             "value": float(quantity.detach()),
                             "gradient": serialize_output(gradient) if gradient is not None else None,
-                            "description": _CONFIDENCE_QUANTITIES[name],
                         }
                     )
 

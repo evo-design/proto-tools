@@ -55,6 +55,9 @@ class ParadeStabilityLogRatioTerm(DifferentiableTerm):
     #: A higher log-ratio is a more stable transcript.
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "higher"
 
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Predicted RNA/gDNA log-ratio; higher means a more stable transcript"
+
     id: Literal["log_ratio"] = Field(
         default="log_ratio",
         title="Term ID",
@@ -141,7 +144,6 @@ class ParadeStabilityGradientOutput(GradientOutput):
                             matrices[index],
                             vocab=vocab,
                             temperature=temperature,
-                            description="Predicted RNA/gDNA log-ratio; higher means a more stable transcript",
                             soft=soft,
                             hard=hard,
                         ),

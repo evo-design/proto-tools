@@ -1,18 +1,9 @@
-"""AlphaFold2 standalone inference — prediction and binder-design gradients.
+"""AlphaFold2 standalone inference — prediction and design-protocol gradients.
 
-Runs in an isolated venv with JAX and ColabDesign. Supports two backends:
+Runs in an isolated venv with JAX and upstream sokrypton/ColabDesign.
 
-- ``"base"``: upstream sokrypton/ColabDesign (pip-installed, used for prediction
-  and generic gradient computation).
-- ``"germinal"``: SantiagoMille/germinal ColabDesign fork (installed to
-  data/colabdesign_germinal, loaded via sys.path swap). Adds persistent
-  bias_redesign, framework contact penalties in ``_loss_binder``, and
-  ``soft_seq()`` with full JAX autograd chain rule.
-  Antibody-language-model gradients remain external to this tool.
-
-Extension loss callbacks (rg, i_ptm, helix, beta_strand, NC) are registered
-when their weight is non-zero in ``loss_weights`` and work on any backend.
-Helix and beta_strand bin selection is gated by backend.
+Extension loss callbacks (rg, i_ptm, beta_strand, NC) are registered when a
+requested gradient term needs one.
 
 Usage:
     python inference.py <input_json_path> <output_json_path>
@@ -24,6 +15,7 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Collection
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
@@ -132,9 +124,9 @@ def _extract_metrics(aux: dict[str, Any] | None, include_pae_matrix: bool = Fals
             if scalar is not None:
                 metrics[dst_key] = scalar
 
-    # Skip "pae" in the losses loop so it doesn't collide with the matrix below.
+    # Terms carry the confidence itself, so copying the raw loss here would duplicate the name.
     for key, value in aux.get("losses", {}).items():
-        if key == "pae":
+        if key in _NATIVE_LOSSES or key in _INVERTED_LOSSES or key == "pae":
             continue
         scalar = _metric_value(value)
         if scalar is not None:
@@ -179,42 +171,7 @@ def _add_i_ptm_loss(af_model: Any, weight: float = 0.1) -> None:
     af_model.opt["weights"]["i_ptm"] = weight
 
 
-def _add_helix_loss(af_model: Any, weight: float = 0.1, *, standard_convention: bool = True) -> None:
-    """Alpha-helix loss — i,i+3 contacts in 2.0-6.2 A range."""
-    import jax
-    import jax.numpy as jnp
-    from colabdesign.af.loss import get_dgram_bins
-
-    select_inside = standard_convention
-
-    def loss_fn(inputs: Any, outputs: Any) -> dict[str, Any]:
-        offset = (
-            inputs["offset"]
-            if "offset" in inputs
-            else (lambda idx: idx[:, None] - idx[None, :])(inputs["residue_index"].flatten())
-        )
-        dgram = outputs["distogram"]["logits"]
-        dgram_bins = get_dgram_bins(outputs)
-        if select_inside:
-            bins = jnp.logical_and(dgram_bins >= 2.0, dgram_bins <= 6.2)
-        else:
-            bins = jnp.logical_or(dgram_bins > 6.2, dgram_bins < 2.0)
-        x = -jnp.log((bins * jax.nn.softmax(dgram) + 1e-8).sum(-1))
-
-        if "pos" in af_model.opt:
-            mask_1d = jnp.zeros(af_model._target_len + af_model._binder_len)
-            mask_1d = mask_1d.at[jnp.asarray(af_model.opt["pos"])].set(1)
-        else:
-            mask_1d = jnp.concatenate([jnp.zeros(af_model._target_len), jnp.ones(af_model._binder_len)])
-        mask_2d = jnp.outer(mask_1d, mask_1d)
-        mask = jnp.where(mask_2d, offset == 3, 0)
-        return {"helix": jnp.where(mask, x, 0.0).sum() / (mask.sum() + 1e-8)}
-
-    af_model._callbacks["model"]["loss"].append(loss_fn)
-    af_model.opt["weights"]["helix"] = weight
-
-
-def _add_beta_strand_loss(af_model: Any, weight: float = 0.1, *, standard_convention: bool = True) -> None:
+def _add_beta_strand_loss(af_model: Any, weight: float = 0.1) -> None:
     """Beta-strand loss — 9.75-11.5 A pairwise distances, top-k."""
     import jax
     import jax.numpy as jnp
@@ -223,7 +180,6 @@ def _add_beta_strand_loss(af_model: Any, weight: float = 0.1, *, standard_conven
     total_len = af_model._target_len + af_model._binder_len
     all_pos = jnp.asarray(af_model.opt.get("pos", []))
     valid_pos = all_pos[(all_pos > 0) & (all_pos < total_len - 1)]
-    select_inside = standard_convention
 
     def loss_fn(_inputs: Any, outputs: Any) -> dict[str, Any]:
         if valid_pos.size == 0:
@@ -231,10 +187,7 @@ def _add_beta_strand_loss(af_model: Any, weight: float = 0.1, *, standard_conven
 
         dgram = outputs["distogram"]["logits"]
         dgram_bins = get_dgram_bins(outputs)
-        if select_inside:
-            bins = jnp.logical_and(dgram_bins >= 9.75, dgram_bins <= 11.5)
-        else:
-            bins = jnp.logical_or(dgram_bins > 11.5, dgram_bins < 9.75)
+        bins = jnp.logical_and(dgram_bins >= 9.75, dgram_bins <= 11.5)
         x = -jnp.log((bins * jax.nn.softmax(dgram) + 1e-8).sum(-1))
 
         mask_1d = jnp.zeros(total_len).at[valid_pos - 1].set(1).at[valid_pos + 1].set(1)
@@ -263,31 +216,123 @@ def _add_termini_distance_loss(af_model: Any, weight: float = 0.1, threshold: fl
     af_model.opt["weights"]["NC"] = weight
 
 
-def _configure_extension_losses(af_model: Any, loss_weights: dict[str, float], *, backend: str = "base") -> None:
-    """Register extension loss callbacks that work on any backend.
+#: Quantities ColabDesign computes itself; an extension must never shadow one.
+_NATIVE_LOSSES = frozenset({"plddt", "pae", "i_pae", "con", "i_con", "exp_res", "helix", "dgram_cce", "fape", "rmsd"})
 
-    Helix/beta_strand bin selection is gated by backend: ``"germinal"``
-    selects bins outside the contact range (positive weight = penalize),
-    others select bins inside (positive weight = encourage).
+#: Quantities ColabDesign reports as ``1 - x``; reported back as the confidence they describe.
+_INVERTED_LOSSES = frozenset({"plddt", "exp_res", "i_ptm"})
+
+
+def _configure_extension_losses(af_model: Any, requested: Collection[str]) -> None:
+    """Register the extension loss callbacks the requested terms need."""
+    requested = set(requested) - _NATIVE_LOSSES
+    if "rg" in requested:
+        _add_rg_loss(af_model)
+    if "i_ptm" in requested:
+        _add_i_ptm_loss(af_model)
+    if "beta_strand" in requested:
+        _add_beta_strand_loss(af_model)
+    if "NC" in requested:
+        _add_termini_distance_loss(af_model)
+
+
+def _per_term_gradients(af_model: Any, term_names: list[str]) -> Any:
+    """Make the backprop pass yield one gradient per loss term instead of one fused gradient.
+
+    ColabDesign sums its weighted terms into a single scalar and differentiates that, so
+    ``aux["grad"]`` answers "how does the whole objective move" and cannot be taken apart
+    afterwards. The individual terms are right there though: ``_model["fn"]`` is the same
+    function ``grad_fn`` differentiates, exposed undifferentiated, and it returns the per-term
+    scalars in ``aux["losses"]`` one line before they are summed.
+
+    So this linearizes that function once and pushes a one-hot cotangent through it per
+    requested term: one forward pass and one cheap backward each, which is JAX's equivalent of
+    retaining a graph across several backwards. The per-term gradients are stashed on
+    ``aux["per_term_grad"]``; ColabDesign's own ``aux["grad"]`` is zeroed, because a raw-term
+    tool never reports a fused gradient and reproducing it would cost a backward per
+    unrequested term as well.
+
+    Only the backprop pass is replaced, so recycling, model selection and PDB export behave
+    exactly as before.
+
+    Args:
+        af_model (Any): The ColabDesign design model.
+        term_names (list[str]): Loss-dict keys to differentiate.
+
+    Returns:
+        Any: A zero-argument callable that restores the original method.
+
+    Raises:
+        RuntimeError: If this ColabDesign pin exposes no undifferentiated loss function, or the
+            recycle mode backprops somewhere other than the final pass.
     """
-    standard = backend != "germinal"
-    if "rg" in loss_weights:
-        _add_rg_loss(af_model, loss_weights["rg"])
-    if "i_ptm" in loss_weights:
-        _add_i_ptm_loss(af_model, loss_weights["i_ptm"])
-    if "helix" in loss_weights:
-        _add_helix_loss(af_model, loss_weights["helix"], standard_convention=standard)
-    if "beta_strand" in loss_weights:
-        _add_beta_strand_loss(af_model, loss_weights["beta_strand"], standard_convention=standard)
-    if "NC" in loss_weights:
-        _add_termini_distance_loss(af_model, loss_weights["NC"])
+    import jax
+    import jax.numpy as jnp
 
+    if "fn" not in af_model._model:
+        raise RuntimeError(
+            "alphafold2: ColabDesign exposes no _model['fn']; per-term gradients need the "
+            "undifferentiated loss function and this pin does not provide it"
+        )
+    mode = af_model._args.get("recycle_mode")
+    if mode != "last":
+        raise RuntimeError(
+            f"alphafold2: recycle_mode={mode!r} does not carry the gradient on the final recycle "
+            '("first" and "sample" backprop through another pass, "average" through all of them), '
+            "so per-term gradients could not be attributed to one recycle"
+        )
 
-def _binder_template_prep_kwargs(binder_chain: str | None) -> dict[str, Any]:
-    """prep_inputs binder override: empty for de-novo (None), template-redesign kwargs for a set chain."""
-    if binder_chain is None:
-        return {}
-    return {"binder_chain": binder_chain, "rm_binder": False, "rm_binder_seq": True, "rm_binder_sc": True}
+    original = af_model._single
+    loss_fn = af_model._model["fn"]
+
+    def single_with_per_term(model_params: Any, backprop: bool = True) -> Any:
+        """Stand in for ColabDesign's single pass, adding per-term gradients on the backprop one."""
+        if not backprop:
+            return original(model_params, backprop=False)
+
+        # Some ColabDesign forks bind opt only here, so the sync has to be repeated.
+        af_model._inputs["opt"] = af_model.opt
+
+        # One key draw, so every term is differentiated through the same MSA subsample.
+        rest = (model_params, af_model._inputs, af_model.key())
+
+        def losses_of(params: Any) -> Any:
+            """Expose the per-term loss dict as the differentiated output."""
+            loss, aux = loss_fn(params, *rest)
+            return aux["losses"], (loss, aux)
+
+        losses, pull_back, (loss, aux) = jax.vjp(losses_of, af_model._params, has_aux=True)
+
+        missing = [name for name in term_names if name not in losses]
+        if missing:
+            raise RuntimeError(
+                f"alphafold2: requested terms {missing} are not among this configuration's "
+                f"losses; available: {sorted(losses)}"
+            )
+
+        zeros = jax.tree_util.tree_map(jnp.zeros_like, losses)
+        per_term = {}
+        for name in term_names:
+            cotangent = dict(zeros)
+            cotangent[name] = jnp.ones_like(losses[name])
+            (per_term[name],) = pull_back(cotangent)
+
+        aux.update(
+            {
+                "loss": loss,
+                "grad": jax.tree_util.tree_map(jnp.zeros_like, af_model._params),
+                "per_term_grad": per_term,
+            }
+        )
+        return aux
+
+    af_model._single = single_with_per_term
+
+    def restore() -> None:
+        """Put ColabDesign's own single-pass method back."""
+        af_model._single = original
+
+    return restore
 
 
 # AlphaFold-Multimer MSA layout: row 0 = concatenated queries; paired rows span all columns, unpaired rows are block-diagonal; ColabDesign gap char = 21.
@@ -431,52 +476,25 @@ class AlphaFold2Model:
     def __init__(self) -> None:
         """Initialize persistent worker state."""
         self._loaded = False
-        self._backend: str = "base"
         self.device = "cuda"
         self.params_dir: str | None = None
         self._jax: Any | None = None
         self._jnp: Any | None = None
         self._mk_af_model: Any | None = None
-        self._models: dict[tuple[str, bool, bool, str, str], Any] = {}
-        self._model_defaults: dict[tuple[str, bool, bool, str, str], dict[str, Any]] = {}
+        self._models: dict[tuple[str, bool, bool, str], Any] = {}
+        self._model_defaults: dict[tuple[str, bool, bool, str], dict[str, Any]] = {}
 
-    def load(self, device: str, backend: str = "base", verbose: bool = False) -> None:
+    def load(self, device: str, verbose: bool = False) -> None:
         """Load ColabDesign entrypoints and resolve parameter locations.
 
         Args:
             device: JAX device string ("cuda", "cpu", "cuda:0", etc.).
-            backend: Which ColabDesign package to use:
-                ``"base"`` — upstream sokrypton/ColabDesign (default for prediction).
-                ``"germinal"`` — Germinal fork with bias and framework contacts.
             verbose: Log loading details.
         """
-        if self._loaded and self._backend == backend:
+        if self._loaded:
             return
-        if self._loaded and self._backend != backend:
-            # Backend switch: clear cached models and JAX JIT cache, then reload
-            self._models.clear()
-            self._model_defaults.clear()
-            if self._jax is not None:
-                self._jax.clear_caches()
-            self._loaded = False
 
         # Device env (CUDA_VISIBLE_DEVICES / JAX_PLATFORMS) is owned by the worker spawn (pin_visible_devices).
-        germinal_dir = os.path.join(
-            os.environ.get("TOOL_VENV_PATH", os.environ.get("VIRTUAL_ENV", "")),
-            "data",
-            "colabdesign_germinal",
-        )
-        if backend == "germinal":
-            if not os.path.isdir(germinal_dir):
-                raise RuntimeError(f"alphafold2: Germinal ColabDesign not found at {germinal_dir}; run setup.sh")
-            if germinal_dir not in sys.path:
-                sys.path.insert(0, germinal_dir)
-                self._purge_colabdesign_modules()
-            logger.info("Using Germinal ColabDesign backend from %s", germinal_dir)
-        elif germinal_dir in sys.path:
-            sys.path.remove(germinal_dir)
-            self._purge_colabdesign_modules()
-
         import jax
         import jax.numpy as jnp
         from colabdesign import mk_afdesign_model as mk_af_model
@@ -486,22 +504,14 @@ class AlphaFold2Model:
         self._mk_af_model = mk_af_model
         self.params_dir = _resolve_params_dir()
         self.device = device
-        self._backend = backend
         self._loaded = True
 
         if verbose:
-            logger.info("AlphaFold2 ColabDesign runtime loaded on %s (backend=%s)", device, backend)
+            logger.info("AlphaFold2 ColabDesign runtime loaded on %s", device)
 
-    @staticmethod
-    def _purge_colabdesign_modules() -> None:
-        """Remove cached colabdesign modules so the next import picks up the correct backend."""
-        for mod_name in list(sys.modules):
-            if mod_name == "colabdesign" or mod_name.startswith("colabdesign."):
-                del sys.modules[mod_name]
-
-    def _ensure_loaded(self, device: str, backend: str = "base", verbose: bool = False) -> None:
-        if not self._loaded or self._backend != backend:
-            self.load(device, backend=backend, verbose=verbose)
+    def _ensure_loaded(self, device: str, verbose: bool = False) -> None:
+        if not self._loaded:
+            self.load(device, verbose=verbose)
         elif self.device != device:
             self.to_device(device, verbose=verbose)
 
@@ -515,7 +525,7 @@ class AlphaFold2Model:
         verbose: bool = False,
     ) -> Any:
         """Return a cached ColabDesign model, creating one if needed."""
-        key = (protocol, use_multimer, use_msa, recycle_mode, self._backend)
+        key = (protocol, use_multimer, use_msa, recycle_mode)
         model = self._models.get(key)
         if model is not None:
             return model
@@ -550,7 +560,7 @@ class AlphaFold2Model:
         }
         return model
 
-    def _restore_model_defaults(self, key: tuple[str, bool, bool, str, str], model: Any) -> None:
+    def _restore_model_defaults(self, key: tuple[str, bool, bool, str], model: Any) -> None:
         """Restore callbacks and opt weights to baseline before request-specific setup."""
         defaults = self._model_defaults.get(key)
         if defaults is None:
@@ -633,7 +643,7 @@ class AlphaFold2Model:
         include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
         """Run AlphaFold2 prediction on one complex."""
-        self._ensure_loaded(device, backend="base", verbose=verbose)
+        self._ensure_loaded(device, verbose=verbose)
 
         use_multimer = complex_data["num_chains"] > 1
         use_msa = msa_a3m_content is not None or bool(per_chain_msas_a3m and any(per_chain_msas_a3m))
@@ -693,12 +703,12 @@ class AlphaFold2Model:
         num_recycles: int,
         model_num: int,
         sample_models: bool,
-        loss_weights: dict[str, float] | None,
+        gradient_terms: list[str] | None,
         seed: int | None,
         backprop: bool = True,
         include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
-        """Run one binder-design AF2 pass and return loss, metrics, Structure, and optionally gradient.
+        """Run one design-protocol AF2 pass and return loss, metrics, Structure, and optionally gradient.
 
         ``soft_seq()`` applies the relaxation and any persistent bias internally; see
         :func:`_relaxation_opt` for the options proto pins. When ``backprop=True``, JAX autograd
@@ -719,8 +729,6 @@ class AlphaFold2Model:
         opt.update(_relaxation_opt(temperature=temperature, soft=soft, hard=hard))
         if seed is not None:
             af_model.set_seed(seed)
-        if loss_weights:
-            af_model.set_weights(**loss_weights)
 
         # Inject logits at binder positions (last binder_len rows), reordering to AF2 AA order.
         af_logits = jnp.asarray(logits, dtype=jnp.float32)[:, PROTO_TO_AF2]
@@ -737,134 +745,117 @@ class AlphaFold2Model:
         af_model._args["clear_prev"] = True
         from standalone_helpers import oom_guard
 
-        with oom_guard("alphafold2", hint="Shorten the binder/target or lower num_recycles."):
-            af_model.run(backprop=backprop, model_nums=model_nums)
-        aux = af_model.aux
+        restore = _per_term_gradients(af_model, gradient_terms) if (backprop and gradient_terms) else None
+        try:
+            with oom_guard("alphafold2", hint="Shorten the binder/target or lower num_recycles."):
+                af_model.run(backprop=backprop, model_nums=model_nums)
+            aux = af_model.aux
+        finally:
+            if restore is not None:
+                restore()
 
-        gradient: list[list[float]] | None = None
-        if backprop:
-            # Extract binder gradient, reordering back to proto canonical order.
+        def _binder_rows(seq_grad: Any) -> list[list[float]]:
+            """Reorder one gradient into proto column order and keep the binder's rows."""
             # Shape (batch, L, alphabet) expected; fail loudly if ColabDesign's layout shifts.
-            assert aux["grad"]["seq"].ndim == 3, f"unexpected grad shape {aux['grad']['seq'].shape}"
-            full_grad = aux["grad"]["seq"][0][:, AF2_TO_PROTO]
-            seq_grad = full_grad[full_len - binder_len :]
-            gradient = serialize_output(seq_grad)
+            assert seq_grad.ndim == 3, f"unexpected grad shape {seq_grad.shape}"
+            rows: list[list[float]] = serialize_output(seq_grad[0][:, AF2_TO_PROTO][full_len - binder_len :])
+            return rows
+
+        terms: list[dict[str, Any]] = []
+        for name in gradient_terms or []:
+            value = _metric_value(aux["losses"][name])
+            per_term = aux.get("per_term_grad", {}).get(name) if backprop else None
+            rows = _binder_rows(per_term["seq"]) if per_term is not None else None
+            if name in _INVERTED_LOSSES:
+                # ColabDesign reports 1 - confidence; negate the gradient with the value.
+                value = None if value is None else 1.0 - value
+                rows = None if rows is None else [[-entry for entry in row] for row in rows]
+            terms.append({"id": name, "value": value, "gradient": rows})
 
         return {
-            "gradient": gradient,
+            "terms": terms,
             "loss": float(serialize_output(aux["loss"])),
             "metrics": _extract_metrics(aux, include_pae_matrix=include_pae_matrix),
             "vocab": AMINO_ACIDS_LIST,
             "pdb": af_model.save_pdb(get_best=False),
         }
 
-    def compute_binder_gradient(
+    def compute_design_gradient(
         self,
         *,
+        protocol: str,
+        prep_kwargs: dict[str, Any],
         logits: list[list[float]],
+        gradient_terms: list[str],
         temperature: float | None = 1.0,
         soft: float = 1.0,
         hard: float = 0.0,
-        target_pdb: str,
-        target_chain: str = "A",
-        target_hotspot: str | None = None,
-        binder_chain: str | None = None,
-        design_positions: list[int] | None = None,
-        bias_redesign: float | None = None,
-        excluded_amino_acids: str | None = None,
         num_recycles: int = 3,
         recycle_mode: str = "last",
         model_num: int = 1,
         sample_models: bool = False,
-        use_multimer: bool = True,
-        rm_target_seq: bool = True,
-        rm_target_sc: bool = False,
-        rm_template_ic: bool = True,
-        starting_binder_seq: str | None = None,
-        loss_weights: dict[str, float] | None = None,
-        intra_contact_num: int = 2,
-        intra_contact_cutoff: float = 14.0,
-        inter_contact_num: int = 1,
-        inter_contact_cutoff: float = 21.6875,
-        framework_contact_offset: float = 1.0,
+        use_multimer: bool = False,
         seed: int | None = None,
-        backend: str = "base",
         compute_gradient: bool = True,
         device: str = "cuda",
         verbose: bool = False,
         include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
-        """Run AF2 binder design against a frozen target (forward, optionally backward).
+        """Differentiate one ColabDesign protocol's quantities with respect to relaxed logits.
 
-        When ``backend="germinal"``, uses Germinal's ColabDesign fork for the full setup:
-        - ``prep_inputs()`` handles position resolution, bias initialization,
-          template masking, and framework contact configuration.
-        - ``soft_seq()`` applies the relaxation and persistent bias.
-        - Extension losses (rg, i_ptm, helix, beta_strand, NC) are registered
-          as callbacks based on ``loss_weights``.
+        The three design tools differ only in which protocol they build and what they hand to
+        ``prep_inputs``; everything after that — relaxation, per-term differentiation, structure
+        and metric extraction — is shared. The designed segment is always the trailing
+        ``len(logits)`` rows, which is the binder for the binder protocol and the whole chain for
+        the others, so one gradient slice serves all three.
+
+        Args:
+            protocol (str): ColabDesign protocol: ``"binder"``, ``"fixbb"`` or ``"hallucination"``.
+            prep_kwargs (dict[str, Any]): Protocol-specific arguments for ``prep_inputs``.
+            logits (list[list[float]]): Relaxed ``(L, 20)`` state for the designed chain.
+            gradient_terms (list[str]): Loss-dict keys to differentiate, one gradient each.
+            temperature (float | None): Softmax temperature, or ``None`` for probabilities.
+            soft (float): Relaxation blend.
+            hard (float): Straight-through coefficient.
+            num_recycles (int): Structure-module recycling iterations.
+            recycle_mode (str): ColabDesign recycle mode.
+            model_num (int): Which AF2 parameter set to run.
+            sample_models (bool): Whether to sample the parameter set at random.
+            use_multimer (bool): Use multimer parameters.
+            seed (int | None): Seed for the model's RNG.
+            compute_gradient (bool): Run the backward passes.
+            device (str): Device to run on.
+            verbose (bool): Verbose model loading.
+            include_pae_matrix (bool): Attach the full PAE matrix to the metrics.
+
+        Returns:
+            dict[str, Any]: One entry per requested term with its raw value and gradient, plus
+                metrics, the predicted structure and the vocabulary.
         """
-        if target_pdb is None:
-            raise ValueError("alphafold2: target_pdb is required for binder gradient computation")
-        if backend == "germinal" and binder_chain is None:
-            raise ValueError("alphafold2: backend='germinal' requires binder_chain (template-based binder redesign).")
-
-        self._ensure_loaded(device, backend=backend, verbose=verbose)
-        key = ("binder", use_multimer, False, recycle_mode, self._backend)
+        self._ensure_loaded(device, verbose=verbose)
+        # MSA mode drops params["seq"], the parameter the relaxed state is injected into.
+        key = (protocol, use_multimer, False, recycle_mode)
         af_model = self._get_model(
-            protocol="binder",
+            protocol=protocol,
             use_multimer=use_multimer,
             use_msa=False,
             recycle_mode=recycle_mode,
             verbose=verbose,
         )
+        # The model is cached across requests, so a previous call's options must be cleared.
         self._restore_model_defaults(key, af_model)
-
-        # Germinal's prep_inputs handles position resolution, bias
-        # initialization, template setup.
-        prep_kwargs: dict[str, Any] = {
-            "pdb_filename": target_pdb,
-            "target_chain": target_chain,
-            "binder_len": len(logits),
-            "rm_target_seq": rm_target_seq,
-            "rm_target_sc": rm_target_sc,
-            "rm_template_ic": rm_template_ic,
-            **_binder_template_prep_kwargs(binder_chain),
-        }
-        if target_hotspot:
-            prep_kwargs["hotspot"] = target_hotspot
-        if excluded_amino_acids:
-            prep_kwargs["rm_aa"] = excluded_amino_acids
-
-        # Germinal-specific prep_inputs kwargs (bias_redesign, pos,
-        # starting_binder_seq) are only supported by the Germinal ColabDesign fork.
-        if backend == "germinal":
-            prep_kwargs["pos"] = design_positions if design_positions is not None else list(range(len(logits)))
-            if bias_redesign is not None:
-                prep_kwargs["bias_redesign"] = bias_redesign
-            # Germinal's prep_inputs bootstraps an antibody LM before _prep_model();
-            # pass hidden defaults so the fork initializes cleanly (we only use run()).
-            prep_kwargs["ablm_model"] = "ablang"
-            prep_kwargs["ablm_temp"] = 0.6
-            prep_kwargs["lens"] = {"fw": [0, 0, 0, 0], "cdrs": [0, 0, 0]}
-            if starting_binder_seq is not None:
-                if len(starting_binder_seq) != len(logits):
-                    raise ValueError(
-                        f"alphafold2: starting_binder_seq length {len(starting_binder_seq)} != logits length {len(logits)}"
-                    )
-                prep_kwargs["starting_binder_seq"] = starting_binder_seq
-
         af_model.prep_inputs(**prep_kwargs)
 
-        # Contact num/cutoff: respect user config on all backends
-        af_model.opt["con"].update({"num": intra_contact_num, "cutoff": intra_contact_cutoff})
-        af_model.opt["i_con"].update({"num": inter_contact_num, "cutoff": inter_contact_cutoff})
-
-        if backend == "germinal":
-            af_model.opt["i_con"].update(
-                {"framework_contact_loss": True, "framework_contact_offset": framework_contact_offset}
+        # prep_inputs parses the PDB, so only it knows how many residues were resolved.
+        designed_len = int(af_model._binder_len if protocol == "binder" else af_model._len)
+        if len(logits) != designed_len:
+            raise ValueError(
+                f"alphafold2: this input supplies {len(logits)} residues but the {protocol} protocol "
+                f"designs {designed_len}; the relaxed state must cover exactly the designed residues"
             )
 
-        _configure_extension_losses(af_model, loss_weights or {}, backend=backend)
+        # An extension loss only reaches aux["losses"] once its callback is installed.
+        _configure_extension_losses(af_model, set(gradient_terms))
 
         return self._run_gradient(
             af_model,
@@ -875,7 +866,7 @@ class AlphaFold2Model:
             num_recycles=num_recycles,
             model_num=model_num,
             sample_models=sample_models,
-            loss_weights=loss_weights,
+            gradient_terms=gradient_terms,
             seed=seed,
             backprop=compute_gradient,
             include_pae_matrix=include_pae_matrix,
@@ -925,50 +916,35 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             verbose=input_dict["verbose"],
             include_pae_matrix=input_dict["include_pae_matrix"],
         )
-    if operation == "compute_gradient":
-        # One chunk of independent candidates: prep_inputs re-runs per item, so no state carries over.
+    if operation == "compute_design_gradient":
         results = [
-            _model.compute_binder_gradient(
+            _model.compute_design_gradient(
+                protocol=input_dict["protocol"],
+                prep_kwargs=item["prep_kwargs"],
                 logits=item["logits"],
+                gradient_terms=input_dict["gradient_terms"],
                 temperature=resolve_temperature(input_dict["temperature"]),
-                soft=input_dict.get("soft", 1.0),
-                hard=input_dict.get("hard", 0.0),
-                target_pdb=item["target_pdb"],
-                target_chain=item["target_chain"],
-                target_hotspot=item.get("target_hotspot"),
-                binder_chain=item.get("binder_chain"),
-                design_positions=item.get("design_positions"),
-                bias_redesign=input_dict.get("bias_redesign"),
-                excluded_amino_acids=input_dict.get("excluded_amino_acids"),
-                num_recycles=input_dict["num_recycles"],
+                soft=input_dict["soft"],
+                hard=input_dict["hard"],
+                num_recycles=input_dict.get("num_recycles", 3),
                 recycle_mode=input_dict.get("recycle_mode", "last"),
-                model_num=input_dict["model_num"],
+                model_num=input_dict.get("model_num", 1),
                 sample_models=input_dict.get("sample_models", False),
-                use_multimer=input_dict.get("use_multimer", True),
-                rm_target_seq=input_dict.get("rm_target_seq", True),
-                rm_target_sc=input_dict.get("rm_target_sc", False),
-                rm_template_ic=input_dict.get("rm_template_ic", True),
-                starting_binder_seq=input_dict.get("starting_binder_seq"),
-                loss_weights=input_dict.get("loss_weights"),
-                intra_contact_num=input_dict.get("intra_contact_num", 2),
-                intra_contact_cutoff=input_dict.get("intra_contact_cutoff", 14.0),
-                inter_contact_num=input_dict.get("inter_contact_num", 1),
-                inter_contact_cutoff=input_dict.get("inter_contact_cutoff", 21.6875),
-                framework_contact_offset=input_dict.get("framework_contact_offset", 1.0),
+                use_multimer=input_dict.get("use_multimer", False),
                 seed=input_dict["seed"],
-                backend=input_dict.get("backend", "base"),
                 compute_gradient=input_dict.get("compute_gradient", True),
                 device=input_dict["device"],
                 verbose=input_dict["verbose"],
-                include_pae_matrix=input_dict["include_pae_matrix"],
+                include_pae_matrix=input_dict.get("include_pae_matrix", False),
             )
             for item in input_dict["items"]
         ]
         return {
-            "results": [{key: result[key] for key in ("gradient", "loss", "metrics", "pdb")} for result in results],
+            "results": [{key: result[key] for key in ("terms", "metrics", "pdb")} for result in results],
             "vocab": results[0]["vocab"],
         }
-    raise ValueError(f"alphafold2: unknown operation {operation!r}; valid: ['predict', 'compute_gradient']")
+
+    raise ValueError(f"alphafold2: unknown operation {operation!r}; valid: ['predict', 'compute_design_gradient']")
 
 
 def get_memory_stats() -> dict[str, Any]:

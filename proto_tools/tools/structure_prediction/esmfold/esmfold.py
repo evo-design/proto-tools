@@ -422,6 +422,9 @@ class ESMFoldPLDDTTerm(DifferentiableTerm):
     #: A confident prediction scores closer to 1.
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "higher"
 
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Mean predicted local distance difference test over modelled residues"
+
     id: Literal["plddt"] = Field(
         default="plddt",
         title="Term ID",
@@ -438,6 +441,9 @@ class ESMFoldPTMTerm(DifferentiableTerm):
 
     #: A better-folded prediction scores closer to 1.
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "higher"
+
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Predicted TM-score for the complex"
 
     id: Literal["ptm"] = Field(
         default="ptm",
@@ -464,6 +470,9 @@ class ESMFoldPAETerm(DifferentiableTerm):
 
     #: Angstroms, averaged over the residue pairs the mean is taken across.
     UNITS: ClassVar[str] = "angstroms"
+
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Mean predicted aligned error over residue pairs"
 
     id: Literal["pae"] = Field(
         default="pae",
@@ -906,7 +915,7 @@ def run_esmfold_gradient(
                         term=_ESMFOLD_TERM.validate_python({"id": entry["id"]}),
                         term_value=float(entry["value"]),
                         gradient=entry["gradient"],
-                        metadata=basis.model_copy(update={"description": entry["description"]}),
+                        metadata=basis,
                     )
                     for entry in result["terms"]
                 ],

@@ -40,34 +40,66 @@ This tool folds a protein sequence into a 3D model for structural analysis, dock
 - **Confidence is reported as pLDDT, pTM, ipTM, and PAE.** Average pLDDT (0 to 1) is the primary per-structure quality metric; ipTM is populated only for multi-chain complexes. Set `include_pae_matrix` to attach the full per-residue PAE matrix.
 - **Protein sequences only.** DNA, RNA, and ligands are not supported; `X` is allowed for unknown residues.
 
-### AlphaFold2 Gradient (`alphafold2-gradient`)
+### AlphaFold2 Hallucination Gradient (`alphafold2-hallucination-gradient`)
 
-Scores and differentiates a binder against a frozen target structure. Given a target-plus-binder template, it runs AlphaFold2 (through ColabDesign's binder-design path) on the binder against the fixed target and returns the design loss, the predicted `Structure`, and, by default, the gradient of the loss with respect to the binder sequence logits.
+Differentiates AlphaFold2's own confidence in a sequence that has no reference: ColabDesign's hallucination protocol folds the sequence alone and reports each requested quantity with its own raw gradient with respect to the sequence logits.
 
 #### Applications
 
-This tool supplies the loss and gradient signal that gradient-based binder-design methods optimize against a chosen target. With `compute_gradient=False` it instead provides forward-only scoring of a candidate binder (loss, metrics, and predicted structure) for ranking or filtering.
+De novo design driven only by what AlphaFold2 believes about a sequence — maximizing confidence, encouraging compactness through contacts, or shaping secondary structure — with no target and no backbone to match.
 
 #### Usage Tips
 
-- **Use this for protein binder objectives, not ligand generation.** The input
-  binder is an amino-acid chain and the returned losses describe a predicted
-  protein-protein interface. For small-molecule compounds, choose
-  chemistry-aware ligand tools instead.
-- **One binder configuration per call; this tool is not an optimization loop.** It evaluates a single binder against the fixed target. Drive it from a binder-design optimizer, or call it repeatedly, to actually design a binder.
-- **`compute_gradient` defaults to `True`.** It runs a forward and backward pass and returns the gradient with respect to the binder logits; set it `False` for forward-only scoring (`gradient=None`). The loss, metrics, and predicted structure are identical in both modes.
-- **`temperature`** controls how the input logits are converted into amino acid probabilities using `softmax(logits / temperature)`. Lower temperatures make the distribution more concentrated around the most likely amino acid at each position, while higher temperatures produce more uniform distributions. The default is `1.0`, and the returned gradient is calculated with respect to the input logits.
-- **Advanced option:** `temperature=None` skips softmax and treats the input as probabilities rather than logits. Most users should leave the default in place. In this case, each row must contain nonnegative values that sum to 1, and the returned gradient is calculated with respect to those probabilities. This is generally less convenient for gradient-based optimization because updating probabilities directly can cause them to become negative or no longer sum to 1. Optimizing logits avoids this issue, since softmax always produces a valid probability distribution. However, working directly with probabilities can be useful when using an optimizer designed for probability distributions or when exact zero probabilities are needed to exclude particular tokens. Passing probabilities also means `soft`, `hard`, `excluded_amino_acids` and `bias_redesign` have no effect, so the tool rejects them instead of ignoring them silently.
-- **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator — the forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, which is differentiable but outside the model's training distribution. ColabDesign applies alpha scaling and any `bias_redesign` to the softmax branch, so they do not reach that raw-input blend.
-- **`backend` selects the loss set.** `"base"` (the default) uses the upstream ColabDesign losses; `"germinal"` adds the Germinal fork's alpha, bias, framework-contact, and extension losses. `starting_binder_seq` is only valid with `"germinal"`.
-- **`target_hotspot` focuses the design on chosen target residues.** Supply comma-separated residue indices on the target to bias the binder toward a specific epitope; `loss_weights` (only the validated keys) tunes the objective terms.
+- **Select quantities with `gradient_terms`.** The protocol offers `plddt`, `pae`, `con`, `exp_res` and `helix`; each returns one `TermGradient` carrying its own value and its own gradient.
+- **Terms are raw quantities, not objectives.** `plddt` is the confidence itself, not a loss, and no weight or direction is folded into its gradient. Combine them downstream with goals and weights.
+- **`helix` has no built-in direction.** Lower means more helical contacts, but whether that is wanted depends on the design, so composing it requires an explicit goal.
+- **One sequence per call; this tool is not an optimization loop.** Drive it from an optimizer, or call it repeatedly.
+
+### AlphaFold2 FixBB Gradient (`alphafold2-fixbb-gradient`)
+
+Differentiates how well a sequence reproduces a backbone it is supposed to fold into. ColabDesign's fixed-backbone protocol compares the prediction against a reference chain and adds the structural quantities that comparison makes available.
+
+#### Applications
+
+Sequence redesign for a known fold: driving a sequence toward a target backbone by `rmsd`, `dgram_cce` or `fape`, or scoring how well candidate sequences recover an existing structure.
+
+#### Usage Tips
+
+- **The logits must cover exactly the reference chain.** The designed length comes from the reference, so a matrix of a different length is rejected rather than padded; supply one row per residue of `reference_chain`.
+- **`rmsd`, `dgram_cce` and `fape` exist only here.** They measure agreement with the reference, so they are meaningless without one and are absent from the other two tools.
+- **`reference_chain` defaults to `"A"`.** Name the chain whose backbone the sequence should reproduce.
+
+### AlphaFold2 Binder Gradient (`alphafold2-binder-gradient`)
+
+Differentiates a de novo binder against a fixed target structure, using ColabDesign's binder protocol. The binder has no template of its own, which is what keeps the interface and confidence quantities informative.
+
+#### Applications
+
+Gradient-based binder design against a chosen epitope, optimizing interface contacts (`i_con`) and interface error (`i_pae`) alongside overall confidence.
+
+#### Usage Tips
+
+- **`i_con` and `i_pae` exist only here.** They describe the binder-target interface, so they require the two-chain setup this protocol builds.
+- **`target_hotspot` focuses the interface.** Supply ColabDesign-style residue selections on the target to bias the binder toward a specific epitope.
+- **The target's template is masked by default.** `rm_target_seq` and `rm_template_ic` default to `True` so the target's own sequence and inter-chain contacts do not leak into the prediction; `use_multimer` defaults to `True`.
+- **The binder length is the number of rows in the logits.** There is no binder template, so nothing else defines it.
+
+## Migrating from `alphafold2-gradient`
+
+The previous `alphafold2-gradient` tool is replaced by the three tools above. It returned one gradient of one weighted objective; these return one raw gradient per quantity, which the caller composes.
+
+- **`loss_weights={"plddt": w, ...}` becomes `gradient_terms=["plddt", ...]`.** The weights move out of the tool: each requested quantity comes back with its own value and its own unweighted gradient, and weighting happens when the terms are composed.
+- **Pick the tool that matches the design.** De novo with no reference → `alphafold2-hallucination-gradient`. Sequence against a known backbone → `alphafold2-fixbb-gradient`. Binder against a target → `alphafold2-binder-gradient`. Splitting them is what makes each tool's term catalog honest: the old tool accepted terms its protocol never computed and returned gradients of zero for them.
+- **`binder_chain` has no successor.** It selected an existing chain of the target template to redesign, which made the binder supervised and silently zeroed the confidence quantities. No tool here reproduces template-based binder redesign.
+- **`helix` now means ColabDesign's native helix loss** — a binary contact loss over i,i+3 pairs across the whole designed region — rather than the binder-only variant the previous tool registered. Its magnitude, normalization and sign convention all differ.
+- **`backend="germinal"`, `starting_binder_seq`, `excluded_amino_acids` and `bias_redesign` are not carried over.**
 
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every AlphaFold2 tool in this toolkit (`alphafold2-prediction`, `alphafold2-gradient`).
+These apply to every AlphaFold2 tool in this toolkit (`alphafold2-prediction`, `alphafold2-hallucination-gradient`, `alphafold2-fixbb-gradient`, `alphafold2-binder-gradient`).
 
-- **Requires a GPU.** Both tools run AlphaFold2 through a JAX backend and need an NVIDIA GPU; CPU execution is not practical.
+- **Requires a GPU.** Every tool here runs AlphaFold2 through a JAX backend and need an NVIDIA GPU; CPU execution is not practical.
 - **Runs the original AlphaFold2 through ColabDesign, not the full DeepMind pipeline.** There is no template-search stage; multiple-sequence alignments are optional and are used only by `alphafold2-prediction`.
-- **`num_recycles` (default `3`) applies to both tools.** Each recycling iteration refines the structure; raising it improves accuracy at higher runtime.
+- **`num_recycles` (default `3`) applies to every tool here.** Each recycling iteration refines the structure; raising it improves accuracy at higher runtime.

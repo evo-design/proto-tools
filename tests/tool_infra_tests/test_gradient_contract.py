@@ -498,9 +498,8 @@ def test_relaxation_formula_runs_in_jax_env() -> None:
 def test_alphafold2_relaxation_matches_the_contract_in_env() -> None:
     """AlphaFold2 relaxes inside ColabDesign, so its own blend is checked against the contract.
 
-    ``_alphafold2_relaxation_env_checks.py`` compares ``soft_seq`` on both backends — upstream
-    ColabDesign and the Germinal fork, whose alpha scaling and bias feed the softmax branch —
-    against the shared formula, and ties the no-preprocessing case to ``relaxed_sequence_jax``.
+    ``_alphafold2_relaxation_env_checks.py`` compares ColabDesign's ``soft_seq`` against the
+    shared formula, and ties the no-preprocessing case to ``relaxed_sequence_jax``.
     It needs no model weights and no GPU. A non-zero exit surfaces here as ``RuntimeError``.
     """
     from pathlib import Path as _Path

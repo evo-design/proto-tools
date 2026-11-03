@@ -160,6 +160,9 @@ class ProteinMPNNNLLTerm(DifferentiableTerm):
     #: Nats, averaged over the designed residue positions the mean is taken across.
     UNITS: ClassVar[str] = "nats per position"
 
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Mean autoregressive negative log-likelihood over ProteinMPNN-scored positions"
+
     id: Literal["nll"] = Field(
         default="nll",
         title="Term ID",
@@ -294,6 +297,5 @@ def run_proteinmpnn_gradient(
         temperature=inputs.temperature,
         soft=config.soft,
         hard=config.hard,
-        description="Mean autoregressive negative log-likelihood over ProteinMPNN-scored positions",
     )
     return ProteinMPNNGradientOutput(**result)

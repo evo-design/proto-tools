@@ -154,7 +154,6 @@ def answer(
             relaxed_state(rows, columns),
             vocab=VOCAB[:columns],
             temperature=1.0,
-            description="synthetic quantity",
         ),
     )
 

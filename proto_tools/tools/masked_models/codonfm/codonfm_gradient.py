@@ -87,6 +87,9 @@ class CodonFMMaskedPLLTerm(DifferentiableTerm):
     #: Nats, averaged over the codon positions the mean is taken across.
     UNITS: ClassVar[str] = "nats per codon"
 
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Mean masked negative log-likelihood over codon positions"
+
     id: Literal["codon_masked_pll"] = Field(
         default="codon_masked_pll",
         title="Term ID",
@@ -232,6 +235,5 @@ def run_codonfm_gradient(
         temperature=inputs.temperature,
         soft=config.soft,
         hard=config.hard,
-        description="Mean masked negative log-likelihood over codon positions",
     )
     return CodonFMGradientOutput(**result)

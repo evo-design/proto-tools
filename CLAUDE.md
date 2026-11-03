@@ -29,6 +29,12 @@ pip install -e ".[dev]"      # first-time setup only
 Do not manually create or activate tool-specific environments; proto-tools
 builds and manages standalone tool environments automatically.
 
+Never treat a triggered environment rebuild as a cost or a risk when weighing a
+change. Editing `setup.sh`, `requirements.txt` or anything else in the env
+fingerprint rebuilds that tool's environment, and that is intended. Do not
+raise it as a drawback, scope a change around avoiding it, or ask whether the
+rebuild is acceptable.
+
 Integration tests are skipped by default. See `notes/testing.md` for markers,
 selection flags, logs, and test layout.
 

@@ -83,32 +83,16 @@ def test_masking_strategy_seeded():
 #   floating-point ops non-deterministically across runs, so same-seed
 #   coordinates drift beyond tolerance in both the persistent and non-persistent
 #   variants.
-# - alphafold2-gradient: JAX bfloat16 / CUDA autotune drift (ColabDesign's
-#   default ``global_config.bfloat16=True``) amplified by gradient backprop
-#   beyond tolerances even within a single persistent worker (~12% relative
-#   error on gradient values).
-# - alphafold3-prediction: AF3 honours the seed via ``modelSeeds`` →
-#   ``jax.random.PRNGKey(seed)`` in run_alphafold.py, but the diffusion +
-#   pairformer stack hits JAX/CUDA autotune + bfloat16 reduction-order
-#   non-determinism. ~7 mÅ atomic-coordinate drift between runs (same
-#   seed) — across both persistent and non-persistent variants. Mitigations
-#   like ``XLA_FLAGS=--xla_gpu_deterministic_ops=true`` would slow inference
-#   2-5x without a guarantee of bit-exact reproducibility.
-# - germinal-design: binder-design pipeline that runs AF2 hallucination +
-#   re-prediction internally, inheriting the same JAX/CUDA non-determinism as
-#   alphafold2/3 above. Cross-run drift changes which trajectory filters fire,
-#   so even the ``pipeline_stats`` keys differ between runs; both variants fail.
-# - bindcraft-design, freebindcraft-design: AF2 hallucination + MPNN pipeline
-#   (same ColabDesign/JAX non-determinism as germinal-design); BindCraft also
-#   samples binder length + trajectory seed from an unseeded numpy RNG, so
-#   cross-call runs diverge in both trajectory choice and filter outcomes.
+# - the three alphafold2 gradient tools: JAX bfloat16 / CUDA autotune drift amplified by backprop (~12% on gradients).
 _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "rfdiffusion3-design",
         "rf3-prediction",
         "protenix-prediction",
         "opendde-prediction",
-        "alphafold2-gradient",
+        "alphafold2-binder-gradient",
+        "alphafold2-fixbb-gradient",
+        "alphafold2-hallucination-gradient",
         "alphafold3-prediction",
         "germinal-design",
         "bindcraft-design",

@@ -108,7 +108,6 @@ class GradientMetadata(BaseModel):
         *,
         vocab: Sequence[str],
         temperature: float | None,
-        description: str = "",
         positions: Sequence[int] | None = None,
         hard: float = 0.0,
         soft: float = 1.0,
@@ -119,7 +118,6 @@ class GradientMetadata(BaseModel):
             matrix (Sequence[Sequence[float]]): The differentiated relaxed state, ``(L, V)``.
             vocab (Sequence[str]): Column identity and order.
             temperature (float | None): The input's temperature, which fixes the coordinate space.
-            description (str): What the scalar measures.
             positions (Sequence[int] | None): 1-indexed input position per row, where the rows are
                 not simply ``1..L``.
             hard (float): Straight-through coefficient in force.
@@ -129,7 +127,6 @@ class GradientMetadata(BaseModel):
             Self: Metadata describing this gradient.
         """
         return cls(
-            description=description,
             vocab=list(vocab),
             coordinate_space="probabilities" if temperature is None else "logits",
             length=len(matrix),

@@ -43,6 +43,9 @@ class GLM2MaskedPLLTerm(DifferentiableTerm):
     #: Nats, averaged over the positions the mean is taken across.
     UNITS: ClassVar[str] = "nats per position"
 
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Mean masked negative log-likelihood over canonical protein and DNA token positions"
+
     id: Literal["masked_pll"] = Field(
         default="masked_pll",
         title="Term ID",
@@ -118,6 +121,5 @@ def run_glm2_gradient(
         temperature=inputs.temperature,
         soft=config.soft,
         hard=config.hard,
-        description="Mean masked negative log-likelihood over canonical protein and DNA token positions",
     )
     return GLM2GradientOutput(**result)

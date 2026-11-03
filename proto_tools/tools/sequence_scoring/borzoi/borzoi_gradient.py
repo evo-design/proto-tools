@@ -51,6 +51,9 @@ class BorzoiActivityTerm(DifferentiableTerm):
     #: A track can be something to drive up or something to suppress; only the caller knows.
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
 
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Mean predicted regulatory activity over a Borzoi track and bin span"
+
     id: Literal["track_activity"] = Field(
         default="track_activity",
         title="Term ID",
@@ -416,7 +419,6 @@ def run_borzoi_gradient(
             candidate.logits.root,
             vocab=result["vocab"],
             temperature=inputs.temperature,
-            description="Mean predicted regulatory activity over a Borzoi track and bin span",
             positions=candidate.positions,
             soft=config.soft,
             hard=config.hard,

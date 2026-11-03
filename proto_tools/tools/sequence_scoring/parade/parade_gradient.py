@@ -51,6 +51,9 @@ class ParadeActivityTerm(DifferentiableTerm):
     #: Whether more activity is wanted depends on whether the cell is a target or an off-target.
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
 
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Predicted PARADE UTR activity for one cell line"
+
     id: Literal["activity"] = Field(
         default="activity",
         title="Term ID",
@@ -273,7 +276,6 @@ class ParadeGradientOutput(GradientOutput):
                             matrices[index],
                             vocab=payload["vocab"],
                             temperature=temperature,
-                            description=f"Predicted PARADE UTR activity for cell {entry['cell_type']}",
                             soft=soft,
                             hard=hard,
                         ),

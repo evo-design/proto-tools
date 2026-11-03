@@ -360,9 +360,7 @@ def test_mixed_gradient_export_preserves_values(tmp_path):
                         term=GLM2MaskedPLLTerm(),
                         term_value=1.0,
                         gradient=matrix,
-                        metadata=GradientMetadata.from_input(
-                            matrix, vocab=MIXED_VOCAB, temperature=1.0, description="mean masked NLL"
-                        ),
+                        metadata=GradientMetadata.from_input(matrix, vocab=MIXED_VOCAB, temperature=1.0),
                     )
                 ]
             )

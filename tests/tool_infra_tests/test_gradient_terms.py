@@ -81,6 +81,8 @@ class ConfidenceTerm(DifferentiableTerm):
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "higher"
 
+    DESCRIPTION: ClassVar[str] = "mean pLDDT"
+
     id: Literal["plddt"] = Field(
         default="plddt",
         title="Term ID",
@@ -93,6 +95,8 @@ class ErrorTerm(DifferentiableTerm):
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
     UNITS: ClassVar[str] = "angstroms"
+
+    DESCRIPTION: ClassVar[str] = "mean predicted error"
 
     id: Literal["pae"] = Field(
         default="pae",
@@ -351,7 +355,7 @@ def test_a_narrowed_gradient_round_trips_with_its_selectors_intact() -> None:
         term=CellActivityTerm(cell_type="K562"),
         term_value=1.5,
         gradient=[[1.0, 0.0]],
-        metadata=_metadata(vocab=("A", "C"), matrix=[[0.5, 0.5]], description="predicted activity"),
+        metadata=_metadata(vocab=("A", "C"), matrix=[[0.5, 0.5]]),
     )
     restored = CellTermGradient.model_validate(original.model_dump())
 
@@ -548,13 +552,13 @@ def test_two_parameterless_quantities_read_back_as_their_own_classes() -> None:
                         term=ConfidenceTerm(),
                         term_value=0.87,
                         gradient=[[0.1, 0.0, 0.0, 0.0]],
-                        metadata=_metadata(matrix=[[0.25] * 4], description="mean pLDDT"),
+                        metadata=_metadata(matrix=[[0.25] * 4]),
                     ),
                     PredictionTermGradient(
                         term=ErrorTerm(),
                         term_value=4.75,
                         gradient=[[0.0, -0.2, 0.0, 0.0]],
-                        metadata=_metadata(matrix=[[0.25] * 4], description="mean PAE"),
+                        metadata=_metadata(matrix=[[0.25] * 4]),
                     ),
                 ],
             )
@@ -803,7 +807,6 @@ def test_attach_intrinsic_term_moves_the_scalar_and_gradient_into_the_term() -> 
         ErrorTerm(),
         matrices=[[[0.5, 0.5]], [[0.25, 0.75]]],
         temperature=1.0,
-        description="mean predicted error",
     )
 
     first, second = payload["results"]  # type: ignore[index]
@@ -828,7 +831,6 @@ def test_attach_intrinsic_term_describes_each_item_with_its_own_state() -> None:
         ErrorTerm(),
         matrices=[[[0.5, 0.5]], [[0.25, 0.75]]],
         temperature=1.0,
-        description="mean predicted error",
         positions=[[7], None],
     )
 
@@ -848,5 +850,4 @@ def test_attach_intrinsic_term_requires_a_matrix_per_item() -> None:
             ErrorTerm(),
             matrices=[[[1.0]], [[1.0]]],
             temperature=1.0,
-            description="mean predicted error",
         )
