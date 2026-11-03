@@ -759,13 +759,17 @@ def test_non_whitelisted_vars_are_absent(monkeypatch):
 
 
 @pytest.mark.parametrize("device", ["cpu", "cuda:0"])
-def test_foundation_bin_follows_tool_env_bin_on_worker_path(tmp_path: Path, device: str):
-    """Workers get the foundation env's bin/ right after the tool env's, as setup.sh does."""
+def test_foundation_bin_follows_host_path_on_worker_path(tmp_path: Path, device: str, monkeypatch):
+    """Workers get the foundation env's bin/ after the host PATH and system dirs, so host tools still win."""
+    host_bin = tmp_path / "host_bin"
+    monkeypatch.setenv("PATH", f"{host_bin}:/usr/bin:/bin")
     venv = tmp_path / "tool_env"
     foundation_bin = tmp_path / ".foundation_env" / "bin"
     with patch("proto_tools.utils.foundation_env.active_foundation_bin", return_value=foundation_bin):
         path = _build_subprocess_env(device=device, tool_env_path=venv)["PATH"].split(":")
-    assert path[:2] == [str(venv / "bin"), str(foundation_bin)]
+    assert path[0] == str(venv / "bin")
+    foundation_index = path.index(str(foundation_bin))
+    assert all(path.index(entry) < foundation_index for entry in (str(host_bin), "/usr/bin", "/bin"))
 
 
 def test_worker_path_omits_foundation_bin_when_unused(tmp_path: Path, monkeypatch):

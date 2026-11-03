@@ -483,15 +483,10 @@ def _build_subprocess_env(
         {var: val for var, val in os.environ.items() if var.startswith("PROTO_") and var.endswith("_WEIGHTS_DIR")}
     )
 
-    # Reconstruct PATH: venv/bin > foundation_env/bin > cuda/bin (GPU) > parent PATH > system dirs.
-    # The foundation env (when in use) serves workers too, not only setup.sh: Triton and torch
-    # inductor call gcc at run time, and hosts that needed the foundation env have none.
+    # Reconstruct PATH: venv/bin > cuda/bin (GPU) > parent PATH > system dirs > foundation_env/bin.
     path_parts: list[str] = []
     if tool_env_path:
         path_parts.append(str(Path(tool_env_path) / "bin"))
-    foundation_bin = active_foundation_bin()
-    if foundation_bin is not None:
-        path_parts.append(str(foundation_bin))
     if device != "cpu":
         path_parts.append(_CUDA_BIN_DIR)
     for p in os.environ.get("PATH", "").split(":"):
@@ -500,6 +495,13 @@ def _build_subprocess_env(
     for d in _SYSTEM_PATH_DIRS:
         if d not in path_parts:
             path_parts.append(d)
+    # Last, so it only fills gaps: Triton and torch inductor call gcc at run time, and a host that
+    # needed the foundation env may have no compiler at all. Ahead of the host it would shadow a
+    # working host gcc/curl/binutils with conda-forge builds (glibc 2.34 sysroot, gcc newer than
+    # nvcc accepts, conda's CA bundle). setup.sh still gets it first (ToolInstance setup).
+    foundation_bin = active_foundation_bin()
+    if foundation_bin is not None and str(foundation_bin) not in path_parts:
+        path_parts.append(str(foundation_bin))
     env["PATH"] = ":".join(path_parts)
 
     # CUDA_VISIBLE_DEVICES: pinned workers (JAX) see only their physical GPU(s) as local cuda:0..N-1; else pass parent's through.
