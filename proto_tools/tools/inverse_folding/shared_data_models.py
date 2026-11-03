@@ -6,8 +6,9 @@ Shared base schemas (configs and io) for inverse folding tools.
 import contextlib
 import csv
 import json
+import logging
 from abc import ABC
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -31,6 +32,8 @@ from proto_tools.utils import (
     InputField,
 )
 from proto_tools.utils.tool_io import Metrics, MetricSpec
+
+logger = logging.getLogger(__name__)
 
 
 class SequenceStructurePair(BaseModel):
@@ -167,6 +170,42 @@ class InverseFoldingInput(BaseToolInput):
     )
 
 
+def residue_label(structure: Any, chain_id: str, position: int) -> str:
+    """Render a position as ``64 (CRO)`` for a diagnostic, falling back to the bare number."""
+    try:
+        residue = structure.get_chain_residue_atoms(chain_id)[chain_id][position - 1]
+    except (KeyError, IndexError, ValueError):
+        return str(position)
+    return f"{position} ({residue.name})"
+
+
+def summarize_positions(structure: Any, chain_id: str, positions: Sequence[int], limit: int = 4) -> str:
+    """Render up to ``limit`` labelled positions, then a count, for a diagnostic."""
+    labelled = [residue_label(structure, chain_id, position) for position in positions[:limit]]
+    remainder = len(positions) - len(labelled)
+    return ", ".join(labelled) + (f", and {remainder} more" if remainder > 0 else "")
+
+
+def validate_residue_mapping(readable: dict[str, list[int]], structure: Any) -> None:
+    """Reject a malformed residue mapping before anything relies on it.
+
+    Args:
+        readable (dict[str, list[int]]): Positions the model processes, per chain ID.
+        structure (Any): The structure the mapping describes.
+
+    Raises:
+        ValueError: If a mapping is unordered, repeats a position, or falls outside its chain.
+    """
+    lengths = {chain_id: len(residues) for chain_id, residues in structure.get_chain_residue_atoms().items()}
+    for chain_id, positions in readable.items():
+        if chain_id not in lengths:
+            raise ValueError(f"residue mapping names chain {chain_id}, which is not a polymer chain")
+        if list(positions) != sorted(set(positions)):
+            raise ValueError(f"residue mapping for chain {chain_id} must be ascending and unique")
+        if positions and not (positions[0] >= 1 and positions[-1] <= lengths[chain_id]):
+            raise ValueError(f"residue mapping for chain {chain_id} falls outside its {lengths[chain_id]} residues")
+
+
 class InverseFoldingConfig(BaseConfig):
     """Base configuration for inverse folding models.
 
@@ -202,6 +241,25 @@ class InverseFoldingConfig(BaseConfig):
         description="Number of sequences to process simultaneously on GPU. Defaults to num_sequences_per_structure.",
     )
 
+    def readable_positions(self, inp: Any) -> dict[str, list[int]] | None:
+        """Positions this model processes, 1-indexed, per chain.
+
+        Structure parsers disagree about modified residues: ProteinMPNN renames the residues in
+        ColabDesign's MODRES table and drops anything without a backbone N, ESM-IF1 keeps only
+        names biotite maps to one letter, LigandMPNN's rule depends on ``model_choice``. A
+        toolkit overrides this with its own model's rule.
+
+        ``None`` means no rule is declared, which keeps a toolkit's existing strict behaviour.
+
+        Args:
+            inp (Any): One structure input, exposing ``structure``.
+
+        Returns:
+            dict[str, list[int]] | None: Ascending positions per chain ID, or ``None``.
+        """
+        del inp
+        return None
+
     @model_validator(mode="after")
     def resolve_batch_size(self) -> Any:
         """Default batch_size to num_sequences_per_structure if not set."""
@@ -224,6 +282,80 @@ class InverseFoldingConfig(BaseConfig):
         include_in_key=False,
         examples=["cuda", "cpu"],
     )
+
+
+def _surviving_modifications(entry: Any, readable: list[int] | None, fixed: list[int] | None) -> list[Any]:
+    """Modification annotations that still describe the designed chain.
+
+    An annotation survives only where the input residue survives: a position the parser
+    excluded, or one the caller fixed. A freely redesigned position loses it even when the
+    model happens to return the same letter -- an unfixed MSE coming back as ``M`` is a
+    designed methionine, not the selenomethionine that was there.
+
+    Args:
+        entry (Any): The input chain.
+        readable (list[int] | None): Positions the model processed, or ``None`` if undeclared.
+        fixed (list[int] | None): Positions kept unchanged, excluded ones included.
+
+    Returns:
+        list[Any]: The annotations to carry into the output chain.
+    """
+    annotations = getattr(entry, "modifications", None) or []
+    if not annotations or readable is None:
+        # No declared mapping means every position was designed, as before this feature.
+        return []
+    kept = set(fixed or ())
+    return [modification for modification in annotations if modification.position in kept]
+
+
+def _check_fixed_positions_honoured(
+    entry: Any, sequence: str, readable: list[int], fixed: list[int], tool: str
+) -> None:
+    """Reject a design that changed a residue the caller fixed.
+
+    Args:
+        entry (Any): The input chain.
+        sequence (str): The reconstructed full-length sequence.
+        readable (list[int]): Positions the model processed.
+        fixed (list[int]): Positions kept unchanged, excluded ones included.
+        tool (str): Tool key named in the error.
+
+    Raises:
+        ValueError: If a fixed, processed position came back different.
+    """
+    changed = [
+        position
+        for position in sorted(set(fixed) & set(readable))
+        if sequence[position - 1] != entry.sequence[position - 1]
+    ]
+    if changed:
+        detail = ", ".join(f"{p} ({entry.sequence[p - 1]}->{sequence[p - 1]})" for p in changed)
+        raise ValueError(
+            f"{tool}: Chain {entry.id} position {detail} was fixed but the model returned a "
+            "different residue. Refusing to return a design that violates the requested constraints."
+        )
+
+
+def _splice_design(native: str, designed: str, positions: list[int]) -> str:
+    """Place a model's residues at the positions it read, keeping the input's elsewhere.
+
+    Args:
+        native (str): The chain's input sequence, one character per polymer residue.
+        designed (str): The model's sequence, one character per entry of ``positions``.
+        positions (list[int]): 1-indexed positions of ``native`` the model read, ascending.
+
+    Returns:
+        str: ``native`` with the designed residues substituted at ``positions``.
+
+    Raises:
+        ValueError: If a position falls outside ``native``.
+    """
+    spliced = list(native)
+    for position, residue in zip(positions, designed, strict=True):
+        if not 1 <= position <= len(native):
+            raise ValueError(f"readable position {position} falls outside a chain of {len(native)} residues")
+        spliced[position - 1] = residue
+    return "".join(spliced)
 
 
 class DesignedComplex(Complex):
@@ -287,6 +419,8 @@ class DesignedComplex(Complex):
         *,
         tool: str,
         include_ligands: bool,
+        readable_positions: dict[str, list[int]] | None = None,
+        fixed_positions: dict[str, list[int]] | None = None,
         **fields: Any,
     ) -> Self:
         """Build a design from its input structure and the model's redesigned sequences.
@@ -303,6 +437,15 @@ class DesignedComplex(Complex):
             tool (str): Tool key, named in errors.
             include_ligands (bool): Whether the input's ligands are kept as ``Fragment``
                 entries; true only for models that condition on ligands.
+            readable_positions (dict[str, list[int]] | None): Per chain, the 1-indexed
+                positions this model reads, from ``Config.readable_positions``. A model that
+                skips a modified residue returns one residue per readable position rather
+                than one per polymer residue; the design is then placed on those positions
+                and the skipped residues keep their input identity. ``None`` requires one
+                residue per polymer residue.
+            fixed_positions (dict[str, list[int]] | None): Positions the caller asked to keep
+                unchanged. A modification annotation survives at a fixed position when the
+                output residue still matches the modification's parent amino acid.
             fields (Any): Remaining fields of the subclass, such as ``metrics``.
 
         Returns:
@@ -325,15 +468,36 @@ class DesignedComplex(Complex):
         for entry in native:
             if isinstance(entry, Chain) and entry.id in sequences:
                 sequence = sequences[entry.id]
-                if len(sequence) != len(entry.sequence):
+                readable = (readable_positions or {}).get(entry.id)
+                if readable_positions is not None and readable is None:
                     raise ValueError(
-                        f"{tool}: designed chain {entry.id} has {len(sequence)} residues but the input "
-                        f"structure's chain {entry.id} has {len(entry.sequence)}. The model read fewer "
-                        "residues than the chain holds; which residues a model skips differs by model, and "
-                        "commonly includes non-standard residues such as selenomethionine and residues "
-                        "missing backbone atoms."
+                        f"{tool}: Chain {entry.id} was redesigned but is missing from the residue "
+                        "mapping, so the returned sequence cannot be aligned to the structure."
                     )
-                chains.append(Chain(id=entry.id, sequence=sequence, entity_type="protein"))
+                if readable is not None:
+                    # Any other length would mean guessing which positions the design covers.
+                    if len(sequence) != len(readable):
+                        raise ValueError(
+                            f"{tool}: the model returned {len(sequence)} residues for chain "
+                            f"{entry.id}, but this toolkit's readable_positions rule says it reads "
+                            f"{len(readable)} of that chain's {len(entry.sequence)} residues. The "
+                            "design cannot be placed back on the chain unless those agree. The rule "
+                            "most likely no longer matches the installed version of the model."
+                        )
+                    sequence = _splice_design(entry.sequence, sequence, readable)
+                elif len(sequence) != len(entry.sequence):
+                    raise ValueError(
+                        f"{tool}: the model returned {len(sequence)} residues for chain {entry.id}, "
+                        f"but that chain has {len(entry.sequence)}. Models skip residues they cannot "
+                        "read, such as a chromophore or a residue missing backbone atoms, and which "
+                        "ones differs by model. This toolkit has not declared a readable_positions "
+                        "rule, so the design cannot be placed back on the chain."
+                    )
+                chain_fixed = (fixed_positions or {}).get(entry.id) or []
+                if readable is not None:
+                    _check_fixed_positions_honoured(entry, sequence, readable, chain_fixed, tool)
+                preserved = _surviving_modifications(entry, readable, chain_fixed)
+                chains.append(Chain(id=entry.id, sequence=sequence, entity_type="protein", modifications=preserved))
             else:
                 chains.append(entry)
         flags = [isinstance(entry, Chain) and entry.id in designed for entry in chains]

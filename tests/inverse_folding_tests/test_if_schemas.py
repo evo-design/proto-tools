@@ -417,7 +417,7 @@ def test_from_design_context_chain_keeps_modifications(modified_gapped):
         (
             {"A": "MKTAYIA"},
             {"A"},
-            r"test-sample: designed chain A has 7 residues but the input structure's chain A has 8",
+            r"test-sample: the model returned 7 residues for chain A, but that chain has 8",
         ),
         ({"Z": "MKT"}, {"Z"}, r"designed chain\(s\) \['Z'\] are not polymer chains"),
         ({}, {"A"}, r"no sequence for designed chain\(s\) \['A'\]"),
@@ -428,6 +428,64 @@ def test_from_design_rejects_sequences_that_do_not_map_onto_the_structure(modifi
     """A design that cannot be laid over the input's observed residues fails, naming the tool."""
     with pytest.raises(ValueError, match=match):
         _MetricDesign.from_design(modified_gapped, sequences, designed, tool="test-sample", include_ligands=False)
+
+
+def test_from_design_splices_a_short_design_onto_the_positions_the_model_read(modified_gapped):
+    """A model that skips a residue returns one residue per *readable* position.
+
+    The design belongs at those positions; the skipped residue keeps its input identity,
+    because dropping or shifting it would misalign everything after the first skip.
+    """
+    native = modified_gapped.get_chain("A").sequence
+    readable = [1, 2, 3, 4, 5, 6, 8]  # position 7 unreadable
+
+    design = _MetricDesign.from_design(
+        modified_gapped,
+        {"A": "MKTAYIK"},
+        {"A"},
+        tool="test-sample",
+        include_ligands=False,
+        readable_positions={"A": readable},
+    )
+
+    spliced = design.chains[0].sequence
+    assert len(spliced) == len(native), "the design must cover the whole chain"
+    assert spliced[6] == native[6], "the skipped residue keeps its input identity"
+    assert "".join(spliced[p - 1] for p in readable) == "MKTAYIK"
+
+
+def test_from_design_without_readable_positions_keeps_the_strict_contract(modified_gapped):
+    """Callers that declare no rule are unaffected, so un-migrated toolkits keep behaving."""
+    with pytest.raises(ValueError, match="returned 7 residues for chain A"):
+        _MetricDesign.from_design(modified_gapped, {"A": "MKTAYIA"}, {"A"}, tool="test-sample", include_ligands=False)
+
+
+def test_from_design_requires_the_design_to_match_a_declared_rule_exactly(modified_gapped):
+    """A declared rule is authoritative, so any other length is an error, not a fallback.
+
+    A full-length design is rejected too: if the rule says the model reads 7 of 8 residues and
+    8 come back, the rule no longer matches the model, and guessing which 8 positions the
+    design covers is how a misaligned sequence gets through looking plausible.
+    """
+    with pytest.raises(ValueError, match="rule says it reads 7 of that chain's 8 residues"):
+        _MetricDesign.from_design(
+            modified_gapped,
+            {"A": "MKT"},
+            {"A"},
+            tool="test-sample",
+            include_ligands=False,
+            readable_positions={"A": [1, 2, 3, 4, 5, 6, 8]},
+        )
+
+    with pytest.raises(ValueError, match="rule says it reads 7 of that chain's 8 residues"):
+        _MetricDesign.from_design(
+            modified_gapped,
+            {"A": "MKTAYIAK"},  # full chain length, but the rule says 7 are readable
+            {"A"},
+            tool="test-sample",
+            include_ligands=False,
+            readable_positions={"A": [1, 2, 3, 4, 5, 6, 8]},
+        )
 
 
 def test_default_redesign_set_is_protein_chains(modified_gapped):
