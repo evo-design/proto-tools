@@ -101,7 +101,7 @@ def test_preprocess_rejects_a_fixed_position_the_model_cannot_read():
     inputs = InverseFoldingInput(
         inputs=[InverseFoldingStructureInput(structure=structure, fixed_positions={"A": [64]})]
     )
-    with pytest.raises(ValueError, match=r"cannot read chain A residue\(s\) 64 \(CRO\)"):
+    with pytest.raises(ValueError, match=r"lists chain A residue 64 \(CRO\), which this model does not read"):
         config.preprocess(inputs)
 
 

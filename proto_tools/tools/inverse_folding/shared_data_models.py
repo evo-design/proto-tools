@@ -251,12 +251,16 @@ def _reject_unreadable_selections(inp: Any, readable: dict[str, list[int]]) -> N
                 for position in unreadable
                 if 0 < position <= len(residues_by_chain.get(chain_id, ()))
             )
+            many = len(unreadable) > 1
+            noun = "residues" if many else "residue"
+            them, they_are = ("them", "they are") if many else ("it", "it is")
             raise ValueError(
-                f"This model cannot read chain {chain_id} residue(s) {named or unreadable}, so it "
-                f"cannot hold them fixed. Remove them from {name}. They are usually modified "
-                "residues, such as a chromophore or a phosphorylated residue, which the model's "
-                "structure reader skips; the model never sees them, so they are neither designed "
-                "nor fixable. They are kept unchanged in the output either way."
+                f"{name} lists chain {chain_id} {noun} {named or unreadable}, which this model "
+                f"does not read from the structure file. {name} sets the amino acid at a position "
+                "to stay as it is while the rest of the chain is redesigned. This model leaves "
+                f"{them} out of the structure it builds, so it has no amino acid there to keep or "
+                f"change. The current amino acid appears unchanged in the output whether or not "
+                f"{they_are} listed. Remove {them} from {name}."
             )
 
 
@@ -456,11 +460,14 @@ class DesignedComplex(Complex):
                     sequence = _splice_design(entry.sequence, sequence, readable)
                     skipped = [p for p in range(1, len(entry.sequence) + 1) if p not in set(readable)]
                     logger.warning(
-                        "%s: chain %s position(s) %s are not readable by this model, so they were "
-                        "kept unchanged rather than designed.",
+                        "%s: this model does not read chain %s %s %s from the structure file. "
+                        "%s current amino acid appears unchanged in the output instead of a "
+                        "designed one. Every other position in the chain was designed.",
                         tool,
                         entry.id,
-                        skipped,
+                        "positions" if len(skipped) > 1 else "position",
+                        ", ".join(str(position) for position in skipped),
+                        "Their" if len(skipped) > 1 else "Its",
                     )
                 if len(sequence) != len(entry.sequence):
                     raise ValueError(
