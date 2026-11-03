@@ -417,7 +417,7 @@ def test_from_design_context_chain_keeps_modifications(modified_gapped):
         (
             {"A": "MKTAYIA"},
             {"A"},
-            r"test-sample: designed chain A has 7 residues but the input structure's chain A has 8",
+            r"test-sample: the model returned 7 residues for chain A, but that chain has 8",
         ),
         ({"Z": "MKT"}, {"Z"}, r"designed chain\(s\) \['Z'\] are not polymer chains"),
         ({}, {"A"}, r"no sequence for designed chain\(s\) \['A'\]"),
@@ -456,7 +456,7 @@ def test_from_design_splices_a_short_design_onto_the_positions_the_model_read(mo
 
 def test_from_design_without_readable_positions_keeps_the_strict_contract(modified_gapped):
     """Callers that declare no rule are unaffected, so un-migrated toolkits keep behaving."""
-    with pytest.raises(ValueError, match="designed chain A has 7 residues"):
+    with pytest.raises(ValueError, match="returned 7 residues for chain A"):
         _MetricDesign.from_design(modified_gapped, {"A": "MKTAYIA"}, {"A"}, tool="test-sample", include_ligands=False)
 
 

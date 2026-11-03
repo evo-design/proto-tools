@@ -6,6 +6,7 @@ Shared base schemas (configs and io) for inverse folding tools.
 import contextlib
 import csv
 import json
+import logging
 from abc import ABC
 from collections.abc import Iterator
 from pathlib import Path
@@ -31,6 +32,8 @@ from proto_tools.utils import (
     InputField,
 )
 from proto_tools.utils.tool_io import Metrics, MetricSpec
+
+logger = logging.getLogger(__name__)
 
 
 class SequenceStructurePair(BaseModel):
@@ -232,18 +235,29 @@ def _reject_unreadable_selections(inp: Any, readable: dict[str, list[int]]) -> N
     Raises:
         ValueError: If a selected position is not one the model reads.
     """
+    residues_by_chain: dict[str, list[Any]] | None = None
     for name in type(inp).model_fields:
         chains = getattr(getattr(inp, name, None), "chains", None)
         if not isinstance(chains, dict):
             continue  # ChainSelection holds a list of chain IDs, not per-chain positions
         for chain_id, positions in chains.items():
             unreadable = sorted(p for p in positions if p not in set(readable.get(chain_id, ())))
-            if unreadable:
-                raise ValueError(
-                    f"{name} {unreadable} on chain {chain_id} name residues this model does not "
-                    "read, so it cannot honour them. This is usually a modified residue, such as "
-                    "a chromophore, or a residue missing the backbone atoms the model requires."
-                )
+            if not unreadable:
+                continue
+            if residues_by_chain is None:
+                residues_by_chain = inp.structure.get_chain_residue_atoms()
+            named = ", ".join(
+                f"{position} ({residues_by_chain[chain_id][position - 1].name})"
+                for position in unreadable
+                if 0 < position <= len(residues_by_chain.get(chain_id, ()))
+            )
+            raise ValueError(
+                f"This model cannot read chain {chain_id} residue(s) {named or unreadable}, so it "
+                f"cannot hold them fixed. Remove them from {name}. They are usually modified "
+                "residues, such as a chromophore or a phosphorylated residue, which the model's "
+                "structure reader skips; the model never sees them, so they are neither designed "
+                "nor fixable. They are kept unchanged in the output either way."
+            )
 
 
 class InverseFoldingConfig(ReadableResiduesMixin, BaseConfig):
@@ -440,18 +454,29 @@ class DesignedComplex(Complex):
                     # read: dropping or shifting the others would misalign everything after
                     # the first skip, which looks like a plausible sequence rather than a bug.
                     sequence = _splice_design(entry.sequence, sequence, readable)
+                    skipped = [p for p in range(1, len(entry.sequence) + 1) if p not in set(readable)]
+                    logger.warning(
+                        "%s: chain %s position(s) %s are not readable by this model, so they were "
+                        "kept unchanged rather than designed.",
+                        tool,
+                        entry.id,
+                        skipped,
+                    )
                 if len(sequence) != len(entry.sequence):
                     raise ValueError(
-                        f"{tool}: designed chain {entry.id} has {len(sequence)} residues but the input "
-                        f"structure's chain {entry.id} has {len(entry.sequence)}. The model read fewer "
-                        "residues than the chain holds; which residues a model skips differs by model, and "
-                        "commonly includes non-standard residues such as selenomethionine and residues "
-                        "missing backbone atoms."
+                        f"{tool}: the model returned {len(sequence)} residues for chain {entry.id}, "
+                        f"but that chain has {len(entry.sequence)}"
                         + (
-                            f" This model was expected to read {len(readable)} of them; if that count "
-                            "is wrong, the toolkit's readable_positions rule needs correcting."
+                            f" and this model was expected to read {len(readable)} of them. Since "
+                            f"{len(sequence)} matches neither, the design cannot be placed back on the "
+                            "chain without guessing which residues it covers. The toolkit's "
+                            "readable_positions rule most likely no longer matches the model — check it "
+                            "against the version currently installed."
                             if readable is not None
-                            else ""
+                            else ". Models skip residues they cannot read, such as a chromophore or a "
+                            "residue missing backbone atoms, and which ones differs by model. This "
+                            "toolkit has not declared a readable_positions rule, so the design cannot "
+                            "be placed back on the chain."
                         )
                     )
                 chains.append(Chain(id=entry.id, sequence=sequence, entity_type="protein"))
