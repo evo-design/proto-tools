@@ -23,6 +23,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    validate_residue_mapping,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import AminoAcid, ConfigField
@@ -90,6 +91,25 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
             dict[str, list[int]]: Ascending readable positions per chain ID.
         """
         return proteinmpnn_readable_positions(inp.structure)
+
+    def tool_key_for_messages(self) -> str:
+        """Tool key named in diagnostics."""
+        return "proteinmpnn-sample"
+
+    def preprocess(self, inputs: Any) -> Any:
+        """Check each structure's fixed positions against what this model processes.
+
+        Args:
+            inputs (Any): Tool inputs to prepare.
+
+        Returns:
+            Any: The inputs, unchanged.
+        """
+        for inp in inputs.inputs:
+            readable = self.readable_positions(inp)
+            validate_residue_mapping(readable, inp.structure)
+            self.check_fixed_positions(inp, readable)
+        return inputs
 
     @field_validator("excluded_amino_acids", mode="before")
     @classmethod

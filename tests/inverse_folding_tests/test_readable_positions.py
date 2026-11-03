@@ -7,9 +7,8 @@ for everyone. These pin each toolkit's declared rule against the upstream behavi
 mirrors, and pin the validation that runs in ``preprocess``. CPU-only, no model execution.
 """
 
+import logging
 from pathlib import Path
-
-import pytest
 
 from proto_tools.entities.structures.examples import get_gfp_structure
 from proto_tools.entities.structures.structure import Structure
@@ -94,15 +93,17 @@ def test_proteinmpnn_reads_selenomethionine_so_it_can_be_held_fixed():
     config.preprocess(inputs)  # must not raise
 
 
-def test_preprocess_rejects_a_fixed_position_the_model_cannot_read():
-    """The error names the field, the chain and the position, before anything is dispatched."""
+def test_fixing_an_excluded_position_is_accepted_and_warns(caplog):
+    """An excluded residue is preserved anyway, so fixing it is redundant, not an error."""
     structure = get_gfp_structure()
-    config = ProteinMPNNSampleConfig()
     inputs = InverseFoldingInput(
         inputs=[InverseFoldingStructureInput(structure=structure, fixed_positions={"A": [64]})]
     )
-    with pytest.raises(ValueError, match=r"lists chain A residue 64 \(CRO\), which this model does not read"):
-        config.preprocess(inputs)
+    with caplog.at_level(logging.WARNING):
+        ProteinMPNNSampleConfig().preprocess(inputs)
+
+    assert "Chain A, position 64 (CRO) is excluded by the model's structure parser" in caplog.text
+    assert "preserved unchanged" in caplog.text
 
 
 def test_a_toolkit_declaring_no_rule_validates_nothing():
