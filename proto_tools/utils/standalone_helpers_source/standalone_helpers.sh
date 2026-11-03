@@ -316,14 +316,52 @@ proto_sha256() {
 
 
 # ---------------------------------------------------------------------------
+# proto_with_lock <lock_file> <command> [args...]
+#
+# Run <command> (a program or shell function) while holding an exclusive flock on
+# <lock_file>, so setup scripts that share a model cache take turns on a download
+# instead of writing the same files at once. The kernel drops the lock when the
+# holder exits, so a crashed run leaves no stale lock; the 0-byte lock file is kept
+# (deleting it would let two processes lock different inodes). <command> runs in a
+# subshell, so variables it sets do not reach the caller. Waits up to
+# $PROTO_LOCK_TIMEOUT_SECONDS (default 3600, enough to wait out someone else's
+# multi-GB download), then fails. Lock files are named like standalone_helpers'
+# Python ones, e.g. ".<file>.download.lock" beside the file. Without flock(1)
+# (macOS), <command> runs unlocked.
+#
+# Example:
+#   proto_with_lock "${WEIGHTS_DIR}/.params.extract.lock" _fetch_params
+# ---------------------------------------------------------------------------
+proto_with_lock() {
+    local lock="$1"
+    shift
+    mkdir -p "$(dirname "$lock")"
+    if ! command -v flock >/dev/null 2>&1; then
+        "$@"
+        return
+    fi
+    (
+        if ! flock -x -w "${PROTO_LOCK_TIMEOUT_SECONDS:-3600}" 9; then
+            echo "ERROR: timed out waiting for lock ${lock}" >&2
+            exit 1
+        fi
+        "$@"
+    ) 9>>"$lock"
+}
+
+
+# ---------------------------------------------------------------------------
 # proto_download_verified <url> <dest> <sha256>
 #
 # Download <url> to <dest>, verifying against <sha256>. A file already at <dest>
 # is kept only when its digest matches, so a truncated or altered download is
 # re-fetched instead of being trusted for merely existing. The transfer lands in
-# a .part file that is moved into place only once it matches, so an interrupted
-# run never leaves something that looks finished. Returns nonzero if the freshly
-# downloaded file does not match, which aborts a `set -e` setup.sh.
+# a temp file of this process's own that is moved into place only once it
+# matches, so an interrupted run never leaves something that looks finished.
+# Concurrent callers for the same <dest> (two setups sharing a model cache) take
+# turns under proto_with_lock, so one downloads and the rest find it verified.
+# Returns nonzero if the freshly downloaded file does not match, which aborts a
+# `set -e` setup.sh.
 #
 # Example:
 #   proto_download_verified "$URL" "$WEIGHTS_DIR/model.pth" "$MODEL_SHA256"
@@ -331,8 +369,14 @@ proto_sha256() {
 # Reference: tools/structure_scoring/metal3d/standalone/setup.sh
 # ---------------------------------------------------------------------------
 proto_download_verified() {
+    local dest="$2"
+    mkdir -p "$(dirname "$dest")"
+    proto_with_lock "$(dirname "$dest")/.$(basename "$dest").download.lock" _proto_download_verified_locked "$@"
+}
+
+_proto_download_verified_locked() {
     local url="$1" dest="$2" expected="$3"
-    local actual
+    local actual tmp
 
     actual="$(proto_sha256 "$dest")"
     if [ "$actual" = "$expected" ]; then
@@ -344,14 +388,19 @@ proto_download_verified() {
     fi
 
     echo "Downloading $(basename "$dest")..."
-    curl -fsSL -o "${dest}.part" "$url"
-    actual="$(proto_sha256 "${dest}.part")"
+    tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
+    if ! curl -fsSL -o "$tmp" "$url"; then
+        rm -f "$tmp"
+        echo "ERROR: failed to download ${url}" >&2
+        return 1
+    fi
+    actual="$(proto_sha256 "$tmp")"
     if [ "$actual" != "$expected" ]; then
-        rm -f "${dest}.part"
+        rm -f "$tmp"
         echo "ERROR: checksum mismatch for ${url} (expected ${expected}, got ${actual})" >&2
         return 1
     fi
-    mv "${dest}.part" "$dest"
+    mv -f "$tmp" "$dest"
 }
 
 # ---------------------------------------------------------------------------
@@ -377,18 +426,26 @@ sys.exit(0 if looks_like_zip and not zipfile.is_zipfile(sys.argv[1]) else 1)
 # proto_download <url> <dest>
 #
 # Download <url> to <dest> when no checksum is published (prefer
-# proto_download_verified when one is). The transfer lands in a .part file that
-# is moved into place only once curl succeeds, so an interrupted run never leaves
-# something that looks finished. An existing <dest> is kept unless it is empty or
-# a truncated zip-format checkpoint (see proto_is_truncated_zip), which is
-# re-downloaded. Returns nonzero on a failed download, which aborts a `set -e`
-# setup.sh.
+# proto_download_verified when one is). The transfer lands in a temp file of this
+# process's own that is moved into place only once curl succeeds, so an
+# interrupted run never leaves something that looks finished. An existing <dest>
+# is kept unless it is empty or a truncated zip-format checkpoint (see
+# proto_is_truncated_zip), which is re-downloaded. Concurrent callers for the same
+# <dest> take turns under proto_with_lock. Returns nonzero on a failed download,
+# which aborts a `set -e` setup.sh.
 #
 # Example:
 #   proto_download "${REPO_BASE}/fampnn_0_3.pt" "${WEIGHTS_DIR}/fampnn_0_3.pt"
 # ---------------------------------------------------------------------------
 proto_download() {
+    local dest="$2"
+    mkdir -p "$(dirname "$dest")"
+    proto_with_lock "$(dirname "$dest")/.$(basename "$dest").download.lock" _proto_download_locked "$@"
+}
+
+_proto_download_locked() {
     local url="$1" dest="$2"
+    local tmp
 
     if [ -s "$dest" ] && ! proto_is_truncated_zip "$dest"; then
         echo "$(basename "$dest") already present."
@@ -399,13 +456,13 @@ proto_download() {
     fi
 
     echo "Downloading $(basename "$dest")..."
-    mkdir -p "$(dirname "$dest")"
-    if ! curl -fsSL -o "${dest}.part" "$url"; then
-        rm -f "${dest}.part"
+    tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
+    if ! curl -fsSL -o "$tmp" "$url"; then
+        rm -f "$tmp"
         echo "ERROR: failed to download ${url}" >&2
         return 1
     fi
-    mv "${dest}.part" "$dest"
+    mv -f "$tmp" "$dest"
 }
 
 
@@ -415,12 +472,20 @@ proto_download() {
 # Stream the tar archive at <url> into <dest_dir> and mark it complete. The
 # marker is written only after curl and tar both succeed, so a partial
 # extraction is re-extracted on the next run instead of being trusted because
-# some of its files exist. Extra arguments go to tar (e.g. -z for .tar.gz).
+# some of its files exist. Concurrent callers for the same <dest_dir> take turns
+# under proto_with_lock, so one extracts and the rest find the marker. Extra
+# arguments go to tar (e.g. -z for .tar.gz).
 #
 # Example:
 #   proto_download_archive "$AF2_PARAMS_URL" "${WEIGHTS_DIR}/params"
 # ---------------------------------------------------------------------------
 proto_download_archive() {
+    local dest_dir="$2"
+    mkdir -p "$(dirname "$dest_dir")"
+    proto_with_lock "$(dirname "$dest_dir")/.$(basename "$dest_dir").extract.lock" _proto_download_archive_locked "$@"
+}
+
+_proto_download_archive_locked() {
     local url="$1" dest_dir="$2"
     shift 2
     local marker="${dest_dir}/.proto_download_complete"
