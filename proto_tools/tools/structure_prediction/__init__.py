@@ -79,6 +79,21 @@ from proto_tools.tools.structure_prediction.esmfold2 import (
     ESMFold2Output,
     run_esmfold2,
 )
+from proto_tools.tools.structure_prediction.esmfold2_inversion import (
+    ESMFold2EpitopeTerm,
+    ESMFold2GlobularityTerm,
+    ESMFold2InterContactTerm,
+    ESMFold2IntraContactTerm,
+    ESMFold2InversionCandidate,
+    ESMFold2InversionGradientConfig,
+    ESMFold2InversionGradientInput,
+    ESMFold2InversionGradientMetrics,
+    ESMFold2InversionGradientOutput,
+    ESMFold2InversionGradientResult,
+    ESMFold2InversionTermGradient,
+    ESMFold2PseudoPerplexityTerm,
+    run_esmfold2_inversion_gradient,
+)
 from proto_tools.tools.structure_prediction.msa_plan import SentMSA
 from proto_tools.tools.structure_prediction.msa_reporting import build_msa_conditioning
 from proto_tools.tools.structure_prediction.opendde import (
@@ -193,6 +208,19 @@ __all__ = [
     "ESMFoldGradientOutput",
     # ESMFold2
     "run_esmfold2",
+    "ESMFold2EpitopeTerm",
+    "ESMFold2GlobularityTerm",
+    "ESMFold2InterContactTerm",
+    "ESMFold2IntraContactTerm",
+    "ESMFold2InversionCandidate",
+    "ESMFold2InversionGradientConfig",
+    "ESMFold2InversionGradientInput",
+    "ESMFold2InversionGradientMetrics",
+    "ESMFold2InversionGradientOutput",
+    "ESMFold2InversionGradientResult",
+    "ESMFold2InversionTermGradient",
+    "ESMFold2PseudoPerplexityTerm",
+    "run_esmfold2_inversion_gradient",
     "ESMFold2Input",
     "ESMFold2Config",
     "ESMFold2Output",
