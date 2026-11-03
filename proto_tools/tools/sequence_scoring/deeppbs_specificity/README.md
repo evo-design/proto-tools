@@ -34,6 +34,7 @@ Runs DeepPBS preprocessing and prediction on each input protein-DNA structure an
 - **Inputs are full protein-DNA PDB structures.** Provide a clean co-crystal containing both DNA strands; missing strands or non-standard residues can trigger the fallback path.
 - **DeepPBS, X3DNA, and the weights are provisioned for you.** The standalone setup clones a pinned revision of the DeepPBS repository (which bundles the X3DNA/DSSR binaries, the process/predict configs, and the trained inference weights) into the managed weights cache and installs it, so no repository or X3DNA path is configured. Point `PROTO_DEEPPBS_SPECIFICITY_WEIGHTS_DIR` at an existing checkout to reuse it.
 - **Fallback is opt-in.** By default a missing dependency or failed run raises; pass `allow_fallback=True` to get a uniform fallback PPM instead. A `used_fallback=True` result carries a uniform PPM, not a real prediction.
+- **Files are kept only under `output_directory`.** Leave it unset and nothing is written to disk for you: scratch files go in a temporary directory that is removed, each result's `output_npz_path` is `None`, and the result's arrays hold the same data. Set it to keep the canonical `.npz` files there. `keep_intermediate=True` also keeps DeepPBS's process and predict files under `output_directory/intermediate/<input>`, and requires `output_directory`.
 
 ## Toolkit Notes
 

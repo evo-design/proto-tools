@@ -1,11 +1,13 @@
 """DeepPBS specificity standalone runner for ToolInstance venv execution."""
 
+import contextlib
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -167,6 +169,23 @@ def _fallback_canonical_from_pdb(canonical_npz_path: str, pdb_path: str) -> dict
     }
 
 
+@contextlib.contextmanager
+def _scratch_dir(config: dict[str, Any], output_root: str, input_name: str) -> Iterator[str]:
+    """Yield the working directory for one structure's DeepPBS run.
+
+    With ``keep_intermediate``, the files stay in ``output_root/intermediate/<input_name>``
+    (``output_root`` is then the caller's ``output_directory``); otherwise they go in a
+    temporary directory that is removed afterwards.
+    """
+    if config.get("keep_intermediate", False):
+        kept = os.path.join(output_root, "intermediate", input_name)
+        os.makedirs(kept, exist_ok=True)
+        yield kept
+        return
+    with tempfile.TemporaryDirectory(prefix=f"deeppbs_{input_name}_") as tmp_dir:
+        yield tmp_dir
+
+
 def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) -> dict[str, Any]:
     """Run DeepPBS prediction for one input PDB and return canonical output."""
     pdb_path = os.path.abspath(pdb_path)
@@ -193,9 +212,7 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
         raise FileNotFoundError(f"DeepPBS predict config missing: {predict_config}")
 
     input_name = Path(pdb_path).stem
-    tmp_dir = tempfile.mkdtemp(prefix=f"deeppbs_{input_name}_")
-
-    try:
+    with _scratch_dir(config, output_root, input_name) as tmp_dir:
         pdb_dir = os.path.join(tmp_dir, "pdb")
         os.makedirs(pdb_dir, exist_ok=True)
         input_filename = os.path.basename(pdb_path)
@@ -386,20 +403,16 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
             "fallback_reason": None,
             **canonical,
         }
-    finally:
-        if not bool(config.get("keep_intermediate", False)):
-            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def run_deeppbs_specificity(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Run DeepPBS specificity across input PDB paths."""
-    output_directory = input_data.get("output_directory")
-    if output_directory is None:
-        output_root = tempfile.mkdtemp(prefix="deeppbs_specificity_")
-    else:
-        output_root = os.path.abspath(output_directory)
-        os.makedirs(output_root, exist_ok=True)
+    """Run DeepPBS specificity across input PDB paths.
 
+    Files are kept only under ``output_directory``. Without it, the canonical NPZ files are
+    written to a temporary directory that is removed before returning, and each result's
+    ``output_npz_path`` is ``None``; its arrays already carry the NPZ's contents.
+    """
+    output_directory = input_data.get("output_directory")
     config = {
         "keep_intermediate": bool(input_data.get("keep_intermediate", False)),
         "no_clean_protein": bool(input_data.get("no_clean_protein", False)),
@@ -408,9 +421,16 @@ def run_deeppbs_specificity(input_data: dict[str, Any]) -> dict[str, Any]:
         "verbose": bool(input_data.get("verbose", False)),
     }
 
-    results = [_run_one_structure(pdb_path, config, output_root) for pdb_path in input_data["pdb_paths"]]
+    if output_directory is not None:
+        output_root = os.path.abspath(output_directory)
+        os.makedirs(output_root, exist_ok=True)
+        return {"results": [_run_one_structure(path, config, output_root) for path in input_data["pdb_paths"]]}
 
-    return {"results": results}
+    if config["keep_intermediate"]:
+        raise ValueError("deeppbs_specificity: keep_intermediate needs output_directory to keep the files in")
+    with tempfile.TemporaryDirectory(prefix="deeppbs_specificity_") as output_root:
+        results = [_run_one_structure(path, config, output_root) for path in input_data["pdb_paths"]]
+    return {"results": [{**result, "output_npz_path": None} for result in results]}
 
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
