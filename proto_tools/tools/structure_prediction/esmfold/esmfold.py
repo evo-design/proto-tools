@@ -10,9 +10,9 @@ import json
 import logging
 from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Annotated, Any, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.utils.progress import progress_bar
@@ -44,19 +44,22 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     PROTEIN_AMINO_ACIDS,
     ConfigField,
+    DifferentiableTerm,
+    GradientConfig,
     GradientInput,
+    GradientMetadata,
     GradientOutput,
     InputField,
     ProteinSequenceLogits,
-    RelaxationConfig,
     SequenceLogits,
+    TermCatalog,
+    TermGradient,
     ToolInstance,
     coerce_to_item_list,
+    resolve_terms,
     return_invalid_protein_chars,
 )
-from proto_tools.utils.tool_io import Metrics, MetricSpec
-
-_VALID_GRADIENT_LOSS_KEYS = frozenset({"plddt", "ptm", "pae"})
+from proto_tools.utils.tool_io import Directionality, Metrics, MetricSpec
 
 # Up to 4 halvings (e.g. 1200→600→300→150→75) before re-raising the OOM.
 _MAX_OOM_HALVINGS = 4
@@ -409,7 +412,99 @@ class ESMFoldGradientInput(GradientInput):
         return ESMFoldGradientCandidate(logits=matrix, **fields)
 
 
-class ESMFoldGradientConfig(ESMFoldConfig, RelaxationConfig):
+class ESMFoldPLDDTTerm(DifferentiableTerm):
+    """ESMFold's mean predicted local distance difference test over the modelled residues.
+
+    Attributes:
+        id (Literal["plddt"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: A confident prediction scores closer to 1.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "higher"
+
+    id: Literal["plddt"] = Field(
+        default="plddt",
+        title="Term ID",
+        description="Identifies this quantity as ESMFold's mean pLDDT.",
+    )
+
+
+class ESMFoldPTMTerm(DifferentiableTerm):
+    """ESMFold's predicted TM-score for the complex as a whole.
+
+    Attributes:
+        id (Literal["ptm"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: A better-folded prediction scores closer to 1.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "higher"
+
+    id: Literal["ptm"] = Field(
+        default="ptm",
+        title="Term ID",
+        description="Identifies this quantity as ESMFold's predicted TM-score.",
+    )
+
+
+class ESMFoldPAETerm(DifferentiableTerm):
+    """ESMFold's mean predicted aligned error over residue pairs, in angstroms.
+
+    Reported in its own physical units rather than normalized. Put it on a comparable scale with
+    :class:`~proto_tools.utils.gradient.goals.ClippedLinearGoal`, which also caps how much a
+    hopeless prediction can contribute::
+
+        ClippedLinearGoal(scale=1 / 31.75, ceiling=1.0)
+
+    Attributes:
+        id (Literal["pae"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: Less error between residue pairs is a better prediction.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
+
+    #: Angstroms, averaged over the residue pairs the mean is taken across.
+    UNITS: ClassVar[str] = "angstroms"
+
+    id: Literal["pae"] = Field(
+        default="pae",
+        title="Term ID",
+        description="Identifies this quantity as ESMFold's mean predicted aligned error.",
+    )
+
+
+#: ESMFold's three confidence quantities, discriminated so each reads back as its own class.
+ESMFoldTerm = Annotated[ESMFoldPLDDTTerm | ESMFoldPTMTerm | ESMFoldPAETerm, Field(discriminator="id")]
+
+#: Turns a worker's term id back into the concrete class, through the same discriminator.
+_ESMFOLD_TERM: TypeAdapter[ESMFoldTerm] = TypeAdapter(ESMFoldTerm)
+
+
+class ESMFoldTermGradient(TermGradient):
+    """One ESMFold confidence quantity and its raw gradient.
+
+    Attributes:
+        term (ESMFoldTerm): Which confidence quantity this gradient answers.
+    """
+
+    term: ESMFoldTerm = Field(title="Term", description="Confidence quantity this gradient answers.")
+
+
+class ESMFoldGradientResult(StructureGradientResult):
+    """One evaluated item: its confidence gradients and the structure predicted alongside them.
+
+    Attributes:
+        terms (list[ESMFoldTermGradient]): One entry per requested confidence quantity, in the
+            order requested.
+    """
+
+    terms: list[ESMFoldTermGradient] = Field(  # type: ignore[assignment]  # narrows the element type
+        default_factory=list,
+        title="Terms",
+        description="One gradient per requested confidence quantity, in the order requested.",
+    )
+
+
+class ESMFoldGradientConfig(ESMFoldConfig, GradientConfig):
     """Configuration for one differentiable ESMFold confidence pass.
 
     Attributes:
@@ -418,7 +513,10 @@ class ESMFoldGradientConfig(ESMFoldConfig, RelaxationConfig):
         chain_linker (str): Sequence inserted between chains before folding.
         max_batch_residues (int): Maximum residues per ESMFold inference batch.
         num_recycles (int): Structure module recycling iterations.
-        loss_weights (dict[str, float]): Weights for pLDDT, pTM, and pAE losses.
+        gradient_terms (list[ESMFoldTerm]): Confidence quantities to differentiate, given as
+            catalog names (``"plddt"``), term classes, or instances. Each is reported with its
+            own raw value and gradient; how they trade off against one another is a goal the
+            caller applies afterwards, not a setting here.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
             (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
             and ColabDesign parity. See
@@ -427,10 +525,17 @@ class ESMFoldGradientConfig(ESMFoldConfig, RelaxationConfig):
         compute_gradient (bool): Whether to return the gradient with respect to logits.
     """
 
-    loss_weights: dict[str, float] = ConfigField(
-        default_factory=lambda: {"plddt": 1.0},
-        title="Loss Weights",
-        description="ESMFold confidence loss weights. Valid keys: plddt, ptm, pae.",
+    TERMS: ClassVar[TermCatalog] = {
+        "plddt": ESMFoldPLDDTTerm,
+        "ptm": ESMFoldPTMTerm,
+        "pae": ESMFoldPAETerm,
+    }
+
+    gradient_terms: list[ESMFoldTerm] = ConfigField(
+        default_factory=lambda: [ESMFoldPLDDTTerm()],
+        min_length=1,
+        title="Gradient Terms",
+        description="Confidence quantities to differentiate, by name, class or instance.",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
@@ -438,17 +543,31 @@ class ESMFoldGradientConfig(ESMFoldConfig, RelaxationConfig):
         description="Run backward pass and return gradient; set False for forward-only scoring.",
     )
 
+    @field_validator("gradient_terms", mode="before")
+    @classmethod
+    def resolve_gradient_terms(cls, value: Any) -> Any:
+        """Accept catalog names and term classes alongside instances.
+
+        Only the spellings this validator owns are resolved. A mapping is what a round-tripped
+        config looks like, and the discriminated union reads those back on its own.
+        """
+        if not isinstance(value, list):
+            return value
+        catalog = cls.supported_terms()
+        return [
+            resolve_terms([entry], catalog)[0]  # type: ignore[arg-type]
+            if isinstance(entry, str | type)
+            else entry
+            for entry in value
+        ]
+
     @model_validator(mode="after")
-    def validate_loss_weights(self) -> Self:
-        """Reject unknown or negative confidence loss weights."""
-        unknown_keys = set(self.loss_weights) - _VALID_GRADIENT_LOSS_KEYS
-        if unknown_keys:
-            raise ValueError(
-                f"Unknown loss_weights keys: {unknown_keys}. Valid keys: {sorted(_VALID_GRADIENT_LOSS_KEYS)}"
-            )
-        negative = {key: weight for key, weight in self.loss_weights.items() if weight < 0.0}
-        if negative:
-            raise ValueError(f"loss_weights must be non-negative; got {negative}")
+    def reject_repeated_terms(self) -> Self:
+        """Each quantity yields one term, so asking for it twice is a mistake rather than a sum."""
+        asked = [term.id for term in self.gradient_terms]
+        repeated = sorted({name for name in asked if asked.count(name) > 1})
+        if repeated:
+            raise ValueError(f"gradient_terms names {repeated} more than once; each quantity yields one term")
         return self
 
 
@@ -456,12 +575,12 @@ class ESMFoldGradientOutput(GradientOutput):
     """Differentiable ESMFold confidence output.
 
     Attributes:
-        results (list[StructureGradientResult]): One per input item, each carrying that item's
-            gradient, weighted confidence objective, confidence metrics, and folded structure.
+        results (list[ESMFoldGradientResult]): One per input item, each carrying that item's
+            requested confidence gradients, confidence metrics, and folded structure.
         vocab (list[str]): Amino-acid column ordering for logits and gradient.
     """
 
-    results: list[StructureGradientResult] = Field(  # type: ignore[assignment]  # narrows the element type
+    results: list[ESMFoldGradientResult] = Field(  # type: ignore[assignment]  # narrows the element type
         title="Results",
         description="One result per input item, in input order, each with its own folded structure",
     )
@@ -712,7 +831,7 @@ def _esmfold_msa_conditioning(chains: list[Chain | Fragment], complex_msas: Comp
     config_class=ESMFoldGradientConfig,
     output_class=ESMFoldGradientOutput,
     metrics_class=ESMFoldMetrics,
-    description="Differentiable ESMFold confidence loss and gradient w.r.t. target-chain logits",
+    description="Differentiable ESMFold confidence quantities and their gradients w.r.t. chain logits",
     uses_gpu=True,
     example_input=example_gradient_input,
     cacheable=False,
@@ -755,7 +874,7 @@ def run_esmfold_gradient(
             "temperature": inputs.temperature,
             "soft": config.soft,
             "hard": config.hard,
-            "loss_weights": config.loss_weights,
+            "gradient_terms": [term.id for term in config.gradient_terms],
             "compute_gradient": config.compute_gradient,
             "residue_idx_offset": config.residue_idx_offset,
             "chain_linker": config.chain_linker,
@@ -769,13 +888,28 @@ def run_esmfold_gradient(
     )
 
     results = []
-    for result, prepared_complex in zip(output_data["results"], prepared, strict=True):
+    for item, result, prepared_complex in zip(inputs.inputs, output_data["results"], prepared, strict=True):
         metrics = result["metrics"]
         pdb_output = _relabel_chains(result["pdb"], prepared_complex["seq_lengths"])
+        # Every confidence quantity is a derivative of the same relaxed target-chain state.
+        basis = GradientMetadata.from_input(
+            item.logits.root,
+            vocab=list(PROTEIN_AMINO_ACIDS),
+            temperature=inputs.temperature,
+            soft=config.soft,
+            hard=config.hard,
+        )
         results.append(
-            StructureGradientResult(
-                gradient=result["gradient"],
-                loss=result["loss"],
+            ESMFoldGradientResult(
+                terms=[
+                    ESMFoldTermGradient(
+                        term=_ESMFOLD_TERM.validate_python({"id": entry["id"]}),
+                        term_value=float(entry["value"]),
+                        gradient=entry["gradient"],
+                        metadata=basis.model_copy(update={"description": entry["description"]}),
+                    )
+                    for entry in result["terms"]
+                ],
                 metrics=metrics,
                 structure=Structure(
                     structure=pdb_output,

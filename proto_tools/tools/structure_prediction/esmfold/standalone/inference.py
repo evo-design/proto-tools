@@ -23,7 +23,12 @@ logger = get_logger(__name__)
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
 # ESMFold PAE head maximum: 31 bins at 1.025 A spacing, used to normalize PAE loss to [0, 1].
-PAE_MAXIMUM = 31.75
+#: What each confidence quantity measures; its units are declared on the term class.
+_CONFIDENCE_QUANTITIES: dict[str, str] = {
+    "plddt": "Mean predicted local distance difference test over modelled residues",
+    "ptm": "Predicted TM-score for the complex",
+    "pae": "Mean predicted aligned error over residue pairs",
+}
 # ESMFold's own residue order, matching transformers' openfold_utils.residue_constants.restypes.
 # Its embedding is 0-based, the same basis as _sequence_to_aatype; padding_idx=0 shifts nothing.
 ESMFOLD_AMINO_ACIDS: list[str] = list("ARNDCQEGHILKMFPSTWYV")
@@ -119,7 +124,7 @@ class ESMFoldModel:
         temperature: float | None = 1.0,
         soft: float = 1.0,
         hard: float = 0.0,
-        loss_weights: dict[str, float] | None = None,
+        gradient_terms: list[str] | None = None,
         compute_gradient: bool = True,
         device: str = "cuda",
         verbose: bool = False,
@@ -134,11 +139,11 @@ class ESMFoldModel:
         distribution, so confidence losses can differentiate back to the input
         logits.
         """
-        if loss_weights is None:
-            loss_weights = {"plddt": 1.0}
-        unknown = set(loss_weights) - {"plddt", "ptm", "pae"}
+        if not gradient_terms:
+            gradient_terms = ["plddt"]
+        unknown = [name for name in gradient_terms if name not in _CONFIDENCE_QUANTITIES]
         if unknown:
-            raise ValueError(f"esmfold: unknown loss_weights keys {sorted(unknown)}")
+            raise ValueError(f"esmfold: unknown gradient_terms {sorted(unknown)}")
 
         if not self._loaded:
             self.load(device, verbose)
@@ -167,25 +172,6 @@ class ESMFoldModel:
             self.model.trunk.set_chunk_size(64)
 
         try:
-            if all(weight == 0.0 for weight in loss_weights.values()):
-                # Forward-only path; avoid inference tensors.
-                with torch.no_grad(), _allow_tf32():
-                    outputs = self._run_discrete_forward(
-                        complex_data,
-                        residue_idx_offset=residue_idx_offset,
-                        chain_linker=chain_linker,
-                        num_recycles=num_recycles,
-                    )
-                result = self._extract_result(outputs, 0, include_pae_matrix)
-                metrics = _metrics_with_losses(result, {})
-                return {
-                    "gradient": serialize_output(torch.zeros_like(logits)) if compute_gradient else None,
-                    "loss": 0.0,
-                    "metrics": metrics,
-                    "vocab": AMINO_ACIDS_LIST,
-                    "pdb": result["pdb"],
-                }
-
             # Differentiable path; tensors must be saved for backward.
             with torch.inference_mode(False), torch.set_grad_enabled(compute_gradient), _allow_tf32():
                 relaxed = relaxed_sequence(logits, temperature=temperature, soft=soft, hard=hard)
@@ -197,27 +183,35 @@ class ESMFoldModel:
                     chain_linker=chain_linker,
                     num_recycles=num_recycles,
                 )
-                loss_terms = self._confidence_loss_terms(outputs)
-                missing = [key for key, weight in loss_weights.items() if weight != 0.0 and key not in loss_terms]
+                quantities = self._confidence_quantities(outputs)
+                missing = [name for name in gradient_terms if name not in quantities]
                 if missing:
                     raise RuntimeError(
                         f"esmfold: model output did not include required confidence terms {missing}; "
-                        f"available terms: {sorted(loss_terms)}"
+                        f"available terms: {sorted(quantities)}"
                     )
-                weighted_terms = [
-                    float(weight) * loss_terms[key] for key, weight in loss_weights.items() if weight != 0.0
-                ]
-                weighted_loss = torch.stack(weighted_terms).sum()
 
-                gradient = None
-                if compute_gradient:
-                    gradient = torch.autograd.grad(weighted_loss, logits, allow_unused=False)[0]
+                # One backward per quantity, sharing one forward graph retained until the last.
+                terms = []
+                for position, name in enumerate(gradient_terms):
+                    quantity = quantities[name]
+                    gradient = None
+                    if compute_gradient:
+                        retain = position < len(gradient_terms) - 1
+                        gradient = torch.autograd.grad(quantity, logits, retain_graph=retain, allow_unused=False)[0]
+                    terms.append(
+                        {
+                            "id": name,
+                            "value": float(quantity.detach()),
+                            "gradient": serialize_output(gradient) if gradient is not None else None,
+                            "description": _CONFIDENCE_QUANTITIES[name],
+                        }
+                    )
 
             result = self._extract_result(outputs, 0, include_pae_matrix)
-            metrics = _metrics_with_losses(result, {key: float(loss_terms[key].detach()) for key in loss_terms})
+            metrics = _confidence_metrics(result)
             return {
-                "gradient": serialize_output(gradient) if gradient is not None else None,
-                "loss": float(weighted_loss.detach()),
+                "terms": terms,
                 "metrics": metrics,
                 "vocab": AMINO_ACIDS_LIST,
                 "pdb": result["pdb"],
@@ -389,24 +383,28 @@ class ESMFoldModel:
         structure.update(compute_predicted_aligned_error(ptm_logits, max_bin=31, no_bins=self.model.distogram_bins))
         return structure
 
-    def _confidence_loss_terms(self, outputs: dict[str, torch.Tensor | None]) -> dict[str, torch.Tensor]:
-        """Return differentiable ESMFold confidence losses on the masked complex."""
+    def _confidence_quantities(self, outputs: dict[str, torch.Tensor | None]) -> dict[str, torch.Tensor]:
+        """Return ESMFold's differentiable confidence quantities, in their own units.
+
+        These are the quantities themselves, not objectives built from them: pLDDT and pTM as the
+        model reports them, and PAE in angstroms. Inverting pLDDT, or dividing PAE onto a
+        comparable scale and capping it, are goals a caller applies to the returned value, where
+        the chain rule carries the transform through to the gradient.
+        """
         atom_exists = outputs["atom37_atom_exists"]
         plddt = outputs["plddt"]
         assert atom_exists is not None and plddt is not None
-        avg_plddt = (plddt * atom_exists).sum() / atom_exists.sum().clamp(min=1)
 
-        loss_terms: dict[str, torch.Tensor] = {"plddt": 1.0 - avg_plddt}
+        quantities: dict[str, torch.Tensor] = {"plddt": (plddt * atom_exists).sum() / atom_exists.sum().clamp(min=1)}
         ptm = outputs.get("ptm")
         if ptm is not None:
-            loss_terms["ptm"] = 1.0 - ptm.reshape(-1)[0]
+            quantities["ptm"] = ptm.reshape(-1)[0]
         pae = outputs.get("predicted_aligned_error")
         if pae is not None:
             residue_mask = atom_exists.any(dim=-1)
             pae_mask = residue_mask.unsqueeze(-1) * residue_mask.unsqueeze(-2)
-            avg_pae = (pae * pae_mask).sum() / pae_mask.sum().clamp(min=1)
-            loss_terms["pae"] = torch.clamp(avg_pae / PAE_MAXIMUM, max=1.0)
-        return loss_terms
+            quantities["pae"] = (pae * pae_mask).sum() / pae_mask.sum().clamp(min=1)
+        return quantities
 
     def _build_batch_tensors(
         self, batch_data: list[dict[str, Any]], residue_idx_offset: int, chain_linker: str
@@ -633,16 +631,18 @@ def _chain_spans(chains: list[str], chain_linker: str, selected_indices: list[in
     return spans
 
 
-def _metrics_with_losses(result: dict[str, Any], loss_terms: dict[str, float]) -> dict[str, Any]:
-    """Build JSON-safe ESMFold metrics with unweighted per-term losses."""
-    metrics = {
+def _confidence_metrics(result: dict[str, Any]) -> dict[str, Any]:
+    """Build JSON-safe ESMFold confidence metrics.
+
+    The quantities a caller differentiates are reported as terms, so these are the same numbers
+    read as metrics rather than a second, separately-named copy of them.
+    """
+    return {
         "avg_plddt": result["avg_plddt"],
         "ptm": result["ptm"],
         "avg_pae": result["avg_pae"],
         "pae": result.get("pae"),
     }
-    metrics.update({f"loss_{key}": value for key, value in loss_terms.items()})
-    return metrics
 
 
 # ============================================================================
@@ -681,7 +681,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 temperature=resolve_temperature(input_dict["temperature"]),
                 soft=input_dict["soft"],
                 hard=input_dict["hard"],
-                loss_weights=input_dict["loss_weights"],
+                gradient_terms=input_dict["gradient_terms"],
                 compute_gradient=input_dict["compute_gradient"],
                 device=input_dict["device"],
                 verbose=input_dict["verbose"],
@@ -691,7 +691,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             for item in input_dict["items"]
         ]
         return {
-            "results": [{key: result[key] for key in ("gradient", "loss", "metrics", "pdb")} for result in results],
+            "results": [{key: result[key] for key in ("terms", "metrics", "pdb")} for result in results],
             "vocab": results[0]["vocab"],
         }
     raise ValueError(f"esmfold: unknown operation {operation!r}; valid: ['predict', 'compute_gradient']")

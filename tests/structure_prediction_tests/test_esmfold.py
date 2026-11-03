@@ -19,10 +19,13 @@ from proto_tools.tools.structure_prediction import (
     ESMFoldGradientConfig,
     ESMFoldGradientInput,
     ESMFoldInput,
+    ESMFoldPAETerm,
+    ESMFoldPLDDTTerm,
+    ESMFoldPTMTerm,
     run_esmfold,
     run_esmfold_gradient,
 )
-from proto_tools.utils import one_hot_protein_logits
+from proto_tools.utils import ClippedLinearGoal, MaximizeGoal, one_hot_protein_logits
 from tests.conftest import benchmark_twice, random_protein_sequences
 
 
@@ -140,15 +143,21 @@ def test_esmfold_gradient_dispatch_builds_output():
     dispatch_result = {
         "results": [
             {
-                "gradient": [[0.1] * 20 for _ in range(4)],
-                "loss": 1.5,
-                "metrics": {
-                    "avg_plddt": 0.8,
-                    "ptm": 0.4,
-                    "avg_pae": 6.0,
-                    "loss_plddt": 0.2,
-                    "loss_ptm": 0.6,
-                },
+                "terms": [
+                    {
+                        "id": "plddt",
+                        "value": 0.8,
+                        "gradient": [[0.1] * 20 for _ in range(4)],
+                        "description": "Mean pLDDT",
+                    },
+                    {
+                        "id": "pae",
+                        "value": 6.0,
+                        "gradient": [[-0.2] * 20 for _ in range(4)],
+                        "description": "Mean PAE",
+                    },
+                ],
+                "metrics": {"avg_plddt": 0.8, "ptm": 0.4, "avg_pae": 6.0},
                 "pdb": _minimal_pdb(4),
             }
         ],
@@ -161,16 +170,42 @@ def test_esmfold_gradient_dispatch_builds_output():
             ESMFoldGradientInput(
                 inputs=ESMFoldGradientCandidate(logits=one_hot_protein_logits("MKTL", sharpness=2.0), chains=["MKTL"])
             ),
-            ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 2.0, "ptm": 0.5}),
+            ESMFoldGradientConfig(num_recycles=1, gradient_terms=["plddt", "pae"]),
         )
 
     payload = mock_dispatch.call_args.args[1]
     assert payload["operation"] == "compute_gradient"
-    assert payload["loss_weights"] == {"plddt": 2.0, "ptm": 0.5}
+    assert payload["gradient_terms"] == ["plddt", "pae"]
     assert [item["target_chain_indices"] for item in payload["items"]] == [[0]]
-    assert output.results[0].gradient is not None and len(output.results[0].gradient) == 4
-    assert output.results[0].loss == pytest.approx(1.5)
+
+    plddt, pae = output.results[0].terms
+    assert (type(plddt.term).__name__, type(pae.term).__name__) == ("ESMFoldPLDDTTerm", "ESMFoldPAETerm")
+    assert (plddt.term_value, pae.term_value) == (0.8, 6.0)
+    assert plddt.gradient is not None and len(plddt.gradient) == 4
+    assert pae.metadata is not None and pae.metadata.units == "angstroms"
+    assert plddt.metadata.suggested_optimization_direction == "higher"
+    assert pae.metadata.suggested_optimization_direction == "lower"
     assert output.results[0].structure.metrics["avg_plddt"] == pytest.approx(0.8)
+
+    # Both quantities come off one forward pass, so they are derivatives at the same point.
+    assert [term.term.id for term in output.results[0].terms] == ["plddt", "pae"], "in the order requested"
+    assert plddt.metadata.incompatibility_with(pae.metadata) is None, "same input, same point"
+
+    objective = output.results[0].compose(
+        goals={plddt.term: MaximizeGoal(), pae.term: ClippedLinearGoal(scale=1 / 31.75, ceiling=1.0)},
+        weights={plddt.term: 2.0},
+    )
+    assert objective.objective_loss == pytest.approx(2.0 * -0.8 + 6.0 / 31.75, rel=1e-9)
+    assert [contribution.weight for contribution in objective.contributions] == [2.0, 1.0]
+
+
+def test_esmfold_catalog_is_discoverable_without_a_config() -> None:
+    """``supported_terms()`` is how a caller finds out what ESMFold can differentiate."""
+    assert ESMFoldGradientConfig.supported_terms() == {
+        "plddt": ESMFoldPLDDTTerm,
+        "ptm": ESMFoldPTMTerm,
+        "pae": ESMFoldPAETerm,
+    }
 
 
 @pytest.mark.slow
@@ -181,13 +216,16 @@ def test_esmfold_gradient_smoke():
         ESMFoldGradientInput(
             inputs=ESMFoldGradientCandidate(logits=one_hot_protein_logits("MKTL", sharpness=2.0), chains=["MKTL"])
         ),
-        ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
+        ESMFoldGradientConfig(num_recycles=1),
     )
 
-    assert output.results[0].gradient is not None
-    assert len(output.results[0].gradient) == 4
-    assert all(len(row) == 20 for row in output.results[0].gradient)
-    assert output.results[0].loss == pytest.approx(output.results[0].metrics["loss_plddt"])
+    (plddt,) = output.results[0].terms
+    assert plddt.gradient is not None
+    assert len(plddt.gradient) == 4
+    assert all(len(row) == 20 for row in plddt.gradient)
+    assert plddt.term_value == pytest.approx(output.results[0].metrics["avg_plddt"]), (
+        "the term reports the quantity itself, not an objective built from it"
+    )
 
 
 @pytest.mark.slow
@@ -211,7 +249,7 @@ def test_esmfold_relaxed_one_hot_matches_discrete_prediction():
         ESMFoldGradientInput(
             inputs=ESMFoldGradientCandidate(logits=one_hot_protein_logits(sequence, sharpness=20.0), chains=[sequence])
         ),
-        ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}, compute_gradient=False),
+        ESMFoldGradientConfig(num_recycles=1, compute_gradient=False),
     )
 
     # Saturated softmax is 0.99999996 rather than exactly one-hot, so allow a little slack.
@@ -226,7 +264,7 @@ def test_esmfold_gradient_probability_mode_matches_logit_mode():
     """temperature=None on softmax(L) evaluates the same relaxed sequence as temperature=1.0 on L."""
     logits = one_hot_protein_logits("MKTL", sharpness=2.0)
     probabilities = [[math.exp(v) / sum(math.exp(u) for u in row) for v in row] for row in logits]
-    config = ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0})
+    config = ESMFoldGradientConfig(num_recycles=1)
 
     logit_mode = run_esmfold_gradient(
         ESMFoldGradientInput(inputs=ESMFoldGradientCandidate(logits=logits, chains=["MKTL"])), config
@@ -236,9 +274,11 @@ def test_esmfold_gradient_probability_mode_matches_logit_mode():
         config,
     )
 
-    assert probability_mode.results[0].loss == pytest.approx(logit_mode.results[0].loss, rel=1e-4)
-    assert probability_mode.results[0].gradient is not None
-    assert all(math.isfinite(v) for row in probability_mode.results[0].gradient for v in row)
+    (from_probabilities,) = probability_mode.results[0].terms
+    (from_logits,) = logit_mode.results[0].terms
+    assert from_probabilities.term_value == pytest.approx(from_logits.term_value, rel=1e-4)
+    assert from_probabilities.gradient is not None
+    assert all(math.isfinite(v) for row in from_probabilities.gradient for v in row)
 
 
 @pytest.mark.benchmark("esmfold-prediction")
@@ -286,7 +326,7 @@ def test_esmfold_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     inputs = ESMFoldGradientInput(
         inputs=ESMFoldGradientCandidate(logits=one_hot_protein_logits(sequence, sharpness=2.0), chains=[sequence])
     )
-    config = ESMFoldGradientConfig(num_recycles=1, loss_weights={"plddt": 1.0})
+    config = ESMFoldGradientConfig(num_recycles=1)
 
     def run_batch():
         last = None
@@ -298,9 +338,10 @@ def test_esmfold_gradient_benchmark(request: pytest.FixtureRequest) -> None:
 
     assert result.tool_id == "esmfold-gradient"
     (item,) = result.results
-    assert item.gradient is not None
-    assert len(item.gradient) == 200
-    assert all(len(row) == 20 for row in item.gradient)
+    (plddt,) = item.terms
+    assert plddt.gradient is not None
+    assert len(plddt.gradient) == 200
+    assert all(len(row) == 20 for row in plddt.gradient)
     assert is_valid_structure(item.structure.structure_cif)
 
 
