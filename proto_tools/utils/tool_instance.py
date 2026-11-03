@@ -1652,9 +1652,9 @@ class ToolInstance:
     @staticmethod
     def _get_foundation_env_path() -> Path:
         """Return ``PROTO_HOME/.foundation_env/``."""
-        from proto_tools.utils.proto_home import get_proto_home
+        from proto_tools.utils.foundation_env import foundation_env_path
 
-        return get_proto_home() / ".foundation_env"
+        return foundation_env_path()
 
     @staticmethod
     def _ensure_foundation_env() -> Path | None:

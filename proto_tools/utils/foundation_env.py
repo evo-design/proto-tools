@@ -7,7 +7,9 @@ dependencies on its own. This module owns the tool list, the probe logic, and th
 minimum-version constant that decides "satisfies".
 """
 
+import functools
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -92,3 +94,44 @@ def missing_foundation_packages(foundation_path: Path) -> list[str]:
     """
     bin_dir = foundation_path / "bin"
     return [package for tool, package in FOUNDATION_TOOLS.items() if not (bin_dir / tool).exists()]
+
+
+def foundation_env_path() -> Path:
+    """Return the foundation env root, ``PROTO_HOME/.foundation_env/``.
+
+    Returns:
+        Path: Foundation env root (it may not exist yet).
+    """
+    from proto_tools.utils.proto_home import get_proto_home
+
+    return get_proto_home() / ".foundation_env"
+
+
+@functools.cache
+def _host_has_foundation_tools_cached() -> bool:
+    """Return ``host_has_foundation_tools()``, probed once per process."""
+    return host_has_foundation_tools()
+
+
+def active_foundation_bin() -> Path | None:
+    """Return the foundation env's ``bin/`` when tool subprocesses should use it, else ``None``.
+
+    Tool workers need the foundation tools at run time as well as during setup:
+    Triton compiles a small C launcher with ``gcc`` when it initializes, and
+    ``torch.compile`` JIT-compiles C++. This mirrors the decision
+    ``ToolInstance._ensure_foundation_env`` makes, without creating anything: the
+    env must already be built, and the host must not satisfy the contract itself
+    (unless ``PROTO_USE_FOUNDATION_ENV=1``). ``PROTO_USE_FOUNDATION_ENV=0`` disables it.
+
+    Returns:
+        Path | None: ``PROTO_HOME/.foundation_env/bin`` when in use, else ``None``.
+    """
+    override = os.environ.get("PROTO_USE_FOUNDATION_ENV")
+    if override == "0":
+        return None
+    root = foundation_env_path()
+    if not (root / ".ready").exists():
+        return None
+    if override != "1" and _host_has_foundation_tools_cached():
+        return None
+    return root / "bin"
