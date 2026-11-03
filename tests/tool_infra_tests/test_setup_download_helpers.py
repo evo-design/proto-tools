@@ -410,6 +410,45 @@ def test_verified_download_waits_out_a_slow_holder(tmp_path: Path, source: Path)
     assert dest.read_bytes() == source.read_bytes()
 
 
+class _TricklingHandler(http.server.BaseHTTPRequestHandler):
+    """Send a small body slowly (~200 B/s), well under the old 1 KB/s abort threshold."""
+
+    def do_GET(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Length", str(1200))
+        self.end_headers()
+        for _ in range(6):
+            self.wfile.write(b"x" * 200)
+            self.wfile.flush()
+            time.sleep(1)
+
+    def log_message(self, *args: object) -> None:
+        pass
+
+
+def _serve(handler: type[http.server.BaseHTTPRequestHandler]) -> http.server.ThreadingHTTPServer:
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_download_keeps_a_slow_transfer_that_is_still_progressing(tmp_path: Path) -> None:
+    """A download that keeps receiving data is never aborted, however slow, even past the stall window."""
+    server = _serve(_TricklingHandler)
+    dest = tmp_path / "model.pt"
+    try:
+        result = _run_concurrently(
+            f'proto_download "http://127.0.0.1:{server.server_address[1]}/model.pt" "{dest}"',
+            1,
+            env={"PROTO_DOWNLOAD_STALL_SECONDS": "2"},
+        )
+    finally:
+        server.shutdown()
+    assert result[0][0] == 0, result[0][1]
+    assert dest.read_bytes() == b"x" * 1200
+
+
 class _StallingHandler(http.server.BaseHTTPRequestHandler):
     """Promise a large body, send a few bytes, then go silent."""
 
@@ -426,10 +465,8 @@ class _StallingHandler(http.server.BaseHTTPRequestHandler):
 
 
 def test_download_aborts_a_stalled_transfer(tmp_path: Path) -> None:
-    """A transfer that stops sending fails after PROTO_DOWNLOAD_STALL_SECONDS and leaves no temp file."""
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _StallingHandler)
-    server.daemon_threads = True
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    """A transfer that receives nothing for PROTO_DOWNLOAD_STALL_SECONDS fails and leaves no temp file."""
+    server = _serve(_StallingHandler)
     dest = tmp_path / "model.pt"
     try:
         started = time.monotonic()

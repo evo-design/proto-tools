@@ -159,7 +159,7 @@ proto_download_verified "https://example.com/model.pt" "$WEIGHTS_DIR/model.pt" "
 Waiting has no fixed deadline, so a large download on a slow link is waited out however long it takes:
 
 - `PROTO_LOCK_STALL_SECONDS` (default 600): a waiter gives up only when the holder's download (its temp file, or the directory being extracted) has not grown for this long. `proto_with_lock --progress <path>` gives custom steps the same behavior; without `--progress`, a waiter waits until the lock is free.
-- `PROTO_DOWNLOAD_STALL_SECONDS` (default 300): the helpers' `curl` aborts a transfer that stays under 1 KB/s this long, which releases the lock before waiters give up, so a dead connection can't hold the cache.
+- `PROTO_DOWNLOAD_STALL_SECONDS` (default 300): the helpers' `curl` aborts a transfer that receives nothing for this long, which releases the lock before waiters give up, so a dead connection can't hold the cache. A slow transfer that is still receiving data is never aborted.
 - `PROTO_LOCK_TIMEOUT_SECONDS` (default 0, off): an optional hard cap on the total wait.
 
 ## Exceptions

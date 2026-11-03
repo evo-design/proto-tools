@@ -328,9 +328,10 @@ proto_sha256() {
 # - With --progress, the waiter watches <path> (a file, directory, or glob, such as
 #   the holder's temp file) and keeps waiting while it grows, however long a big
 #   download takes. It gives up only after $PROTO_LOCK_STALL_SECONDS (default 600)
-#   without growth, naming the stalled path. The download helpers abort a stalled
-#   transfer sooner (see PROTO_DOWNLOAD_STALL_SECONDS), so a stuck holder normally
-#   releases the lock before its waiters give up.
+#   without any growth, naming the stalled path. The download helpers abort a
+#   transfer only once it has received nothing for PROTO_DOWNLOAD_STALL_SECONDS
+#   (default 300), never a slow one that is still receiving data, so a stuck holder
+#   normally releases the lock before its waiters give up.
 # - Without --progress, it waits until the lock is free.
 # - $PROTO_LOCK_TIMEOUT_SECONDS (default 0, off) caps the total wait either way.
 # - The lock is checked every $PROTO_LOCK_POLL_SECONDS (default 60) at most; it is
@@ -494,7 +495,7 @@ _proto_download_verified_locked() {
     echo "Downloading $(basename "$dest")..."
     _proto_remove_stale_temps "$dest"
     tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
-    if ! curl -fsSL --speed-limit 1024 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
+    if ! curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
         rm -f "$tmp"
         echo "ERROR: failed to download ${url}" >&2
         return 1
@@ -569,7 +570,7 @@ _proto_download_locked() {
     echo "Downloading $(basename "$dest")..."
     _proto_remove_stale_temps "$dest"
     tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
-    if ! curl -fsSL --speed-limit 1024 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
+    if ! curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
         rm -f "$tmp"
         echo "ERROR: failed to download ${url}" >&2
         return 1
@@ -615,7 +616,7 @@ _proto_download_archive_locked() {
 
     echo "Downloading and extracting $(basename "$url")..."
     mkdir -p "$dest_dir"
-    if ! (set -o pipefail; curl -fsSL --speed-limit 1024 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" "$url" | tar -x -C "$dest_dir" "$@"); then
+    if ! (set -o pipefail; curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" "$url" | tar -x -C "$dest_dir" "$@"); then
         echo "ERROR: failed to download or extract ${url}" >&2
         return 1
     fi
