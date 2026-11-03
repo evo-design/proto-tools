@@ -8,11 +8,13 @@ that read their own environment variable, and downloads files into it safely.
 
 import contextlib
 import fcntl
+import glob
 import hashlib
 import os
 import shutil
 import stat
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -154,38 +156,110 @@ def export_weights_dir(env_var: str, toolkit: str, *, prepend: bool = False) -> 
     return path
 
 
-LOCK_TIMEOUT_SECONDS = 600
+# Locks this thread holds, so taking one again (a helper calling a helper) doesn't wait on itself
+_held_locks = threading.local()
+
+
+def _env_seconds(name: str, default: float) -> float:
+    """Read a seconds setting from the environment, falling back to ``default`` when unset or invalid."""
+    try:
+        return float(os.environ.get(name, default))
+    except ValueError:
+        return default
+
+
+def _progress_size(pattern: str) -> int:
+    """Return the total size of what ``pattern`` (a path or glob) matches, recursing into directories."""
+    total = 0
+    for match in glob.glob(pattern):
+        path = Path(match)
+        if path.is_dir():
+            for root, _dirs, files in os.walk(path):
+                for name in files:
+                    with contextlib.suppress(OSError):
+                        total += (Path(root) / name).stat().st_size
+        else:
+            with contextlib.suppress(OSError):
+                total += path.stat().st_size
+    return total
 
 
 @contextlib.contextmanager
-def file_lock(lock_path: str | Path, timeout: float = LOCK_TIMEOUT_SECONDS) -> Iterator[None]:
+def file_lock(
+    lock_path: str | Path, timeout: float | None = None, *, progress: str | Path | None = None
+) -> Iterator[None]:
     """Hold an exclusive cross-process ``flock`` on ``lock_path`` so concurrent workers don't race.
 
     The kernel releases the lock when its holder exits, so a crashed downloader leaves no stale
     lock. The 0-byte lock file is never unlinked; deleting it would let a second process lock a
-    fresh inode while a third still holds the old one.
+    fresh inode while a third still holds the old one. This is the Python side of
+    ``proto_with_lock`` in ``standalone_helpers.sh``: same lock files, same waiting rules, and
+    the same ``PROTO_LOCK_*`` settings, so bash and Python callers for one target take turns.
+
+    Waiting for another holder has no fixed deadline. With ``progress`` (a path or glob, such as
+    the holder's temp file), the waiter keeps waiting while it grows and gives up only after
+    ``PROTO_LOCK_STALL_SECONDS`` (default 600) without growth, checking every
+    ``PROTO_LOCK_POLL_SECONDS`` (default 60). ``timeout``, or ``PROTO_LOCK_TIMEOUT_SECONDS``
+    when it is ``None`` (default 0, off), caps the total wait.
+
+    Re-entrant: a lock this thread already holds, or one a parent ``proto_with_lock`` holds
+    (listed in ``_PROTO_HELD_LOCKS``), is entered without waiting.
 
     Args:
         lock_path (str | Path): Lock file to create and lock.
-        timeout (float): Seconds to wait for the lock before giving up.
+        timeout (float | None): Seconds to wait before giving up; ``None`` uses
+            ``PROTO_LOCK_TIMEOUT_SECONDS`` (0 waits without a cap).
+        progress (str | Path | None): Path or glob whose growth shows the holder is still working.
 
     Raises:
-        TimeoutError: If the lock is not acquired within ``timeout`` seconds.
+        TimeoutError: If the cap is reached, or ``progress`` stops growing for the stall window.
     """
     lock_path = Path(lock_path)
+    key = str(lock_path)
+    held: set[str] = getattr(_held_locks, "paths", None) or set()
+    _held_locks.paths = held
+    if key in held or key in os.environ.get("_PROTO_HELD_LOCKS", "").split(":"):
+        yield
+        return
+
+    cap = timeout if timeout is not None else _env_seconds("PROTO_LOCK_TIMEOUT_SECONDS", 0)
+    capped = timeout is not None or cap > 0
+    stall = _env_seconds("PROTO_LOCK_STALL_SECONDS", 600)
+    poll = _env_seconds("PROTO_LOCK_POLL_SECONDS", 60)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o666)
     try:
-        started = time.monotonic()
+        started = last_check = idle_since = time.monotonic()
+        last_size: int | None = None
+        waiting = False
         while True:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
             except BlockingIOError as err:
-                if time.monotonic() - started > timeout:
-                    raise TimeoutError(f"timed out after {timeout:.0f}s waiting for lock {lock_path}") from err
-                time.sleep(1)
-        yield
+                now = time.monotonic()
+                if not waiting:
+                    logger.info("Waiting for another process to finish with %s", lock_path.name)
+                    waiting = True
+                if capped and now - started >= cap:
+                    raise TimeoutError(f"timed out after {now - started:.0f}s waiting for lock {lock_path}") from err
+                if progress is not None and now - last_check >= poll:
+                    last_check = now
+                    size = _progress_size(str(progress))
+                    if size != last_size:
+                        last_size, idle_since = size, now
+                    elif now - idle_since >= stall:
+                        raise TimeoutError(
+                            f"gave up waiting for lock {lock_path}: {progress} made no progress for "
+                            f"{now - idle_since:.0f}s (the holder may be stuck; raise PROTO_LOCK_STALL_SECONDS "
+                            "to wait longer)"
+                        ) from err
+                time.sleep(min(1.0, poll))
+        held.add(key)
+        try:
+            yield
+        finally:
+            held.discard(key)
     finally:
         with contextlib.suppress(OSError):
             fcntl.flock(fd, fcntl.LOCK_UN)
@@ -326,7 +400,8 @@ def download_weights(
     if _verified(dest, sha256, md5):
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
-    with file_lock(dest.parent / f".{dest.name}.download.lock"):
+    temps = f"{glob.escape(str(dest.parent))}/.{glob.escape(dest.name)}.*.tmp"
+    with file_lock(dest.parent / f".{dest.name}.download.lock", progress=temps):
         if _verified(dest, sha256, md5):
             return dest
         for attempt in range(1, retries + 1):
@@ -397,7 +472,9 @@ def download_archive(
     if (dest_dir / marker).exists():
         return dest_dir
     dest_dir.parent.mkdir(parents=True, exist_ok=True)
-    with file_lock(dest_dir.parent / f".{dest_dir.name}.extract.lock"):
+    # The holder's archive download (and its temp file) and staging dir all sit beside dest_dir
+    staged = f"{glob.escape(str(dest_dir.parent))}/.*{glob.escape(dest_dir.name)}.*"
+    with file_lock(dest_dir.parent / f".{dest_dir.name}.extract.lock", progress=staged):
         if (dest_dir / marker).exists():
             return dest_dir
         name = Path(urllib.parse.urlparse(url).path).name

@@ -56,7 +56,7 @@ def _resolve_checkpoint(input_dict: dict[str, Any]) -> str:
     safetensors_path = cache_dir / filename
     config_path = cache_dir / "config.json"
 
-    with file_lock(cache_dir.parent / f".{input_dict['cache_subdir']}.download.lock"):
+    with file_lock(cache_dir.parent / f".{input_dict['cache_subdir']}.download.lock", progress=cache_dir):
         download_weights(safetensors_url, safetensors_path, timeout=300)
         download_weights(config_url, config_path, timeout=300)
     return str(safetensors_path)

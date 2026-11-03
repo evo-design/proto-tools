@@ -50,7 +50,7 @@ def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:
     if checkpoint.is_file():
         return extracted_dir
 
-    with file_lock(cache_dir / ".malinois_artifact_extract.lock"):
+    with file_lock(cache_dir / ".malinois_artifact_extract.lock", progress=cache_dir / ".malinois_extract_*"):
         if checkpoint.is_file():
             return extracted_dir
         tmp_dir = cache_dir / f".malinois_extract_{os.getpid()}"

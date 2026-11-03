@@ -5,7 +5,11 @@ import hashlib
 import io
 import logging
 import os
+import shutil
+import subprocess
 import tarfile
+import threading
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -211,6 +215,161 @@ def test_download_lock_excludes_and_releases(tmp_path: Path):
 
     with file_lock(lock_path):
         assert lock_path.exists()
+
+
+_HELPERS_SH = Path(weights.__file__).resolve().parent.parent / "standalone_helpers.sh"
+_needs_flock = pytest.mark.skipif(shutil.which("flock") is None, reason="flock(1) not available")
+
+
+def _hold_with_bash(lock_path: Path, script: str) -> subprocess.Popen:
+    """Hold ``lock_path`` through proto_with_lock while ``script`` runs; return once held."""
+    held = lock_path.with_name(lock_path.name + ".held")
+    proc = subprocess.Popen(
+        ["bash", "-c", f'source "{_HELPERS_SH}"; proto_with_lock "{lock_path}" bash -c \'touch "{held}"; {script}\'']
+    )
+    for _ in range(50):
+        if held.exists():
+            return proc
+        time.sleep(0.1)
+    proc.kill()
+    raise AssertionError("bash holder never took the lock")
+
+
+def test_file_lock_waits_while_holder_makes_progress(tmp_path: Path, monkeypatch):
+    """A holder whose progress file keeps growing is waited out, past the stall window."""
+    monkeypatch.setenv("PROTO_LOCK_POLL_SECONDS", "0.2")
+    monkeypatch.setenv("PROTO_LOCK_STALL_SECONDS", "0.6")
+    lock_path, growing = tmp_path / ".d.lock", tmp_path / "d.tmp"
+
+    def hold() -> None:
+        with file_lock(lock_path):
+            for _ in range(10):
+                with open(growing, "ab") as f:
+                    f.write(b"x")
+                time.sleep(0.2)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    time.sleep(0.1)
+    started = time.monotonic()
+    with file_lock(lock_path, progress=growing):
+        waited = time.monotonic() - started
+    holder.join()
+    assert waited > 1.5  # well past the 0.6 s stall window
+
+
+def test_file_lock_gives_up_on_a_stalled_holder(tmp_path: Path, monkeypatch):
+    """A holder whose progress path stops growing is reported instead of waited on forever."""
+    monkeypatch.setenv("PROTO_LOCK_POLL_SECONDS", "0.2")
+    monkeypatch.setenv("PROTO_LOCK_STALL_SECONDS", "0.6")
+    lock_path, growing = tmp_path / ".d.lock", tmp_path / "d.tmp"
+    growing.write_bytes(b"x")
+    release = threading.Event()
+
+    def hold() -> None:
+        with file_lock(lock_path):
+            release.wait(10)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    time.sleep(0.1)
+    try:
+        with pytest.raises(TimeoutError, match="made no progress"), file_lock(lock_path, progress=growing):
+            pass
+    finally:
+        release.set()
+        holder.join()
+
+
+def test_file_lock_has_no_cap_by_default(tmp_path: Path, monkeypatch):
+    """Without a timeout or PROTO_LOCK_TIMEOUT_SECONDS, a waiter outlasts a slow holder."""
+    monkeypatch.delenv("PROTO_LOCK_TIMEOUT_SECONDS", raising=False)
+    lock_path = tmp_path / ".d.lock"
+
+    def hold() -> None:
+        with file_lock(lock_path):
+            time.sleep(1.5)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    time.sleep(0.1)
+    with file_lock(lock_path):
+        pass
+    holder.join()
+
+
+def test_file_lock_is_reentrant_in_one_thread(tmp_path: Path):
+    """Taking a lock this thread already holds runs straight through instead of deadlocking."""
+    with file_lock(tmp_path / ".d.lock", timeout=1), file_lock(tmp_path / ".d.lock", timeout=1):
+        pass
+
+
+def test_file_lock_still_excludes_other_threads(tmp_path: Path):
+    """Re-entrancy is per thread: another thread in the same process still waits."""
+    lock_path = tmp_path / ".d.lock"
+    with file_lock(lock_path):
+        errors: list[BaseException] = []
+
+        def other() -> None:
+            try:
+                with file_lock(lock_path, timeout=0.5):
+                    pass
+            except TimeoutError as err:
+                errors.append(err)
+
+        thread = threading.Thread(target=other)
+        thread.start()
+        thread.join()
+    assert len(errors) == 1
+
+
+@_needs_flock
+def test_python_waits_for_a_bash_holder(tmp_path: Path):
+    """proto_with_lock in a setup.sh and file_lock in a worker take turns on one lock file."""
+    lock_path = tmp_path / ".model.pt.download.lock"
+    holder = _hold_with_bash(lock_path, "sleep 2")
+    started = time.monotonic()
+    with file_lock(lock_path):
+        waited = time.monotonic() - started
+    holder.wait()
+    assert waited > 1.5
+
+
+@_needs_flock
+def test_bash_waits_for_a_python_holder(tmp_path: Path):
+    """A setup.sh waits while a Python worker holds the same download lock."""
+    lock_path = tmp_path / ".model.pt.download.lock"
+    with file_lock(lock_path):
+        started = time.monotonic()
+        waiter = subprocess.Popen(
+            ["bash", "-c", f'source "{_HELPERS_SH}"; proto_with_lock "{lock_path}" true'],
+            env={**os.environ, "PROTO_LOCK_POLL_SECONDS": "1"},
+        )
+        time.sleep(1.5)
+        assert waiter.poll() is None, "bash took a lock Python still held"
+    assert waiter.wait(timeout=10) == 0
+    assert time.monotonic() - started > 1.5
+
+
+@_needs_flock
+def test_python_inside_a_bash_lock_does_not_deadlock(tmp_path: Path):
+    """A Python script run under the same proto_with_lock lock (setup.sh calling Python) enters it."""
+    lock_path = tmp_path / ".model.pt.download.lock"
+    script = tmp_path / "inner.py"
+    script.write_text(
+        "from standalone_helpers.weights import file_lock\n"
+        f"with file_lock({str(lock_path)!r}, timeout=2):\n"
+        "    print('entered')\n"
+    )
+    result = subprocess.run(
+        ["bash", "-c", f'source "{_HELPERS_SH}"; proto_with_lock "{lock_path}" python3 "{script}"'],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "PYTHONPATH": str(_HELPERS_SH.parent)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert "entered" in result.stdout
 
 
 @pytest.mark.parametrize(
