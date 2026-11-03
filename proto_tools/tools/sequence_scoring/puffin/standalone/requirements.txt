@@ -3,4 +3,5 @@ pandas
 docopt
 selene-sdk
 setuptools<81  # provides pkg_resources (dropped in setuptools 81+), which selene-sdk imports
+six  # selene-sdk imports it without declaring it; python-dateutil 4.0+ no longer pulls it in
 torch-fftconv
