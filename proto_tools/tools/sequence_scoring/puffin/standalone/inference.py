@@ -261,7 +261,7 @@ def _compute_gradient(state: PuffinModel, input_dict: dict[str, Any]) -> dict[st
     temperature = resolve_temperature(input_dict["temperature"])
     soft = float(input_dict.get("soft", 1.0))
     hard = float(input_dict.get("hard", 0.0))
-    loss_terms = input_dict["loss_terms"]
+    gradient_terms = input_dict["gradient_terms"]
 
     model = state.load(device, verbose=verbose)
     channels = _channel_indices(model, list(input_dict["track_names"]))
@@ -283,9 +283,9 @@ def _compute_gradient(state: PuffinModel, input_dict: dict[str, Any]) -> dict[st
             prediction = model(relaxed.t().unsqueeze(0))
             scored = prediction[0, :, PUFFIN_PADDING:-PUFFIN_PADDING]
 
-            total = torch.zeros((), device=state.device, dtype=torch.float32)
-            term_metrics: list[dict[str, Any]] = []
-            for term in loss_terms:
+            # One backward per track, sharing one forward graph retained until the last.
+            terms: list[dict[str, Any]] = []
+            for position, term in enumerate(gradient_terms):
                 name = term["track"]
                 start = 1 if term["position_start"] is None else int(term["position_start"])
                 end = output_length if term["position_end"] is None else int(term["position_end"])
@@ -294,39 +294,23 @@ def _compute_gradient(state: PuffinModel, input_dict: dict[str, Any]) -> dict[st
                         f"puffin: term span {start}..{end} leaves the {output_length}-position output window"
                     )
                 signal = scored[track_channel[name], start - 1 : end].float().mean()
-                signed = -signal if term["direction"] == "max" else signal
-                weighted = float(term["weight"]) * signed
-                total = total + weighted
-                term_metrics.append(
+
+                gradient_value: list[list[float]] | None = None
+                if backprop:
+                    retain = position < len(gradient_terms) - 1
+                    grad = torch.autograd.grad(signal, seq_dist, retain_graph=retain, allow_unused=False)[0]
+                    gradient_value = grad.detach().cpu().tolist()
+
+                # The span reported is the one averaged; an open end resolves per candidate.
+                terms.append(
                     {
-                        "track": name,
-                        "position_start": start,
-                        "position_end": end,
-                        "direction": term["direction"],
-                        "weight": float(term["weight"]),
-                        "mean_signal": float(signal.item()),
-                        "weighted_score": float(weighted.item()),
+                        "term": {"track": name, "position_start": start, "position_end": end},
+                        "value": float(signal.item()),
+                        "gradient": gradient_value,
                     }
                 )
 
-            gradient_value: list[list[float]] | None = None
-            if backprop:
-                total.backward()
-                if seq_dist.grad is None:
-                    raise RuntimeError("puffin: missing relaxed-state gradient after backward")
-                gradient_value = seq_dist.grad.detach().cpu().tolist()
-
-        results.append(
-            {
-                "gradient": gradient_value,
-                "loss": float(total.item()),
-                "metrics": {
-                    "loss": float(total.item()),
-                    "output_length": output_length,
-                    "loss_terms": term_metrics,
-                },
-            }
-        )
+        results.append({"terms": terms, "metrics": {"output_length": output_length}})
 
     return {"results": results, "vocab": ["A", "C", "G", "T"]}
 

@@ -3,9 +3,11 @@
 from proto_tools.tools.sequence_scoring.puffin.puffin_gradient import (
     PuffinGradientConfig,
     PuffinGradientInput,
-    PuffinGradientLossTerm,
     PuffinGradientOutput,
+    PuffinGradientResult,
     PuffinGradientSampleMetrics,
+    PuffinSignalTerm,
+    PuffinTermGradient,
     run_puffin_gradient,
 )
 from proto_tools.tools.sequence_scoring.puffin.puffin_interpretation import (
@@ -32,7 +34,9 @@ from proto_tools.tools.sequence_scoring.puffin.puffin_prediction import (
 __all__ = [
     "PuffinGradientConfig",
     "PuffinGradientInput",
-    "PuffinGradientLossTerm",
+    "PuffinGradientResult",
+    "PuffinSignalTerm",
+    "PuffinTermGradient",
     "PuffinGradientOutput",
     "PuffinGradientSampleMetrics",
     "run_puffin_gradient",

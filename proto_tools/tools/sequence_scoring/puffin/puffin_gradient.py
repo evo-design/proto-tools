@@ -3,7 +3,7 @@
 import logging
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.tools.sequence_scoring.puffin.puffin_prediction import (
@@ -14,15 +14,21 @@ from proto_tools.tools.sequence_scoring.puffin.puffin_prediction import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
+    DifferentiableTerm,
+    GradientConfig,
     GradientInput,
+    GradientMetadata,
     GradientOutput,
+    GradientResult,
     InputField,
     NucleotideSequenceLogits,
-    RelaxationConfig,
+    TermCatalog,
+    TermGradient,
     ToolInstance,
     coerce_to_item_list,
+    resolve_terms,
 )
-from proto_tools.utils.tool_io import Metrics, MetricSpec
+from proto_tools.utils.tool_io import Directionality, Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -38,30 +44,39 @@ PuffinTrack = Literal[
     "ENCODE_CAGE-",
     "FANTOM_CAGE-",
 ]
-PuffinObjectiveDirection = Literal["max", "min"]
 
 
-class PuffinGradientLossTerm(BaseModel):
-    """One differentiable Puffin transcription-initiation objective term.
+class PuffinSignalTerm(DifferentiableTerm):
+    """One differentiable Puffin quantity: mean initiation signal over a track and position span.
 
-    The term's score is the mean predicted signal for ``track`` across output positions
-    ``position_start``..``position_end``. ``direction`` fixes its sign so the summed objective is
-    always minimized, and ``weight`` scales it before the terms are added together.
+    Whether more signal is wanted depends on whether the track is a target or an off-target,
+    and how much it matters relative to other tracks is a weight — both are goals a caller
+    applies to the returned value, not properties of the quantity.
+
+    An open-ended span is resolved against the candidate's own output window, so the term that
+    comes back names the positions actually averaged rather than the ``None`` that was asked for.
 
     Attributes:
+        id (Literal["track_signal"]): Fixed identifier for this kind of quantity.
         track (PuffinTrack): Output track to optimize, named as in ``TRACK_NAMES``; ``+`` and
             ``-`` select the forward and reverse strand heads.
         position_start (int | None): First output position to average, 1-indexed and inclusive.
             ``None`` starts at the first output position.
         position_end (int | None): Last output position to average, 1-indexed and inclusive.
             ``None`` ends at the last output position.
-        direction (PuffinObjectiveDirection): ``"max"`` minimizes ``-mean_signal``; ``"min"``
-            minimizes ``+mean_signal``.
-        weight (float): Non-negative scalar applied before terms are summed.
     """
 
-    model_config = ConfigDict(extra="forbid", validate_assignment=True, frozen=True)
+    #: A track can be something to drive up or something to suppress; only the caller knows.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
 
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Mean predicted transcription-initiation signal over a Puffin track and position span"
+
+    id: Literal["track_signal"] = Field(
+        default="track_signal",
+        title="Term ID",
+        description="Identifies this quantity as Puffin mean track signal over a position span.",
+    )
     track: PuffinTrack = Field(
         default="FANTOM_CAGE+",
         title="Track",
@@ -78,18 +93,6 @@ class PuffinGradientLossTerm(BaseModel):
         ge=1,
         title="Position End",
         description="Last output position to average, 1-indexed inclusive; None ends at the last",
-    )
-    direction: PuffinObjectiveDirection = Field(
-        default="max",
-        title="Direction",
-        description="Whether to maximize ('max') or minimize ('min') mean signal for this track",
-    )
-    weight: float = Field(
-        default=1.0,
-        ge=0.0,
-        allow_inf_nan=False,
-        title="Weight",
-        description="Relative weight of this term in the summed objective (must be non-negative)",
     )
 
     @model_validator(mode="after")
@@ -146,23 +149,38 @@ class PuffinGradientInput(GradientInput):
         return self
 
 
+class PuffinTermGradient(TermGradient):
+    """One Puffin track's mean initiation signal and its raw gradient.
+
+    Attributes:
+        term (PuffinSignalTerm): The track-and-position quantity this gradient answers.
+    """
+
+    term: PuffinSignalTerm = Field(title="Term", description="Track-and-position quantity answered.")
+
+
+class PuffinGradientResult(GradientResult):
+    """One evaluated candidate and every track signal differentiated for it.
+
+    Attributes:
+        terms (list[PuffinTermGradient]): One entry per requested track, in the order requested.
+    """
+
+    terms: list[PuffinTermGradient] = Field(  # type: ignore[assignment]  # narrows the element type
+        default_factory=list,
+        title="Terms",
+        description="One gradient per requested track-and-position quantity, in the order requested.",
+    )
+
+
 class PuffinGradientSampleMetrics(Metrics):
     """Per-candidate differentiable Puffin objective metrics.
 
     Attributes:
-        loss_terms (list[dict[str, Any]]): Per-objective-term metadata — track, position span,
-            direction, weight, mean signal, and the weighted contribution.
+        output_length (int): Number of scored output positions for this candidate.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "loss": {
-            "availability": "always",
-            "type": "float",
-            "min": None,
-            "max": None,
-            "description": "Weighted scalar Puffin objective value for one candidate.",
-            "better_values_are": "lower",
-        },
         "output_length": {
             "availability": "always",
             "type": "int",
@@ -174,33 +192,33 @@ class PuffinGradientSampleMetrics(Metrics):
     }
 
     primary_metric: str | None = Field(
-        default="loss",
+        default="output_length",
         title="Primary Metric",
         description="Headline metric used to rank results.",
-    )
-    loss_terms: list[dict[str, Any]] = Field(
-        default_factory=list,
-        title="Loss Terms",
-        description="Per-objective-term signal and weighting metadata for this candidate.",
     )
 
 
 class PuffinGradientOutput(GradientOutput):
-    """Puffin weighted-objective output; gradient is optional in forward-only mode.
+    """Puffin track-signal output; gradients are optional in forward-only mode.
 
     Attributes:
-        results (list[GradientResult]): One per input candidate, in input order, each holding
-            that candidate's full ``(L, 4)`` gradient (``None`` in forward-only mode), its
-            weighted objective value, and its per-term signal metrics.
+        results (list[PuffinGradientResult]): One per input candidate, in input order, each
+            holding that candidate's requested track signals and their raw ``(L, 4)`` gradients
+            (``None`` in forward-only mode).
         vocab (list[str]): Nucleotide column ordering for the input logits.
     """
 
+    results: list[PuffinGradientResult] = Field(  # type: ignore[assignment]  # narrows the element type
+        title="Results",
+        description="One result per input candidate, in input order, each carrying its track signals.",
+    )
 
-class PuffinGradientConfig(RelaxationConfig):
+
+class PuffinGradientConfig(GradientConfig):
     """Configuration for the Puffin transcription-initiation gradient tool.
 
     Attributes:
-        loss_terms (list[PuffinGradientLossTerm]): Objective terms summed into the scalar loss.
+        gradient_terms (list[PuffinSignalTerm]): Track-and-position quantities to differentiate.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
             (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
             and ColabDesign parity. See
@@ -211,11 +229,13 @@ class PuffinGradientConfig(RelaxationConfig):
         device (str): Device to run the model on.
     """
 
-    loss_terms: list[PuffinGradientLossTerm] = ConfigField(
-        title="Loss Terms",
-        default_factory=lambda: [PuffinGradientLossTerm()],
+    TERMS: ClassVar[TermCatalog] = {"track_signal": PuffinSignalTerm}
+
+    gradient_terms: list[PuffinSignalTerm] = ConfigField(
+        title="Gradient Terms",
+        default_factory=lambda: [PuffinSignalTerm()],
         min_length=1,
-        description="Track-and-position objective terms summed into the scalar loss",
+        description="Track-and-position quantities to differentiate, by name or as instances",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
@@ -228,6 +248,29 @@ class PuffinGradientConfig(RelaxationConfig):
         description="Device to run the model on",
         include_in_key=False,
     )
+
+    @field_validator("gradient_terms", mode="before")
+    @classmethod
+    def resolve_gradient_terms(cls, value: Any) -> Any:
+        """Accept a term by name or class, leaving an already-built instance as it is."""
+        if not isinstance(value, list):
+            return value
+        catalog = cls.supported_terms()
+        return [
+            resolve_terms([entry], catalog)[0]  # type: ignore[arg-type]
+            if isinstance(entry, str | type)
+            else entry
+            for entry in value
+        ]
+
+    @model_validator(mode="after")
+    def reject_repeated_terms(self) -> Self:
+        """The same track and position span twice would be one quantity asked for twice."""
+        asked = [(term.track, term.position_start, term.position_end) for term in self.gradient_terms]
+        repeated = sorted({item for item in asked if asked.count(item) > 1})
+        if repeated:
+            raise ValueError(f"gradient_terms names the same track and position span more than once: {repeated}")
+        return self
 
 
 def example_input() -> PuffinGradientInput:
@@ -256,14 +299,14 @@ def run_puffin_gradient(
     config: PuffinGradientConfig,
     instance: Any = None,
 ) -> PuffinGradientOutput:
-    """Compute Puffin weighted initiation-signal gradients with respect to relaxed DNA logits."""
+    """Report each requested Puffin track signal and its gradient w.r.t. the relaxed logits."""
     logger.debug("Using local worker for Puffin gradient (%d candidate(s))", len(inputs.inputs))
     result = ToolInstance.dispatch(
         "puffin",
         {
             "operation": "compute_gradient",
             "items": [matrix.root for matrix in inputs.inputs],
-            "loss_terms": [term.model_dump() for term in config.loss_terms],
+            "gradient_terms": [term.model_dump() for term in config.gradient_terms],
             "track_names": list(TRACK_NAMES),
             "temperature": inputs.temperature,
             "soft": config.soft,
@@ -276,4 +319,29 @@ def run_puffin_gradient(
         instance=instance,
         config=config,
     )
-    return PuffinGradientOutput(**result)
+
+    # Puffin differentiates the whole relaxed state, so a gradient covers every input row.
+    results = []
+    for matrix, item in zip(inputs.inputs, result["results"], strict=True):
+        basis = GradientMetadata.from_input(
+            matrix.root,
+            vocab=result["vocab"],
+            temperature=inputs.temperature,
+            soft=config.soft,
+            hard=config.hard,
+        )
+        results.append(
+            PuffinGradientResult(
+                terms=[
+                    PuffinTermGradient(
+                        term=PuffinSignalTerm(**entry["term"]),
+                        term_value=float(entry["value"]),
+                        gradient=entry["gradient"],
+                        metadata=basis,
+                    )
+                    for entry in item["terms"]
+                ],
+                metrics=item["metrics"],
+            )
+        )
+    return PuffinGradientOutput(results=results, vocab=result["vocab"])
