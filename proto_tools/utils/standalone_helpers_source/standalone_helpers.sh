@@ -190,6 +190,8 @@ proto_resolve_weights_dir() {
 #
 # The copy counts as complete when all 15 model files are present; a partial
 # extraction is downloaded again. .params_complete records a verified copy.
+# Concurrent setups (any of those toolkits, on any node) take turns under
+# proto_with_lock: one downloads and extracts, the rest wait and find it complete.
 #
 # Example:
 #   proto_ensure_af2_params
@@ -211,6 +213,15 @@ proto_ensure_af2_params() {
         done
     }
 
+    # A complete copy needs no lock, so read-only caches keep working
+    if [ -f "${AF2_PARAMS_DIR}/.params_complete" ]; then
+        echo "AlphaFold2 parameters already present at ${AF2_PARAMS_DIR}"
+        return 0
+    fi
+    proto_with_lock --progress "$AF2_PARAMS_DIR" "${WEIGHTS_DIR}/.params.extract.lock" _proto_af2_params_fetch
+}
+
+_proto_af2_params_fetch() {
     if [ -f "${AF2_PARAMS_DIR}/.params_complete" ] || _proto_af2_params_complete; then
         touch "${AF2_PARAMS_DIR}/.params_complete"
         echo "AlphaFold2 parameters already present at ${AF2_PARAMS_DIR}"
@@ -218,7 +229,14 @@ proto_ensure_af2_params() {
     fi
 
     echo "Downloading AlphaFold2 parameters (~5.3 GB) into ${AF2_PARAMS_DIR}..."
-    curl -fsSL https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar | tar x -C "$AF2_PARAMS_DIR"
+    # No --retry: a retry mid-stream would feed tar a restarted archive
+    if ! (set -o pipefail
+        curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" \
+            "${_PROTO_AF2_PARAMS_URL:-https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar}" \
+            | tar x -C "$AF2_PARAMS_DIR"); then
+        echo "ERROR: AlphaFold2 parameter download into ${AF2_PARAMS_DIR} failed" >&2
+        return 1
+    fi
     if ! _proto_af2_params_complete; then
         echo "ERROR: AlphaFold2 parameter download into ${AF2_PARAMS_DIR} is incomplete" >&2
         return 1
