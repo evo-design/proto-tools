@@ -15,9 +15,11 @@ from proto_tools.tools.rna_splicing.splice_transformer.splice_transformer_gradie
     SpliceTransformerGradientCandidate,
     SpliceTransformerGradientConfig,
     SpliceTransformerGradientInput,
-    SpliceTransformerGradientLossTerm,
     SpliceTransformerGradientOutput,
+    SpliceTransformerGradientResult,
     SpliceTransformerGradientSampleMetrics,
+    SpliceTransformerProbabilityTerm,
+    SpliceTransformerTermGradient,
     run_splice_transformer_gradient,
 )
 
@@ -25,7 +27,9 @@ __all__ = [
     "SpliceTransformerGradientCandidate",
     "SpliceTransformerGradientConfig",
     "SpliceTransformerGradientInput",
-    "SpliceTransformerGradientLossTerm",
+    "SpliceTransformerGradientResult",
+    "SpliceTransformerProbabilityTerm",
+    "SpliceTransformerTermGradient",
     "SpliceTransformerGradientOutput",
     "SpliceTransformerGradientSampleMetrics",
     "run_splice_transformer_gradient",

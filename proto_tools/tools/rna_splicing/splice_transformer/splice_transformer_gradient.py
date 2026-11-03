@@ -14,16 +14,22 @@ from proto_tools.tools.rna_splicing.splice_transformer.splice_transformer import
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
+    DifferentiableTerm,
+    GradientConfig,
     GradientInput,
+    GradientMetadata,
     GradientOutput,
+    GradientResult,
     InputField,
     NucleotideSequenceLogits,
-    RelaxationConfig,
+    TermCatalog,
+    TermGradient,
     ToolInstance,
     coerce_to_item_list,
+    resolve_terms,
 )
 from proto_tools.utils.sequence_logits import SequenceLogits
-from proto_tools.utils.tool_io import Metrics, MetricSpec
+from proto_tools.utils.tool_io import Directionality, Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
@@ -73,17 +79,20 @@ SPLICE_CHANNEL_INDEX: dict[str, int] = {
         )
     )
 }
-SpliceTransformerObjectiveDirection = Literal["max", "min"]
 
 
-class SpliceTransformerGradientLossTerm(BaseModel):
-    """One differentiable SpliceTransformer channel-and-position objective term.
+class SpliceTransformerProbabilityTerm(DifferentiableTerm):
+    """One differentiable SpliceTransformer quantity: mean predicted probability for a channel.
 
-    The term's score is the mean predicted probability for ``channel`` across target positions
-    ``position_start``..``position_end``. ``direction`` fixes its sign so the summed objective is
-    always minimized, and ``weight`` scales it before the terms are added together.
+    Whether more probability is wanted depends on whether the channel is a target or an
+    off-target, and how much it matters relative to other channels is a weight — both are goals
+    a caller applies to the returned value, not properties of the quantity.
+
+    An open-ended span is resolved against the target window, so the term that comes back names
+    the positions actually averaged rather than the ``None`` that was asked for.
 
     Attributes:
+        id (Literal["channel_probability"]): Fixed identifier for this kind of quantity.
         channel (SpliceTransformerChannel): Output channel to optimize — a splice class
             (``NEITHER``/``ACCEPTOR``/``DONOR``, softmaxed across the three) or a tissue
             (sigmoid-activated).
@@ -91,13 +100,21 @@ class SpliceTransformerGradientLossTerm(BaseModel):
             ``None`` starts at the first target position.
         position_end (int | None): Last target position to average, 1-indexed and inclusive.
             ``None`` ends at the last target position.
-        direction (SpliceTransformerObjectiveDirection): ``"max"`` minimizes ``-mean_probability``;
-            ``"min"`` minimizes ``+mean_probability``.
-        weight (float): Non-negative scalar applied before terms are summed.
     """
 
-    model_config = ConfigDict(extra="forbid", validate_assignment=True, frozen=True)
+    #: A channel can be something to drive up or something to suppress; only the caller knows.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
 
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = (
+        "Mean predicted SpliceTransformer probability for a channel over a target position span"
+    )
+
+    id: Literal["channel_probability"] = Field(
+        default="channel_probability",
+        title="Term ID",
+        description="Identifies this quantity as a SpliceTransformer mean channel probability.",
+    )
     channel: SpliceTransformerChannel = Field(
         default="ACCEPTOR",
         title="Channel",
@@ -116,18 +133,6 @@ class SpliceTransformerGradientLossTerm(BaseModel):
         le=TARGET_LENGTH,
         title="Position End",
         description="Last target position to average, 1-indexed inclusive; None ends at the last",
-    )
-    direction: SpliceTransformerObjectiveDirection = Field(
-        default="max",
-        title="Direction",
-        description="Whether to maximize ('max') or minimize ('min') mean probability for this channel",
-    )
-    weight: float = Field(
-        default=1.0,
-        ge=0.0,
-        allow_inf_nan=False,
-        title="Weight",
-        description="Relative weight of this term in the summed objective (must be non-negative)",
     )
 
     @model_validator(mode="after")
@@ -255,23 +260,38 @@ class SpliceTransformerGradientInput(GradientInput):
         return SpliceTransformerGradientCandidate(logits=matrix, **fields)
 
 
+class SpliceTransformerTermGradient(TermGradient):
+    """One SpliceTransformer channel's mean probability and its raw gradient.
+
+    Attributes:
+        term (SpliceTransformerProbabilityTerm): The channel-and-position quantity answered.
+    """
+
+    term: SpliceTransformerProbabilityTerm = Field(title="Term", description="Channel-and-position quantity answered.")
+
+
+class SpliceTransformerGradientResult(GradientResult):
+    """One evaluated candidate and every channel probability differentiated for it.
+
+    Attributes:
+        terms (list[SpliceTransformerTermGradient]): One entry per requested channel, in order.
+    """
+
+    terms: list[SpliceTransformerTermGradient] = Field(  # type: ignore[assignment]  # narrows the element type
+        default_factory=list,
+        title="Terms",
+        description="One gradient per requested channel-and-position quantity, in the order requested.",
+    )
+
+
 class SpliceTransformerGradientSampleMetrics(Metrics):
     """Per-candidate differentiable SpliceTransformer objective metrics.
 
     Attributes:
-        loss_terms (list[dict[str, Any]]): Per-objective-term metadata — channel, position span,
-            direction, weight, mean probability, and the weighted contribution.
+        target_length (int): Number of scored target positions for this candidate.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "loss": {
-            "availability": "always",
-            "type": "float",
-            "min": None,
-            "max": None,
-            "description": "Weighted scalar SpliceTransformer objective value for one candidate.",
-            "better_values_are": "lower",
-        },
         "target_length": {
             "availability": "always",
             "type": "int",
@@ -283,34 +303,34 @@ class SpliceTransformerGradientSampleMetrics(Metrics):
     }
 
     primary_metric: str | None = Field(
-        default="loss",
+        default="target_length",
         title="Primary Metric",
         description="Headline metric used to rank results.",
-    )
-    loss_terms: list[dict[str, Any]] = Field(
-        default_factory=list,
-        title="Loss Terms",
-        description="Per-objective-term probability and weighting metadata for this candidate.",
     )
 
 
 class SpliceTransformerGradientOutput(GradientOutput):
-    """SpliceTransformer weighted-objective output; gradient is optional in forward-only mode.
+    """SpliceTransformer channel-probability output; gradients are optional in forward-only mode.
 
     Attributes:
-        results (list[GradientResult]): One per input candidate, in input order, each holding
-            that candidate's ``(TARGET_LENGTH, 4)`` gradient (``None`` in forward-only mode), its
-            weighted objective value, and its per-term probability metrics.
+        results (list[SpliceTransformerGradientResult]): One per input candidate, in input order,
+            each holding that candidate's requested channel probabilities and their raw
+            ``(TARGET_LENGTH, 4)`` gradients (``None`` in forward-only mode).
         vocab (list[str]): Nucleotide column ordering for the input logits.
     """
 
+    results: list[SpliceTransformerGradientResult] = Field(  # type: ignore[assignment]  # narrows the element type
+        title="Results",
+        description="One result per input candidate, in input order, each carrying its channel probabilities.",
+    )
 
-class SpliceTransformerGradientConfig(RelaxationConfig):
+
+class SpliceTransformerGradientConfig(GradientConfig):
     """Configuration for the SpliceTransformer splice-channel gradient tool.
 
     Attributes:
-        loss_terms (list[SpliceTransformerGradientLossTerm]): Objective terms summed into the
-            scalar loss.
+        gradient_terms (list[SpliceTransformerProbabilityTerm]): Channel-and-position quantities
+            to differentiate.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
             (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
             and ColabDesign parity. See
@@ -321,11 +341,13 @@ class SpliceTransformerGradientConfig(RelaxationConfig):
         device (str): Device to run the model on.
     """
 
-    loss_terms: list[SpliceTransformerGradientLossTerm] = ConfigField(
-        title="Loss Terms",
-        default_factory=lambda: [SpliceTransformerGradientLossTerm()],
+    TERMS: ClassVar[TermCatalog] = {"channel_probability": SpliceTransformerProbabilityTerm}
+
+    gradient_terms: list[SpliceTransformerProbabilityTerm] = ConfigField(
+        title="Gradient Terms",
+        default_factory=lambda: [SpliceTransformerProbabilityTerm()],
         min_length=1,
-        description="Channel-and-position objective terms summed into the scalar loss",
+        description="Channel-and-position quantities to differentiate, by name or as instances",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
@@ -338,6 +360,29 @@ class SpliceTransformerGradientConfig(RelaxationConfig):
         description="Device to run the model on",
         include_in_key=False,
     )
+
+    @field_validator("gradient_terms", mode="before")
+    @classmethod
+    def resolve_gradient_terms(cls, value: Any) -> Any:
+        """Accept a term by name or class, leaving an already-built instance as it is."""
+        if not isinstance(value, list):
+            return value
+        catalog = cls.supported_terms()
+        return [
+            resolve_terms([entry], catalog)[0]  # type: ignore[arg-type]
+            if isinstance(entry, str | type)
+            else entry
+            for entry in value
+        ]
+
+    @model_validator(mode="after")
+    def reject_repeated_terms(self) -> Self:
+        """The same channel and position span twice would be one quantity asked for twice."""
+        asked = [(term.channel, term.position_start, term.position_end) for term in self.gradient_terms]
+        repeated = sorted({item for item in asked if asked.count(item) > 1})
+        if repeated:
+            raise ValueError(f"gradient_terms names the same channel and position span more than once: {repeated}")
+        return self
 
 
 def example_input() -> SpliceTransformerGradientInput:
@@ -375,7 +420,7 @@ def run_splice_transformer_gradient(
     config: SpliceTransformerGradientConfig,
     instance: Any = None,
 ) -> SpliceTransformerGradientOutput:
-    """Compute SpliceTransformer weighted channel gradients with respect to relaxed target logits."""
+    """Report each requested SpliceTransformer channel probability and its gradient."""
     logger.debug("Using local worker for SpliceTransformer gradient (%d candidate(s))", len(inputs.inputs))
     result = ToolInstance.dispatch(
         "splice_transformer",
@@ -389,8 +434,9 @@ def run_splice_transformer_gradient(
                 }
                 for candidate in inputs.inputs
             ],
-            "loss_terms": [
-                {**term.model_dump(), "channel_index": SPLICE_CHANNEL_INDEX[term.channel]} for term in config.loss_terms
+            "gradient_terms": [
+                {**term.model_dump(), "channel_index": SPLICE_CHANNEL_INDEX[term.channel]}
+                for term in config.gradient_terms
             ],
             "context_length": CONTEXT_LENGTH,
             "temperature": inputs.temperature,
@@ -404,4 +450,29 @@ def run_splice_transformer_gradient(
         instance=instance,
         config=config,
     )
-    return SpliceTransformerGradientOutput(**result)
+
+    # Only the target window is relaxed, so a gradient covers the candidate's own rows.
+    results = []
+    for candidate, item in zip(inputs.inputs, result["results"], strict=True):
+        basis = GradientMetadata.from_input(
+            candidate.logits.root,
+            vocab=result["vocab"],
+            temperature=inputs.temperature,
+            soft=config.soft,
+            hard=config.hard,
+        )
+        results.append(
+            SpliceTransformerGradientResult(
+                terms=[
+                    SpliceTransformerTermGradient(
+                        term=SpliceTransformerProbabilityTerm(**entry["term"]),
+                        term_value=float(entry["value"]),
+                        gradient=entry["gradient"],
+                        metadata=basis,
+                    )
+                    for entry in item["terms"]
+                ],
+                metrics=item["metrics"],
+            )
+        )
+    return SpliceTransformerGradientOutput(results=results, vocab=result["vocab"])

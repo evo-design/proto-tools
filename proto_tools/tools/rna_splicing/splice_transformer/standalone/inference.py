@@ -250,7 +250,7 @@ def _compute_gradient(model: "SpliceTransformerModel", input_dict: dict[str, Any
     temperature = resolve_temperature(input_dict["temperature"])
     soft = float(input_dict.get("soft", 1.0))
     hard = float(input_dict.get("hard", 0.0))
-    loss_terms = input_dict["loss_terms"]
+    gradient_terms = input_dict["gradient_terms"]
 
     if not model._loaded:
         model.load(device)
@@ -279,9 +279,9 @@ def _compute_gradient(model: "SpliceTransformerModel", input_dict: dict[str, Any
             tissues = torch.sigmoid(raw[:, 3:, :])
             prediction = torch.cat((classes, tissues), dim=1)
 
-            total = torch.zeros((), device=model.device, dtype=torch.float32)
-            term_metrics: list[dict[str, Any]] = []
-            for term in loss_terms:
+            # One backward per channel, sharing one forward graph retained until the last.
+            terms: list[dict[str, Any]] = []
+            for position, term in enumerate(gradient_terms):
                 channel = int(term["channel_index"])
                 start = 1 if term["position_start"] is None else int(term["position_start"])
                 end = target_length if term["position_end"] is None else int(term["position_end"])
@@ -291,39 +291,23 @@ def _compute_gradient(model: "SpliceTransformerModel", input_dict: dict[str, Any
                         f"{target_length}-position target window"
                     )
                 probability = prediction[0, channel, start - 1 : end].float().mean()
-                signed = -probability if term["direction"] == "max" else probability
-                weighted = float(term["weight"]) * signed
-                total = total + weighted
-                term_metrics.append(
+
+                gradient_value: list[list[float]] | None = None
+                if backprop:
+                    retain = position < len(gradient_terms) - 1
+                    grad = torch.autograd.grad(probability, seq_dist, retain_graph=retain, allow_unused=False)[0]
+                    gradient_value = grad.detach().cpu().tolist()
+
+                # channel_index finds the row; an open end reports the span actually averaged.
+                terms.append(
                     {
-                        "channel": term["channel"],
-                        "position_start": start,
-                        "position_end": end,
-                        "direction": term["direction"],
-                        "weight": float(term["weight"]),
-                        "mean_probability": float(probability.item()),
-                        "weighted_score": float(weighted.item()),
+                        "term": {"channel": term["channel"], "position_start": start, "position_end": end},
+                        "value": float(probability.item()),
+                        "gradient": gradient_value,
                     }
                 )
 
-            gradient_value: list[list[float]] | None = None
-            if backprop:
-                total.backward()
-                if seq_dist.grad is None:
-                    raise RuntimeError("splice-transformer: missing relaxed-state gradient after backward")
-                gradient_value = seq_dist.grad.detach().cpu().tolist()
-
-        results.append(
-            {
-                "gradient": gradient_value,
-                "loss": float(total.item()),
-                "metrics": {
-                    "loss": float(total.item()),
-                    "target_length": target_length,
-                    "loss_terms": term_metrics,
-                },
-            }
-        )
+        results.append({"terms": terms, "metrics": {"target_length": target_length}})
 
     return {"results": results, "vocab": ["A", "C", "G", "T"]}
 
