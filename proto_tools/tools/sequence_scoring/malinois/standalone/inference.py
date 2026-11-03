@@ -9,9 +9,9 @@ import tempfile
 import time
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import malinois_scoring
 import torch
@@ -277,13 +277,13 @@ class MalinoisModel:
         *,
         logits_list: list[list[list[float]]],
         temperature: float | None,
-        loss_terms: list[dict[str, Any]],
+        gradient_terms: list[dict[str, Any]],
         soft: float,
         hard: float,
         compute_gradient: bool,
         device: str,
     ) -> dict[str, Any]:
-        """Compute differentiable Malinois loss and optional gradient."""
+        """Report each requested cell type's raw activity and its gradient."""
         if self.model is None or self.flank_builder is None:
             raise ValueError("malinois: model is not loaded")
         self.to_device(device)
@@ -300,67 +300,35 @@ class MalinoisModel:
             predictions = (predictions + self.model(prepped.flip(dims=[1, 2]))) / 2.0
 
             batch_size = int(predictions.shape[0])
-            sample_losses = torch.zeros(batch_size, device=device, dtype=predictions.dtype)
-            term_metrics_by_sample: list[list[dict[str, Any]]] = [[] for _ in range(batch_size)]
-            raw_scores_by_sample: list[dict[str, float]] = [{} for _ in range(batch_size)]
-            for term in loss_terms:
-                cell_type = term["cell_type"]
-                direction = term["direction"]
-                weight = float(term.get("weight", 1.0))
-                center = float(term.get("sigmoid_center", 4.0))
-                scale = float(term.get("sigmoid_scale", 1.0))
+
+            # One entry per distinct cell, in first-requested order, carrying raw activity.
+            cells: list[str] = []
+            for term in gradient_terms:
+                if term["cell_type"] not in cells:
+                    cells.append(term["cell_type"])
+
+            terms: list[dict[str, Any]] = []
+            for position, cell_type in enumerate(cells):
                 raw_score = predictions[:, CELL_TYPE_INDEX[cell_type]]
-                scaled_score = (raw_score - center) / scale
-                sigmoid_value = torch.sigmoid(scaled_score)
-                if direction == "max":
-                    score = 1.0 - sigmoid_value
-                elif direction == "min":
-                    score = sigmoid_value
-                else:
-                    raise ValueError(f"malinois: invalid direction {direction!r}; expected 'max' or 'min'")
-                weighted_score = score * weight
-                sample_losses = sample_losses + weighted_score
+                entry: dict[str, Any] = {
+                    "cell_type": cell_type,
+                    "values": [float(value) for value in raw_score.detach().cpu().tolist()],
+                    "gradients": None,
+                }
 
-                raw_score_values = raw_score.detach().cpu().tolist()
-                scaled_score_values = scaled_score.detach().cpu().tolist()
-                sigmoid_values = sigmoid_value.detach().cpu().tolist()
-                score_values = score.detach().cpu().tolist()
-                weighted_score_values = weighted_score.detach().cpu().tolist()
-                for sample_idx in range(batch_size):
-                    raw_scores_by_sample[sample_idx][cell_type] = float(raw_score_values[sample_idx])
-                    term_metrics_by_sample[sample_idx].append(
-                        {
-                            "cell_type": cell_type,
-                            "direction": direction,
-                            "weight": weight,
-                            "raw_score": float(raw_score_values[sample_idx]),
-                            "scaled_score": float(scaled_score_values[sample_idx]),
-                            "sigmoid_value": float(sigmoid_values[sample_idx]),
-                            "score": float(score_values[sample_idx]),
-                            "weighted_score": float(weighted_score_values[sample_idx]),
-                            "sigmoid_center": center,
-                            "sigmoid_scale": scale,
-                        }
-                    )
+                if compute_gradient:
+                    # Samples are independent, so summing only batches the backward pass.
+                    (gradient,) = torch.autograd.grad(raw_score.sum(), logits, retain_graph=(position < len(cells) - 1))
+                    if gradient is None:
+                        raise RuntimeError(f"malinois: missing gradient for cell {cell_type!r} after backward")
+                    entry["gradients"] = gradient.detach().cpu().tolist()
+                    del gradient
 
-            total_loss = sample_losses.sum()
-            sample_loss_values = [float(value) for value in sample_losses.detach().cpu().tolist()]
-
-            gradient_value: list[list[list[float]]] | None = None
-            if compute_gradient:
-                backward = cast(Callable[[], None], total_loss.backward)
-                backward()
-                if logits.grad is None:
-                    raise RuntimeError("malinois: missing logits gradient")
-                gradient_value = logits.grad.detach().cpu().tolist()
+                terms.append(entry)
 
         return {
-            "gradient": gradient_value,
-            "loss": float(sum(sample_loss_values)),
+            "terms": terms,
             "metrics": {
-                "raw_scores": raw_scores_by_sample,
-                "loss_terms": term_metrics_by_sample,
-                "losses": sample_loss_values,
                 "batch_size": batch_size,
                 "temperature": temperature,
                 "soft": soft,
@@ -380,8 +348,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     operation = input_dict["operation"]
 
     if operation == "compute_gradient":
-        loss_terms = input_dict["loss_terms"]
-        unsupported = sorted({term["cell_type"] for term in loss_terms} - set(CELL_TYPE_INDEX))
+        gradient_terms = input_dict["gradient_terms"]
+        unsupported = sorted({term["cell_type"] for term in gradient_terms} - set(CELL_TYPE_INDEX))
         if unsupported:
             raise ValueError(f"malinois: unsupported cell_types: {unsupported}")
         _model.load(
@@ -396,7 +364,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model.compute_gradient(
             logits_list=input_dict["logits"],
             temperature=resolve_temperature(input_dict["temperature"]),
-            loss_terms=loss_terms,
+            gradient_terms=gradient_terms,
             soft=float(input_dict.get("soft", 1.0)),
             hard=float(input_dict.get("hard", 0.0)),
             compute_gradient=bool(input_dict.get("compute_gradient", True)),

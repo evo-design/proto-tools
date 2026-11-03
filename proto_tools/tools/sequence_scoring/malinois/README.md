@@ -15,7 +15,7 @@ Malinois is the CODA/BODA2 convolutional neural network for predicting MPRA-meas
 
 Malinois is the regulatory sequence model used in CODA ([Gosai et al., 2024](https://doi.org/10.1038/s41586-024-08070-z)) for machine-guided design of cell-type-targeting cis-regulatory elements. The model adapts the Basset-style convolutional architecture to MPRA data and predicts activity from a fixed 200 nucleotide insert after adding the assay flanks expected by the published checkpoint.
 
-The model returns one raw activity value for each supported cell context: K562, HepG2, and SK-N-SH. The scoring wrapper averages forward and reverse-complement predictions and returns selected raw outputs. The gradient wrapper applies max/min sigmoid objective terms to these raw scores and backpropagates through relaxed A,C,G,T logits, matching the Fast SeqProp-style design path used for regulatory DNA optimization.
+The model returns one raw activity value for each supported cell context: K562, HepG2, and SK-N-SH. The scoring wrapper averages forward and reverse-complement predictions and returns selected raw outputs. The gradient wrapper reports those raw scores and their derivatives with respect to relaxed A,C,G,T logits, one cell type at a time, matching the Fast SeqProp-style design path used for regulatory DNA optimization.
 
 ## Tools
 
@@ -35,18 +35,19 @@ Use this tool to rank regulatory DNA designs by predicted activity in K562, HepG
 
 ### Malinois Gradient (`malinois-gradient`)
 
-Computes a weighted differentiable activity objective and, by default, returns the gradient with respect to batched relaxed DNA logits.
+Reports Malinois's raw predicted activity for each requested cell type and, by default, that activity's own gradient with respect to batched relaxed DNA logits.
 
 #### Applications
 
-Use this tool inside gradient-based DNA design loops to maximize activity in an on-target cell type while minimizing activity in off-target cell types. It is designed for optimizer calls rather than final biological validation.
+Use this tool inside gradient-based DNA design loops to maximize activity in an on-target cell type while minimizing activity in off-target cell types: request a term per cell, then compose a goal per term. It is designed for optimizer calls rather than final biological validation.
 
 #### Usage Tips
 
 - **Logits are batched.** Pass logits with shape `B x L x 4` in `A,C,G,T` order; use `B=1` for a single candidate. Every batch item must share one sequence length.
 - **`temperature`** controls how the input logits are converted into nucleotide probabilities using `softmax(logits / temperature)`. Lower temperatures make the distribution more concentrated around the most likely nucleotide at each position, while higher temperatures produce more uniform distributions. The default is `1.0`, and the returned gradient is calculated with respect to the input logits. `soft` and `hard` then control how that relaxed state reaches the model.
 - **Advanced option:** `temperature=None` skips softmax and treats the input as probabilities rather than logits. Most users should leave the default in place. In this case, each row must contain nonnegative values that sum to 1, and the returned gradient is calculated with respect to those probabilities. This is generally less convenient for gradient-based optimization because updating probabilities directly can cause them to become negative or no longer sum to 1. Optimizing logits avoids this issue, since softmax always produces a valid probability distribution. However, working directly with probabilities can be useful when using an optimizer designed for probability distributions or when exact zero probabilities are needed to exclude particular tokens.
-- **Directions are per term.** `direction="max"` minimizes `1 - sigmoid(raw)` and `direction="min"` minimizes `sigmoid(raw)` after centering and scaling.
+- **The value is the raw activity, not a bounded transform of it.** Each term reports the model's own activity score, and the gradient beside it is that score's derivative. The saturating objective this tool used to compute internally is now a goal: `SigmoidGoal(direction="maximize", center=4.0, scale=1.0)` reproduces the former `direction="max"` with the former default centre and scale, and `direction="minimize"` the former `"min"`. A weight on the goal balances cells against each other.
+- **All three cells share one forward pass.** Each requested cell gets its own backward over that shared graph, so asking for K cells costs one forward and K backwards rather than K of each.
 - **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator — the forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, which is differentiable but outside the model's training distribution.
 
 ## Toolkit Notes
