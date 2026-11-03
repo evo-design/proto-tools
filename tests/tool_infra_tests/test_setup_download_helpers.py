@@ -4,11 +4,14 @@ Tests for the setup.sh download helpers in standalone_helpers.sh, run in bash ag
 """
 
 import hashlib
+import http.server
 import io
 import os
 import shutil
 import subprocess
 import tarfile
+import threading
+import time
 import zipfile
 from pathlib import Path
 
@@ -159,7 +162,7 @@ def test_with_lock_times_out(tmp_path: Path) -> None:
     finally:
         holder.kill()
     assert result[0][0] != 0
-    assert "timed out waiting for lock" in result[0][1]
+    assert "timed out after 1s waiting for lock" in result[0][1]
 
 
 @_needs_flock
@@ -331,3 +334,114 @@ def test_different_files_in_one_folder_download_in_parallel(tmp_path: Path) -> N
         holder.kill()
     assert result[0][0] == 0
     assert (weights / "b.pt").read_bytes() == _zip_bytes()
+
+
+# Fast waits for the progress tests: check every second, call 2 s without growth a stall
+_FAST_WAIT = {"PROTO_LOCK_POLL_SECONDS": "1", "PROTO_LOCK_STALL_SECONDS": "2"}
+
+
+def _hold_lock(lock: Path, script: str) -> subprocess.Popen:
+    """Start a holder that takes ``lock`` and runs ``script``; return once it holds the lock."""
+    started = lock.with_name(lock.name + ".held")
+    holder = subprocess.Popen(
+        ["bash", "-c", f'source "{_HELPERS}"; proto_with_lock "{lock}" bash -c \'touch "{started}"; {script}\'']
+    )
+    for _ in range(50):
+        if started.exists():
+            return holder
+        time.sleep(0.1)
+    holder.kill()
+    raise AssertionError("holder never took the lock")
+
+
+@_needs_flock
+def test_waiter_outlasts_stall_window_while_holder_makes_progress(tmp_path: Path) -> None:
+    """A slow but live download keeps its waiters waiting, however long it takes."""
+    growing = tmp_path / "part.tmp"
+    holder = _hold_lock(tmp_path / ".lock", f'for i in 1 2 3 4 5 6; do printf x >> "{growing}"; sleep 1; done')
+    started = time.monotonic()
+    result = _run_concurrently(f'proto_with_lock --progress "{growing}" "{tmp_path}/.lock" true', 1, env=_FAST_WAIT)
+    holder.wait()
+    assert result[0][0] == 0, result[0][1]
+    assert time.monotonic() - started > 4  # waited well past the 2 s stall window
+
+
+@_needs_flock
+def test_waiter_gives_up_on_a_stalled_holder(tmp_path: Path) -> None:
+    """A holder whose progress path stops growing is reported instead of waited on forever."""
+    growing = tmp_path / "part.tmp"
+    growing.write_bytes(b"x")
+    holder = _hold_lock(tmp_path / ".lock", "sleep 20")
+    try:
+        started = time.monotonic()
+        result = _run_concurrently(f'proto_with_lock --progress "{growing}" "{tmp_path}/.lock" true', 1, env=_FAST_WAIT)
+        elapsed = time.monotonic() - started
+    finally:
+        holder.kill()
+    assert result[0][0] != 0
+    assert "made no progress" in result[0][1]
+    assert elapsed < 10
+
+
+@_needs_flock
+def test_waiter_has_no_hard_cap_by_default(tmp_path: Path) -> None:
+    """Without PROTO_LOCK_TIMEOUT_SECONDS, a waiter with no progress path waits until the lock is free."""
+    holder = _hold_lock(tmp_path / ".lock", "sleep 4")
+    result = _run_concurrently(f'proto_with_lock "{tmp_path}/.lock" true', 1, env={"PROTO_LOCK_POLL_SECONDS": "1"})
+    holder.wait()
+    assert result[0][0] == 0, result[0][1]
+
+
+@_needs_flock
+def test_verified_download_waits_out_a_slow_holder(tmp_path: Path, source: Path) -> None:
+    """The helper's waiter tracks the holder's temp file, then finds the finished file verified."""
+    dest = tmp_path / "weights" / "model.pt"
+    dest.parent.mkdir()
+    sha = hashlib.sha256(source.read_bytes()).hexdigest()
+    tmp = dest.parent / ".model.pt.Hold01.tmp"
+    holder = _hold_lock(
+        dest.parent / ".model.pt.download.lock",
+        f'for i in 1 2 3 4 5; do printf x >> "{tmp}"; sleep 1; done; cp "{source}" "{tmp}"; mv "{tmp}" "{dest}"',
+    )
+    result = _run_concurrently(f'proto_download_verified "file://{source}" "{dest}" "{sha}"', 1, env=_FAST_WAIT)
+    holder.wait()
+    assert result[0][0] == 0, result[0][1]
+    assert "already present and verified" in result[0][1]
+    assert dest.read_bytes() == source.read_bytes()
+
+
+class _StallingHandler(http.server.BaseHTTPRequestHandler):
+    """Promise a large body, send a few bytes, then go silent."""
+
+    def do_GET(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Length", str(10 << 20))
+        self.end_headers()
+        self.wfile.write(b"x" * 4096)
+        self.wfile.flush()
+        time.sleep(30)
+
+    def log_message(self, *args: object) -> None:
+        pass
+
+
+def test_download_aborts_a_stalled_transfer(tmp_path: Path) -> None:
+    """A transfer that stops sending fails after PROTO_DOWNLOAD_STALL_SECONDS and leaves no temp file."""
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _StallingHandler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    dest = tmp_path / "model.pt"
+    try:
+        started = time.monotonic()
+        result = _run_concurrently(
+            f'proto_download "http://127.0.0.1:{server.server_address[1]}/model.pt" "{dest}"',
+            1,
+            env={"PROTO_DOWNLOAD_STALL_SECONDS": "2"},
+        )
+        elapsed = time.monotonic() - started
+    finally:
+        server.shutdown()
+    assert result[0][0] != 0
+    assert "failed to download" in result[0][1]
+    assert elapsed < 20
+    assert not dest.exists() and not list(tmp_path.glob(".model.pt.*.tmp"))

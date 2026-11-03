@@ -154,7 +154,13 @@ proto_resolve_weights_dir my_tool
 proto_download_verified "https://example.com/model.pt" "$WEIGHTS_DIR/model.pt" "$MODEL_SHA256"
 ```
 
-`proto_download_verified` (checksum known), `proto_download` (no checksum), and `proto_download_archive` (tar into a directory) each lock their target, download into a temp file of their own, and move it into place only when complete, so concurrent setups sharing the cache never see or clobber a partial file. A file that is already present skips the lock, so read-only caches keep working. Wrap any other step that writes shared files in `proto_with_lock <lock_file> <command...>`; name the lock `.<file>.download.lock` beside a file or `.<dir>.extract.lock` beside a directory, matching the Python helpers, so bash and Python callers for the same target wait for each other. The wait is capped by `PROTO_LOCK_TIMEOUT_SECONDS` (default 3600).
+`proto_download_verified` (checksum known), `proto_download` (no checksum), and `proto_download_archive` (tar into a directory) each lock their target, download into a temp file of their own, and move it into place only when complete, so concurrent setups sharing the cache never see or clobber a partial file. A file that is already present skips the lock, so read-only caches keep working. Wrap any other step that writes shared files in `proto_with_lock <lock_file> <command...>`; name the lock `.<file>.download.lock` beside a file or `.<dir>.extract.lock` beside a directory, matching the Python helpers, so bash and Python callers for the same target wait for each other.
+
+Waiting has no fixed deadline, so a large download on a slow link is waited out however long it takes:
+
+- `PROTO_LOCK_STALL_SECONDS` (default 600): a waiter gives up only when the holder's download (its temp file, or the directory being extracted) has not grown for this long. `proto_with_lock --progress <path>` gives custom steps the same behavior; without `--progress`, a waiter waits until the lock is free.
+- `PROTO_DOWNLOAD_STALL_SECONDS` (default 300): the helpers' `curl` aborts a transfer that stays under 1 KB/s this long, which releases the lock before waiters give up, so a dead connection can't hold the cache.
+- `PROTO_LOCK_TIMEOUT_SECONDS` (default 0, off): an optional hard cap on the total wait.
 
 ## Exceptions
 

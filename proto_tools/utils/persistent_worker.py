@@ -229,6 +229,11 @@ _BASE_PASSTHROUGH = {
     # Model weights management
     "PROTO_HOME",
     "PROTO_MODEL_CACHE",
+    # Shared-download lock waits in standalone_helpers.sh (proto_with_lock)
+    "PROTO_LOCK_POLL_SECONDS",
+    "PROTO_LOCK_STALL_SECONDS",
+    "PROTO_LOCK_TIMEOUT_SECONDS",
+    "PROTO_DOWNLOAD_STALL_SECONDS",
     # uv/pip package caches: let user-set values override our defaults
     "UV_CACHE_DIR",
     "PIP_CACHE_DIR",

@@ -316,22 +316,33 @@ proto_sha256() {
 
 
 # ---------------------------------------------------------------------------
-# proto_with_lock <lock_file> <command> [args...]
+# proto_with_lock [--progress <path>] <lock_file> <command> [args...]
 #
 # Run <command> (a program or shell function) while holding an exclusive flock on
 # <lock_file>, so setup scripts that share a model cache take turns on a download
 # instead of writing the same files at once. This works across processes and, on
-# the shared filesystems tested (Lustre $SCRATCH), across nodes. Returns
-# <command>'s exit status.
+# the shared filesystems tested (Lustre $SCRATCH and Oak, NFS $HOME), across
+# nodes. Returns <command>'s exit status.
 #
+# Waiting for another holder:
+# - With --progress, the waiter watches <path> (a file, directory, or glob, such as
+#   the holder's temp file) and keeps waiting while it grows, however long a big
+#   download takes. It gives up only after $PROTO_LOCK_STALL_SECONDS (default 600)
+#   without growth, naming the stalled path. The download helpers abort a stalled
+#   transfer sooner (see PROTO_DOWNLOAD_STALL_SECONDS), so a stuck holder normally
+#   releases the lock before its waiters give up.
+# - Without --progress, it waits until the lock is free.
+# - $PROTO_LOCK_TIMEOUT_SECONDS (default 0, off) caps the total wait either way.
+# - The lock is checked every $PROTO_LOCK_POLL_SECONDS (default 60) at most; it is
+#   taken the moment the holder releases it.
+#
+# Other behavior:
 # - The kernel drops the lock when the holder exits, even on kill -9, so a crashed
 #   run leaves no stale lock. The 0-byte lock file is kept: deleting it would let
 #   two processes lock different inodes.
 # - Re-entrant: a <command> that takes the same <lock_file> again (a helper calling
 #   a helper) runs without waiting on itself. Different lock files nest normally.
 # - <command> runs in a subshell, so variables it sets do not reach the caller.
-# - Waits up to $PROTO_LOCK_TIMEOUT_SECONDS (default 3600, long enough to wait out
-#   someone else's multi-GB download), then fails.
 # - Without flock(1) (macOS), <command> runs unlocked, as before locking existed.
 #
 # Name lock files like standalone_helpers' Python ones, ".<file>.download.lock"
@@ -339,9 +350,15 @@ proto_sha256() {
 # callers for the same target wait for each other.
 #
 # Example:
-#   proto_with_lock "${WEIGHTS_DIR}/.params.extract.lock" _fetch_params
+#   proto_with_lock --progress "${WEIGHTS_DIR}/params" \
+#       "${WEIGHTS_DIR}/.params.extract.lock" _fetch_params
 # ---------------------------------------------------------------------------
 proto_with_lock() {
+    local progress=""
+    if [ "${1:-}" = "--progress" ]; then
+        progress="$2"
+        shift 2
+    fi
     local lock="$1"
     shift
     case ":${_PROTO_HELD_LOCKS:-}:" in
@@ -358,13 +375,65 @@ proto_with_lock() {
     # fd 199 rather than a low number a setup.sh might already use; each nested
     # call's subshell gets its own, so an outer lock stays held
     (
-        if ! flock -x -w "${PROTO_LOCK_TIMEOUT_SECONDS:-3600}" 199; then
-            echo "ERROR: timed out waiting for lock ${lock}" >&2
-            exit 1
-        fi
+        _proto_wait_for_lock 199 "$lock" "$progress" || exit 1
         export _PROTO_HELD_LOCKS="${_PROTO_HELD_LOCKS:+${_PROTO_HELD_LOCKS}:}${lock}"
         "$@"
     ) 199>>"$lock"
+}
+
+
+# Take the flock on <fd> (open on <lock>), waiting as proto_with_lock describes.
+_proto_wait_for_lock() {
+    local fd="$1" lock="$2" progress="$3"
+    local poll="${PROTO_LOCK_POLL_SECONDS:-60}" stall="${PROTO_LOCK_STALL_SECONDS:-600}"
+    local cap="${PROTO_LOCK_TIMEOUT_SECONDS:-0}"
+    local waited=0 idle=0 chunk last="" now
+
+    flock -x -n "$fd" && return 0
+    echo "Waiting for another process to finish with $(basename "$lock")..."
+    while :; do
+        chunk="$poll"
+        if [ "$cap" -gt 0 ] && [ $((cap - waited)) -lt "$chunk" ]; then
+            chunk=$((cap - waited))
+        fi
+        if [ "$chunk" -gt 0 ] && flock -x -w "$chunk" "$fd"; then
+            return 0
+        fi
+        waited=$((waited + chunk))
+        if [ "$cap" -gt 0 ] && [ "$waited" -ge "$cap" ]; then
+            echo "ERROR: timed out after ${waited}s waiting for lock ${lock}" >&2
+            return 1
+        fi
+        [ -n "$progress" ] || continue
+        now="$(_proto_progress_size "$progress")"
+        if [ "$now" != "$last" ]; then
+            last="$now"
+            idle=0
+        else
+            idle=$((idle + chunk))
+        fi
+        if [ "$idle" -ge "$stall" ]; then
+            echo "ERROR: gave up waiting for lock ${lock}: ${progress} made no progress for ${idle}s" \
+                "(the holder may be stuck; raise PROTO_LOCK_STALL_SECONDS to wait longer)" >&2
+            return 1
+        fi
+    done
+}
+
+
+# Print the total size of whatever <pattern> (a file, directory, or glob) matches,
+# so a waiter can tell whether the lock holder is still writing.
+_proto_progress_size() {
+    local path total=0 size
+    while IFS= read -r path; do
+        if [ -d "$path" ]; then
+            size="$(du -sk "$path" 2>/dev/null | cut -f1)"
+        else
+            size="$(wc -c < "$path" 2>/dev/null)"
+        fi
+        total=$((total + ${size:-0}))
+    done < <(compgen -G "$1")
+    echo "$total"
 }
 
 
@@ -405,7 +474,8 @@ proto_download_verified() {
         return 0
     fi
     mkdir -p "$(dirname "$dest")"
-    proto_with_lock "$(dirname "$dest")/.$(basename "$dest").download.lock" _proto_download_verified_locked "$@"
+    proto_with_lock --progress "$(dirname "$dest")/.$(basename "$dest").*.tmp" \
+        "$(dirname "$dest")/.$(basename "$dest").download.lock" _proto_download_verified_locked "$@"
 }
 
 _proto_download_verified_locked() {
@@ -424,7 +494,7 @@ _proto_download_verified_locked() {
     echo "Downloading $(basename "$dest")..."
     _proto_remove_stale_temps "$dest"
     tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
-    if ! curl -fsSL -o "$tmp" "$url"; then
+    if ! curl -fsSL --speed-limit 1024 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
         rm -f "$tmp"
         echo "ERROR: failed to download ${url}" >&2
         return 1
@@ -480,7 +550,8 @@ proto_download() {
         return 0
     fi
     mkdir -p "$(dirname "$dest")"
-    proto_with_lock "$(dirname "$dest")/.$(basename "$dest").download.lock" _proto_download_locked "$@"
+    proto_with_lock --progress "$(dirname "$dest")/.$(basename "$dest").*.tmp" \
+        "$(dirname "$dest")/.$(basename "$dest").download.lock" _proto_download_locked "$@"
 }
 
 _proto_download_locked() {
@@ -498,7 +569,7 @@ _proto_download_locked() {
     echo "Downloading $(basename "$dest")..."
     _proto_remove_stale_temps "$dest"
     tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
-    if ! curl -fsSL -o "$tmp" "$url"; then
+    if ! curl -fsSL --speed-limit 1024 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
         rm -f "$tmp"
         echo "ERROR: failed to download ${url}" >&2
         return 1
@@ -528,7 +599,8 @@ proto_download_archive() {
         return 0
     fi
     mkdir -p "$(dirname "$dest_dir")"
-    proto_with_lock "$(dirname "$dest_dir")/.$(basename "$dest_dir").extract.lock" _proto_download_archive_locked "$@"
+    proto_with_lock --progress "$dest_dir" \
+        "$(dirname "$dest_dir")/.$(basename "$dest_dir").extract.lock" _proto_download_archive_locked "$@"
 }
 
 _proto_download_archive_locked() {
@@ -543,7 +615,7 @@ _proto_download_archive_locked() {
 
     echo "Downloading and extracting $(basename "$url")..."
     mkdir -p "$dest_dir"
-    if ! (set -o pipefail; curl -fsSL "$url" | tar -x -C "$dest_dir" "$@"); then
+    if ! (set -o pipefail; curl -fsSL --speed-limit 1024 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" "$url" | tar -x -C "$dest_dir" "$@"); then
         echo "ERROR: failed to download or extract ${url}" >&2
         return 1
     fi
