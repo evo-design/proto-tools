@@ -8,8 +8,8 @@ and both are easy to get wrong from the outside:
 1. ``pdb_to_string`` (``colabdesign/shared/protein.py:52-58``) rewrites a ``HETATM`` line to
    ``ATOM`` when its residue name is in the ``MODRES`` table below, giving it the parent
    standard residue's name. A ``HETATM`` residue whose name is *not* in the table never
-   reaches the parser at all. So selenomethionine is read and designed as methionine, while
-   GFP's chromophore is skipped.
+   reaches the parser at all. So selenomethionine is read as methionine, while GFP's
+   chromophore is skipped.
 2. ``prep_pdb`` runs with ``ignore_missing=True`` (``colabdesign/mpnn/model.py:56-57``), which
    keeps only residues whose backbone ``N`` is present --
    ``all_atom_mask[:,0] == 1`` at ``colabdesign/af/prep.py:437-440``, where
@@ -22,9 +22,7 @@ Keep this in step with the pin: a bump to ColabDesign should be checked against 
 
 from proto_tools.entities.structures import Structure
 
-# colabdesign/shared/protein.py:8-22 at v1.1.3. ColabDesign also extends this from MODRES
-# records in the file itself, but our staged PDB carries none, so the static table is complete
-# for our inputs.
+# colabdesign/shared/protein.py:8-22 at v1.1.3; staged PDBs carry no MODRES records to extend it.
 COLABDESIGN_MODRES = frozenset(
     {
         "4BF", "AGM", "ALY", "B3A", "B3D", "B3E", "B3K", "B3Y", "BAL", "CME", "CSD", "CSO",

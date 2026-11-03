@@ -2,12 +2,11 @@
 
 Resolving which residues ProteinMPNN is allowed to redesign.
 
-Three things decide it, and they are resolved together here so the model, the output and the
-warnings cannot disagree:
+A residue is redesignable unless the caller fixed it or the parser cannot read it. A CCD
+modification does not fix anything on its own; it only decides which annotations survive
+reconstruction and how a warning is worded.
 
-- the residues the parser processes (``_readable``),
-- the residues carrying a CCD modification, which are fixed by default rather than redesigned,
-- the residues the caller fixed explicitly.
+Resolved in one place so the model, the output and the warnings cannot disagree.
 """
 
 import logging
@@ -73,8 +72,7 @@ def resolve_constraints(
         modified = {m.position for m in structure.get_chain(chain_id).modifications}
         excluded = all_positions - chain_readable
 
-        # A chemical modification does not fix a position. If the parser reads the residue,
-        # the model may redesign it unless the caller said otherwise.
+        # A modification does not fix a position; only the caller or the parser does.
         effective_fixed = requested_fixed | excluded
         worker_fixed = requested_fixed & chain_readable
 

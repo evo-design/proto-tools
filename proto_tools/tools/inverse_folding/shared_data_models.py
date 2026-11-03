@@ -475,11 +475,7 @@ class DesignedComplex(Complex):
                         "mapping, so the returned sequence cannot be aligned to the structure."
                     )
                 if readable is not None:
-                    # A declared rule is authoritative: the model returns one residue per position
-                    # the rule says it reads, always. Accepting any other length would mean
-                    # guessing which positions the design covers, and a wrong guess misaligns
-                    # every residue after the first skipped one -- a plausible-looking sequence
-                    # rather than an error. A mismatch means the rule no longer matches the model.
+                    # Any other length would mean guessing which positions the design covers.
                     if len(sequence) != len(readable):
                         raise ValueError(
                             f"{tool}: the model returned {len(sequence)} residues for chain "
