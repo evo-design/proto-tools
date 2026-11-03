@@ -2061,6 +2061,36 @@ def test_ready_foundation_env_with_every_tool_runs_nothing(monkeypatch, tmp_path
         mock_run.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    ("built", "override", "host_has_tools", "uses_foundation"),
+    [
+        (False, None, False, False),  # not built yet: nothing to put on PATH
+        (True, None, False, True),  # built because the host lacks tools
+        (True, None, True, False),  # host satisfies the contract itself
+        (True, "1", True, True),  # forced on
+        (True, "0", False, False),  # forced off
+    ],
+)
+def test_active_foundation_bin_matches_foundation_env_decision(
+    monkeypatch, tmp_path, built, override, host_has_tools, uses_foundation
+):
+    """Tool subprocesses get the foundation env's bin/ exactly when setup would use the env."""
+    from proto_tools.utils import foundation_env
+
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    if override is None:
+        monkeypatch.delenv("PROTO_USE_FOUNDATION_ENV", raising=False)
+    else:
+        monkeypatch.setenv("PROTO_USE_FOUNDATION_ENV", override)
+    root = foundation_env.foundation_env_path()
+    if built:
+        root.mkdir(parents=True)
+        (root / ".ready").touch()
+    with patch.object(foundation_env, "_host_has_foundation_tools_cached", return_value=host_has_tools):
+        result = foundation_env.active_foundation_bin()
+    assert result == (root / "bin" if uses_foundation else None)
+
+
 # ── Tool-env path guard (conda binary-relocation safety) ─────────────────────
 
 

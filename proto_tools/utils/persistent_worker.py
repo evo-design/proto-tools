@@ -444,6 +444,7 @@ def _build_subprocess_env(
         pin_visible_devices (bool): Restrict ``CUDA_VISIBLE_DEVICES`` to ``device``'s physical GPU(s) (local cuda:0..N-1) instead of the parent's value. For JAX tools.
         toolkit (str | None): Toolkit the subprocess runs, which names its JAX compilation cache directory. ``None`` leaves the cache off.
     """
+    from proto_tools.utils.foundation_env import active_foundation_bin
     from proto_tools.utils.system_info import capture_subprocess_env
 
     env: dict[str, str] = {}
@@ -482,10 +483,15 @@ def _build_subprocess_env(
         {var: val for var, val in os.environ.items() if var.startswith("PROTO_") and var.endswith("_WEIGHTS_DIR")}
     )
 
-    # Reconstruct PATH: venv/bin > cuda/bin (GPU) > parent PATH > system dirs
+    # Reconstruct PATH: venv/bin > foundation_env/bin > cuda/bin (GPU) > parent PATH > system dirs.
+    # The foundation env (when in use) serves workers too, not only setup.sh: Triton and torch
+    # inductor call gcc at run time, and hosts that needed the foundation env have none.
     path_parts: list[str] = []
     if tool_env_path:
         path_parts.append(str(Path(tool_env_path) / "bin"))
+    foundation_bin = active_foundation_bin()
+    if foundation_bin is not None:
+        path_parts.append(str(foundation_bin))
     if device != "cpu":
         path_parts.append(_CUDA_BIN_DIR)
     for p in os.environ.get("PATH", "").split(":"):

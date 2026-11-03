@@ -758,6 +758,25 @@ def test_non_whitelisted_vars_are_absent(monkeypatch):
         assert var not in env, f"{var} leaked into subprocess env"
 
 
+@pytest.mark.parametrize("device", ["cpu", "cuda:0"])
+def test_foundation_bin_follows_tool_env_bin_on_worker_path(tmp_path: Path, device: str):
+    """Workers get the foundation env's bin/ right after the tool env's, as setup.sh does."""
+    venv = tmp_path / "tool_env"
+    foundation_bin = tmp_path / ".foundation_env" / "bin"
+    with patch("proto_tools.utils.foundation_env.active_foundation_bin", return_value=foundation_bin):
+        path = _build_subprocess_env(device=device, tool_env_path=venv)["PATH"].split(":")
+    assert path[:2] == [str(venv / "bin"), str(foundation_bin)]
+
+
+def test_worker_path_omits_foundation_bin_when_unused(tmp_path: Path, monkeypatch):
+    """Hosts that satisfy the foundation contract keep their PATH unchanged."""
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    venv = tmp_path / "tool_env"
+    with patch("proto_tools.utils.foundation_env.active_foundation_bin", return_value=None):
+        path = _build_subprocess_env(device="cpu", tool_env_path=venv)["PATH"].split(":")
+    assert not any(part.endswith(".foundation_env/bin") for part in path)
+
+
 def test_base_whitelist_vars_present(monkeypatch):
     """Whitelisted vars should be passed through when set."""
     monkeypatch.setenv("HOME", "/home/test")
