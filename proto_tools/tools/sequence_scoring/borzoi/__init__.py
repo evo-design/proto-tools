@@ -7,12 +7,14 @@ from proto_tools.tools.sequence_scoring.borzoi.borzoi_ensemble import (
     run_borzoi_ensemble,
 )
 from proto_tools.tools.sequence_scoring.borzoi.borzoi_gradient import (
+    BorzoiActivityTerm,
     BorzoiGradientCandidate,
     BorzoiGradientConfig,
     BorzoiGradientInput,
-    BorzoiGradientLossTerm,
     BorzoiGradientOutput,
+    BorzoiGradientResult,
     BorzoiGradientSampleMetrics,
+    BorzoiTermGradient,
     run_borzoi_gradient,
 )
 from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import (
@@ -33,7 +35,9 @@ __all__ = [
     "BorzoiGradientCandidate",
     "BorzoiGradientConfig",
     "BorzoiGradientInput",
-    "BorzoiGradientLossTerm",
+    "BorzoiActivityTerm",
+    "BorzoiGradientResult",
+    "BorzoiTermGradient",
     "BorzoiGradientOutput",
     "BorzoiGradientSampleMetrics",
     "run_borzoi_gradient",

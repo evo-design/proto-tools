@@ -185,7 +185,7 @@ class BorzoiModel:
         positions: list[int],
         logits_list: list[list[float]],
         *,
-        loss_terms: list[dict[str, Any]],
+        gradient_terms: list[dict[str, Any]],
         temperature: float | None = None,
         soft: float = 1.0,
         hard: float = 0.0,
@@ -203,7 +203,7 @@ class BorzoiModel:
             sequence: Full ``BORZOI_CONTEXT`` bp context window.
             positions: 1-indexed inclusive context positions the relaxed rows map to.
             logits_list: Relaxed state, shape ``(len(positions), 4)`` in ``A,C,G,T`` order.
-            loss_terms: Objective terms, each with track, bin_start, bin_end, direction, weight.
+            gradient_terms: Quantities to differentiate, each with track, bin_start, bin_end.
             temperature: Optional softmax temperature; ``None`` uses the rows as probabilities.
             soft: Blend from the raw input matrix (0) to softmax probabilities (1).
             hard: Straight-through coefficient; 1 forwards a hard one-hot.
@@ -212,7 +212,8 @@ class BorzoiModel:
             verbose: Whether to log status messages.
 
         Returns:
-            dict[str, Any]: Gradient (or ``None``), weighted loss, per-term metrics, and vocab.
+            dict[str, Any]: One entry per requested quantity with its raw mean activity and
+                gradient (or ``None``), plus per-candidate metrics and the vocab.
 
         Raises:
             ValueError: If the context length, positions, or rows do not line up.
@@ -252,45 +253,33 @@ class BorzoiModel:
             with torch.autocast(device_type=torch.device(self.device).type):
                 output = self.model(onehot, is_human=(self.species == "human"))
 
-            total = torch.zeros((), device=self.device, dtype=torch.float32)
-            term_metrics: list[dict[str, Any]] = []
-            for term in loss_terms:
+            # One backward per track, sharing one forward graph retained until the last.
+            terms: list[dict[str, Any]] = []
+            for position, term in enumerate(gradient_terms):
                 track = int(term["track"])
                 start = int(term["bin_start"]) - 1
                 end = int(term["bin_end"])
                 if track >= output.shape[1]:
                     raise ValueError(f"borzoi: track {track} is out of range for {output.shape[1]} output tracks")
                 activity = output[0, track, start:end].float().mean()
-                signed = -activity if term["direction"] == "max" else activity
-                weighted = float(term["weight"]) * signed
-                total = total + weighted
-                term_metrics.append(
+
+                gradient_value: list[list[float]] | None = None
+                if backprop:
+                    retain = position < len(gradient_terms) - 1
+                    grad = torch.autograd.grad(activity, seq_dist, retain_graph=retain, allow_unused=False)[0]
+                    gradient_value = grad.detach().cpu().tolist()
+
+                terms.append(
                     {
-                        "track": track,
-                        "bin_start": int(term["bin_start"]),
-                        "bin_end": int(term["bin_end"]),
-                        "direction": term["direction"],
-                        "weight": float(term["weight"]),
-                        "mean_activity": float(activity.item()),
-                        "weighted_score": float(weighted.item()),
+                        "term": {"track": track, "bin_start": int(term["bin_start"]), "bin_end": int(term["bin_end"])},
+                        "value": float(activity.item()),
+                        "gradient": gradient_value,
                     }
                 )
 
-            gradient_value: list[list[float]] | None = None
-            if backprop:
-                total.backward()
-                if seq_dist.grad is None:
-                    raise RuntimeError("borzoi: missing relaxed-state gradient after backward")
-                gradient_value = seq_dist.grad.detach().cpu().tolist()
-
         return {
-            "gradient": gradient_value,
-            "loss": float(total.item()),
-            "metrics": {
-                "loss": float(total.item()),
-                "designed_positions": len(positions),
-                "loss_terms": term_metrics,
-            },
+            "terms": terms,
+            "metrics": {"designed_positions": len(positions)},
             "vocab": ["A", "C", "G", "T"],
         }
 
@@ -366,7 +355,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 sequence=item["sequence"],
                 positions=item["positions"],
                 logits_list=item["logits"],
-                loss_terms=input_dict["loss_terms"],
+                gradient_terms=input_dict["gradient_terms"],
                 temperature=resolve_temperature(input_dict["temperature"]),
                 soft=float(input_dict.get("soft", 1.0)),
                 hard=float(input_dict.get("hard", 0.0)),
@@ -377,7 +366,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             for item in input_dict["items"]
         ]
         return {
-            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
+            "results": [{key: result[key] for key in ("terms", "metrics")} for result in results],
             "vocab": results[0]["vocab"],
         }
 

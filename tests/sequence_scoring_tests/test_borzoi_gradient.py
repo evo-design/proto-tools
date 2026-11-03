@@ -7,10 +7,10 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.tools import (
+    BorzoiActivityTerm,
     BorzoiGradientCandidate,
     BorzoiGradientConfig,
     BorzoiGradientInput,
-    BorzoiGradientLossTerm,
     BorzoiGradientOutput,
     run_borzoi_gradient,
 )
@@ -54,10 +54,10 @@ def test_borzoi_gradient_candidate_requires_aligned_positions():
         BorzoiGradientCandidate(sequence=_context(), positions=[BORZOI_CONTEXT + 1], logits=[[0.25] * 4])
 
 
-def test_borzoi_gradient_loss_term_rejects_inverted_bin_span():
+def test_borzoi_gradient_term_rejects_inverted_bin_span():
     """A term's bin span must be ordered, otherwise the mean would cover nothing."""
     with pytest.raises(ValidationError, match="precedes"):
-        BorzoiGradientLossTerm(bin_start=100, bin_end=10)
+        BorzoiActivityTerm(bin_start=100, bin_end=10)
 
 
 def test_borzoi_gradient_input_normalizes_a_single_candidate():
@@ -80,9 +80,15 @@ def test_borzoi_gradient_dispatch_contract(monkeypatch):
         return {
             "results": [
                 {
-                    "gradient": [[0.0] * 4] * len(item["positions"]),
-                    "loss": -1.5,
-                    "metrics": {"loss": -1.5, "designed_positions": len(item["positions"]), "loss_terms": []},
+                    "terms": [
+                        {
+                            "term": {k: term[k] for k in ("track", "bin_start", "bin_end")},
+                            "value": 1.5 + index,
+                            "gradient": [[0.1 * (index + 1)] * 4] * len(item["positions"]),
+                        }
+                        for index, term in enumerate(payload["gradient_terms"])
+                    ],
+                    "metrics": {"designed_positions": len(item["positions"])},
                 }
                 for item in payload["items"]
             ],
@@ -97,9 +103,9 @@ def test_borzoi_gradient_dispatch_contract(monkeypatch):
     result = run_borzoi_gradient(
         BorzoiGradientInput(inputs=[_candidate(4), _candidate(2)], temperature=0.7),
         BorzoiGradientConfig(
-            loss_terms=[
-                BorzoiGradientLossTerm(track=11, bin_start=3000, bin_end=3010, direction="max", weight=2.0),
-                BorzoiGradientLossTerm(track=12, direction="min"),
+            gradient_terms=[
+                BorzoiActivityTerm(track=11, bin_start=3000, bin_end=3010),
+                BorzoiActivityTerm(track=12),
             ],
             device="cuda",
         ),
@@ -112,12 +118,26 @@ def test_borzoi_gradient_dispatch_contract(monkeypatch):
     assert payload["items"][0]["positions"][0] == CENTER
     assert len(payload["items"][0]["sequence"]) == BORZOI_CONTEXT
     assert payload["temperature"] == 0.7
-    assert [term["track"] for term in payload["loss_terms"]] == [11, 12]
-    assert payload["loss_terms"][0]["weight"] == 2.0
-    assert payload["loss_terms"][1]["bin_end"] == BORZOI_OUTPUT
+    assert [term["track"] for term in payload["gradient_terms"]] == [11, 12]
+    assert payload["gradient_terms"][1]["bin_end"] == BORZOI_OUTPUT
     assert payload["use_flash_attn"] is True, "human species uses FlashAttention, as prediction does"
     assert len(result.results) == 2
     assert result.vocab == ["A", "C", "G", "T"]
+
+    # Each track comes back as its own term, carrying the selectors it was asked for
+    first, second = result.results[0].terms
+    assert [(t.term.track, t.term.bin_start, t.term.bin_end) for t in (first, second)] == [
+        (11, 3000, 3010),
+        (12, 1, BORZOI_OUTPUT),
+    ]
+    assert (first.term_value, second.term_value) == (1.5, 2.5)
+    assert first.metadata is not None
+    assert first.metadata.positions == result.results[0].terms[1].metadata.positions
+    assert first.metadata.positions[0] == CENTER, "metadata records where in the context the rows sit"
+
+    # A track can be a target or an off-target, so the tool declines to guess a direction
+    with pytest.raises(ValueError, match="needs an explicit goal"):
+        result.results[0].compose()
 
 
 def test_borzoi_gradient_rejects_flash_attention_on_cpu():
@@ -138,58 +158,39 @@ def test_borzoi_gradient_single_candidate():
     """A real checkpoint returns a finite gradient covering only the designed positions."""
     result = run_borzoi_gradient(
         BorzoiGradientInput(inputs=_candidate(8)),
-        BorzoiGradientConfig(loss_terms=[BorzoiGradientLossTerm(track=0, bin_start=3060, bin_end=3085)]),
+        BorzoiGradientConfig(gradient_terms=[BorzoiActivityTerm(track=0, bin_start=3060, bin_end=3085)]),
     )
     validate_output(result)
 
     assert result.tool_id == "borzoi-gradient"
     (candidate,) = result.results
-    assert candidate.gradient is not None
-    assert len(candidate.gradient) == 8, "one gradient row per designed position"
-    assert all(len(row) == 4 for row in candidate.gradient)
-    assert all(math.isfinite(value) for row in candidate.gradient for value in row)
-    assert any(value != 0.0 for row in candidate.gradient for value in row)
-    assert math.isfinite(candidate.loss)
+    (activity,) = candidate.terms
+    assert activity.gradient is not None
+    assert len(activity.gradient) == 8, "one gradient row per designed position"
+    assert all(len(row) == 4 for row in activity.gradient)
+    assert all(math.isfinite(value) for row in activity.gradient for value in row)
+    assert any(value != 0.0 for row in activity.gradient for value in row)
+    assert math.isfinite(activity.term_value)
+    assert activity.term.track == 0
     assert candidate.metrics["designed_positions"] == 8
-    (term,) = candidate.metrics["loss_terms"]
-    assert term["track"] == 0
-    assert math.isfinite(term["mean_activity"])
     assert result.vocab == ["A", "C", "G", "T"]
 
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-def test_borzoi_gradient_direction_flips_the_objective_sign():
-    """`max` and `min` on the same track differ only in the sign of the objective."""
+def test_borzoi_gradient_forward_mode_matches_backward_activity():
+    """compute_gradient=False returns the same activity without a gradient."""
     inputs = BorzoiGradientInput(inputs=_candidate(4))
-    term = {"track": 0, "bin_start": 3060, "bin_end": 3085}
+    terms = [BorzoiActivityTerm(track=0, bin_start=3060, bin_end=3085)]
 
-    maximize = run_borzoi_gradient(
-        inputs, BorzoiGradientConfig(loss_terms=[BorzoiGradientLossTerm(**term, direction="max")])
-    )
-    minimize = run_borzoi_gradient(
-        inputs, BorzoiGradientConfig(loss_terms=[BorzoiGradientLossTerm(**term, direction="min")])
-    )
+    backward = run_borzoi_gradient(inputs, BorzoiGradientConfig(gradient_terms=terms))
+    forward = run_borzoi_gradient(inputs, BorzoiGradientConfig(gradient_terms=terms, compute_gradient=False))
 
-    assert maximize.results[0].loss == pytest.approx(-minimize.results[0].loss, rel=1e-5, abs=1e-6)
-    assert maximize.results[0].metrics["loss_terms"][0]["mean_activity"] == pytest.approx(
-        minimize.results[0].metrics["loss_terms"][0]["mean_activity"], rel=1e-5
-    )
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-def test_borzoi_gradient_forward_mode_matches_backward_loss():
-    """compute_gradient=False returns the same objective without a gradient."""
-    inputs = BorzoiGradientInput(inputs=_candidate(4))
-    terms = [BorzoiGradientLossTerm(track=0, bin_start=3060, bin_end=3085)]
-
-    backward = run_borzoi_gradient(inputs, BorzoiGradientConfig(loss_terms=terms))
-    forward = run_borzoi_gradient(inputs, BorzoiGradientConfig(loss_terms=terms, compute_gradient=False))
-
-    assert forward.results[0].gradient is None
-    assert backward.results[0].gradient is not None
-    assert forward.results[0].loss == pytest.approx(backward.results[0].loss, rel=1e-4, abs=1e-5)
+    (with_gradient,) = backward.results[0].terms
+    (without,) = forward.results[0].terms
+    assert without.gradient is None
+    assert with_gradient.gradient is not None
+    assert without.term_value == pytest.approx(with_gradient.term_value, rel=1e-4, abs=1e-5)
 
 
 @pytest.mark.benchmark("borzoi-gradient")
@@ -198,7 +199,7 @@ def test_borzoi_gradient_forward_mode_matches_backward_loss():
 def test_borzoi_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark borzoi-gradient: one backward pass over the full 524,288 bp context (cold + warm)."""
     inputs = BorzoiGradientInput(inputs=_candidate(16))
-    config = BorzoiGradientConfig(loss_terms=[BorzoiGradientLossTerm(track=0, bin_start=3060, bin_end=3085)])
+    config = BorzoiGradientConfig(gradient_terms=[BorzoiActivityTerm(track=0, bin_start=3060, bin_end=3085)])
 
     result = benchmark_twice(request, "borzoi", lambda: run_borzoi_gradient(inputs, config))
     validate_output(result)
@@ -206,5 +207,6 @@ def test_borzoi_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     assert isinstance(result, BorzoiGradientOutput)
     assert result.tool_id == "borzoi-gradient"
     (candidate,) = result.results
-    assert candidate.gradient is not None
-    assert len(candidate.gradient) == 16
+    (activity,) = candidate.terms
+    assert activity.gradient is not None
+    assert len(activity.gradient) == 16

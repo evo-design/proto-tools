@@ -14,40 +14,48 @@ from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import (
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
+    DifferentiableTerm,
+    GradientConfig,
     GradientInput,
+    GradientMetadata,
     GradientOutput,
+    GradientResult,
     InputField,
     NucleotideSequenceLogits,
-    RelaxationConfig,
+    TermCatalog,
+    TermGradient,
     ToolInstance,
     coerce_to_item_list,
+    resolve_terms,
 )
 from proto_tools.utils.sequence_logits import SequenceLogits
-from proto_tools.utils.tool_io import Metrics, MetricSpec
+from proto_tools.utils.tool_io import Directionality, Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
-BorzoiObjectiveDirection = Literal["max", "min"]
 
+class BorzoiActivityTerm(DifferentiableTerm):
+    """One differentiable Borzoi quantity: mean predicted activity over a track and bin span.
 
-class BorzoiGradientLossTerm(BaseModel):
-    """One differentiable Borzoi track-and-bin objective term.
-
-    The term's score is the mean predicted activity over ``track`` across bins
-    ``bin_start``..``bin_end``. ``direction`` fixes its sign so the summed objective is always
-    minimized, and ``weight`` scales it before the terms are added together.
+    Whether more activity is wanted depends on whether the track is a target or an off-target,
+    and how much it matters relative to other tracks is a weight — both are goals a caller
+    applies to the returned value, not properties of the quantity.
 
     Attributes:
+        id (Literal["track_activity"]): Fixed identifier for this kind of quantity.
         track (int): Borzoi output-track index (0-based, as the prediction tool reports them).
         bin_start (int): First output bin to average, 1-indexed and inclusive.
         bin_end (int): Last output bin to average, 1-indexed and inclusive.
-        direction (BorzoiObjectiveDirection): ``"max"`` minimizes ``-mean_activity``; ``"min"``
-            minimizes ``+mean_activity``.
-        weight (float): Non-negative scalar applied before terms are summed.
     """
 
-    model_config = ConfigDict(extra="forbid", validate_assignment=True, frozen=True)
+    #: A track can be something to drive up or something to suppress; only the caller knows.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
 
+    id: Literal["track_activity"] = Field(
+        default="track_activity",
+        title="Term ID",
+        description="Identifies this quantity as Borzoi mean track activity over a bin span.",
+    )
     track: int = Field(
         default=0,
         ge=0,
@@ -68,18 +76,6 @@ class BorzoiGradientLossTerm(BaseModel):
         title="Bin End",
         description="Last output bin to average, 1-indexed and inclusive",
     )
-    direction: BorzoiObjectiveDirection = Field(
-        default="max",
-        title="Direction",
-        description="Whether to maximize ('max') or minimize ('min') mean activity for this track",
-    )
-    weight: float = Field(
-        default=1.0,
-        ge=0.0,
-        allow_inf_nan=False,
-        title="Weight",
-        description="Relative weight of this term in the summed objective (must be non-negative)",
-    )
 
     @model_validator(mode="after")
     def validate_bin_span(self) -> Self:
@@ -87,6 +83,30 @@ class BorzoiGradientLossTerm(BaseModel):
         if self.bin_end < self.bin_start:
             raise ValueError(f"borzoi gradient: bin_end ({self.bin_end}) precedes bin_start ({self.bin_start})")
         return self
+
+
+class BorzoiTermGradient(TermGradient):
+    """One Borzoi track's mean activity and its raw gradient.
+
+    Attributes:
+        term (BorzoiActivityTerm): The track-and-bin quantity this gradient answers.
+    """
+
+    term: BorzoiActivityTerm = Field(title="Term", description="Track-and-bin quantity answered.")
+
+
+class BorzoiGradientResult(GradientResult):
+    """One evaluated candidate and every track activity differentiated for it.
+
+    Attributes:
+        terms (list[BorzoiTermGradient]): One entry per requested track, in the order requested.
+    """
+
+    terms: list[BorzoiTermGradient] = Field(  # type: ignore[assignment]  # narrows the element type
+        default_factory=list,
+        title="Terms",
+        description="One gradient per requested track-and-bin quantity, in the order requested.",
+    )
 
 
 class BorzoiGradientCandidate(BaseModel):
@@ -202,19 +222,10 @@ class BorzoiGradientSampleMetrics(Metrics):
     """Per-candidate differentiable Borzoi objective metrics.
 
     Attributes:
-        loss_terms (list[dict[str, Any]]): Per-objective-term metadata — track, bin span,
-            direction, weight, mean activity, and the weighted contribution.
+        designed_positions (int): Number of relaxed context positions this candidate carries.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "loss": {
-            "availability": "always",
-            "type": "float",
-            "min": None,
-            "max": None,
-            "description": "Weighted scalar Borzoi objective value for one candidate.",
-            "better_values_are": "lower",
-        },
         "designed_positions": {
             "availability": "always",
             "type": "int",
@@ -226,33 +237,35 @@ class BorzoiGradientSampleMetrics(Metrics):
     }
 
     primary_metric: str | None = Field(
-        default="loss",
+        default="designed_positions",
         title="Primary Metric",
         description="Headline metric used to rank results.",
-    )
-    loss_terms: list[dict[str, Any]] = Field(
-        default_factory=list,
-        title="Loss Terms",
-        description="Per-objective-term activity and weighting metadata for this candidate.",
     )
 
 
 class BorzoiGradientOutput(GradientOutput):
-    """Borzoi weighted-objective output; gradient is optional in forward-only mode.
+    """Borzoi track-activity output; gradients are optional in forward-only mode.
 
     Attributes:
-        results (list[GradientResult]): One per input candidate, in input order, each holding
-            that candidate's gradient w.r.t. its relaxed positions (``None`` in forward-only
-            mode), its weighted objective value, and its per-term activity metrics.
+        results (list[BorzoiGradientResult]): One per input candidate, in input order, each
+            holding that candidate's requested track activities and their raw gradients w.r.t.
+            its relaxed positions (``None`` in forward-only mode).
         vocab (list[str]): Nucleotide column ordering for the input logits.
     """
 
+    results: list[BorzoiGradientResult] = Field(  # type: ignore[assignment]  # narrows the element type
+        title="Results",
+        description="One result per input candidate, in input order, each carrying its track activities.",
+    )
 
-class BorzoiGradientConfig(RelaxationConfig):
+
+class BorzoiGradientConfig(GradientConfig):
     """Configuration for the Borzoi regulatory-activity gradient tool.
 
     Attributes:
-        loss_terms (list[BorzoiGradientLossTerm]): Objective terms summed into the scalar loss.
+        gradient_terms (list[BorzoiActivityTerm]): Track-and-bin quantities to differentiate,
+            given as the catalog name (``"track_activity"``) or as instances naming a track and
+            bin span. Each comes back with its own raw activity and gradient.
         species (Literal['human', 'mouse']): Species model to use.
         replicate (Literal['0', '1', '2', '3']): Replicate ID to run.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
@@ -265,12 +278,42 @@ class BorzoiGradientConfig(RelaxationConfig):
         device (str): Device to run the model on.
     """
 
-    loss_terms: list[BorzoiGradientLossTerm] = ConfigField(
-        title="Loss Terms",
-        default_factory=lambda: [BorzoiGradientLossTerm()],
+    TERMS: ClassVar[TermCatalog] = {"track_activity": BorzoiActivityTerm}
+
+    gradient_terms: list[BorzoiActivityTerm] = ConfigField(
+        title="Gradient Terms",
+        default_factory=lambda: [BorzoiActivityTerm()],
         min_length=1,
-        description="Track-and-bin objective terms summed into the scalar loss",
+        description="Track-and-bin quantities to differentiate, by name or as instances",
     )
+
+    @field_validator("gradient_terms", mode="before")
+    @classmethod
+    def resolve_gradient_terms(cls, value: Any) -> Any:
+        """Accept the catalog name and the term class alongside instances.
+
+        A mapping is what a round-tripped config looks like, and Pydantic reads those back on
+        its own.
+        """
+        if not isinstance(value, list):
+            return value
+        catalog = cls.supported_terms()
+        return [
+            resolve_terms([entry], catalog)[0]  # type: ignore[arg-type]
+            if isinstance(entry, str | type)
+            else entry
+            for entry in value
+        ]
+
+    @model_validator(mode="after")
+    def reject_repeated_terms(self) -> Self:
+        """The same track and bin span twice would be one quantity asked for twice."""
+        asked = [(term.track, term.bin_start, term.bin_end) for term in self.gradient_terms]
+        repeated = sorted({item for item in asked if asked.count(item) > 1})
+        if repeated:
+            raise ValueError(f"gradient_terms names the same track and bin span more than once: {repeated}")
+        return self
+
     species: Literal["human", "mouse"] = ConfigField(
         title="Species",
         default="human",
@@ -332,7 +375,7 @@ def run_borzoi_gradient(
     config: BorzoiGradientConfig,
     instance: Any = None,
 ) -> BorzoiGradientOutput:
-    """Compute Borzoi weighted track-activity gradients with respect to relaxed DNA logits."""
+    """Compute Borzoi track-activity gradients with respect to relaxed DNA logits."""
     use_flash_attn = config.species == "human"
     if use_flash_attn and not config.device.startswith("cuda"):
         raise ValueError("Must run on GPU to use FlashAttention with Borzoi")
@@ -350,7 +393,7 @@ def run_borzoi_gradient(
                 }
                 for candidate in inputs.inputs
             ],
-            "loss_terms": [term.model_dump() for term in config.loss_terms],
+            "gradient_terms": [term.model_dump() for term in config.gradient_terms],
             "temperature": inputs.temperature,
             "soft": config.soft,
             "hard": config.hard,
@@ -365,4 +408,31 @@ def run_borzoi_gradient(
         instance=instance,
         config=config,
     )
-    return BorzoiGradientOutput(**result)
+
+    # Every track's gradient is w.r.t. the candidate's relaxed rows inside the context window.
+    results = []
+    for candidate, item in zip(inputs.inputs, result["results"], strict=True):
+        basis = GradientMetadata.from_input(
+            candidate.logits.root,
+            vocab=result["vocab"],
+            temperature=inputs.temperature,
+            description="Mean predicted regulatory activity over a Borzoi track and bin span",
+            positions=candidate.positions,
+            soft=config.soft,
+            hard=config.hard,
+        )
+        results.append(
+            BorzoiGradientResult(
+                terms=[
+                    BorzoiTermGradient(
+                        term=BorzoiActivityTerm(**entry["term"]),
+                        term_value=float(entry["value"]),
+                        gradient=entry["gradient"],
+                        metadata=basis,
+                    )
+                    for entry in item["terms"]
+                ],
+                metrics=item["metrics"],
+            )
+        )
+    return BorzoiGradientOutput(results=results, vocab=result["vocab"])
