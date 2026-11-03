@@ -16,6 +16,7 @@ from tests.conftest import benchmark_twice
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 LENGTH = 50
+GRADIENT_ROW = [0.1, -0.2, 0.3, -0.4]
 
 
 def _uniform(length: int = LENGTH, n: int = 1) -> list[list[list[float]]]:
@@ -50,10 +51,9 @@ def test_parade_stability_gradient_dispatch_contract(monkeypatch):
         captured["payload"] = payload
         batch = len(payload["logits"])
         return {
-            "losses": [-1.5, -2.5][:batch],
             "log_ratios": [1.5, 2.5][:batch],
             "lengths": [LENGTH] * batch,
-            "gradients": [[[0.0] * 4] * LENGTH for _ in range(batch)],
+            "gradients": [[list(GRADIENT_ROW)] * LENGTH for _ in range(batch)],
         }
 
     monkeypatch.setattr(
@@ -63,23 +63,31 @@ def test_parade_stability_gradient_dispatch_contract(monkeypatch):
 
     result = run_parade_stability_gradient(
         ParadeStabilityGradientInput(inputs=_uniform(n=2), temperature=0.7),
-        ParadeStabilityGradientConfig(direction="max", device="cuda"),
+        ParadeStabilityGradientConfig(device="cuda"),
     )
 
     assert captured["toolkit"] == "parade"
     payload = captured["payload"]
     assert payload["operation"] == "stability_gradient", "a distinct operation from the activity gradient"
-    assert payload["direction"] == "max"
     assert payload["temperature"] == 0.7
     assert "stability" in payload["checkpoint_filename"], "the stability checkpoint, not an activity one"
     assert "construct_type" not in payload, "stability is not conditioned on a UTR construct"
     assert "loss_terms" not in payload, "stability is a single scalar, not per-cell terms"
 
     assert len(result.results) == 2, "one result per candidate"
-    assert [r.loss for r in result.results] == [-1.5, -2.5]
-    assert [r.metrics["log_ratio"] for r in result.results] == [1.5, 2.5]
+    assert [r.terms[0].term_value for r in result.results] == [1.5, 2.5], "the raw log-ratio, not a signed objective"
     assert result.results[0].metrics["sequence_length"] == LENGTH
     assert result.vocab == ["A", "C", "G", "T"]
+
+    (term,) = result.results[0].terms
+    assert term.term.id == "log_ratio"
+    assert term.metadata.suggested_optimization_direction == "higher", "a higher log-ratio is more stable"
+
+    # That advisory direction resolves a goal on its own, so composing needs no arguments.
+    composed = result.results[0].compose()
+    assert composed.contributions[0].dloss_dvalue == -1.0, "the advisory 'higher' resolved to maximize"
+    assert composed.objective_loss == pytest.approx(-1.5), "the loss falls as the log-ratio rises"
+    assert composed.gradient[0] == [-value for value in GRADIENT_ROW], "the raw gradient, negated"
 
 
 def test_parade_stability_gradient_forward_mode_returns_no_gradient(monkeypatch):
@@ -87,7 +95,7 @@ def test_parade_stability_gradient_forward_mode_returns_no_gradient(monkeypatch)
 
     def fake_dispatch(toolkit: str, payload: dict[str, Any], *, instance: Any = None, config: Any = None) -> Any:
         assert payload["compute_gradient"] is False
-        return {"losses": [-1.0], "log_ratios": [1.0], "lengths": [LENGTH], "gradients": None}
+        return {"log_ratios": [1.0], "lengths": [LENGTH], "gradients": None}
 
     monkeypatch.setattr(
         "proto_tools.tools.sequence_scoring.parade.parade_stability_gradient.ToolInstance.dispatch",
@@ -99,8 +107,9 @@ def test_parade_stability_gradient_forward_mode_returns_no_gradient(monkeypatch)
         ParadeStabilityGradientConfig(compute_gradient=False),
     )
 
-    assert result.results[0].gradient is None
-    assert result.results[0].loss == -1.0
+    (term,) = result.results[0].terms
+    assert term.gradient is None and term.grad_l2_norm is None
+    assert term.term_value == 1.0, "forward-only keeps the scalar and drops only its derivative"
 
 
 # ── Integration ───────────────────────────────────────────────────────────────
@@ -112,36 +121,20 @@ def test_parade_stability_gradient_single_candidate():
     """A real checkpoint returns a finite gradient and the objective tracks the log-ratio."""
     result = run_parade_stability_gradient(
         ParadeStabilityGradientInput(inputs=_uniform()[0]),
-        ParadeStabilityGradientConfig(direction="max"),
+        ParadeStabilityGradientConfig(),
     )
     validate_output(result)
 
     assert result.tool_id == "parade-stability-gradient"
     (candidate,) = result.results
-    assert candidate.gradient is not None
-    assert len(candidate.gradient) == LENGTH
-    assert all(len(row) == 4 for row in candidate.gradient)
-    assert all(math.isfinite(value) for row in candidate.gradient for value in row)
-    assert any(value != 0.0 for row in candidate.gradient for value in row)
-    assert math.isfinite(candidate.metrics["log_ratio"])
-    assert candidate.loss == pytest.approx(-candidate.metrics["log_ratio"], rel=1e-6), (
-        "maximizing stability minimizes the negated log-ratio"
-    )
+    (term,) = candidate.terms
+    assert term.gradient is not None
+    assert len(term.gradient) == LENGTH
+    assert all(len(row) == 4 for row in term.gradient)
+    assert all(math.isfinite(value) for row in term.gradient for value in row)
+    assert any(value != 0.0 for row in term.gradient for value in row)
+    assert math.isfinite(term.term_value)
     assert result.vocab == ["A", "C", "G", "T"]
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-def test_parade_stability_gradient_direction_flips_the_objective_sign():
-    """`max` and `min` differ only in the sign of the objective and its gradient."""
-    inputs = ParadeStabilityGradientInput(inputs=_uniform()[0])
-
-    maximize = run_parade_stability_gradient(inputs, ParadeStabilityGradientConfig(direction="max"))
-    minimize = run_parade_stability_gradient(inputs, ParadeStabilityGradientConfig(direction="min"))
-
-    assert maximize.results[0].loss == pytest.approx(-minimize.results[0].loss, rel=1e-5, abs=1e-7)
-    assert maximize.results[0].metrics["log_ratio"] == pytest.approx(minimize.results[0].metrics["log_ratio"], rel=1e-5)
-    assert maximize.results[0].gradient[0][0] == pytest.approx(-minimize.results[0].gradient[0][0], rel=1e-4, abs=1e-7)
 
 
 @pytest.mark.uses_gpu
@@ -166,8 +159,8 @@ def test_parade_stability_gradient_batch_matches_individual_evaluations():
 
     assert len(batched.results) == 3
     for index, (together, alone) in enumerate(zip(batched.results, singles, strict=True)):
-        assert together.metrics["log_ratio"] == pytest.approx(
-            alone.results[0].metrics["log_ratio"], rel=3e-3, abs=1e-4
+        assert together.terms[0].term_value == pytest.approx(
+            alone.results[0].terms[0].term_value, rel=3e-3, abs=1e-4
         ), f"candidate {index} scored differently in a batch"
 
 
@@ -185,4 +178,4 @@ def test_parade_stability_gradient_benchmark(request: pytest.FixtureRequest) -> 
     assert isinstance(result, ParadeStabilityGradientOutput)
     assert result.tool_id == "parade-stability-gradient"
     assert len(result.results) == 16
-    assert all(candidate.gradient is not None for candidate in result.results)
+    assert all(candidate.terms[0].gradient is not None for candidate in result.results)

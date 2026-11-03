@@ -74,7 +74,8 @@ This is the differentiable form of `parade-stability`, intended as an objective 
 
 #### Usage Tips
 
-- **The objective is a single scalar, so there are no loss terms.** Where `parade-gradient` takes per-cell terms, stability takes just a `direction`: `"max"` minimizes `-log_ratio` and drives the sequence toward higher predicted stability, `"min"` does the reverse. The predicted `log_ratio` itself comes back in each candidate's metrics.
+- **Direction is a goal, not a setting.** The tool reports the predicted `log_ratio` as it is, in one term per candidate; `MaximizeGoal()` drives the sequence toward higher predicted stability and `MinimizeGoal()` does the reverse. Maximizing is the advised direction, so composing without naming a goal already steps toward stability.
+- **The quantity is a single scalar, so there are no per-cell terms.** Where `parade-gradient` takes one term per cell line, stability has just the one.
 - **It runs the stability checkpoint**, which is a different model from the activity checkpoints — there is no `construct_type` here, since stability is not conditioned on a UTR construct.
 - **One batch, one length.** The backend evaluates the batch in a single vectorized pass, so every candidate in a call must share a sequence length; the gradient comes back stacked and is split into one result per candidate.
 

@@ -29,6 +29,7 @@ from proto_tools.tools.sequence_scoring.parade.parade_stability_gradient import 
     ParadeStabilityGradientInput,
     ParadeStabilityGradientMetrics,
     ParadeStabilityGradientOutput,
+    ParadeStabilityLogRatioTerm,
     run_parade_stability_gradient,
 )
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
@@ -45,6 +46,7 @@ from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
 __all__ = [
     "ParadeStabilityGradientConfig",
     "ParadeStabilityGradientInput",
+    "ParadeStabilityLogRatioTerm",
     "ParadeStabilityGradientMetrics",
     "ParadeStabilityGradientOutput",
     "run_parade_stability_gradient",

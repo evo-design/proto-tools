@@ -1,7 +1,7 @@
 """PARADE 3' UTR stability gradient tool."""
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, ClassVar, Literal
 
 from pydantic import Field
@@ -14,17 +14,18 @@ from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BatchedNucleotideGradientInput,
     ConfigField,
+    DifferentiableTerm,
+    GradientMetadata,
     GradientOutput,
     GradientResult,
     NucleotideSequenceLogits,
     RelaxationConfig,
+    TermGradient,
     ToolInstance,
 )
-from proto_tools.utils.tool_io import Metrics, MetricSpec
+from proto_tools.utils.tool_io import Directionality, Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
-
-ParadeStabilityObjectiveDirection = Literal["max", "min"]
 
 
 class ParadeStabilityGradientInput(BatchedNucleotideGradientInput):
@@ -41,32 +42,37 @@ class ParadeStabilityGradientInput(BatchedNucleotideGradientInput):
     """
 
 
+class ParadeStabilityLogRatioTerm(DifferentiableTerm):
+    """PARADE stability's one differentiable quantity: the predicted RNA/gDNA log-ratio.
+
+    The tool exposes a single scalar, so the term carries no selectors beyond the identifier
+    naming what it is.
+
+    Attributes:
+        id (Literal["log_ratio"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: A higher log-ratio is a more stable transcript.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "higher"
+
+    id: Literal["log_ratio"] = Field(
+        default="log_ratio",
+        title="Term ID",
+        description="Identifies this quantity as PARADE's predicted RNA/gDNA log-ratio.",
+    )
+
+
 class ParadeStabilityGradientMetrics(Metrics):
     """Per-candidate differentiable PARADE stability metrics.
 
+    The predicted log-ratio is the differentiated scalar, so it is reported as a term value rather
+    than as a metric and carries its direction there.
+
     Metrics documented in ``metric_spec``:
-        loss (float): Signed stability objective for one candidate.
-        log_ratio (float): Predicted RNA/gDNA log-ratio; higher means more stable.
         sequence_length (int): Length of the scored UTR.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "loss": {
-            "availability": "always",
-            "type": "float",
-            "min": None,
-            "max": None,
-            "description": "Signed PARADE stability objective value for one candidate.",
-            "better_values_are": "lower",
-        },
-        "log_ratio": {
-            "availability": "always",
-            "type": "float",
-            "min": None,
-            "max": None,
-            "description": "Predicted RNA/gDNA log-ratio; higher means more stable.",
-            "better_values_are": "context-dependent",
-        },
         "sequence_length": {
             "availability": "always",
             "type": "int",
@@ -78,7 +84,7 @@ class ParadeStabilityGradientMetrics(Metrics):
     }
 
     primary_metric: str | None = Field(
-        default="loss",
+        default=None,
         title="Primary Metric",
         description="Headline metric used to rank results.",
     )
@@ -88,49 +94,70 @@ class ParadeStabilityGradientOutput(GradientOutput):
     """Differentiable PARADE stability output.
 
     Attributes:
-        results (list[GradientResult]): One per input UTR, in input order, each holding that
-            candidate's own gradient, signed objective, and predicted log-ratio.
+        results (list[GradientResult]): One per input UTR, in input order. Contains a single
+            log-ratio term carrying that candidate's predicted RNA/gDNA log-ratio and its raw
+            gradient (``None`` in forward-only mode), plus the scored length in ``metrics``.
         vocab (list[str]): DNA column ordering for logits and gradient.
     """
 
     @classmethod
-    def from_batch(cls, payload: Mapping[str, Any]) -> "ParadeStabilityGradientOutput":
+    def from_batch(
+        cls,
+        payload: Mapping[str, Any],
+        *,
+        matrices: Sequence[Sequence[Sequence[float]]],
+        temperature: float | None,
+        soft: float = 1.0,
+        hard: float = 0.0,
+    ) -> "ParadeStabilityGradientOutput":
         """Unbatch one worker payload into per-candidate results.
 
         The worker evaluates the batch in one vectorized pass and reports a stacked ``(B, L, 4)``
-        gradient alongside per-sample losses, so this splits them back into one result per UTR.
+        gradient alongside per-sample log-ratios, so this splits them back into one result per UTR.
 
         Args:
-            payload (Mapping[str, Any]): Worker reply with losses, log ratios, and gradients.
+            payload (Mapping[str, Any]): Worker reply with log ratios, gradients, and lengths.
+            matrices (Sequence[Sequence[Sequence[float]]]): The relaxed UTR each candidate was
+                differentiated at, in input order.
+            temperature (float | None): The input's temperature, which fixes the coordinate space.
+            soft (float): Relaxation blend in force.
+            hard (float): Straight-through coefficient in force.
 
         Returns:
             ParadeStabilityGradientOutput: One result per input candidate, in input order.
         """
-        losses = list(payload["losses"])
         log_ratios = list(payload["log_ratios"])
         lengths = list(payload["lengths"])
-        gradients = payload.get("gradients") or [None] * len(losses)
+        gradients = payload.get("gradients") or [None] * len(log_ratios)
+        vocab = list(NucleotideSequenceLogits.VOCAB)
         results = [
             GradientResult(
-                gradient=gradients[index],
-                loss=float(losses[index]),
-                metrics={
-                    "loss": float(losses[index]),
-                    "log_ratio": float(log_ratios[index]),
-                    "sequence_length": int(lengths[index]),
-                },
+                terms=[
+                    TermGradient(
+                        term=ParadeStabilityLogRatioTerm(),
+                        term_value=float(log_ratios[index]),
+                        gradient=gradients[index],
+                        metadata=GradientMetadata.from_input(
+                            matrices[index],
+                            vocab=vocab,
+                            temperature=temperature,
+                            description="Predicted RNA/gDNA log-ratio; higher means a more stable transcript",
+                            soft=soft,
+                            hard=hard,
+                        ),
+                    )
+                ],
+                metrics={"sequence_length": int(lengths[index])},
             )
-            for index in range(len(losses))
+            for index in range(len(log_ratios))
         ]
-        return cls(results=results, vocab=list(NucleotideSequenceLogits.VOCAB))
+        return cls(results=results, vocab=vocab)
 
 
 class ParadeStabilityGradientConfig(RelaxationConfig, ParadeCheckpointConfig):
     """Configuration for the PARADE 3' UTR stability gradient tool.
 
     Attributes:
-        direction (ParadeStabilityObjectiveDirection): ``"max"`` minimizes ``-log_ratio``, driving
-            the sequence toward higher predicted stability; ``"min"`` minimizes ``+log_ratio``.
         checkpoint (str): Inherited; your own ``.ckpt`` path or https link, used instead of the
             pinned stability checkpoint.
         batch_size (int): Inherited; sequences per GPU forward pass.
@@ -144,11 +171,6 @@ class ParadeStabilityGradientConfig(RelaxationConfig, ParadeCheckpointConfig):
         device (str): Device to run the model on.
     """
 
-    direction: ParadeStabilityObjectiveDirection = ConfigField(
-        title="Direction",
-        default="max",
-        description="Whether to maximize ('max') or minimize ('min') predicted RNA/gDNA stability",
-    )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
         default=True,
@@ -199,7 +221,6 @@ def run_parade_stability_gradient(
             "operation": "stability_gradient",
             "logits": [item.root for item in inputs.inputs],
             "temperature": inputs.temperature,
-            "direction": config.direction,
             "checkpoint_path": checkpoint_path,
             "checkpoint_url": url,
             "checkpoint_md5": md5,
@@ -214,4 +235,10 @@ def run_parade_stability_gradient(
         instance=instance,
         config=config,
     )
-    return ParadeStabilityGradientOutput.from_batch(result)
+    return ParadeStabilityGradientOutput.from_batch(
+        result,
+        matrices=[item.root for item in inputs.inputs],
+        temperature=inputs.temperature,
+        soft=config.soft,
+        hard=config.hard,
+    )

@@ -328,7 +328,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         return _model.compute_stability_gradient(
             logits_list=input_dict["logits"],
             temperature=resolve_temperature(input_dict["temperature"]),
-            direction=input_dict["direction"],
             soft=float(input_dict.get("soft", 1.0)),
             hard=float(input_dict.get("hard", 0.0)),
             compute_gradient=bool(input_dict.get("compute_gradient", True)),
