@@ -162,6 +162,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/sequence_scoring/parade/">parade/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/primer3/">primer3/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/puffin/">puffin/</a>
+├── <a href="proto_tools/tools/sequence_scoring/rs3/">rs3/</a>
 └── <a href="proto_tools/tools/sequence_scoring/segmasker/">segmasker/</a>
 <a href="proto_tools/tools/structure_alignment/">structure_alignment/</a>            # Structure comparison
 ├── <a href="proto_tools/tools/structure_alignment/foldmason/">foldmason/</a>
