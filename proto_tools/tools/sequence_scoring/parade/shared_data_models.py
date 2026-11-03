@@ -70,6 +70,9 @@ PARADE_CELL_LINE_NAMES: dict[ParadeCellType, str] = {
     "c13": "PA-1",
 }
 
+# One rendering of the panel, shared by the cell-selector descriptions and the resolver's error.
+PARADE_CELL_PANEL = ", ".join(f"{code} {name}" for code, name in PARADE_CELL_LINE_NAMES.items())
+
 # Case-insensitive lookup that accepts either a code (``"c2"``) or a cell-line name (``"HepG2"``).
 _CELL_SELECTOR_TO_CODE: dict[str, ParadeCellType] = {
     **{code.lower(): code for code in PARADE_CELL_LINE_NAMES},
@@ -98,8 +101,9 @@ def resolve_cell_type(value: str) -> ParadeCellType:
         raise ValueError(f"PARADE cell type must be a string, got {type(value).__name__}")
     code = _CELL_SELECTOR_TO_CODE.get(value.strip().lower())
     if code is None:
-        known = ", ".join(f"{name} ({code})" for code, name in PARADE_CELL_LINE_NAMES.items())
-        raise ValueError(f"Unknown PARADE cell type {value!r}; expected a cell code or cell-line name: {known}")
+        raise ValueError(
+            f"Unknown PARADE cell type {value!r}; expected a cell code or cell-line name: {PARADE_CELL_PANEL}"
+        )
     return code
 
 

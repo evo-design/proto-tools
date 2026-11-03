@@ -339,7 +339,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             logits_list=input_dict["logits"],
             temperature=resolve_temperature(input_dict["temperature"]),
             construct_type=input_dict["construct_type"],
-            loss_terms=input_dict["loss_terms"],
+            gradient_terms=input_dict["gradient_terms"],
             soft=float(input_dict.get("soft", 1.0)),
             hard=float(input_dict.get("hard", 0.0)),
             compute_gradient=bool(input_dict.get("compute_gradient", True)),

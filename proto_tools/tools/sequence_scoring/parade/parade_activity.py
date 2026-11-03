@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_val
 
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     PARADE_CELL_LINE_NAMES,
+    PARADE_CELL_PANEL,
     PARADE_CELL_TYPES,
     ParadeActivityMetrics,
     ParadeCellType,
@@ -53,7 +54,7 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
     cell_types: list[ParadeCellType] = ConfigField(
         title="Cell Types",
         default_factory=list,
-        description="Cell lines to return by code ('c2') or name ('HepG2'); empty returns the full panel.",
+        description=f"Cells to return: {PARADE_CELL_PANEL}; empty = all",
     )
 
     @field_validator("cell_types", mode="before")

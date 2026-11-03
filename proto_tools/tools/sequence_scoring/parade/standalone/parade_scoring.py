@@ -249,16 +249,38 @@ def compute_gradient(
     logits_list: list[list[list[float]]],
     temperature: float | None,
     construct_type: str,
-    loss_terms: list[dict[str, Any]],
+    gradient_terms: list[dict[str, Any]],
     soft: float,
     hard: float,
     compute_gradient: bool,
     device: str,
 ) -> dict[str, Any]:
-    """Compute a differentiable PARADE activity loss and optional gradient.
+    """Differentiate each requested PARADE cell activity with respect to a relaxed state.
 
-    Each loss term maps a cell's raw activity through a max/min sigmoid; the weighted
-    terms are summed into one scalar loss and backpropagated to the relaxed input logits.
+    Every term names one cell, and its value is that cell's raw predicted activity: no direction,
+    weight or sigmoid is applied, so each gradient is ``d(activity)/d(input)``. PARADE conditions
+    on a single cell per forward pass via its condition channels, so one forward runs per cell and
+    is differentiated immediately, keeping at most one gradient on the device at a time. The
+    relaxation is shared by every cell, so its graph is retained until the final backward frees it.
+
+    Args:
+        model: Loaded activity checkpoint.
+        logits_list: Relaxed states, shape ``(B, L, 4)`` in ``A,C,G,T`` order.
+        temperature: Optional softmax temperature; ``None`` uses the rows as probabilities.
+        construct_type: ``"utr5"`` or ``"utr3"``, selecting the condition-channel panel.
+        gradient_terms: Resolved terms, each naming one ``cell_type``.
+        soft: Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard: Straight-through coefficient; 1 forwards a hard one-hot.
+        compute_gradient: If False, skip every backward and return ``gradients=None`` per term.
+        device: Device to run on.
+
+    Returns:
+        dict[str, Any]: One entry per term with its per-sample values and gradients, plus
+            call-level descriptors and the vocabulary.
+
+    Raises:
+        ValueError: If the logits are not rank 3.
+        RuntimeError: If an expected gradient is missing after a backward pass.
     """
     with torch.set_grad_enabled(compute_gradient):
         logits = torch.tensor(logits_list, device=device, dtype=torch.float32, requires_grad=compute_gradient)
@@ -268,75 +290,40 @@ def compute_gradient(
         relaxed = relaxed_sequence(logits, temperature=temperature, soft=soft, hard=hard)
         batch_size = int(relaxed.shape[0])
 
-        # PARADE conditions on a single cell type per forward pass (via the condition
-        # channels), so run one forward per requested cell type and reuse its raw
-        # activity across every loss term that targets that cell.
-        needed_cells = {term["cell_type"] for term in loss_terms}
-        raw_by_cell = {
-            cell: model(_featurize_logits(relaxed, construct_type, cell))[:, _ACTIVITY_MASS_CENTER_INDEX]
-            for cell in needed_cells
-        }
+        # One forward per distinct cell, in first-requested order, carrying the caller's term id.
+        cells: list[tuple[str, str | None]] = []
+        seen: set[str] = set()
+        for term in gradient_terms:
+            if term["cell_type"] not in seen:
+                seen.add(term["cell_type"])
+                cells.append((term["cell_type"], term.get("id")))
 
-        sample_losses = torch.zeros(batch_size, device=device, dtype=relaxed.dtype)
-        term_metrics_by_sample: list[list[dict[str, Any]]] = [[] for _ in range(batch_size)]
-        raw_scores_by_sample: list[dict[str, float]] = [{} for _ in range(batch_size)]
-        for term in loss_terms:
-            cell = term["cell_type"]
-            direction = term["direction"]
-            weight = float(term.get("weight", 1.0))
-            center = float(term.get("sigmoid_center", 2.0))
-            scale = float(term.get("sigmoid_scale", 1.0))
-            raw_score = raw_by_cell[cell]
-            scaled_score = (raw_score - center) / scale
-            sigmoid_value = torch.sigmoid(scaled_score)
-            if direction == "max":
-                score = 1.0 - sigmoid_value
-            elif direction == "min":
-                score = sigmoid_value
-            else:
-                raise ValueError(f"parade: invalid direction {direction!r}; expected 'max' or 'min'")
-            weighted_score = score * weight
-            sample_losses = sample_losses + weighted_score
+        terms: list[dict[str, Any]] = []
+        for position, (cell, term_id) in enumerate(cells):
+            # (B, L, 4) -> featurized -> (B,) raw activity for this cell
+            activity = model(_featurize_logits(relaxed, construct_type, cell))[:, _ACTIVITY_MASS_CENTER_INDEX]
+            entry: dict[str, Any] = {
+                "cell_type": cell,
+                "id": term_id,
+                "values": [float(value) for value in activity.detach().cpu().tolist()],
+                "gradients": None,
+            }
 
-            raw_score_values = raw_score.detach().cpu().tolist()
-            scaled_score_values = scaled_score.detach().cpu().tolist()
-            sigmoid_values = sigmoid_value.detach().cpu().tolist()
-            score_values = score.detach().cpu().tolist()
-            weighted_score_values = weighted_score.detach().cpu().tolist()
-            for sample_idx in range(batch_size):
-                raw_scores_by_sample[sample_idx][cell] = float(raw_score_values[sample_idx])
-                term_metrics_by_sample[sample_idx].append(
-                    {
-                        "cell_type": cell,
-                        "direction": direction,
-                        "weight": weight,
-                        "raw_score": float(raw_score_values[sample_idx]),
-                        "scaled_score": float(scaled_score_values[sample_idx]),
-                        "sigmoid_value": float(sigmoid_values[sample_idx]),
-                        "score": float(score_values[sample_idx]),
-                        "weighted_score": float(weighted_score_values[sample_idx]),
-                        "sigmoid_center": center,
-                        "sigmoid_scale": scale,
-                    }
-                )
+            if compute_gradient:
+                # Samples are independent, so summing only batches the backward pass.
+                (gradient,) = torch.autograd.grad(activity.sum(), logits, retain_graph=(position < len(cells) - 1))
+                if gradient is None:
+                    raise RuntimeError(f"parade: missing gradient for cell {cell!r} after backward")
+                # Off the device before the next cell's forward, so peak memory holds one gradient
+                entry["gradients"] = gradient.detach().cpu().tolist()
+                del gradient
 
-        total_loss = sample_losses.sum()
-        sample_loss_values = [float(value) for value in sample_losses.detach().cpu().tolist()]
-
-        gradient_value: list[list[list[float]]] | None = None
-        if compute_gradient:
-            total_loss.backward()
-            if logits.grad is None:
-                raise RuntimeError("parade: missing logits gradient")
-            gradient_value = logits.grad.detach().cpu().tolist()
+            terms.append(entry)
+            del activity
 
     return {
-        "gradient": gradient_value,
-        "loss": float(sum(sample_loss_values)),
+        "terms": terms,
         "metrics": {
-            "raw_scores": raw_scores_by_sample,
-            "loss_terms": term_metrics_by_sample,
-            "losses": sample_loss_values,
             "batch_size": batch_size,
             "temperature": temperature,
             "soft": soft,

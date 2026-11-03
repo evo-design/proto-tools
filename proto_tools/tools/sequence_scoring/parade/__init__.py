@@ -8,12 +8,12 @@ from proto_tools.tools.sequence_scoring.parade.parade_activity import (
     run_parade_activity,
 )
 from proto_tools.tools.sequence_scoring.parade.parade_gradient import (
+    ParadeActivityTerm,
     ParadeGradientConfig,
     ParadeGradientInput,
-    ParadeGradientLossTerm,
     ParadeGradientOutput,
-    ParadeGradientSampleMetrics,
-    ParadeObjectiveDirection,
+    ParadeGradientResult,
+    ParadeTermGradient,
     run_parade_gradient,
 )
 from proto_tools.tools.sequence_scoring.parade.parade_stability import (
@@ -67,10 +67,10 @@ __all__ = [
     # Gradient
     "ParadeGradientInput",
     "ParadeGradientConfig",
-    "ParadeGradientLossTerm",
+    "ParadeGradientResult",
+    "ParadeActivityTerm",
     "ParadeGradientOutput",
-    "ParadeGradientSampleMetrics",
-    "ParadeObjectiveDirection",
+    "ParadeTermGradient",
     # Stability
     "ParadeStabilityInput",
     "ParadeStabilityConfig",

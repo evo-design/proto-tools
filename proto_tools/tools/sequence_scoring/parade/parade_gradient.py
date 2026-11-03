@@ -1,14 +1,16 @@
 """Differentiable PARADE UTR activity objectives for gradient-based design."""
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
+from typing_extensions import Self
 
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     _CUSTOM_CHECKPOINT_REJECTED,
+    PARADE_CELL_PANEL,
     PARADE_CELL_TYPES,
     ParadeCellType,
     ParadeConstructType,
@@ -22,70 +24,48 @@ from proto_tools.utils import (
     DNA_NUCLEOTIDES,
     BatchedNucleotideGradientInput,
     ConfigField,
+    DifferentiableTerm,
+    GradientMetadata,
     GradientOutput,
     GradientResult,
     NucleotideSequenceLogits,
     RelaxationConfig,
+    TermGradient,
     ToolInstance,
 )
 from proto_tools.utils.device import RemoteDevice
-from proto_tools.utils.tool_io import Metrics, MetricSpec
-
-ParadeObjectiveDirection = Literal["max", "min"]
+from proto_tools.utils.tool_io import Directionality
 
 
-class ParadeGradientLossTerm(BaseModel):
-    """One differentiable PARADE UTR-activity objective term.
+class ParadeActivityTerm(DifferentiableTerm):
+    """One differentiable PARADE UTR-activity quantity: a single cell's predicted activity.
 
     Attributes:
-        cell_type (ParadeCellType): PARADE cell to optimize, given by code (``"c2"``) or
-            cell-line name (``"HepG2"``, case-insensitive); resolved to its canonical code,
-            which must be in the configured ``construct_type`` panel.
-        direction (ParadeObjectiveDirection): ``"max"`` minimizes
-            ``1 - sigmoid((raw - center) / scale)``; ``"min"`` minimizes
-            ``sigmoid((raw - center) / scale)``.
-        weight (float): Non-negative scalar applied before terms are summed.
-        sigmoid_center (float): Raw activity value where the sigmoid is 0.5.
-        sigmoid_scale (float): Positive scale for the raw activity transform.
+        id (Literal["activity"]): Fixed identifier for this kind of quantity. Every cell's term
+            reports the same one; the ``cell_type`` selector is what tells two of them apart.
+        cell_type (ParadeCellType): PARADE cell whose activity is differentiated, given by code
+            (``"c2"``) or cell-line name (``"HepG2"``, case-insensitive); resolved to its canonical
+            code, which must be in the configured ``construct_type`` panel.
     """
 
-    model_config = ConfigDict(extra="forbid", validate_assignment=True, frozen=True)
+    #: Whether more activity is wanted depends on whether the cell is a target or an off-target.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
 
+    id: Literal["activity"] = Field(
+        default="activity",
+        title="Term ID",
+        description="Identifies this quantity as a PARADE UTR activity prediction.",
+    )
     cell_type: ParadeCellType = Field(
         default="c2",
         title="Cell Type",
-        description="PARADE cell to optimize, by code ('c2') or cell-line name ('HepG2', case-insensitive).",
-    )
-    direction: ParadeObjectiveDirection = Field(
-        default="max",
-        title="Direction",
-        description="Whether to maximize ('max') or minimize ('min') activity for this cell code",
-    )
-    weight: float = Field(
-        default=1.0,
-        ge=0.0,
-        allow_inf_nan=False,
-        title="Weight",
-        description="Relative weight of this term in the summed objective (must be non-negative)",
-    )
-    sigmoid_center: float = Field(
-        default=2.0,
-        allow_inf_nan=False,
-        title="Sigmoid Center",
-        description="Raw PARADE activity at the sigmoid midpoint (0.5 output)",
-    )
-    sigmoid_scale: float = Field(
-        default=1.0,
-        gt=0.0,
-        allow_inf_nan=False,
-        title="Sigmoid Scale",
-        description="Sigmoid steepness in raw-activity units; larger values produce a wider transition",
+        description=f"Cell to differentiate: {PARADE_CELL_PANEL}",
     )
 
     @field_validator("cell_type", mode="before")
     @classmethod
     def _resolve_cell_type(cls, value: Any) -> Any:
-        """Accept a cell code ('c2') or cell-line name ('HepG2') and resolve it to its canonical code."""
+        """Accept a cell code ('c2') or cell-line name ('HepG2') and resolve it to its code."""
         if isinstance(value, str):
             return resolve_cell_type(value)
         return value
@@ -111,8 +91,8 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, RelaxationConfig):
     Attributes:
         device (str): Device used for inference and backpropagation.
         construct_type (ParadeConstructType): UTR model to use — ``"utr5"`` or ``"utr3"``.
-        loss_terms (list[ParadeGradientLossTerm]): Per-cell objective terms summed
-            into one scalar loss.
+        gradient_terms (list[ParadeActivityTerm]): Cells whose activity to differentiate. A bare
+            cell code or cell-line name is also accepted and normalized into a term.
         checkpoint (str): Your own checkpoint to use instead of the pinned one, given as a local
             ``.ckpt`` path or an ``https`` download link (a schemeless ``host.tld/path`` is
             accepted). Works on ``device="cpu"``, ``device="cuda"``, and ``device="modal"``.
@@ -137,10 +117,11 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, RelaxationConfig):
         description="UTR model to use: 'utr5' (5' UTR) or 'utr3' (3' UTR).",
         reload_on_change=True,
     )
-    loss_terms: list[ParadeGradientLossTerm] = ConfigField(
-        default_factory=lambda: [ParadeGradientLossTerm()],
-        title="Loss Terms",
-        description="Per-cell PARADE activity objectives to sum before backpropagation.",
+    gradient_terms: list[ParadeActivityTerm] = ConfigField(
+        default_factory=lambda: [ParadeActivityTerm()],
+        min_length=1,
+        title="Gradient Terms",
+        description="Cells whose predicted activity to differentiate, by code or cell-line name.",
     )
     checkpoint: str = ConfigField(
         title="Checkpoint",
@@ -161,32 +142,50 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, RelaxationConfig):
         """Validate a checkpoint override: an https link (schemeless allowed) or a local path."""
         return normalize_checkpoint_override(value)
 
+    @field_validator("gradient_terms", mode="before")
+    @classmethod
+    def _normalize_terms(cls, value: Any) -> Any:
+        """Accept bare cell codes or names alongside full term objects."""
+        if isinstance(value, list):
+            return [
+                ParadeActivityTerm(cell_type=cast(ParadeCellType, item)) if isinstance(item, str) else item
+                for item in value
+            ]
+        return value
+
     @field_validator("construct_type")
     @classmethod
     def validate_construct_type(cls, value: ParadeConstructType, info: ValidationInfo) -> ParadeConstructType:
-        """Reject a construct update that would invalidate the current loss terms."""
-        loss_terms = info.data.get("loss_terms", [])
-        offpanel = sorted({term.cell_type for term in loss_terms} - set(PARADE_CELL_TYPES[value]))
+        """Reject a construct that strands an already-selected cell, before the assignment lands.
+
+        This runs *before* the field is written, so a rejected assignment leaves the config
+        unchanged. The model validator below cannot do that: it runs after Pydantic has already
+        mutated the field, so raising there would leave an invalid construct in place. At
+        construction time ``info.data`` has no ``gradient_terms`` yet, which is why both exist.
+        """
+        selected = info.data.get("gradient_terms", [])
+        offpanel = sorted({term.cell_type for term in selected} - set(PARADE_CELL_TYPES[value]))
         if offpanel:
             raise ValueError(
-                f"loss_terms cell codes {offpanel} are not in the {value} panel {list(PARADE_CELL_TYPES[value])}"
+                f"gradient_terms cell codes {offpanel} are not in the {value} panel {list(PARADE_CELL_TYPES[value])}"
             )
         return value
 
-    @field_validator("loss_terms")
-    @classmethod
-    def validate_loss_terms(
-        cls, value: list[ParadeGradientLossTerm], info: ValidationInfo
-    ) -> list[ParadeGradientLossTerm]:
-        """Require at least one loss term whose cell code is in the construct panel."""
-        if not value:
-            raise ValueError("loss_terms cannot be empty")
-        construct_type = info.data.get("construct_type", "utr5")
-        panel = PARADE_CELL_TYPES[construct_type]
-        offpanel = sorted({term.cell_type for term in value} - set(panel))
+    @model_validator(mode="after")
+    def validate_terms_against_panel(self) -> Self:
+        """Require every selected cell to be in the construct's panel, and each to appear once."""
+        panel = PARADE_CELL_TYPES[self.construct_type]
+        offpanel = sorted({term.cell_type for term in self.gradient_terms} - set(panel))
         if offpanel:
-            raise ValueError(f"loss_terms cell codes {offpanel} are not in the {construct_type} panel {list(panel)}")
-        return value
+            raise ValueError(
+                f"gradient_terms cell codes {offpanel} are not in the {self.construct_type} panel {list(panel)}"
+            )
+
+        cells = [term.cell_type for term in self.gradient_terms]
+        duplicates = sorted({cell for cell in cells if cells.count(cell) > 1})
+        if duplicates:
+            raise ValueError(f"gradient_terms names cells {duplicates} more than once; each cell yields one term")
+        return self
 
     def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
         """Proto will not load a custom checkpoint; a deployment the caller owns may."""
@@ -195,109 +194,95 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, RelaxationConfig):
         return None
 
 
-class ParadeGradientSampleMetrics(Metrics):
-    """Per-sample differentiable PARADE objective metrics.
-
-    Raw per-cell activity predictions are stored as metrics when the corresponding cell
-    code appears in the objective. Per-term transformation metadata is kept in
-    ``loss_terms`` so metric values remain scalar and easy to index.
-
-    Metrics documented in ``metric_spec``:
-        loss (float): Weighted scalar objective value for one sample.
-        c1, c2, c4, c6, c17, c13 (float): Raw PARADE activity for that cell code.
+class ParadeTermGradient(TermGradient):
+    """One PARADE cell's differentiated activity.
 
     Attributes:
-        loss_terms (list[dict[str, Any]]): Per-objective-term metadata, including
-            direction, weight, sigmoid transform, and weighted score.
+        term (ParadeActivityTerm): The resolved cell-selection term.
     """
 
-    metric_spec: ClassVar[dict[str, MetricSpec]] = {
-        "loss": {
-            "availability": "always",
-            "type": "float",
-            "min": 0.0,
-            "max": None,
-            "description": "Weighted scalar PARADE objective value for one sample.",
-            "better_values_are": "lower",
-        },
-        **{
-            code: {
-                "availability": "when requested",
-                "type": "float",
-                "min": None,
-                "max": None,
-                "description": f"Raw PARADE UTR activity for cell code {code}.",
-                "better_values_are": "context-dependent",
-            }
-            for code in ("c1", "c2", "c4", "c6", "c17", "c13")
-        },
-    }
-    primary_metric: str | None = Field(
-        default="loss",
-        title="Primary Metric",
-        description="Headline metric used to rank results.",
-    )
-    loss_terms: list[dict[str, Any]] = Field(
+    term: ParadeActivityTerm = Field(title="Term", description="Resolved cell-selection term.")
+
+
+class ParadeGradientResult(GradientResult):
+    """One evaluated UTR and every cell activity differentiated for it.
+
+    Attributes:
+        terms (list[ParadeTermGradient]): One entry per selected cell, in requested order.
+    """
+
+    terms: list[ParadeTermGradient] = Field(  # type: ignore[assignment]  # narrows the element type
         default_factory=list,
-        title="Loss Terms",
-        description="Per-objective-term transform metadata for this sample.",
+        title="Gradient Terms",
+        description="One result per selected cell, each with its raw activity and gradient.",
     )
-
-
-def _build_gradient_sample_metrics(metrics: dict[str, Any]) -> list[ParadeGradientSampleMetrics]:
-    """Build per-sample metric containers from the standalone gradient payload."""
-    raw_scores_by_sample = metrics.get("raw_scores")
-    losses = metrics.get("losses")
-    loss_terms_by_sample = metrics.get("loss_terms")
-    if not isinstance(raw_scores_by_sample, list) or not isinstance(losses, list):
-        return []
-
-    sample_metrics = []
-    for sample_idx, loss in enumerate(losses):
-        raw_scores = raw_scores_by_sample[sample_idx] if sample_idx < len(raw_scores_by_sample) else {}
-        loss_terms = (
-            loss_terms_by_sample[sample_idx]
-            if isinstance(loss_terms_by_sample, list) and sample_idx < len(loss_terms_by_sample)
-            else []
-        )
-        metric_values: dict[str, float] = {"loss": float(loss)}
-        if isinstance(raw_scores, dict):
-            metric_values.update(
-                {code: float(raw_scores[code]) for code in ("c1", "c2", "c4", "c6", "c17", "c13") if code in raw_scores}
-            )
-        sample_metrics.append(ParadeGradientSampleMetrics.model_validate({**metric_values, "loss_terms": loss_terms}))
-    return sample_metrics
 
 
 class ParadeGradientOutput(GradientOutput):
     """Differentiable PARADE UTR-activity output.
 
     Attributes:
-        results (list[GradientResult]): One per input UTR, in input order, each holding that
-            sample's own gradient, weighted sigmoid objective, and raw per-cell activity.
+        results (list[ParadeGradientResult]): One per input UTR, in input order. Contains one term
+            per selected cell, each carrying that cell's raw predicted activity and its own
+            gradient (``None`` in forward-only mode).
         vocab (list[str]): DNA column ordering for logits and gradient.
     """
 
+    results: list[ParadeGradientResult] = Field(  # type: ignore[assignment]  # narrows the element type
+        title="Results",
+        description="One result per input UTR, in input order, each carrying one term per cell.",
+    )
+
     @classmethod
-    def from_batch(cls, payload: Mapping[str, Any]) -> "ParadeGradientOutput":
+    def from_batch(
+        cls,
+        payload: Mapping[str, Any],
+        *,
+        matrices: Sequence[Sequence[Sequence[float]]],
+        temperature: float | None,
+        soft: float = 1.0,
+        hard: float = 0.0,
+    ) -> "ParadeGradientOutput":
         """Unbatch one worker payload into per-sample results.
 
-        The worker evaluates the batch in one vectorized pass and reports a stacked ``(B, L, 4)``
-        gradient with per-sample losses and raw scores, so this splits them back into one result
-        per input UTR.
+        The worker reports one entry per cell, each holding that cell's value and gradient for
+        every sample, so this transposes cells x samples into one result per UTR.
 
         Args:
             payload (Mapping[str, Any]): Worker payload for the whole batch.
+            matrices (Sequence[Sequence[Sequence[float]]]): The relaxed UTR each sample was
+                differentiated at, in input order. Every cell's gradient for one sample is a
+                derivative with respect to the same state, which is what lets them be combined.
+            temperature (float | None): The input's temperature, which fixes the coordinate space.
+            soft (float): Relaxation blend in force.
+            hard (float): Straight-through coefficient in force.
 
         Returns:
             ParadeGradientOutput: One result per sample, in input order.
         """
-        sample_metrics = _build_gradient_sample_metrics(payload["metrics"])
-        gradients = payload.get("gradient") or [None] * len(sample_metrics)
-        results = []
-        for index, metrics in enumerate(sample_metrics):
-            values = metrics.model_dump()
-            results.append(GradientResult(gradient=gradients[index], loss=float(values["loss"]), metrics=values))
+        entries = list(payload["terms"])
+        batch_size = int(payload["metrics"]["batch_size"])
+        results = [
+            ParadeGradientResult(
+                terms=[
+                    ParadeTermGradient(
+                        term=ParadeActivityTerm(cell_type=entry["cell_type"]),
+                        term_value=float(entry["values"][index]),
+                        gradient=entry["gradients"][index] if entry["gradients"] else None,
+                        metadata=GradientMetadata.from_input(
+                            matrices[index],
+                            vocab=payload["vocab"],
+                            temperature=temperature,
+                            description=f"Predicted PARADE UTR activity for cell {entry['cell_type']}",
+                            soft=soft,
+                            hard=hard,
+                        ),
+                    )
+                    for entry in entries
+                ]
+            )
+            for index in range(batch_size)
+        ]
         return cls(results=results, vocab=payload["vocab"])
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
@@ -322,8 +307,7 @@ def example_gradient_input() -> Any:
     input_class=ParadeGradientInput,
     config_class=ParadeGradientConfig,
     output_class=ParadeGradientOutput,
-    metrics_class=ParadeGradientSampleMetrics,
-    description="Compute differentiable PARADE UTR-activity losses and gradients for relaxed UTR logits",
+    description="Compute per-cell PARADE UTR activities and their gradients for relaxed UTR logits",
     uses_gpu=True,
     example_input=example_gradient_input,
     cacheable=False,
@@ -344,7 +328,8 @@ def run_parade_gradient(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        ParadeGradientOutput: Loss, optional gradient, and per-sample activity metrics.
+        ParadeGradientOutput: One result per input UTR, each carrying one term per selected
+            cell with that cell's raw activity and its own gradient.
     """
     inputs = ParadeGradientInput.model_validate(inputs.model_dump())
     # Revalidate a dumped copy so nested/container mutation cannot reach the worker
@@ -360,7 +345,7 @@ def run_parade_gradient(
             "logits": [item.root for item in inputs.inputs],
             "temperature": inputs.temperature,
             "construct_type": config.construct_type,
-            "loss_terms": [term.model_dump() for term in config.loss_terms],
+            "gradient_terms": [term.model_dump() for term in config.gradient_terms],
             "checkpoint_path": checkpoint_path,
             "checkpoint_url": url,
             "checkpoint_md5": md5,
@@ -375,4 +360,10 @@ def run_parade_gradient(
         instance=instance,
         config=config,
     )
-    return ParadeGradientOutput.from_batch(result)
+    return ParadeGradientOutput.from_batch(
+        result,
+        matrices=[item.root for item in inputs.inputs],
+        temperature=inputs.temperature,
+        soft=config.soft,
+        hard=config.hard,
+    )
