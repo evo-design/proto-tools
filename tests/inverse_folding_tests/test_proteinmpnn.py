@@ -649,7 +649,8 @@ def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
     assert captured["payload"]["soft"] == 1.0
     assert captured["payload"]["hard"] == 1.0
     assert captured["payload"]["compute_gradient"] is True
-    assert result.results[0].gradient == [[0.0] * 20] * 5
+    (term,) = result.results[0].terms
+    assert term.gradient == [[0.0] * 20] * 5
 
 
 def test_proteinmpnn_sample_lays_design_over_structure_chains(monkeypatch):
@@ -736,9 +737,10 @@ def test_proteinmpnn_gradient_forward_only_returns_loss_without_a_gradient() -> 
     )
 
     validate_output(result)
-    assert result.results[0].gradient is None
-    assert result.results[0].loss > 0.0
-    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-result.results[0].loss, rel=1e-6)
+    (term,) = result.results[0].terms
+    assert term.gradient is None
+    assert term.term_value > 0.0
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-term.term_value, rel=1e-6)
     assert result.vocab == list(_CANONICAL_AA)
 
 
@@ -773,14 +775,15 @@ def test_proteinmpnn_gradient_end_to_end(soft: float, hard: float):
 
     validate_output(result)
     assert result.tool_id == "proteinmpnn-gradient"
-    assert result.results[0].gradient is not None
-    assert len(result.results[0].gradient) == 5
-    assert all(len(row) == 20 for row in result.results[0].gradient)
-    assert all(np.isfinite(v) for row in result.results[0].gradient for v in row)
-    assert any(v != 0.0 for row in result.results[0].gradient for v in row)
-    assert result.results[0].loss > 0.0
-    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-result.results[0].loss, rel=1e-6)
-    assert result.results[0].metrics["perplexity"] == pytest.approx(np.exp(result.results[0].loss), rel=1e-6)
+    (term,) = result.results[0].terms
+    assert term.gradient is not None
+    assert len(term.gradient) == 5
+    assert all(len(row) == 20 for row in term.gradient)
+    assert all(np.isfinite(v) for row in term.gradient for v in row)
+    assert any(v != 0.0 for row in term.gradient for v in row)
+    assert term.term_value > 0.0
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-term.term_value, rel=1e-6)
+    assert result.results[0].metrics["perplexity"] == pytest.approx(np.exp(term.term_value), rel=1e-6)
     assert result.vocab == list(_CANONICAL_AA)
 
 
@@ -1060,8 +1063,9 @@ def test_proteinmpnn_gradient_benchmark(request: pytest.FixtureRequest, pdb_stru
 
     validate_output(result)
     assert result.tool_id == "proteinmpnn-gradient"
-    assert result.results[0].gradient is not None
-    assert len(result.results[0].gradient) == target_len
-    assert all(len(row) == 20 for row in result.results[0].gradient)
-    assert all(np.isfinite(v) for row in result.results[0].gradient for v in row)
-    assert result.results[0].loss > 0.0
+    (term,) = result.results[0].terms
+    assert term.gradient is not None
+    assert len(term.gradient) == target_len
+    assert all(len(row) == 20 for row in term.gradient)
+    assert all(np.isfinite(v) for row in term.gradient for v in row)
+    assert term.term_value > 0.0

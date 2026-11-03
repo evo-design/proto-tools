@@ -1,9 +1,9 @@
-"""ProteinMPNN structure-conditioned perplexity gradient tool."""
+"""ProteinMPNN structure-conditioned negative log-likelihood gradient tool."""
 
 import logging
 from collections.abc import Iterator, Sequence
 from contextlib import ExitStack
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -11,6 +11,7 @@ from proto_tools.entities.structures import ChainSelection, ResidueSelection, St
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
+    DifferentiableTerm,
     GradientInput,
     GradientOutput,
     InputField,
@@ -18,9 +19,11 @@ from proto_tools.utils import (
     RelaxationConfig,
     SequenceLogits,
     ToolInstance,
+    attach_intrinsic_term,
     coerce_to_item_list,
     one_hot_protein_logits,
 )
+from proto_tools.utils.tool_io import Directionality
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +43,7 @@ class ProteinMPNNGradientCandidate(BaseModel):
         chains_to_redesign (ChainSelection | None): Chains to score/design. If
             ``None``, all chains in ``structure`` are used.
         fixed_positions (ResidueSelection | None): Per-chain positions excluded
-            from the perplexity objective.
+            from the ProteinMPNN objective.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -141,6 +144,29 @@ class ProteinMPNNGradientInput(GradientInput):
         return ProteinMPNNGradientCandidate(logits=matrix, **fields)
 
 
+class ProteinMPNNNLLTerm(DifferentiableTerm):
+    """ProteinMPNN's one differentiable quantity: the autoregressive negative log-likelihood.
+
+    The tool exposes a single scalar, so the term carries no selectors beyond the identifier
+    naming what it is.
+
+    Attributes:
+        id (Literal["nll"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: A mean negative log-likelihood is better the smaller it is.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
+
+    #: Nats, averaged over the designed residue positions the mean is taken across.
+    UNITS: ClassVar[str] = "nats per position"
+
+    id: Literal["nll"] = Field(
+        default="nll",
+        title="Term ID",
+        description="Identifies this quantity as ProteinMPNN's autoregressive negative log-likelihood.",
+    )
+
+
 class ProteinMPNNGradientOutput(GradientOutput):
     """ProteinMPNN mean-NLL output; gradient is optional in forward-only mode.
 
@@ -148,13 +174,13 @@ class ProteinMPNNGradientOutput(GradientOutput):
         results (list[GradientResult]): One per input item, each holding its gradient w.r.t.
             the supplied logits (``None`` in forward-only mode), its mean negative log-likelihood
             over ProteinMPNN-scored positions, and its log-likelihood, perplexity, sequence
-            length and objective details.
+            lengths, model choice and objective name.
         vocab (list[str]): Canonical amino-acid column ordering for logits and gradients.
     """
 
 
 class ProteinMPNNGradientConfig(RelaxationConfig):
-    """Configuration for relaxed ProteinMPNN perplexity gradients.
+    """Configuration for relaxed ProteinMPNN negative log-likelihood gradients.
 
     Attributes:
         model_choice (ProteinMPNNModelChoice): ProteinMPNN weight variant.
@@ -209,7 +235,7 @@ def example_input() -> ProteinMPNNGradientInput:
     input_class=ProteinMPNNGradientInput,
     config_class=ProteinMPNNGradientConfig,
     output_class=ProteinMPNNGradientOutput,
-    description="Compute ProteinMPNN structure-conditioned perplexity gradient for relaxed protein sequences",
+    description="Compute ProteinMPNN structure-conditioned NLL gradients for relaxed protein sequences",
     uses_gpu=True,
     pin_visible_devices=True,
     example_input=example_input,
@@ -261,4 +287,13 @@ def run_proteinmpnn_gradient(
             instance=instance,
             config=config,
         )
+    attach_intrinsic_term(
+        result,
+        ProteinMPNNNLLTerm(),
+        matrices=[candidate.logits.root for candidate in inputs.inputs],
+        temperature=inputs.temperature,
+        soft=config.soft,
+        hard=config.hard,
+        description="Mean autoregressive negative log-likelihood over ProteinMPNN-scored positions",
+    )
     return ProteinMPNNGradientOutput(**result)

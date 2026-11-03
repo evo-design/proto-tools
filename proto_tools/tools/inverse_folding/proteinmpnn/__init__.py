@@ -5,6 +5,7 @@ from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient import (
     ProteinMPNNGradientConfig,
     ProteinMPNNGradientInput,
     ProteinMPNNGradientOutput,
+    ProteinMPNNNLLTerm,
     run_proteinmpnn_gradient,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
@@ -47,6 +48,7 @@ __all__ = [
     "ProteinMPNNHomooligomerSampleConfig",
     "ProteinMPNNHomooligomerSampleInput",
     "ProteinMPNNHomooligomerStructureInput",
+    "ProteinMPNNNLLTerm",
     "ProteinMPNNSampleConfig",
     "ProteinMPNNSampleInput",
     "ProteinMPNNSampleOutput",

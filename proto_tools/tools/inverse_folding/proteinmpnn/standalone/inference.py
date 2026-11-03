@@ -313,7 +313,7 @@ class ProteinMPNNModel:
                 "sequence_length": parsed_len,
                 "effective_sequence_length": effective_length,
                 "model_choice": model_choice,
-                "objective": "autoregressive_nll",
+                "objective": "nll",
             },
             "vocab": CANONICAL_VOCAB,
         }
