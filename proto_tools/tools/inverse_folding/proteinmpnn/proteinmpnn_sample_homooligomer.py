@@ -15,6 +15,7 @@ from typing_extensions import Self
 
 from proto_tools.entities.structures.selection import ChainSelection, ResidueSelection, StructureInputBase
 from proto_tools.tools.inverse_folding.proteinmpnn._constraints import (
+    require_compatible_fixed_residues,
     require_matching_protomers,
     resolve_constraints,
 )
@@ -341,6 +342,7 @@ def run_proteinmpnn_sample_homooligomer(
         constraints = resolve_constraints(inp.structure, protomer_ids, inp.fixed_positions, tool=_TOOL_KEY)
         validate_residue_mapping(constraints.readable, inp.structure)
         require_matching_protomers(inp.structure, protomer_ids, constraints.readable, tool=_TOOL_KEY)
+        require_compatible_fixed_residues(inp.structure, protomer_ids, constraints.effective_fixed, tool=_TOOL_KEY)
 
         all_seqs, all_perp, all_seq_recovery = collect_samples(
             inp,

@@ -71,17 +71,19 @@ def resolve_constraints(
         all_positions = set(range(1, len(residues.get(chain_id, ())) + 1))
         requested_fixed = set(requested.get(chain_id, ()))
         modified = {m.position for m in structure.get_chain(chain_id).modifications}
-
-        effective_fixed = requested_fixed | modified
-        worker_fixed = effective_fixed & chain_readable
         excluded = all_positions - chain_readable
-        automatic = (modified | excluded) - requested_fixed
+
+        # A chemical modification does not fix a position. If the parser reads the residue,
+        # the model may redesign it unless the caller said otherwise.
+        effective_fixed = requested_fixed | excluded
+        worker_fixed = requested_fixed & chain_readable
 
         readable[chain_id] = sorted(chain_readable)
         if worker_fixed:
             worker[chain_id] = sorted(worker_fixed)
-        effective[chain_id] = sorted(effective_fixed | excluded)
-        _warn_automatic(tool, structure, chain_id, sorted(automatic), modified, excluded)
+        effective[chain_id] = sorted(effective_fixed)
+        _warn_excluded(tool, structure, chain_id, sorted(excluded - requested_fixed))
+        _warn_fixed_modifications(tool, structure, chain_id, sorted((requested_fixed & chain_readable) & modified))
 
     return ProteinMPNNConstraints(
         readable=readable,
@@ -90,60 +92,56 @@ def resolve_constraints(
     )
 
 
-def _warn_automatic(
-    tool: str,
-    structure: Structure,
-    chain_id: str,
-    automatic: list[int],
-    modified: set[int],
-    excluded: set[int],
-) -> None:
-    """Report positions kept fixed without being asked, grouped by why, one line per group."""
-    if not automatic:
+def _warn_excluded(tool: str, structure: Structure, chain_id: str, excluded: list[int]) -> None:
+    """Report positions the parser skipped that the caller did not already fix."""
+    if not excluded:
         return
     residues = structure.get_chain_residue_atoms(chain_id)[chain_id]
+    modified = {m.position for m in structure.get_chain(chain_id).modifications}
 
     def names(positions: list[int]) -> str:
         return ", ".join(f"{p} ({residues[p - 1].name})" for p in positions)
 
-    unreadable_modified = [p for p in automatic if p in modified and p in excluded]
-    readable_modified = [p for p in automatic if p in modified and p not in excluded]
-    unreadable_standard = [p for p in automatic if p not in modified]
+    groups = (
+        ([p for p in excluded if p in modified], "is a modified residue that ProteinMPNN cannot redesign"),
+        (
+            [p for p in excluded if p not in modified and "N" not in residues[p - 1].atom_names],
+            "cannot be processed because its backbone nitrogen is missing",
+        ),
+        (
+            [p for p in excluded if p not in modified and "N" in residues[p - 1].atom_names],
+            "is excluded by the model's structure parser",
+        ),
+    )
+    for positions, reason in groups:
+        if positions:
+            logger.warning(
+                "%s: Chain %s, position %s %s. The original residue will be preserved in the output.",
+                tool,
+                chain_id,
+                names(positions),
+                reason,
+            )
 
-    if unreadable_modified:
+
+def _warn_fixed_modifications(tool: str, structure: Structure, chain_id: str, positions: list[int]) -> None:
+    """Explain that a fixed modified residue reads as its parent amino acid in the sequence."""
+    if not positions:
+        return
+    codes = {m.position: m.modification_code for m in structure.get_chain(chain_id).modifications}
+    sequence = structure.get_chain_sequence(chain_id)
+    for position in positions:
         logger.warning(
-            "%s: Chain %s, position %s is a modified residue that ProteinMPNN cannot redesign. "
-            "It will be kept fixed in the output.",
+            "%s: Chain %s, position %s (%s) is fixed. The output sequence contains %s at this "
+            "position, and the original %s annotation is retained in the output's "
+            "chains[].modifications field.",
             tool,
             chain_id,
-            names(unreadable_modified),
+            position,
+            codes[position],
+            sequence[position - 1],
+            codes[position],
         )
-    if readable_modified:
-        logger.warning(
-            "%s: Chain %s, position %s is a modified residue. It will be kept fixed during design.",
-            tool,
-            chain_id,
-            names(readable_modified),
-        )
-    if unreadable_standard:
-        missing_n = [p for p in unreadable_standard if "N" not in residues[p - 1].atom_names]
-        other = [p for p in unreadable_standard if p not in set(missing_n)]
-        if missing_n:
-            logger.warning(
-                "%s: Chain %s, position %s cannot be processed because its backbone nitrogen is "
-                "missing. It will be preserved unchanged in the output.",
-                tool,
-                chain_id,
-                names(missing_n),
-            )
-        if other:
-            logger.warning(
-                "%s: Chain %s, position %s is excluded by the model's structure parser. It will "
-                "be preserved unchanged in the output.",
-                tool,
-                chain_id,
-                names(other),
-            )
 
 
 def require_matching_protomers(
@@ -184,3 +182,39 @@ def require_matching_protomers(
             f"{names(chain_id, excluded_of(chain_id))}. Tied design requires matching residue "
             "mappings across protomers."
         )
+
+
+def require_compatible_fixed_residues(
+    structure: Structure, protomer_ids: list[str], fixed: dict[str, list[int]], *, tool: str
+) -> None:
+    """Reject tied design when a fixed position holds different residues in different protomers.
+
+    Fixing a position pins it to whatever that chain already has. Tied sampling produces one
+    shared sequence, so two protomers demanding different residues at the same position cannot
+    both be satisfied. Positions that differ but are not fixed are fine: the shared sequence is
+    free to design them.
+
+    Args:
+        structure (Structure): The input structure.
+        protomer_ids (list[str]): The chains being tied.
+        fixed (dict[str, list[int]]): Positions kept unchanged, per chain.
+        tool (str): Tool key named in the error.
+
+    Raises:
+        ValueError: If a fixed position holds different residues across protomers.
+    """
+    sequences = {chain_id: structure.get_chain_sequence(chain_id) for chain_id in protomer_ids}
+    positions = sorted({p for chain_id in protomer_ids for p in fixed.get(chain_id, ())})
+    for position in positions:
+        holders = {
+            chain_id: sequences[chain_id][position - 1]
+            for chain_id in protomer_ids
+            if position in set(fixed.get(chain_id, ())) and position <= len(sequences[chain_id])
+        }
+        if len(set(holders.values())) > 1:
+            detail = ", ".join(f"{chain_id} requires {aa}" for chain_id, aa in sorted(holders.items()))
+            raise ValueError(
+                f"{tool}: Cannot tie these protomers because fixed position {position} requires "
+                f"different residues ({detail}). Tied design produces one shared sequence, so a "
+                "fixed position must hold the same residue in every protomer."
+            )

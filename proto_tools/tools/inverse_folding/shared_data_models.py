@@ -284,22 +284,18 @@ class InverseFoldingConfig(BaseConfig):
     )
 
 
-def _surviving_modifications(
-    entry: Any, sequence: str, readable: list[int] | None, fixed: list[int] | None
-) -> list[Any]:
+def _surviving_modifications(entry: Any, readable: list[int] | None, fixed: list[int] | None) -> list[Any]:
     """Modification annotations that still describe the designed chain.
 
-    An annotation survives at a position the model excluded, where the input residue is
-    untouched, and at a fixed position whose output residue still matches the modification's
-    parent amino acid -- a fixed MSE comes back as ``M``, and the residue is still the
-    selenomethionine that was there. A redesigned position loses it: the model put a
-    different, standard amino acid there.
+    An annotation survives only where the input residue survives: a position the parser
+    excluded, or one the caller fixed. A freely redesigned position loses it even when the
+    model happens to return the same letter -- an unfixed MSE coming back as ``M`` is a
+    designed methionine, not the selenomethionine that was there.
 
     Args:
         entry (Any): The input chain.
-        sequence (str): The designed sequence for that chain, full length.
         readable (list[int] | None): Positions the model processed, or ``None`` if undeclared.
-        fixed (list[int] | None): Positions the caller asked to keep unchanged.
+        fixed (list[int] | None): Positions kept unchanged, excluded ones included.
 
     Returns:
         list[Any]: The annotations to carry into the output chain.
@@ -308,14 +304,36 @@ def _surviving_modifications(
     if not annotations or readable is None:
         # No declared mapping means every position was designed, as before this feature.
         return []
-    excluded = set(range(1, len(entry.sequence) + 1)) - set(readable)
-    fixed_set = set(fixed or ())
-    surviving = []
-    for modification in annotations:
-        position = modification.position
-        if position in excluded or (position in fixed_set and sequence[position - 1] == entry.sequence[position - 1]):
-            surviving.append(modification)
-    return surviving
+    kept = set(fixed or ())
+    return [modification for modification in annotations if modification.position in kept]
+
+
+def _check_fixed_positions_honoured(
+    entry: Any, sequence: str, readable: list[int], fixed: list[int], tool: str
+) -> None:
+    """Reject a design that changed a residue the caller fixed.
+
+    Args:
+        entry (Any): The input chain.
+        sequence (str): The reconstructed full-length sequence.
+        readable (list[int]): Positions the model processed.
+        fixed (list[int]): Positions kept unchanged, excluded ones included.
+        tool (str): Tool key named in the error.
+
+    Raises:
+        ValueError: If a fixed, processed position came back different.
+    """
+    changed = [
+        position
+        for position in sorted(set(fixed) & set(readable))
+        if sequence[position - 1] != entry.sequence[position - 1]
+    ]
+    if changed:
+        detail = ", ".join(f"{p} ({entry.sequence[p - 1]}->{sequence[p - 1]})" for p in changed)
+        raise ValueError(
+            f"{tool}: Chain {entry.id} position {detail} was fixed but the model returned a "
+            "different residue. Refusing to return a design that violates the requested constraints."
+        )
 
 
 def _splice_design(native: str, designed: str, positions: list[int]) -> str:
@@ -479,7 +497,10 @@ class DesignedComplex(Complex):
                         "ones differs by model. This toolkit has not declared a readable_positions "
                         "rule, so the design cannot be placed back on the chain."
                     )
-                preserved = _surviving_modifications(entry, sequence, readable, (fixed_positions or {}).get(entry.id))
+                chain_fixed = (fixed_positions or {}).get(entry.id) or []
+                if readable is not None:
+                    _check_fixed_positions_honoured(entry, sequence, readable, chain_fixed, tool)
+                preserved = _surviving_modifications(entry, readable, chain_fixed)
                 chains.append(Chain(id=entry.id, sequence=sequence, entity_type="protein", modifications=preserved))
             else:
                 chains.append(entry)
