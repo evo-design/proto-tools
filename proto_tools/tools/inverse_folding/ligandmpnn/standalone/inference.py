@@ -350,11 +350,9 @@ class LigandMPNNModel:
             logger.info(f"Loading LigandMPNN model_type={model_type} on {device}")
 
         # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
-        from standalone_helpers import resolve_weights_dir
+        from standalone_helpers import export_weights_dir
 
-        weights_dir = resolve_weights_dir("ligandmpnn")
-        if weights_dir:
-            os.environ["FOUNDRY_CHECKPOINT_DIRS"] = weights_dir
+        export_weights_dir("FOUNDRY_CHECKPOINT_DIRS", "ligandmpnn", prepend=True)
 
         from mpnn.inference_engines.mpnn import MPNNInferenceEngine
 
@@ -926,36 +924,6 @@ class LegacyCompatibleLigandMPNNModel:
             torch.cuda.empty_cache()
 
 
-def _download_file(url: str, dest: Path) -> None:
-    """Download ``url`` to ``dest`` via curl-with-retry, staging through a temp file."""
-    import subprocess
-
-    from standalone_helpers import get_subprocess_device_env
-
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_name(dest.name + ".tmp")
-    logger.info("ligandmpnn: downloading %s", url)
-    curl_cmd = [
-        "curl",
-        "--no-progress-meter",
-        "--show-error",
-        "--location",
-        "--fail",
-        "--retry",
-        "5",
-        "--retry-delay",
-        "10",
-        "--retry-all-errors",
-        "--max-time",
-        "1800",
-        "--output",
-        str(tmp),
-        url,
-    ]
-    subprocess.run(curl_cmd, check=True, env=get_subprocess_device_env("cpu"))
-    tmp.replace(dest)
-
-
 def _ensure_legacy_assets() -> Path:
     """Provision the original LigandMPNN code + weights on first use; return the package path.
 
@@ -966,11 +934,9 @@ def _ensure_legacy_assets() -> Path:
     """
     import subprocess
 
-    from standalone_helpers import get_subprocess_device_env, resolve_weights_dir
+    from standalone_helpers import download_weights, get_subprocess_device_env, require_weights_dir
 
-    weights_dir = resolve_weights_dir("ligandmpnn")
-    if weights_dir is None:
-        raise RuntimeError("ligandmpnn: cannot resolve a weights directory for the original LigandMPNN assets")
+    weights_dir = require_weights_dir("ligandmpnn")
     package_path = Path(weights_dir) / "legacy" / _LEGACY_SOURCE_COMMIT[:12] / _LEGACY_PACKAGE_DIRNAME
 
     # 1. Code: fetch the original ligandmpnn package if the modules are missing.
@@ -978,7 +944,7 @@ def _ensure_legacy_assets() -> Path:
         package_path.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="ligandmpnn_code_") as tmpdir:
             tarball = Path(tmpdir) / "source.tar.gz"
-            _download_file(_LEGACY_CODE_TARBALL_URL, tarball)
+            download_weights(_LEGACY_CODE_TARBALL_URL, tarball)
             tar_cmd = ["tar", "-zxf", str(tarball), "-C", tmpdir, _LEGACY_CODE_SUBDIR]
             subprocess.run(tar_cmd, check=True, env=get_subprocess_device_env("cpu"))
             extracted = Path(tmpdir) / _LEGACY_CODE_SUBDIR
@@ -995,8 +961,7 @@ def _ensure_legacy_assets() -> Path:
     model_params = package_path / "model_params"
     for filename, url in _LEGACY_WEIGHT_URLS:
         dest = model_params / filename
-        if not dest.is_file():
-            _download_file(url, dest)
+        download_weights(url, dest)
     return package_path
 
 

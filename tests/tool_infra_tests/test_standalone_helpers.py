@@ -217,7 +217,7 @@ from proto_tools.utils.standalone_helpers_source.standalone_helpers import (  # 
 
 
 def test_resolve_weights_dir_default_uses_proto_home(monkeypatch, tmp_path):
-    """Default mode (no PROTO_MODEL_CACHE) returns {PROTO_HOME}/proto_model_cache/{tool}."""
+    """Default mode (no PROTO_MODEL_CACHE) returns {PROTO_HOME}/proto_model_cache/{tool}/weights."""
     proto_home = tmp_path / ".proto"
     monkeypatch.setenv("PROTO_HOME", str(proto_home))
     monkeypatch.delenv("PROTO_MODEL_CACHE", raising=False)
@@ -225,7 +225,7 @@ def test_resolve_weights_dir_default_uses_proto_home(monkeypatch, tmp_path):
 
     result = resolve_weights_dir("fampnn")
 
-    assert result == str(proto_home / "proto_model_cache" / "fampnn")
+    assert result == str(proto_home / "proto_model_cache" / "fampnn" / "weights")
     assert os.path.isdir(result)
 
 
@@ -241,7 +241,7 @@ def test_resolve_weights_dir_in_env_explicit(monkeypatch, tmp_path):
 
 
 def test_resolve_weights_dir_shared_path_mode(monkeypatch, tmp_path):
-    """Absolute path mode returns /path/{toolkit}/."""
+    """Absolute path mode returns /path/{toolkit}/weights/."""
     shared = tmp_path / "shared_weights"
     shared.mkdir()
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(shared))
@@ -249,7 +249,7 @@ def test_resolve_weights_dir_shared_path_mode(monkeypatch, tmp_path):
 
     result = resolve_weights_dir("protenix")
 
-    assert result == str(shared / "protenix")
+    assert result == str(shared / "protenix" / "weights")
     assert os.path.isdir(result)
 
 
@@ -361,7 +361,7 @@ def test_resolve_weights_dir_no_proto_home_falls_back_to_default(monkeypatch, tm
     result = resolve_weights_dir("fampnn")
 
     home = os.path.expanduser("~")
-    assert result == os.path.join(home, ".proto", "proto_model_cache", "fampnn")
+    assert result == os.path.join(home, ".proto", "proto_model_cache", "fampnn", "weights")
 
 
 def test_parse_cuda_indices_invalid():

@@ -18,14 +18,33 @@ Everything lives under `PROTO_HOME` regardless of install mode:
 
 ```
 PROTO_HOME/                   (default: ~/.proto/)
-├── proto_model_cache/        model weights (HF_HOME, TORCH_HOME, resolve_weights_dir)
-│   ├── databases/            provisioned MMseqs2 databases (override: PROTO_DATABASES_DIR)
-│   └── jax_cache/{toolkit}/  compiled JAX programs (JAX_COMPILATION_CACHE_DIR)
+├── proto_model_cache/        model weights, one folder per toolkit (override: PROTO_MODEL_CACHE)
+│   ├── {toolkit}/
+│   │   ├── huggingface/      HF_HOME for this toolkit
+│   │   ├── torch/            TORCH_HOME for this toolkit
+│   │   ├── jax_cache/        compiled JAX programs (JAX_COMPILATION_CACHE_DIR)
+│   │   ├── compile_cache/    the toolkit's Triton, TorchInductor, vLLM, ... kernels
+│   │   └── weights/          everything else the toolkit downloads (resolve_weights_dir)
+│   └── databases/            provisioned MMseqs2 databases (override: PROTO_DATABASES_DIR)
 ├── proto_tool_envs/          micromamba-managed tool venvs
+├── compile_cache/            driver-level caches shared by every tool (CUDA_CACHE_PATH, ...)
 ├── uv_cache/                 uv package download cache (UV_CACHE_DIR)
 ├── pip_cache/                pip HTTP cache (PIP_CACHE_DIR)
 └── .micromamba/              micromamba binary + package cache
 ```
+
+Each toolkit's folder holds every model file it downloads, whichever framework fetches it, so deleting `proto_model_cache/{toolkit}/` frees exactly that toolkit's weights. Subfolders appear only when the toolkit writes to them. A few toolkits read another toolkit's folder instead of keeping a copy: bindcraft, freebindcraft, and germinal use `alphafold2/`'s AF2 parameters, and germinal uses `chai1/`'s Chai-1 weights and `ablang/`'s AbLang weights.
+
+### Moving from the old layout
+
+Older versions kept one shared `huggingface/`, `torch/`, and `jax_cache/` at the top of `proto_model_cache/`, and put other weights directly in `{toolkit}/`. The first tool you run moves every toolkit's files into the new folders, so nothing is downloaded again. It moves files rather than copying them and removes the old folders it empties; anything not in the old place is skipped. If a file already exists in both places, or cannot be moved (for example a read-only shared cache), it stays where it is and a warning is logged. To migrate up front, or to see what would move:
+
+```bash
+python scripts/migrate_proto_home.py --dry-run
+python scripts/migrate_proto_home.py
+```
+
+Anything left in the old top-level `huggingface/` afterwards belongs to no current toolkit and can be deleted.
 
 ## uv / pip package caches
 
@@ -47,12 +66,12 @@ The cache and tool envs share a filesystem by default, which lets `uv` hard-link
 
 The first time a JAX model runs, XLA compiles it for your GPU. For large models like AlphaFold3 and AlphaGenome that takes several minutes. proto-tools saves the compiled model to disk, so the next run with the same input size, GPU, and JAX version loads it in seconds instead of compiling again.
 
-This happens automatically for every JAX tool: `persistent_worker._build_subprocess_env()` sets `JAX_COMPILATION_CACHE_DIR` for each tool, and tools that don't use JAX ignore it. The cache is stored next to your model weights, so it survives env rebuilds, and on Modal it lives on the shared volume where every container can use it.
+This happens automatically for every JAX tool: `persistent_worker._build_subprocess_env()` sets `JAX_COMPILATION_CACHE_DIR` for each tool, and tools that don't use JAX ignore it. The cache is stored in the toolkit's model-cache folder, so it survives env rebuilds, and on Modal it lives on the shared volume where every container can use it.
 
 | `PROTO_MODEL_CACHE` | Cache location |
 |---|---|
-| *(unset, default)* | `{PROTO_HOME}/proto_model_cache/jax_cache/{toolkit}/` |
-| `/absolute/path` | `/absolute/path/jax_cache/{toolkit}/` |
+| *(unset, default)* | `{PROTO_HOME}/proto_model_cache/{toolkit}/jax_cache/` |
+| `/absolute/path` | `/absolute/path/{toolkit}/jax_cache/` |
 | `IN_ENV` | `{venv}/jax_cache/` |
 | `NONE` | Not set, unless you set `JAX_COMPILATION_CACHE_DIR` yourself |
 
@@ -72,18 +91,29 @@ JAX_COMPILATION_CACHE_DIR=
 
 Leave the value truly empty. JAX treats an empty value as "off", but a space makes it write cache files into the working directory.
 
-A cached model only matches the GPU type and JAX version that compiled it, so a mismatch just triggers a fresh compile, never a wrong result. That also makes the cache safe to share between users on the same model cache. It grows as you run new input sizes, GPUs, and JAX versions; you can delete `jax_cache/`, or one tool's folder inside it, at any time, and the next run recompiles.
+A cached model only matches the GPU type and JAX version that compiled it, so a mismatch just triggers a fresh compile, never a wrong result. That also makes the cache safe to share between users on the same model cache. It grows as you run new input sizes, GPUs, and JAX versions; you can delete any toolkit's `jax_cache/` at any time, and the next run recompiles.
+
+## Compile caches
+
+Libraries that compile kernels on first use keep a cache of the results, by default in your home directory or `/tmp`. proto-tools points each one under `PROTO_HOME` instead, so a tool's disk use stays where you can see and delete it:
+
+| Kind | Variables | Location |
+|---|---|---|
+| Built from one toolkit's model code, against its env's library versions | `TRITON_CACHE_DIR`, `TORCHINDUCTOR_CACHE_DIR`, `TORCH_EXTENSIONS_DIR`, `VLLM_CACHE_ROOT`, `HUMMING_CACHE_DIR`, `FLASHINFER_WORKSPACE_BASE`, `CUPY_CACHE_DIR`, `NUMBA_CACHE_DIR` | `proto_model_cache/{toolkit}/compile_cache/` |
+| General: the GPU driver's JIT cache and torch's generic kernels | `CUDA_CACHE_PATH`, `PYTORCH_KERNEL_CACHE_PATH` | `PROTO_HOME/compile_cache/` (per user) |
+
+Like the JAX cache, every entry is keyed on the GPU and library versions, so a mismatch recompiles rather than giving a wrong result, and any of these folders can be deleted at any time. A value you set for one of these variables in your shell is used as-is. `IN_ENV` mode keeps the toolkit-specific caches in `{venv}/compile_cache/`; `NONE` mode leaves every library's default.
 
 ## Modes
 
 | Mode | HF_HOME | Non-HF weights | TORCH_HOME |
 |------|---------|----------------|------------|
-| *(unset, default)* | `{PROTO_HOME}/proto_model_cache/huggingface/` | `{PROTO_HOME}/proto_model_cache/{toolkit}/` | `{PROTO_HOME}/proto_model_cache/torch/` |
-| `/absolute/path` | `/absolute/path/huggingface/` | `/absolute/path/{toolkit}/` | `/absolute/path/torch/` |
+| *(unset, default)* | `{PROTO_HOME}/proto_model_cache/{toolkit}/huggingface/` | `{PROTO_HOME}/proto_model_cache/{toolkit}/weights/` | `{PROTO_HOME}/proto_model_cache/{toolkit}/torch/` |
+| `/absolute/path` | `/absolute/path/{toolkit}/huggingface/` | `/absolute/path/{toolkit}/weights/` | `/absolute/path/{toolkit}/torch/` |
 | `IN_ENV` | `{venv}/cache/huggingface/` | `{venv}/model_weight_cache/` | `{venv}/cache/torch/` |
 | `NONE` | Parent `HF_HOME` passthrough | `{venv}/weights/` | Parent `TORCH_HOME` passthrough |
 
-The default (`proto_model_cache/` under `PROTO_HOME`) keeps weights outside tool envs so they survive env rebuilds.
+The default (`proto_model_cache/` under `PROTO_HOME`) keeps weights outside tool envs so they survive env rebuilds. `IN_ENV` and `NONE` keep their per-venv and pass-through behavior and do not use per-toolkit folders.
 
 ## Shared weights for teams
 
@@ -122,7 +152,7 @@ python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases <dataset>
 
 ## Per-tool override
 
-`PROTO_{TOOL_NAME}_WEIGHTS_DIR` always wins, regardless of mode:
+`PROTO_{TOOL_NAME}_WEIGHTS_DIR` always wins, regardless of mode. It replaces the toolkit's `weights/` folder (it is used as given, with no `weights/` appended); Hugging Face, torch, and JAX caches stay in the toolkit's model-cache folder:
 
 ```bash
 export PROTO_FAMPNN_WEIGHTS_DIR=/custom/path/fampnn
@@ -132,7 +162,7 @@ export PROTO_PROTENIX_WEIGHTS_DIR=/custom/path/protenix
 <!-- docs:ignore start -->
 ## For tool authors
 
-Non-HF tools call `resolve_weights_dir(toolkit)` from the `standalone_helpers` package:
+Non-HF tools call `resolve_weights_dir(toolkit)` from the `standalone_helpers` package; it returns the toolkit's `weights/` folder:
 
 ```python
 from standalone_helpers import resolve_weights_dir
@@ -143,7 +173,24 @@ if weights_dir:
     ...
 ```
 
-HF-based tools need no code changes. `persistent_worker.py` sets `HF_HOME` automatically.
+HF-based tools need no code changes. `persistent_worker.py` points `HF_HOME`, `TORCH_HOME`, and `JAX_COMPILATION_CACHE_DIR` at the toolkit's folder automatically. A toolkit that should share another toolkit's Hugging Face and torch caches names that folder in `standalone/weights_key.txt`.
+
+When a toolkit's downloads change, add what it previously wrote to `MIGRATIONS` in `proto_tools/utils/weights_layout.py` (an `HFRepo`, `HFRepoPattern`, `HFHomePath`, `TorchHubFile`, `WeightsDir`, or `CachePath`) so existing caches move instead of downloading again.
+
+Use the shared helpers rather than writing download or path code in a tool:
+
+- `require_weights_dir(name)`: like `resolve_weights_dir`, but raises instead of returning `None`. Use it instead of falling back to a temp directory.
+- `download_weights(url, dest, sha256=..., md5=...)`: downloads once under a file lock, verifies the checksum, and renames into place, so concurrent workers on a shared cache never see a partial file. It refuses non-HTTPS URLs and sends `HF_TOKEN` only to `huggingface.co`. It is the Python counterpart of `proto_download_verified`.
+- `export_weights_dir(env_var, name, prepend=False)`: points a library's own location variable (`FOUNDRY_CHECKPOINT_DIRS`, `CHAI_DOWNLOADS_DIR`, `PROTENIX_ROOT_DIR`) at the weights directory. `prepend=True` keeps an existing search path after it.
+
+When toolkits share weights, one `setup.sh` helper owns the download so every toolkit gets the same pinned files: `proto_ensure_af2_params` (alphafold2, bindcraft, freebindcraft, germinal, bioemu) and `proto_ensure_chai1_weights` (chai1, germinal). `tests/style_consistency_tests/test_shared_weights_pins.py` fails if toolkits sharing a folder pin different versions.
+
+```python
+from standalone_helpers import download_weights, export_weights_dir, require_weights_dir
+
+export_weights_dir("FOUNDRY_CHECKPOINT_DIRS", "rf3", prepend=True)
+ckpt = download_weights(URL, Path(require_weights_dir("my_tool")) / "model.pt", sha256=SHA256)
+```
 
 For `setup.sh` scripts that download weights during environment setup, use the shared helpers from `standalone_helpers.sh` (resolved off `PATH`):
 

@@ -5,28 +5,20 @@ JSON input file and writes a JSON output file, matching the proto one-shot dispa
 (``python inference.py input.json output.json``).
 """
 
-import contextlib
-import fcntl
 import json
 import math
-import os
-import re
 import sys
-import tempfile
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from standalone_helpers import (
+    download_weights,
+    file_lock,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
-    resolve_weights_dir,
+    require_weights_dir,
     serialize_output,
     set_torch_seed,
 )
@@ -37,8 +29,6 @@ from standalone_helpers.vocabulary import DNA_CODONS
 sys.path.insert(0, str(Path(__file__).parent))
 
 logger = get_logger(__name__)
-
-LOCK_TIMEOUT_SECONDS = 600
 
 # The tokenizer's codon vocabulary is all 64 codons (``product("ACGT", 3)``), which includes the
 # three stop codons. Masked-codon resampling must never draw one of these into an interior codon,
@@ -53,124 +43,6 @@ _MASK_CODON = "___"
 # ---------------------------------------------------------------------------
 # HuggingFace checkpoint provisioning (public NVIDIA Open Model License weights)
 # ---------------------------------------------------------------------------
-def _is_trusted_hf_url(url: str) -> bool:
-    """True only for an HTTPS URL on ``huggingface.co`` or a real subdomain."""
-    parsed = urllib.parse.urlparse(url)
-    host = (parsed.hostname or "").lower()
-    return parsed.scheme == "https" and (host == "huggingface.co" or host.endswith(".huggingface.co"))
-
-
-def _redact_url(url: str) -> str:
-    """Strip userinfo/query so signed URLs and creds never reach logs/errors."""
-    try:
-        parsed = urllib.parse.urlparse(url)
-        netloc = parsed.hostname or ""
-        if ":" in netloc:
-            netloc = f"[{netloc}]"
-        if parsed.port:
-            netloc = f"{netloc}:{parsed.port}"
-    except ValueError:
-        return "<unparseable-url>"
-    cleaned = parsed._replace(netloc=netloc, path=("/<redacted-path>" if parsed.path else ""), query="", fragment="")
-    return urllib.parse.urlunparse(cleaned)
-
-
-class _SecureRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Abort insecure redirects and drop ``Authorization`` when a hop leaves trusted HF."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
-        if urllib.parse.urlparse(newurl).scheme != "https":
-            raise urllib.error.HTTPError(newurl, code, "codonfm: refusing insecure (non-HTTPS) redirect", headers, fp)
-        new = super().redirect_request(req, fp, code, msg, headers, newurl)
-        if new is not None and not _is_trusted_hf_url(newurl):
-            new.headers.pop("Authorization", None)
-            new.unredirected_hdrs.pop("Authorization", None)
-        return new
-
-
-@contextlib.contextmanager
-def _file_lock(lock_path: Path) -> Iterator[None]:
-    """Cross-process advisory lock via ``fcntl.flock`` (kernel-released on process exit)."""
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
-    try:
-        started = time.monotonic()
-        while True:
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError as err:
-                if time.monotonic() - started > LOCK_TIMEOUT_SECONDS:
-                    raise TimeoutError(f"codonfm: timed out waiting for lock {lock_path}") from err
-                time.sleep(1)
-        yield
-    finally:
-        with contextlib.suppress(OSError):
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
-
-
-def _resolve_hf_token() -> str | None:
-    """Resolve a HuggingFace token from every source the main-process gate accepts.
-
-    Mirrors ``proto_tools.utils.auth.resolve_hf_token`` (which isn't importable in the isolated
-    standalone env) so a token provided via ``hf auth login`` works for the download too, not just
-    the ``HF_TOKEN`` env var: env ``HF_TOKEN`` / ``HUGGING_FACE_HUB_TOKEN``, then the cached token
-    file, then git credentials.
-    """
-    token = os.environ.get("HF_TOKEN", "") or os.environ.get("HUGGING_FACE_HUB_TOKEN", "")
-    if token:
-        return token
-    token_file = os.path.expanduser("~/.cache/huggingface/token")
-    if os.path.isfile(token_file):
-        with contextlib.suppress(OSError):
-            token = Path(token_file).read_text().strip()
-            if token:
-                return token
-    git_creds = os.path.expanduser("~/.git-credentials")
-    if os.path.isfile(git_creds):
-        with contextlib.suppress(OSError):
-            for line in Path(git_creds).read_text().splitlines():
-                match = re.search(r"https?://[^:]+:(hf_[^@]+)@huggingface\.co", line)
-                if match:
-                    return match.group(1)
-    return None
-
-
-def _download(url: str, dest: Path) -> None:
-    """Download a public HuggingFace file over HTTPS, using an optional token when available."""
-    if urllib.parse.urlparse(url).scheme != "https":
-        raise ValueError(f"codonfm: checkpoint URL must use https, got {_redact_url(url)!r}")
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
-    with contextlib.suppress(FileNotFoundError):
-        tmp.unlink()
-    logger.info("Downloading CodonFM checkpoint file from %s to %s", _redact_url(url), dest)
-    request = urllib.request.Request(url)
-    hf_token = _resolve_hf_token()
-    if _is_trusted_hf_url(url) and hf_token:
-        request.add_header("Authorization", f"Bearer {hf_token}")
-    opener = urllib.request.build_opener(_SecureRedirectHandler())
-    try:
-        with opener.open(request, timeout=300) as response, open(tmp, "wb") as handle:
-            while chunk := response.read(1024 * 1024):
-                handle.write(chunk)
-        os.replace(tmp, dest)
-    except Exception:
-        with contextlib.suppress(FileNotFoundError):
-            tmp.unlink()
-        raise
-
-
-def _weights_dir() -> Path:
-    resolved = resolve_weights_dir("codonfm")
-    if resolved:
-        return Path(resolved)
-    fallback = Path(tempfile.gettempdir()) / "proto_codonfm_weights"
-    fallback.mkdir(parents=True, exist_ok=True)
-    return fallback
-
-
 def _resolve_checkpoint(input_dict: dict[str, Any]) -> str:
     """Provision ``<name>.safetensors`` + ``config.json`` into one cache dir; return the safetensors path.
 
@@ -180,15 +52,13 @@ def _resolve_checkpoint(input_dict: dict[str, Any]) -> str:
     safetensors_url = input_dict["safetensors_url"]
     config_url = input_dict["config_url"]
     filename = input_dict["safetensors_filename"]
-    cache_dir = _weights_dir() / input_dict["cache_subdir"]
+    cache_dir = Path(require_weights_dir("codonfm")) / input_dict["cache_subdir"]
     safetensors_path = cache_dir / filename
     config_path = cache_dir / "config.json"
 
-    with _file_lock(cache_dir.parent / f".{input_dict['cache_subdir']}.download.lock"):
-        if not safetensors_path.is_file():
-            _download(safetensors_url, safetensors_path)
-        if not config_path.is_file():
-            _download(config_url, config_path)
+    with file_lock(cache_dir.parent / f".{input_dict['cache_subdir']}.download.lock", progress=cache_dir):
+        download_weights(safetensors_url, safetensors_path, timeout=300)
+        download_weights(config_url, config_path, timeout=300)
     return str(safetensors_path)
 
 

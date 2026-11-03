@@ -482,3 +482,24 @@ def test_download_aborts_a_stalled_transfer(tmp_path: Path) -> None:
     assert "failed to download" in result[0][1]
     assert elapsed < 20
     assert not dest.exists() and not list(tmp_path.glob(".model.pt.*.tmp"))
+
+
+@_needs_flock
+def test_concurrent_af2_param_setups_download_once(tmp_path: Path) -> None:
+    """Setups of the AF2-param toolkits racing on one cache: one extracts, all find a complete copy."""
+    archive = tmp_path / "alphafold_params.tar"
+    with tarfile.open(archive, "w") as tar:
+        for model in range(1, 6):
+            for variant in ("", "_ptm", "_multimer_v3"):
+                member = tmp_path / f"params_model_{model}{variant}.npz"
+                member.write_bytes(_zip_bytes())
+                tar.add(member, arcname=member.name)
+    env = {"PROTO_MODEL_CACHE": str(tmp_path / "cache"), "_PROTO_AF2_PARAMS_URL": f"file://{archive}"}
+
+    results = _run_concurrently("proto_ensure_af2_params", 3, env=env)
+
+    assert [rc for rc, _ in results] == [0, 0, 0], [out for _, out in results]
+    assert sum("Downloading AlphaFold2 parameters" in out for _, out in results) == 1
+    params = tmp_path / "cache" / "alphafold2" / "weights" / "params"
+    assert len(list(params.glob("params_model_*.npz"))) == 15
+    assert (params / ".params_complete").exists()

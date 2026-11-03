@@ -19,6 +19,13 @@ from standalone_helpers import get_logger
 logger = get_logger(__name__)
 
 # Typed Config threshold fields → filter YAML keys (shape: {value, operator}).
+# AbLang weights germinal's ColabDesign fork loads (ablang2-paired for scFv, ablang1-heavy otherwise).
+# Same archives as the ablang toolkit, whose cache folder germinal shares (ablang2 is pinned to match).
+_ABLANG_ARCHIVES: dict[str, tuple[str, str]] = {
+    "ablang1-heavy": ("https://opig.stats.ox.ac.uk/data/downloads/ablang-heavy.tar.gz", "amodel.pt"),
+    "ablang2-paired": ("https://zenodo.org/records/10185169/files/ablang2-weights.tar.gz", "model.pt"),
+}
+
 _TYPED_FILTER_KEY_MAP: dict[str, str] = {
     "plddt_threshold": "external_plddt",
     "iptm_threshold": "external_iptm",
@@ -58,8 +65,10 @@ class GerminalRunner:
         self.af_params_dir: Path | None = None
 
     def load(self) -> None:
-        """Resolve the cloned Germinal repo and AF-Multimer params directory."""
-        from standalone_helpers import resolve_weights_dir
+        """Resolve the cloned repo and point it at the shared AF2, Chai-1, and AbLang caches."""
+        import importlib.util
+
+        from standalone_helpers import download_archive, export_weights_dir, link_to_cache, require_weights_dir
 
         venv = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VIRTUAL_ENV")
         if not venv:
@@ -70,31 +79,33 @@ class GerminalRunner:
         if not (repo / "run_germinal.py").exists():
             raise FileNotFoundError(f"Germinal repository not found at {repo}. Re-run standalone/setup.sh.")
         self.germinal_repo = repo
+        self.weights_dir = Path(require_weights_dir("germinal"))
 
-        weights_dir = resolve_weights_dir("germinal")
-        if weights_dir is None:
-            raise RuntimeError("resolve_weights_dir('germinal') returned None — weights not provisioned.")
-        self.weights_dir = Path(weights_dir)
-
-        # Resolve af_params_dir: prefer the .params_redirect file written by
-        # setup.sh when reusing the AF2 standalone's params; otherwise use
-        # $WEIGHTS_DIR/params (where setup.sh downloads them).
-        redirect = self.weights_dir / ".params_redirect"
-        if redirect.exists():
-            for line in redirect.read_text().splitlines():
-                if "=" in line:
-                    key, _, val = line.partition("=")
-                    if key.strip() == "PROTO_GERMINAL_AF_PARAMS_DIR":
-                        self.af_params_dir = Path(val.strip())
-                        break
-        if self.af_params_dir is None:
-            self.af_params_dir = self.weights_dir / "params"
-
+        # AF-Multimer params are the alphafold2 toolkit's copy (setup.sh: proto_ensure_af2_params)
+        self.af_params_dir = Path(require_weights_dir("alphafold2")) / "params"
         if not self.af_params_dir.exists() or not list(self.af_params_dir.glob("*.npz")):
             raise FileNotFoundError(
                 f"AlphaFold-Multimer params not found at {self.af_params_dir}. "
                 "Re-run standalone/setup.sh to download them."
             )
+
+        # The run_germinal.py subprocess inherits os.environ: Chai-1 reads the chai1 toolkit's
+        # cache, and AbLang's hardcoded package paths point at the ablang toolkit's cache.
+        export_weights_dir("CHAI_DOWNLOADS_DIR", "chai1")
+        ablang_cache = Path(require_weights_dir("ablang"))
+        # Locate the installed ablang2 package without importing it (and torch with it)
+        ablang_spec = importlib.util.find_spec("ablang2")
+        if ablang_spec is None or not ablang_spec.submodule_search_locations:
+            raise RuntimeError("germinal: ablang2 is not installed in the env; re-run standalone/setup.sh")
+        ablang_pkg = Path(next(iter(ablang_spec.submodule_search_locations)))
+        for model, (url, marker) in _ABLANG_ARCHIVES.items():
+            cached = download_archive(url, ablang_cache / f"model-weights-{model}", marker=marker)
+            link_to_cache(ablang_pkg / f"model-weights-{model}", cached)
+
+        # setup.sh links the built DAlphaBall into the repo; repoint it if the cache moved
+        dalphaball = self.weights_dir / "binaries" / "DAlphaBall.gcc"
+        if dalphaball.exists():
+            link_to_cache(repo / "params" / "DAlphaBall.gcc", dalphaball)
 
         self._loaded = True
         logger.debug(
