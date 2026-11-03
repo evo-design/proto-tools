@@ -10,7 +10,7 @@ from standalone_helpers.compression import compress_array
 from standalone_helpers.mixed_sequence import tokenize_mixed_sequence
 
 from proto_tools.tools.masked_models.execution import dispatch_masked_model
-from proto_tools.tools.masked_models.glm2 import GLM2EmbeddingsConfig, GLM2GradientConfig
+from proto_tools.tools.masked_models.glm2 import GLM2EmbeddingsConfig, GLM2GradientConfig, GLM2MaskedPLLTerm
 from proto_tools.tools.masked_models.minerva import MinervaEmbeddingsConfig, MinervaInteractionsConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
     MIXED_VOCAB,
@@ -23,7 +23,7 @@ from proto_tools.tools.masked_models.mixed_data_models import (
 )
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.transforms.masking import MaskingStrategy
-from proto_tools.utils import GradientResult, ToolInstance
+from proto_tools.utils import GradientMetadata, GradientResult, TermGradient, ToolInstance
 from proto_tools.utils.interaction_models import SequenceInteractionsOutput
 
 _LOCUS = "+MA+ac-X"
@@ -350,14 +350,35 @@ def test_mixed_dispatch_decompresses_nested_matrices(monkeypatch):
 
 
 def test_mixed_gradient_export_preserves_values(tmp_path):
+    """Export round-trips the term surface, which is what these tools now report."""
+    matrix = [[0.0] * 24] * len(_TOKENS)
     output = MixedGradientOutput(
-        results=[GradientResult(gradient=[[0.0] * 24] * len(_TOKENS), loss=1.0)], vocab=MIXED_VOCAB
+        results=[
+            GradientResult(
+                terms=[
+                    TermGradient(
+                        term=GLM2MaskedPLLTerm(),
+                        term_value=1.0,
+                        gradient=matrix,
+                        metadata=GradientMetadata.from_input(
+                            matrix, vocab=MIXED_VOCAB, temperature=1.0, description="mean masked NLL"
+                        ),
+                    )
+                ]
+            )
+        ],
+        vocab=MIXED_VOCAB,
     )
     output._export_output(tmp_path / "gradient.v1", "json")
     restored = MixedGradientOutput.model_validate_json((tmp_path / "gradient.v1.json").read_text())
+
     assert restored.vocab == output.vocab
-    for field in ("gradient", "loss", "metrics"):
-        assert getattr(restored.results[0], field) == getattr(output.results[0], field)
+    (term,) = restored.results[0].terms
+    assert (term.term_value, term.gradient) == (1.0, matrix)
+    assert term.metadata is not None and term.metadata.units == "nats per position"
+    # A base-typed output reads the term back as DifferentiableTerm; with no selectors to lose,
+    # the id is all there is to preserve.
+    assert term.term.id == "masked_pll"
 
 
 # ── Numerical runtime checks with a tiny differentiable model ────────────────

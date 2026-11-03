@@ -69,16 +69,18 @@ def check_embeddings_score_gradient(toolkit, checkpoint):
     }
     backward = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2)
     forward = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2, compute_gradient=False)
-    gradient = np.asarray(backward.results[0].gradient)
+    gradient = np.asarray(backward.results[0].terms[0].gradient)
     assert gradient.shape == (8, 24)
     assert np.isfinite(gradient).all()
     np.testing.assert_array_equal(gradient[[0, 3, 6, 7]], 0.0)
     np.testing.assert_array_equal(gradient[[1, 2], 20:], 0.0)
     np.testing.assert_array_equal(gradient[[4, 5], :20], 0.0)
     assert np.any(gradient[[1, 2, 4, 5]] != 0.0)
-    assert backward.results[0].loss == pytest.approx(-score.avg_log_likelihood, rel=2e-5, abs=2e-5)
-    assert forward.results[0].loss == pytest.approx(backward.results[0].loss, rel=2e-5, abs=2e-5)
-    assert forward.results[0].gradient is None
+    assert backward.results[0].terms[0].term_value == pytest.approx(-score.avg_log_likelihood, rel=2e-5, abs=2e-5)
+    assert forward.results[0].terms[0].term_value == pytest.approx(
+        backward.results[0].terms[0].term_value, rel=2e-5, abs=2e-5
+    )
+    assert forward.results[0].terms[0].gradient is None
     validate_output(backward)
 
 
@@ -130,10 +132,11 @@ def check_gradient_finite_difference(toolkit, checkpoint):
                 compute_gradient=False,
             )
             .results[0]
-            .loss
+            .terms[0]
+            .term_value
         )
     derivative = (losses[0] - losses[1]) / (2 * epsilon)
-    assert result.results[0].gradient[3][21] == pytest.approx(derivative, rel=0.03, abs=3e-4)
+    assert result.results[0].terms[0].gradient[3][21] == pytest.approx(derivative, rel=0.03, abs=3e-4)
 
 
 _UPSTREAM_REFERENCE = """

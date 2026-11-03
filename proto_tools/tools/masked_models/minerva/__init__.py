@@ -10,6 +10,7 @@ from proto_tools.tools.masked_models.minerva.minerva_gradient import (
     MinervaGradientConfig,
     MinervaGradientInput,
     MinervaGradientOutput,
+    MinervaMaskedPLLTerm,
     run_minerva_gradient,
 )
 from proto_tools.tools.masked_models.minerva.minerva_interactions import (
@@ -36,6 +37,7 @@ __all__ = [
     "MinervaEmbeddingsInput",
     "MinervaEmbeddingsOutput",
     "MinervaGradientConfig",
+    "MinervaMaskedPLLTerm",
     "MinervaGradientInput",
     "MinervaGradientOutput",
     "MinervaInteractionsConfig",

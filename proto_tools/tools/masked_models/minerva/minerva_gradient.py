@@ -1,7 +1,9 @@
 """Minerva gradient for prepared mixed protein/DNA sequences."""
 
 import logging
-from typing import Any
+from typing import Any, ClassVar, Literal
+
+from pydantic import Field
 
 from proto_tools.tools.masked_models.execution import dispatch_masked_model
 from proto_tools.tools.masked_models.minerva.config import MinervaConfig
@@ -13,6 +15,8 @@ from proto_tools.tools.masked_models.mixed_data_models import (
     one_hot_mixed_logits,
 )
 from proto_tools.tools.tool_registry import tool
+from proto_tools.utils import DifferentiableTerm, attach_intrinsic_term
+from proto_tools.utils.tool_io import Directionality
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +25,29 @@ MinervaGradientInput = MixedSequenceGradientInput
 
 # Output:
 MinervaGradientOutput = MixedGradientOutput
+
+
+class MinervaMaskedPLLTerm(DifferentiableTerm):
+    """Minerva's one differentiable quantity: the masked pseudo-log-likelihood.
+
+    The tool exposes a single scalar, so the term carries no selectors beyond the identifier
+    naming what it is.
+
+    Attributes:
+        id (Literal["masked_pll"]): Fixed identifier for this kind of quantity.
+    """
+
+    #: A mean negative log-likelihood is better the smaller it is.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
+
+    #: Nats, averaged over the positions the mean is taken across.
+    UNITS: ClassVar[str] = "nats per position"
+
+    id: Literal["masked_pll"] = Field(
+        default="masked_pll",
+        title="Term ID",
+        description="Identifies this quantity as Minerva's masked pseudo-log-likelihood.",
+    )
 
 
 class MinervaGradientConfig(MinervaConfig, MixedGradientConfig):
@@ -83,4 +110,14 @@ def run_minerva_gradient(
         MinervaGradientOutput: Token-aligned gradient output.
     """
     logger.debug("Using local worker for Minerva gradient: %s", config.model_checkpoint)
-    return MinervaGradientOutput(**dispatch_masked_model("minerva", "gradient", inputs, config, instance))
+    result = dispatch_masked_model("minerva", "gradient", inputs, config, instance)
+    attach_intrinsic_term(
+        result,
+        MinervaMaskedPLLTerm(),
+        matrices=[candidate.logits.root for candidate in inputs.inputs],
+        temperature=inputs.temperature,
+        soft=config.soft,
+        hard=config.hard,
+        description="Mean masked negative log-likelihood over canonical protein and DNA token positions",
+    )
+    return MinervaGradientOutput(**result)
