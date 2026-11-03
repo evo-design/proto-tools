@@ -1,4 +1,4 @@
-"""proto_tools/utils/gradient_models.py.
+"""proto_tools/utils/gradient/models.py.
 
 Shared input and output contracts for relaxed-sequence gradient tools.
 """
@@ -9,12 +9,22 @@ import json
 import math
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, get_args
+from typing import Any, ClassVar, cast, get_args
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.utils.base_config import BaseConfig, ConfigField
+from proto_tools.utils.gradient.metadata import GradientMetadata, gradient_l2_norm, input_fingerprint
+from proto_tools.utils.gradient.terms import (
+    DifferentiableTerm,
+    GroupedTermCatalog,
+    TermCatalog,
+    TermGradient,
+    _is_term_class,
+    _validate_term_catalog,
+    resolve_terms,
+)
 from proto_tools.utils.sequence_logits import (
     NucleotideSequenceLogits,
     ProteinSequenceLogits,
@@ -60,7 +70,23 @@ class RelaxationConfig(BaseConfig):
     :func:`standalone_helpers.relaxation.relaxed_sequence`. ``temperature`` lives on the Input
     because it describes the supplied numbers; relaxation is a property of the run.
 
+    Both coefficients are applied the way ColabDesign applies them, one after the other, at
+    https://github.com/sokrypton/ColabDesign/blob/5ab4efaba2321a6c3c314b82d2fff8e0241f5c2d/colabdesign/shared/model.py#L205-L206
+    (the revision ``alphafold2/standalone/requirements.txt`` pins)::
+
+        seq["pseudo"] = opt["soft"] * seq["soft"] + (1 - opt["soft"]) * seq["input"]
+        seq["pseudo"] = opt["hard"] * seq["hard"] + (1 - opt["hard"]) * seq["pseudo"]
+
     Attributes:
+        hard (float): Straight-through coefficient; 1 forwards a hard one-hot to the model.
+
+            At ``0.0`` the model sees the relaxed blend itself. At ``1.0`` the forward pass sees
+            a discrete one-hot while the backward pass still flows through the probabilities, so
+            the gradient describes a sequence the model scored exactly as it would score a real
+            one. Values in between interpolate between the two.
+
+            This is the setting to reach for when the goal is to evaluate a *discrete* sequence;
+            lowering ``soft`` is not.
         soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
 
             It is recommended to leave ``soft`` at ``1.0`` in almost all use cases. That feeds
@@ -70,11 +96,7 @@ class RelaxationConfig(BaseConfig):
             sequence representation and alter gradient behaviour.
 
             The setting is left exposed for research purposes and for parity with the
-            ColabDesign implementation.
-
-            To evaluate a *discrete* sequence in the forward pass while keeping surrogate
-            gradients, set ``hard=1.0`` rather than lowering ``soft``.
-        hard (float): Straight-through coefficient; 1 forwards a hard one-hot to the model.
+            ColabDesign implementation linked above.
     """
 
     soft: float = ConfigField(
@@ -386,20 +408,115 @@ class BatchedNucleotideGradientInput(GradientInput):
         return self
 
 
+class GradientConfig(RelaxationConfig):
+    """Shared configuration for gradient tools, carrying the quantities they can differentiate.
+
+    A tool declares ``TERMS``, and callers discover what it offers through
+    :meth:`supported_terms` without having to build a config first. Where the available
+    quantities depend on another setting — the species a model was trained on, the construct a
+    predictor was fitted for — the catalog is grouped by that setting's value and
+    ``TERM_GROUP_FIELD`` names the field that selects a group.
+
+    Attributes:
+        soft (float): Inherited relaxation blend; see :class:`RelaxationConfig`.
+        hard (float): Inherited straight-through coefficient; see :class:`RelaxationConfig`.
+    """
+
+    # What this tool can differentiate, keyed by name or by the setting the choice depends on.
+    TERMS: ClassVar[TermCatalog | GroupedTermCatalog] = {}
+
+    # The config field whose value selects a group of a grouped TERMS; None when the catalog is flat.
+    TERM_GROUP_FIELD: ClassVar[str | None] = None
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """Check a tool's catalog as it is declared, rather than when someone first asks for it."""
+        super().__pydantic_init_subclass__(**kwargs)
+        if cls.TERMS:
+            _validate_term_catalog(cls.TERMS, owner=f"{cls.__name__}.TERMS")
+
+    @classmethod
+    def supported_terms(cls, **group: str) -> TermCatalog | GroupedTermCatalog:
+        """Return the quantities this tool can differentiate.
+
+        Each value is the term class itself, which carries its own selector fields and whatever
+        values they permit. That is deliberately a catalog of what can be asked for rather than an
+        enumeration of every combination of arguments: a parameterized quantity is described by
+        its fields, which a caller reads from the class.
+
+        Args:
+            group (str): For a tool whose quantities depend on a setting, that setting's value,
+                such as ``species="human"``. Omit it to see every group.
+
+        Returns:
+            TermCatalog | GroupedTermCatalog: ``name -> term class`` for a flat catalog, and for
+                one group of a grouped catalog. ``setting value -> name -> term class`` for a
+                grouped catalog asked without a filter. Always a fresh mapping, so editing what
+                discovery hands back cannot edit the tool's own declaration.
+
+        Raises:
+            ValueError: If a filter is given to a tool whose catalog is not grouped, names a field
+                other than the grouping one, names a value that field does not permit, or names a
+                group for which no terms are declared.
+        """
+        if not group:
+            if all(_is_term_class(entry) for entry in cls.TERMS.values()):
+                return dict(cast(TermCatalog, cls.TERMS))
+            return {name: dict(terms) for name, terms in cast(GroupedTermCatalog, cls.TERMS).items()}
+        if cls.TERM_GROUP_FIELD is None:
+            raise ValueError(f"{cls.__name__}.supported_terms() takes no filters; its catalog is not grouped")
+        if len(group) > 1 or cls.TERM_GROUP_FIELD not in group:
+            raise ValueError(
+                f"{cls.__name__}.supported_terms() filters on {cls.TERM_GROUP_FIELD!r} alone, got {sorted(group)}"
+            )
+        value = group[cls.TERM_GROUP_FIELD]
+        permitted = cls._group_values()
+        if value not in permitted:
+            raise ValueError(f"unknown {cls.TERM_GROUP_FIELD} {value!r}; {cls.__name__} supports {sorted(permitted)}")
+        terms = cast(GroupedTermCatalog, cls.TERMS).get(value)
+        if terms is None:
+            raise ValueError(f"{cls.__name__} declares no differentiable terms for {cls.TERM_GROUP_FIELD}={value!r}")
+        return dict(terms)
+
+    @classmethod
+    def _group_values(cls) -> tuple[str, ...]:
+        """Return the values the grouping field permits, from its own schema where it states them.
+
+        The config field is the source of truth for which values are legal; the catalog only says
+        which of them have terms. A field that permits anything falls back to the catalog's keys.
+        """
+        info = cls.model_fields.get(cls.TERM_GROUP_FIELD or "")
+        options = get_args(info.annotation) if info is not None else ()
+        return tuple(str(option) for option in options) or tuple(cls.TERMS)
+
+
 class GradientResult(BaseModel):
-    """One evaluated item: its gradient, its objective, and its own metrics.
+    """One evaluated item: the gradients it was asked for, its objective, and its own metrics.
 
     Everything a gradient tool produces per item lives here, so a batch split across workers
     reassembles into exactly one of these per input. Only the vocabulary stays at the top level,
     because the alphabet is a property of the tool rather than of an item.
 
+    ``terms`` holds the requested quantities in the order they were asked for, which is how a
+    caller lines a returned gradient up with what they wanted from it. A tool whose terms carry
+    selectors narrows the field to its own ``TermGradient`` subclass, because Pydantic serializes
+    against the declared type and a base-typed term would lose them.
+
     Attributes:
+        terms (list[TermGradient]): One entry per differentiated quantity requested for this item,
+            in the order requested, each carrying its own raw value and raw gradient. Empty on a
+            tool that has not yet migrated to per-term gradients.
         gradient (list[list[float]] | None): Gradient for this item, an ``(L, V)`` matrix
             matching its input shape and column order, or ``None`` in forward-only mode.
         loss (float): This item's own objective value; no batch mean or total.
         metrics (dict[str, Any]): Metrics for this item alone.
     """
 
+    terms: list[TermGradient] = Field(
+        default_factory=list,
+        title="Terms",
+        description="One gradient per differentiated quantity, in the order requested.",
+    )
     gradient: list[list[float]] | None = Field(
         default=None,
         title="Gradient",
@@ -500,9 +617,18 @@ class GradientOutput(BaseToolOutput):
 __all__ = [
     "BatchedNucleotideGradientInput",
     "RelaxationConfig",
+    "DifferentiableTerm",
+    "GradientConfig",
     "GradientInput",
     "GradientOutput",
     "GradientResult",
+    "GradientMetadata",
+    "GroupedTermCatalog",
+    "TermCatalog",
+    "TermGradient",
     "coerce_to_item_list",
+    "gradient_l2_norm",
+    "input_fingerprint",
+    "resolve_terms",
     "ProteinGradientInput",
 ]

@@ -16,14 +16,23 @@ from proto_tools.utils.device import (
 from proto_tools.utils.device_manager import SUPPORTED_DEVICE_PREFIXES, AllocationType, DeviceManager, OffloadStrategy
 from proto_tools.utils.env_runner import run_in_env
 from proto_tools.utils.export_names import build_export_name, sanitize_field
-from proto_tools.utils.gradient_models import (
+from proto_tools.utils.gradient.models import (
     BatchedNucleotideGradientInput,
+    DifferentiableTerm,
+    GradientConfig,
     GradientInput,
+    GradientMetadata,
     GradientOutput,
     GradientResult,
+    GroupedTermCatalog,
     ProteinGradientInput,
     RelaxationConfig,
+    TermCatalog,
+    TermGradient,
     coerce_to_item_list,
+    gradient_l2_norm,
+    input_fingerprint,
+    resolve_terms,
 )
 from proto_tools.utils.http_session import build_http_session, request_with_retry, user_agent_for
 from proto_tools.utils.interaction_models import (
@@ -119,10 +128,19 @@ __all__ = [
     "AminoAcid",
     # Gradient models
     "BatchedNucleotideGradientInput",
+    "DifferentiableTerm",
+    "GradientConfig",
     "GradientInput",
     "GradientOutput",
+    "GradientMetadata",
     "GradientResult",
+    "GroupedTermCatalog",
+    "TermCatalog",
+    "TermGradient",
     "coerce_to_item_list",
+    "gradient_l2_norm",
+    "input_fingerprint",
+    "resolve_terms",
     "ProteinGradientInput",
     "RelaxationConfig",
     # Relaxed sequence state

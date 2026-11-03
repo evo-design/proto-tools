@@ -26,7 +26,7 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.tools.tool_registry import ToolRegistry
-from proto_tools.utils.gradient_models import (
+from proto_tools.utils.gradient.models import (
     BatchedNucleotideGradientInput,
     GradientInput,
     GradientOutput,
