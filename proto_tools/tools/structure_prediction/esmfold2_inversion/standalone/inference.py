@@ -323,15 +323,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         raise
 
 
-def to_device(device: str) -> dict[str, Any]:
-    """Move every cached model to ``device``."""
-    from standalone_helpers import move_model_to_device
-
-    for model in list(_folders.values()) + ([_language_model] if _language_model is not None else []):
-        move_model_to_device(model, device)
-    return {"success": True, "device": device}
-
-
 def get_memory_stats() -> dict[str, Any]:
     """Report the worker's GPU memory use."""
     from standalone_helpers import get_pytorch_memory_stats

@@ -1,6 +1,7 @@
 """ESMFold2 inversion structure-objective gradient tool."""
 
 import logging
+from collections.abc import Iterator, Sequence
 from typing import Any, ClassVar, Literal, cast, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -24,6 +25,7 @@ from proto_tools.utils import (
     coerce_to_item_list,
     resolve_terms,
 )
+from proto_tools.utils.sequence_logits import SequenceLogits
 from proto_tools.utils.tool_io import Directionality, Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
@@ -202,6 +204,14 @@ class ESMFold2InversionCandidate(BaseModel):
         description="Logit column order, a permutation of the 20 canonical amino acids.",
     )
 
+    def iter_sequence_logits(self) -> Iterator[tuple[str, SequenceLogits]]:
+        """Expose this candidate's relaxed state to the shared validation hooks.
+
+        Yields:
+            tuple[str, SequenceLogits]: The field name and this candidate's matrix.
+        """
+        yield "logits", self.logits
+
     @model_validator(mode="after")
     def validate_candidate(self) -> Self:
         """Reject non-canonical sequences, a bad alphabet, and hotspots the target contradicts.
@@ -253,6 +263,35 @@ class ESMFold2InversionGradientInput(GradientInput):
     def normalize_inputs(cls, value: Any) -> Any:
         """Accept one candidate where a list is expected."""
         return coerce_to_item_list(value)
+
+    @classmethod
+    def build_candidate(
+        cls,
+        probabilities: Sequence[Sequence[float]],
+        *,
+        temperature: float = 1.0,
+        **fields: Any,
+    ) -> ESMFold2InversionCandidate:
+        """Build one candidate pairing the converted binder matrix with its fixed target.
+
+        The target belongs to the candidate, so it arrives here either shared across the call or
+        named in this candidate's own mapping.
+
+        Args:
+            probabilities (Sequence[Sequence[float]]): ``(L, 20)`` strictly positive rows.
+            temperature (float): Positive, finite temperature the matrix is converted at.
+            fields (Any): This candidate's remaining fields; must include ``target_sequence``.
+
+        Returns:
+            ESMFold2InversionCandidate: Candidate whose logits reproduce ``probabilities``.
+
+        Raises:
+            ValueError: If ``target_sequence`` is missing.
+        """
+        if "target_sequence" not in fields:
+            raise ValueError("esmfold2-inversion-gradient from_probabilities requires the target sequence")
+        matrix = ProteinSequenceLogits.from_probabilities(probabilities, temperature=temperature)
+        return ESMFold2InversionCandidate(logits=matrix, **fields)
 
 
 class ESMFold2InversionGradientMetrics(Metrics):
