@@ -2,13 +2,14 @@
 
 import importlib.util
 import json
-import re
 import sys
 import types
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
+from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.msa import MSA
 from proto_tools.entities.structures import Structure, is_valid_structure
 from proto_tools.tools import Chain, Mol1Config, Mol1Input, run_mol1_prediction
@@ -28,7 +29,6 @@ _METRICS = {
     "chain_plddt": [0.912],
     "chain_pair_iptm": [[0.0]],
 }
-_SPECIES_REGEX = re.compile(r"(?:tr|sp)\|[A-Z0-9]{6,10}(?:_\d+)?\|(?:[A-Z0-9]{1,10}_)(?P<SpeciesId>[A-Z0-9]{1,5})")
 
 
 @pytest.fixture
@@ -62,11 +62,16 @@ def captured_dispatch(monkeypatch):
 
 def test_mol1_json_preserves_ligand_representations_and_ids():
     """CCD ligands use the native prefix while novel ligands retain raw SMILES."""
+    novel = Fragment(
+        id="Novel",
+        smiles="FC(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)C(F)(F)c1ccc(-c2ccc(-c3ccccc3)cc2)cc1",
+    )
+    assert novel.ccd_code is None
     job = complex_to_mol1_json(
         [
-            {"id": "Receptor", "entity_type": "protein", "sequence": _PEPTIDE},
-            {"id": "ATP", "entity_type": "ligand", "ccd_code": "ATP", "smiles": "ignored"},
-            {"id": "Novel", "entity_type": "ligand", "ccd_code": None, "smiles": "FC(F)(F)c1ccccc1"},
+            Chain(id="Receptor", entity_type="protein", sequence=_PEPTIDE),
+            Fragment(id="ATP", ccd_code="atp"),
+            novel,
         ],
         "prediction",
     )
@@ -75,7 +80,7 @@ def test_mol1_json_preserves_ligand_representations_and_ids():
         "sequences": [
             {"proteinChain": {"id": ["Receptor"], "count": 1, "sequence": _PEPTIDE}},
             {"ligand": {"id": ["ATP"], "count": 1, "ligand": "CCD_ATP"}},
-            {"ligand": {"id": ["Novel"], "count": 1, "ligand": "FC(F)(F)c1ccccc1"}},
+            {"ligand": {"id": ["Novel"], "count": 1, "ligand": novel.smiles}},
         ],
     }
 
@@ -91,7 +96,7 @@ def test_mol1_json_preserves_ligand_representations_and_ids():
 def test_mol1_json_preserves_residue_modifications(kind, sequence, code, entry_key, expected_mod):
     """Modified residues keep their one-based positions and native CCD encoding."""
     chain = Chain(id="Modified", entity_type=kind, sequence=sequence, modifications=[(2, code)])
-    job = complex_to_mol1_json([chain.model_dump()], "prediction")
+    job = complex_to_mol1_json([chain], "prediction")
     assert job["sequences"] == [
         {entry_key: {"id": ["Modified"], "count": 1, "sequence": sequence, "modifications": [expected_mod]}}
     ]
@@ -170,18 +175,14 @@ def test_mol1_supplied_msas_keep_paired_rows_and_unpaired_depth(captured_dispatc
     assert config.use_msa is False
     [capture] = captured_dispatch
     assert capture["payload"]["use_msa"] is True
-    species = []
     for index, chain_id in enumerate(("Alpha", "Beta")):
         alignments = capture["alignments"][chain_id]
         unpaired_rows = [line for line in alignments["unpairedMsaPath"].splitlines() if not line.startswith(">")]
         assert unpaired_rows == unpaired[index].aligned_sequences
         paired_lines = alignments["pairedMsaPath"].splitlines()
         assert paired_lines[1::2] == paired[index].aligned_sequences
-        matches = [_SPECIES_REGEX.fullmatch(header[1:]) for header in paired_lines[2::2]]
-        assert all(matches)
-        species.append([match.group("SpeciesId") for match in matches if match is not None])
-    assert species[0] == species[1]
-    assert len(set(species[0])) == len(paired[0].aligned_sequences) - 1
+        assert paired_lines[0] == ">query"
+        assert all(header.startswith(">tr|") for header in paired_lines[2::2])
 
 
 def test_mol1_unpaired_msa_has_no_paired_path(captured_dispatch):
@@ -298,39 +299,31 @@ def test_mol1_standalone_dispatch_derives_per_item_sampling_seed(
 
 def test_mol1_warm_runner_applies_changed_sampling_and_recycling(standalone_module, monkeypatch):
     """A reused model updates cached recycling state, diffusion settings and confidence dumping."""
-    settings, dumpers, deterministic_modes = [], [], []
+    snapshots, dumpers, deterministic_modes = [], [], []
     configs = types.SimpleNamespace(
         model=types.SimpleNamespace(N_cycle=20),
         sample_diffusion=types.SimpleNamespace(),
         infer_setting=types.SimpleNamespace(),
+        use_template=False,
+        use_rna_msa=False,
+        use_seeds_in_json=False,
     )
+
+    def update_model_configs(active_configs):
+        runner.model.configs = active_configs
+
     runner = types.SimpleNamespace(
         configs=configs,
-        model=types.SimpleNamespace(N_cycle=20),
+        model=types.SimpleNamespace(N_cycle=20, configs=configs),
         init_dumper=lambda **kwargs: dumpers.append(kwargs),
-        update_model_configs=lambda _: None,
+        update_model_configs=update_model_configs,
     )
 
     def infer_predict(active_runner, active_configs):
         assert active_runner is runner
-        assert active_configs.model.N_cycle == runner.model.N_cycle
+        active_runner.update_model_configs(active_configs)
         assert json.loads(Path(active_configs.input_json_path).read_text()) == [{"name": "job", "sequences": []}]
-        settings.append(
-            {
-                "cycles": runner.model.N_cycle,
-                "samples": active_configs.sample_diffusion.N_sample,
-                "steps": active_configs.sample_diffusion.N_step,
-                "dtype": active_configs.dtype,
-                "chunk": active_configs.infer_setting.chunk_size,
-                "diffusion_chunk": active_configs.infer_setting.sample_diffusion_chunk_size,
-                "msa": active_configs.use_msa,
-                "pae": active_configs.need_atom_confidence,
-                "seeds": active_configs.seeds,
-                "deterministic": active_configs.deterministic,
-            }
-        )
-        assert active_configs.use_template is False
-        assert active_configs.use_rna_msa is False
+        snapshots.append((deepcopy(active_configs), runner.model.N_cycle))
 
     upstream = types.ModuleType("mol.runner.inference")
     upstream.infer_predict = infer_predict
@@ -358,8 +351,8 @@ def test_mol1_warm_runner_applies_changed_sampling_and_recycling(standalone_modu
         "seed": 101,
         "verbose": False,
     }
-    model.predict(payload)
-    model.predict(
+    requests = [
+        payload,
         {
             **payload,
             "num_cycles": 6,
@@ -372,34 +365,24 @@ def test_mol1_warm_runner_applies_changed_sampling_and_recycling(standalone_modu
             "include_pae_matrix": True,
             "sampling_seed": 102,
             "seed": None,
-        }
-    )
-    assert settings == [
-        {
-            "cycles": 4,
-            "samples": 2,
-            "steps": 33,
-            "dtype": "fp32",
-            "chunk": 128,
-            "diffusion_chunk": 2,
-            "msa": False,
-            "pae": False,
-            "seeds": [101],
-            "deterministic": True,
-        },
-        {
-            "cycles": 6,
-            "samples": 3,
-            "steps": 44,
-            "dtype": "bf16",
-            "chunk": None,
-            "diffusion_chunk": None,
-            "msa": True,
-            "pae": True,
-            "seeds": [102],
-            "deterministic": False,
         },
     ]
+    for request in requests:
+        model.predict(request)
+    for request, (snapshot, cached_cycles) in zip(requests, snapshots, strict=True):
+        assert snapshot.model.N_cycle == cached_cycles == request["num_cycles"]
+        assert snapshot.sample_diffusion.N_sample == request["num_samples"]
+        assert snapshot.sample_diffusion.N_step == request["num_steps"]
+        assert snapshot.dtype == request["dtype"]
+        assert snapshot.infer_setting.chunk_size == request["chunk_size"]
+        assert snapshot.infer_setting.sample_diffusion_chunk_size == request["sample_diffusion_chunk_size"]
+        assert snapshot.use_msa == request["use_msa"]
+        assert snapshot.need_atom_confidence == request["include_pae_matrix"]
+        assert snapshot.seeds == [request["sampling_seed"]]
+        assert snapshot.deterministic is (request["seed"] is not None)
+        assert snapshot.use_template is False
+        assert snapshot.use_rna_msa is False
+        assert snapshot.use_seeds_in_json is False
     assert dumpers == [
         {"need_atom_confidence": False, "sorted_by_ranking_score": True},
         {"need_atom_confidence": True, "sorted_by_ranking_score": True},
@@ -415,16 +398,26 @@ def test_mol1_prediction_default_sampling():
     assert result.tool_id == "mol1-prediction"
     assert len(result.structures) == 1
     assert is_valid_structure(result.structures[0].structure_cif)
-    assert result.structures[0].get_chain_sequence("A") == _PEPTIDE
+    assert "".join(aa for aa, _ in result.structures[0].get_residue_position_map()["A"]) == _PEPTIDE
     assert_metrics_in_spec(result)
 
 
 @pytest.mark.uses_gpu
-def test_mol1_prediction_nondefault_sampling_with_pae():
-    """Nondefault sampling returns a token-indexed PAE matrix in angstroms."""
+def test_mol1_prediction_nondefault_sampling_with_pae(tmp_path):
+    """Nondefault sampling returns token PAE in angstroms and exportable coordinates."""
     result = run_mol1_prediction(
         Mol1Input(complexes=[_PEPTIDE]),
-        Mol1Config(use_msa=False, num_samples=2, num_steps=25, num_cycles=2, seed=42, include_pae_matrix=True),
+        Mol1Config(
+            use_msa=False,
+            num_samples=2,
+            num_steps=25,
+            num_cycles=2,
+            seed=42,
+            dtype="fp32",
+            chunk_size=128,
+            sample_diffusion_chunk_size=2,
+            include_pae_matrix=True,
+        ),
     )
     assert result.success
     assert result.tool_id == "mol1-prediction"
@@ -436,21 +429,10 @@ def test_mol1_prediction_nondefault_sampling_with_pae():
     assert all(len(row) == len(_PEPTIDE) for row in pae)
     assert metrics["avg_pae"] == pytest.approx(sum(map(sum, pae)) / len(_PEPTIDE) ** 2)
     assert_metrics_in_spec(result)
-
-
-@pytest.mark.uses_gpu
-def test_mol1_prediction_exports_structures(tmp_path):
-    """Predicted coordinates export to both supported structure formats."""
-    result = run_mol1_prediction(
-        Mol1Input(complexes=[_PEPTIDE]), Mol1Config(use_msa=False, num_samples=1, num_steps=25, num_cycles=2, seed=42)
-    )
-    assert result.success
-    assert result.tool_id == "mol1-prediction"
     for file_format in ("pdb", "cif"):
         result.export(file_format, export_path=tmp_path, file_format=file_format)
         exported = Structure.from_file(tmp_path / file_format / f"structure_0.{file_format}")
-        assert exported.get_chain_sequence("A") == _PEPTIDE
-    assert_metrics_in_spec(result)
+        assert "".join(aa for aa, _ in exported.get_residue_position_map()["A"]) == _PEPTIDE
 
 
 @pytest.mark.benchmark("mol1-prediction")

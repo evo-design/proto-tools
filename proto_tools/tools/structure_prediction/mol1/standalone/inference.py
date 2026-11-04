@@ -13,7 +13,6 @@ from standalone_helpers import (
     get_random_int,
     move_model_to_device,
     resolve_weights_dir,
-    serialize_output,
     set_torch_seed,
 )
 
@@ -51,7 +50,7 @@ def _extract_structure_and_scores(output_dir: str, include_pae_matrix: bool = Fa
         ):
             raise ValueError("mol1: token_pair_pae must be a non-empty square matrix of finite numbers")
         metrics["pae"] = pae
-        metrics["avg_pae"] = sum(sum(row) for row in pae) / sum(len(row) for row in pae)
+        metrics["avg_pae"] = sum(sum(row) for row in pae) / len(pae) ** 2
     return {"structure_cif_output": cif_path.read_text(), "metrics": metrics}
 
 
@@ -80,27 +79,13 @@ class Mol1Model:
         checkpoint_path = (
             Path(root) / "checkpoint" / "mol-1-base.pt" if checkpoint == "mol-1-base" else Path(checkpoint)
         )
-        if not checkpoint_path.is_file():
-            raise FileNotFoundError(
-                f"mol1: checkpoint missing at {checkpoint_path}; re-run setup or supply an existing file"
-            )
         inference_configs["dump_dir"] = output_dir
         logger.update_status("Loading Mol-1 checkpoint")
         self.runner = get_default_runner(
-            n_cycle=input_dict["num_cycles"],
-            n_step=input_dict["num_steps"],
-            n_sample=input_dict["num_samples"],
-            dtype=input_dict["dtype"],
             device=input_dict["device"],
             load_checkpoint_path=str(checkpoint_path),
-            use_msa=input_dict["use_msa"],
             trimul_kernel="torch",
             triatt_kernel="torch",
-            need_atom_confidence=input_dict["include_pae_matrix"],
-            memory_settings={
-                "infer_setting.chunk_size": input_dict["chunk_size"],
-                "infer_setting.sample_diffusion_chunk_size": input_dict["sample_diffusion_chunk_size"],
-            },
         )
         self.device = str(self.runner.device)
         self.model_checkpoint = checkpoint
@@ -124,7 +109,6 @@ class Mol1Model:
             Path(configs.input_json_path).write_text(json.dumps([input_dict["job"]]))
             configs.dump_dir = output_dir
             configs.seeds = [input_dict["sampling_seed"]]
-            configs.use_seeds_in_json = False
             configs.deterministic = input_dict.get("seed") is not None
             torch.use_deterministic_algorithms(configs.deterministic)
             configs.model.N_cycle = input_dict["num_cycles"]
@@ -133,8 +117,6 @@ class Mol1Model:
             configs.sample_diffusion.N_step = input_dict["num_steps"]
             configs.dtype = input_dict["dtype"]
             configs.use_msa = input_dict["use_msa"]
-            configs.use_template = False
-            configs.use_rna_msa = False
             configs.need_atom_confidence = input_dict["include_pae_matrix"]
             configs.infer_setting.chunk_size = input_dict["chunk_size"]
             configs.infer_setting.sample_diffusion_chunk_size = input_dict["sample_diffusion_chunk_size"]
@@ -142,10 +124,8 @@ class Mol1Model:
             self.runner.dump_dir = output_dir
             self.runner.error_dir = str(Path(output_dir) / "ERR")
             self.runner.init_dumper(need_atom_confidence=configs.need_atom_confidence, sorted_by_ranking_score=True)
-            self.runner.update_model_configs(configs)
             logger.update_status("Predicting with Mol-1")
-            if input_dict["verbose"]:
-                logger.info("Mol-1: generating %s samples on %s", input_dict["num_samples"], self.device)
+            logger.info("Mol-1: generating %s samples on %s", input_dict["num_samples"], self.device)
             infer_predict(self.runner, configs)
             return _extract_structure_and_scores(output_dir, include_pae_matrix=input_dict["include_pae_matrix"])
 
@@ -180,9 +160,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     global _model
     if _model is None:
         _model = Mol1Model()
-    result = serialize_output(_model.predict({**input_dict, "sampling_seed": sampling_seed}))
-    assert isinstance(result, dict)
-    return result
+    return _model.predict({**input_dict, "sampling_seed": sampling_seed})
 
 
 def to_device(device: str) -> dict[str, Any]:

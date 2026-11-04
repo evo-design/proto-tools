@@ -12,7 +12,6 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionInput,
     StructurePredictionOutput,
     normalize_output_chain_ids,
-    resolve_chain_ids,
     unwrap_complex_msas,
     write_paired_a3m_with_uniprot_headers,
 )
@@ -228,17 +227,7 @@ def run_mol1_prediction(inputs: Mol1Input, config: Mol1Config, instance: Any = N
     structures = []
     for index, comp in enumerate(inputs.complexes):
         with tempfile.TemporaryDirectory() as scratch:
-            chain_ids = resolve_chain_ids(comp.chains)
-            job = complex_to_mol1_json(
-                [
-                    dict(
-                        chain.model_dump(include={"entity_type", "sequence", "modifications", "ccd_code", "smiles"}),
-                        id=cid,
-                    )
-                    for chain, cid in zip(comp.chains, chain_ids, strict=True)
-                ],
-                "mol1_job",
-            )
+            job = complex_to_mol1_json(comp.chains, "mol1_job")
             if inputs.msas is not None:
                 primary, unpaired, paired = unwrap_complex_msas(inputs.msas[index])
                 for chain_index, entry in enumerate(job["sequences"]):

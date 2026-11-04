@@ -7,15 +7,9 @@ proto_install_pytorch
 
 # Keep the hardware-matched Torch build when resolving upstream's dependencies.
 TORCH_CONSTRAINT="${VENV_PATH}/mol1-torch-constraint.txt"
-python - "$TORCH_CONSTRAINT" <<'PY'
-import importlib.metadata
-import sys
-from pathlib import Path
-
-version = importlib.metadata.version("torch")
-if tuple(map(int, version.split("+")[0].split(".")[:2])) < (2, 7):
-    raise RuntimeError("Mol-1 requires PyTorch >=2.7; this host's recommended build is too old")
-Path(sys.argv[1]).write_text(f"torch=={version}\n")
+python - <<'PY' > "$TORCH_CONSTRAINT"
+from importlib.metadata import version
+print(f"torch=={version('torch')}")
 PY
 uv pip install -r requirements.txt --constraint "$TORCH_CONSTRAINT"
 
