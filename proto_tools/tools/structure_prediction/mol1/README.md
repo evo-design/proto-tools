@@ -2,6 +2,8 @@
 
 # Mol-1
 
+![Mol-1](https://proto-bio.github.io/proto-assets/images/tool/mol1/hero.png)
+
 > [!NOTE]
 > **License:** Mol-1 is open source and free for academic and commercial use under an Apache-2.0 license. Please refer to [the license](https://github.com/molence/Mol-1/blob/main/LICENSE) for full terms.
 
