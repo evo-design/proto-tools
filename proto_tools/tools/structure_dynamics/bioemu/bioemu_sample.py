@@ -168,7 +168,9 @@ class BioEmuConfig(StructurePredictionConfig):
             overrides ``denoiser_type`` when set.
         cache_embeds_dir (str | None): Directory to cache MSA embeddings across runs; each MSA
             gets its own sub-directory, so a cached embedding is reused only for the same MSA.
-        cache_so3_dir (str | None): Directory to cache SO3 precomputations across runs.
+            Defaults to ``embeds_cache/`` in BioEmu's weights directory.
+        cache_so3_dir (str | None): Directory to cache SO3 precomputations across runs; defaults
+            to ``so3_cache/`` in BioEmu's weights directory.
         output_dir (str | None): Optional directory for raw BioEmu outputs.
         msa_search_config (Mmseqs2HomologySearchConfig | None): MMseqs2 homology
             search config (MSA generation). Defaults are used when ``None``.
@@ -215,13 +217,13 @@ class BioEmuConfig(StructurePredictionConfig):
     cache_embeds_dir: str | None = ConfigField(
         title="MSA Embeds Cache Dir",
         default=None,
-        description="Directory to cache MSA embeddings across runs, one sub-directory per MSA",
+        description="Directory to cache MSA embeddings, one sub-directory per MSA (default: BioEmu's weights dir)",
         include_in_key=False,
     )
     cache_so3_dir: str | None = ConfigField(
         title="SO3 Cache Dir",
         default=None,
-        description="Directory to cache SO3 precomputations across runs",
+        description="Directory to cache SO3 precomputations (default: in BioEmu's weights dir)",
         include_in_key=False,
     )
     output_dir: str | None = ConfigField(

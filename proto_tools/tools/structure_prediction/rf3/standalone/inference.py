@@ -17,12 +17,10 @@ class RF3Model:
     def __init__(self) -> None:
         """Initialize the wrapper; resolve weights cache directory."""
         self._loaded = False
-        from standalone_helpers import resolve_weights_dir
+        from standalone_helpers import export_weights_dir
 
-        weights_dir = resolve_weights_dir("rf3")
-        if weights_dir is None:
-            raise RuntimeError("rf3: cannot determine cache directory; set PROTO_HOME or PROTO_MODEL_CACHE")
-        self.cache_dir = Path(weights_dir)
+        # Foundry searches FOUNDRY_CHECKPOINT_DIRS; the rf3 CLI subprocess inherits it from os.environ
+        self.cache_dir = Path(export_weights_dir("FOUNDRY_CHECKPOINT_DIRS", "rf3", prepend=True))
         self.rf3_executable: str | None = None
 
     def __call__(
@@ -79,8 +77,6 @@ class RF3Model:
         from standalone_helpers import get_subprocess_device_env, is_cuda_oom, raise_oom, run_teed
 
         env = get_subprocess_device_env(device)
-        existing = env.get("FOUNDRY_CHECKPOINT_DIRS", "")
-        env["FOUNDRY_CHECKPOINT_DIRS"] = f"{self.cache_dir}{':' + existing if existing else ''}"
         logger.debug("Running RF3 command: %s", " ".join(cmd))
         sys.stdout.flush()
 

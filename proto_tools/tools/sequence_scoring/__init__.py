@@ -285,6 +285,16 @@ from proto_tools.tools.sequence_scoring.puffin import (
     run_puffin_interpretation,
     run_puffin_prediction,
 )
+from proto_tools.tools.sequence_scoring.rs3 import (
+    RS3_MODEL,
+    RS3_VERSION,
+    RS3Metrics,
+    RS3ScoreConfig,
+    RS3ScoreInput,
+    RS3ScoreOutput,
+    RS3ScoreResult,
+    run_rs3_score,
+)
 from proto_tools.tools.sequence_scoring.segmasker import (
     SegmaskerConfig,
     SegmaskerInput,
@@ -499,6 +509,15 @@ __all__ = [
     "MalinoisScoreResult",
     "run_malinois_gradient",
     "run_malinois_score",
+    # Rule Set 3
+    "RS3_MODEL",
+    "RS3_VERSION",
+    "RS3Metrics",
+    "RS3ScoreInput",
+    "RS3ScoreConfig",
+    "RS3ScoreOutput",
+    "RS3ScoreResult",
+    "run_rs3_score",
     # NA-MPNN Specificity
     "NAMPNNSpecificityInput",
     "NAMPNNSpecificityConfig",

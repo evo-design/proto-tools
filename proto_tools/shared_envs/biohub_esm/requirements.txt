@@ -1,3 +1,3 @@
 tqdm
-# Fork of Biohub/esm 3.4.1.post1 with the ESM3 bf16 fix (Biohub/esm#417).
-esm @ git+https://github.com/bviggiano/esm.git@730cf9eaa84bb03fc7b2dd42c053780e1a384d8b
+# Fork of Biohub/esm 3.4.2 with the ESM3 bf16 fix (Biohub/esm#417), branch fix/esm3-bf16.
+esm @ git+https://github.com/bviggiano/esm.git@1ad44674ef25f5a783273751ee3261617f4c5504

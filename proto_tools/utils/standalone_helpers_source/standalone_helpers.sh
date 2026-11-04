@@ -145,8 +145,8 @@ proto_install_cuda_toolkit() {
 # Priority:
 #   1. PROTO_{TOOL_NAME}_WEIGHTS_DIR (per-tool override)
 #   2. PROTO_MODEL_CACHE:
-#      - (default/unset): {PROTO_HOME}/proto_model_cache/{toolkit}
-#      - /absolute/path:  /absolute/path/{toolkit} (shared directory)
+#      - (default/unset): {PROTO_HOME}/proto_model_cache/{toolkit}/weights
+#      - /absolute/path:  /absolute/path/{toolkit}/weights (shared directory)
 #      - IN_ENV:          {VENV_PATH}/model_weight_cache (legacy, per-venv)
 #      - NONE:            {VENV_PATH}/weights (fallback)
 #
@@ -170,13 +170,130 @@ proto_resolve_weights_dir() {
     elif [ "${PROTO_MODEL_CACHE:-}" = "NONE" ]; then
         WEIGHTS_DIR="${VENV_PATH}/weights"
     elif [ -n "${PROTO_MODEL_CACHE:-}" ]; then
-        WEIGHTS_DIR="${PROTO_MODEL_CACHE}/${toolkit}"
+        WEIGHTS_DIR="${PROTO_MODEL_CACHE}/${toolkit}/weights"
     else
         # Default: PROTO_HOME/proto_model_cache/ directory
         local _proto_home="${PROTO_HOME:-$HOME/.proto}"
-        WEIGHTS_DIR="${_proto_home}/proto_model_cache/${toolkit}"
+        WEIGHTS_DIR="${_proto_home}/proto_model_cache/${toolkit}/weights"
     fi
     mkdir -p "$WEIGHTS_DIR"
+}
+
+
+# ---------------------------------------------------------------------------
+# proto_ensure_af2_params
+#
+# Make sure the AlphaFold2 parameters are in alphafold2's weights directory and
+# set AF2_PARAMS_DIR to that params/ folder. alphafold2, bindcraft, freebindcraft,
+# germinal, and bioemu all read this one copy (~5.3 GB), so the version below is pinned in
+# one place (tests/style_consistency_tests/test_shared_weights_pins.py).
+#
+# The copy counts as complete when all 15 model files are present; a partial
+# extraction is downloaded again. .params_complete records a verified copy.
+# Concurrent setups (any of those toolkits, on any node) take turns under
+# proto_with_lock: one downloads and extracts, the rest wait and find it complete.
+#
+# Example:
+#   proto_ensure_af2_params
+#   echo "AF2 params at: $AF2_PARAMS_DIR"
+#
+# Reference: tools/structure_prediction/alphafold2/standalone/setup.sh
+# ---------------------------------------------------------------------------
+proto_ensure_af2_params() {
+    proto_resolve_weights_dir alphafold2
+    AF2_PARAMS_DIR="${WEIGHTS_DIR}/params"
+    mkdir -p "$AF2_PARAMS_DIR"
+
+    _proto_af2_params_complete() {
+        local model variant
+        for model in 1 2 3 4 5; do
+            for variant in "" "_ptm" "_multimer_v3"; do
+                [ -s "${AF2_PARAMS_DIR}/params_model_${model}${variant}.npz" ] || return 1
+            done
+        done
+    }
+
+    # A complete copy needs no lock, so read-only caches keep working
+    if [ -f "${AF2_PARAMS_DIR}/.params_complete" ]; then
+        echo "AlphaFold2 parameters already present at ${AF2_PARAMS_DIR}"
+        return 0
+    fi
+    proto_with_lock --progress "$AF2_PARAMS_DIR" "${WEIGHTS_DIR}/.params.extract.lock" _proto_af2_params_fetch
+}
+
+_proto_af2_params_fetch() {
+    if [ -f "${AF2_PARAMS_DIR}/.params_complete" ] || _proto_af2_params_complete; then
+        touch "${AF2_PARAMS_DIR}/.params_complete"
+        echo "AlphaFold2 parameters already present at ${AF2_PARAMS_DIR}"
+        return 0
+    fi
+
+    echo "Downloading AlphaFold2 parameters (~5.3 GB) into ${AF2_PARAMS_DIR}..."
+    # No --retry: a retry mid-stream would feed tar a restarted archive
+    if ! (set -o pipefail
+        curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" \
+            "${_PROTO_AF2_PARAMS_URL:-https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar}" \
+            | tar x -C "$AF2_PARAMS_DIR"); then
+        echo "ERROR: AlphaFold2 parameter download into ${AF2_PARAMS_DIR} failed" >&2
+        return 1
+    fi
+    if ! _proto_af2_params_complete; then
+        echo "ERROR: AlphaFold2 parameter download into ${AF2_PARAMS_DIR} is incomplete" >&2
+        return 1
+    fi
+    touch "${AF2_PARAMS_DIR}/.params_complete"
+}
+
+
+
+# ---------------------------------------------------------------------------
+# proto_ensure_chai1_weights
+#
+# Stage Chai-1's weights into the chai1 toolkit's weights directory and set
+# CHAI1_WEIGHTS_DIR to it. chai1 and germinal both point CHAI_DOWNLOADS_DIR there,
+# so chai_lab never falls back to its own (flaky) downloader. Every file is
+# sha256-pinned, so both toolkits load exactly the same weights.
+#
+# Example:
+#   proto_ensure_chai1_weights
+#   echo "Chai-1 weights at: $CHAI1_WEIGHTS_DIR"
+#
+# Reference: tools/structure_prediction/chai1/standalone/setup.sh
+# ---------------------------------------------------------------------------
+proto_ensure_chai1_weights() {
+    proto_resolve_weights_dir chai1
+    CHAI1_WEIGHTS_DIR="$WEIGHTS_DIR"
+    local HF_BASE CHAI_ASSETS COMPONENT
+
+    # The model components come from Chai Discovery's HuggingFace repo, pinned to a commit. These
+    # match chai_lab's own downloads byte for byte; the digests are the files' HuggingFace LFS ids.
+    HF_BASE="https://huggingface.co/chaidiscovery/chai-1/resolve/9e998997951bbc1680f83939be7f0f4ef16187b2"
+    local -A COMPONENT_SHA256=(
+        ["feature_embedding.pt"]="58600fb282827ee105b4bf33845c2eb2dce2a7d2ba7582951f76c9290c66c019"
+        ["bond_loss_input_proj.pt"]="98f3b2e415d11e460a684cdbfc213ca80447308022b1953cc5326ad468948851"
+        ["token_embedder.pt"]="60cada19fd9c77d8298131a00368d162b6bc7d3c836dd36c715db04d21f7bbde"
+        ["trunk.pt"]="b7a08e104455f76491088a5eeaea9bb95a08168c48969b0b892971346e51ccbc"
+        ["diffusion_module.pt"]="bd77cf4095ad6b8a4eae7e390d01d24be1ebd819922ca3f28e8744f9945c9cad"
+        ["confidence_head.pt"]="82a4ac9f934fdd0e73870150f508cecbe010c1383234bdadcaa70d57323deb6b"
+    )
+    mkdir -p "${CHAI1_WEIGHTS_DIR}/models_v2" "${CHAI1_WEIGHTS_DIR}/esm"
+    for COMPONENT in "${!COMPONENT_SHA256[@]}"; do
+        proto_download_verified \
+            "${HF_BASE}/${COMPONENT}" \
+            "${CHAI1_WEIGHTS_DIR}/models_v2/${COMPONENT}" \
+            "${COMPONENT_SHA256[$COMPONENT]}"
+    done
+
+    # The ligand conformer cache and the traced ESM2 encoder are published only on Chai's CDN.
+    CHAI_ASSETS="https://chaiassets.com/chai1-inference-depencencies"
+    proto_download_verified \
+        "${CHAI_ASSETS}/conformers_v1.apkl" \
+        "${CHAI1_WEIGHTS_DIR}/conformers_v1.apkl" \
+        "f2161256b565bbd84198da8b3e3d3978ae2f179f778d0995cd135c4c0c57c41f"
+    proto_download_verified \
+        "${CHAI_ASSETS}/esm2/traced_sdpa_esm2_t36_3B_UR50D_fp16.pt" \
+        "${CHAI1_WEIGHTS_DIR}/esm/traced_sdpa_esm2_t36_3B_UR50D_fp16.pt" \
+        "074673b97e1c1ff9c3cf949294749dd446ad1c83cee50a466b4841bb4d89c27a"
 }
 
 
@@ -316,14 +433,151 @@ proto_sha256() {
 
 
 # ---------------------------------------------------------------------------
+# proto_with_lock [--progress <path>] <lock_file> <command> [args...]
+#
+# Run <command> (a program or shell function) while holding an exclusive flock on
+# <lock_file>, so setup scripts that share a model cache take turns on a download
+# instead of writing the same files at once. This works across processes and, on
+# the shared filesystems tested (Lustre $SCRATCH and Oak, NFS $HOME), across
+# nodes. Returns <command>'s exit status.
+#
+# Waiting for another holder:
+# - With --progress, the waiter watches <path> (a file, directory, or glob, such as
+#   the holder's temp file) and keeps waiting while it grows, however long a big
+#   download takes. It gives up only after $PROTO_LOCK_STALL_SECONDS (default 600)
+#   without any growth, naming the stalled path. The download helpers abort a
+#   transfer only once it has received nothing for PROTO_DOWNLOAD_STALL_SECONDS
+#   (default 300), never a slow one that is still receiving data, so a stuck holder
+#   normally releases the lock before its waiters give up.
+# - Without --progress, it waits until the lock is free.
+# - $PROTO_LOCK_TIMEOUT_SECONDS (default 0, off) caps the total wait either way.
+# - The lock is checked every $PROTO_LOCK_POLL_SECONDS (default 60) at most; it is
+#   taken the moment the holder releases it.
+#
+# Other behavior:
+# - The kernel drops the lock when the holder exits, even on kill -9, so a crashed
+#   run leaves no stale lock. The 0-byte lock file is kept: deleting it would let
+#   two processes lock different inodes.
+# - Re-entrant: a <command> that takes the same <lock_file> again (a helper calling
+#   a helper) runs without waiting on itself. Different lock files nest normally.
+# - <command> runs in a subshell, so variables it sets do not reach the caller.
+# - Without flock(1) (macOS), <command> runs unlocked, as before locking existed.
+#
+# Name lock files like standalone_helpers' Python ones, ".<file>.download.lock"
+# beside a file or ".<dir>.extract.lock" beside a directory, so bash and Python
+# callers for the same target wait for each other.
+#
+# Example:
+#   proto_with_lock --progress "${WEIGHTS_DIR}/params" \
+#       "${WEIGHTS_DIR}/.params.extract.lock" _fetch_params
+# ---------------------------------------------------------------------------
+proto_with_lock() {
+    local progress=""
+    if [ "${1:-}" = "--progress" ]; then
+        progress="$2"
+        shift 2
+    fi
+    local lock="$1"
+    shift
+    case ":${_PROTO_HELD_LOCKS:-}:" in
+        *":${lock}:"*)
+            "$@"
+            return
+            ;;
+    esac
+    mkdir -p "$(dirname "$lock")"
+    if ! command -v flock >/dev/null 2>&1; then
+        "$@"
+        return
+    fi
+    # fd 199 rather than a low number a setup.sh might already use; each nested
+    # call's subshell gets its own, so an outer lock stays held
+    (
+        _proto_wait_for_lock 199 "$lock" "$progress" || exit 1
+        export _PROTO_HELD_LOCKS="${_PROTO_HELD_LOCKS:+${_PROTO_HELD_LOCKS}:}${lock}"
+        "$@"
+    ) 199>>"$lock"
+}
+
+
+# Take the flock on <fd> (open on <lock>), waiting as proto_with_lock describes.
+_proto_wait_for_lock() {
+    local fd="$1" lock="$2" progress="$3"
+    local poll="${PROTO_LOCK_POLL_SECONDS:-60}" stall="${PROTO_LOCK_STALL_SECONDS:-600}"
+    local cap="${PROTO_LOCK_TIMEOUT_SECONDS:-0}"
+    local waited=0 idle=0 chunk last="" now
+
+    flock -x -n "$fd" && return 0
+    echo "Waiting for another process to finish with $(basename "$lock")..."
+    while :; do
+        chunk="$poll"
+        if [ "$cap" -gt 0 ] && [ $((cap - waited)) -lt "$chunk" ]; then
+            chunk=$((cap - waited))
+        fi
+        if [ "$chunk" -gt 0 ] && flock -x -w "$chunk" "$fd"; then
+            return 0
+        fi
+        waited=$((waited + chunk))
+        if [ "$cap" -gt 0 ] && [ "$waited" -ge "$cap" ]; then
+            echo "ERROR: timed out after ${waited}s waiting for lock ${lock}" >&2
+            return 1
+        fi
+        [ -n "$progress" ] || continue
+        now="$(_proto_progress_size "$progress")"
+        if [ "$now" != "$last" ]; then
+            last="$now"
+            idle=0
+        else
+            idle=$((idle + chunk))
+        fi
+        if [ "$idle" -ge "$stall" ]; then
+            echo "ERROR: gave up waiting for lock ${lock}: ${progress} made no progress for ${idle}s" \
+                "(the holder may be stuck; raise PROTO_LOCK_STALL_SECONDS to wait longer)" >&2
+            return 1
+        fi
+    done
+}
+
+
+# Print the total size of whatever <pattern> (a file, directory, or glob) matches,
+# so a waiter can tell whether the lock holder is still writing.
+_proto_progress_size() {
+    local path total=0 size
+    while IFS= read -r path; do
+        if [ -d "$path" ]; then
+            size="$(du -sk "$path" 2>/dev/null | cut -f1)"
+        else
+            size="$(wc -c < "$path" 2>/dev/null)"
+        fi
+        total=$((total + ${size:-0}))
+    done < <(compgen -G "$1")
+    echo "$total"
+}
+
+
+# Remove temp files a killed earlier download of <dest> left behind. Only call it
+# while holding <dest>'s lock: no other downloader of <dest> can be running then.
+_proto_remove_stale_temps() {
+    local dest="$1" stale
+    for stale in "$(dirname "$dest")/.$(basename "$dest")".*.tmp; do
+        [ -e "$stale" ] && rm -f "$stale"
+    done
+    return 0
+}
+
+
+# ---------------------------------------------------------------------------
 # proto_download_verified <url> <dest> <sha256>
 #
 # Download <url> to <dest>, verifying against <sha256>. A file already at <dest>
 # is kept only when its digest matches, so a truncated or altered download is
 # re-fetched instead of being trusted for merely existing. The transfer lands in
-# a .part file that is moved into place only once it matches, so an interrupted
-# run never leaves something that looks finished. Returns nonzero if the freshly
-# downloaded file does not match, which aborts a `set -e` setup.sh.
+# a temp file of this process's own that is moved into place only once it
+# matches, so an interrupted run never leaves something that looks finished.
+# Concurrent callers for the same <dest> (two setups sharing a model cache) take
+# turns under proto_with_lock, so one downloads and the rest find it verified.
+# Returns nonzero if the freshly downloaded file does not match, which aborts a
+# `set -e` setup.sh.
 #
 # Example:
 #   proto_download_verified "$URL" "$WEIGHTS_DIR/model.pth" "$MODEL_SHA256"
@@ -331,8 +585,20 @@ proto_sha256() {
 # Reference: tools/structure_scoring/metal3d/standalone/setup.sh
 # ---------------------------------------------------------------------------
 proto_download_verified() {
+    local dest="$2" expected="$3"
+    # A verified file needs no lock, so read-only caches keep working
+    if [ "$(proto_sha256 "$dest")" = "$expected" ]; then
+        echo "$(basename "$dest") already present and verified."
+        return 0
+    fi
+    mkdir -p "$(dirname "$dest")"
+    proto_with_lock --progress "$(dirname "$dest")/.$(basename "$dest").*.tmp" \
+        "$(dirname "$dest")/.$(basename "$dest").download.lock" _proto_download_verified_locked "$@"
+}
+
+_proto_download_verified_locked() {
     local url="$1" dest="$2" expected="$3"
-    local actual
+    local actual tmp
 
     actual="$(proto_sha256 "$dest")"
     if [ "$actual" = "$expected" ]; then
@@ -344,14 +610,22 @@ proto_download_verified() {
     fi
 
     echo "Downloading $(basename "$dest")..."
-    curl -fsSL -o "${dest}.part" "$url"
-    actual="$(proto_sha256 "${dest}.part")"
+    _proto_remove_stale_temps "$dest"
+    tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
+    # Retry transient failures: some upstream CDNs drop large transfers intermittently
+    if ! curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
+        --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
+        rm -f "$tmp"
+        echo "ERROR: failed to download ${url}" >&2
+        return 1
+    fi
+    actual="$(proto_sha256 "$tmp")"
     if [ "$actual" != "$expected" ]; then
-        rm -f "${dest}.part"
+        rm -f "$tmp"
         echo "ERROR: checksum mismatch for ${url} (expected ${expected}, got ${actual})" >&2
         return 1
     fi
-    mv "${dest}.part" "$dest"
+    mv -f "$tmp" "$dest"
 }
 
 # ---------------------------------------------------------------------------
@@ -377,18 +651,32 @@ sys.exit(0 if looks_like_zip and not zipfile.is_zipfile(sys.argv[1]) else 1)
 # proto_download <url> <dest>
 #
 # Download <url> to <dest> when no checksum is published (prefer
-# proto_download_verified when one is). The transfer lands in a .part file that
-# is moved into place only once curl succeeds, so an interrupted run never leaves
-# something that looks finished. An existing <dest> is kept unless it is empty or
-# a truncated zip-format checkpoint (see proto_is_truncated_zip), which is
-# re-downloaded. Returns nonzero on a failed download, which aborts a `set -e`
-# setup.sh.
+# proto_download_verified when one is). The transfer lands in a temp file of this
+# process's own that is moved into place only once curl succeeds, so an
+# interrupted run never leaves something that looks finished. An existing <dest>
+# is kept unless it is empty or a truncated zip-format checkpoint (see
+# proto_is_truncated_zip), which is re-downloaded. Concurrent callers for the same
+# <dest> take turns under proto_with_lock. Returns nonzero on a failed download,
+# which aborts a `set -e` setup.sh.
 #
 # Example:
 #   proto_download "${REPO_BASE}/fampnn_0_3.pt" "${WEIGHTS_DIR}/fampnn_0_3.pt"
 # ---------------------------------------------------------------------------
 proto_download() {
+    local dest="$2"
+    # A complete file needs no lock, so read-only caches keep working
+    if [ -s "$dest" ] && ! proto_is_truncated_zip "$dest"; then
+        echo "$(basename "$dest") already present."
+        return 0
+    fi
+    mkdir -p "$(dirname "$dest")"
+    proto_with_lock --progress "$(dirname "$dest")/.$(basename "$dest").*.tmp" \
+        "$(dirname "$dest")/.$(basename "$dest").download.lock" _proto_download_locked "$@"
+}
+
+_proto_download_locked() {
     local url="$1" dest="$2"
+    local tmp
 
     if [ -s "$dest" ] && ! proto_is_truncated_zip "$dest"; then
         echo "$(basename "$dest") already present."
@@ -399,13 +687,14 @@ proto_download() {
     fi
 
     echo "Downloading $(basename "$dest")..."
-    mkdir -p "$(dirname "$dest")"
-    if ! curl -fsSL -o "${dest}.part" "$url"; then
-        rm -f "${dest}.part"
+    _proto_remove_stale_temps "$dest"
+    tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
+    if ! curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
+        rm -f "$tmp"
         echo "ERROR: failed to download ${url}" >&2
         return 1
     fi
-    mv "${dest}.part" "$dest"
+    mv -f "$tmp" "$dest"
 }
 
 
@@ -415,12 +704,26 @@ proto_download() {
 # Stream the tar archive at <url> into <dest_dir> and mark it complete. The
 # marker is written only after curl and tar both succeed, so a partial
 # extraction is re-extracted on the next run instead of being trusted because
-# some of its files exist. Extra arguments go to tar (e.g. -z for .tar.gz).
+# some of its files exist. Concurrent callers for the same <dest_dir> take turns
+# under proto_with_lock, so one extracts and the rest find the marker. Extra
+# arguments go to tar (e.g. -z for .tar.gz).
 #
 # Example:
 #   proto_download_archive "$AF2_PARAMS_URL" "${WEIGHTS_DIR}/params"
 # ---------------------------------------------------------------------------
 proto_download_archive() {
+    local dest_dir="$2"
+    # A completed extraction needs no lock, so read-only caches keep working
+    if [ -f "${dest_dir}/.proto_download_complete" ]; then
+        echo "$(basename "$dest_dir") already present."
+        return 0
+    fi
+    mkdir -p "$(dirname "$dest_dir")"
+    proto_with_lock --progress "$dest_dir" \
+        "$(dirname "$dest_dir")/.$(basename "$dest_dir").extract.lock" _proto_download_archive_locked "$@"
+}
+
+_proto_download_archive_locked() {
     local url="$1" dest_dir="$2"
     shift 2
     local marker="${dest_dir}/.proto_download_complete"
@@ -432,7 +735,7 @@ proto_download_archive() {
 
     echo "Downloading and extracting $(basename "$url")..."
     mkdir -p "$dest_dir"
-    if ! (set -o pipefail; curl -fsSL "$url" | tar -x -C "$dest_dir" "$@"); then
+    if ! (set -o pipefail; curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" "$url" | tar -x -C "$dest_dir" "$@"); then
         echo "ERROR: failed to download or extract ${url}" >&2
         return 1
     fi

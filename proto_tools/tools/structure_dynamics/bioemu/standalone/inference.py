@@ -322,9 +322,39 @@ class BioEmuModel:
         self.device = "cpu"
 
 
+def _use_managed_caches(input_data: dict[str, Any]) -> tuple[str, str]:
+    """Keep BioEmu's caches in its weights directory instead of the user's home directory.
+
+    Upstream defaults are ``~/.bioemu_embeds_cache`` (embeddings), ``~/sampling_so3_cache`` (SO3
+    lookup tables), and ``~/.cache/colabfold`` (the AF2 params the embeddings need, downloaded on
+    first use). Config values still win for the first two; the AF2 params have no config field and
+    are read from the alphafold2 toolkit's shared copy (setup.sh: proto_ensure_af2_params).
+
+    Args:
+        input_data (dict[str, Any]): Dispatch payload.
+
+    Returns:
+        tuple[str, str]: The embeddings and SO3 cache directories to use.
+    """
+    import functools
+
+    from bioemu.colabfold_inline import model_runner
+    from standalone_helpers import require_weights_dir
+
+    weights = Path(require_weights_dir("bioemu"))
+    af2_weights = Path(require_weights_dir("alphafold2"))  # holds params/, the layout data_dir expects
+    # get_colabfold_embeds imports get_embeddings at call time, so rebinding it here takes effect
+    if not isinstance(model_runner.get_embeddings, functools.partial):
+        model_runner.get_embeddings = functools.partial(model_runner.get_embeddings, data_dir=af2_weights)
+    embeds_dir = input_data.get("cache_embeds_dir") or str(weights / "embeds_cache")
+    so3_dir = input_data.get("cache_so3_dir") or str(weights / "so3_cache")
+    return embeds_dir, so3_dir
+
+
 def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run BioEmu sampling for one or more sequences."""
     assert _model is not None, "run_bioemu_batch() must be reached via dispatch()"
+    cache_embeds_dir, cache_so3_dir = _use_managed_caches(input_data)
     sequences = input_data["sequences"]
     msa_a3m_contents = input_data["msa_a3m_contents"]
     output_dir = input_data["output_dir"]
@@ -351,8 +381,8 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
                 denoiser_type=input_data.get("denoiser_type", "dpm"),
                 denoiser_config=input_data.get("denoiser_config"),
                 msa_a3m=msa_a3m_contents[seq_idx],
-                cache_embeds_dir=input_data.get("cache_embeds_dir"),
-                cache_so3_dir=input_data.get("cache_so3_dir"),
+                cache_embeds_dir=cache_embeds_dir,
+                cache_so3_dir=cache_so3_dir,
                 device=input_data["device"],
                 output_dir=per_sequence_output_dir,
                 seed=per_seq_seed,

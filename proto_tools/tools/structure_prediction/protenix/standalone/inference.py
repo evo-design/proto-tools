@@ -471,17 +471,10 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
-    # Resolve checkpoint directory via PROTO_MODEL_CACHE
-    from standalone_helpers import resolve_weights_dir
+    # Protenix downloads checkpoints (incl. the ESM2-3B used by mini_esm) and CCD data under PROTENIX_ROOT_DIR
+    from standalone_helpers import export_weights_dir
 
-    weights_dir = resolve_weights_dir("protenix")
-    if weights_dir:
-        os.environ["PROTENIX_ROOT_DIR"] = weights_dir
-    elif not os.environ.get("PROTENIX_ROOT_DIR"):
-        # Fallback: store checkpoints in the tool env directory
-        env_path = os.environ.get("TOOL_VENV_PATH")
-        if env_path:
-            os.environ["PROTENIX_ROOT_DIR"] = env_path
+    export_weights_dir("PROTENIX_ROOT_DIR", "protenix")
 
     if _model is None:
         _model = ProtenixModel()

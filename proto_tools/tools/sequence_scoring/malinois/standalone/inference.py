@@ -1,21 +1,26 @@
 """Malinois standalone inference implementation for venv execution."""
 
 import contextlib
-import hashlib
 import json
 import os
 import sys
 import tempfile
-import time
 import urllib.parse
 import urllib.request
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import malinois_scoring
 import torch
-from standalone_helpers import get_logger, move_model_to_device, resolve_weights_dir, serialize_output, set_torch_seed
+from standalone_helpers import (
+    download_weights,
+    file_lock,
+    get_logger,
+    move_model_to_device,
+    require_weights_dir,
+    serialize_output,
+    set_torch_seed,
+)
 from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 from standalone_helpers.vocabulary import DNA_NUCLEOTIDES
 
@@ -25,46 +30,6 @@ CELL_TYPE_INDEX = {"K562": 0, "HepG2": 1, "SKNSH": 2}
 DNA_VOCAB = list(DNA_NUCLEOTIDES)
 DEFAULT_ARTIFACT_FILENAME = "MODELS-malinois_artifacts__20211113_021200__287348.tar.gz"
 DEFAULT_ARTIFACT_MD5 = "375142a714e7df73c463b46113a65210"
-LOCK_TIMEOUT_SECONDS = 600
-
-
-@contextlib.contextmanager
-def _file_lock(lock_path: Path) -> Iterator[None]:
-    """Small cross-process lock using O_EXCL so concurrent workers do not race downloads."""
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    started = time.monotonic()
-    fd: int | None = None
-    while fd is None:
-        try:
-            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError as err:  # noqa: PERF203 - lock acquisition is intentionally retry-based.
-            if time.monotonic() - started > LOCK_TIMEOUT_SECONDS:
-                raise TimeoutError(f"malinois: timed out waiting for lock {lock_path}") from err
-            time.sleep(1)
-    try:
-        os.write(fd, str(os.getpid()).encode())
-        yield
-    finally:
-        os.close(fd)
-        with contextlib.suppress(FileNotFoundError):
-            lock_path.unlink()
-
-
-def _md5(path: Path) -> str:
-    digest = hashlib.md5()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _weights_dir() -> Path:
-    resolved = resolve_weights_dir("malinois")
-    if resolved:
-        return Path(resolved)
-    fallback = Path(tempfile.gettempdir()) / "proto_malinois_weights"
-    fallback.mkdir(parents=True, exist_ok=True)
-    return fallback
 
 
 def _filename_from_url(url: str) -> str:
@@ -76,37 +41,7 @@ def _filename_from_url(url: str) -> str:
 def _download_artifact(url: str, expected_md5: str | None, cache_dir: Path) -> Path:
     if not url:
         raise FileNotFoundError("malinois: artifact_path is unavailable and artifact_url is empty")
-
-    dest = cache_dir / _filename_from_url(url)
-    if dest.is_file() and (not expected_md5 or _md5(dest) == expected_md5):
-        return dest
-
-    with _file_lock(cache_dir / ".malinois_artifact_download.lock"):
-        if dest.is_file() and (not expected_md5 or _md5(dest) == expected_md5):
-            return dest
-        tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
-        with contextlib.suppress(FileNotFoundError):
-            tmp.unlink()
-        logger.info("Downloading Malinois artifact from %s to %s", url, dest)
-        try:
-            request = urllib.request.Request(url)
-            if urllib.parse.urlparse(url).netloc.endswith("huggingface.co") and os.environ.get("HF_TOKEN"):
-                request.add_header("Authorization", f"Bearer {os.environ['HF_TOKEN']}")
-            with urllib.request.urlopen(request, timeout=120) as response, open(tmp, "wb") as handle:
-                while chunk := response.read(1024 * 1024):
-                    handle.write(chunk)
-            if expected_md5:
-                observed = _md5(tmp)
-                if observed != expected_md5:
-                    raise RuntimeError(
-                        f"malinois: artifact checksum mismatch for {url}; expected {expected_md5}, got {observed}"
-                    )
-            os.replace(tmp, dest)
-        except Exception:
-            with contextlib.suppress(FileNotFoundError):
-                tmp.unlink()
-            raise
-    return dest
+    return Path(download_weights(url, cache_dir / _filename_from_url(url), md5=expected_md5 or None))
 
 
 def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:
@@ -115,7 +50,7 @@ def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:
     if checkpoint.is_file():
         return extracted_dir
 
-    with _file_lock(cache_dir / ".malinois_artifact_extract.lock"):
+    with file_lock(cache_dir / ".malinois_artifact_extract.lock", progress=cache_dir / ".malinois_extract_*"):
         if checkpoint.is_file():
             return extracted_dir
         tmp_dir = cache_dir / f".malinois_extract_{os.getpid()}"
@@ -151,7 +86,7 @@ def _resolve_artifact_paths(
     artifact_md5: str,
     malinois_dir: str,
 ) -> tuple[str, str]:
-    cache_dir = _weights_dir()
+    cache_dir = Path(require_weights_dir("malinois"))
     artifact_candidate = Path(artifact_path).expanduser() if artifact_path else None
     if artifact_candidate is not None and artifact_candidate.is_file():
         resolved_artifact = artifact_candidate

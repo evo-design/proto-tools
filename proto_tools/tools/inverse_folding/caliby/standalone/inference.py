@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger, resolve_weights_dir, serialize_output, set_torch_seed
+from standalone_helpers import export_weights_dir, get_logger, serialize_output, set_torch_seed
 
 logger = get_logger(__name__)
 
@@ -33,19 +33,13 @@ def _configure_caliby_env(model_checkpoint: str) -> None:
         model_checkpoint (str): Bundled checkpoint name or a path to a ``.ckpt`` file.
 
     Raises:
-        FileNotFoundError: If no weights directory resolves, or the requested checkpoint
-            is not present in it.
+        RuntimeError: If no weights directory resolves.
+        FileNotFoundError: If the requested checkpoint is not present in it.
     """
     os.environ.setdefault("PDB_MIRROR_PATH", "")
     os.environ.setdefault("CCD_MIRROR_PATH", "")
 
-    weights_dir = resolve_weights_dir("caliby")
-    if not weights_dir:
-        raise FileNotFoundError(
-            "caliby: unable to resolve a weights directory; set PROTO_CALIBY_WEIGHTS_DIR, "
-            "or configure PROTO_MODEL_CACHE"
-        )
-    os.environ["MODEL_PARAMS_DIR"] = weights_dir
+    weights_dir = export_weights_dir("MODEL_PARAMS_DIR", "caliby")
 
     if model_checkpoint.endswith(".ckpt"):
         if not Path(model_checkpoint).is_file():

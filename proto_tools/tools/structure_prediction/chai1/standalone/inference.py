@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger, get_random_int, report_msa_rows_loaded, resolve_weights_dir, set_torch_seed
+from standalone_helpers import export_weights_dir, get_logger, get_random_int, report_msa_rows_loaded, set_torch_seed
 
 logger = get_logger(__name__)
 
@@ -175,9 +175,7 @@ class Chai1Model:
         logger.debug("Initializing Chai1")
 
         # chai_lab reads CHAI_DOWNLOADS_DIR at import, so set it first: setup.sh staged the weights there.
-        weights_dir = resolve_weights_dir("chai1")
-        if weights_dir:
-            os.environ["CHAI_DOWNLOADS_DIR"] = weights_dir
+        export_weights_dir("CHAI_DOWNLOADS_DIR", "chai1")
 
         try:
             from chai_lab.chai1 import run_inference
