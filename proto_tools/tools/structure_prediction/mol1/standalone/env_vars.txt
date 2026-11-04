@@ -1,0 +1,5 @@
+[passthrough]
+PROTO_MOL1_WEIGHTS_DIR
+
+[set]
+LAYERNORM_TYPE=torch

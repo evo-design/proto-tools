@@ -46,6 +46,13 @@ from proto_tools.tools.structure_prediction.esmfold2 import (
     ESMFold2Output,
     run_esmfold2,
 )
+from proto_tools.tools.structure_prediction.mol1 import (
+    Mol1Config,
+    Mol1Input,
+    Mol1Metrics,
+    Mol1Output,
+    run_mol1_prediction,
+)
 from proto_tools.tools.structure_prediction.opendde import (
     OpenDDEConfig,
     OpenDDEInput,
@@ -129,6 +136,12 @@ __all__ = [
     "ESMFold2Config",
     "ESMFold2Output",
     "ESMFold2Metrics",
+    # Mol-1
+    "Mol1Config",
+    "Mol1Input",
+    "Mol1Metrics",
+    "Mol1Output",
+    "run_mol1_prediction",
     # OpenDDE
     "run_opendde",
     "OpenDDEInput",

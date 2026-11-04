@@ -1,0 +1,13 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/molence/Mol-1/blob/main/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+notes: >-
+  The repository declares Apache-2.0 for code and publishes a downloadable base
+  checkpoint, but states no separate checkpoint license. Reference data retain
+  their publishers' terms. Protenix-derived code and optional third-party kernels
+  retain their notices; see upstream THIRD_PARTY_NOTICES.md. The commercial-use
+  and redistribution flags describe the repository code license.
+last_updated: '2026-11-04'

@@ -1,0 +1,2 @@
+# Import package: mol. Install base dependencies; Torch kernels work on CPU and CUDA.
+molence @ git+https://github.com/molence/Mol-1.git@e6e64866ee89640a91cef7ee777a85f1d8be03bb
