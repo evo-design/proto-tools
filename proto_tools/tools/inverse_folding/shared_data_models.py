@@ -45,23 +45,26 @@ class SequenceStructurePair(BaseModel):
     Attributes:
         sequence (str): Protein sequence to score against the structure.
         structure (Structure): Protein structure to score the sequence against.
-        fixed_positions (ResidueSelection | None): Per-chain 1-indexed positions
-            excluded from the aggregate scoring metrics. Accepts ``{"A": [1, 2]}``.
+        excluded_positions (ResidueSelection | None): Per-chain 1-indexed positions left out
+            of the aggregate scoring metrics. The residues still condition the model; they
+            just do not contribute to the reported likelihood. Accepts ``{"A": [1, 2]}``.
+            Sampling tools use ``fixed_positions`` instead, which holds an identity rather
+            than omitting a position from a metric.
     """
 
     sequence: str = Field(title="Sequence", description="Sequence to score against the structure")
     structure: Structure = Field(title="Input Structure", description="Structure to score the sequence against")
-    fixed_positions: ResidueSelection | None = Field(
+    excluded_positions: ResidueSelection | None = Field(
         default=None,
-        title="Fixed Positions",
-        description="Per-chain 1-indexed positions excluded from scoring metrics.",
+        title="Excluded Positions",
+        description="Per-chain 1-indexed positions left out of the aggregate scoring metrics.",
     )
 
     @model_validator(mode="after")
-    def _validate_fixed_positions(self) -> "SequenceStructurePair":
-        """Reject fixed positions that aren't real residues in ``structure``."""
-        if self.fixed_positions is not None:
-            self.fixed_positions.validate_against(self.structure, label="fixed_positions")
+    def _validate_excluded_positions(self) -> "SequenceStructurePair":
+        """Reject excluded positions that aren't real residues in ``structure``."""
+        if self.excluded_positions is not None:
+            self.excluded_positions.validate_against(self.structure, label="excluded_positions")
         return self
 
 

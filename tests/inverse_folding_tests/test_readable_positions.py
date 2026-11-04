@@ -478,3 +478,183 @@ def test_tied_protomers_fixed_to_the_same_amino_acid_are_accepted():
     require_compatible_fixed_residues(
         structure, ["A", "B"], {"A": [2], "B": [2]}, tool="proteinmpnn-sample-homooligomer"
     )
+
+
+# ── scoring ─────────────────────────────────────────────────────────────────
+
+
+def test_scoring_trims_the_sequence_to_the_processed_positions(caplog):
+    """A scored sequence covers every observed residue; the model parses fewer."""
+    from proto_tools.tools.inverse_folding.proteinmpnn._constraints import restrict_sequence_to_readable
+
+    structure = get_gfp_structure()
+    native = structure.get_chain_sequence("A")
+    with caplog.at_level(logging.WARNING):
+        trimmed = restrict_sequence_to_readable(structure, ["A"], native, tool="proteinmpnn-score")
+
+    assert len(native) == 228 and len(trimmed) == 227
+    assert trimmed == native[:63] + native[64:], "only the chromophore is dropped"
+    assert "position 64 (CRO)" in caplog.text
+
+
+def test_scoring_refuses_logits_it_cannot_align():
+    """Logits are declared one row per sequence position, so a trimmed sequence breaks that."""
+    from proto_tools.tools.inverse_folding.proteinmpnn._constraints import restrict_sequence_to_readable
+
+    structure = get_gfp_structure()
+    with pytest.raises(ValueError, match="per-position logits cannot be aligned"):
+        restrict_sequence_to_readable(
+            structure,
+            ["A"],
+            structure.get_chain_sequence("A"),
+            tool="proteinmpnn-score",
+            allow_excluded=False,
+        )
+
+
+def test_scoring_rejects_a_sequence_that_does_not_cover_the_chain():
+    """A length mismatch against the structure is the caller's error, not the parser's."""
+    from proto_tools.tools.inverse_folding.proteinmpnn._constraints import restrict_sequence_to_readable
+
+    with pytest.raises(ValueError, match="but chains"):
+        restrict_sequence_to_readable(get_gfp_structure(), ["A"], "MVLS", tool="proteinmpnn-score")
+
+
+# ── scoring: the worker payload ─────────────────────────────────────────────
+
+
+def _score_payload(monkeypatch, structure, excluded=None, return_logits=False):
+    """Run scoring against a stubbed worker and return the dispatched payload."""
+    from proto_tools.tools.inverse_folding import (
+        ProteinMPNNScoringConfig,
+        ProteinMPNNScoringInput,
+        SequenceStructurePair,
+        run_proteinmpnn_score,
+    )
+
+    sent: list[dict] = []
+
+    def dispatch(_tool, input_dict, **_kwargs):
+        sent.append(input_dict)
+        return {
+            "metrics": {"log_likelihood": -1.0, "avg_log_likelihood": -0.5, "perplexity": 1.6},
+            "logits": None,
+            "vocab": None,
+        }
+
+    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(dispatch))
+    sequence = "".join(structure.get_chain_sequence(c) for c in structure.get_chain_ids())
+    run_proteinmpnn_score(
+        ProteinMPNNScoringInput(
+            sequence_structure_pairs=[
+                SequenceStructurePair(sequence=sequence, structure=structure, excluded_positions=excluded)
+            ]
+        ),
+        ProteinMPNNScoringConfig(return_logits=return_logits),
+    )
+    return sent[0]
+
+
+def test_scoring_sends_the_trimmed_sequence_and_warns(monkeypatch, caplog):
+    """GFP with no user exclusions: 227 residues reach the worker, with one warning."""
+    with caplog.at_level(logging.WARNING):
+        payload = _score_payload(monkeypatch, get_gfp_structure())
+
+    assert len(payload["sequence"]) == 227
+    assert payload["fixed_positions"] is None
+    assert caplog.text.count("position 64 (CRO)") == 1
+
+
+def test_scoring_drops_a_parser_excluded_position_from_the_worker_selection(monkeypatch, caplog):
+    """Explicitly excluding CRO is honoured without sending a position the model lacks."""
+    with caplog.at_level(logging.WARNING):
+        payload = _score_payload(monkeypatch, get_gfp_structure(), excluded={"A": [10, 64]})
+
+    worker = payload["fixed_positions"]
+    assert list(worker) == ["A"] and len(worker["A"]) == 1, "only the readable exclusion is sent"
+    assert "position 64 (CRO)" in caplog.text, "the parser exclusion is still reported"
+
+
+def test_scoring_does_not_warn_about_a_user_excluded_readable_position(monkeypatch, caplog):
+    """A readable residue the caller excluded is exactly what they asked for."""
+    structure = _structure([("ALA", False, _BACKBONE), ("GLY", False, _BACKBONE), ("LEU", False, _BACKBONE)])
+    with caplog.at_level(logging.WARNING):
+        payload = _score_payload(monkeypatch, structure, excluded={"A": [2]})
+
+    assert caplog.text == ""
+    assert payload["fixed_positions"] is not None
+
+
+def test_scoring_translates_positions_through_nonsequential_numbering(monkeypatch):
+    """GFP's residues do not start at 1, so ordinal positions must be translated."""
+    structure = get_gfp_structure()
+    first_number = structure.get_chain_residue_ids()["A"][0][0]
+    assert first_number != 1, "the fixture must actually be offset"
+
+    payload = _score_payload(monkeypatch, structure, excluded={"A": [10]})
+    assert payload["fixed_positions"]["A"] == [structure.get_chain_residue_ids()["A"][9][0]]
+
+
+def test_scoring_refuses_logits_when_a_position_is_parser_excluded(monkeypatch):
+    """Logits would not align to the caller's sequence, so this is rejected before dispatch."""
+    with pytest.raises(ValueError, match="per-position logits cannot be aligned"):
+        _score_payload(monkeypatch, get_gfp_structure(), return_logits=True)
+
+
+# ── gradient: reject rather than guess ──────────────────────────────────────
+
+
+def test_gradient_rejects_a_structure_with_an_unreadable_residue():
+    """A gradient is per position, so an unreadable residue has no row to report."""
+    from proto_tools.tools.inverse_folding import ProteinMPNNGradientInput
+    from proto_tools.utils import one_hot_protein_logits
+
+    structure = get_gfp_structure()
+    with pytest.raises(ValueError, match=r"does not support structures containing residues"):
+        ProteinMPNNGradientInput(inputs=[{"logits": one_hot_protein_logits("A" * 227), "structure": structure}])
+
+
+def test_gradient_rejection_names_the_residue_and_the_alternatives():
+    """The message has to say which residue and what to use instead."""
+    from proto_tools.tools.inverse_folding import ProteinMPNNGradientInput
+    from proto_tools.utils import one_hot_protein_logits
+
+    with pytest.raises(ValueError) as caught:
+        ProteinMPNNGradientInput(
+            inputs=[{"logits": one_hot_protein_logits("A" * 227), "structure": get_gfp_structure()}]
+        )
+
+    message = str(caught.value)
+    assert "chain A position 64 (CRO)" in message
+    assert "proteinmpnn-sample" in message and "proteinmpnn-score" in message
+
+
+def test_gradient_accepts_a_structure_the_parser_reads_in_full():
+    """Structures without modified residues are unaffected."""
+    from proto_tools.tools.inverse_folding import ProteinMPNNGradientInput
+    from proto_tools.utils import one_hot_protein_logits
+
+    structure = _structure([("ALA", False, _BACKBONE), ("GLY", False, _BACKBONE)])
+    candidate = ProteinMPNNGradientInput(inputs=[{"logits": one_hot_protein_logits("AG"), "structure": structure}])
+    assert len(candidate.inputs) == 1
+
+
+def test_gradient_only_checks_the_chains_it_was_given():
+    """A modified residue on a chain outside the selection must not block the run."""
+    from proto_tools.tools.inverse_folding import ProteinMPNNGradientInput
+    from proto_tools.utils import one_hot_protein_logits
+
+    structure = _two_protomers(
+        [("ALA", False, _BACKBONE), ("GLY", False, _BACKBONE)],
+        [("ALA", False, _BACKBONE), ("CRO", True, _BACKBONE)],
+    )
+    candidate = ProteinMPNNGradientInput(
+        inputs=[
+            {
+                "logits": one_hot_protein_logits("AG"),
+                "structure": structure,
+                "chains_to_redesign": ["A"],
+            }
+        ]
+    )
+    assert len(candidate.inputs) == 1

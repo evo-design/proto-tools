@@ -271,44 +271,44 @@ def test_proteinmpnn_sample_input_roundtrip():
 
 
 def test_sequence_structure_pair_roundtrip():
-    """Native Pydantic coercion + fixed_positions survive a JSON round-trip."""
+    """Native Pydantic coercion + excluded_positions survive a JSON round-trip."""
     original = SequenceStructurePair(
         sequence="MVLSP",
         structure=Structure.from_file(TEST_PDB_FILE),
-        fixed_positions={"A": [1, 2, 3]},
+        excluded_positions={"A": [1, 2, 3]},
     )
     restored = SequenceStructurePair(**original.model_dump(mode="json"))
     assert restored.sequence == "MVLSP"
     assert restored.structure.structure == original.structure.structure
-    assert restored.fixed_positions is not None
-    assert restored.fixed_positions.chains == {"A": [1, 2, 3]}
+    assert restored.excluded_positions is not None
+    assert restored.excluded_positions.chains == {"A": [1, 2, 3]}
 
 
-def test_sequence_structure_pair_rejects_invalid_fixed_chain():
+def test_sequence_structure_pair_rejects_invalid_excluded_chain():
     with pytest.raises(ValueError, match="not in structure"):
         SequenceStructurePair(
             sequence="MVLSP",
             structure=Structure.from_file(TEST_PDB_FILE),
-            fixed_positions={"Z": [1]},
+            excluded_positions={"Z": [1]},
         )
 
 
-def test_sequence_structure_pair_rejects_invalid_fixed_residues():
+def test_sequence_structure_pair_rejects_invalid_excluded_residues():
     with pytest.raises(ValueError, match="invalid positions"):
         SequenceStructurePair(
             sequence="MVLSP",
             structure=Structure.from_file(TEST_PDB_FILE),
-            fixed_positions={"A": [99999]},
+            excluded_positions={"A": [99999]},
         )
 
 
-def test_sequence_structure_pair_fixed_positions_distinguishes_cache_key():
-    """Per-pair fixed_positions enters the per-item cache key, preventing collisions."""
+def test_sequence_structure_pair_excluded_positions_distinguishes_cache_key():
+    """Per-pair excluded_positions enters the per-item cache key, preventing collisions."""
     from proto_tools.utils.tool_cache import _serialize_for_cache_key
 
     structure = Structure.from_file(TEST_PDB_FILE)
     base = SequenceStructurePair(sequence="MVLSP", structure=structure)
-    fixed = SequenceStructurePair(sequence="MVLSP", structure=structure, fixed_positions={"A": [1, 2, 3]})
+    fixed = SequenceStructurePair(sequence="MVLSP", structure=structure, excluded_positions={"A": [1, 2, 3]})
     assert _serialize_for_cache_key(base) != _serialize_for_cache_key(fixed)
 
 

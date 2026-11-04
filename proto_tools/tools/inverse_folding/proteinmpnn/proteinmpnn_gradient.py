@@ -8,6 +8,10 @@ from typing import Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities.structures import ChainSelection, ResidueSelection, Structure
+from proto_tools.tools.inverse_folding.proteinmpnn._constraints import (
+    describe_positions,
+    parser_excluded_positions,
+)
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
@@ -66,6 +70,40 @@ class ProteinMPNNGradientCandidate(BaseModel):
         title="Fixed Positions",
         description="Per-chain 1-indexed residue positions excluded from the ProteinMPNN objective.",
     )
+
+    @model_validator(mode="after")
+    def _reject_unreadable_residues(self) -> "ProteinMPNNGradientCandidate":
+        """Reject structures holding residues ProteinMPNN's parser cannot read.
+
+        Sampling preserves such residues and scoring omits them, but a gradient is a
+        per-position quantity: the returned array would cover fewer positions than the
+        supplied logits, and nothing downstream could align the two.
+
+        Returns:
+            ProteinMPNNGradientCandidate: This candidate, unchanged.
+
+        Raises:
+            ValueError: If the structure holds a residue the parser cannot read.
+        """
+        chain_ids = (
+            list(self.chains_to_redesign.chains)
+            if self.chains_to_redesign is not None
+            else list(self.structure.get_chain_residue_atoms())
+        )
+        skipped = parser_excluded_positions(self.structure, chain_ids)
+        if skipped:
+            detail = "; ".join(
+                f"chain {chain_id} position {describe_positions(self.structure, chain_id, positions)}"
+                for chain_id, positions in skipped.items()
+            )
+            raise ValueError(
+                f"proteinmpnn-gradient does not support structures containing residues its "
+                f"structure parser cannot read ({detail}). A gradient is reported per position, "
+                "and these residues produce none, so the result could not be aligned to the "
+                "supplied logits. Use proteinmpnn-sample, which preserves them, or "
+                "proteinmpnn-score, which leaves them out of the aggregate metrics."
+            )
+        return self
 
     def iter_sequence_logits(self) -> Iterator[tuple[str, SequenceLogits]]:
         """Expose this item's relaxed state to the shared validation hooks.
