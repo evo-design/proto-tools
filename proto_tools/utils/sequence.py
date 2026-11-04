@@ -64,7 +64,21 @@ def one_hot_protein_logits(sequence: str, *, sharpness: float = 20.0) -> list[li
 
     Returns:
         list[list[float]]: Logits matrix with shape ``(len(sequence), 20)``.
+
+    Raises:
+        ValueError: If a character is not one of the 20 canonical amino acids. ``X`` is the
+            common case: a designed sequence carries it where a model preserved a residue it
+            could not read, and an unknown residue has no one-hot column to set.
     """
+    unknown = sorted({aa for aa in sequence if aa not in _PROTEIN_AA_INDEX})
+    if unknown:
+        first = next(i for i, aa in enumerate(sequence, start=1) if aa in set(unknown))
+        raise ValueError(
+            f"one_hot_protein_logits cannot encode {unknown} (first at position {first}); only "
+            f"the 20 canonical amino acids have a column. 'X' marks a residue with no canonical "
+            "identity, such as one a structure parser preserved without designing it, so there "
+            "is no distribution to seed there."
+        )
     n = len(PROTEIN_AMINO_ACIDS)
     rows: list[list[float]] = []
     for aa in sequence:
