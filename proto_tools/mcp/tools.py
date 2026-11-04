@@ -661,6 +661,27 @@ def _setup_errors(device: Device) -> tuple[type[Exception], ...]:
     return (ModalDispatchError,)
 
 
+def _local_device(cfg: BaseConfig, caller_chose: bool) -> str:
+    """Return the torch device for a call answered in this process.
+
+    A device the caller put in the config wins. Otherwise the tool keeps its own default (``cuda``
+    for GPU tools) when this machine has a GPU, and runs on ``cpu`` when it has none, where a GPU
+    default could only fail.
+
+    Args:
+        cfg (BaseConfig): The call's config, before any backend name is written into it.
+        caller_chose (bool): Whether the caller's config set ``device``.
+
+    Returns:
+        str: The device to run on.
+    """
+    if caller_chose:
+        return cfg.device
+    from proto_tools.utils.device import number_of_visible_gpus
+
+    return cfg.device if number_of_visible_gpus() > 0 else "cpu"
+
+
 def _dispatch(
     device: Device,
     tool_key: str,
@@ -671,8 +692,12 @@ def _dispatch(
     client: Any | None = None,
     progress_partition: str | None = None,
     on_record: Callable[[dict[str, Any]], None] | None = None,
+    local_device: str = "cpu",
 ) -> tuple[Any, Device]:
     """Route one call to the backend ``device`` names, and report where it ran.
+
+    ``local_device`` is the torch device for a call answered in this process (see
+    ``_local_device``); a ``device="local"`` call arrives with it already in ``cfg``.
 
     The server is a stdio process on the caller's own machine, so "run it here" is always an
     option and is sometimes the only correct one. Which tools that covers is a property of the
@@ -699,13 +724,13 @@ def _dispatch(
     # server would look for a deployment that such a tool has no reason to have.
     if (reason := cfg.local_execution_reason(device)) is not None:
         logger.info("Tool %s: %s Running in this process instead.", tool_key, reason)
-        cfg.device = "cpu"
+        cfg.device = local_device
         return spec.function(payload, cfg), "local"
     # Declared undeployable. Its inputs live on this machine, which is where the server is, so
     # running it here answers the call instead of naming a deployment that will never exist.
     if spec.local_only is not None:
         logger.info("Tool %s: %s Running in this process instead.", tool_key, spec.local_only)
-        cfg.device = "cpu"
+        cfg.device = local_device
         return spec.function(payload, cfg), "local"
 
     if device == "proto":
@@ -810,7 +835,8 @@ def run_tool(
 
     if not isinstance(cfg, BaseConfig):
         return {"ok": False, "error": f"config model is {type(cfg).__name__}, not a BaseConfig"}
-    cfg.device = device if is_remote(device) else "cpu"
+    local_device = _local_device(cfg, caller_chose="device" in (config or {}))
+    cfg.device = device if is_remote(device) else local_device
     # The registry's wrapper asks this before dispatching, but this path does not go through it.
     # Without the check a setting the device cannot honour -- a custom checkpoint on Proto, a
     # local database on any remote worker -- reaches a container and fails there instead.
@@ -834,6 +860,7 @@ def run_tool(
             client=client,
             progress_partition=progress_partition,
             on_record=on_record,
+            local_device=local_device,
         )
     except _setup_errors(device) as exc:
         return {"ok": False, **_unavailable(device, tool_key, str(exc))}
