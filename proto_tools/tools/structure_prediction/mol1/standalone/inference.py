@@ -116,6 +116,7 @@ class Mol1Model:
             elif input_dict["device"] != self.device:
                 self.to_device(input_dict["device"])
 
+            import torch
             from mol.runner.inference import infer_predict, update_gpu_compatible_configs
 
             configs = self.runner.configs
@@ -124,6 +125,8 @@ class Mol1Model:
             configs.dump_dir = output_dir
             configs.seeds = [input_dict["sampling_seed"]]
             configs.use_seeds_in_json = False
+            configs.deterministic = input_dict.get("seed") is not None
+            torch.use_deterministic_algorithms(configs.deterministic)
             configs.model.N_cycle = input_dict["num_cycles"]
             self.runner.model.N_cycle = input_dict["num_cycles"]
             configs.sample_diffusion.N_sample = input_dict["num_samples"]

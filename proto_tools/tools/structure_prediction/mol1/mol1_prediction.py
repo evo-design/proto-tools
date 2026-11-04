@@ -286,4 +286,4 @@ def run_mol1_prediction(inputs: Mol1Input, config: Mol1Config, instance: Any = N
             source="mol1-prediction",
         )
         structures.append(normalize_output_chain_ids(structure, comp.chains))
-    return Mol1Output(structures=structures, metadata={"num_complexes": len(structures)})
+    return Mol1Output(structures=structures)

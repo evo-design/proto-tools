@@ -103,6 +103,7 @@ def test_mol1_dispatch_assembles_metrics_and_forwards_sampling(captured_dispatch
     result = run_mol1_prediction(
         Mol1Input(complexes=[Complex(chains=[Chain(id="Receptor", sequence=_PEPTIDE)])]),
         Mol1Config(
+            device="cpu",
             use_msa=False,
             num_samples=2,
             num_steps=33,
@@ -163,7 +164,7 @@ def test_mol1_supplied_msas_keep_paired_rows_and_unpaired_depth(captured_dispatc
         complexes=[Complex(chains=[Chain(id="Alpha", sequence=seq_a), Chain(id="Beta", sequence=seq_b)])],
         msas=[ComplexMSAs(per_chain=paired, paired=True, unpaired_per_chain=unpaired)],
     )
-    config = Mol1Config(use_msa=False)
+    config = Mol1Config(device="cpu", use_msa=False)
     result = run_mol1_prediction(inputs, config)
     assert result.success
     assert config.use_msa is False
@@ -186,7 +187,9 @@ def test_mol1_supplied_msas_keep_paired_rows_and_unpaired_depth(captured_dispatc
 def test_mol1_unpaired_msa_has_no_paired_path(captured_dispatch):
     """An independent alignment is supplied only to the unpaired input slot."""
     msa = MSA(aligned_sequences=[_PEPTIDE, "NLYIQWLKDGGPSSGRPPPA"])
-    result = run_mol1_prediction(Mol1Input(complexes=[_PEPTIDE], msas=[{0: msa}]), Mol1Config(use_msa=False))
+    result = run_mol1_prediction(
+        Mol1Input(complexes=[_PEPTIDE], msas=[{0: msa}]), Mol1Config(device="cpu", use_msa=False)
+    )
     assert result.success
     [capture] = captured_dispatch
     assert set(capture["alignments"]["A"]) == {"unpairedMsaPath"}
@@ -196,7 +199,9 @@ def test_mol1_unpaired_msa_has_no_paired_path(captured_dispatch):
 
 def test_mol1_seeded_batch_preserves_duplicate_items_and_item_indices(captured_dispatch):
     """Duplicate complexes each reach the worker with a distinct RNG offset."""
-    result = run_mol1_prediction(Mol1Input(complexes=[_PEPTIDE, _PEPTIDE]), Mol1Config(use_msa=False, seed=7))
+    result = run_mol1_prediction(
+        Mol1Input(complexes=[_PEPTIDE, _PEPTIDE]), Mol1Config(device="cpu", use_msa=False, seed=7)
+    )
     assert result.success
     assert len(result.structures) == 2
     assert [capture["payload"]["item_index"] for capture in captured_dispatch] == [0, 1]
@@ -293,7 +298,7 @@ def test_mol1_standalone_dispatch_derives_per_item_sampling_seed(
 
 def test_mol1_warm_runner_applies_changed_sampling_and_recycling(standalone_module, monkeypatch):
     """A reused model updates cached recycling state, diffusion settings and confidence dumping."""
-    settings, dumpers = [], []
+    settings, dumpers, deterministic_modes = [], [], []
     configs = types.SimpleNamespace(
         model=types.SimpleNamespace(N_cycle=20),
         sample_diffusion=types.SimpleNamespace(),
@@ -321,6 +326,7 @@ def test_mol1_warm_runner_applies_changed_sampling_and_recycling(standalone_modu
                 "msa": active_configs.use_msa,
                 "pae": active_configs.need_atom_confidence,
                 "seeds": active_configs.seeds,
+                "deterministic": active_configs.deterministic,
             }
         )
         assert active_configs.use_template is False
@@ -330,6 +336,9 @@ def test_mol1_warm_runner_applies_changed_sampling_and_recycling(standalone_modu
     upstream.infer_predict = infer_predict
     upstream.update_gpu_compatible_configs = lambda _: None
     monkeypatch.setitem(sys.modules, "mol.runner.inference", upstream)
+    monkeypatch.setitem(
+        sys.modules, "torch", types.SimpleNamespace(use_deterministic_algorithms=deterministic_modes.append)
+    )
     monkeypatch.setattr(standalone_module, "_extract_structure_and_scores", lambda *args, **kwargs: {})
     model = standalone_module.Mol1Model()
     model.runner, model.device, model.model_checkpoint, model._loaded = runner, "cuda:0", "mol-1-base", True
@@ -346,6 +355,7 @@ def test_mol1_warm_runner_applies_changed_sampling_and_recycling(standalone_modu
         "use_msa": False,
         "include_pae_matrix": False,
         "sampling_seed": 101,
+        "seed": 101,
         "verbose": False,
     }
     model.predict(payload)
@@ -361,6 +371,7 @@ def test_mol1_warm_runner_applies_changed_sampling_and_recycling(standalone_modu
             "use_msa": True,
             "include_pae_matrix": True,
             "sampling_seed": 102,
+            "seed": None,
         }
     )
     assert settings == [
@@ -374,6 +385,7 @@ def test_mol1_warm_runner_applies_changed_sampling_and_recycling(standalone_modu
             "msa": False,
             "pae": False,
             "seeds": [101],
+            "deterministic": True,
         },
         {
             "cycles": 6,
@@ -385,12 +397,14 @@ def test_mol1_warm_runner_applies_changed_sampling_and_recycling(standalone_modu
             "msa": True,
             "pae": True,
             "seeds": [102],
+            "deterministic": False,
         },
     ]
     assert dumpers == [
         {"need_atom_confidence": False, "sorted_by_ranking_score": True},
         {"need_atom_confidence": True, "sorted_by_ranking_score": True},
     ]
+    assert deterministic_modes == [True, False]
 
 
 @pytest.mark.uses_gpu
