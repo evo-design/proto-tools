@@ -127,6 +127,11 @@ def run_progen3_score(
         >>> result = run_progen3_score(inputs, config)
         >>> print(f"Perplexity: {result.scores[0]['perplexity']}")
     """
+    if config.device == "cpu":
+        raise ValueError(
+            "progen3 needs a GPU: its model code places tensors with torch.cuda, so device='cpu' cannot run"
+        )
+
     logger.debug(f"Using local venv for ProGen3 scoring: {config.model_checkpoint}")
 
     result = ToolInstance.dispatch(

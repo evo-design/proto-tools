@@ -188,6 +188,11 @@ def run_progen3_sample(
     direction_token = _DIRECTION_TOKEN[config.direction]
     prefixed_prompts = [f"{direction_token}{p}" for p in inputs.prompts]
 
+    if config.device == "cpu":
+        raise ValueError(
+            "progen3 needs a GPU: its model code places tensors with torch.cuda, so device='cpu' cannot run"
+        )
+
     result = ToolInstance.dispatch(
         "progen3",
         {

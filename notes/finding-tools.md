@@ -172,6 +172,8 @@ Tool calls dispatch into isolated environments by default when a toolkit has a `
 
 GPU tools default to `device="cuda"` when their config supports device selection. Before dispatch, inspect `ToolSpec.uses_gpu`, list CPU/GPU subsets through the registry, and check storage and access requirements.
 
+The CLI and MCP server follow the same default for a call they run on this machine (`proto-tools run`, `device="local"`, or a tool that has to run here): a `device` set in the call's config wins; otherwise a tool keeps its default (`cuda` for GPU tools) when a GPU is visible, and runs on `cpu` when none is. A tool that cannot run on CPU (such as `progen3-*`) then fails with an error saying it needs a GPU.
+
 ## JSON and Wire Consumers
 
 Registry docs, schemas, example inputs, and outputs are Pydantic or JSON-serializable objects:
