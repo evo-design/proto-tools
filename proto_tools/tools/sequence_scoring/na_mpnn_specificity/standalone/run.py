@@ -195,63 +195,64 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
         "0",
     ]
 
-    logger.update_status(f"Running NA-MPNN on {input_name}")
-    # Propagate the assigned device (CUDA_VISIBLE_DEVICES etc.) to the upstream
-    # NA-MPNN CLI subprocess via the DeviceManager-aware helper.
-    sub_env = {**get_subprocess_device_env(config.get("device", "cuda")), "PYTHONNOUSERSITE": "1"}
-    verbose = bool(config.get("verbose", False))
-    if verbose:
-        subprocess.run(
-            command,
-            cwd=repo_path,
-            env=sub_env,
-            check=True,
-        )
-    else:
-        proc = subprocess.run(
-            command,
-            cwd=repo_path,
-            env=sub_env,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if proc.returncode != 0:
-            stderr_tail = (proc.stderr or "").strip().splitlines()[-30:]
-            stdout_tail = (proc.stdout or "").strip().splitlines()[-30:]
-            combined_tail = "\n".join(["[stderr]", *stderr_tail, "", "[stdout]", *stdout_tail]).strip()
-            raise RuntimeError(f"NA-MPNN inference failed for {pdb_path} (exit {proc.returncode}).\n{combined_tail}")
+    try:
+        logger.update_status(f"Running NA-MPNN on {input_name}")
+        # Propagate the assigned device (CUDA_VISIBLE_DEVICES etc.) to the upstream
+        # NA-MPNN CLI subprocess via the DeviceManager-aware helper.
+        sub_env = {**get_subprocess_device_env(config.get("device", "cuda")), "PYTHONNOUSERSITE": "1"}
+        verbose = bool(config.get("verbose", False))
+        if verbose:
+            subprocess.run(
+                command,
+                cwd=repo_path,
+                env=sub_env,
+                check=True,
+            )
+        else:
+            proc = subprocess.run(
+                command,
+                cwd=repo_path,
+                env=sub_env,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if proc.returncode != 0:
+                stderr_tail = (proc.stderr or "").strip().splitlines()[-30:]
+                stdout_tail = (proc.stdout or "").strip().splitlines()[-30:]
+                combined_tail = "\n".join(["[stderr]", *stderr_tail, "", "[stdout]", *stdout_tail]).strip()
+                raise RuntimeError(
+                    f"NA-MPNN inference failed for {pdb_path} (exit {proc.returncode}).\n{combined_tail}"
+                )
 
-    raw_npz = os.path.join(raw_dir, "specificity", f"{input_name}.npz")
-    if not os.path.exists(raw_npz):
-        raise FileNotFoundError(f"NA-MPNN specificity output not found: {raw_npz}")
+        raw_npz = os.path.join(raw_dir, "specificity", f"{input_name}.npz")
+        if not os.path.exists(raw_npz):
+            raise FileNotFoundError(f"NA-MPNN specificity output not found: {raw_npz}")
 
-    canonical_dir = os.path.join(output_root, "canonical_npz")
-    os.makedirs(canonical_dir, exist_ok=True)
-    canonical_npz = os.path.join(canonical_dir, f"{input_name}.npz")
+        canonical_dir = os.path.join(output_root, "canonical_npz")
+        os.makedirs(canonical_dir, exist_ok=True)
+        canonical_npz = os.path.join(canonical_dir, f"{input_name}.npz")
 
-    canonical = _canonicalize_npz(raw_npz, canonical_npz)
-
-    if not bool(config.get("keep_intermediate", False)):
-        shutil.rmtree(raw_dir, ignore_errors=True)
-
-    return {
-        "input_name": input_name,
-        "source_method": "na_mpnn",
-        "output_npz_path": canonical_npz,
-        **canonical,
-    }
+        canonical = _canonicalize_npz(raw_npz, canonical_npz)
+        return {
+            "input_name": input_name,
+            "source_method": "na_mpnn",
+            "output_npz_path": canonical_npz,
+            **canonical,
+        }
+    finally:
+        if not bool(config.get("keep_intermediate", False)):
+            shutil.rmtree(raw_dir, ignore_errors=True)
 
 
 def run_na_mpnn_specificity(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Run NA-MPNN specificity across all input PDB paths."""
-    output_directory = input_data.get("output_directory")
-    if output_directory is None:
-        output_root = tempfile.mkdtemp(prefix="na_mpnn_specificity_")
-    else:
-        output_root = os.path.abspath(output_directory)
-        os.makedirs(output_root, exist_ok=True)
+    """Run NA-MPNN specificity across all input PDB paths.
 
+    Files are kept only under ``output_directory``. Without it, raw and canonical NPZ files are
+    written to a temporary directory that is removed before returning, and each result's
+    ``output_npz_path`` is ``None``; its arrays already carry the NPZ's contents.
+    """
+    output_directory = input_data.get("output_directory")
     config = {
         "batch_size": int(input_data.get("batch_size", 1)),
         "number_of_batches": int(input_data.get("number_of_batches", 1)),
@@ -263,9 +264,16 @@ def run_na_mpnn_specificity(input_data: dict[str, Any]) -> dict[str, Any]:
         "verbose": bool(input_data.get("verbose", False)),
     }
 
-    results = [_run_one_structure(pdb_path, config, output_root) for pdb_path in input_data["pdb_paths"]]
+    if output_directory is not None:
+        output_root = os.path.abspath(output_directory)
+        os.makedirs(output_root, exist_ok=True)
+        return {"results": [_run_one_structure(path, config, output_root) for path in input_data["pdb_paths"]]}
 
-    return {"results": results}
+    if config["keep_intermediate"]:
+        raise ValueError("na_mpnn_specificity: keep_intermediate needs output_directory to keep the files in")
+    with tempfile.TemporaryDirectory(prefix="na_mpnn_specificity_") as output_root:
+        results = [_run_one_structure(path, config, output_root) for path in input_data["pdb_paths"]]
+    return {"results": [{**result, "output_npz_path": None} for result in results]}
 
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:

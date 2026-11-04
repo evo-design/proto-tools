@@ -33,7 +33,7 @@ This tool is appropriate for scoring and ranking candidate protein–DNA binder 
 - **The NA-MPNN checkout and checkpoint are provisioned for you.** The standalone setup clones a pinned revision of the repository (which ships the specificity checkpoint in-tree) into the managed weights cache, so no repository or checkpoint path is configured. Point `PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR` at an existing checkout to reuse it.
 - **`predicted_ppm` rows are DNA-only and renormalized.** Only positions that are both valid and DNA are kept, and each row is renormalized over `A,C,G,T`, so the returned matrix already excludes protein and masked positions.
 - **`temperature` controls sampling sharpness.** Lower values (default `0.1`) concentrate probability on the most-preferred base; raise it to soften the distribution.
-- **`output_directory` and `keep_intermediate` control artifacts.** Leave `output_directory` unset to write canonical `.npz` files to a temporary directory, or set it to persist them. Set `keep_intermediate=True` to retain the raw NA-MPNN output for debugging.
+- **Files are kept only under `output_directory`.** Leave it unset and nothing is written to disk for you: scratch files go in a temporary directory that is removed, each result's `output_npz_path` is `None`, and the result's arrays hold the same data. Set it to keep the canonical `.npz` files there. `keep_intermediate=True` also keeps the raw NA-MPNN output under `output_directory/na_mpnn_raw/`, and requires `output_directory`.
 
 ## Toolkit Notes
 
