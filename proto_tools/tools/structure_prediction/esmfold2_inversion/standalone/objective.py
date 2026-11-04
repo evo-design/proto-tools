@@ -113,11 +113,26 @@ def masked_mean(values: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     return torch.where(selected, values, 0.0).sum(-1) / selected.sum(-1).clamp(min=1)
 
 
-def _binder_positions(length: int, binder_length: int, device: torch.device) -> torch.Tensor:
-    """Boolean mask over complex positions that is true on the trailing binder residues."""
-    positions = torch.zeros(length, dtype=torch.bool, device=device)
-    positions[length - binder_length :] = True
-    return positions
+def span_mask(length: int, span: tuple[int, int], device: torch.device) -> torch.Tensor:
+    """Boolean mask over complex positions that is true on one chain's rows.
+
+    Args:
+        length (int): Rows in the complex.
+        span (tuple[int, int]): Half-open ``(start, stop)`` row range of the chain.
+        device (torch.device): Device to build the mask on.
+
+    Returns:
+        torch.Tensor: Shape ``(length,)``, true inside the span.
+
+    Raises:
+        ValueError: If the span is empty or reaches outside the complex.
+    """
+    start, stop = span
+    if not 0 <= start < stop <= length:
+        raise ValueError(f"chain span {span} does not fit a complex of {length} rows")
+    mask = torch.zeros(length, dtype=torch.bool, device=device)
+    mask[start:stop] = True
+    return mask
 
 
 def _contact_loss(
@@ -140,11 +155,10 @@ def _contact_loss(
         distogram_logits (torch.Tensor): Shape ``(batch, length, length, bins)``.
         midpoints (torch.Tensor): Bin midpoint distances, shape ``(bins,)``.
         contacts_per_residue (int): How many contacts each scored residue is credited with.
-        minimum_separation (int): Sequence separation a partner must exceed; 0 disables the check,
-            which is what an interface objective wants since the chains are not sequential.
-        cutoff (float): Contact distance in angstroms.
+        minimum_separation (int): Sequence separation a partner must exceed; 0 disables the check.
         scored_positions (torch.Tensor): Boolean mask, shape ``(length,)``, of residues to average.
         partner_positions (torch.Tensor): Boolean mask, shape ``(length,)``, of eligible partners.
+        cutoff (float): Contact distance in angstroms.
 
     Returns:
         torch.Tensor: Per-example losses, shape ``(batch,)``.
@@ -159,87 +173,97 @@ def _contact_loss(
     return masked_mean(per_residue, scored_positions)
 
 
-def intra_contact_loss(distogram_logits: torch.Tensor, binder_length: int, midpoints: torch.Tensor) -> torch.Tensor:
-    """Binder self-contact: each binder residue's two best contacts within its own chain.
+def intra_contact_loss(distogram_logits: torch.Tensor, span: tuple[int, int], midpoints: torch.Tensor) -> torch.Tensor:
+    """Self-contact within one chain: each residue's two best contacts inside its own chain.
 
-    The separation floor of nine keeps trivially-close neighbours from satisfying the objective,
-    so it rewards tertiary packing rather than an extended chain.
+    Partners are restricted to the same chain, so a residue cannot satisfy this objective by
+    touching a neighbouring chain. The separation floor of nine keeps trivially-close sequence
+    neighbours from counting, so it rewards tertiary packing rather than an extended chain.
 
     Args:
         distogram_logits (torch.Tensor): Shape ``(batch, length, length, bins)``.
-        binder_length (int): Number of trailing positions that are the binder.
+        span (tuple[int, int]): Half-open row range of the chain being scored.
         midpoints (torch.Tensor): Bin midpoint distances, shape ``(bins,)``.
 
     Returns:
         torch.Tensor: Per-example losses, shape ``(batch,)``.
     """
-    binder = _binder_positions(distogram_logits.shape[1], binder_length, distogram_logits.device)
+    chain = span_mask(distogram_logits.shape[1], span, distogram_logits.device)
     return _contact_loss(
         distogram_logits,
         midpoints,
         contacts_per_residue=2,
         minimum_separation=9,
         cutoff=14.0,
-        scored_positions=binder,
-        partner_positions=binder,
+        scored_positions=chain,
+        partner_positions=chain,
     )
 
 
-def inter_contact_loss(distogram_logits: torch.Tensor, binder_length: int, midpoints: torch.Tensor) -> torch.Tensor:
+def inter_contact_loss(
+    distogram_logits: torch.Tensor,
+    target_span: tuple[int, int],
+    binder_span: tuple[int, int],
+    midpoints: torch.Tensor,
+) -> torch.Tensor:
     """Interface contact: each target residue's single best contact with the binder.
 
-    Scored over the target and partnered against the binder, so it rewards the binder reaching
-    the target rather than the target rearranging.
+    Deliberately asymmetric. It is scored over the target and partnered against the binder, so it
+    rewards the binder reaching the target rather than the target rearranging. It is not a generic
+    symmetric inter-chain objective and should not be read as one.
 
     Args:
         distogram_logits (torch.Tensor): Shape ``(batch, length, length, bins)``.
-        binder_length (int): Number of trailing positions that are the binder.
+        target_span (tuple[int, int]): Half-open row range of the fixed target chain.
+        binder_span (tuple[int, int]): Half-open row range of the designed binder chain.
         midpoints (torch.Tensor): Bin midpoint distances, shape ``(bins,)``.
 
     Returns:
         torch.Tensor: Per-example losses, shape ``(batch,)``.
     """
-    binder = _binder_positions(distogram_logits.shape[1], binder_length, distogram_logits.device)
+    length = distogram_logits.shape[1]
     return _contact_loss(
         distogram_logits,
         midpoints,
         contacts_per_residue=1,
         minimum_separation=0,
         cutoff=22.0,
-        scored_positions=~binder,
-        partner_positions=binder,
+        scored_positions=span_mask(length, target_span, distogram_logits.device),
+        partner_positions=span_mask(length, binder_span, distogram_logits.device),
     )
 
 
-def globularity_loss(distogram_logits: torch.Tensor, binder_length: int, midpoints: torch.Tensor) -> torch.Tensor:
-    """Algorithm 13. Excess radius of gyration over a packed globular protein of the same length.
+def globularity_loss(distogram_logits: torch.Tensor, span: tuple[int, int], midpoints: torch.Tensor) -> torch.Tensor:
+    """Algorithm 13. Excess radius of gyration of one chain over a packed protein of its length.
 
-    The expected squared distance between binder residue pairs gives a radius of gyration, which
-    is compared against the empirical scaling for a packed protein. An ELU leaves compact designs
-    almost unpenalized while growing linearly as the design extends.
+    Only the chain's own sub-block of the distogram is read, so a neighbouring chain cannot make
+    a sprawling design look compact.
 
     Args:
         distogram_logits (torch.Tensor): Shape ``(batch, length, length, bins)``.
-        binder_length (int): Number of trailing positions that are the binder.
+        span (tuple[int, int]): Half-open row range of the chain being scored.
         midpoints (torch.Tensor): Bin midpoint distances, shape ``(bins,)``.
 
     Returns:
         torch.Tensor: Per-example losses, shape ``(batch,)``.
     """
-    binder_pairs = distogram_logits[:, -binder_length:, -binder_length:, :]
+    span_mask(distogram_logits.shape[1], span, distogram_logits.device)  # validates the span
+    start, stop = span
+    residues = stop - start
+    chain_pairs = distogram_logits[:, start:stop, start:stop, :]
     saturated = midpoints.clamp(max=_RG_DISTANCE_CLAMP)
-    expected_square = (torch.softmax(binder_pairs, dim=-1) * saturated.square()).sum(-1)
+    expected_square = (torch.softmax(chain_pairs, dim=-1) * saturated.square()).sum(-1)
     # Each unordered pair once, via the strict lower triangle.
     total = torch.tril(expected_square, diagonal=-1).sum(dim=(1, 2))
-    radius = torch.sqrt(total / (binder_length * binder_length))
-    packed = _RG_COEFFICIENT * binder_length**_RG_EXPONENT
+    radius = torch.sqrt(total / (residues * residues))
+    packed = _RG_COEFFICIENT * residues**_RG_EXPONENT
     return torch.nn.functional.elu(radius - packed)
 
 
 def epitope_loss(
     distogram_logits: torch.Tensor,
     epitope_mask: torch.Tensor,
-    binder_length: int,
+    binder_span: tuple[int, int],
     midpoints: torch.Tensor,
     contact_distance: float,
 ) -> torch.Tensor:
@@ -252,7 +276,7 @@ def epitope_loss(
     Args:
         distogram_logits (torch.Tensor): Shape ``(batch, length, length, bins)``.
         epitope_mask (torch.Tensor): Boolean mask, shape ``(batch, length)``, true at hotspots.
-        binder_length (int): Number of trailing positions that are the binder.
+        binder_span (tuple[int, int]): Half-open row range of the designed binder chain.
         midpoints (torch.Tensor): Bin midpoint distances, shape ``(bins,)``.
         contact_distance (float): Distance in angstroms defining a hotspot-binder contact.
 
@@ -265,7 +289,7 @@ def epitope_loss(
     batch, length = distogram_logits.shape[0], distogram_logits.shape[1]
     if epitope_mask.shape != (batch, length):
         raise ValueError(f"epitope mask {tuple(epitope_mask.shape)} does not match complex {(batch, length)}")
-    binder = _binder_positions(length, binder_length, distogram_logits.device)
+    binder = span_mask(length, binder_span, distogram_logits.device)
     hotspot_to_binder = epitope_mask[:, :, None] & binder[None, None, :]
     in_contact = (torch.softmax(distogram_logits, dim=-1) * (midpoints < contact_distance)).sum(-1)
     surprisal = -torch.log(in_contact + 1e-8)
