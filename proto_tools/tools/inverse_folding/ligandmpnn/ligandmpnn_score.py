@@ -27,7 +27,7 @@ class LigandMPNNScoringInput(BaseToolInput):
 
     Attributes:
         sequence_structure_pairs (list[SequenceStructurePair]): Sequence and structure pairs to
-            score; each pair may carry per-pair ``fixed_positions`` excluded from the metrics.
+            score; each pair may carry per-pair ``excluded_positions`` excluded from the metrics.
     """
 
     sequence_structure_pairs: list[SequenceStructurePair] = InputField(
@@ -154,8 +154,8 @@ def run_ligandmpnn_score(
                     "sequence": pair.sequence,
                     "seed": seed,
                     "fixed_positions": (
-                        pair.fixed_positions.to_residue_numbers(pair.structure)
-                        if pair.fixed_positions is not None
+                        pair.excluded_positions.to_residue_numbers(pair.structure)
+                        if pair.excluded_positions is not None
                         else None
                     ),
                     "device": config.device,

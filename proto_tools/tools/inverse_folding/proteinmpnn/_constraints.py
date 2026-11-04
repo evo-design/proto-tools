@@ -11,6 +11,7 @@ Resolved in one place so the model, the output and the warnings cannot disagree.
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 from proto_tools.entities.structures import ResidueSelection, Structure
 from proto_tools.tools.inverse_folding.proteinmpnn._readable import proteinmpnn_readable_positions
@@ -35,8 +36,11 @@ class ProteinMPNNConstraints:
     effective_fixed: dict[str, list[int]]
 
 
-def excluded_positions(structure: Structure, chain_ids: list[str]) -> dict[str, list[int]]:
-    """Positions ProteinMPNN's parser skips, per chain, ascending.
+def parser_excluded_positions(structure: Structure, chain_ids: list[str]) -> dict[str, list[int]]:
+    """Positions ProteinMPNN's structure parser cannot process, per chain, ascending.
+
+    Pure detection: it reads the structure and reports, without warning or altering anything,
+    so sampling and scoring can each decide what the result means.
 
     Args:
         structure (Structure): The structure to read.
@@ -86,7 +90,7 @@ def resolve_constraints(
         ProteinMPNNConstraints: The mapping and the constraints derived from it.
     """
     readable_all = proteinmpnn_readable_positions(structure)
-    skipped = excluded_positions(structure, redesign_ids)
+    skipped = parser_excluded_positions(structure, redesign_ids)
     requested = (user_fixed.chains if user_fixed is not None else {}) or {}
 
     readable: dict[str, list[int]] = {}
@@ -186,7 +190,7 @@ def require_matching_protomers(
     Raises:
         ValueError: If two protomers have different readable positions.
     """
-    skipped = excluded_positions(structure, protomer_ids)
+    skipped = parser_excluded_positions(structure, protomer_ids)
 
     def names(chain_id: str) -> str:
         return describe_positions(structure, chain_id, skipped.get(chain_id, [])) or "none"
@@ -280,7 +284,7 @@ def restrict_sequence_to_readable(
             f"{expected}. Each chain's residues must appear in order."
         )
 
-    dropped = excluded_positions(structure, chain_ids)
+    dropped = parser_excluded_positions(structure, chain_ids)
     kept: list[str] = []
     offset = 0
     for chain_id in chain_ids:
@@ -304,3 +308,34 @@ def restrict_sequence_to_readable(
             named,
         )
     return "".join(kept)
+
+
+def worker_excluded_positions(
+    structure: Structure, selection: Any, chain_ids: list[str]
+) -> dict[str, list[int]] | None:
+    """User scoring exclusions, minus the ones the parser already drops, as residue numbers.
+
+    A position the parser never read has no counterpart in the model's input, so sending it
+    would fail to resolve there. Filtering happens in ordinal space before the selection is
+    translated, so the remaining positions still name the residues the caller meant.
+
+    Args:
+        structure (Structure): The structure being scored against.
+        selection (Any): The caller's ``excluded_positions``, or ``None``.
+        chain_ids (list[str]): Chains in scoring order.
+
+    Returns:
+        dict[str, list[int]] | None: Per-chain residue numbers for the worker, or ``None``.
+    """
+    if selection is None:
+        return None
+    skipped = parser_excluded_positions(structure, chain_ids)
+    kept = {
+        chain_id: [p for p in positions if p not in set(skipped.get(chain_id, ()))]
+        for chain_id, positions in selection.chains.items()
+    }
+    kept = {chain_id: positions for chain_id, positions in kept.items() if positions}
+    if not kept:
+        return None
+    translated: dict[str, list[int]] = type(selection)(chains=kept).to_residue_numbers(structure)
+    return translated

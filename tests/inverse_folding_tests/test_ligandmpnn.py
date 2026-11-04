@@ -259,7 +259,7 @@ def test_ligandmpnn_score_dispatch_contract(monkeypatch):
                 SequenceStructurePair(
                     sequence=sequence,
                     structure=structure,
-                    fixed_positions={"A": [1]},
+                    excluded_positions={"A": [1]},
                 )
             ]
         ),

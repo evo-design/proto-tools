@@ -518,3 +518,84 @@ def test_scoring_rejects_a_sequence_that_does_not_cover_the_chain():
 
     with pytest.raises(ValueError, match="but chains"):
         restrict_sequence_to_readable(get_gfp_structure(), ["A"], "MVLS", tool="proteinmpnn-score")
+
+
+# ── scoring: the worker payload ─────────────────────────────────────────────
+
+
+def _score_payload(monkeypatch, structure, excluded=None, return_logits=False):
+    """Run scoring against a stubbed worker and return the dispatched payload."""
+    from proto_tools.tools.inverse_folding import (
+        ProteinMPNNScoringConfig,
+        ProteinMPNNScoringInput,
+        SequenceStructurePair,
+        run_proteinmpnn_score,
+    )
+
+    sent: list[dict] = []
+
+    def dispatch(_tool, input_dict, **_kwargs):
+        sent.append(input_dict)
+        return {
+            "metrics": {"log_likelihood": -1.0, "avg_log_likelihood": -0.5, "perplexity": 1.6},
+            "logits": None,
+            "vocab": None,
+        }
+
+    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(dispatch))
+    sequence = "".join(structure.get_chain_sequence(c) for c in structure.get_chain_ids())
+    run_proteinmpnn_score(
+        ProteinMPNNScoringInput(
+            sequence_structure_pairs=[
+                SequenceStructurePair(sequence=sequence, structure=structure, excluded_positions=excluded)
+            ]
+        ),
+        ProteinMPNNScoringConfig(return_logits=return_logits),
+    )
+    return sent[0]
+
+
+def test_scoring_sends_the_trimmed_sequence_and_warns(monkeypatch, caplog):
+    """GFP with no user exclusions: 227 residues reach the worker, with one warning."""
+    with caplog.at_level(logging.WARNING):
+        payload = _score_payload(monkeypatch, get_gfp_structure())
+
+    assert len(payload["sequence"]) == 227
+    assert payload["fixed_positions"] is None
+    assert caplog.text.count("position 64 (CRO)") == 1
+
+
+def test_scoring_drops_a_parser_excluded_position_from_the_worker_selection(monkeypatch, caplog):
+    """Explicitly excluding CRO is honoured without sending a position the model lacks."""
+    with caplog.at_level(logging.WARNING):
+        payload = _score_payload(monkeypatch, get_gfp_structure(), excluded={"A": [10, 64]})
+
+    worker = payload["fixed_positions"]
+    assert list(worker) == ["A"] and len(worker["A"]) == 1, "only the readable exclusion is sent"
+    assert "position 64 (CRO)" in caplog.text, "the parser exclusion is still reported"
+
+
+def test_scoring_does_not_warn_about_a_user_excluded_readable_position(monkeypatch, caplog):
+    """A readable residue the caller excluded is exactly what they asked for."""
+    structure = _structure([("ALA", False, _BACKBONE), ("GLY", False, _BACKBONE), ("LEU", False, _BACKBONE)])
+    with caplog.at_level(logging.WARNING):
+        payload = _score_payload(monkeypatch, structure, excluded={"A": [2]})
+
+    assert caplog.text == ""
+    assert payload["fixed_positions"] is not None
+
+
+def test_scoring_translates_positions_through_nonsequential_numbering(monkeypatch):
+    """GFP's residues do not start at 1, so ordinal positions must be translated."""
+    structure = get_gfp_structure()
+    first_number = structure.get_chain_residue_ids()["A"][0][0]
+    assert first_number != 1, "the fixture must actually be offset"
+
+    payload = _score_payload(monkeypatch, structure, excluded={"A": [10]})
+    assert payload["fixed_positions"]["A"] == [structure.get_chain_residue_ids()["A"][9][0]]
+
+
+def test_scoring_refuses_logits_when_a_position_is_parser_excluded(monkeypatch):
+    """Logits would not align to the caller's sequence, so this is rejected before dispatch."""
+    with pytest.raises(ValueError, match="per-position logits cannot be aligned"):
+        _score_payload(monkeypatch, get_gfp_structure(), return_logits=True)
