@@ -16,9 +16,16 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
+from pathlib import Path
 from typing import get_args
 
-from proto_tools.utils.tool_versions import VERSIONS_FILE, Bump, packaged_toolkit_dirs, record_source_hash
+# Hash this checkout, not whichever one the installed proto_tools points at: an editable
+# install from another worktree would otherwise be hashed and have its versions.yaml rewritten.
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO))
+
+from proto_tools.utils.tool_versions import VERSIONS_FILE, Bump, packaged_toolkit_dirs, record_source_hash  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
