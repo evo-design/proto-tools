@@ -599,3 +599,62 @@ def test_scoring_refuses_logits_when_a_position_is_parser_excluded(monkeypatch):
     """Logits would not align to the caller's sequence, so this is rejected before dispatch."""
     with pytest.raises(ValueError, match="per-position logits cannot be aligned"):
         _score_payload(monkeypatch, get_gfp_structure(), return_logits=True)
+
+
+# ── gradient: reject rather than guess ──────────────────────────────────────
+
+
+def test_gradient_rejects_a_structure_with_an_unreadable_residue():
+    """A gradient is per position, so an unreadable residue has no row to report."""
+    from proto_tools.tools.inverse_folding import ProteinMPNNGradientInput
+    from proto_tools.utils import one_hot_protein_logits
+
+    structure = get_gfp_structure()
+    with pytest.raises(ValueError, match=r"does not support structures containing residues"):
+        ProteinMPNNGradientInput(inputs=[{"logits": one_hot_protein_logits("A" * 227), "structure": structure}])
+
+
+def test_gradient_rejection_names_the_residue_and_the_alternatives():
+    """The message has to say which residue and what to use instead."""
+    from proto_tools.tools.inverse_folding import ProteinMPNNGradientInput
+    from proto_tools.utils import one_hot_protein_logits
+
+    with pytest.raises(ValueError) as caught:
+        ProteinMPNNGradientInput(
+            inputs=[{"logits": one_hot_protein_logits("A" * 227), "structure": get_gfp_structure()}]
+        )
+
+    message = str(caught.value)
+    assert "chain A position 64 (CRO)" in message
+    assert "proteinmpnn-sample" in message and "proteinmpnn-score" in message
+
+
+def test_gradient_accepts_a_structure_the_parser_reads_in_full():
+    """Structures without modified residues are unaffected."""
+    from proto_tools.tools.inverse_folding import ProteinMPNNGradientInput
+    from proto_tools.utils import one_hot_protein_logits
+
+    structure = _structure([("ALA", False, _BACKBONE), ("GLY", False, _BACKBONE)])
+    candidate = ProteinMPNNGradientInput(inputs=[{"logits": one_hot_protein_logits("AG"), "structure": structure}])
+    assert len(candidate.inputs) == 1
+
+
+def test_gradient_only_checks_the_chains_it_was_given():
+    """A modified residue on a chain outside the selection must not block the run."""
+    from proto_tools.tools.inverse_folding import ProteinMPNNGradientInput
+    from proto_tools.utils import one_hot_protein_logits
+
+    structure = _two_protomers(
+        [("ALA", False, _BACKBONE), ("GLY", False, _BACKBONE)],
+        [("ALA", False, _BACKBONE), ("CRO", True, _BACKBONE)],
+    )
+    candidate = ProteinMPNNGradientInput(
+        inputs=[
+            {
+                "logits": one_hot_protein_logits("AG"),
+                "structure": structure,
+                "chains_to_redesign": ["A"],
+            }
+        ]
+    )
+    assert len(candidate.inputs) == 1
