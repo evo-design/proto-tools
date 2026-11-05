@@ -20,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
-from pydantic import Field, PositiveInt, field_validator
+from pydantic import Field, PositiveFloat, PositiveInt, field_validator
 
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import AlphaFold2Metrics
@@ -122,6 +122,12 @@ class AlphaFold2ContactTerm(AlphaFold2Term):
 
     Attributes:
         id (Literal["con"]): Fixed identifier for this kind of quantity.
+        positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
+            keeps the protocol's own region.
+        num_contacts (PositiveInt | None): Contacts averaged per residue; ``None`` keeps ColabDesign's
+            default.
+        cutoff (PositiveFloat | None): Contact distance cutoff in angstroms; ``None`` keeps
+            ColabDesign's default.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -129,6 +135,15 @@ class AlphaFold2ContactTerm(AlphaFold2Term):
 
     id: Literal["con"] = Field(
         default="con", title="Term ID", description="Identifies this quantity as the intra-chain contact loss."
+    )
+    positions: list[PositiveInt] | None = Field(
+        default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
+    )
+    num_contacts: PositiveInt | None = Field(
+        default=None, title="Number of Contacts", description="Contacts averaged per residue; None keeps the default."
+    )
+    cutoff: PositiveFloat | None = Field(
+        default=None, title="Cutoff", description="Contact distance cutoff in angstroms; None keeps the default."
     )
 
 
@@ -142,6 +157,10 @@ class AlphaFold2InterfaceContactTerm(AlphaFold2Term):
         id (Literal["i_con"]): Fixed identifier for this kind of quantity.
         positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
             keeps the protocol's own region.
+        num_contacts (PositiveInt | None): Contacts averaged per residue; ``None`` keeps ColabDesign's
+            default.
+        cutoff (PositiveFloat | None): Contact distance cutoff in angstroms; ``None`` keeps
+            ColabDesign's default.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -152,6 +171,12 @@ class AlphaFold2InterfaceContactTerm(AlphaFold2Term):
     )
     positions: list[PositiveInt] | None = Field(
         default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
+    )
+    num_contacts: PositiveInt | None = Field(
+        default=None, title="Number of Contacts", description="Contacts averaged per residue; None keeps the default."
+    )
+    cutoff: PositiveFloat | None = Field(
+        default=None, title="Cutoff", description="Contact distance cutoff in angstroms; None keeps the default."
     )
 
 
@@ -306,6 +331,10 @@ class AlphaFold2FrameworkContactTerm(AlphaFold2Term):
     Attributes:
         id (Literal["fw_i_con"]): Fixed identifier for this kind of quantity.
         framework_positions (list[PositiveInt]): 1-indexed binder positions that form the framework.
+        num_contacts (PositiveInt | None): Contacts averaged per residue; ``None`` keeps ColabDesign's
+            default.
+        cutoff (PositiveFloat | None): Contact distance cutoff in angstroms; ``None`` keeps
+            ColabDesign's default.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "higher"
@@ -316,6 +345,12 @@ class AlphaFold2FrameworkContactTerm(AlphaFold2Term):
     )
     framework_positions: list[PositiveInt] = Field(
         min_length=1, title="Framework Positions", description="1-indexed binder positions forming the framework."
+    )
+    num_contacts: PositiveInt | None = Field(
+        default=None, title="Number of Contacts", description="Contacts averaged per residue; None keeps the default."
+    )
+    cutoff: PositiveFloat | None = Field(
+        default=None, title="Cutoff", description="Contact distance cutoff in angstroms; None keeps the default."
     )
 
 

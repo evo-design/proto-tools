@@ -146,10 +146,12 @@ def _extract_metrics(aux: dict[str, Any] | None, include_pae_matrix: bool = Fals
 def _loss_key(term_id: str, options: Mapping[str, Any]) -> str:
     """Loss-dict key a requested term is read from.
 
-    A ColabDesign loss restricted by ``positions`` is computed by an extension under its own key,
-    so ColabDesign's unrestricted value is never shadowed; the reported id drops the suffix.
+    A ColabDesign loss with any selector set is computed by an extension under its own key, so
+    ColabDesign's own value is never shadowed and the cached model's options are never mutated;
+    the reported id drops the suffix.
     """
-    return f"{term_id}@positions" if term_id in _NATIVE_LOSSES and options.get("positions") else term_id
+    selected = any(value is not None for value in options.values())
+    return f"{term_id}@selected" if term_id in _NATIVE_LOSSES and selected else term_id
 
 
 def _extension_loss_fns(
@@ -186,6 +188,12 @@ def _extension_loss_fns(
         """The selector a term was requested with, if any."""
         return term_options.get(term_id, {}).get(key)
 
+    def contact_opt(opt: Any, opt_key: str, term_id: str) -> dict[str, Any]:
+        """ColabDesign's contact options with a term's ``num_contacts``/``cutoff`` applied."""
+        options = term_options.get(term_id, {})
+        overrides = {"num": options.get("num_contacts"), "cutoff": options.get("cutoff")}
+        return {**opt[opt_key], **{key: value for key, value in overrides.items() if value is not None}}
+
     def designed_ca(outputs: Any) -> Any:
         """CA coordinates of the designed residues."""
         return outputs["structure_module"]["final_atom_positions"][-designed_len:, residue_constants.atom_order["CA"]]
@@ -221,22 +229,30 @@ def _extension_loss_fns(
         """Contact loss from the target to the framework residues, as in Germinal."""
         framework = select(inputs, positions_of("fw_i_con", "framework_positions"))
         target = 1 - select(inputs, None)
-        return {"fw_i_con": get_con_loss(inputs, outputs, opt["i_con"], mask_1d=target, mask_1b=framework)}
+        fw_opt = contact_opt(opt, "i_con", "fw_i_con")
+        return {"fw_i_con": get_con_loss(inputs, outputs, fw_opt, mask_1d=target, mask_1b=framework)}
 
     def plddt(inputs: Any, outputs: Any) -> dict[str, Any]:
         """ColabDesign's pLDDT loss over the selected positions."""
-        return {"plddt@positions": get_plddt_loss(outputs, mask_1d=select(inputs, positions_of("plddt")))}
+        return {"plddt@selected": get_plddt_loss(outputs, mask_1d=select(inputs, positions_of("plddt")))}
 
     def pae(inputs: Any, outputs: Any) -> dict[str, Any]:
         """ColabDesign's PAE loss over pairs within the selected positions."""
         mask = select(inputs, positions_of("pae"))
-        return {"pae@positions": get_pae_loss(outputs, mask_1d=mask, mask_1b=mask)}
+        return {"pae@selected": get_pae_loss(outputs, mask_1d=mask, mask_1b=mask)}
+
+    def con(inputs: Any, outputs: Any, opt: Any) -> dict[str, Any]:
+        """ColabDesign's intra-chain contact loss over pairs within the selected positions."""
+        mask = select(inputs, positions_of("con"))
+        con_opt = contact_opt(opt, "con", "con")
+        return {"con@selected": get_con_loss(inputs, outputs, con_opt, mask_1d=mask, mask_2d=jnp.outer(mask, mask))}
 
     def i_con(inputs: Any, outputs: Any, opt: Any) -> dict[str, Any]:
         """ColabDesign's interface contact loss with the binder side restricted to the selected positions."""
         binder = select(inputs, positions_of("i_con"))
         rows, columns = (inputs["hotspot"], binder) if has_hotspot else (binder, 1 - select(inputs, None))
-        return {"i_con@positions": get_con_loss(inputs, outputs, opt["i_con"], mask_1d=rows, mask_1b=columns)}
+        i_con_opt = contact_opt(opt, "i_con", "i_con")
+        return {"i_con@selected": get_con_loss(inputs, outputs, i_con_opt, mask_1d=rows, mask_1b=columns)}
 
     return {
         "rg": rg,
@@ -244,9 +260,10 @@ def _extension_loss_fns(
         "i_ptm": i_ptm,
         "beta_strand": beta_strand,
         "fw_i_con": fw_i_con,
-        "plddt@positions": plddt,
-        "pae@positions": pae,
-        "i_con@positions": i_con,
+        "plddt@selected": plddt,
+        "pae@selected": pae,
+        "con@selected": con,
+        "i_con@selected": i_con,
     }
 
 
@@ -817,8 +834,8 @@ class AlphaFold2Model:
             value = _metric_value(aux["losses"][name])
             per_term = aux.get("per_term_grad", {}).get(name) if backprop else None
             rows = _binder_rows(per_term["seq"]) if per_term is not None else None
-            # A positions-restricted loss is read from its own key but reported under its term id.
-            term_id = name.removesuffix("@positions")
+            # A selector-restricted loss is read from its own key but reported under its term id.
+            term_id = name.removesuffix("@selected")
             if term_id in _INVERTED_LOSSES:
                 # ColabDesign reports 1 - confidence; negate the gradient with the value.
                 value = None if value is None else 1.0 - value
