@@ -552,3 +552,64 @@ def test_concurrent_af2_param_setups_download_once(tmp_path: Path) -> None:
     params = tmp_path / "cache" / "alphafold2" / "weights" / "params"
     assert len(list(params.glob("params_model_*.npz"))) == 15
     assert (params / ".params_complete").exists()
+
+
+# ── Git checkouts ─────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def upstream(tmp_path: Path) -> tuple[str, str]:
+    """A local repository with a weights file, as ``(url, commit)``."""
+    repo = tmp_path / "upstream"
+    (repo / "resources").mkdir(parents=True)
+    (repo / "resources" / "model.pth").write_bytes(b"weights")
+    (repo / "code.py").write_text("x = 1\n")
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run([*git, "add", "."], check=True)
+    subprocess.run([*git, "commit", "-qm", "init"], check=True)
+    commit = subprocess.run([*git, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+    return f"file://{repo}", commit
+
+
+def _ensure_checkout(url: str, dest: Path, commit: str) -> subprocess.CompletedProcess[str]:
+    return _run(f'proto_ensure_git_checkout "{url}" "{dest}" "{commit}"')
+
+
+@pytest.mark.parametrize("purge", ["working_tree", "working_tree_and_git"])
+def test_git_checkout_restores_purged_files(tmp_path: Path, upstream: tuple[str, str], purge: str) -> None:
+    """Deleted tracked files come back, even when the purge also emptied .git (its folders remain)."""
+    url, commit = upstream
+    dest = tmp_path / "weights" / "repo"
+    assert _ensure_checkout(url, dest, commit).returncode == 0
+    (dest / "notes.txt").write_text("untracked")
+
+    (dest / "resources" / "model.pth").unlink()
+    if purge == "working_tree_and_git":
+        for path in (dest / ".git").rglob("*"):
+            if path.is_file():
+                path.unlink()
+    result = _ensure_checkout(url, dest, commit)
+
+    assert result.returncode == 0, result.stderr
+    assert (dest / "resources" / "model.pth").read_bytes() == b"weights"
+    assert (dest / "notes.txt").read_text() == "untracked"
+
+
+def test_git_checkout_ignores_a_repository_in_a_parent_directory(tmp_path: Path, upstream: tuple[str, str]) -> None:
+    """A weights folder inside some other repository still gets its own checkout."""
+    url, commit = upstream
+    outer = tmp_path / "outer"
+    subprocess.run(["git", "init", "-q", str(outer)], check=True)
+
+    result = _ensure_checkout(url, outer / "repo", commit)
+
+    assert result.returncode == 0, result.stderr
+    assert (outer / "repo" / "resources" / "model.pth").read_bytes() == b"weights"
+
+
+def test_git_checkout_reports_a_failed_clone(tmp_path: Path) -> None:
+    result = _ensure_checkout(f"file://{tmp_path}/missing", tmp_path / "repo", "0" * 40)
+
+    assert result.returncode != 0
+    assert "could not clone" in result.stderr

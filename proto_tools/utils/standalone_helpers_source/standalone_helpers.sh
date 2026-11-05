@@ -784,6 +784,54 @@ _proto_download_archive_locked() {
 
 
 # ---------------------------------------------------------------------------
+# proto_ensure_git_checkout <url> <dir> <commit>
+#
+# Make <dir> a checkout of <commit> from <url> with every tracked file present.
+# A checkout whose files were deleted since (a scratch purge) gets them back,
+# including one whose .git the purge emptied: git can no longer read it, so a
+# fresh .git is cloned beside it and moved in. Files git does not track are
+# left alone, so a user's own checkout (a PROTO_<TOOL>_WEIGHTS_DIR override)
+# is never deleted. Returns non-zero when the clone fails.
+#
+# Example:
+#   proto_resolve_weights_dir puffin
+#   proto_ensure_git_checkout https://github.com/jzhoulab/puffin.git "$WEIGHTS_DIR/puffin_repo" "$PUFFIN_COMMIT"
+#
+# Reference: tools/sequence_scoring/puffin/standalone/setup.sh
+# ---------------------------------------------------------------------------
+proto_ensure_git_checkout() {
+    local url="$1" dir="$2" commit="$3" tmp
+    mkdir -p "$dir"
+    if [ -d "$dir/.git" ] && ! _proto_git_has_commit "$dir" "$commit"; then
+        git -C "$dir" fetch --quiet origin "$commit" 2>/dev/null || git -C "$dir" fetch --quiet origin 2>/dev/null || true
+    fi
+    if ! _proto_git_has_commit "$dir" "$commit"; then
+        echo "Cloning ${url} into ${dir}..."
+        tmp="$(mktemp -d "$(dirname "$dir")/.$(basename "$dir").clone.XXXXXX")"
+        if ! git clone --quiet --no-checkout "$url" "$tmp"; then
+            rm -rf "$tmp"
+            echo "ERROR: could not clone ${url}" >&2
+            return 1
+        fi
+        rm -rf "${dir}/.git"
+        mv "${tmp}/.git" "${dir}/.git"
+        rm -rf "$tmp"
+    fi
+    # --force restores tracked files that were deleted since the last checkout
+    git -C "$dir" checkout --quiet --force "$commit"
+}
+
+# Whether <dir> is itself the root of a repository holding <commit> (git -C would
+# otherwise find a repository in a parent directory).
+_proto_git_has_commit() {
+    local dir="$1" commit="$2" top
+    top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || return 1
+    [ "$top" = "$(cd "$dir" && pwd -P)" ] || return 1
+    git -C "$dir" rev-parse --verify --quiet "${commit}^{commit}" >/dev/null
+}
+
+
+# ---------------------------------------------------------------------------
 # proto_install_binary <toolkit>
 #
 # Download the platform-specific binary described by binary_config.py in the
