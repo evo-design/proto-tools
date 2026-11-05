@@ -2,7 +2,9 @@
 
 import json
 import os
+import shutil
 import sys
+import tarfile
 from pathlib import Path
 from typing import Any
 
@@ -107,6 +109,32 @@ def _install_msa_row_logging() -> None:
 
     construct_logging_msa_rows._logs_msa_rows = True  # type: ignore[attr-defined]
     featurizerv2.construct_paired_msa = construct_logging_msa_rows
+
+
+def _ensure_boltz_data(cache: Path) -> None:
+    """Download boltz's checkpoints and CCD molecules, extracting the molecules again when any are gone.
+
+    boltz downloads a missing checkpoint or ``mols.tar`` but extracts the tar only when ``mols/`` does
+    not exist, so a scratch purge that empties the folder and leaves it would fail every run on missing
+    ligand files. ``ensure_complete`` records the files the extraction produced and removes ``mols/``
+    when any are gone, so boltz extracts it again; concurrent workers sharing the cache take turns.
+    """
+    from boltz.main import download_boltz2
+    from standalone_helpers import ensure_complete
+
+    def extract(_mols: Path) -> None:
+        try:
+            download_boltz2(cache)
+        except (tarfile.ReadError, EOFError):
+            # An interrupted download left a truncated mols.tar: fetch it again
+            logger.warning("boltz2: %s is incomplete; downloading it again", cache / "mols.tar")
+            (cache / "mols.tar").unlink(missing_ok=True)
+            shutil.rmtree(cache / "mols", ignore_errors=True)
+            download_boltz2(cache)
+
+    ensure_complete(cache / "mols", extract)
+    # Checkpoints boltz checks file by file, so a purged one is simply downloaded again
+    download_boltz2(cache)
 
 
 class Boltz2Model:
@@ -265,6 +293,7 @@ class Boltz2Model:
 
         _install_checkpoint_cache()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        _ensure_boltz_data(self.cache_dir)
 
         import torch
 
