@@ -14,6 +14,7 @@ import pytest
 
 from proto_tools.entities.structures import BFactorType, Structure, is_valid_structure
 from proto_tools.tools.structure_prediction.alphafold2 import (
+    AlphaFold2BetaStrandTerm,
     AlphaFold2BinderGradientCandidate,
     AlphaFold2BinderGradientConfig,
     AlphaFold2BinderGradientInput,
@@ -25,6 +26,7 @@ from proto_tools.tools.structure_prediction.alphafold2 import (
     AlphaFold2HallucinationGradientOutput,
     AlphaFold2HallucinationGradientResult,
     AlphaFold2HallucinationTermGradient,
+    AlphaFold2InterfaceContactTerm,
     AlphaFold2PlddtTerm,
     AlphaFold2RmsdTerm,
     gradient_helpers,
@@ -277,6 +279,32 @@ def test_fixbb_dispatch_sends_the_reference_chain(monkeypatch: pytest.MonkeyPatc
     (result,) = output.results
     assert result.terms[0].term.id == "rmsd"
     assert result.terms[0].metadata.units == "angstroms"
+
+
+def test_binder_selectors_reach_the_worker_and_come_back_with_the_term(
+    monkeypatch: pytest.MonkeyPatch, target: Structure
+) -> None:
+    """A CDR-restricted term must reach the worker and be reported as the term that was asked for."""
+    captured: dict[str, Any] = {}
+
+    def fake_dispatch(toolkit: str, payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        captured.update(payload)
+        terms = [{"id": term_id, "value": 0.5, "gradient": [[0.0] * 20] * 6} for term_id in payload["gradient_terms"]]
+        return {"results": [{"terms": terms, "metrics": {"avg_plddt": 0.5}, "pdb": _FIXTURE_PDB.read_text()}]}
+
+    monkeypatch.setattr(gradient_helpers.ToolInstance, "dispatch", staticmethod(fake_dispatch))
+    i_con = AlphaFold2InterfaceContactTerm(positions=[2, 3])
+    strand = AlphaFold2BetaStrandTerm(positions=[1, 2, 3, 4, 5], form="out_of_range")
+    output = run_alphafold2_binder_gradient(
+        AlphaFold2BinderGradientInput(
+            inputs=[AlphaFold2BinderGradientCandidate(logits=[[0.0] * 20] * 6, target_pdb=target, target_chain="A")]
+        ),
+        AlphaFold2BinderGradientConfig(gradient_terms=[i_con, strand]),
+    )
+
+    assert captured["term_options"]["i_con"]["positions"] == [2, 3]
+    assert captured["term_options"]["beta_strand"]["form"] == "out_of_range"
+    assert [term.term for term in output.results[0].terms] == [i_con, strand]
 
 
 @pytest.mark.uses_gpu

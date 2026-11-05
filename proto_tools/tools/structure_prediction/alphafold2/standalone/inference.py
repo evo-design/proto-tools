@@ -143,23 +143,48 @@ def _extract_metrics(aux: dict[str, Any] | None, include_pae_matrix: bool = Fals
 # ============================================================================
 
 
-def _extension_loss_fns(designed_len: int, term_options: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
-    """Build the extension loss functions, each over the trailing ``designed_len`` residues.
+def _loss_key(term_id: str, options: Mapping[str, Any]) -> str:
+    """Loss-dict key a requested term is read from.
 
-    The designed segment is always the trailing rows (the binder, or the whole chain for the
-    single-chain protocols), so every extension applies under all three protocols.
+    A ColabDesign loss restricted by ``positions`` is computed by an extension under its own key,
+    so ColabDesign's unrestricted value is never shadowed; the reported id drops the suffix.
+    """
+    return f"{term_id}@positions" if term_id in _NATIVE_LOSSES and options.get("positions") else term_id
+
+
+def _extension_loss_fns(
+    designed_len: int, term_options: Mapping[str, Mapping[str, Any]], has_hotspot: bool
+) -> dict[str, Any]:
+    """Build the extension loss functions, keyed by :func:`_loss_key`.
+
+    The designed segment is always the trailing ``designed_len`` rows (the binder, or the whole
+    chain for the single-chain protocols), so every extension applies under all three protocols.
+    Selector positions are 1-indexed within that segment.
 
     Args:
         designed_len (int): Number of trailing residues being designed.
         term_options (Mapping[str, Mapping[str, Any]]): Per-term selectors, by term id.
+        has_hotspot (bool): Whether the input names a target hotspot.
 
     Returns:
-        dict[str, Any]: One loss callback per extension term; ColabDesign passes arguments by name.
+        dict[str, Any]: One loss callback per extension key; ColabDesign passes arguments by name.
     """
     import jax
     import jax.numpy as jnp
     from colabdesign.af.alphafold.common import residue_constants
-    from colabdesign.af.loss import get_con_loss, get_dgram_bins, get_ptm
+    from colabdesign.af.loss import get_con_loss, get_dgram_bins, get_pae_loss, get_plddt_loss, get_ptm
+
+    def select(inputs: Any, positions: list[int] | None) -> Any:
+        """Mask over the full complex selecting designed positions, or all designed residues."""
+        length = inputs["seq_mask"].shape[0]
+        mask = jnp.zeros(length)
+        if positions is None:
+            return mask.at[length - designed_len :].set(1)
+        return mask.at[jnp.asarray(positions) + length - designed_len - 1].set(1)
+
+    def positions_of(term_id: str, key: str = "positions") -> Any:
+        """The selector a term was requested with, if any."""
+        return term_options.get(term_id, {}).get(key)
 
     def designed_ca(outputs: Any) -> Any:
         """CA coordinates of the designed residues."""
@@ -180,24 +205,49 @@ def _extension_loss_fns(designed_len: int, term_options: Mapping[str, Mapping[st
         """Interface pTM, as ``1 - ipTM`` like ColabDesign's other confidences."""
         return {"i_ptm": 1 - get_ptm(inputs, outputs, interface=True)}
 
-    def beta_strand(outputs: Any) -> dict[str, Any]:
-        """Mean of the worst third of ``-log P(9.75 <= d <= 11.5)`` over designed i,i+3 pairs."""
-        dgram = outputs["distogram"]["logits"]
+    def beta_strand(inputs: Any, outputs: Any) -> dict[str, Any]:
+        """Mean of the worst third of per-pair ``-log P`` over selected i,i+3 pairs, as in Germinal."""
         bins = get_dgram_bins(outputs)
         in_range = jnp.logical_and(bins >= 9.75, bins <= 11.5)
-        pair_loss = -jnp.log((in_range * jax.nn.softmax(dgram) + 1e-8).sum(-1))
-        worst = jnp.sort(jnp.diagonal(pair_loss[-designed_len:, -designed_len:], 3))[::-1]
-        return {"beta_strand": worst[: max(designed_len // 3, 1)].mean()}
+        if term_options.get("beta_strand", {}).get("form") == "out_of_range":
+            in_range = jnp.logical_not(in_range)
+        pair_loss = -jnp.log((in_range * jax.nn.softmax(outputs["distogram"]["logits"]) + 1e-8).sum(-1))
+        mask = select(inputs, positions_of("beta_strand"))
+        worst = jnp.sort(jnp.diagonal(jnp.outer(mask, mask) * pair_loss, 3))[::-1]
+        count = len(positions_of("beta_strand") or range(designed_len))
+        return {"beta_strand": worst[: max(count // 3, 1)].mean()}
 
     def fw_i_con(inputs: Any, outputs: Any, opt: Any) -> dict[str, Any]:
         """Contact loss from the target to the framework residues, as in Germinal."""
-        length = inputs["seq_mask"].shape[0]
-        positions = term_options["fw_i_con"]["framework_positions"]
-        target = jnp.zeros(length).at[: length - designed_len].set(1)
-        framework = jnp.zeros(length).at[jnp.asarray(positions) + length - designed_len - 1].set(1)
+        framework = select(inputs, positions_of("fw_i_con", "framework_positions"))
+        target = 1 - select(inputs, None)
         return {"fw_i_con": get_con_loss(inputs, outputs, opt["i_con"], mask_1d=target, mask_1b=framework)}
 
-    return {"rg": rg, "NC": termini, "i_ptm": i_ptm, "beta_strand": beta_strand, "fw_i_con": fw_i_con}
+    def plddt(inputs: Any, outputs: Any) -> dict[str, Any]:
+        """ColabDesign's pLDDT loss over the selected positions."""
+        return {"plddt@positions": get_plddt_loss(outputs, mask_1d=select(inputs, positions_of("plddt")))}
+
+    def pae(inputs: Any, outputs: Any) -> dict[str, Any]:
+        """ColabDesign's PAE loss over pairs within the selected positions."""
+        mask = select(inputs, positions_of("pae"))
+        return {"pae@positions": get_pae_loss(outputs, mask_1d=mask, mask_1b=mask)}
+
+    def i_con(inputs: Any, outputs: Any, opt: Any) -> dict[str, Any]:
+        """ColabDesign's interface contact loss with the binder side restricted to the selected positions."""
+        binder = select(inputs, positions_of("i_con"))
+        rows, columns = (inputs["hotspot"], binder) if has_hotspot else (binder, 1 - select(inputs, None))
+        return {"i_con@positions": get_con_loss(inputs, outputs, opt["i_con"], mask_1d=rows, mask_1b=columns)}
+
+    return {
+        "rg": rg,
+        "NC": termini,
+        "i_ptm": i_ptm,
+        "beta_strand": beta_strand,
+        "fw_i_con": fw_i_con,
+        "plddt@positions": plddt,
+        "pae@positions": pae,
+        "i_con@positions": i_con,
+    }
 
 
 #: Quantities ColabDesign computes itself; an extension must never shadow one.
@@ -208,25 +258,33 @@ _INVERTED_LOSSES = frozenset({"plddt", "exp_res", "i_ptm"})
 
 
 def _configure_extension_losses(
-    af_model: Any, requested: Collection[str], designed_len: int, term_options: Mapping[str, Mapping[str, Any]]
+    af_model: Any,
+    loss_keys: Collection[str],
+    designed_len: int,
+    term_options: Mapping[str, Mapping[str, Any]],
+    has_hotspot: bool,
 ) -> None:
-    """Register the extension loss callbacks the requested terms need.
+    """Register the extension loss callbacks the requested loss keys need.
 
     Args:
         af_model (Any): The ColabDesign design model.
-        requested (Collection[str]): Requested term ids.
+        loss_keys (Collection[str]): Requested loss keys, from :func:`_loss_key`.
         designed_len (int): Number of trailing residues being designed.
         term_options (Mapping[str, Mapping[str, Any]]): Per-term selectors, by term id.
+        has_hotspot (bool): Whether the input names a target hotspot.
 
     Raises:
-        ValueError: If a framework position lies outside the designed residues.
+        ValueError: If a selector position lies outside the designed residues.
     """
-    positions = term_options.get("fw_i_con", {}).get("framework_positions", [])
-    if any(position > designed_len for position in positions):
-        raise ValueError(f"alphafold2: framework_positions {positions} exceed the {designed_len} designed residues")
-    extensions = _extension_loss_fns(designed_len, term_options)
-    for name in set(requested) - _NATIVE_LOSSES:
-        af_model._callbacks["model"]["loss"].append(extensions[name])
+    for term_id, options in term_options.items():
+        for key in ("positions", "framework_positions"):
+            if any(position > designed_len for position in options.get(key) or []):
+                raise ValueError(
+                    f"alphafold2: {term_id} {key} {options[key]} exceed the {designed_len} designed residues"
+                )
+    extensions = _extension_loss_fns(designed_len, term_options, has_hotspot)
+    for key in set(loss_keys) - _NATIVE_LOSSES:
+        af_model._callbacks["model"]["loss"].append(extensions[key])
 
 
 def _per_term_gradients(af_model: Any, term_names: list[str]) -> Any:
@@ -759,11 +817,13 @@ class AlphaFold2Model:
             value = _metric_value(aux["losses"][name])
             per_term = aux.get("per_term_grad", {}).get(name) if backprop else None
             rows = _binder_rows(per_term["seq"]) if per_term is not None else None
-            if name in _INVERTED_LOSSES:
+            # A positions-restricted loss is read from its own key but reported under its term id.
+            term_id = name.removesuffix("@positions")
+            if term_id in _INVERTED_LOSSES:
                 # ColabDesign reports 1 - confidence; negate the gradient with the value.
                 value = None if value is None else 1.0 - value
                 rows = None if rows is None else [[-entry for entry in row] for row in rows]
-            terms.append({"id": name, "value": value, "gradient": rows})
+            terms.append({"id": term_id, "value": value, "gradient": rows})
 
         return {
             "terms": terms,
@@ -807,7 +867,7 @@ class AlphaFold2Model:
             protocol (str): ColabDesign protocol: ``"binder"``, ``"fixbb"`` or ``"hallucination"``.
             prep_kwargs (dict[str, Any]): Protocol-specific arguments for ``prep_inputs``.
             logits (list[list[float]]): Relaxed ``(L, 20)`` state for the designed chain.
-            gradient_terms (list[str]): Loss-dict keys to differentiate, one gradient each.
+            gradient_terms (list[str]): Requested term ids, one gradient each.
             term_options (Mapping[str, Mapping[str, Any]] | None): Per-term selectors, by term id.
             temperature (float | None): Softmax temperature, or ``None`` for probabilities.
             soft (float): Relaxation blend.
@@ -850,7 +910,9 @@ class AlphaFold2Model:
             )
 
         # An extension loss only reaches aux["losses"] once its callback is installed.
-        _configure_extension_losses(af_model, gradient_terms, designed_len, term_options or {})
+        term_options = term_options or {}
+        loss_keys = [_loss_key(term_id, term_options.get(term_id, {})) for term_id in gradient_terms]
+        _configure_extension_losses(af_model, loss_keys, designed_len, term_options, "hotspot" in prep_kwargs)
 
         return self._run_gradient(
             af_model,
@@ -861,7 +923,7 @@ class AlphaFold2Model:
             num_recycles=num_recycles,
             model_num=model_num,
             sample_models=sample_models,
-            gradient_terms=gradient_terms,
+            gradient_terms=loss_keys,
             seed=seed,
             backprop=compute_gradient,
             include_pae_matrix=include_pae_matrix,
