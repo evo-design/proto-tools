@@ -105,7 +105,7 @@ Template-based binder redesign as in Germinal: optimizing an antibody's CDRs on 
 
 
 These four gradient tools return one raw gradient per quantity, which the caller composes.
-- **Pick the tool that matches the design.** De novo with no reference → `alphafold2-hallucination-gradient`. Sequence against a known backbone → `alphafold2-fixbb-gradient`. Binder against a target → `alphafold2-binder-gradient`; an existing template binder chain → `alphafold2-binder-redesign-gradient`. 
+- **Pick the tool that matches the design.** De novo with no reference → `alphafold2-hallucination-gradient`. Sequence against a known backbone → `alphafold2-fixbb-gradient`. Binder against a target → `alphafold2-binder-gradient`; an existing template binder chain → `alphafold2-binder-redesign-gradient`.
 
 ## Toolkit Notes
 bin
