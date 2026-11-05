@@ -293,7 +293,7 @@ def test_binder_selectors_reach_the_worker_and_come_back_with_the_term(
         return {"results": [{"terms": terms, "metrics": {"avg_plddt": 0.5}, "pdb": _FIXTURE_PDB.read_text()}]}
 
     monkeypatch.setattr(gradient_helpers.ToolInstance, "dispatch", staticmethod(fake_dispatch))
-    i_con = AlphaFold2InterfaceContactTerm(positions=[2, 3])
+    i_con = AlphaFold2InterfaceContactTerm(positions=[2, 3], num_contacts=2, cutoff=20.0)
     strand = AlphaFold2BetaStrandTerm(positions=[1, 2, 3, 4, 5], form="out_of_range")
     output = run_alphafold2_binder_gradient(
         AlphaFold2BinderGradientInput(
@@ -302,7 +302,7 @@ def test_binder_selectors_reach_the_worker_and_come_back_with_the_term(
         AlphaFold2BinderGradientConfig(gradient_terms=[i_con, strand]),
     )
 
-    assert captured["term_options"]["i_con"]["positions"] == [2, 3]
+    assert captured["term_options"]["i_con"] == {"positions": [2, 3], "num_contacts": 2, "cutoff": 20.0}
     assert captured["term_options"]["beta_strand"]["form"] == "out_of_range"
     assert [term.term for term in output.results[0].terms] == [i_con, strand]
 
