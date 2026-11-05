@@ -26,23 +26,8 @@ from proto_tools.tools.structure_prediction import (
     run_esmfold_gradient,
 )
 from proto_tools.utils import ClippedLinearGoal, MaximizeGoal, one_hot_protein_logits
+from tests._structure_fixtures import single_chain_pdb
 from tests.conftest import benchmark_twice, random_protein_sequences
-
-
-def _minimal_pdb(num_residues: int) -> str:
-    """Build a simple single-chain PDB with ``num_residues`` glycine residues."""
-    lines = []
-    atom_id = 1
-    for residue_id in range(1, num_residues + 1):
-        base = float(residue_id * 3)
-        for atom_name, dx, dy in [("N", 0.0, 0.0), ("CA", 1.4, 0.0), ("C", 2.1, 1.2), ("O", 1.7, 2.3)]:
-            lines.append(
-                f"ATOM  {atom_id:5d} {atom_name:<4} GLY A{residue_id:4d}    "
-                f"{base + dx:8.3f}{dy:8.3f}{0.0:8.3f}{1.0:6.2f}{0.8:6.2f}           {atom_name[0]:>2}"
-            )
-            atom_id += 1
-    lines.append("END")
-    return "\n".join(lines) + "\n"
 
 
 def test_esmfold_predict_retries_on_cuda_oom():
@@ -55,7 +40,7 @@ def test_esmfold_predict_retries_on_cuda_oom():
         ]
     )
     config = ESMFoldConfig(max_batch_residues=200, num_recycles=1)
-    one_result = {"pdb": _minimal_pdb(4), "avg_plddt": 0.8, "ptm": 0.5, "avg_pae": 6.0}
+    one_result = {"pdb": single_chain_pdb(4), "avg_plddt": 0.8, "ptm": 0.5, "avg_pae": 6.0}
 
     calls: list[int] = []
 
@@ -82,7 +67,7 @@ def test_esmfold_predict_does_not_duplicate_results_on_mid_attempt_oom():
         complexes=[Complex(chains=[{"sequence": ch * 50, "entity_type": "protein"}]) for ch in ("A", "C", "D", "E")]
     )
     config = ESMFoldConfig(max_batch_residues=200, num_recycles=1)
-    one_result = {"pdb": _minimal_pdb(4), "avg_plddt": 0.8, "ptm": 0.5, "avg_pae": 6.0}
+    one_result = {"pdb": single_chain_pdb(4), "avg_plddt": 0.8, "ptm": 0.5, "avg_pae": 6.0}
 
     call_idx = 0
 
@@ -158,7 +143,7 @@ def test_esmfold_gradient_dispatch_builds_output():
                     },
                 ],
                 "metrics": {"avg_plddt": 0.8, "ptm": 0.4, "avg_pae": 6.0},
-                "pdb": _minimal_pdb(4),
+                "pdb": single_chain_pdb(4),
             }
         ],
         "vocab": list("ACDEFGHIKLMNPQRSTVWY"),
