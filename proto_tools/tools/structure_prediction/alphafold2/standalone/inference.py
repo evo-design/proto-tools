@@ -111,8 +111,10 @@ def _metric_value(value: Any) -> float | None:
     return float(serialized)
 
 
-def _extract_metrics(aux: dict[str, Any] | None, include_pae_matrix: bool = False) -> dict[str, Any]:
-    """Convert ColabDesign aux outputs into simple scalar metrics."""
+def _extract_metrics(
+    aux: dict[str, Any] | None, include_pae_matrix: bool = False, term_keys: Collection[str] = ()
+) -> dict[str, Any]:
+    """Convert ColabDesign aux outputs into simple scalar metrics, leaving out the requested terms."""
     if not aux:
         return {}
 
@@ -124,9 +126,10 @@ def _extract_metrics(aux: dict[str, Any] | None, include_pae_matrix: bool = Fals
             if scalar is not None:
                 metrics[dst_key] = scalar
 
-    # Terms carry the confidence itself, so copying the raw loss here would duplicate the name.
+    # Terms carry their own values, so copying their losses here would duplicate them, and a
+    # selector-restricted loss would leak its internal key.
     for key, value in aux.get("losses", {}).items():
-        if key in _NATIVE_LOSSES or key in _INVERTED_LOSSES or key == "pae":
+        if key in _NATIVE_LOSSES or key in _INVERTED_LOSSES or key == "pae" or key in term_keys:
             continue
         scalar = _metric_value(value)
         if scalar is not None:
@@ -845,7 +848,7 @@ class AlphaFold2Model:
         return {
             "terms": terms,
             "loss": float(serialize_output(aux["loss"])),
-            "metrics": _extract_metrics(aux, include_pae_matrix=include_pae_matrix),
+            "metrics": _extract_metrics(aux, include_pae_matrix=include_pae_matrix, term_keys=gradient_terms or ()),
             "vocab": AMINO_ACIDS_LIST,
             "pdb": af_model.save_pdb(get_best=False),
         }
