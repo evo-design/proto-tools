@@ -53,6 +53,7 @@ De novo design driven only by what AlphaFold2 believes about a sequence — maxi
 - **Select quantities with `gradient_terms`.** The protocol offers `plddt`, `pae`, `con`, `exp_res`, `helix`, `rg`, `NC` and `beta_strand`; each returns one `TermGradient` carrying its own value and its own gradient.
 - **Terms are raw quantities, not objectives.** `plddt` is the confidence itself, not a loss, and no weight or direction is folded into its gradient. Combine them downstream with goals and weights.
 - **`helix` and `beta_strand` have no built-in direction.** Lower means more helical contacts or more strand-like i,i+3 spacing, but whether that is wanted depends on the design, so composing them requires an explicit goal.
+- **`positions` restricts a term to part of the designed chain.** `plddt`, `pae` and `beta_strand` (and `i_con` on the binder tool) take optional 1-indexed `positions`, e.g. the CDRs; without it a term covers its usual region. `beta_strand` also takes `form="out_of_range"`, which scores `-log(1 - P)` as Germinal does.
 - **`rg` and `NC` shape the designed chain.** `rg` is the radius of gyration beyond `2.38 * N**0.365` and `NC` the terminal CA distance beyond 7 Å, as in BindCraft and Germinal; both are offered by all three tools.
 - **One sequence per call; this tool is not an optimization loop.** Drive it from an optimizer, or call it repeatedly.
 
@@ -94,7 +95,7 @@ The previous `alphafold2-gradient` tool is replaced by the three tools above. It
 - **Pick the tool that matches the design.** De novo with no reference → `alphafold2-hallucination-gradient`. Sequence against a known backbone → `alphafold2-fixbb-gradient`. Binder against a target → `alphafold2-binder-gradient`. Splitting them is what makes each tool's term catalog honest: the old tool accepted terms its protocol never computed and returned gradients of zero for them.
 - **`binder_chain` has no successor.** It selected an existing chain of the target template to redesign, which made the binder supervised and silently zeroed the confidence quantities. No tool here reproduces template-based binder redesign.
 - **`helix` now means ColabDesign's native helix loss** — a binary contact loss over i,i+3 pairs across the whole designed region — rather than the binder-only variant the previous tool registered. Its magnitude, normalization and sign convention all differ.
-- **`rg`, `i_ptm`, `NC` and `beta_strand` are terms again**, and the Germinal framework-contact penalty is composed from `fw_i_con` and `i_con`. `beta_strand` now spans the designed residues; Germinal's fork instead scored `-log(1 - P)` over its CDR positions.
+- **`rg`, `i_ptm`, `NC` and `beta_strand` are terms again**, and the Germinal framework-contact penalty is composed from `fw_i_con` and `i_con`. Germinal's CDR-restricted terms map to `positions`, and its strand loss to `beta_strand(form="out_of_range")`.
 - **`backend="germinal"`, `starting_binder_seq`, `excluded_amino_acids` and `bias_redesign` are not carried over.**
 
 ## Toolkit Notes

@@ -52,6 +52,8 @@ class AlphaFold2PlddtTerm(AlphaFold2Term):
 
     Attributes:
         id (Literal["plddt"]): Fixed identifier for this kind of quantity.
+        positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
+            keeps the protocol's own region.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "higher"
@@ -59,6 +61,9 @@ class AlphaFold2PlddtTerm(AlphaFold2Term):
 
     id: Literal["plddt"] = Field(
         default="plddt", title="Term ID", description="Identifies this quantity as mean pLDDT."
+    )
+    positions: list[PositiveInt] | None = Field(
+        default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
     )
 
 
@@ -82,6 +87,8 @@ class AlphaFold2PaeTerm(AlphaFold2Term):
 
     Attributes:
         id (Literal["pae"]): Fixed identifier for this kind of quantity.
+        positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
+            keeps the protocol's own region.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -89,6 +96,9 @@ class AlphaFold2PaeTerm(AlphaFold2Term):
 
     id: Literal["pae"] = Field(
         default="pae", title="Term ID", description="Identifies this quantity as intra-chain PAE."
+    )
+    positions: list[PositiveInt] | None = Field(
+        default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
     )
 
 
@@ -125,8 +135,13 @@ class AlphaFold2ContactTerm(AlphaFold2Term):
 class AlphaFold2InterfaceContactTerm(AlphaFold2Term):
     """ColabDesign's interface contact objective between binder and target.
 
+    ``positions`` restricts the binder side: those residues' contacts to the target, or the
+    hotspot's contacts to those residues when the input names a hotspot.
+
     Attributes:
         id (Literal["i_con"]): Fixed identifier for this kind of quantity.
+        positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
+            keeps the protocol's own region.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -134,6 +149,9 @@ class AlphaFold2InterfaceContactTerm(AlphaFold2Term):
 
     id: Literal["i_con"] = Field(
         default="i_con", title="Term ID", description="Identifies this quantity as the interface contact loss."
+    )
+    positions: list[PositiveInt] | None = Field(
+        default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
     )
 
 
@@ -238,12 +256,17 @@ class AlphaFold2TerminiDistanceTerm(AlphaFold2Term):
 class AlphaFold2BetaStrandTerm(AlphaFold2Term):
     """Strand-geometry objective over i,i+3 pairs of the designed residues.
 
-    Each pair scores ``-log P(9.75 <= d <= 11.5)`` from the distogram; the value is the mean of
-    the worst third. Lower values mean more strand-like spacing, so like ``helix`` it carries no
-    advisory direction.
+    Each pair scores ``-log P(9.75 <= d <= 11.5)`` from the distogram, or ``-log`` of the
+    complement under ``form="out_of_range"``; the value is the mean of the worst third. With
+    ``positions``, only pairs with both ends listed count. Lower in-range values mean more
+    strand-like spacing, so like ``helix`` it carries no advisory direction.
 
     Attributes:
         id (Literal["beta_strand"]): Fixed identifier for this kind of quantity.
+        positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
+            keeps the protocol's own region.
+        form (Literal["in_range", "out_of_range"]): Whether each pair scores ``-log P`` of falling
+            in the strand range or outside it; Germinal uses ``"out_of_range"``.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
@@ -251,6 +274,12 @@ class AlphaFold2BetaStrandTerm(AlphaFold2Term):
 
     id: Literal["beta_strand"] = Field(
         default="beta_strand", title="Term ID", description="Identifies this quantity as the strand loss."
+    )
+    positions: list[PositiveInt] | None = Field(
+        default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
+    )
+    form: Literal["in_range", "out_of_range"] = Field(
+        default="in_range", title="Form", description="Score -log P of the strand range, or of outside it."
     )
 
 
