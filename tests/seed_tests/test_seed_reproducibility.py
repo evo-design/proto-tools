@@ -83,7 +83,7 @@ def test_masking_strategy_seeded():
 #   floating-point ops non-deterministically across runs, so same-seed
 #   coordinates drift beyond tolerance in both the persistent and non-persistent
 #   variants.
-# - the three alphafold2 gradient tools: JAX bfloat16 / CUDA autotune drift amplified by backprop (~12% on gradients).
+# - the alphafold2 gradient tools: JAX bfloat16 / CUDA autotune drift amplified by backprop (~12% on gradients).
 _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "rfdiffusion3-design",
@@ -91,6 +91,7 @@ _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
         "protenix-prediction",
         "opendde-prediction",
         "alphafold2-binder-gradient",
+        "alphafold2-binder-redesign-gradient",
         "alphafold2-fixbb-gradient",
         "alphafold2-hallucination-gradient",
         "alphafold3-prediction",

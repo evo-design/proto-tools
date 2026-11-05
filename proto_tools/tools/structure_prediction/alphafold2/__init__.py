@@ -15,6 +15,15 @@ from proto_tools.tools.structure_prediction.alphafold2.alphafold2_binder_gradien
     AlphaFold2BinderTermGradient,
     run_alphafold2_binder_gradient,
 )
+from proto_tools.tools.structure_prediction.alphafold2.alphafold2_binder_redesign_gradient import (
+    AlphaFold2BinderRedesignGradientCandidate,
+    AlphaFold2BinderRedesignGradientConfig,
+    AlphaFold2BinderRedesignGradientInput,
+    AlphaFold2BinderRedesignGradientOutput,
+    AlphaFold2BinderRedesignGradientResult,
+    AlphaFold2BinderRedesignTermGradient,
+    run_alphafold2_binder_redesign_gradient,
+)
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2_fixbb_gradient import (
     AlphaFold2FixBBGradientCandidate,
     AlphaFold2FixBBGradientConfig,
@@ -74,6 +83,12 @@ __all__ = [
     "AlphaFold2BinderGradientOutput",
     "AlphaFold2BinderGradientResult",
     "AlphaFold2BinderTermGradient",
+    "AlphaFold2BinderRedesignGradientCandidate",
+    "AlphaFold2BinderRedesignGradientConfig",
+    "AlphaFold2BinderRedesignGradientInput",
+    "AlphaFold2BinderRedesignGradientOutput",
+    "AlphaFold2BinderRedesignGradientResult",
+    "AlphaFold2BinderRedesignTermGradient",
     "AlphaFold2FixBBGradientCandidate",
     "AlphaFold2FixBBGradientConfig",
     "AlphaFold2FixBBGradientInput",
@@ -86,6 +101,7 @@ __all__ = [
     "AlphaFold2HallucinationGradientResult",
     "AlphaFold2HallucinationTermGradient",
     "run_alphafold2_binder_gradient",
+    "run_alphafold2_binder_redesign_gradient",
     "run_alphafold2_fixbb_gradient",
     "run_alphafold2_hallucination_gradient",
     "AlphaFold2Input",
