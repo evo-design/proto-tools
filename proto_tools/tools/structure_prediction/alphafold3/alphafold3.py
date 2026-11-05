@@ -18,8 +18,6 @@ logger = logging.getLogger(__name__)
 
 # MSA rows the Evoformer keeps after shuffling the featurized MSA (its Config.num_msa).
 ALPHAFOLD3_NUM_MSA = 1024
-# AlphaFold3 is written a chain's MSA only alongside its primary alignment.
-_UNPAIRED_ONLY_REASON = "only unpaired rows were supplied; AlphaFold3 is sent a chain's primary alignment"
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.msa import MSA
@@ -326,12 +324,9 @@ def run_alphafold3(
                 complex_msas = inputs.msas[dispatch_idx]
                 per_chain_msas, unpaired_per_chain = complex_msas.per_chain, complex_msas.unpaired_per_chain
                 is_paired = complex_msas.paired
-                if per_chain_msas:
-                    input_json, msa_sent = _assign_msas_to_input_json(
-                        input_json, per_chain_msas, unpaired_per_chain, is_paired, comp, input_dir, config.verbose
-                    )
-                else:
-                    msa_sent = dict.fromkeys(unpaired_per_chain or {}, SentMSA(ignored_reason=_UNPAIRED_ONLY_REASON))
+                input_json, msa_sent = _assign_msas_to_input_json(
+                    input_json, per_chain_msas, unpaired_per_chain, is_paired, comp, input_dir, config.verbose
+                )
 
             # Write input JSON to file for worker protocol
             input_json_path = os.path.join(input_dir, f"{config.name}_{dispatch_idx}.json")
@@ -409,7 +404,8 @@ def _assign_msas_to_input_json(
     pairing) itself. ``unpairedMsaPath`` gets each chain's deep unpaired MSA
     (``unpaired_per_chain`` when available), and ``pairedMsaPath`` gets the
     row-aligned paired MSA (``per_chain``) when ``is_paired``. When no separate
-    unpaired MSA is provided, ``per_chain`` serves both slots.
+    unpaired MSA is provided, ``per_chain`` serves both slots. A chain with only
+    unpaired rows gets just ``unpairedMsaPath``, so it never pairs.
 
     Args:
         input_json_data (AlphaFold3JSON): AlphaFold3 input JSON dictionary to
@@ -446,39 +442,36 @@ def _assign_msas_to_input_json(
             break
         chain_idx = protein_chains_idx[proto_pos]
         msa = per_chain_msas.get(chain_idx)
-        if msa is None:
-            if chain_idx in (unpaired_per_chain or {}):
-                sent[chain_idx] = SentMSA(ignored_reason=_UNPAIRED_ONLY_REASON)
+        # unpairedMsaPath gets each chain's deep unpaired MSA when available, else the
+        # primary MSA; AF3 block-diagonalizes the unpaired rows across the complex itself.
+        unpaired_msa = (unpaired_per_chain or {}).get(chain_idx, msa)
+        if unpaired_msa is None:
             continue
+        paired_msa = msa if is_paired else None
 
         chain_id = seq_entry["protein"]["id"]
         if isinstance(chain_id, list):
             chain_id = chain_id[0]
 
-        # unpairedMsaPath gets each chain's deep unpaired MSA when available, else the
-        # primary MSA; AF3 block-diagonalizes the unpaired rows across the complex itself.
-        unpaired_msa = (unpaired_per_chain or {}).get(chain_idx)
-        if unpaired_msa is None:
-            unpaired_msa = msa
         a3m_path = os.path.join(msa_dir, f"chain_{chain_id}_{chain_idx}.a3m")
         unpaired_msa.to_a3m_file(a3m_path, query_index=0)
         seq_entry["protein"]["unpairedMsaPath"] = os.path.relpath(a3m_path, input_dir)
 
-        if is_paired:
+        if paired_msa is not None:
             paired_a3m_path = os.path.join(msa_dir, f"chain_{chain_id}_{chain_idx}.paired.a3m")
-            write_paired_a3m_with_uniprot_headers(msa, paired_a3m_path)
+            write_paired_a3m_with_uniprot_headers(paired_msa, paired_a3m_path)
             seq_entry["protein"]["pairedMsaPath"] = os.path.relpath(paired_a3m_path, input_dir)
 
         sent[chain_idx] = SentMSA(
-            rows=len(msa) if is_paired else len(unpaired_msa),
+            rows=len(paired_msa) if paired_msa is not None else len(unpaired_msa),
             # Without a deep unpaired MSA the unpaired file repeats the paired rows: no extra depth.
-            unpaired_rows=len(unpaired_msa) - 1 if is_paired and unpaired_msa is not msa else 0,
-            paired=is_paired,
+            unpaired_rows=len(unpaired_msa) - 1 if paired_msa is not None and unpaired_msa is not msa else 0,
+            paired=paired_msa is not None,
             ignored_reason=short_chain_reason(protein_chains[chain_idx], "AlphaFold3"),
         )
         if verbose:
             logger.info(
-                f"Assigned MSA to chain {chain_id} (unpaired {len(unpaired_msa)} / paired {len(msa)} sequences)"
+                f"Assigned MSA to chain {chain_id} (unpaired {len(unpaired_msa)} / paired {len(paired_msa or [])} sequences)"
             )
 
     return input_json_data, sent

@@ -18,8 +18,6 @@ logger = logging.getLogger(__name__)
 CHAI1_RECYCLE_SUBSAMPLE_ROWS = 4096
 # chai-lab's row quota for the uniref90 source every written MSA row is tagged with.
 CHAI1_UNIREF90_QUOTA_ROWS = 10_000
-# Chai-1 is written a chain's pqt only from its primary alignment.
-_UNPAIRED_ONLY_REASON = "only unpaired rows were supplied; Chai-1 is sent a chain's primary alignment"
 
 from proto_tools.entities.structures import MSASubsampling
 from proto_tools.entities.structures.structure import BFactorType, Structure
@@ -33,6 +31,7 @@ from proto_tools.tools.structure_prediction.chai1.helpers import (
 )
 from proto_tools.tools.structure_prediction.msa_plan import (
     SentMSA,
+    chain_base_rows,
     protein_chain_msas,
     unpaired_depth_rows,
 )
@@ -443,39 +442,31 @@ def run_chai1_on_complex(
         output_dir = os.path.join(temp_dir, "output")
         os.makedirs(output_dir, exist_ok=True)
 
-        is_paired = complex_msas is not None and complex_msas.paired
-
         # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied
         # by the caller (always respected regardless of use_msa).
-        msa_directory = None
-        msa_sent: dict[int, SentMSA] = {}
-        if complex_msas is not None and complex_msas.per_chain:
-            pqt_dir = os.path.join(temp_dir, "msa_pqt")
-            os.makedirs(pqt_dir, exist_ok=True)
-            # Identical chains share one pqt, so the last chain written for a sequence wins.
-            written: dict[str, SentMSA] = {}
-            for chain in protein_chain_msas(comp.chains, complex_msas):
-                if chain.primary is None:
-                    continue
-                seq_hash = _hash_sequence(chain.chain.sequence.upper())
-                # Pair row-aligned rows across chains; append the deep unpaired MSA for depth.
-                written[seq_hash] = _msa_to_pqt_file(
-                    msa=chain.primary,
-                    pqt_path=os.path.join(pqt_dir, f"{seq_hash}.aligned.pqt"),
-                    query_index=0,
-                    paired=is_paired,
-                    unpaired_msa=chain.unpaired,
-                )
-                if config.verbose:
-                    logger.info(f"Assigned MSA to protein chain {chain.index} ({len(chain.primary)} sequences)")
-            for chain in protein_chain_msas(comp.chains, complex_msas):
-                if chain.primary is not None:
-                    msa_sent[chain.index] = written[_hash_sequence(chain.chain.sequence.upper())]
-            if os.listdir(pqt_dir):
-                msa_directory = pqt_dir
+        bundle_paired = complex_msas is not None and complex_msas.paired
+        pqt_dir = os.path.join(temp_dir, "msa_pqt")
+        os.makedirs(pqt_dir, exist_ok=True)
+        # Identical chains share one pqt, so the last chain written for a sequence wins.
+        written: dict[str, SentMSA] = {}
+        chain_hashes: dict[int, str] = {}
         for chain in protein_chain_msas(comp.chains, complex_msas):
-            if chain.primary is None and chain.unpaired is not None:
-                msa_sent[chain.index] = SentMSA(ignored_reason=_UNPAIRED_ONLY_REASON)
+            base, unpaired, pairs = chain_base_rows(chain, bundle_paired)
+            if base is None:
+                continue
+            seq_hash = chain_hashes[chain.index] = _hash_sequence(chain.chain.sequence.upper())
+            # Pair row-aligned rows across chains; append the deep unpaired MSA for depth.
+            written[seq_hash] = _msa_to_pqt_file(
+                msa=base,
+                pqt_path=os.path.join(pqt_dir, f"{seq_hash}.aligned.pqt"),
+                query_index=0,
+                paired=pairs,
+                unpaired_msa=unpaired,
+            )
+            if config.verbose:
+                logger.info(f"Assigned MSA to protein chain {chain.index} ({len(base)} sequences)")
+        msa_sent = {index: written[seq_hash] for index, seq_hash in chain_hashes.items()}
+        msa_directory = pqt_dir if written else None
 
         # Prepare input data for inference script
         input_data = {

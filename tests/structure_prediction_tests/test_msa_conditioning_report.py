@@ -253,28 +253,91 @@ def test_boltz2_subsampling_reports_boltz_row_caps(max_msa_seqs, subsample_msa, 
     assert (report.mode, report.max_rows) == (mode, max_rows)
 
 
-def test_chai1_keeps_the_unpaired_only_reason_without_any_primary_alignment(monkeypatch):
-    from proto_tools.tools.structure_prediction.chai1.chai1 import Chai1Config, run_chai1_on_complex
+# ── Chains with only unpaired rows ───────────────────────────────────────────
+
+# Chains A and B are paired; chain C has unpaired rows but no primary alignment.
+_UNPAIRED_ONLY_COMPLEX = Complex(
+    chains=[Chain(sequence=seq, entity_type="protein") for seq in ("AAAAA", "CCCCC", "GGGGG")]
+)
+_UNPAIRED_ONLY_MSAS = ComplexMSAs(
+    per_chain={0: _msa("AAAAA", "AAAAG"), 1: _msa("CCCCC", "CCCCG")},
+    paired=True,
+    unpaired_per_chain={0: _msa("AAAAA", "AAAAT"), 2: _msa("GGGGG", "GGGGA", "GGGGC")},
+)
+_PAIRED_RECORD = SentMSA(rows=2, paired=True)
+_UNPAIRED_ONLY_RECORD = SentMSA(rows=3)
+
+
+def test_boltz2_writes_unpaired_only_rows_with_no_pairing_key(tmp_path):
+    import csv
+
+    from proto_tools.tools.structure_prediction.boltz2.helpers import build_chain_msa_paths
+
+    paths, sent = build_chain_msa_paths(_UNPAIRED_ONLY_COMPLEX, _UNPAIRED_ONLY_MSAS, str(tmp_path))
+
+    def keys(chain_id):
+        with open(paths[chain_id]) as f:
+            return [int(row["key"]) for row in csv.DictReader(f)]
+
+    assert keys("A") == [-1, 1, -1]  # paired row keyed, appended depth unkeyed
+    assert keys("C") == [-1, -1, -1]
+    assert sent[0] == SentMSA(rows=2, unpaired_rows=1, paired=True)
+    assert sent[2] == _UNPAIRED_ONLY_RECORD
+
+
+def test_chai1_writes_unpaired_only_rows_with_no_pairing_key(monkeypatch):
+    import pandas as pd
+
+    from proto_tools.tools.structure_prediction.chai1.chai1 import Chai1Config, _hash_sequence, run_chai1_on_complex
     from tests._structure_fixtures import synthetic_cif
 
-    monkeypatch.setattr(
-        "proto_tools.tools.structure_prediction.chai1.chai1.ToolInstance.dispatch",
-        lambda *a, **k: {
-            "cif_output": synthetic_cif(["A"]),
-            "metrics": {
-                "avg_plddt": 0.8,
-                "ptm": 0.7,
-                "iptm": 0.0,
-                "avg_pae": 1.0,
-                "pae": None,
-                "confidence_score": 0.7,
-            },
-        },
+    pairing_keys = {}
+
+    def fake_dispatch(_name, input_data, **_kwargs):
+        for seq in ("AAAAA", "GGGGG"):
+            pqt = f"{input_data['msa_directory']}/{_hash_sequence(seq)}.aligned.pqt"
+            pairing_keys[seq] = pd.read_parquet(pqt)["pairing_key"].tolist()
+        metrics = {"avg_plddt": 0.8, "ptm": 0.7, "iptm": 0.0, "avg_pae": 1.0, "pae": None, "confidence_score": 0.7}
+        return {"cif_output": synthetic_cif(["A", "B", "C"]), "metrics": metrics}
+
+    monkeypatch.setattr("proto_tools.tools.structure_prediction.chai1.chai1.ToolInstance.dispatch", fake_dispatch)
+    structure = run_chai1_on_complex(_UNPAIRED_ONLY_COMPLEX, Chai1Config(), complex_msas=_UNPAIRED_ONLY_MSAS)
+
+    assert pairing_keys == {"AAAAA": ["", "1", ""], "GGGGG": ["", "", ""]}
+    assert [chain.status for chain in structure.msa_conditioning.chains] == ["consumed"] * 3
+
+
+def test_alphafold3_sends_unpaired_only_rows_without_a_paired_msa(tmp_path):
+    from proto_tools.tools.structure_prediction.alphafold3.alphafold3 import (
+        _assign_msas_to_input_json,
+        _create_input_json_from_complex,
     )
-    msas = ComplexMSAs(per_chain={}, unpaired_per_chain={0: _msa("MKTAYIAKQR", "MKTAYIAKQA")})
-    structure = run_chai1_on_complex(
-        Complex(chains=[Chain(sequence="MKTAYIAKQR", entity_type="protein")]), Chai1Config(), complex_msas=msas
+
+    input_json, sent = _assign_msas_to_input_json(
+        _create_input_json_from_complex(_UNPAIRED_ONLY_COMPLEX, "cx", 1),
+        _UNPAIRED_ONLY_MSAS.per_chain,
+        _UNPAIRED_ONLY_MSAS.unpaired_per_chain,
+        _UNPAIRED_ONLY_MSAS.paired,
+        _UNPAIRED_ONLY_COMPLEX,
+        str(tmp_path),
     )
-    assert structure.msa_conditioning.chains[0].ignored_reason == (
-        "only unpaired rows were supplied; Chai-1 is sent a chain's primary alignment"
-    )
+    proteins = [entry["protein"] for entry in input_json["sequences"]]
+    assert ["pairedMsaPath" in protein for protein in proteins] == [True, True, False]
+    assert all("unpairedMsaPath" in protein for protein in proteins)
+    assert sent == {
+        0: SentMSA(rows=2, unpaired_rows=1, paired=True),
+        1: _PAIRED_RECORD,
+        2: _UNPAIRED_ONLY_RECORD,
+    }
+
+
+def test_rf3_and_esmfold2_record_unpaired_only_rows_as_sent(tmp_path):
+    from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import _esmfold2_sent_msas
+    from proto_tools.tools.structure_prediction.rf3.helpers import build_chain_a3m_paths
+
+    paths, sent = build_chain_a3m_paths(_UNPAIRED_ONLY_COMPLEX, _UNPAIRED_ONLY_MSAS, str(tmp_path))
+    assert set(paths) == {"A", "B", "C"}
+    assert sent[2] == _UNPAIRED_ONLY_RECORD
+
+    sent = _esmfold2_sent_msas("esmfold2", _UNPAIRED_ONLY_COMPLEX, _UNPAIRED_ONLY_MSAS)
+    assert (sent[1], sent[2]) == (_PAIRED_RECORD, _UNPAIRED_ONLY_RECORD)

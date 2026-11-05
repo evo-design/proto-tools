@@ -64,6 +64,17 @@ def protein_chain_msas(chains: Sequence[Chain | Fragment], complex_msas: Complex
     ]
 
 
+def chain_base_rows(chain: ChainMSAs, bundle_paired: bool) -> tuple[MSA | None, MSA | None, bool]:
+    """A chain's base alignment, the unpaired depth beneath it, and whether the base pairs across chains.
+
+    A chain with only unpaired rows sends them as its base, which never pairs; other chains keep
+    the bundle's pairing. The base is ``None`` when the chain has no rows.
+    """
+    if chain.primary is None:
+        return chain.unpaired, None, False
+    return chain.primary, chain.unpaired, bundle_paired
+
+
 def unpaired_depth_rows(rows: Sequence[str], unpaired: MSA | None) -> list[tuple[str, str]]:
     """``(sequence, id)`` unpaired rows to append beneath ``rows``: no query, no duplicate sequences."""
     if unpaired is None:
