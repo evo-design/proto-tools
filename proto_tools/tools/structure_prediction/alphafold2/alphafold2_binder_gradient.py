@@ -15,15 +15,20 @@ from typing_extensions import Self
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import AlphaFold2Metrics
 from proto_tools.tools.structure_prediction.alphafold2.gradient_helpers import (
+    AlphaFold2BetaStrandTerm,
     AlphaFold2ContactTerm,
     AlphaFold2DesignGradientConfig,
     AlphaFold2ExpResTerm,
+    AlphaFold2FrameworkContactTerm,
     AlphaFold2HelixTerm,
     AlphaFold2InterfaceContactTerm,
     AlphaFold2InterfacePaeTerm,
+    AlphaFold2InterfacePtmTerm,
     AlphaFold2PaeTerm,
     AlphaFold2PlddtTerm,
+    AlphaFold2RgTerm,
     AlphaFold2StructureGradientOutput,
+    AlphaFold2TerminiDistanceTerm,
     build_structure,
     build_terms,
     dispatch_design_gradient,
@@ -56,7 +61,12 @@ AlphaFold2BinderTerm = Annotated[
     | AlphaFold2ExpResTerm
     | AlphaFold2HelixTerm
     | AlphaFold2InterfacePaeTerm
-    | AlphaFold2InterfaceContactTerm,
+    | AlphaFold2InterfaceContactTerm
+    | AlphaFold2RgTerm
+    | AlphaFold2TerminiDistanceTerm
+    | AlphaFold2BetaStrandTerm
+    | AlphaFold2InterfacePtmTerm
+    | AlphaFold2FrameworkContactTerm,
     Field(discriminator="id"),
 ]
 
@@ -68,6 +78,11 @@ _CATALOG: TermCatalog = {
     "helix": AlphaFold2HelixTerm,
     "i_pae": AlphaFold2InterfacePaeTerm,
     "i_con": AlphaFold2InterfaceContactTerm,
+    "rg": AlphaFold2RgTerm,
+    "NC": AlphaFold2TerminiDistanceTerm,
+    "beta_strand": AlphaFold2BetaStrandTerm,
+    "i_ptm": AlphaFold2InterfacePtmTerm,
+    "fw_i_con": AlphaFold2FrameworkContactTerm,
 }
 
 
@@ -330,7 +345,7 @@ def run_alphafold2_binder_gradient(
     for candidate, reply in zip(inputs.inputs, worker_results, strict=True):
         built = build_terms(
             reply["terms"],
-            _CATALOG,  # type: ignore[arg-type]
+            config.gradient_terms,
             candidate.logits.root,
             temperature=inputs.temperature,
             soft=config.soft,

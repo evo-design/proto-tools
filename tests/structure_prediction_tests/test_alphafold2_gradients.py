@@ -137,7 +137,7 @@ def test_build_terms_shares_one_basis_and_each_term_adds_what_only_it_knows() ->
             {"id": "rmsd", "value": 1.5, "gradient": [[0.1] * 20] * 3},
             {"id": "plddt", "value": 0.8, "gradient": [[0.2] * 20] * 3},
         ],
-        {"rmsd": AlphaFold2RmsdTerm, "plddt": AlphaFold2PlddtTerm},
+        [AlphaFold2RmsdTerm(), AlphaFold2PlddtTerm()],
         [[0.0] * 20] * 3,
         temperature=1.0,
         soft=1.0,
@@ -159,7 +159,7 @@ def test_a_term_with_nothing_to_measure_is_named_in_the_error() -> None:
     with pytest.raises(ValueError, match="plddt"):
         build_terms(
             [{"id": "plddt", "value": None, "gradient": None}],
-            {"plddt": AlphaFold2PlddtTerm},
+            [AlphaFold2PlddtTerm()],
             [[0.0] * 20] * 3,
             temperature=1.0,
             soft=1.0,
@@ -167,12 +167,12 @@ def test_a_term_with_nothing_to_measure_is_named_in_the_error() -> None:
         )
 
 
-def test_a_term_outside_this_tool_catalog_is_named_in_the_error() -> None:
-    """A protocol reporting a quantity this tool does not offer should say so, not raise KeyError."""
+def test_an_unrequested_term_is_named_in_the_error() -> None:
+    """A worker reporting a quantity nobody asked for should say so, not raise KeyError."""
     with pytest.raises(ValueError, match="i_con"):
         build_terms(
             [{"id": "i_con", "value": 0.5, "gradient": None}],
-            {"plddt": AlphaFold2PlddtTerm},
+            [AlphaFold2PlddtTerm()],
             [[0.0] * 20] * 3,
             temperature=1.0,
             soft=1.0,
@@ -189,7 +189,7 @@ def test_helix_requires_an_explicit_goal() -> None:
         gradient=[[1.0] + [0.0] * 19] * 3,
         metadata=build_terms(
             [{"id": "helix", "value": 0.5, "gradient": [[1.0] + [0.0] * 19] * 3}],
-            {"helix": gradient_helpers.AlphaFold2HelixTerm},
+            [gradient_helpers.AlphaFold2HelixTerm()],
             [[0.0] * 20] * 3,
             temperature=1.0,
             soft=1.0,
@@ -333,7 +333,7 @@ def test_gradient_export_writes_one_pdb_sidecar_per_result(tmp_path: Path, name:
                     AlphaFold2HallucinationTermGradient(
                         **build_terms(
                             [{"id": "plddt", "value": value, "gradient": [[0.1] * 20] * 2}],
-                            {"plddt": AlphaFold2PlddtTerm},
+                            [AlphaFold2PlddtTerm()],
                             [[0.0] * 20] * 2,
                             temperature=1.0,
                             soft=1.0,

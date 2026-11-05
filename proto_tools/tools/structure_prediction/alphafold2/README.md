@@ -50,9 +50,10 @@ De novo design driven only by what AlphaFold2 believes about a sequence — maxi
 
 #### Usage Tips
 
-- **Select quantities with `gradient_terms`.** The protocol offers `plddt`, `pae`, `con`, `exp_res` and `helix`; each returns one `TermGradient` carrying its own value and its own gradient.
+- **Select quantities with `gradient_terms`.** The protocol offers `plddt`, `pae`, `con`, `exp_res`, `helix`, `rg`, `NC` and `beta_strand`; each returns one `TermGradient` carrying its own value and its own gradient.
 - **Terms are raw quantities, not objectives.** `plddt` is the confidence itself, not a loss, and no weight or direction is folded into its gradient. Combine them downstream with goals and weights.
-- **`helix` has no built-in direction.** Lower means more helical contacts, but whether that is wanted depends on the design, so composing it requires an explicit goal.
+- **`helix` and `beta_strand` have no built-in direction.** Lower means more helical contacts or more strand-like i,i+3 spacing, but whether that is wanted depends on the design, so composing them requires an explicit goal.
+- **`rg` and `NC` shape the designed chain.** `rg` is the radius of gyration beyond `2.38 * N**0.365` and `NC` the terminal CA distance beyond 7 Å, as in BindCraft and Germinal; both are offered by all three tools.
 - **One sequence per call; this tool is not an optimization loop.** Drive it from an optimizer, or call it repeatedly.
 
 ### AlphaFold2 FixBB Gradient (`alphafold2-fixbb-gradient`)
@@ -79,7 +80,8 @@ Gradient-based binder design against a chosen epitope, optimizing interface cont
 
 #### Usage Tips
 
-- **`i_con` and `i_pae` exist only here.** They describe the binder-target interface, so they require the two-chain setup this protocol builds.
+- **`i_con`, `i_pae`, `i_ptm` and `fw_i_con` exist only here.** They describe the binder-target interface, so they require the two-chain setup this protocol builds.
+- **`fw_i_con` measures framework contact.** It is the `i_con` objective restricted to the 1-indexed binder `framework_positions` it is given, so higher means the framework sits farther from the target. Germinal's framework penalty is `i_con**2 / max(fw_i_con - offset, 1e-8)`, composed downstream from the two terms.
 - **`target_hotspot` focuses the interface.** Supply ColabDesign-style residue selections on the target to bias the binder toward a specific epitope.
 - **The target's template is masked by default.** `rm_target_seq` and `rm_template_ic` default to `True` so the target's own sequence and inter-chain contacts do not leak into the prediction; `use_multimer` defaults to `True`.
 - **The binder length is the number of rows in the logits.** There is no binder template, so nothing else defines it.
@@ -92,6 +94,7 @@ The previous `alphafold2-gradient` tool is replaced by the three tools above. It
 - **Pick the tool that matches the design.** De novo with no reference → `alphafold2-hallucination-gradient`. Sequence against a known backbone → `alphafold2-fixbb-gradient`. Binder against a target → `alphafold2-binder-gradient`. Splitting them is what makes each tool's term catalog honest: the old tool accepted terms its protocol never computed and returned gradients of zero for them.
 - **`binder_chain` has no successor.** It selected an existing chain of the target template to redesign, which made the binder supervised and silently zeroed the confidence quantities. No tool here reproduces template-based binder redesign.
 - **`helix` now means ColabDesign's native helix loss** — a binary contact loss over i,i+3 pairs across the whole designed region — rather than the binder-only variant the previous tool registered. Its magnitude, normalization and sign convention all differ.
+- **`rg`, `i_ptm`, `NC` and `beta_strand` are terms again**, and the Germinal framework-contact penalty is composed from `fw_i_con` and `i_con`. `beta_strand` now spans the designed residues; Germinal's fork instead scored `-log(1 - P)` over its CDR positions.
 - **`backend="germinal"`, `starting_binder_seq`, `excluded_amino_acids` and `bias_redesign` are not carried over.**
 
 ## Toolkit Notes
