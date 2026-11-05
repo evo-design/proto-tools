@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger, resolve_weights_dir
+from standalone_helpers import ensure_complete, get_logger, resolve_weights_dir
 
 logger = get_logger(__name__)
 
@@ -54,6 +54,10 @@ def _ensure_prostt5_weights(override: str | None) -> str:
     one-time). Resolution honors ``PROTO_FOLDSEEK_WEIGHTS_DIR`` and
     ``PROTO_MODEL_CACHE`` per ``notes/storage.md``.
     ``override``, if set, must point to an existing path and is returned as-is.
+
+    ``ensure_complete`` records the downloaded files and downloads again when any are gone (a
+    scratch purge), into a staging directory swapped into place, under a lock shared by
+    concurrent runs.
     """
     if override:
         if not Path(override).exists():
@@ -64,20 +68,13 @@ def _ensure_prostt5_weights(override: str | None) -> str:
     if base is None:
         raise RuntimeError("resolve_weights_dir('foldseek') returned None; cannot locate ProstT5 cache")
     cache_dir = Path(base) / "prostt5"
-    weights_path = cache_dir / "weights"
-    marker = cache_dir / ".proto-ready"
 
-    if marker.exists():
-        return str(weights_path)
+    def download(staging: Path) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_cmd([_find_binary(), "databases", "ProstT5", str(staging / "weights"), tmp], "databases ProstT5")
 
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as tmp:
-        _run_cmd(
-            [_find_binary(), "databases", "ProstT5", str(weights_path), tmp],
-            "databases ProstT5",
-        )
-    marker.touch()
-    return str(weights_path)
+    ensure_complete(cache_dir, download, stage=True)
+    return str(cache_dir / "weights")
 
 
 _M8_FORMAT_PIDENT = (

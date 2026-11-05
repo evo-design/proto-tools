@@ -311,6 +311,51 @@ def test_submit_raises_on_invalid_id(payload, error_pattern):
         _submit("PDB...", ["pdb100"], "3diaa", session)
 
 
+# ── ProstT5 weights cache ────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def prostt5_downloads(tmp_path: Path, monkeypatch):
+    """Point foldseek's weights at ``tmp_path`` and stand in for ``foldseek databases ProstT5``."""
+    from proto_tools.tools.structure_alignment.foldseek.standalone import run
+
+    monkeypatch.setenv("PROTO_FOLDSEEK_WEIGHTS_DIR", str(tmp_path))
+    monkeypatch.setattr(run, "_find_binary", lambda: "foldseek")
+    downloads: list[str] = []
+
+    def fake_run_cmd(cmd: list[str], description: str) -> None:
+        weights = Path(cmd[3])
+        weights.mkdir(parents=True)
+        (weights / "prostt5-f16.gguf").write_bytes(b"w")
+        downloads.append(description)
+
+    monkeypatch.setattr(run, "_run_cmd", fake_run_cmd)
+    return run, tmp_path / "prostt5", downloads
+
+
+def test_prostt5_weights_download_once(prostt5_downloads):
+    run, _, downloads = prostt5_downloads
+
+    assert run._ensure_prostt5_weights(None) == run._ensure_prostt5_weights(None)
+    assert downloads == ["databases ProstT5"]
+
+
+@pytest.mark.parametrize("purge", ["weights", "weights_from_a_cache_marked_ready_before"])
+def test_prostt5_weights_download_again_when_purged(prostt5_downloads, purge: str):
+    """Weights a purge deleted are downloaded again, also under the bare marker older runs wrote."""
+    run, cache, downloads = prostt5_downloads
+    run._ensure_prostt5_weights(None)
+
+    (cache / "weights" / "prostt5-f16.gguf").unlink()
+    if purge == "weights_from_a_cache_marked_ready_before":
+        (cache / ".proto_complete").unlink()
+        (cache / ".proto-ready").touch()
+    run._ensure_prostt5_weights(None)
+
+    assert (cache / "weights" / "prostt5-f16.gguf").exists()
+    assert len(downloads) == 2
+
+
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
