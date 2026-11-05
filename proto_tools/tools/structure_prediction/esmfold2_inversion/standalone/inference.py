@@ -1,4 +1,4 @@
-"""ESMFold2 inversion worker: folds a binder/target complex and differentiates its objectives."""
+"""ESMFold2 inversion worker: folds a protein complex and differentiates per-chain objectives."""
 
 import json
 import logging
@@ -18,23 +18,18 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 _folders: dict[str, Any] = {}
 _language_model: Any = None
 
-#: Folding settings the reference recipe uses for a gradient step, as opposed to a scoring pass.
+#: Folding settings the reference recipe uses for a gradient step rather than a scoring pass.
 _NUM_LOOPS = 1
 _NUM_SAMPLING_STEPS = 1
-#: The designed chain occupies the trailing columns of a 33-token vocabulary whose amino acids
-#: start at index 2, so a 20-wide relaxed state is padded on both sides to line up.
+#: A chain occupies the amino-acid columns of a 33-token vocabulary, so a 20-wide relaxed state
+#: is padded on both sides to line up.
 _TOKEN_PAD = (2, 11)
-
-
 #: Residue-type indices 0 and 1 are padding and a gap, so the amino acids start at 2.
 _FIRST_AMINO_ACID_INDEX = 2
 
 
 def _folding_vocabulary() -> str:
     """One-letter amino acids in the folding trunk's column order.
-
-    The trunk's residue-type table is keyed by index and spelled in three-letter codes; the
-    twenty amino acids occupy the entries after padding and the gap token.
 
     Returns:
         str: Twenty one-letter amino acids in trunk column order.
@@ -48,9 +43,9 @@ def _folding_vocabulary() -> str:
 def _load_folder(model_name: str, device: str, seed: int) -> Any:
     """Load an inversion checkpoint, caching it for the life of the worker.
 
-    Loading happens inside the seed context because it can initialize runtime-only modules that
-    the checkpoint does not carry; leaving that unseeded makes a run irreproducible for reasons
-    that never show up in the forward pass.
+    Loading happens inside the seed context because it can initialize runtime-only modules the
+    checkpoint does not carry; leaving that unseeded makes a run irreproducible for reasons that
+    never show up in the forward pass.
 
     Args:
         model_name (str): Inversion checkpoint name.
@@ -96,44 +91,113 @@ def _trunk_to_lm_matrix(device: torch.device) -> torch.Tensor:
     return matrix
 
 
-def _fold(model: Any, target_sequence: str, design: torch.Tensor, device: str, seed: int) -> torch.Tensor:
-    """Fold the target/binder complex and return its distogram logits.
+def _relax(source: torch.Tensor, order: list[int], data: dict[str, Any]) -> torch.Tensor:
+    """Turn one chain's caller-ordered logits into its relaxed state in trunk column order."""
+    reordered = source[:, order]
+    temperature = data["temperature"]
+    relaxed = reordered if temperature is None else torch.softmax(reordered / temperature, dim=-1)
+    soft, hard = data["soft"], data["hard"]
+    if soft != 1.0:
+        relaxed = soft * relaxed + (1 - soft) * reordered
+    if hard != 0.0:
+        relaxed = hard * objective.straight_through(relaxed) + (1 - hard) * relaxed
+    return relaxed
+
+
+class _Complex:
+    """One prepared complex: its chain spans, its relaxed state, and what to differentiate.
+
+    Attributes:
+        spans (dict[str, tuple[int, int]]): Chain id to its half-open rows in the complex.
+        sources (list[torch.Tensor]): Leaf tensors, one per designable chain, in fold order.
+        designable (list[str]): Designable chain ids, in fold order.
+        sequences (dict[str, str]): Decoded sequence per chain, as folded.
+        res_type_soft (torch.Tensor): The complex's relaxed residue types, shape ``(1, L, 33)``.
+        relaxed (dict[str, torch.Tensor]): Per-chain relaxed state, shape ``(1, len, 20)``.
+    """
+
+    def __init__(self, data: dict[str, Any], vocabulary: str) -> None:
+        """Build the complex from the worker payload.
+
+        Args:
+            data (dict[str, Any]): Worker payload carrying ``chains`` and relaxation settings.
+            vocabulary (str): Folding-trunk column order.
+        """
+        import torch.nn.functional as F
+
+        device = data["device"]
+        order = [data["alphabet"].index(residue) for residue in vocabulary]
+        self.spans: dict[str, tuple[int, int]] = {}
+        self.sources: list[torch.Tensor] = []
+        self.designable: list[str] = []
+        self.sequences: dict[str, str] = {}
+        self.relaxed: dict[str, torch.Tensor] = {}
+        blocks: list[torch.Tensor] = []
+        cursor = 0
+
+        for chain in data["chains"]:
+            chain_id = chain["chain_id"]
+            if chain["logits"] is not None:
+                source = torch.tensor(chain["logits"], dtype=torch.float32, device=device, requires_grad=True)
+                relaxed = _relax(source, order, data).unsqueeze(0)
+                self.sources.append(source)
+                self.designable.append(chain_id)
+                self.relaxed[chain_id] = relaxed
+                self.sequences[chain_id] = "".join(vocabulary[index] for index in relaxed[0].argmax(-1).tolist())
+                length = relaxed.shape[1]
+            else:
+                sequence = chain["sequence"]
+                relaxed = torch.zeros(1, len(sequence), 20, device=device)
+                for position, residue in enumerate(sequence):
+                    relaxed[0, position, vocabulary.index(residue)] = 1
+                self.relaxed[chain_id] = relaxed
+                self.sequences[chain_id] = sequence
+                length = len(sequence)
+            blocks.append(F.pad(relaxed, _TOKEN_PAD, mode="constant", value=0))
+            self.spans[chain_id] = (cursor, cursor + length)
+            cursor += length
+
+        self.res_type_soft = torch.cat(blocks, dim=1)
+        self.length = cursor
+
+    def chain_rows(self) -> dict[str, list[int]]:
+        """Where each designable chain's rows sit in the concatenated gradient."""
+        rows: dict[str, list[int]] = {}
+        cursor = 0
+        for chain_id in self.designable:
+            length = self.relaxed[chain_id].shape[1]
+            rows[chain_id] = [cursor, cursor + length]
+            cursor += length
+        return rows
+
+
+def _fold(model: Any, prepared: _Complex, data: dict[str, Any]) -> torch.Tensor:
+    """Fold the complex and return its distogram logits.
 
     Args:
         model (Any): Loaded experimental folding model.
-        target_sequence (str): Fixed target chain.
-        design (torch.Tensor): Relaxed binder, shape ``(1, length, 20)``, trunk column order.
-        device (str): Device the complex is assembled on.
-        seed (int): Seed scoping the forward pass.
+        prepared (_Complex): The assembled complex.
+        data (dict[str, Any]): Worker payload, read for device and seed.
 
     Returns:
-        torch.Tensor: Distogram logits, shape ``(1, complex_length, complex_length, bins)``.
+        torch.Tensor: Distogram logits, shape ``(1, length, length, bins)``.
     """
-    import torch.nn.functional as F
     from esm.models.esmfold2 import ProteinInput, StructurePredictionInput, load_ccd, prepare_esmfold2_input
     from esm.models.esmfold2.layers import _seed_context as seed_context
 
+    device, seed = data["device"], data["seed"]
     load_ccd()
-    vocabulary = _folding_vocabulary()
-    padded = F.pad(design, _TOKEN_PAD, mode="constant", value=0)
-    decoded = "".join(vocabulary[index] for index in design[0].argmax(-1).tolist())
-
-    prepared = StructurePredictionInput(
-        sequences=[
-            ProteinInput(id="0", sequence=target_sequence, msa=None),
-            ProteinInput(id="1", sequence=decoded, msa=None),
-        ]
-    )
-    features, _ = prepare_esmfold2_input(prepared, seed=seed)
+    sequences = [
+        ProteinInput(id=str(index), sequence=prepared.sequences[chain["chain_id"]], msa=None)
+        for index, chain in enumerate(data["chains"])
+    ]
+    features, _ = prepare_esmfold2_input(StructurePredictionInput(sequences=sequences), seed=seed)
     # Distogram conditioning is unimplemented upstream and the forward pass rejects it.
     features.pop("disto_cond", None)
     features.pop("disto_cond_mask", None)
     inputs = {key: value.unsqueeze(0).to(device) for key, value in features.items()}
-
-    target_one_hot = torch.zeros(1, len(target_sequence), padded.shape[-1], device=device, dtype=padded.dtype)
-    for position, residue in enumerate(target_sequence):
-        target_one_hot[0, position, _TOKEN_PAD[0] + vocabulary.index(residue)] = 1
-    inputs["res_type_soft"] = torch.cat((target_one_hot, padded), dim=1)
+    # The relaxed state enters here, which is what keeps every designable chain differentiable.
+    inputs["res_type_soft"] = prepared.res_type_soft
 
     with seed_context(seed):
         output = model(
@@ -146,139 +210,74 @@ def _fold(model: Any, target_sequence: str, design: torch.Tensor, device: str, s
     return output["distogram_logits"]
 
 
-def _relaxed_design(data: dict[str, Any], vocabulary: str, device: str) -> tuple[torch.Tensor, torch.Tensor]:
-    """Build the relaxed binder in trunk column order, and the tensor to differentiate against.
-
-    The gradient is taken with respect to the caller's own pre-softmax, pre-permutation matrix,
-    so the matrix handed back is already in the column order the caller asked in.
-
-    Args:
-        data (dict[str, Any]): Worker payload.
-        vocabulary (str): Folding-trunk column order.
-        device (str): Device to build on.
-
-    Returns:
-        tuple[torch.Tensor, torch.Tensor]: The relaxed design ``(1, length, 20)`` and the leaf
-            tensor its gradient is taken against.
-    """
-    source = torch.tensor(data["logits"], dtype=torch.float32, device=device, requires_grad=True)
-    order = [data["alphabet"].index(residue) for residue in vocabulary]
-    reordered = source[:, order]
-    temperature = data["temperature"]
-    relaxed = reordered if temperature is None else torch.softmax(reordered / temperature, dim=-1)
-    soft, hard = data["soft"], data["hard"]
-    if soft != 1.0:
-        relaxed = soft * relaxed + (1 - soft) * reordered
-    if hard != 0.0:
-        relaxed = hard * objective.straight_through(relaxed) + (1 - hard) * relaxed
-    return relaxed.unsqueeze(0), source
+def _epitope_mask(data: dict[str, Any], prepared: _Complex) -> torch.Tensor:
+    """Boolean mask over complex positions, true at the requested target hotspots."""
+    target_id = data["target_chain_id"]
+    start, _ = prepared.spans[target_id]
+    mask = torch.zeros(1, prepared.length, dtype=torch.bool, device=prepared.res_type_soft.device)
+    for hotspot in data.get("target_hotspot_ids") or []:
+        mask[0, start + int(hotspot[1:]) - 1] = True
+    return mask
 
 
-def structure_gradient(data: dict[str, Any]) -> dict[str, Any]:
-    """Fold one complex and differentiate each requested quantity against the relaxed binder.
+def _quantity(
+    name: str,
+    chain_id: str,
+    distogram: torch.Tensor,
+    midpoints: torch.Tensor,
+    prepared: _Complex,
+    data: dict[str, Any],
+) -> torch.Tensor:
+    """Evaluate one requested quantity over the chain it names.
 
     Args:
+        name (str): Quantity id.
+        chain_id (str): Chain the quantity is evaluated over.
+        distogram (torch.Tensor): Distogram logits for the folded complex.
+        midpoints (torch.Tensor): Bin midpoint distances.
+        prepared (_Complex): The assembled complex, for its spans and relaxed state.
         data (dict[str, Any]): Worker payload.
 
     Returns:
-        dict[str, Any]: ``terms`` (one entry per requested quantity) and ``metrics``.
+        torch.Tensor: A scalar for this candidate.
 
     Raises:
-        ValueError: If an unknown quantity is requested.
+        ValueError: If the quantity is unknown, or an interface quantity is asked for without a
+            target chain.
     """
-    device, seed = data["device"], data["seed"]
-    vocabulary = _folding_vocabulary()
-    design, source = _relaxed_design(data, vocabulary, device)
-    binder_length = design.shape[1]
-    target_sequence = data["target_sequence"]
-
-    requested = list(data["gradient_terms"])
-    unknown = [name for name in requested if name not in _QUANTITIES]
-    if unknown:
-        raise ValueError(f"esmfold2_inversion: unknown quantities {sorted(unknown)}")
-
-    folder = _load_folder(data["model_name"], device, seed)
-    distogram = _fold(folder, target_sequence, design, device, seed)
-    midpoints = objective.bin_midpoints(distogram.device).to(distogram.dtype)
-
-    hotspots = data.get("target_hotspot_ids") or []
-    epitope_mask = torch.zeros(1, distogram.shape[1], dtype=torch.bool, device=distogram.device)
-    for hotspot in hotspots:
-        epitope_mask[0, int(hotspot[1:]) - 1] = True
-
-    values: dict[str, torch.Tensor] = {}
-    for name in requested:
-        values[name] = _QUANTITIES[name](
-            distogram=distogram,
-            binder_length=binder_length,
-            midpoints=midpoints,
-            epitope_mask=epitope_mask,
-            contact_distance=data["epitope_contact_distance"],
-            design=design,
-            data=data,
-            device=device,
-            seed=seed,
+    span = prepared.spans[chain_id]
+    if name == "intra_contact":
+        return objective.intra_contact_loss(distogram, span, midpoints).squeeze(0)
+    if name == "globularity":
+        return objective.globularity_loss(distogram, span, midpoints).squeeze(0)
+    if name == "plm_nll":
+        return _pseudo_perplexity(prepared.relaxed[chain_id], data).squeeze(0)
+    if name in ("inter_contact", "epitope"):
+        target_id = data.get("target_chain_id")
+        if target_id is None:
+            raise ValueError(f"quantity {name!r} needs a target chain; it is offered only by the binder tool")
+        if name == "inter_contact":
+            return objective.inter_contact_loss(distogram, prepared.spans[target_id], span, midpoints).squeeze(0)
+        return objective.epitope_loss(
+            distogram, _epitope_mask(data, prepared), span, midpoints, data["epitope_contact_distance"]
         ).squeeze(0)
-
-    terms = []
-    for position, name in enumerate(requested):
-        gradient = None
-        if data["compute_gradient"]:
-            # One backward per quantity over the shared forward graph, retained until the last.
-            gradient = torch.autograd.grad(
-                values[name], source, retain_graph=position < len(requested) - 1, allow_unused=False
-            )[0]
-        terms.append(
-            {
-                "id": name,
-                "value": float(values[name].detach()),
-                "gradient": serialize_output(gradient) if gradient is not None else None,
-            }
-        )
-
-    return {
-        "terms": terms,
-        "metrics": {
-            "binder_length": binder_length,
-            "target_length": len(target_sequence),
-        },
-    }
+    raise ValueError(f"esmfold2_inversion: unknown quantity {name!r}")
 
 
-def _structure_quantity(fn: Any) -> Any:
-    """Adapt a distogram-only objective to the uniform quantity signature."""
-
-    def call(*, distogram: torch.Tensor, binder_length: int, midpoints: torch.Tensor, **_: Any) -> torch.Tensor:
-        return fn(distogram, binder_length, midpoints)
-
-    return call
-
-
-def _epitope_quantity(
-    *,
-    distogram: torch.Tensor,
-    binder_length: int,
-    midpoints: torch.Tensor,
-    epitope_mask: torch.Tensor,
-    contact_distance: float,
-    **_: Any,
-) -> torch.Tensor:
-    return objective.epitope_loss(distogram, epitope_mask, binder_length, midpoints, contact_distance)
-
-
-def _plm_quantity(*, design: torch.Tensor, data: dict[str, Any], device: str, seed: int, **_: Any) -> torch.Tensor:
-    """Score the designed chain under ESM C, loading the language model only if asked for."""
+def _pseudo_perplexity(relaxed: torch.Tensor, data: dict[str, Any]) -> torch.Tensor:
+    """Score one chain under ESM C, loading the language model only when it is asked for."""
     from esm.models.esmc import EsmcTokenizer
 
+    device, seed = data["device"], data["seed"]
     masked_lm = _load_language_model(device, seed)
     tokenizer = EsmcTokenizer()
-    scored = torch.ones(design.shape[0], design.shape[1], dtype=torch.bool, device=design.device)
-    generator = torch.Generator(device=design.device).manual_seed(seed)
+    scored = torch.ones(relaxed.shape[0], relaxed.shape[1], dtype=torch.bool, device=relaxed.device)
+    generator = torch.Generator(device=relaxed.device).manual_seed(seed)
     return objective.pseudo_perplexity_nll(
         masked_lm,
-        design,
+        relaxed,
         scored,
-        trunk_to_lm=_trunk_to_lm_matrix(design.device),
+        trunk_to_lm=_trunk_to_lm_matrix(relaxed.device),
         cls_id=tokenizer.cls_token_id,
         eos_id=tokenizer.eos_token_id,
         mask_id=masked_lm.config.mask_token_id,
@@ -290,14 +289,53 @@ def _plm_quantity(*, design: torch.Tensor, data: dict[str, Any], device: str, se
     )
 
 
-#: Every quantity this worker can differentiate, by the id the wrapper resolves to a term class.
-_QUANTITIES: dict[str, Any] = {
-    "intra_contact": _structure_quantity(objective.intra_contact_loss),
-    "inter_contact": _structure_quantity(objective.inter_contact_loss),
-    "globularity": _structure_quantity(objective.globularity_loss),
-    "epitope": _epitope_quantity,
-    "plm_nll": _plm_quantity,
-}
+def complex_gradient(data: dict[str, Any]) -> dict[str, Any]:
+    """Fold one complex and differentiate each requested quantity against its designable chains.
+
+    Args:
+        data (dict[str, Any]): Worker payload.
+
+    Returns:
+        dict[str, Any]: ``terms``, ``chain_rows`` and ``metrics``.
+    """
+    vocabulary = _folding_vocabulary()
+    prepared = _Complex(data, vocabulary)
+    folder = _load_folder(data["model_name"], data["device"], data["seed"])
+    distogram = _fold(folder, prepared, data)
+    midpoints = objective.bin_midpoints(distogram.device).to(distogram.dtype)
+
+    requested = list(data["gradient_terms"])
+    values = [
+        (entry, _quantity(entry["id"], entry["chain_id"], distogram, midpoints, prepared, data)) for entry in requested
+    ]
+
+    terms = []
+    for position, (entry, value) in enumerate(values):
+        gradient = None
+        if data["compute_gradient"]:
+            # One backward per quantity over the shared forward graph, retained until the last.
+            # Chains a quantity does not touch get a zero block rather than being dropped, so
+            # every gradient covers the same rows and the terms stay composable.
+            parts = torch.autograd.grad(
+                value,
+                prepared.sources,
+                retain_graph=position < len(values) - 1,
+                allow_unused=True,
+                materialize_grads=True,
+            )
+            gradient = serialize_output(torch.cat(parts, dim=0))
+        terms.append(
+            {"id": entry["id"], "chain_id": entry["chain_id"], "value": float(value.detach()), "gradient": gradient}
+        )
+
+    return {
+        "terms": terms,
+        "chain_rows": prepared.chain_rows(),
+        "metrics": {
+            "complex_length": prepared.length,
+            "designable_length": sum(prepared.relaxed[name].shape[1] for name in prepared.designable),
+        },
+    }
 
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
@@ -313,10 +351,10 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         ValueError: If the operation is not one this worker offers.
     """
     operation = input_dict.get("operation")
-    if operation != "structure_gradient":
-        raise ValueError(f"esmfold2_inversion: unknown operation {operation!r}; valid: ['structure_gradient']")
+    if operation != "complex_gradient":
+        raise ValueError(f"esmfold2_inversion: unknown operation {operation!r}; valid: ['complex_gradient']")
     try:
-        return structure_gradient(input_dict)
+        return complex_gradient(input_dict)
     except RuntimeError as error:
         if is_cuda_oom(error):
             release_cuda_memory()

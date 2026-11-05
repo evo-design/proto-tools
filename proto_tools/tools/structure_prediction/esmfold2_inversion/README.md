@@ -19,30 +19,75 @@ The quantities themselves are read off the predicted distogram, the model's dist
 
 ## Tools
 
+Both tools fold a complex once and differentiate each requested quantity against the relaxed
+state, sharing one worker, one checkpoint family and one set of objective implementations. They
+differ in what they take in and what they offer.
+
+The objectives read ESMFold2's **differentiable distogram prediction** — its distribution over
+pairwise distances. They are not gradients through diffusion-generated coordinates, and no
+coordinates are produced or differentiated.
+
 ### ESMFold2 Inversion Gradient (`esmfold2-inversion-gradient`)
 
-Folds one target/binder complex per candidate and differentiates each requested quantity against the relaxed binder state.
+General protein-complex inversion. A complex is a list of chains in fold order, each either
+**fixed** (a discrete `sequence`) or **designable** (relaxed `logits`). Any number of chains may
+be designed at once; fixed chains are folded as context and receive no gradient.
 
 | term | measures | units |
 |---|---|---|
-| `intra_contact` | binder self-contact over each residue's two best intra-chain partners | — |
-| `inter_contact` | interface contact between the target and the binder | — |
-| `globularity` | binder radius of gyration in excess of a packed protein | angstroms |
-| `epitope` | contact surprisal between the binder and named target hotspots | — |
-| `plm_nll` | ESM C masked pseudo-perplexity of the designed chain | nats per masked position |
+| `intra_contact` | self-contact over a chain's two best contacts inside that same chain | — |
+| `globularity` | that chain's radius of gyration in excess of a packed protein | angstroms |
+| `plm_nll` | ESM C masked pseudo-perplexity of that chain, scored on its own | nats per masked position |
+
+Each term names the chain it evaluates through `chain_id`; with exactly one designable chain the
+default resolves on its own.
 
 #### Applications
 
-Use this inside a gradient-based binder design loop, where an optimizer holds a relaxed sequence state, asks for the gradient, and steps it. The terms are reported separately so an optimizer can weigh structure against sequence plausibility, or drive the binder onto a chosen epitope, without the tool deciding the trade-off.
+Hallucinating a monomer, redesigning one chain inside a fixed assembly, or co-designing several
+chains of a complex in one optimization.
 
 #### Usage Tips
 
-- **Every quantity is lower-is-better**, so composing without naming goals already minimizes them. Weights are how you balance them: `result.compose(weights={...})` reproduces any fixed weighting, and changing it costs nothing because the terms are reported raw.
-- **One fold, many gradients.** All requested quantities come from a single forward pass, with one backward each. Asking for five terms costs one fold and five backwards, not five folds.
-- **`epitope` needs hotspots.** Each is a residue letter and a 1-indexed position, such as `L15`, and is checked against the target sequence — a hotspot that names a residue the target does not have at that position is rejected rather than silently aimed elsewhere.
-- **`plm_nll` loads a second model.** Leave it out of `gradient_terms` and ESM C is never loaded.
-- **The alphabet is yours.** Give `alphabet` as any permutation of the canonical amino acids and the returned gradient comes back in that same column order.
-- **The binder is the only mutable chain.** The target is supplied as a discrete sequence and never receives a gradient.
+- **One gradient spans every designable chain.** Rows are those chains' matrices concatenated in
+  fold order, and `chain_rows` on each result gives the `[start, stop)` rows per chain. Terms
+  therefore share one coordinate space and compose directly.
+- **A chain boundary is a real boundary.** `intra_contact` counts only partners inside its own
+  chain, `globularity` reads only its own sub-block, and `plm_nll` scores each chain as its own
+  sequence rather than reading a boundary as a peptide bond.
+- **Several terms on several chains coexist**, so `intra_contact` on chain B and on chain C are
+  two separate quantities with two separate gradients.
+
+### ESMFold2 Inversion Binder Gradient (`esmfold2-inversion-binder-gradient`)
+
+Binder design against one fixed target. The two chain roles are part of the model rather than
+something to configure, so the input is a target sequence, a relaxed binder, and optional
+hotspots.
+
+Offers the three single-chain terms above, applied to the binder, plus two interface terms:
+
+| term | measures | units |
+|---|---|---|
+| `inter_contact` | interface contact between the target and the binder | — |
+| `epitope` | contact surprisal between the binder and named target hotspots | — |
+
+#### Applications
+
+A gradient-based binder design loop: an optimizer holds the relaxed binder, asks for the
+gradient, and steps it, weighing interface contact against the binder's own foldability.
+
+#### Usage Tips
+
+- **Every quantity is lower-is-better**, so composing without naming goals already minimizes
+  them. `result.compose(weights={...})` reproduces any fixed weighting.
+- **`inter_contact` is deliberately asymmetric.** It is scored over the target and partnered
+  against the binder, so it rewards the binder reaching the target rather than the reverse. It
+  is not a generic inter-chain objective, which is why the general tool does not offer it.
+- **`epitope` needs hotspots**, each a residue letter and a 1-indexed position such as `L15`,
+  checked against the target sequence so a stale selection is rejected rather than re-aimed.
+- **`plm_nll` loads a second model.** Leave it out and ESM C is never loaded.
+- **The alphabet is yours.** Give any permutation of the canonical amino acids and the gradient
+  comes back in that same column order.
 
 ## Toolkit Notes
 
