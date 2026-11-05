@@ -103,19 +103,12 @@ Template-based binder redesign as in Germinal: optimizing an antibody's CDRs on 
 - **`dgram_cce` and `fape` measure agreement with the binder template.** `rmsd`, `exp_res` and `helix` are not offered, because ColabDesign masks them to nothing under this protocol.
 - **Inter-chain template contacts are always masked**, so the interface terms measure an interface the template does not hand over.
 
-## Migrating from `alphafold2-gradient`
 
-The previous `alphafold2-gradient` tool is replaced by the three tools above. It returned one gradient of one weighted objective; these return one raw gradient per quantity, which the caller composes.
-
-- **`loss_weights={"plddt": w, ...}` becomes `gradient_terms=["plddt", ...]`.** The weights move out of the tool: each requested quantity comes back with its own value and its own unweighted gradient, and weighting happens when the terms are composed.
-- **Pick the tool that matches the design.** De novo with no reference → `alphafold2-hallucination-gradient`. Sequence against a known backbone → `alphafold2-fixbb-gradient`. Binder against a target → `alphafold2-binder-gradient`; an existing template binder chain → `alphafold2-binder-redesign-gradient`. Splitting them is what makes each tool's term catalog honest: the old tool accepted terms its protocol never computed and returned gradients of zero for them.
-- **`binder_chain` moves to `alphafold2-binder-redesign-gradient`.** Redesign parses the binder from the template, which empties ColabDesign's unsupervised masks; that tool computes the confidence terms over the binder instead of reporting zero.
-- **`helix` now means ColabDesign's native helix loss** — a binary contact loss over i,i+3 pairs across the whole designed region — rather than the binder-only variant the previous tool registered. Its magnitude, normalization and sign convention all differ.
-- **`rg`, `i_ptm`, `NC` and `beta_strand` are terms again**, and the Germinal framework-contact penalty is composed from `fw_i_con` and `i_con`. Germinal's CDR-restricted terms map to `positions`, and its strand loss to `beta_strand(form="out_of_range")`.
-- **`backend="germinal"`, `starting_binder_seq`, `excluded_amino_acids` and `bias_redesign` are not carried over.**
+These four gradient tools return one raw gradient per quantity, which the caller composes.
+- **Pick the tool that matches the design.** De novo with no reference → `alphafold2-hallucination-gradient`. Sequence against a known backbone → `alphafold2-fixbb-gradient`. Binder against a target → `alphafold2-binder-gradient`; an existing template binder chain → `alphafold2-binder-redesign-gradient`. 
 
 ## Toolkit Notes
-
+bin
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
 These apply to every AlphaFold2 tool in this toolkit (`alphafold2-prediction`, `alphafold2-hallucination-gradient`, `alphafold2-fixbb-gradient`, `alphafold2-binder-gradient`, `alphafold2-binder-redesign-gradient`).
