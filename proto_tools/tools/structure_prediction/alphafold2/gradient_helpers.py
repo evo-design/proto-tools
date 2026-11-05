@@ -20,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
-from pydantic import Field, field_validator
+from pydantic import Field, PositiveInt, field_validator
 
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import AlphaFold2Metrics
@@ -201,9 +201,98 @@ class AlphaFold2RmsdTerm(AlphaFold2Term):
     )
 
 
+class AlphaFold2RgTerm(AlphaFold2Term):
+    """Radius of gyration of the designed chain's CA atoms beyond the compact-fold expectation.
+
+    The value is ``elu(rg - 2.38 * N**0.365)`` for ``N`` designed residues, as in BindCraft and
+    Germinal.
+
+    Attributes:
+        id (Literal["rg"]): Fixed identifier for this kind of quantity.
+    """
+
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
+    DESCRIPTION: ClassVar[str] = "Radius of gyration in excess of the expected compact value"
+
+    id: Literal["rg"] = Field(default="rg", title="Term ID", description="Identifies this quantity as excess Rg.")
+
+
+class AlphaFold2TerminiDistanceTerm(AlphaFold2Term):
+    """Distance between the designed chain's terminal CA atoms beyond 7 angstroms.
+
+    The value is ``relu(elu(d - 7))``, which is zero once the termini are within 7 angstroms.
+
+    Attributes:
+        id (Literal["NC"]): Fixed identifier for this kind of quantity.
+    """
+
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
+    DESCRIPTION: ClassVar[str] = "N-to-C terminal CA distance in excess of 7 angstroms"
+    UNITS: ClassVar[str | None] = "angstroms"
+
+    id: Literal["NC"] = Field(
+        default="NC", title="Term ID", description="Identifies this quantity as termini distance."
+    )
+
+
+class AlphaFold2BetaStrandTerm(AlphaFold2Term):
+    """Strand-geometry objective over i,i+3 pairs of the designed residues.
+
+    Each pair scores ``-log P(9.75 <= d <= 11.5)`` from the distogram; the value is the mean of
+    the worst third. Lower values mean more strand-like spacing, so like ``helix`` it carries no
+    advisory direction.
+
+    Attributes:
+        id (Literal["beta_strand"]): Fixed identifier for this kind of quantity.
+    """
+
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
+    DESCRIPTION: ClassVar[str] = "Strand-spacing objective over i,i+3 designed pairs"
+
+    id: Literal["beta_strand"] = Field(
+        default="beta_strand", title="Term ID", description="Identifies this quantity as the strand loss."
+    )
+
+
+class AlphaFold2InterfacePtmTerm(AlphaFold2Term):
+    """Interface predicted TM-score between binder and target.
+
+    Attributes:
+        id (Literal["i_ptm"]): Fixed identifier for this kind of quantity.
+    """
+
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "higher"
+    DESCRIPTION: ClassVar[str] = "Interface predicted TM-score"
+
+    id: Literal["i_ptm"] = Field(default="i_ptm", title="Term ID", description="Identifies this quantity as ipTM.")
+
+
+class AlphaFold2FrameworkContactTerm(AlphaFold2Term):
+    """Contact loss between the target and the binder's framework residues.
+
+    The same contact objective as ``i_con``, restricted to the framework, so higher values mean
+    the framework sits farther from the target. Germinal's framework penalty composes it with
+    ``i_con`` as ``i_con**2 / max(fw_i_con - offset, 1e-8)``.
+
+    Attributes:
+        id (Literal["fw_i_con"]): Fixed identifier for this kind of quantity.
+        framework_positions (list[PositiveInt]): 1-indexed binder positions that form the framework.
+    """
+
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "higher"
+    DESCRIPTION: ClassVar[str] = "Contact loss between the target and the binder framework"
+
+    id: Literal["fw_i_con"] = Field(
+        default="fw_i_con", title="Term ID", description="Identifies this quantity as framework contact loss."
+    )
+    framework_positions: list[PositiveInt] = Field(
+        min_length=1, title="Framework Positions", description="1-indexed binder positions forming the framework."
+    )
+
+
 def build_terms(
     payload_terms: list[dict[str, Any]],
-    catalog: dict[str, type[AlphaFold2Term]],
+    requested: Sequence[AlphaFold2Term],
     matrix: list[list[float]],
     *,
     temperature: float | None,
@@ -214,7 +303,7 @@ def build_terms(
 
     Args:
         payload_terms (list[dict[str, Any]]): Worker entries, each with id, value and gradient.
-        catalog (dict[str, type[AlphaFold2Term]]): The tool's supported terms, by id.
+        requested (Sequence[AlphaFold2Term]): The config's terms, returned with their selectors.
         matrix (list[list[float]]): The relaxed state this candidate was differentiated at.
         temperature (float | None): The input's temperature.
         soft (float): Relaxation blend in force.
@@ -231,19 +320,16 @@ def build_terms(
         soft=soft,
         hard=hard,
     )
+    by_id = {term.id: term for term in requested}
     built = []
     for entry in payload_terms:
-        term_class = catalog.get(entry["id"])
-        if term_class is None:
-            raise ValueError(
-                f"alphafold2 reported term {entry['id']!r}, which is not in this tool's catalog {sorted(catalog)}"
-            )
+        term = by_id.get(entry["id"])
+        if term is None:
+            raise ValueError(f"alphafold2 reported term {entry['id']!r}, which was not requested ({sorted(by_id)})")
         if entry["value"] is None:
             raise ValueError(
                 f"alphafold2 term {entry['id']!r} has nothing to measure on this input and reported no value"
             )
-        # Each concrete quantity pins its own id; the base is never instantiated directly.
-        term = term_class()  # type: ignore[call-arg]
         built.append(
             {
                 "term": term,
@@ -439,6 +525,7 @@ def dispatch_design_gradient(
             "protocol": protocol,
             "items": items,
             "gradient_terms": requested,
+            "term_options": {term.id: term.model_dump(exclude={"id"}) for term in config.gradient_terms},
             "temperature": temperature,
             "soft": config.soft,
             "hard": config.hard,
@@ -460,18 +547,23 @@ def dispatch_design_gradient(
 
 
 __all__ = [
+    "AlphaFold2BetaStrandTerm",
     "AlphaFold2ContactTerm",
     "AlphaFold2DesignGradientConfig",
     "AlphaFold2DgramCCETerm",
     "AlphaFold2ExpResTerm",
     "AlphaFold2FapeTerm",
+    "AlphaFold2FrameworkContactTerm",
     "AlphaFold2HelixTerm",
     "AlphaFold2InterfaceContactTerm",
     "AlphaFold2InterfacePaeTerm",
+    "AlphaFold2InterfacePtmTerm",
     "AlphaFold2PaeTerm",
     "AlphaFold2PlddtTerm",
+    "AlphaFold2RgTerm",
     "AlphaFold2RmsdTerm",
     "AlphaFold2Term",
+    "AlphaFold2TerminiDistanceTerm",
     "build_structure",
     "build_terms",
     "dispatch_design_gradient",

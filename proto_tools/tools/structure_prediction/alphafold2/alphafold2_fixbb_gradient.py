@@ -15,6 +15,7 @@ from typing_extensions import Self
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import AlphaFold2Metrics
 from proto_tools.tools.structure_prediction.alphafold2.gradient_helpers import (
+    AlphaFold2BetaStrandTerm,
     AlphaFold2ContactTerm,
     AlphaFold2DesignGradientConfig,
     AlphaFold2DgramCCETerm,
@@ -23,8 +24,10 @@ from proto_tools.tools.structure_prediction.alphafold2.gradient_helpers import (
     AlphaFold2HelixTerm,
     AlphaFold2PaeTerm,
     AlphaFold2PlddtTerm,
+    AlphaFold2RgTerm,
     AlphaFold2RmsdTerm,
     AlphaFold2StructureGradientOutput,
+    AlphaFold2TerminiDistanceTerm,
     build_structure,
     build_terms,
     dispatch_design_gradient,
@@ -58,7 +61,10 @@ AlphaFold2FixBBTerm = Annotated[
     | AlphaFold2HelixTerm
     | AlphaFold2DgramCCETerm
     | AlphaFold2FapeTerm
-    | AlphaFold2RmsdTerm,
+    | AlphaFold2RmsdTerm
+    | AlphaFold2RgTerm
+    | AlphaFold2TerminiDistanceTerm
+    | AlphaFold2BetaStrandTerm,
     Field(discriminator="id"),
 ]
 
@@ -71,6 +77,9 @@ _CATALOG: TermCatalog = {
     "dgram_cce": AlphaFold2DgramCCETerm,
     "fape": AlphaFold2FapeTerm,
     "rmsd": AlphaFold2RmsdTerm,
+    "rg": AlphaFold2RgTerm,
+    "NC": AlphaFold2TerminiDistanceTerm,
+    "beta_strand": AlphaFold2BetaStrandTerm,
 }
 
 
@@ -298,7 +307,7 @@ def run_alphafold2_fixbb_gradient(
     for candidate, reply in zip(inputs.inputs, worker_results, strict=True):
         built = build_terms(
             reply["terms"],
-            _CATALOG,  # type: ignore[arg-type]
+            config.gradient_terms,
             candidate.logits.root,
             temperature=inputs.temperature,
             soft=config.soft,

@@ -2,7 +2,7 @@
 
 Runs in an isolated venv with JAX and upstream sokrypton/ColabDesign.
 
-Extension loss callbacks (rg, i_ptm, beta_strand, NC) are registered when a
+Extension loss callbacks (rg, NC, i_ptm, beta_strand, fw_i_con) are registered when a
 requested gradient term needs one.
 
 Usage:
@@ -15,7 +15,7 @@ import json
 import logging
 import os
 import sys
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
@@ -143,77 +143,61 @@ def _extract_metrics(aux: dict[str, Any] | None, include_pae_matrix: bool = Fals
 # ============================================================================
 
 
-def _add_rg_loss(af_model: Any, weight: float = 0.1) -> None:
-    """Radius-of-gyration loss — penalizes extended binders."""
+def _extension_loss_fns(designed_len: int, term_options: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """Build the extension loss functions, each over the trailing ``designed_len`` residues.
+
+    The designed segment is always the trailing rows (the binder, or the whole chain for the
+    single-chain protocols), so every extension applies under all three protocols.
+
+    Args:
+        designed_len (int): Number of trailing residues being designed.
+        term_options (Mapping[str, Mapping[str, Any]]): Per-term selectors, by term id.
+
+    Returns:
+        dict[str, Any]: One loss callback per extension term; ColabDesign passes arguments by name.
+    """
     import jax
     import jax.numpy as jnp
     from colabdesign.af.alphafold.common import residue_constants
+    from colabdesign.af.loss import get_con_loss, get_dgram_bins, get_ptm
 
-    def loss_fn(_inputs: Any, outputs: Any) -> dict[str, Any]:
-        ca = outputs["structure_module"]["final_atom_positions"][:, residue_constants.atom_order["CA"]]
-        ca = ca[-af_model._binder_len :]
-        rg = jnp.sqrt(jnp.square(ca - ca.mean(0)).sum(-1).mean() + 1e-8)
-        rg_th = 2.38 * ca.shape[0] ** 0.365
-        return {"rg": jax.nn.elu(rg - rg_th)}
+    def designed_ca(outputs: Any) -> Any:
+        """CA coordinates of the designed residues."""
+        return outputs["structure_module"]["final_atom_positions"][-designed_len:, residue_constants.atom_order["CA"]]
 
-    af_model._callbacks["model"]["loss"].append(loss_fn)
-    af_model.opt["weights"]["rg"] = weight
+    def rg(outputs: Any) -> dict[str, Any]:
+        """Excess radius of gyration, as in BindCraft and Germinal."""
+        ca = designed_ca(outputs)
+        radius = jnp.sqrt(jnp.square(ca - ca.mean(0)).sum(-1).mean() + 1e-8)
+        return {"rg": jax.nn.elu(radius - 2.38 * designed_len**0.365)}
 
+    def termini(outputs: Any) -> dict[str, Any]:
+        """Terminal CA distance beyond 7 angstroms, as in BindCraft and Germinal."""
+        ca = designed_ca(outputs)
+        return {"NC": jax.nn.relu(jax.nn.elu(jnp.linalg.norm(ca[0] - ca[-1]) - 7.0))}
 
-def _add_i_ptm_loss(af_model: Any, weight: float = 0.1) -> None:
-    """Interface pTM loss — maximizes interface predicted TM-score."""
-    from colabdesign.af.loss import get_ptm
-
-    def loss_fn(inputs: Any, outputs: Any) -> dict[str, Any]:
+    def i_ptm(inputs: Any, outputs: Any) -> dict[str, Any]:
+        """Interface pTM, as ``1 - ipTM`` like ColabDesign's other confidences."""
         return {"i_ptm": 1 - get_ptm(inputs, outputs, interface=True)}
 
-    af_model._callbacks["model"]["loss"].append(loss_fn)
-    af_model.opt["weights"]["i_ptm"] = weight
-
-
-def _add_beta_strand_loss(af_model: Any, weight: float = 0.1) -> None:
-    """Beta-strand loss — 9.75-11.5 A pairwise distances, top-k."""
-    import jax
-    import jax.numpy as jnp
-    from colabdesign.af.loss import get_dgram_bins
-
-    total_len = af_model._target_len + af_model._binder_len
-    all_pos = jnp.asarray(af_model.opt.get("pos", []))
-    valid_pos = all_pos[(all_pos > 0) & (all_pos < total_len - 1)]
-
-    def loss_fn(_inputs: Any, outputs: Any) -> dict[str, Any]:
-        if valid_pos.size == 0:
-            return {"beta_strand": jnp.array(0.0)}
-
+    def beta_strand(outputs: Any) -> dict[str, Any]:
+        """Mean of the worst third of ``-log P(9.75 <= d <= 11.5)`` over designed i,i+3 pairs."""
         dgram = outputs["distogram"]["logits"]
-        dgram_bins = get_dgram_bins(outputs)
-        bins = jnp.logical_and(dgram_bins >= 9.75, dgram_bins <= 11.5)
-        x = -jnp.log((bins * jax.nn.softmax(dgram) + 1e-8).sum(-1))
+        bins = get_dgram_bins(outputs)
+        in_range = jnp.logical_and(bins >= 9.75, bins <= 11.5)
+        pair_loss = -jnp.log((in_range * jax.nn.softmax(dgram) + 1e-8).sum(-1))
+        worst = jnp.sort(jnp.diagonal(pair_loss[-designed_len:, -designed_len:], 3))[::-1]
+        return {"beta_strand": worst[: max(designed_len // 3, 1)].mean()}
 
-        mask_1d = jnp.zeros(total_len).at[valid_pos - 1].set(1).at[valid_pos + 1].set(1)
-        mask_2d = jnp.outer(mask_1d, mask_1d)
-        loss_array = jnp.sort(jnp.diagonal(mask_2d * x, 3), descending=True)
-        top_k_mask = jnp.arange(loss_array.size) < (valid_pos.size // 3)
-        return {"beta_strand": jnp.where(top_k_mask, loss_array, 0).sum(-1) / (top_k_mask.sum() + 1e-8)}
+    def fw_i_con(inputs: Any, outputs: Any, opt: Any) -> dict[str, Any]:
+        """Contact loss from the target to the framework residues, as in Germinal."""
+        length = inputs["seq_mask"].shape[0]
+        positions = term_options["fw_i_con"]["framework_positions"]
+        target = jnp.zeros(length).at[: length - designed_len].set(1)
+        framework = jnp.zeros(length).at[jnp.asarray(positions) + length - designed_len - 1].set(1)
+        return {"fw_i_con": get_con_loss(inputs, outputs, opt["i_con"], mask_1d=target, mask_1b=framework)}
 
-    af_model._callbacks["model"]["loss"].append(loss_fn)
-    af_model.opt["weights"]["beta_strand"] = weight
-
-
-def _add_termini_distance_loss(af_model: Any, weight: float = 0.1, threshold: float = 7.0) -> None:
-    """N-C termini distance loss — penalizes distant chain ends."""
-    import jax
-    import jax.numpy as jnp
-    from colabdesign.af.alphafold.common import residue_constants
-
-    def loss_fn(_inputs: Any, outputs: Any) -> dict[str, Any]:
-        ca = outputs["structure_module"]["final_atom_positions"][:, residue_constants.atom_order["CA"]]
-        ca = ca[-af_model._binder_len :]
-        dist = jnp.linalg.norm(ca[0] - ca[-1])
-        return {"NC": jax.nn.relu(jax.nn.elu(dist - threshold))}
-
-    af_model._callbacks["model"]["loss"].append(loss_fn)
-    af_model.opt["weights"]["NC"] = weight
+    return {"rg": rg, "NC": termini, "i_ptm": i_ptm, "beta_strand": beta_strand, "fw_i_con": fw_i_con}
 
 
 #: Quantities ColabDesign computes itself; an extension must never shadow one.
@@ -223,17 +207,26 @@ _NATIVE_LOSSES = frozenset({"plddt", "pae", "i_pae", "con", "i_con", "exp_res", 
 _INVERTED_LOSSES = frozenset({"plddt", "exp_res", "i_ptm"})
 
 
-def _configure_extension_losses(af_model: Any, requested: Collection[str]) -> None:
-    """Register the extension loss callbacks the requested terms need."""
-    requested = set(requested) - _NATIVE_LOSSES
-    if "rg" in requested:
-        _add_rg_loss(af_model)
-    if "i_ptm" in requested:
-        _add_i_ptm_loss(af_model)
-    if "beta_strand" in requested:
-        _add_beta_strand_loss(af_model)
-    if "NC" in requested:
-        _add_termini_distance_loss(af_model)
+def _configure_extension_losses(
+    af_model: Any, requested: Collection[str], designed_len: int, term_options: Mapping[str, Mapping[str, Any]]
+) -> None:
+    """Register the extension loss callbacks the requested terms need.
+
+    Args:
+        af_model (Any): The ColabDesign design model.
+        requested (Collection[str]): Requested term ids.
+        designed_len (int): Number of trailing residues being designed.
+        term_options (Mapping[str, Mapping[str, Any]]): Per-term selectors, by term id.
+
+    Raises:
+        ValueError: If a framework position lies outside the designed residues.
+    """
+    positions = term_options.get("fw_i_con", {}).get("framework_positions", [])
+    if any(position > designed_len for position in positions):
+        raise ValueError(f"alphafold2: framework_positions {positions} exceed the {designed_len} designed residues")
+    extensions = _extension_loss_fns(designed_len, term_options)
+    for name in set(requested) - _NATIVE_LOSSES:
+        af_model._callbacks["model"]["loss"].append(extensions[name])
 
 
 def _per_term_gradients(af_model: Any, term_names: list[str]) -> Any:
@@ -787,6 +780,7 @@ class AlphaFold2Model:
         prep_kwargs: dict[str, Any],
         logits: list[list[float]],
         gradient_terms: list[str],
+        term_options: Mapping[str, Mapping[str, Any]] | None = None,
         temperature: float | None = 1.0,
         soft: float = 1.0,
         hard: float = 0.0,
@@ -814,6 +808,7 @@ class AlphaFold2Model:
             prep_kwargs (dict[str, Any]): Protocol-specific arguments for ``prep_inputs``.
             logits (list[list[float]]): Relaxed ``(L, 20)`` state for the designed chain.
             gradient_terms (list[str]): Loss-dict keys to differentiate, one gradient each.
+            term_options (Mapping[str, Mapping[str, Any]] | None): Per-term selectors, by term id.
             temperature (float | None): Softmax temperature, or ``None`` for probabilities.
             soft (float): Relaxation blend.
             hard (float): Straight-through coefficient.
@@ -855,7 +850,7 @@ class AlphaFold2Model:
             )
 
         # An extension loss only reaches aux["losses"] once its callback is installed.
-        _configure_extension_losses(af_model, set(gradient_terms))
+        _configure_extension_losses(af_model, gradient_terms, designed_len, term_options or {})
 
         return self._run_gradient(
             af_model,
@@ -923,6 +918,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 prep_kwargs=item["prep_kwargs"],
                 logits=item["logits"],
                 gradient_terms=input_dict["gradient_terms"],
+                term_options=input_dict.get("term_options"),
                 temperature=resolve_temperature(input_dict["temperature"]),
                 soft=input_dict["soft"],
                 hard=input_dict["hard"],
