@@ -75,7 +75,7 @@ class UniProtSearchConfig(BaseConfig):
     Attributes:
         organism (str | None): Restrict to an organism by name (``organism_name:"..."``), e.g.
             ``"Homo sapiens"``. Combined with the query using AND.
-        taxon_id (int | None): Restrict to an NCBI taxonomy ID (``organism_id:...``), including
+        taxon_id (int | None): Restrict to an NCBI taxonomy ID (``taxonomy_id:...``), including
             all descendant taxa. Combined with the query using AND.
         reviewed_only (bool): Restrict to reviewed Swiss-Prot entries. Defaults to True, which
             keeps results to curated entries and excludes large unreviewed TrEMBL sets.
