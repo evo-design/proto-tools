@@ -252,5 +252,7 @@ def test_supplied_msa_rows_reach_the_backend(tool_key, scenario_name, monkeypatc
     modes = [chain.mode for chain in output.structures[0].msa_conditioning.chains]
     assert modes.count("paired") != 1, f"{tool_key} / {scenario_name}: one chain reported paired with no partner"
     if scenario_name == "homodimer_paired":
-        expected = ["paired", "paired"] if tool_key in _PAIRS_IDENTICAL_CHAINS else [m for m in modes if m != "paired"]
-        assert modes == expected, f"{tool_key}: paired homodimer reported {modes}"
+        if tool_key in _PAIRS_IDENTICAL_CHAINS:
+            assert modes == ["paired", "paired"], f"{tool_key}: paired homodimer reported {modes}"
+        else:
+            assert "paired" not in modes, f"{tool_key}: paired homodimer reported {modes}"

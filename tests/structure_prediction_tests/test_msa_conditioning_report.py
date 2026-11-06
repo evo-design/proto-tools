@@ -372,6 +372,34 @@ def test_alphafold3_sends_no_paired_msa_for_a_homomer(tmp_path):
     assert sent == {0: SentMSA(rows=2), 1: SentMSA(rows=2)}
 
 
+def test_protenix_and_opendde_still_get_a_paired_homodimers_rows(tmp_path):
+    """Both use paired MSAs as unpaired depth (msa_pair_as_unpair), so a homomer's rows are still sent."""
+    from pathlib import Path
+
+    from proto_tools.tools.structure_prediction.opendde.helpers import build_chain_msa_paths
+    from proto_tools.tools.structure_prediction.protenix.protenix import (
+        ProtenixConfig,
+        ProtenixInput,
+        _write_msas_to_batch_json,
+    )
+
+    homodimer = Complex(chains=[Chain(sequence="AAAAA", entity_type="protein")] * 2)
+    paired = _msa("AAAAA", "WAAAA", "YAAAA")
+    deep = _msa("AAAAA", "VAAAA")
+    msas = ComplexMSAs(per_chain={0: paired, 1: paired}, paired=True, unpaired_per_chain={0: deep, 1: deep})
+
+    _, paired_paths, sent = build_chain_msa_paths(homodimer, msas, str(tmp_path / "opendde"))
+    assert set(paired_paths) == {"A", "B"}
+    assert not any(record.paired for record in sent.values())
+
+    batch_json = [{"sequences": [{"proteinChain": {}}, {"proteinChain": {}}]}]
+    (sent,) = _write_msas_to_batch_json(
+        batch_json, ProtenixInput(complexes=[homodimer], msas=[msas]), ProtenixConfig(), str(tmp_path / "protenix")
+    )
+    assert all(Path(entry["proteinChain"]["pairedMsaPath"]).exists() for entry in batch_json[0]["sequences"])
+    assert not any(record.paired for record in sent.values())
+
+
 def test_rf3_and_esmfold2_record_unpaired_only_rows_as_sent(tmp_path):
     from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import _esmfold2_sent_msas
     from proto_tools.tools.structure_prediction.rf3.helpers import build_chain_a3m_paths

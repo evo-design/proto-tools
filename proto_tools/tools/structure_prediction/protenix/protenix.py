@@ -645,7 +645,9 @@ def _write_msas_to_batch_json(
         chains = protein_chain_msas(sp_complex.chains, complex_msas)
         if not chains:
             continue
-        is_paired = af3_style_pairing(
+        # Protenix merges every paired MSA into the unpaired one (msa_pair_as_unpair, on by default),
+        # so the paired rows are always sent; they pair across chains only as af3_style_pairing says.
+        pairs = af3_style_pairing(
             (chain.chain.sequence for chain in chains), sum(chain.primary is not None for chain in chains), is_paired
         )
         protein_chain_indices = [chain.index for chain in chains]
@@ -687,7 +689,7 @@ def _write_msas_to_batch_json(
                 rows=len(msa) if is_paired else len(unpaired_msa),
                 # Without a deep unpaired MSA the unpaired file repeats the paired rows: no extra depth.
                 unpaired_rows=len(unpaired_msa) - 1 if is_paired and chain.unpaired is not None else 0,
-                paired=is_paired,
+                paired=pairs,
                 ignored_reason=short,
             )
 

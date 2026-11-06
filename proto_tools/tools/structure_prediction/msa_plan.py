@@ -67,8 +67,9 @@ def protein_chain_msas(chains: Sequence[Chain | Fragment], complex_msas: Complex
 def chain_base_rows(chain: ChainMSAs, bundle_paired: bool) -> tuple[MSA | None, MSA | None, bool]:
     """A chain's base alignment, the unpaired depth beneath it, and whether the base pairs across chains.
 
-    A chain with only unpaired rows sends them as its base, which never pairs; other chains keep
-    the bundle's pairing. The base is ``None`` when the chain has no rows.
+    A chain with only unpaired rows sends them as its base, which is never paired by row (RF3
+    still pairs rows whose headers share a ``TaxID=``); other chains keep the bundle's pairing. The
+    base is ``None`` when the chain has no rows.
     """
     if chain.primary is None:
         return chain.unpaired, None, False
@@ -79,7 +80,8 @@ def af3_style_pairing(sequences: Iterable[str], chains_with_paired_rows: int, bu
     """Whether an AF3-lineage backend (AF3, Protenix, OpenDDE) pairs this complex's MSAs.
 
     They pair only across two or more distinct protein sequences (``need_msa_pairing``), and a
-    chain's paired rows pair only with another chain's, so the paired MSAs are sent only then.
+    chain's paired rows pair only with another chain's. AF3 ignores paired MSAs otherwise, so they
+    are sent only then; Protenix and OpenDDE use them as unpaired depth, so they always get them.
 
     Args:
         sequences (Iterable[str]): Every protein chain's sequence.
@@ -87,7 +89,7 @@ def af3_style_pairing(sequences: Iterable[str], chains_with_paired_rows: int, bu
         bundle_paired (bool): Whether the bundle's alignments are row-aligned across chains.
 
     Returns:
-        bool: Whether the backend pairs, so the paired MSAs are worth sending.
+        bool: Whether the backend pairs the paired MSAs across chains.
     """
     return bundle_paired and chains_with_paired_rows >= 2 and len(set(sequences)) > 1
 

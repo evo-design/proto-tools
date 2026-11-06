@@ -72,7 +72,7 @@ def build_msa_conditioning(
             unused.append((chain.chain_id, reason))
         mode: MSAMode = (
             "paired"
-            if partnered and record.paired and record.rows > 1
+            if partnered and record.paired and record.rows > 1 and record.ignored_reason is None
             else "unpaired"
             if has_homolog_rows(record)
             else "none"
