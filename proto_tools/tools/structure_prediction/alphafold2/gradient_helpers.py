@@ -183,13 +183,20 @@ class AlphaFold2InterfaceContactTerm(AlphaFold2Term):
 
 
 class AlphaFold2HelixTerm(AlphaFold2Term):
-    """Helical-contact objective: the mean binary contact loss over i,i+3 residue pairs.
+    """Helical-contact objective over i,i+3 residue pairs.
 
-    Lower values mean more helical contacts. Whether that is wanted depends on the design, so
-    this quantity carries no advisory direction and composing it requires an explicit goal.
+    Without selectors this is ColabDesign's native helix loss, a binary contact loss over the
+    designed region. With ``positions`` or ``form`` set (and always under template redesign, where
+    the native loss is masked to nothing), it is Germinal's: the mean over selected i,i+3 pairs of
+    ``-log P(2 <= d <= 6.2)``, or of its complement under ``form="out_of_range"``. Lower values
+    mean more (or, out of range, fewer) helical contacts, so it carries no advisory direction.
 
     Attributes:
         id (Literal["helix"]): Fixed identifier for this kind of quantity.
+        positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
+            keeps the protocol's own region.
+        form (Literal["in_range", "out_of_range"] | None): Score ``-log P`` of falling in the helical
+            range or outside it; ``None`` keeps the native loss when ``positions`` is unset too.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
@@ -197,6 +204,12 @@ class AlphaFold2HelixTerm(AlphaFold2Term):
 
     id: Literal["helix"] = Field(
         default="helix", title="Term ID", description="Identifies this quantity as the helix loss."
+    )
+    positions: list[PositiveInt] | None = Field(
+        default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
+    )
+    form: Literal["in_range", "out_of_range"] | None = Field(
+        default=None, title="Form", description="Score -log P of the helical range, or of outside it."
     )
 
 
@@ -386,12 +399,13 @@ def build_terms(
         soft=soft,
         hard=hard,
     )
-    by_id = {term.id: term for term in requested}
+    if len(payload_terms) != len(requested):
+        raise ValueError(f"alphafold2 reported {len(payload_terms)} terms for {len(requested)} requested")
     built = []
-    for entry in payload_terms:
-        term = by_id.get(entry["id"])
-        if term is None:
-            raise ValueError(f"alphafold2 reported term {entry['id']!r}, which was not requested ({sorted(by_id)})")
+    # The worker answers in request order; terms may share an id when their selectors differ.
+    for entry, term in zip(payload_terms, requested, strict=True):
+        if entry["id"] != term.id:
+            raise ValueError(f"alphafold2 reported term {entry['id']!r} where {term.id!r} was requested")
         if entry["value"] is None:
             raise ValueError(
                 f"alphafold2 term {entry['id']!r} has nothing to measure on this input and reported no value"
@@ -531,11 +545,10 @@ class AlphaFold2DesignGradientConfig(GradientConfig):
     @field_validator("gradient_terms", mode="after", check_fields=False)
     @classmethod
     def reject_repeated_terms(cls, value: list[Any]) -> list[Any]:
-        """Each quantity yields one term, so asking for it twice is a mistake rather than a sum."""
-        asked = [term.id for term in value]
-        repeated = sorted({name for name in asked if asked.count(name) > 1})
+        """The same term with the same selectors twice is one quantity asked for twice."""
+        repeated = sorted({term.id for term in value if value.count(term) > 1})
         if repeated:
-            raise ValueError(f"gradient_terms names {repeated} more than once; each quantity yields one term")
+            raise ValueError(f"gradient_terms names {repeated} more than once with the same selectors")
         return value
 
 
@@ -608,7 +621,7 @@ def dispatch_design_gradient(
             "protocol": protocol,
             "items": items,
             "gradient_terms": requested,
-            "term_options": {term.id: term.model_dump(exclude={"id"}) for term in config.gradient_terms},
+            "term_options": [term.model_dump(exclude={"id"}) for term in config.gradient_terms],
             "temperature": temperature,
             "soft": config.soft,
             "hard": config.hard,
