@@ -417,7 +417,10 @@ def example_input() -> Any:
     input_class=PdbSequenceSearchInput,
     config_class=PdbSequenceSearchConfig,
     output_class=PdbSequenceSearchOutput,
-    description="Search experimental PDB polymer entities for sequences similar to a query with RCSB's MMseqs2 sequence service",
+    description=(
+        "Fast sequence similarity search (seconds): identify which protein a sequence or fragment comes from, "
+        "searching PDB polymer entities with RCSB's MMseqs2 service"
+    ),
     uses_gpu=False,
     example_input=example_input,
     iterable_input_fields=["queries"],
