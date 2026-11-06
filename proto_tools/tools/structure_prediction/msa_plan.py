@@ -5,7 +5,7 @@ Writers walk ``protein_chain_msas`` to decide what to write for every protein ch
 is built from those records, so it cannot drift from what the writers do.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from proto_tools.entities.ligands import Fragment
@@ -62,6 +62,36 @@ def protein_chain_msas(chains: Sequence[Chain | Fragment], complex_msas: Complex
         for index, chain in enumerate(chains)
         if isinstance(chain, Chain) and chain.entity_type == "protein"
     ]
+
+
+def chain_base_rows(chain: ChainMSAs, bundle_paired: bool) -> tuple[MSA | None, MSA | None, bool]:
+    """A chain's base alignment, the unpaired depth beneath it, and whether the base pairs across chains.
+
+    A chain with only unpaired rows sends them as its base, which is never paired by row (RF3
+    still pairs rows whose headers share a ``TaxID=``); other chains keep the bundle's pairing. The
+    base is ``None`` when the chain has no rows.
+    """
+    if chain.primary is None:
+        return chain.unpaired, None, False
+    return chain.primary, chain.unpaired, bundle_paired
+
+
+def af3_style_pairing(sequences: Iterable[str], chains_with_paired_rows: int, bundle_paired: bool) -> bool:
+    """Whether an AF3-lineage backend (AF3, Protenix, OpenDDE) pairs this complex's MSAs.
+
+    They pair only across two or more distinct protein sequences (``need_msa_pairing``), and a
+    chain's paired rows pair only with another chain's. AF3 ignores paired MSAs otherwise, so they
+    are sent only then; Protenix and OpenDDE use them as unpaired depth, so they always get them.
+
+    Args:
+        sequences (Iterable[str]): Every protein chain's sequence.
+        chains_with_paired_rows (int): Protein chains the bundle gives a paired alignment.
+        bundle_paired (bool): Whether the bundle's alignments are row-aligned across chains.
+
+    Returns:
+        bool: Whether the backend pairs the paired MSAs across chains.
+    """
+    return bundle_paired and chains_with_paired_rows >= 2 and len(set(sequences)) > 1
 
 
 def unpaired_depth_rows(rows: Sequence[str], unpaired: MSA | None) -> list[tuple[str, str]]:

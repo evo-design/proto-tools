@@ -14,6 +14,10 @@ All tests use **flat functions** (no test classes). Follow these patterns when w
 - **Module-level fixtures**: Use `@pytest.fixture` at module level, not inside classes. Use `scope="module"` for expensive setup
 - **Module-level constants**: Deduplicate repeated values as `_PREFIXED` constants (e.g., `_SETUP_SH`, `_CRISPR_SEQUENCE`)
 - **Test directory naming**: `tests/{category}_tests/` matching `tools/{category}/`
+- **Registry-wide contracts**: some tests run every registered tool of a kind, so a new tool is
+  checked from its first commit. `tests/structure_prediction_tests/test_msa_contract.py` runs each
+  tool whose input takes `msas` against a set of MSA bundle shapes with its worker stubbed; a new
+  MSA-taking tool needs an entry in its `_STUBS`.
 
 ## Assertions
 

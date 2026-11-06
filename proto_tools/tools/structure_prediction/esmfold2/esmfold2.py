@@ -11,6 +11,7 @@ from pydantic import model_validator
 from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
 from proto_tools.tools.structure_prediction.msa_plan import (
     SentMSA,
+    chain_base_rows,
     protein_chain_msas,
     unpaired_depth_rows,
 )
@@ -33,7 +34,6 @@ logger = getLogger(__name__)
 # MSA rows ESMFold2 randomly keeps per loop; passed to fold() as msa_max_depth.
 ESMFOLD2_MSA_MAX_DEPTH = 1024
 _FAST_REASON = "proto-tools sends no MSA to esmfold2-fast, a single-sequence checkpoint"
-_UNPAIRED_ONLY_REASON = "ESMFold2 is sent a chain's unpaired rows only with its primary alignment"
 
 
 # ============================================================================
@@ -356,9 +356,10 @@ def _run_esmfold2_on_complex(
     # MSAs are only meaningful for the MSA-capable checkpoint.
     msa_payload: dict[str, list[str]] | None = None
     unpaired_payload: dict[str, list[str]] | None = None
-    if config.model_checkpoint == "esmfold2" and per_chain_msas:
+    if config.model_checkpoint == "esmfold2" and (per_chain_msas or unpaired_per_chain):
         msa_payload = _serialize_msas_for_worker(per_chain_msas)
-        # Deep per-chain unpaired MSAs ride alongside the paired rows for block-diagonal depth.
+        # Deep per-chain unpaired MSAs ride after the paired rows as unpaired depth; a chain
+        # with only unpaired rows is sent them alone, unpaired.
         if unpaired_per_chain:
             unpaired_payload = _serialize_msas_for_worker(unpaired_per_chain)
 
@@ -425,21 +426,21 @@ def _esmfold2_sent_msas(checkpoint: str, sp_complex: Complex, complex_msas: Comp
     """The rows the ESMFold2 worker folds per protein chain.
 
     No MSA payload is built for the single-sequence ``esmfold2-fast``. Otherwise the worker sends a
-    chain's primary rows with its deep unpaired rows appended (de-duplicated) beneath them.
+    chain's primary rows with its deep unpaired rows appended (de-duplicated) beneath them, or a
+    chain's unpaired rows alone, unpaired, when it has no primary alignment.
     """
     sent: dict[int, SentMSA] = {}
+    bundle_paired = complex_msas is not None and complex_msas.paired
     for chain in protein_chain_msas(sp_complex.chains, complex_msas):
+        base, unpaired, pairs = chain_base_rows(chain, bundle_paired)
+        if base is None:
+            continue
         if checkpoint == "esmfold2-fast":
-            if chain.primary is not None or chain.unpaired is not None:
-                sent[chain.index] = SentMSA(ignored_reason=_FAST_REASON)
-        elif chain.primary is not None:
-            rows, _ids = extract_msa_sequences(chain.primary, 0)
-            depth = unpaired_depth_rows(rows, chain.unpaired)
-            sent[chain.index] = SentMSA(
-                rows=len(rows), unpaired_rows=len(depth), paired=complex_msas is not None and complex_msas.paired
-            )
-        elif chain.unpaired is not None:
-            sent[chain.index] = SentMSA(ignored_reason=_UNPAIRED_ONLY_REASON)
+            sent[chain.index] = SentMSA(ignored_reason=_FAST_REASON)
+            continue
+        rows, _ids = extract_msa_sequences(base, 0)
+        depth = unpaired_depth_rows(rows, unpaired)
+        sent[chain.index] = SentMSA(rows=len(rows), unpaired_rows=len(depth), paired=pairs)
     return sent
 
 
