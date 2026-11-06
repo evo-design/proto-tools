@@ -91,8 +91,8 @@ class AlphaFold2PaeTerm(AlphaFold2Term):
         id (Literal["pae"]): Fixed identifier for this kind of quantity.
         positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
             keeps the protocol's own region.
-        include_target (bool | None): Also pair the selected positions with the target, as
-            Germinal does; ``None`` keeps pairs within the selection.
+        pair_with_all (bool | None): Pair the selected positions with every residue, target
+            included, as Germinal does; ``None`` keeps pairs within the selection.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -104,8 +104,8 @@ class AlphaFold2PaeTerm(AlphaFold2Term):
     positions: list[PositiveInt] | None = Field(
         default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
     )
-    include_target: bool | None = Field(
-        default=None, title="Include Target", description="Also pair the selected positions with the target."
+    pair_with_all: bool | None = Field(
+        default=None, title="Pair With All", description="Pair the selected positions with every residue."
     )
 
 
