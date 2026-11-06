@@ -501,7 +501,7 @@ class AlphaFold2DesignGradientConfig(GradientConfig):
     excluded_amino_acids: list[AminoAcid] | None = ConfigField(
         title="Excluded Amino Acids",
         default=None,
-        description="Amino acids the softmax branch may not choose at designed positions (rm_aa bias)",
+        description="Single-letter codes the softmax never picks at designed positions (e.g. ['C'] for no Cys)",
     )
     device: str = ConfigField(
         title="Device", default="cuda", description="Device to run the model on", include_in_key=False
