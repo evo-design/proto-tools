@@ -49,5 +49,4 @@ Use this to attach domain, family, and site annotation to a protein before desig
 These apply to every InterProScan tool in this toolkit (`interproscan-fetch`).
 
 - **Requires network access.** The tool calls the live InterPro REST API and iprscan5 service. It does not run offline and keeps no local copy of the data.
-- **The sequence-submission path requires a contact email for identification.** This email lets EBI contact the submitter about job issues, so it must be a real, valid address: EBI temporarily blocks submitters that use placeholder addresses, and the tool surfaces EBI's explanation in the raised `HTTPError`. The email does not raise any bandwidth or rate allowance.
 - **Sequence submissions are subject to a fair-use concurrency cap.** EBI asks that jobs be submitted in batches of no more than 30 concurrent jobs.
