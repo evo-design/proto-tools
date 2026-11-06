@@ -9,7 +9,7 @@
 
 ## Overview
 
-UniProt (the Universal Protein Resource) is the reference database of protein sequences and their functional annotation, maintained by the UniProt consortium. The `uniprot-fetch` tool retrieves a UniProtKB entry over the UniProt REST API, either directly by accession or through a ranked gene- or protein-name and organism search, returning the sequence, gene names, review status, linked PDB structures, and the full JSON record. It runs on CPU and requires only network access.
+UniProt (the Universal Protein Resource) is the reference database of protein sequences and their functional annotation, maintained by the UniProt consortium. The `uniprot-fetch` tool retrieves a UniProtKB entry over the UniProt REST API, either directly by accession or through a ranked gene- or protein-name and organism search, returning the sequence, gene names, review status, linked PDB structures, and the full JSON record. `uniprot-search` returns ranked candidate entries for free-text or query-syntax searches. Both run on CPU and require only network access.
 
 ## Background
 
@@ -41,11 +41,27 @@ Use this to pull a reference protein sequence and its annotation into a pipeline
 - **`fields` narrows the response but can blank typed outputs.** Restricting `fields` shrinks large entries substantially, but the typed outputs are only populated when their source fields are kept, so include `accession`, `sequence`, `reviewed`, `gene_names`, and `xref_pdb` if you read those.
 - **Results track the live database.** The same call can return updated annotation as UniProt releases change; it is not pinned to a fixed release.
 
+### UniProt Search (`uniprot-search`)
+
+Runs one or more UniProtKB searches, written as free text (`"DNA polymerase Thermus aquaticus"`) or UniProt query syntax (`'protein_name:"programmed cell death protein 1"'`), and returns a ranked list of candidate entries per query: accession, entry name, protein name, gene names, organism and taxon, length, review status, annotation score, and optionally the sequence.
+
+#### Applications
+
+Use this to resolve a description to a protein when the gene symbol or accession is unknown, such as a function plus a source organism, a common name, or a drug target, and then fetch the chosen entry with `uniprot-fetch`. It also collects candidate sets: orthologs across a taxon, reviewed members of a protein family, or all reviewed entries carrying a given gene name.
+
+#### Usage Tips
+
+- **Read past the first hit.** Results follow UniProt's relevance ranking, which does not always put the intended entry first. "firefly luciferase", for example, returns the *Luciola mingrelica* enzyme before the common eastern firefly's (P08659). Check organism and protein name before choosing.
+- **`reviewed_only` defaults to True.** Reviewed Swiss-Prot entries are curated and far fewer; set it to False to include unreviewed TrEMBL entries, for example for poorly studied organisms.
+- **`taxon_id` includes descendant taxa; `organism` matches by name.** Use `taxon_id=40674` for all mammals or `taxon_id=9606` for human. Both filters are combined with the query using AND.
+- **Query syntax errors raise.** Field queries follow [UniProt's query syntax](https://www.uniprot.org/help/query-fields); an invalid query raises an HTTP 400 error with UniProt's message.
+- **Sequences are off by default** to keep responses small; set `include_sequence=True` to export hits as FASTA.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every UniProt tool in this toolkit (`uniprot-fetch`).
+These apply to every UniProt tool in this toolkit (`uniprot-fetch`, `uniprot-search`).
 
 - **Requires network access.** The tool calls the live UniProt REST API; it does not run offline and keeps no local copy of the database.
 - **Subject to UniProt rate limits.** Large or rapid batches may be throttled by the UniProt API; space out high-volume requests.
