@@ -621,7 +621,7 @@ def dispatch_design_gradient(
             "device": config.device,
             "verbose": config.verbose,
             "include_pae_matrix": config.include_pae_matrix,
-            "excluded_amino_acids": config.excluded_amino_acids or [],
+            "excluded_amino_acids": config.excluded_amino_acids,
             **(extra_payload or {}),
         },
         instance=instance,
