@@ -73,8 +73,15 @@ def _ensure_prostt5_weights(override: str | None) -> str:
         with tempfile.TemporaryDirectory() as tmp:
             _run_cmd([_find_binary(), "databases", "ProstT5", str(staging / "weights"), tmp], "databases ProstT5")
 
-    ensure_complete(cache_dir, download, stage=True)
+    # A cache downloaded before caches were recorded is kept when its old marker and weights are there
+    ensure_complete(cache_dir, download, stage=True, adopt=_downloaded_before_records)
     return str(cache_dir / "weights")
+
+
+def _downloaded_before_records(cache_dir: Path) -> bool:
+    """Whether an unrecorded cache is a finished download from before: its old marker and weights exist."""
+    weights = cache_dir / "weights"
+    return (cache_dir / ".proto-ready").exists() and weights.exists() and any(weights.iterdir())
 
 
 _M8_FORMAT_PIDENT = (

@@ -356,6 +356,18 @@ def test_prostt5_weights_download_again_when_purged(prostt5_downloads, purge: st
     assert len(downloads) == 2
 
 
+def test_prostt5_cache_from_before_records_is_kept(prostt5_downloads):
+    """A finished download marked the old way is recorded as it is, not downloaded again."""
+    run, cache, downloads = prostt5_downloads
+    (cache / "weights").mkdir(parents=True)
+    (cache / "weights" / "prostt5-f16.gguf").write_bytes(b"w")
+    (cache / ".proto-ready").touch()
+
+    run._ensure_prostt5_weights(None)
+
+    assert downloads == []
+
+
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
