@@ -146,14 +146,16 @@ def _extract_metrics(
 # ============================================================================
 
 
-def _loss_key(term_id: str, options: Mapping[str, Any]) -> str:
+def _loss_key(term_id: str, options: Mapping[str, Any], redesign: bool = False) -> str:
     """Loss-dict key a requested term is read from.
 
     A ColabDesign loss with any selector set is computed by an extension under its own key, so
     ColabDesign's own value is never shadowed and the cached model's options are never mutated;
-    the reported id drops the suffix.
+    the reported id drops the suffix. Template redesign parses the binder from the template, so
+    ColabDesign's unsupervised masks are empty and its own ``plddt``/``pae``/``con`` would read
+    zero; those always take the extension, which masks by the designed residues instead.
     """
-    selected = any(value is not None for value in options.values())
+    selected = any(value is not None for value in options.values()) or (redesign and term_id in _UNSUPERVISED_ONLY)
     return f"{term_id}@selected" if term_id in _NATIVE_LOSSES and selected else term_id
 
 
@@ -272,6 +274,9 @@ def _extension_loss_fns(
 
 #: Quantities ColabDesign computes itself; an extension must never shadow one.
 _NATIVE_LOSSES = frozenset({"plddt", "pae", "i_pae", "con", "i_con", "exp_res", "helix", "dgram_cce", "fape", "rmsd"})
+
+#: Native losses ColabDesign masks to unsupervised residues that have an extension equivalent.
+_UNSUPERVISED_ONLY = frozenset({"plddt", "pae", "con"})
 
 #: Quantities ColabDesign reports as ``1 - x``; reported back as the confidence they describe.
 _INVERTED_LOSSES = frozenset({"plddt", "exp_res", "i_ptm"})
@@ -931,7 +936,8 @@ class AlphaFold2Model:
 
         # An extension loss only reaches aux["losses"] once its callback is installed.
         term_options = term_options or {}
-        loss_keys = [_loss_key(term_id, term_options.get(term_id, {})) for term_id in gradient_terms]
+        redesign = "binder_chain" in prep_kwargs
+        loss_keys = [_loss_key(term_id, term_options.get(term_id, {}), redesign) for term_id in gradient_terms]
         _configure_extension_losses(af_model, loss_keys, designed_len, term_options, "hotspot" in prep_kwargs)
 
         return self._run_gradient(

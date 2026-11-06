@@ -88,22 +88,30 @@ Gradient-based binder design against a chosen epitope, optimizing interface cont
 - **The target's template is masked by default.** `rm_target_seq` and `rm_template_ic` default to `True` so the target's own sequence and inter-chain contacts do not leak into the prediction; `use_multimer` defaults to `True`.
 - **The binder length is the number of rows in the logits.** There is no binder template, so nothing else defines it.
 
-## Migrating from `alphafold2-gradient`
+### AlphaFold2 Binder Redesign Gradient (`alphafold2-binder-redesign-gradient`)
 
-The previous `alphafold2-gradient` tool is replaced by the three tools above. It returned one gradient of one weighted objective; these return one raw gradient per quantity, which the caller composes.
+Differentiates the redesign of an existing binder chain in a template complex, such as a nanobody docked on its target, using ColabDesign's binder protocol with `binder_chain`. The binder's backbone is offered as a template while its sequence and side chains are masked.
 
-- **`loss_weights={"plddt": w, ...}` becomes `gradient_terms=["plddt", ...]`.** The weights move out of the tool: each requested quantity comes back with its own value and its own unweighted gradient, and weighting happens when the terms are composed.
-- **Pick the tool that matches the design.** De novo with no reference → `alphafold2-hallucination-gradient`. Sequence against a known backbone → `alphafold2-fixbb-gradient`. Binder against a target → `alphafold2-binder-gradient`. Splitting them is what makes each tool's term catalog honest: the old tool accepted terms its protocol never computed and returned gradients of zero for them.
-- **`binder_chain` has no successor.** It selected an existing chain of the target template to redesign, which made the binder supervised and silently zeroed the confidence quantities. No tool here reproduces template-based binder redesign.
-- **`helix` now means ColabDesign's native helix loss** — a binary contact loss over i,i+3 pairs across the whole designed region — rather than the binder-only variant the previous tool registered. Its magnitude, normalization and sign convention all differ.
-- **`rg`, `i_ptm`, `NC` and `beta_strand` are terms again**, and the Germinal framework-contact penalty is composed from `fw_i_con` and `i_con`. Germinal's CDR-restricted terms map to `positions`, and its strand loss to `beta_strand(form="out_of_range")`.
-- **`backend="germinal"`, `starting_binder_seq`, `excluded_amino_acids` and `bias_redesign` are not carried over.**
+#### Applications
+
+Template-based binder redesign as in Germinal: optimizing an antibody's CDRs on a fixed framework against an epitope, with the framework held fixed by the caller.
+
+#### Usage Tips
+
+- **The logits cover the whole binder chain.** One row per residue of `binder_chain`; which rows may change is the caller's decision, e.g. by restricting updates to the CDRs.
+- **Confidence terms are measured over the binder.** ColabDesign masks its own `plddt`, `pae` and `con` to nothing under redesign, so the worker computes them over the binder instead; `positions` narrows them further, e.g. to the CDRs for Germinal's `i_plddt`.
+- **`dgram_cce` and `fape` measure agreement with the binder template.** `rmsd`, `exp_res` and `helix` are not offered, because ColabDesign masks them to nothing under this protocol.
+- **Inter-chain template contacts are always masked**, so the interface terms measure an interface the template does not hand over.
+
+
+These four gradient tools return one raw gradient per quantity, which the caller composes.
+- **Pick the tool that matches the design.** De novo with no reference → `alphafold2-hallucination-gradient`. Sequence against a known backbone → `alphafold2-fixbb-gradient`. Binder against a target → `alphafold2-binder-gradient`; an existing template binder chain → `alphafold2-binder-redesign-gradient`.
 
 ## Toolkit Notes
-
+bin
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every AlphaFold2 tool in this toolkit (`alphafold2-prediction`, `alphafold2-hallucination-gradient`, `alphafold2-fixbb-gradient`, `alphafold2-binder-gradient`).
+These apply to every AlphaFold2 tool in this toolkit (`alphafold2-prediction`, `alphafold2-hallucination-gradient`, `alphafold2-fixbb-gradient`, `alphafold2-binder-gradient`, `alphafold2-binder-redesign-gradient`).
 
 - **Requires a GPU.** Every tool here runs AlphaFold2 through a JAX backend and need an NVIDIA GPU; CPU execution is not practical.
 - **Runs the original AlphaFold2 through ColabDesign, not the full DeepMind pipeline.** There is no template-search stage; multiple-sequence alignments are optional and are used only by `alphafold2-prediction`.
