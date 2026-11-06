@@ -78,6 +78,13 @@ def test_duplicate_terms_rejected(protocol: str) -> None:
         _CONFIGS[protocol](gradient_terms=["plddt", "plddt"])
 
 
+def test_a_term_may_repeat_with_different_selectors() -> None:
+    """Germinal scores pLDDT over the whole binder and over its CDRs; each is its own gradient."""
+    whole, cdrs = AlphaFold2PlddtTerm(), AlphaFold2PlddtTerm(positions=[2, 3])
+    config = AlphaFold2BinderRedesignGradientConfig(gradient_terms=[whole, cdrs])
+    assert config.gradient_terms == [whole, cdrs]
+
+
 @pytest.mark.parametrize("protocol", sorted(_CONFIGS))
 def test_terms_outside_the_protocol_catalog_are_rejected(protocol: str) -> None:
     """Each protocol offers only the quantities it actually computes."""
@@ -317,8 +324,8 @@ def test_binder_selectors_reach_the_worker_and_come_back_with_the_term(
         AlphaFold2BinderGradientConfig(gradient_terms=[i_con, strand]),
     )
 
-    assert captured["term_options"]["i_con"] == {"positions": [2, 3], "num_contacts": 2, "cutoff": 20.0}
-    assert captured["term_options"]["beta_strand"]["form"] == "out_of_range"
+    assert captured["term_options"][0] == {"positions": [2, 3], "num_contacts": 2, "cutoff": 20.0}
+    assert captured["term_options"][1]["form"] == "out_of_range"
     assert [term.term for term in output.results[0].terms] == [i_con, strand]
 
 

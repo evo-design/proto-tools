@@ -101,7 +101,9 @@ Template-based binder redesign as in Germinal: optimizing an antibody's CDRs on 
 
 - **The logits cover the whole binder chain.** One row per residue of `binder_chain`; which rows may change is the caller's decision, e.g. by restricting updates to the CDRs.
 - **Confidence terms are measured over the binder.** ColabDesign masks its own `plddt`, `pae` and `con` to nothing under redesign, so the worker computes them over the binder instead; `positions` narrows them further, e.g. to the CDRs for Germinal's `i_plddt`.
-- **`dgram_cce` and `fape` measure agreement with the binder template.** `rmsd`, `exp_res` and `helix` are not offered, because ColabDesign masks them to nothing under this protocol.
+- **`dgram_cce` and `fape` measure agreement with the binder template.** `rmsd` and `exp_res` are not offered, because ColabDesign masks them to nothing under this protocol.
+- **`helix` is Germinal's helix loss here.** ColabDesign's native helix is masked under redesign, so the worker computes the mean -log P(2-6.2 Å) over i,i+3 pairs of the binder (or of `positions`); `form="out_of_range"` penalizes helices instead, e.g. in the CDRs.
+- **A term may repeat with different selectors**, e.g. `plddt` over the whole binder and `plddt(positions=CDRs)`; each comes back as its own `TermGradient`, in request order.
 - **Inter-chain template contacts are always masked**, so the interface terms measure an interface the template does not hand over.
 
 
