@@ -179,7 +179,7 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
     import jax
     import jax.numpy as jnp
     from colabdesign.af.alphafold.common import residue_constants
-    from colabdesign.af.loss import get_con_loss, get_dgram_bins, get_pae_loss, get_plddt_loss, get_ptm
+    from colabdesign.af.loss import get_con_loss, get_dgram_bins, get_dgram_loss, get_pae_loss, get_plddt_loss, get_ptm
 
     def select(inputs: Any, positions: list[int] | None) -> Any:
         """Mask over the full complex selecting designed positions, or all designed residues."""
@@ -225,8 +225,8 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
         """Mean of the worst third of per-pair ``-log P`` over selected i,i+3 pairs, as in Germinal."""
         mask = select(inputs, options.get("positions"))
         worst = jnp.sort(jnp.diagonal(jnp.outer(mask, mask) * range_loss(outputs, 9.75, 11.5), 3))[::-1]
-        count = len(options.get("positions") or range(designed_len))
-        return {key: worst[: max(count // 3, 1)].mean()}
+        count = options.get("top_k") or len(options.get("positions") or range(designed_len)) // 3
+        return {key: worst[: max(count, 1)].mean()}
 
     def helix(inputs: Any, outputs: Any) -> dict[str, Any]:
         """Mean per-pair ``-log P`` over selected i,i+3 pairs in the helical 2-6.2 A range, as in Germinal."""
@@ -245,9 +245,23 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
         return {key: get_plddt_loss(outputs, mask_1d=select(inputs, options.get("positions")))}
 
     def pae(inputs: Any, outputs: Any) -> dict[str, Any]:
-        """ColabDesign's PAE loss over pairs within the selected positions."""
+        """ColabDesign's PAE loss over pairs within the selected positions, or with all residues."""
         mask = select(inputs, options.get("positions"))
-        return {key: get_pae_loss(outputs, mask_1d=mask, mask_1b=mask)}
+        columns = jnp.ones_like(mask) if options.get("include_target") else mask
+        return {key: get_pae_loss(outputs, mask_1d=mask, mask_1b=columns)}
+
+    def i_pae(inputs: Any, outputs: Any) -> dict[str, Any]:
+        """ColabDesign's PAE loss between the selected binder positions and the target."""
+        return {
+            key: get_pae_loss(
+                outputs, mask_1d=select(inputs, options.get("positions")), mask_1b=1 - select(inputs, None)
+            )
+        }
+
+    def dgram_cce(inputs: Any, outputs: Any) -> dict[str, Any]:
+        """ColabDesign's distogram cross-entropy over pairs within the selected positions."""
+        mask = select(inputs, options.get("positions"))
+        return {key: get_dgram_loss(inputs, outputs, aatype=inputs["aatype"], mask_1d=mask)}
 
     def con(inputs: Any, outputs: Any, opt: Any) -> dict[str, Any]:
         """ColabDesign's intra-chain contact loss over pairs within the selected positions."""
@@ -272,6 +286,8 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
         "fw_i_con": fw_i_con,
         "plddt": plddt,
         "pae": pae,
+        "i_pae": i_pae,
+        "dgram_cce": dgram_cce,
         "con": con,
         "i_con": i_con,
     }

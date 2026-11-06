@@ -91,6 +91,8 @@ class AlphaFold2PaeTerm(AlphaFold2Term):
         id (Literal["pae"]): Fixed identifier for this kind of quantity.
         positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
             keeps the protocol's own region.
+        include_target (bool | None): Also pair the selected positions with the target, as
+            Germinal does; ``None`` keeps pairs within the selection.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -102,6 +104,9 @@ class AlphaFold2PaeTerm(AlphaFold2Term):
     positions: list[PositiveInt] | None = Field(
         default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
     )
+    include_target: bool | None = Field(
+        default=None, title="Include Target", description="Also pair the selected positions with the target."
+    )
 
 
 class AlphaFold2InterfacePaeTerm(AlphaFold2Term):
@@ -109,6 +114,8 @@ class AlphaFold2InterfacePaeTerm(AlphaFold2Term):
 
     Attributes:
         id (Literal["i_pae"]): Fixed identifier for this kind of quantity.
+        positions (list[PositiveInt] | None): 1-indexed binder positions to restrict the binder side
+            to; ``None`` keeps the whole binder.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -116,6 +123,9 @@ class AlphaFold2InterfacePaeTerm(AlphaFold2Term):
 
     id: Literal["i_pae"] = Field(
         default="i_pae", title="Term ID", description="Identifies this quantity as interface PAE."
+    )
+    positions: list[PositiveInt] | None = Field(
+        default=None, min_length=1, title="Positions", description="1-indexed binder positions to restrict to."
     )
 
 
@@ -218,6 +228,8 @@ class AlphaFold2DgramCCETerm(AlphaFold2Term):
 
     Attributes:
         id (Literal["dgram_cce"]): Fixed identifier for this kind of quantity.
+        positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to, e.g.
+            Germinal's framework; ``None`` keeps the protocol's own region.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -225,6 +237,9 @@ class AlphaFold2DgramCCETerm(AlphaFold2Term):
 
     id: Literal["dgram_cce"] = Field(
         default="dgram_cce", title="Term ID", description="Identifies this quantity as distogram cross-entropy."
+    )
+    positions: list[PositiveInt] | None = Field(
+        default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
     )
 
 
@@ -297,7 +312,7 @@ class AlphaFold2BetaStrandTerm(AlphaFold2Term):
     """Strand-geometry objective over i,i+3 pairs of the designed residues.
 
     Each pair scores ``-log P(9.75 <= d <= 11.5)`` from the distogram, or ``-log`` of the
-    complement under ``form="out_of_range"``; the value is the mean of the worst third. With
+    complement under ``form="out_of_range"``; the value is the mean of the worst ``top_k``. With
     ``positions``, only pairs with both ends listed count. Lower in-range values mean more
     strand-like spacing, so like ``helix`` it carries no advisory direction.
 
@@ -307,6 +322,8 @@ class AlphaFold2BetaStrandTerm(AlphaFold2Term):
             keeps the protocol's own region.
         form (Literal["in_range", "out_of_range"]): Whether each pair scores ``-log P`` of falling
             in the strand range or outside it; Germinal uses ``"out_of_range"``.
+        top_k (PositiveInt | None): Number of worst pairs averaged; ``None`` keeps a third of the
+            selected positions.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
@@ -320,6 +337,9 @@ class AlphaFold2BetaStrandTerm(AlphaFold2Term):
     )
     form: Literal["in_range", "out_of_range"] = Field(
         default="in_range", title="Form", description="Score -log P of the strand range, or of outside it."
+    )
+    top_k: PositiveInt | None = Field(
+        default=None, title="Top K", description="Worst pairs averaged; None keeps a third of the positions."
     )
 
 
