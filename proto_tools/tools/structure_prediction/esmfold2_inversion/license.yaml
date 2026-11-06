@@ -1,0 +1,12 @@
+code:
+  spdx: MIT
+  url: https://github.com/Biohub/esm/blob/main/LICENSE.md
+weights:
+  spdx: MIT
+  url: https://github.com/Biohub/esm/blob/main/LICENSE.md
+attribution_required: true
+commercial_use: 'yes'
+redistribution: true
+last_updated: '2026-11-03'
+notes: Structure objectives are reimplemented from the MIT-licensed ESMFold2 binder-design recipe.
+  Checkpoint identifiers contain Experimental; consult upstream terms before redistribution.

@@ -661,7 +661,12 @@ def _candidate_matrices(candidate: Any, names: set[str]) -> dict[str, SequenceLo
     """
     if isinstance(candidate, SequenceLogits):
         return dict.fromkeys(names, candidate)
-    return {name: getattr(candidate, name) for name in names}
+    # A candidate declares where its matrices live, and those paths may be nested
+    # (``chains[1].logits``), so ask it rather than assuming a direct attribute.
+    declared = dict(candidate.iter_sequence_logits())
+    missing = sorted(names - set(declared))
+    assert not missing, f"candidate does not declare {missing}; it declares {sorted(declared)}"
+    return {name: declared[name] for name in names}
 
 
 def _build_many_from_probabilities(
