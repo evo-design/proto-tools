@@ -160,9 +160,9 @@ class RFdiffusion3DesignSpec(BaseModel):
         ori_token (list[float] | None): ``[x, y, z]`` origin override (Angstroms).
 
         partial_t (float | None): Noise level (in Angstroms) for partial diffusion.
-            Requires ``select_fixed_atoms`` to be ``False`` or a selection of the atoms to hold;
-            the upstream default fixes every input atom, which would make partial diffusion a
-            no-op. Lower values preserve more of the input structure. Recommended values
+            Requires ``select_fixed_atoms``: a selection of the atoms to hold (e.g. the target
+            chain when refining a binder) or ``False`` to re-noise every input atom. The
+            upstream default fixes every input atom, which would make partial diffusion a no-op. Lower values preserve more of the input structure. Recommended values
             are 5.0-15.0 Angstroms. Useful for refinement or local redesign tasks.
 
         is_non_loopy (bool | None): If ``True``/``False``, produces output
@@ -420,8 +420,9 @@ class RFdiffusion3DesignSpec(BaseModel):
             raise ValueError(
                 "'partial_t' requires 'select_fixed_atoms' to unfix the atoms to re-noise: upstream "
                 "fixes every input atom by default, so this spec would return the input unchanged. "
-                "Pass select_fixed_atoms=False to diffuse the whole input, or a selection "
-                "(e.g. {'A10': 'BKBN'}) naming only the atoms to hold in place."
+                "Pass a selection naming only the atoms to hold (e.g. the target chain 'A1-120' "
+                "when refining a binder, or motif residues), or select_fixed_atoms=False to "
+                "re-noise every input atom, target chains included."
             )
         return self
 

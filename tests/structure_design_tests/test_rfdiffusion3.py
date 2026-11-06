@@ -223,6 +223,10 @@ def test_rfdiffusion3_partial_diffusion_requires_unfixed_atoms():
     assert RFdiffusion3DesignSpec(input_structure=cif, partial_t=10.0, select_fixed_atoms=False).partial_t == 10.0
     held = RFdiffusion3DesignSpec(input_structure=cif, partial_t=10.0, select_fixed_atoms={"A10": "BKBN"})
     assert held.select_fixed_atoms == {"A10": "BKBN"}
+    # Binder refinement: hold the target chain, re-noise only the binder.
+    complex_cif = synthetic_cif(["A", "B"])
+    binder = RFdiffusion3DesignSpec(input_structure=complex_cif, partial_t=5.0, select_fixed_atoms="A1")
+    assert binder.select_fixed_atoms == "A1"
 
 
 def test_rfdiffusion3_config_gamma_0_symmetry_constraint():
