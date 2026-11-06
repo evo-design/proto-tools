@@ -198,7 +198,13 @@ from proto_tools.tools.database_retrieval.uniprot import (
     UniProtFetchConfig,
     UniProtFetchInput,
     UniProtFetchOutput,
+    UniProtSearchConfig,
+    UniProtSearchHit,
+    UniProtSearchInput,
+    UniProtSearchOutput,
+    UniProtSearchResult,
     run_uniprot_fetch,
+    run_uniprot_search,
 )
 
 __all__ = [
@@ -318,6 +324,12 @@ __all__ = [
     "UniProtFetchInput",
     "UniProtFetchOutput",
     "run_uniprot_fetch",
+    "UniProtSearchConfig",
+    "UniProtSearchHit",
+    "UniProtSearchInput",
+    "UniProtSearchOutput",
+    "UniProtSearchResult",
+    "run_uniprot_search",
     # PDB tools
     "PdbChain",
     "PdbFetchConfig",

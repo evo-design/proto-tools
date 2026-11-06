@@ -203,6 +203,11 @@ from proto_tools.tools.database_retrieval import (
     UniProtFetchConfig,
     UniProtFetchInput,
     UniProtFetchOutput,
+    UniProtSearchConfig,
+    UniProtSearchHit,
+    UniProtSearchInput,
+    UniProtSearchOutput,
+    UniProtSearchResult,
     run_alphafold_db_fetch,
     run_alphamissense_db_fetch,
     run_ccd_lookup,
@@ -229,6 +234,7 @@ from proto_tools.tools.database_retrieval import (
     run_sequence_fetch,
     run_synbiohub_fetch,
     run_uniprot_fetch,
+    run_uniprot_search,
 )
 
 # Epitope prediction tools
@@ -2218,6 +2224,12 @@ __all__ = [
     "UniProtFetchInput",
     "UniProtFetchConfig",
     "UniProtFetchOutput",
+    "UniProtSearchConfig",
+    "UniProtSearchHit",
+    "UniProtSearchInput",
+    "UniProtSearchOutput",
+    "UniProtSearchResult",
+    "run_uniprot_search",
     # Database retrieval - PDB Fetch tools
     "run_pdb_fetch_entry",
     "PdbFetchEntryConfig",
