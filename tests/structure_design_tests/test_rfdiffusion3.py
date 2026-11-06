@@ -170,7 +170,12 @@ def test_rfdiffusion3_rejects_unused_input():
     # Each of the four consuming fields makes the same hotspot spec valid.
     spec = RFdiffusion3DesignSpec(input_structure=cif, contig="A1-100/0,80-120", select_hotspots="A24")
     assert spec.contig == "A1-100/0,80-120"
-    assert RFdiffusion3DesignSpec(input_structure=cif, partial_t=10.0, select_hotspots="A24").partial_t == 10.0
+    assert (
+        RFdiffusion3DesignSpec(
+            input_structure=cif, partial_t=10.0, select_fixed_atoms=False, select_hotspots="A24"
+        ).partial_t
+        == 10.0
+    )
     assert RFdiffusion3DesignSpec(input_structure=cif, ligand="HAX", select_hotspots="A24").ligand == "HAX"
     assert RFdiffusion3DesignSpec(input_structure=cif, unindex="A24", length="80-120").unindex == "A24"
 
@@ -200,8 +205,17 @@ def test_rfdiffusion3_partial_diffusion_constraints():
         RFdiffusion3DesignSpec(partial_t=10.0)
 
     # partial_t == 0.0 is a legal noise level, not an absent one.
-    spec = RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), partial_t=0.0)
+    spec = RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), partial_t=0.0, select_fixed_atoms=False)
     assert spec.partial_t == 0.0
+
+
+def test_rfdiffusion3_partial_diffusion_requires_unfixed_atoms():
+    """Upstream fixes every input atom by default, which makes partial diffusion a no-op."""
+    with pytest.raises(ValueError, match=r"'partial_t' requires 'select_fixed_atoms'"):
+        RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), partial_t=10.0)
+    # Holding a target chain (binder optimization) re-noises only the binder.
+    spec = RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A", "B"]), partial_t=5.0, select_fixed_atoms="A1")
+    assert spec.select_fixed_atoms == "A1"
 
 
 def test_rfdiffusion3_config_gamma_0_symmetry_constraint():
