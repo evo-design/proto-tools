@@ -26,6 +26,7 @@ from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import AlphaFold2Metrics
 from proto_tools.utils import (
     PROTEIN_AMINO_ACIDS,
+    AminoAcid,
     ConfigField,
     DifferentiableTerm,
     GradientConfig,
@@ -34,6 +35,7 @@ from proto_tools.utils import (
     ToolInstance,
     resolve_terms,
 )
+from proto_tools.utils.sequence import normalize_excluded_amino_acids
 from proto_tools.utils.tool_io import Directionality
 
 logger = logging.getLogger(__name__)
@@ -472,6 +474,9 @@ class AlphaFold2DesignGradientConfig(GradientConfig):
         model_num (int): Which AlphaFold2 parameter set to run.
         sample_models (bool): Draw the parameter set at random instead of using ``model_num``.
         include_pae_matrix (bool): Attach the full per-residue PAE matrix to the metrics.
+        excluded_amino_acids (list[AminoAcid] | None): Amino acids the softmax branch may not
+            choose at any designed position, applied as ColabDesign's ``rm_aa`` bias. The raw-input
+            branch (``soft < 1``) still sees the logits as supplied.
         device (str): Device to run the model on.
     """
 
@@ -493,9 +498,20 @@ class AlphaFold2DesignGradientConfig(GradientConfig):
     include_pae_matrix: bool = ConfigField(
         title="Include PAE Matrix", default=False, description="Attach the full per-residue PAE matrix"
     )
+    excluded_amino_acids: list[AminoAcid] | None = ConfigField(
+        title="Excluded Amino Acids",
+        default=None,
+        description="Single-letter codes the softmax never picks at designed positions (e.g. ['C'] for no Cys)",
+    )
     device: str = ConfigField(
         title="Device", default="cuda", description="Device to run the model on", include_in_key=False
     )
+
+    @field_validator("excluded_amino_acids", mode="before")
+    @classmethod
+    def validate_excluded_amino_acids(cls, value: Any) -> Any:
+        """Normalize and validate excluded amino-acid codes."""
+        return normalize_excluded_amino_acids(value)
 
     # Each tool narrows ``gradient_terms`` to its own protocol; only the validation is shared.
     @field_validator("gradient_terms", mode="before", check_fields=False)
@@ -529,8 +545,9 @@ def _reject_unused_softmax_knobs(
     """Refuse config the model would silently ignore in probability mode.
 
     ``temperature=None`` consumes the supplied probabilities verbatim, which ColabDesign expresses
-    as ``soft=0``. Its softmax branch is then unused, so ``soft`` and ``hard`` would have no effect
-    on the result and no honest value to report in the gradient's metadata.
+    as ``soft=0``. Its softmax branch is then unused, so ``soft``, ``hard`` and
+    ``excluded_amino_acids`` (a bias on that branch) would have no effect on the result and no
+    honest value to report in the gradient's metadata.
 
     Args:
         config (AlphaFold2DesignGradientConfig): Config whose relaxation knobs are checked.
@@ -546,6 +563,8 @@ def _reject_unused_softmax_knobs(
     ignored = [
         f"{name}={getattr(config, name)}" for name in ("soft", "hard") if getattr(config, name) != fields[name].default
     ]
+    if config.excluded_amino_acids:
+        ignored.append(f"excluded_amino_acids={config.excluded_amino_acids}")
     if ignored:
         raise ValueError(
             f"{tool_key}: temperature=None consumes the supplied probabilities directly, leaving the "
@@ -602,6 +621,7 @@ def dispatch_design_gradient(
             "device": config.device,
             "verbose": config.verbose,
             "include_pae_matrix": config.include_pae_matrix,
+            "excluded_amino_acids": config.excluded_amino_acids,
             **(extra_payload or {}),
         },
         instance=instance,

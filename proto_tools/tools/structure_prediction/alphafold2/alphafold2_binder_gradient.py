@@ -242,6 +242,8 @@ class AlphaFold2BinderGradientConfig(AlphaFold2DesignGradientConfig):
             :class:`AlphaFold2DesignGradientConfig`.
         include_pae_matrix (bool): Inherited PAE matrix switch; see
             :class:`AlphaFold2DesignGradientConfig`.
+        excluded_amino_acids (list[AminoAcid] | None): Inherited softmax-branch exclusions; see
+            :class:`AlphaFold2DesignGradientConfig`.
         soft (float): Inherited relaxation blend; see :class:`RelaxationConfig`.
         hard (float): Inherited straight-through coefficient.
         device (str): Inherited device; see :class:`AlphaFold2DesignGradientConfig`.

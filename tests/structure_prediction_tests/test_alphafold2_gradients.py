@@ -220,6 +220,15 @@ def test_registry_descriptions_are_distinct() -> None:
     assert len(set(descriptions.values())) == len(descriptions)
 
 
+@pytest.mark.parametrize("protocol", sorted(_CONFIGS))
+def test_probability_mode_rejects_excluded_amino_acids(protocol: str) -> None:
+    """The exclusion is a bias on the softmax branch, which probability mode never uses."""
+    config = _CONFIGS[protocol](excluded_amino_acids=["C"])
+    with pytest.raises(ValueError, match="excluded_amino_acids"):
+        gradient_helpers._reject_unused_softmax_knobs(config, None, _KEYS[protocol])
+    gradient_helpers._reject_unused_softmax_knobs(config, 1.0, _KEYS[protocol])
+
+
 def test_binder_dispatch_forwards_its_target_controls(monkeypatch: pytest.MonkeyPatch, target: Structure) -> None:
     """The binder protocol is only comparable across runs if the template masking reaches prep."""
     captured: dict[str, Any] = {}
