@@ -53,6 +53,8 @@ def build_msa_conditioning(
 
     evidence: list[ChainMSAConditioning] = []
     unused: list[tuple[str, str]] = []
+    # Pairing is across chains: a chain whose paired rows have no partner chain is not paired
+    partnered = sum(r.paired and r.rows > 1 and r.ignored_reason is None for r in sent.values()) >= 2
     for chain in protein_chain_msas(chains, complex_msas):
         record = sent.get(chain.index, SentMSA())
         bundle_rows = max(len(chain.primary or []), len(chain.unpaired or []))
@@ -69,7 +71,11 @@ def build_msa_conditioning(
         if status == "ignored" and bundle_rows > 1:
             unused.append((chain.chain_id, reason))
         mode: MSAMode = (
-            "paired" if record.paired and record.rows > 1 else "unpaired" if has_homolog_rows(record) else "none"
+            "paired"
+            if partnered and record.paired and record.rows > 1
+            else "unpaired"
+            if has_homolog_rows(record)
+            else "none"
         )
         evidence.append(
             ChainMSAConditioning(

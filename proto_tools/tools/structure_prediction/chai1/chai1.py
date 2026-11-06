@@ -6,6 +6,7 @@ Protein structure prediction using Chai1.
 import logging
 import os
 import tempfile
+from dataclasses import replace
 from typing import Any, ClassVar
 
 from pydantic import field_validator
@@ -32,6 +33,7 @@ from proto_tools.tools.structure_prediction.chai1.helpers import (
 from proto_tools.tools.structure_prediction.msa_plan import (
     SentMSA,
     chain_base_rows,
+    has_homolog_rows,
     protein_chain_msas,
     unpaired_depth_rows,
 )
@@ -466,6 +468,10 @@ def run_chai1_on_complex(
             if config.verbose:
                 logger.info(f"Assigned MSA to protein chain {chain.index} ({len(base)} sequences)")
         msa_sent = {index: written[seq_hash] for index, seq_hash in chain_hashes.items()}
+        # chai-lab pairs a key only when every chain with an MSA has it, so a chain sent rows
+        # without pairing keys (only unpaired rows) leaves every chain in the complex unpaired
+        if any(has_homolog_rows(record) and not record.paired for record in msa_sent.values()):
+            msa_sent = {index: replace(record, paired=False) for index, record in msa_sent.items()}
         msa_directory = pqt_dir if written else None
 
         # Prepare input data for inference script

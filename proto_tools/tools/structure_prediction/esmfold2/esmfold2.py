@@ -358,8 +358,8 @@ def _run_esmfold2_on_complex(
     unpaired_payload: dict[str, list[str]] | None = None
     if config.model_checkpoint == "esmfold2" and (per_chain_msas or unpaired_per_chain):
         msa_payload = _serialize_msas_for_worker(per_chain_msas)
-        # Deep per-chain unpaired MSAs ride alongside the paired rows for block-diagonal depth;
-        # a chain with only unpaired rows is sent them alone, unpaired.
+        # Deep per-chain unpaired MSAs ride after the paired rows as unpaired depth; a chain
+        # with only unpaired rows is sent them alone, unpaired.
         if unpaired_per_chain:
             unpaired_payload = _serialize_msas_for_worker(unpaired_per_chain)
 

@@ -8,6 +8,7 @@ files where RF3 can read them.
 import hashlib
 import json
 import os
+import re
 from logging import getLogger
 from typing import Any
 
@@ -78,10 +79,13 @@ def build_chain_a3m_paths(
         chain_a3m_paths[chain.chain_id], sent_msas[chain.index] = written[seq]
         if verbose:
             logger.info("Assigned MSA to chain %s (%d sequences)", chain.chain_id, len(sent_msas[chain.index]))
-    # RF3 pairs rows only when at least two distinct chain sequences carry TaxID= headers.
-    tagged = {sequences[i] for i, msa in sent_msas.items() if _has_taxonomy_headers(msa)}
+    # RF3 (atomworks) pairs rows across distinct chain sequences that share a TaxID= value;
+    # identical chains are a homomer, which it leaves unpaired.
+    tax_ids = {sequences[i]: _tax_ids(msa) for i, msa in sent_msas.items()}
     for index, msa in sent_msas.items():
-        sent[index] = SentMSA(rows=len(msa), paired=len(tagged) >= 2 and _has_taxonomy_headers(msa))
+        own = tax_ids[sequences[index]]
+        shared = any(own & ids for seq, ids in tax_ids.items() if seq != sequences[index])
+        sent[index] = SentMSA(rows=len(msa), paired=shared)
     return chain_a3m_paths, sent
 
 
@@ -142,6 +146,6 @@ def complex_to_rf3_json(
     return json.dumps([{"name": name, "components": components}], indent=2)
 
 
-def _has_taxonomy_headers(msa: MSA) -> bool:
-    """Whether any non-query row carries the ``TaxID=`` header RF3 (atomworks) pairs on."""
-    return any("TaxID=" in sequence_id for sequence_id in msa.sequence_ids[1:])
+def _tax_ids(msa: MSA) -> set[str]:
+    """The ``TaxID=`` values RF3 (atomworks) pairs non-query rows on."""
+    return {match for sequence_id in msa.sequence_ids[1:] for match in re.findall(r"TaxID=(\d+)", sequence_id)}

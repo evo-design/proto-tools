@@ -54,6 +54,11 @@ _SCENARIOS = {
             unpaired_per_chain={0: _rows(_A, 3), 2: _rows(_C, 3)},
         ),
     ),
+    # One paired chain and one with only unpaired rows: the paired rows have no partner chain.
+    "dimer_paired_beside_unpaired_only": _Scenario(
+        (_A, _B),
+        ComplexMSAs(per_chain={0: _rows(_A, 2)}, paired=True, unpaired_per_chain={1: _rows(_B, 3)}),
+    ),
     "homodimer": _Scenario((_A, _A), ComplexMSAs(per_chain={0: _rows(_A, 3), 1: _rows(_A, 3)})),
     "heteromer_one_chain_without_msa": _Scenario((_A, _B), ComplexMSAs(per_chain={0: _rows(_A, 3)})),
 }
@@ -204,7 +209,7 @@ def test_every_msa_tool_is_covered():
 @pytest.mark.parametrize("scenario_name", _SCENARIOS)
 @pytest.mark.parametrize("tool_key", sorted(_STUBS))
 def test_supplied_msa_rows_reach_the_backend(tool_key, scenario_name, monkeypatch):
-    """Chains given homolog rows are consumed, and chains with only unpaired rows never pair."""
+    """Chains given homolog rows are consumed, unpaired-only chains never pair, and pairing needs a partner."""
     stub, scenario = _STUBS[tool_key], _SCENARIOS[scenario_name]
     spec = ToolRegistry.get(tool_key)
     chains: list[Chain | Fragment] = [Chain(sequence=seq, entity_type="protein") for seq in scenario.sequences]
@@ -238,3 +243,5 @@ def test_supplied_msa_rows_reach_the_backend(tool_key, scenario_name, monkeypatc
             )
         if chain.chain_index not in msas.per_chain:
             assert chain.mode != "paired", f"{where}: a chain with only unpaired rows was reported paired"
+    modes = [chain.mode for chain in output.structures[0].msa_conditioning.chains]
+    assert modes.count("paired") != 1, f"{tool_key} / {scenario_name}: one chain reported paired with no partner"

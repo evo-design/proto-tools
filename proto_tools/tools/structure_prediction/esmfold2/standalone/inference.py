@@ -88,8 +88,8 @@ def _build_upstream_input(
                     for row_idx, seq in enumerate(chain_msa_rows)
                 ]
                 # Append the deep unpaired rows with non-`key=` headers: upstream reads
-                # taxonomy -1 for these and places them block-diagonally as per-chain
-                # depth after the paired rows (skip the query and any paired duplicate).
+                # taxonomy -1 for these and stacks them as unpaired depth after the
+                # paired rows, never key-paired (skip the query and any paired duplicate).
                 if unpaired_rows:
                     seen = set(chain_msa_rows)
                     for u_seq in unpaired_rows[1:]:

@@ -51,14 +51,25 @@ def test_statuses_follow_what_was_sent():
 
 def test_report_counts_sent_rows_and_round_trips_through_json():
     """Rows are what the backend received; summaries are derived and survive serialization."""
-    chains = [Chain(sequence="AAA", entity_type="protein"), Chain(sequence="GGG", entity_type="protein")]
-    msas = ComplexMSAs(per_chain={0: _msa("AAA", "AAG", "AAT")})
-    report = build_msa_conditioning(
-        chains, msas, {0: SentMSA(rows=3, unpaired_rows=2, paired=True), 1: SentMSA(rows=1)}
-    )
-    assert [(c.rows, c.unpaired_rows, c.mode) for c in report.chains] == [(3, 2, "paired"), (1, 0, "none")]
+    chains = [Chain(sequence=seq, entity_type="protein") for seq in ("AAA", "CCC", "GGG")]
+    msas = ComplexMSAs(per_chain={0: _msa("AAA", "AAG", "AAT"), 1: _msa("CCC", "CCA", "CCT")}, paired=True)
+    sent = {0: SentMSA(rows=3, unpaired_rows=2, paired=True), 1: SentMSA(rows=3, paired=True), 2: SentMSA(rows=1)}
+    report = build_msa_conditioning(chains, msas, sent)
+    assert [(c.rows, c.unpaired_rows, c.mode) for c in report.chains] == [
+        (3, 2, "paired"),
+        (3, 0, "paired"),
+        (1, 0, "none"),
+    ]
     assert (report.coverage, report.pairing_mode) == ("partial", "paired")
     assert MSAConditioning.model_validate_json(report.model_dump_json()) == report
+
+
+def test_paired_rows_without_a_partner_chain_are_reported_unpaired():
+    """Pairing is across chains, so one chain sending paired rows alone pairs with nothing."""
+    chains = [Chain(sequence="AAA", entity_type="protein"), Chain(sequence="CCC", entity_type="protein")]
+    msas = ComplexMSAs(per_chain={0: _msa("AAA", "AAG")}, paired=True, unpaired_per_chain={1: _msa("CCC", "CCA")})
+    report = build_msa_conditioning(chains, msas, {0: SentMSA(rows=2, paired=True), 1: SentMSA(rows=2)})
+    assert ([c.mode for c in report.chains], report.pairing_mode) == (["unpaired", "unpaired"], "unpaired")
 
 
 def test_ignored_alignment_does_not_condition_the_structure():
@@ -170,7 +181,8 @@ def test_alphafold2_heteromer_stacks_unpaired_rows_only_beneath_paired_alignment
     assert sent[1] == SentMSA(rows=0, unpaired_rows=1, paired=False)
     chains = [Chain(sequence="AAA", entity_type="protein"), Chain(sequence="CCC", entity_type="protein")]
     report = build_msa_conditioning(chains, partial, sent)
-    assert ([c.mode for c in report.chains], report.pairing_mode) == (["paired", "unpaired"], "mixed")
+    # Chain A's paired rows have no partner chain, so nothing pairs
+    assert ([c.mode for c in report.chains], report.pairing_mode) == (["unpaired", "unpaired"], "unpaired")
 
     unpaired = ComplexMSAs(per_chain={0: _msa("AAA", "AAG")}, unpaired_per_chain=deep)
     sent = _alphafold2_sent_msas(unpaired, 2, ["a3m", None], ["a3m", "a3m"])
@@ -197,6 +209,10 @@ def test_rf3_pairs_only_distinct_chains_with_taxonomy_headers(tmp_path):
     }
     _, sent = build_chain_a3m_paths(chains("AAA", "CCC"), ComplexMSAs(per_chain=tagged), str(tmp_path / "b"))
     assert all(record.paired for record in sent.values())
+    # TaxIDs that never coincide pair nothing but the query
+    disjoint = {0: tagged[0], 1: _msa("CCC", "CCG", ids=["q", "UniRef100_Z TaxID=7227"])}
+    _, sent = build_chain_a3m_paths(chains("AAA", "CCC"), ComplexMSAs(per_chain=disjoint), str(tmp_path / "d"))
+    assert not any(record.paired for record in sent.values())
     _, sent = build_chain_a3m_paths(
         chains("AAA", "AAA"), ComplexMSAs(per_chain={0: tagged[0], 1: tagged[0]}), str(tmp_path / "c")
     )
@@ -305,6 +321,8 @@ def test_chai1_writes_unpaired_only_rows_with_no_pairing_key(monkeypatch):
 
     assert pairing_keys == {"AAAAA": ["", "1", ""], "GGGGG": ["", "", ""]}
     assert [chain.status for chain in structure.msa_conditioning.chains] == ["consumed"] * 3
+    # chai-lab pairs a key only when every chain with an MSA has it, and chain C has none
+    assert {chain.mode for chain in structure.msa_conditioning.chains} == {"unpaired"}
 
 
 def test_alphafold3_sends_unpaired_only_rows_without_a_paired_msa(tmp_path):
@@ -329,6 +347,24 @@ def test_alphafold3_sends_unpaired_only_rows_without_a_paired_msa(tmp_path):
         1: _PAIRED_RECORD,
         2: _UNPAIRED_ONLY_RECORD,
     }
+
+
+def test_alphafold3_sends_no_paired_msa_for_a_homomer(tmp_path):
+    """AF3 pairs MSAs only across two or more distinct protein sequences."""
+    from proto_tools.tools.structure_prediction.alphafold3.alphafold3 import (
+        _assign_msas_to_input_json,
+        _create_input_json_from_complex,
+    )
+
+    homodimer = Complex(chains=[Chain(sequence="AAAAA", entity_type="protein")] * 2)
+    alignment = _msa("AAAAA", "AAAAG")
+    msas = ComplexMSAs(per_chain={0: alignment, 1: alignment}, paired=True)
+    input_json, sent = _assign_msas_to_input_json(
+        _create_input_json_from_complex(homodimer, "cx", 1), msas.per_chain, None, True, homodimer, str(tmp_path)
+    )
+
+    assert not any("pairedMsaPath" in entry["protein"] for entry in input_json["sequences"])
+    assert sent == {0: SentMSA(rows=2), 1: SentMSA(rows=2)}
 
 
 def test_rf3_and_esmfold2_record_unpaired_only_rows_as_sent(tmp_path):

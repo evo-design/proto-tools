@@ -400,12 +400,13 @@ def _assign_msas_to_input_json(
     """Write pre-computed MSAs to A3M files and assign paths to input JSON.
 
     AF3 takes a separate ``unpairedMsaPath`` and ``pairedMsaPath`` per protein chain
-    and builds the combined MSA features (block-diagonal unpaired + cross-chain
-    pairing) itself. ``unpairedMsaPath`` gets each chain's deep unpaired MSA
-    (``unpaired_per_chain`` when available), and ``pairedMsaPath`` gets the
-    row-aligned paired MSA (``per_chain``) when ``is_paired``. When no separate
-    unpaired MSA is provided, ``per_chain`` serves both slots. A chain with only
-    unpaired rows gets just ``unpairedMsaPath``, so it never pairs.
+    and builds the combined MSA features (stacked unpaired rows + cross-chain
+    pairing by species) itself. ``unpairedMsaPath`` gets each chain's deep unpaired
+    MSA (``unpaired_per_chain`` when available), and ``pairedMsaPath`` gets the
+    row-aligned paired MSA (``per_chain``) when ``is_paired`` and the complex has at
+    least two distinct protein sequences (AF3 ignores paired MSAs otherwise). When no
+    separate unpaired MSA is provided, ``per_chain`` serves both slots. A chain with
+    only unpaired rows gets just ``unpairedMsaPath``, so it never pairs.
 
     Args:
         input_json_data (AlphaFold3JSON): AlphaFold3 input JSON dictionary to
@@ -434,6 +435,8 @@ def _assign_msas_to_input_json(
     }
     protein_chains_idx = list(protein_chains)
     n_protein_chains = len(protein_chains_idx)
+    # AF3 pairs MSAs only across two or more distinct protein sequences (need_msa_pairing)
+    pairs = is_paired and len({chain.sequence for chain in protein_chains.values()}) > 1
     sent: dict[int, SentMSA] = {}
 
     protein_seq_entry_iter = (s for s in input_json_data["sequences"] if "protein" in s)
@@ -443,11 +446,11 @@ def _assign_msas_to_input_json(
         chain_idx = protein_chains_idx[proto_pos]
         msa = per_chain_msas.get(chain_idx)
         # unpairedMsaPath gets each chain's deep unpaired MSA when available, else the
-        # primary MSA; AF3 block-diagonalizes the unpaired rows across the complex itself.
+        # primary MSA; AF3 stacks every chain's unpaired rows into the complex MSA itself.
         unpaired_msa = (unpaired_per_chain or {}).get(chain_idx, msa)
         if unpaired_msa is None:
             continue
-        paired_msa = msa if is_paired else None
+        paired_msa = msa if pairs else None
 
         chain_id = seq_entry["protein"]["id"]
         if isinstance(chain_id, list):
