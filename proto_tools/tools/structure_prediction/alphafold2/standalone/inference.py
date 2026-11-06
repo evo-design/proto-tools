@@ -160,7 +160,7 @@ def _loss_key(term_id: str, options: Mapping[str, Any], index: int, redesign: bo
     return f"{term_id}@{index}" if selected else term_id
 
 
-def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, designed_len: int, has_hotspot: bool) -> Any:
+def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, designed_len: int) -> Any:
     """Build the loss callback computing one requested extension term under ``key``.
 
     The designed segment is always the trailing ``designed_len`` rows (the binder, or the whole
@@ -172,7 +172,6 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
         options (Mapping[str, Any]): The term's selectors.
         key (str): Loss-dict key to report the value under, from :func:`_loss_key`.
         designed_len (int): Number of trailing residues being designed.
-        has_hotspot (bool): Whether the input names a target hotspot.
 
     Returns:
         Any: A loss callback; ColabDesign passes its arguments by name.
@@ -260,7 +259,8 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
     def i_con(inputs: Any, outputs: Any, opt: Any) -> dict[str, Any]:
         """ColabDesign's interface contact loss with the binder side restricted to the selected positions."""
         binder = select(inputs, options.get("positions"))
-        rows, columns = (inputs["hotspot"], binder) if has_hotspot else (binder, 1 - select(inputs, None))
+        # As native i_con: ColabDesign drops hotspots it cannot parse, so check what prep kept.
+        rows, columns = (inputs["hotspot"], binder) if "hotspot" in inputs else (binder, 1 - select(inputs, None))
         return {key: get_con_loss(inputs, outputs, contact_opt(opt, "i_con"), mask_1d=rows, mask_1b=columns)}
 
     builders = {
@@ -314,7 +314,6 @@ def _configure_extension_losses(
     af_model: Any,
     requests: Sequence[tuple[str, Mapping[str, Any], str]],
     designed_len: int,
-    has_hotspot: bool,
 ) -> None:
     """Register the extension loss callbacks the requested terms need.
 
@@ -323,7 +322,6 @@ def _configure_extension_losses(
         requests (Sequence[tuple[str, Mapping[str, Any], str]]): Each requested term's id,
             selectors and loss key, in request order.
         designed_len (int): Number of trailing residues being designed.
-        has_hotspot (bool): Whether the input names a target hotspot.
 
     Raises:
         ValueError: If a selector position lies outside the designed residues.
@@ -336,9 +334,7 @@ def _configure_extension_losses(
                 )
     for term_id, options, key in requests:
         if key not in _NATIVE_LOSSES:
-            af_model._callbacks["model"]["loss"].append(
-                _extension_loss_fn(term_id, options, key, designed_len, has_hotspot)
-            )
+            af_model._callbacks["model"]["loss"].append(_extension_loss_fn(term_id, options, key, designed_len))
 
 
 def _per_term_gradients(af_model: Any, term_names: list[str]) -> Any:
@@ -975,7 +971,7 @@ class AlphaFold2Model:
             (term_id, opts, _loss_key(term_id, opts, index, redesign))
             for index, (term_id, opts) in enumerate(zip(gradient_terms, options, strict=True))
         ]
-        _configure_extension_losses(af_model, requests, designed_len, "hotspot" in prep_kwargs)
+        _configure_extension_losses(af_model, requests, designed_len)
         loss_keys = [key for _, _, key in requests]
 
         return self._run_gradient(
