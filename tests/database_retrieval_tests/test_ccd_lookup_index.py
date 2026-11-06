@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from proto_tools.tools.database_retrieval import CcdLookupConfig, CcdLookupInput, run_ccd_lookup
-from proto_tools.utils.proto_home import get_proto_home
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
 
 _WEIGHTS_DIR_VAR = "PROTO_CCD_LOOKUP_WEIGHTS_DIR"
 _INDEX_FILENAME = "ccd_index.json"
@@ -22,12 +22,9 @@ _ATP_SMILES = "Nc1ncnc2c1ncn2[C@@H]1O[C@H](COP(=O)(O)OP(=O)(O)OP(=O)(O)O)[C@@H](
 
 def _bundle_weights_dir() -> Path:
     """The weights directory the ccd_lookup worker resolves when no test override is set."""
-    if override := os.environ.get(_WEIGHTS_DIR_VAR):
-        return Path(override)
-    cache = os.environ.get("PROTO_MODEL_CACHE", "")
-    if cache in ("IN_ENV", "NONE"):
+    if not os.environ.get(_WEIGHTS_DIR_VAR) and (cache := os.environ.get("PROTO_MODEL_CACHE")) in ("IN_ENV", "NONE"):
         pytest.skip(f"PROTO_MODEL_CACHE={cache} keeps the CCD bundle inside the tool env")
-    return Path(cache or get_proto_home() / "proto_model_cache") / "ccd_lookup"
+    return Path(resolve_weights_dir("ccd_lookup"))
 
 
 @pytest.fixture
