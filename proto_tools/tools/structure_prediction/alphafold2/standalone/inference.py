@@ -272,6 +272,28 @@ def _extension_loss_fns(
     }
 
 
+def _exclude_amino_acids(af_model: Any, designed_len: int, excluded: Collection[str]) -> None:
+    """Bar amino acids from the softmax branch at the designed residues, as ColabDesign's ``rm_aa`` does.
+
+    ``soft_seq`` adds ``inputs["bias"]`` to the logits before the softmax only, so the raw-input
+    branch used when ``soft < 1`` is unaffected. ``prep_inputs`` rebuilds the bias as zeros, so
+    nothing carries over between requests on a cached model.
+
+    Args:
+        af_model (Any): The ColabDesign design model, after ``prep_inputs``.
+        designed_len (int): Number of trailing residues being designed.
+        excluded (Collection[str]): One-letter codes to bar.
+    """
+    if not excluded:
+        return
+    import numpy as np
+
+    bias = np.array(af_model._inputs["bias"], dtype=np.float32)
+    columns = [ALPHAFOLD2_AMINO_ACIDS.index(aa) for aa in excluded]
+    bias[-designed_len:, columns] -= 1e6
+    af_model._inputs["bias"] = bias
+
+
 #: Quantities ColabDesign computes itself; an extension must never shadow one.
 _NATIVE_LOSSES = frozenset({"plddt", "pae", "i_pae", "con", "i_con", "exp_res", "helix", "dgram_cce", "fape", "rmsd"})
 
@@ -879,6 +901,7 @@ class AlphaFold2Model:
         device: str = "cuda",
         verbose: bool = False,
         include_pae_matrix: bool = False,
+        excluded_amino_acids: Collection[str] = (),
     ) -> dict[str, Any]:
         """Differentiate one ColabDesign protocol's quantities with respect to relaxed logits.
 
@@ -907,6 +930,7 @@ class AlphaFold2Model:
             device (str): Device to run on.
             verbose (bool): Verbose model loading.
             include_pae_matrix (bool): Attach the full PAE matrix to the metrics.
+            excluded_amino_acids (Collection[str]): Amino acids the softmax branch may not choose.
 
         Returns:
             dict[str, Any]: One entry per requested term with its raw value and gradient, plus
@@ -933,6 +957,8 @@ class AlphaFold2Model:
                 f"alphafold2: this input supplies {len(logits)} residues but the {protocol} protocol "
                 f"designs {designed_len}; the relaxed state must cover exactly the designed residues"
             )
+
+        _exclude_amino_acids(af_model, designed_len, excluded_amino_acids)
 
         # An extension loss only reaches aux["losses"] once its callback is installed.
         term_options = term_options or {}
@@ -1020,6 +1046,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 device=input_dict["device"],
                 verbose=input_dict["verbose"],
                 include_pae_matrix=input_dict.get("include_pae_matrix", False),
+                excluded_amino_acids=input_dict.get("excluded_amino_acids", []),
             )
             for item in input_dict["items"]
         ]

@@ -117,3 +117,4 @@ These apply to every AlphaFold2 tool in this toolkit (`alphafold2-prediction`, `
 - **Requires a GPU.** Every tool here runs AlphaFold2 through a JAX backend and need an NVIDIA GPU; CPU execution is not practical.
 - **Runs the original AlphaFold2 through ColabDesign, not the full DeepMind pipeline.** There is no template-search stage; multiple-sequence alignments are optional and are used only by `alphafold2-prediction`.
 - **`num_recycles` (default `3`) applies to every tool here.** Each recycling iteration refines the structure; raising it improves accuracy at higher runtime.
+- **The four gradient tools take `excluded_amino_acids`.** It bars those amino acids from the softmax branch at every designed position, as ColabDesign's `rm_aa` bias, so `hard` sequences never contain them. The raw-input branch (`soft < 1`) still sees the logits as supplied, and probability mode (`temperature=None`) rejects it because that branch is unused.

@@ -220,6 +220,39 @@ def test_registry_descriptions_are_distinct() -> None:
     assert len(set(descriptions.values())) == len(descriptions)
 
 
+@pytest.mark.parametrize("protocol", sorted(_CONFIGS))
+def test_probability_mode_rejects_excluded_amino_acids(protocol: str) -> None:
+    """The exclusion is a bias on the softmax branch, which probability mode never uses."""
+    config = _CONFIGS[protocol](excluded_amino_acids=["C"])
+    with pytest.raises(ValueError, match="excluded_amino_acids"):
+        gradient_helpers._reject_unused_softmax_knobs(config, None, _KEYS[protocol])
+    gradient_helpers._reject_unused_softmax_knobs(config, 1.0, _KEYS[protocol])
+
+
+def test_excluded_amino_acids_reach_the_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The worker applies the bias, so the codes must arrive in the payload unchanged."""
+    captured: dict[str, Any] = {}
+
+    def fake_dispatch(toolkit: str, payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        captured.update(payload)
+        return {
+            "results": [
+                {
+                    "terms": [{"id": "plddt", "value": 0.5, "gradient": [[0.0] * 20] * 6}],
+                    "metrics": {"avg_plddt": 0.5},
+                    "pdb": _FIXTURE_PDB.read_text(),
+                }
+            ]
+        }
+
+    monkeypatch.setattr(gradient_helpers.ToolInstance, "dispatch", staticmethod(fake_dispatch))
+    run_alphafold2_hallucination_gradient(
+        AlphaFold2HallucinationGradientInput(inputs=[[[0.0] * 20] * 6]),
+        AlphaFold2HallucinationGradientConfig(gradient_terms=["plddt"], excluded_amino_acids=["C", "W"]),
+    )
+    assert captured["excluded_amino_acids"] == ["C", "W"]
+
+
 def test_binder_dispatch_forwards_its_target_controls(monkeypatch: pytest.MonkeyPatch, target: Structure) -> None:
     """The binder protocol is only comparable across runs if the template masking reaches prep."""
     captured: dict[str, Any] = {}
