@@ -576,10 +576,7 @@ def example_input() -> Any:
     input_class=BlastSearchInput,
     config_class=BlastSearchConfig,
     output_class=BlastSearchOutput,
-    description=(
-        "Search sequences against BLAST databases (online or local); online jobs queue at NCBI for minutes, "
-        "so use pdb-sequence-search or mmseqs2-search-proteins for quick protein identification"
-    ),
+    description="Search sequences against BLAST databases (online or local)",
     example_input=example_input,
     cacheable=True,
 )
