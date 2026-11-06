@@ -161,9 +161,10 @@ class RFdiffusion3DesignSpec(BaseModel):
 
         partial_t (float | None): Noise level (in Angstroms) for partial diffusion.
             Requires ``select_fixed_atoms``: a selection of the atoms to hold (e.g. the target
-            chain when refining a binder) or ``False`` to re-noise every input atom. The
+            chain when diversifying a binder) or ``False`` to re-noise every input atom. The
             upstream default fixes every input atom, which would make partial diffusion a no-op. Lower values preserve more of the input structure. Recommended values
-            are 5.0-15.0 Angstroms. Useful for refinement or local redesign tasks.
+            are 5.0-15.0 Angstroms. Resamples backbones near the input (e.g. to diversify an
+            existing binder against a fixed target); it does not optimize the input.
 
         is_non_loopy (bool | None): If ``True``/``False``, produces output
             structures with fewer/more loops. ``None`` uses the model's
@@ -421,7 +422,7 @@ class RFdiffusion3DesignSpec(BaseModel):
                 "'partial_t' requires 'select_fixed_atoms' to unfix the atoms to re-noise: upstream "
                 "fixes every input atom by default, so this spec would return the input unchanged. "
                 "Pass a selection naming only the atoms to hold (e.g. the target chain 'A1-120' "
-                "when refining a binder, or motif residues), or select_fixed_atoms=False to "
+                "when diversifying a binder, or motif residues), or select_fixed_atoms=False to "
                 "re-noise every input atom, target chains included."
             )
         return self
