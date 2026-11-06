@@ -1,7 +1,7 @@
 """Shared test-data builders for Structure / structure-scoring tests.
 
-Used by tests in ``tests/structure_tests/`` and ``tests/structure_scoring_tests/``.
-Lives at the ``tests/`` root so both sibling packages can import it.
+Used by structure, structure-scoring, and structure-prediction tests.
+Lives at the ``tests/`` root so every test package can import it.
 """
 
 from __future__ import annotations
@@ -58,3 +58,26 @@ def synthetic_cif(chain_names: list[str]) -> str:
             )
             atom_id += 1
     return header + "\n".join(rows) + "\n"
+
+
+def single_chain_pdb(num_residues: int) -> str:
+    """Build a single-chain PDB (chain A) of ``num_residues`` glycine residues.
+
+    Args:
+        num_residues (int): Residues to emit, four backbone atoms each.
+
+    Returns:
+        str: PDB content as a single string.
+    """
+    lines = []
+    atom_id = 1
+    for residue_id in range(1, num_residues + 1):
+        base = float(residue_id * 3)
+        for atom_name, dx, dy in [("N", 0.0, 0.0), ("CA", 1.4, 0.0), ("C", 2.1, 1.2), ("O", 1.7, 2.3)]:
+            lines.append(
+                f"ATOM  {atom_id:5d} {atom_name:<4} GLY A{residue_id:4d}    "
+                f"{base + dx:8.3f}{dy:8.3f}{0.0:8.3f}{1.0:6.2f}{0.8:6.2f}           {atom_name[0]:>2}"
+            )
+            atom_id += 1
+    lines.append("END")
+    return "\n".join(lines) + "\n"

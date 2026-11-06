@@ -678,6 +678,9 @@ CRITICAL RULES:
 - Use `@pytest.mark.uses_gpu` for any test that runs the actual tool on GPU
 - Use `@pytest.mark.integration` for CPU dispatch tests
 - Use realistic biological data (real sequences/structures from dummy_data/)
+- If the tool's input takes `msas`, add a worker stub for it to `_STUBS` in
+  `tests/structure_prediction_tests/test_msa_contract.py`; `test_every_msa_tool_is_covered`
+  fails until you do. The contract test then checks that every MSA bundle shape reaches the backend.
 - Check `result.success` and `result.tool_id`
 - Test both default config and non-default parameters
 ```

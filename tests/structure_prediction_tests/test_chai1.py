@@ -54,7 +54,7 @@ def test_msa_to_pqt_appends_deep_unpaired_with_empty_pairing_key(tmp_path):
     keys = df["pairing_key"].tolist()
     seqs = df["sequence"].tolist()
     assert len(df) == 5  # query + 2 paired + 2 unique unpaired (overlaps deduped)
-    assert keys[0] == "" and df.iloc[0]["source_database"] == "query"  # query row
+    assert keys[0] == "0" and df.iloc[0]["source_database"] == "query"  # query row, keyed as chai-lab's pipeline does
     assert keys[1:3] == ["1", "2"]  # paired rows: row-index pairing keys
     assert keys[3:] == ["", ""]  # appended deep-unpaired rows: empty pairing key
     assert "MKTAYIAKQW" in seqs and "MKTAYIAKQY" in seqs  # new unpaired depth present
@@ -73,7 +73,7 @@ def test_msa_to_pqt_without_unpaired_keeps_paired_only(tmp_path):
 
     df = pd.read_parquet(pqt_path)
     assert len(df) == 3
-    assert df["pairing_key"].tolist() == ["", "1", "2"]
+    assert df["pairing_key"].tolist() == ["0", "1", "2"]
 
 
 @pytest.mark.integration

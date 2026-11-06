@@ -73,19 +73,23 @@ def _build_upstream_input(
         if entity_type == "protein":
             msa_obj = None
             chain_msa_rows = msas.get(str(idx)) if msas else None
+            unpaired_rows = unpaired_msas.get(str(idx)) if unpaired_msas else None
+            # A chain with only unpaired rows is sent them as its base alignment, which never pairs.
+            pairs = msas_paired and bool(chain_msa_rows)
+            if not chain_msa_rows:
+                chain_msa_rows, unpaired_rows = unpaired_rows, None
             if chain_msa_rows:
                 from esm.utils.parsing import FastaEntry
 
                 # `key=<row_idx>` headers engage upstream paired_msa.py cross-chain pairing.
-                header_fmt = "key={row}" if msas_paired else "seq_{row}"
+                header_fmt = "key={row}" if pairs else "seq_{row}"
                 entries = [
                     FastaEntry(header=header_fmt.format(row=row_idx), sequence=seq)
                     for row_idx, seq in enumerate(chain_msa_rows)
                 ]
                 # Append the deep unpaired rows with non-`key=` headers: upstream reads
-                # taxonomy -1 for these and places them block-diagonally as per-chain
-                # depth after the paired rows (skip the query and any paired duplicate).
-                unpaired_rows = unpaired_msas.get(str(idx)) if unpaired_msas else None
+                # taxonomy -1 for these and stacks them as unpaired depth after the
+                # paired rows, never key-paired (skip the query and any paired duplicate).
                 if unpaired_rows:
                     seen = set(chain_msa_rows)
                     for u_seq in unpaired_rows[1:]:
