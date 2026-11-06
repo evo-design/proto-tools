@@ -14,9 +14,13 @@ import pytest
 
 from proto_tools.entities.structures import BFactorType, Structure, is_valid_structure
 from proto_tools.tools.structure_prediction.alphafold2 import (
+    AlphaFold2BetaStrandTerm,
     AlphaFold2BinderGradientCandidate,
     AlphaFold2BinderGradientConfig,
     AlphaFold2BinderGradientInput,
+    AlphaFold2BinderRedesignGradientCandidate,
+    AlphaFold2BinderRedesignGradientConfig,
+    AlphaFold2BinderRedesignGradientInput,
     AlphaFold2FixBBGradientCandidate,
     AlphaFold2FixBBGradientConfig,
     AlphaFold2FixBBGradientInput,
@@ -25,10 +29,12 @@ from proto_tools.tools.structure_prediction.alphafold2 import (
     AlphaFold2HallucinationGradientOutput,
     AlphaFold2HallucinationGradientResult,
     AlphaFold2HallucinationTermGradient,
+    AlphaFold2InterfaceContactTerm,
     AlphaFold2PlddtTerm,
     AlphaFold2RmsdTerm,
     gradient_helpers,
     run_alphafold2_binder_gradient,
+    run_alphafold2_binder_redesign_gradient,
     run_alphafold2_fixbb_gradient,
     run_alphafold2_hallucination_gradient,
 )
@@ -49,11 +55,13 @@ _CONFIGS = {
     "hallucination": AlphaFold2HallucinationGradientConfig,
     "fixbb": AlphaFold2FixBBGradientConfig,
     "binder": AlphaFold2BinderGradientConfig,
+    "binder-redesign": AlphaFold2BinderRedesignGradientConfig,
 }
 _KEYS = {
     "hallucination": "alphafold2-hallucination-gradient",
     "fixbb": "alphafold2-fixbb-gradient",
     "binder": "alphafold2-binder-gradient",
+    "binder-redesign": "alphafold2-binder-redesign-gradient",
 }
 
 
@@ -75,8 +83,8 @@ def test_terms_outside_the_protocol_catalog_are_rejected(protocol: str) -> None:
     """Each protocol offers only the quantities it actually computes."""
     offered = set(_CONFIGS[protocol].supported_terms())
     assert ("rmsd" in offered) is (protocol == "fixbb")
-    assert ("i_pae" in offered) is (protocol == "binder")
-    absent = "i_pae" if protocol != "binder" else "rmsd"
+    assert ("i_pae" in offered) is protocol.startswith("binder")
+    absent = "rmsd" if protocol.startswith("binder") else "i_pae"
     with pytest.raises(ValueError):
         _CONFIGS[protocol](gradient_terms=[absent])
 
@@ -137,7 +145,7 @@ def test_build_terms_shares_one_basis_and_each_term_adds_what_only_it_knows() ->
             {"id": "rmsd", "value": 1.5, "gradient": [[0.1] * 20] * 3},
             {"id": "plddt", "value": 0.8, "gradient": [[0.2] * 20] * 3},
         ],
-        {"rmsd": AlphaFold2RmsdTerm, "plddt": AlphaFold2PlddtTerm},
+        [AlphaFold2RmsdTerm(), AlphaFold2PlddtTerm()],
         [[0.0] * 20] * 3,
         temperature=1.0,
         soft=1.0,
@@ -159,7 +167,7 @@ def test_a_term_with_nothing_to_measure_is_named_in_the_error() -> None:
     with pytest.raises(ValueError, match="plddt"):
         build_terms(
             [{"id": "plddt", "value": None, "gradient": None}],
-            {"plddt": AlphaFold2PlddtTerm},
+            [AlphaFold2PlddtTerm()],
             [[0.0] * 20] * 3,
             temperature=1.0,
             soft=1.0,
@@ -167,12 +175,12 @@ def test_a_term_with_nothing_to_measure_is_named_in_the_error() -> None:
         )
 
 
-def test_a_term_outside_this_tool_catalog_is_named_in_the_error() -> None:
-    """A protocol reporting a quantity this tool does not offer should say so, not raise KeyError."""
+def test_an_unrequested_term_is_named_in_the_error() -> None:
+    """A worker reporting a quantity nobody asked for should say so, not raise KeyError."""
     with pytest.raises(ValueError, match="i_con"):
         build_terms(
             [{"id": "i_con", "value": 0.5, "gradient": None}],
-            {"plddt": AlphaFold2PlddtTerm},
+            [AlphaFold2PlddtTerm()],
             [[0.0] * 20] * 3,
             temperature=1.0,
             soft=1.0,
@@ -189,7 +197,7 @@ def test_helix_requires_an_explicit_goal() -> None:
         gradient=[[1.0] + [0.0] * 19] * 3,
         metadata=build_terms(
             [{"id": "helix", "value": 0.5, "gradient": [[1.0] + [0.0] * 19] * 3}],
-            {"helix": gradient_helpers.AlphaFold2HelixTerm},
+            [gradient_helpers.AlphaFold2HelixTerm()],
             [[0.0] * 20] * 3,
             temperature=1.0,
             soft=1.0,
@@ -279,6 +287,68 @@ def test_fixbb_dispatch_sends_the_reference_chain(monkeypatch: pytest.MonkeyPatc
     assert result.terms[0].metadata.units == "angstroms"
 
 
+def test_binder_selectors_reach_the_worker_and_come_back_with_the_term(
+    monkeypatch: pytest.MonkeyPatch, target: Structure
+) -> None:
+    """A CDR-restricted term must reach the worker and be reported as the term that was asked for."""
+    captured: dict[str, Any] = {}
+
+    def fake_dispatch(toolkit: str, payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        captured.update(payload)
+        terms = [{"id": term_id, "value": 0.5, "gradient": [[0.0] * 20] * 6} for term_id in payload["gradient_terms"]]
+        return {"results": [{"terms": terms, "metrics": {"avg_plddt": 0.5}, "pdb": _FIXTURE_PDB.read_text()}]}
+
+    monkeypatch.setattr(gradient_helpers.ToolInstance, "dispatch", staticmethod(fake_dispatch))
+    i_con = AlphaFold2InterfaceContactTerm(positions=[2, 3], num_contacts=2, cutoff=20.0)
+    strand = AlphaFold2BetaStrandTerm(positions=[1, 2, 3, 4, 5], form="out_of_range")
+    output = run_alphafold2_binder_gradient(
+        AlphaFold2BinderGradientInput(
+            inputs=[AlphaFold2BinderGradientCandidate(logits=[[0.0] * 20] * 6, target_pdb=target, target_chain="A")]
+        ),
+        AlphaFold2BinderGradientConfig(gradient_terms=[i_con, strand]),
+    )
+
+    assert captured["term_options"]["i_con"] == {"positions": [2, 3], "num_contacts": 2, "cutoff": 20.0}
+    assert captured["term_options"]["beta_strand"]["form"] == "out_of_range"
+    assert [term.term for term in output.results[0].terms] == [i_con, strand]
+
+
+def test_redesign_prepares_the_template_binder_chain(monkeypatch: pytest.MonkeyPatch, target: Structure) -> None:
+    """Redesign must hand ColabDesign the binder chain with its backbone kept and sequence masked."""
+    captured: dict[str, Any] = {}
+
+    def fake_dispatch(toolkit: str, payload: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        captured.update(payload)
+        terms = [{"id": "plddt", "value": 0.8, "gradient": [[0.0] * 20] * 4}]
+        return {"results": [{"terms": terms, "metrics": {"avg_plddt": 0.8}, "pdb": _FIXTURE_PDB.read_text()}]}
+
+    monkeypatch.setattr(gradient_helpers.ToolInstance, "dispatch", staticmethod(fake_dispatch))
+    candidate = AlphaFold2BinderRedesignGradientCandidate(
+        logits=[[0.0] * 20] * 4, template_pdb=target, target_chain="A", binder_chain="B"
+    )
+    run_alphafold2_binder_redesign_gradient(
+        AlphaFold2BinderRedesignGradientInput(inputs=[candidate]), AlphaFold2BinderRedesignGradientConfig()
+    )
+
+    prep = captured["items"][0]["prep_kwargs"]
+    assert captured["protocol"] == "binder"
+    assert prep["binder_chain"] == "B" and "binder_len" not in prep
+    assert (prep["rm_binder"], prep["rm_binder_seq"], prep["rm_binder_sc"], prep["rm_template_ic"]) == (
+        False,
+        True,
+        True,
+        True,
+    )
+
+
+def test_redesign_rejects_a_binder_chain_that_is_also_the_target(target: Structure) -> None:
+    """Redesigning a target chain against itself is a misnamed chain, not a design."""
+    with pytest.raises(ValueError, match="also named as a target chain"):
+        AlphaFold2BinderRedesignGradientCandidate(
+            logits=[[0.0] * 20] * 4, template_pdb=target, target_chain="A,B", binder_chain="B"
+        )
+
+
 @pytest.mark.uses_gpu
 def test_fixbb_rejects_logits_that_do_not_cover_the_reference_chain(target: Structure) -> None:
     """Short logits were injected into the trailing rows, folding a sequence nobody supplied."""
@@ -333,7 +403,7 @@ def test_gradient_export_writes_one_pdb_sidecar_per_result(tmp_path: Path, name:
                     AlphaFold2HallucinationTermGradient(
                         **build_terms(
                             [{"id": "plddt", "value": value, "gradient": [[0.1] * 20] * 2}],
-                            {"plddt": AlphaFold2PlddtTerm},
+                            [AlphaFold2PlddtTerm()],
                             [[0.0] * 20] * 2,
                             temperature=1.0,
                             soft=1.0,
@@ -437,3 +507,35 @@ def test_alphafold2_binder_gradient_benchmark(request: pytest.FixtureRequest) ->
     )
 
     _assert_gradient_result(result, expected_terms=["plddt", "i_pae"], length=length)
+
+
+@pytest.mark.benchmark("alphafold2-binder-redesign-gradient")
+@pytest.mark.slow
+@pytest.mark.uses_gpu
+def test_alphafold2_binder_redesign_gradient_benchmark(request: pytest.FixtureRequest) -> None:
+    """Benchmark template redesign: 5 passes redesigning the PD-L1 nanobody chain in place (cold + warm).
+
+    ``plddt`` must come back nonzero here, since ColabDesign's own masks leave it empty under
+    redesign; ``dgram_cce`` is the template-agreement term only this protocol and fixbb offer.
+    """
+    template = Structure.from_file(_FIXTURE_PDB)
+    binder = template.get_chain_sequence("B")
+    inputs = AlphaFold2BinderRedesignGradientInput(
+        inputs=[
+            AlphaFold2BinderRedesignGradientCandidate(
+                logits=ProteinSequenceLogits(one_hot_protein_logits(binder, sharpness=2.0)),
+                template_pdb=template,
+                target_chain="A",
+                binder_chain="B",
+            )
+        ],
+        temperature=1.0,
+    )
+    config = AlphaFold2BinderRedesignGradientConfig(gradient_terms=["plddt", "dgram_cce"], num_recycles=1, seed=0)
+
+    result = benchmark_twice(
+        request, "alphafold2", lambda: _run_steps(lambda: run_alphafold2_binder_redesign_gradient(inputs, config))
+    )
+
+    _assert_gradient_result(result, expected_terms=["plddt", "dgram_cce"], length=len(binder))
+    assert result.results[0].terms[0].term_value > 0
