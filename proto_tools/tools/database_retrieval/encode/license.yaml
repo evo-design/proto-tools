@@ -1,0 +1,15 @@
+code:
+  spdx: MIT
+  url: https://github.com/evo-design/proto-tools
+data:
+  name: the ENCODE portal
+  spdx: Custom (the ENCODE Data Use Policy)
+  url: https://www.encodeproject.org/help/citing-encode/
+  text: External data users may freely download, analyze and publish results based on any ENCODE data without restrictions. Users are asked to cite the ENCODE Consortium and portal publications, acknowledge the production laboratories, and reference the dataset accessions.
+  attribution_required: true
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+proto_tools_original: true
+notes: proto-tools original client code (MIT) calling the ENCODE portal's JSON search endpoint over plain HTTP; there is no ENCODE client library dependency. ENCODE data is free to use without restrictions under the ENCODE Data Use Policy, which asks users to cite the consortium and the dataset accessions.
+last_updated: '2026-11-06'
