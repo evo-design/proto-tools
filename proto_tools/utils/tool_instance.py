@@ -78,6 +78,7 @@ from proto_tools.utils.persistent_worker import (
 )
 from proto_tools.utils.progress import get_current_tool_function, has_active_progress_bar, progress_bar, set_substatus
 from proto_tools.utils.tool_io import MissingAssetError
+from proto_tools.utils.weights_manifest import RECORD_ENV_VAR, RECORD_NAME, weights_problem, write_manifest
 
 if TYPE_CHECKING:
     from proto_tools.tools.tool_registry import ToolSpec
@@ -811,10 +812,20 @@ class ToolInstance:
                 if status_file.exists():
                     status = status_file.read_text()
                     if status.startswith("SUCCESS"):
-                        logger.info(
-                            "Setup files changed for %s, rebuilding environment",
-                            self.toolkit,
-                        )
+                        # With unchanged setup files, the env is being set up again for its weights
+                        unchanged = f"Setup hash: {self._setup_hash()}" in status
+                        problem = weights_problem(self.env_path) if unchanged else None
+                        if problem is not None:
+                            logger.info(
+                                "Setting up %s again to download its weights: %s",
+                                self.toolkit,
+                                problem,
+                            )
+                        else:
+                            logger.info(
+                                "Setup files changed for %s, rebuilding environment",
+                                self.toolkit,
+                            )
                     elif status.startswith("FAILED"):
                         current_hash = self._setup_hash()
                         if f"Setup hash: {current_hash}" in status:
@@ -2684,7 +2695,7 @@ class ToolInstance:
         return ""
 
     def _is_env_ok(self) -> bool:
-        """Check STATUS.txt, verify the Python executable, and compare setup hash."""
+        """Check STATUS.txt, the Python executable, the setup hash, and that the weights are on disk."""
         status_file = self.env_path / "STATUS.txt"
         if not status_file.exists():
             return False
@@ -2705,7 +2716,10 @@ class ToolInstance:
                 return False
             # Compare stored hash to current setup files
             current_hash = self._setup_hash()
-            return f"Setup hash: {current_hash}" in status
+            if f"Setup hash: {current_hash}" not in status:
+                return False
+            # Weights setup.sh downloaded may have been deleted since (e.g. a scratch purge)
+            return weights_problem(self.env_path) is None
         except Exception:
             return False
 
@@ -2837,6 +2851,10 @@ class ToolInstance:
         env["PIP_EXE"] = str(self.env_path.absolute() / "bin" / "pip")
         env["MAMBA_BIN"] = str(mamba_bin.absolute())
         env["PROTO_INSTALL_BINARY"] = str(Path(__file__).parent.absolute() / "install_binary.py")
+        # proto_resolve_weights_dir appends each weights folder setup.sh fills here
+        record = self.env_path / RECORD_NAME
+        record.unlink(missing_ok=True)
+        env[RECORD_ENV_VAR] = str(record.absolute())
 
         returncode, combined_output = _run_setup_script(
             self.setup_script,
@@ -2847,6 +2865,7 @@ class ToolInstance:
         )
 
         if returncode == 0:
+            write_manifest(self.env_path, self.toolkit)
             status_file.write_text(f"SUCCESS\nSetup hash: {self._setup_hash()}\n")
             logger.debug("Environment setup completed for %s", self.toolkit)
             self._clean_package_archives(mamba_bin)

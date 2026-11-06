@@ -61,13 +61,10 @@ proto_resolve_weights_dir fampnn
 
 REPO_BASE="https://github.com/richardshuai/fampnn/raw/aaf788b1502ad95d5c5a84455cfc53f2544f3b45/weights"
 
+# proto_download moves a finished download into place and replaces a truncated checkpoint, so an
+# interrupted run leaves nothing a later setup would take as present.
 for WEIGHT_FILE in fampnn_0_0.pt fampnn_0_3.pt fampnn_0_3_cath.pt; do
-    if [ ! -f "${WEIGHTS_DIR}/${WEIGHT_FILE}" ]; then
-        echo "Downloading ${WEIGHT_FILE}..."
-        curl -fsSL -o "${WEIGHTS_DIR}/${WEIGHT_FILE}" "${REPO_BASE}/${WEIGHT_FILE}"
-    else
-        echo "${WEIGHT_FILE} already present."
-    fi
+    proto_download "${REPO_BASE}/${WEIGHT_FILE}" "${WEIGHTS_DIR}/${WEIGHT_FILE}"
 done
 
 echo "FAMPNN setup complete!"

@@ -1318,6 +1318,34 @@ def test_changed_setup_hash_logs_info_and_retries(tmp_path: Path, caplog):
     assert "Setup files changed" in caplog.text
 
 
+def test_purged_weights_rebuild_the_env(tmp_path: Path, monkeypatch, caplog):
+    """A built env whose weights were deleted since (e.g. by a scratch purge) is set up again, saying why."""
+    from proto_tools.utils.weights_manifest import RECORD_NAME, write_manifest
+
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "cache"))
+    weights = tmp_path / "cache" / "esm2" / "weights" / "model.pt"
+    weights.parent.mkdir(parents=True)
+    weights.write_bytes(b"w")
+    inst = _make_fake_instance()
+    inst._env_ready = False
+    inst.env_path = tmp_path / "fake_env"
+    (inst.env_path / "bin").mkdir(parents=True)
+    (inst.env_path / RECORD_NAME).write_text(f"esm2\t{weights.parent}\n")
+    (inst.env_path / "bin" / "python").symlink_to(sys.executable)
+    (inst.env_path / "STATUS.txt").write_text("SUCCESS\nSetup hash: abc\n")
+    write_manifest(inst.env_path, "esm2")
+
+    with patch.object(ToolInstance, "_setup_hash", return_value="abc"):
+        assert inst._is_env_ok()
+        weights.unlink()
+        assert not inst._is_env_ok()
+        with patch.object(ToolInstance, "_create_env") as mock_create, caplog.at_level(logging.INFO):
+            inst._ensure_env()
+
+    mock_create.assert_called_once()
+    assert "Setting up esm2 again to download its weights: 1 weight file(s) are missing" in caplog.text
+
+
 def test_success_status_with_stale_hash_rebuilds(tmp_path: Path, caplog):
     """A SUCCESS STATUS.txt with a stale hash triggers a rebuild."""
     inst = _make_fake_instance()
@@ -1383,8 +1411,11 @@ def test_returns_false_when_hash_mismatches(tmp_path: Path):
         assert inst._is_env_ok() is False
 
 
-def test_returns_true_when_hash_matches(tmp_path: Path):
-    """_is_env_ok() should return True when hash matches and python works."""
+def test_returns_true_when_hash_matches(tmp_path: Path, monkeypatch):
+    """_is_env_ok() should return True when hash matches, python works, and the weights are recorded."""
+    from proto_tools.utils.weights_manifest import write_manifest
+
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "cache"))
     inst = ToolInstance.__new__(ToolInstance)
     inst.env_path = tmp_path / "fake_env"
     inst.env_path.mkdir()
@@ -1394,6 +1425,7 @@ def test_returns_true_when_hash_matches(tmp_path: Path):
     current_hash = inst._setup_hash()
     status_file = inst.env_path / "STATUS.txt"
     status_file.write_text(f"SUCCESS\nSetup hash: {current_hash}\n")
+    write_manifest(inst.env_path, "esm2")
 
     bin_dir = inst.env_path / "bin"
     bin_dir.mkdir()

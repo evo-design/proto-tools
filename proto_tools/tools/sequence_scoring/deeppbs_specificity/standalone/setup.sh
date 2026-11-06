@@ -41,29 +41,21 @@ DEEPPBS_COMMIT="8bfb211dd67f02877841f6f33aa493ddf7daedf9"
 proto_resolve_weights_dir deeppbs_specificity   # sets $WEIGHTS_DIR
 DEEPPBS_DIR="$WEIGHTS_DIR"
 
-if [ ! -d "${DEEPPBS_DIR}/.git" ]; then
-  echo "[deeppbs] Cloning DeepPBS into ${DEEPPBS_DIR}"
-  # Clone into the freshly created, empty cache dir. On failure (offline, proxy,
-  # firewall) emit the skip sentinel so the env build / tests degrade cleanly.
-  if ! git clone --quiet "$DEEPPBS_REPO_URL" "$DEEPPBS_DIR"; then
-    {
-      echo "[proto-tools] ASSET_NOT_AVAILABLE: deeppbs_specificity:repo"
-      echo "Could not clone ${DEEPPBS_REPO_URL}."
-      echo "The repository is public, so sign-in is normally not required. If you are"
-      echo "behind a proxy or firewall, authenticate git (e.g. 'gh auth setup-git') or"
-      echo "clone it manually and point the tool at the checkout:"
-      echo "  git clone ${DEEPPBS_REPO_URL} /path/to/DeepPBS"
-      echo "  git -C /path/to/DeepPBS checkout ${DEEPPBS_COMMIT}"
-      echo "  export PROTO_DEEPPBS_SPECIFICITY_WEIGHTS_DIR=/path/to/DeepPBS"
-    } >&2
-    exit 64
-  fi
+# Clones on first use and restores any repo file a purge deleted since. On failure
+# (offline, proxy, firewall) emit the skip sentinel so the env build / tests degrade cleanly.
+if ! proto_ensure_git_checkout "$DEEPPBS_REPO_URL" "$DEEPPBS_DIR" "$DEEPPBS_COMMIT"; then
+  {
+    echo "[proto-tools] ASSET_NOT_AVAILABLE: deeppbs_specificity:repo"
+    echo "Could not clone ${DEEPPBS_REPO_URL}."
+    echo "The repository is public, so sign-in is normally not required. If you are"
+    echo "behind a proxy or firewall, authenticate git (e.g. 'gh auth setup-git') or"
+    echo "clone it manually and point the tool at the checkout:"
+    echo "  git clone ${DEEPPBS_REPO_URL} /path/to/DeepPBS"
+    echo "  git -C /path/to/DeepPBS checkout ${DEEPPBS_COMMIT}"
+    echo "  export PROTO_DEEPPBS_SPECIFICITY_WEIGHTS_DIR=/path/to/DeepPBS"
+  } >&2
+  exit 64
 fi
-
-# Pin to the recorded revision (already present after a full clone; the fetch
-# only matters when bumping DEEPPBS_COMMIT on a warm cache).
-git -C "$DEEPPBS_DIR" fetch --quiet origin || true
-git -C "$DEEPPBS_DIR" checkout --quiet "$DEEPPBS_COMMIT"
 echo "[deeppbs] DeepPBS pinned to ${DEEPPBS_COMMIT}"
 # The bundled X3DNA/DSSR binaries must stay executable after a fresh clone.
 chmod +x "${DEEPPBS_DIR}/dependencies/bin/"* 2>/dev/null || true

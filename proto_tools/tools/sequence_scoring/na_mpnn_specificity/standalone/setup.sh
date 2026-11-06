@@ -22,30 +22,22 @@ NA_MPNN_COMMIT="aafa32c87b65046a02db152f6e6235a7078e5fef"
 proto_resolve_weights_dir na_mpnn_specificity   # sets $WEIGHTS_DIR
 NA_MPNN_DIR="$WEIGHTS_DIR"
 
-if [ ! -d "${NA_MPNN_DIR}/.git" ]; then
-    echo "[na-mpnn] Cloning NA-MPNN into ${NA_MPNN_DIR}"
-    # Clone into the freshly created, empty cache dir. On failure (offline,
-    # proxy, firewall) emit the skip sentinel so the env build / tests degrade
-    # cleanly instead of hard-erroring.
-    if ! git clone --quiet "$NA_MPNN_REPO_URL" "$NA_MPNN_DIR"; then
-        {
-            echo "[proto-tools] ASSET_NOT_AVAILABLE: na_mpnn_specificity:repo"
-            echo "Could not clone ${NA_MPNN_REPO_URL}."
-            echo "The repository is public, so sign-in is normally not required. If you are"
-            echo "behind a proxy or firewall, authenticate git (e.g. 'gh auth setup-git') or"
-            echo "clone it manually and point the tool at the checkout:"
-            echo "  git clone ${NA_MPNN_REPO_URL} /path/to/NA-MPNN"
-            echo "  git -C /path/to/NA-MPNN checkout ${NA_MPNN_COMMIT}"
-            echo "  export PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR=/path/to/NA-MPNN"
-        } >&2
-        exit 64
-    fi
+# Clones on first use and restores any repo file a purge deleted since (the
+# specificity checkpoint included). On failure (offline, proxy, firewall) emit
+# the skip sentinel so the env build / tests degrade cleanly instead of hard-erroring.
+if ! proto_ensure_git_checkout "$NA_MPNN_REPO_URL" "$NA_MPNN_DIR" "$NA_MPNN_COMMIT"; then
+    {
+        echo "[proto-tools] ASSET_NOT_AVAILABLE: na_mpnn_specificity:repo"
+        echo "Could not clone ${NA_MPNN_REPO_URL}."
+        echo "The repository is public, so sign-in is normally not required. If you are"
+        echo "behind a proxy or firewall, authenticate git (e.g. 'gh auth setup-git') or"
+        echo "clone it manually and point the tool at the checkout:"
+        echo "  git clone ${NA_MPNN_REPO_URL} /path/to/NA-MPNN"
+        echo "  git -C /path/to/NA-MPNN checkout ${NA_MPNN_COMMIT}"
+        echo "  export PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR=/path/to/NA-MPNN"
+    } >&2
+    exit 64
 fi
-
-# Pin to the recorded revision (the commit is already present after a full
-# clone; the fetch only matters when bumping NA_MPNN_COMMIT on a warm cache).
-git -C "$NA_MPNN_DIR" fetch --quiet origin || true
-git -C "$NA_MPNN_DIR" checkout --quiet "$NA_MPNN_COMMIT"
 echo "[na-mpnn] NA-MPNN pinned to ${NA_MPNN_COMMIT}"
 # The in-tree specificity checkpoint (models/specificity_model/s_70114.pt) is
 # resolved directly by the runtime; no extra placement is needed.
