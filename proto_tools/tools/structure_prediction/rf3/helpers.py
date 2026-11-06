@@ -147,5 +147,6 @@ def complex_to_rf3_json(
 
 
 def _tax_ids(msa: MSA) -> set[str]:
-    """The ``TaxID=`` values RF3 (atomworks) pairs non-query rows on."""
-    return {match for sequence_id in msa.sequence_ids[1:] for match in re.findall(r"TaxID=(\d+)", sequence_id)}
+    """The ``TaxID=`` values RF3 (atomworks) pairs non-query rows on: the first one in each header."""
+    matches = (re.search(r"TaxID=(\d+)", sequence_id) for sequence_id in msa.sequence_ids[1:])
+    return {match.group(1) for match in matches if match}

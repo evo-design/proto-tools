@@ -23,7 +23,7 @@ from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.msa import MSA
 from proto_tools.entities.structures.msa_conditioning import MSASubsampling
 from proto_tools.entities.structures.structure import BFactorType, Structure
-from proto_tools.tools.structure_prediction.msa_plan import SentMSA, short_chain_reason
+from proto_tools.tools.structure_prediction.msa_plan import SentMSA, af3_style_pairing, short_chain_reason
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     Complex,
@@ -403,8 +403,8 @@ def _assign_msas_to_input_json(
     and builds the combined MSA features (stacked unpaired rows + cross-chain
     pairing by species) itself. ``unpairedMsaPath`` gets each chain's deep unpaired
     MSA (``unpaired_per_chain`` when available), and ``pairedMsaPath`` gets the
-    row-aligned paired MSA (``per_chain``) when ``is_paired`` and the complex has at
-    least two distinct protein sequences (AF3 ignores paired MSAs otherwise). When no
+    row-aligned paired MSA (``per_chain``) when AF3 pairs at all (``af3_style_pairing``:
+    two or more distinct protein sequences, two or more chains with paired rows). When no
     separate unpaired MSA is provided, ``per_chain`` serves both slots. A chain with
     only unpaired rows gets just ``unpairedMsaPath``, so it never pairs.
 
@@ -435,8 +435,11 @@ def _assign_msas_to_input_json(
     }
     protein_chains_idx = list(protein_chains)
     n_protein_chains = len(protein_chains_idx)
-    # AF3 pairs MSAs only across two or more distinct protein sequences (need_msa_pairing)
-    pairs = is_paired and len({chain.sequence for chain in protein_chains.values()}) > 1
+    pairs = af3_style_pairing(
+        (chain.sequence for chain in protein_chains.values()),
+        sum(index in per_chain_msas for index in protein_chains),
+        is_paired,
+    )
     sent: dict[int, SentMSA] = {}
 
     protein_seq_entry_iter = (s for s in input_json_data["sequences"] if "protein" in s)

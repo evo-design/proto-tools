@@ -379,16 +379,17 @@ def _msa_to_pqt_file(
 ) -> SentMSA:
     """Write an MSA object to Chai1's .aligned.pqt Parquet format and return the rows written.
 
-    When ``paired=True``, each non-query paired row receives a pairing_key equal to
-    its row index so chai_lab matches rows across chains by index (proto-tools'
+    When ``paired=True``, each paired row (the query's included, as chai_lab's own
+    pipeline writes them) receives a pairing_key equal to its row index so chai_lab
+    matches rows across chains by index (proto-tools'
     paired MSA is taxonomy-aligned, so equal indices share a taxon). When
     ``unpaired_msa`` is supplied, its non-query rows are appended with empty pairing
     keys (``NO_PAIRING_KEY`` in chai_lab), giving full per-chain unpaired depth
     alongside the paired rows in one pqt.
     """
     sequences, seq_ids = extract_msa_sequences(msa, query_index)
-    # Row 0 is the query; chai_lab pairs rows whose pairing_key is non-empty and equal.
-    pairing_keys = [""] + [str(i) for i in range(1, len(sequences))] if paired else None
+    # Row i's pairing_key is i, the query's included, as chai-lab's own ColabFold pipeline writes them.
+    pairing_keys = [str(i) for i in range(len(sequences))] if paired else None
     # The deep unpaired rows append with an empty pairing_key (NO_PAIRING_KEY): depth, not matched.
     depth = unpaired_depth_rows(sequences, unpaired_msa)
     write_msa_pqt(
@@ -469,8 +470,15 @@ def run_chai1_on_complex(
                 logger.info(f"Assigned MSA to protein chain {chain.index} ({len(base)} sequences)")
         msa_sent = {index: written[seq_hash] for index, seq_hash in chain_hashes.items()}
         # chai-lab pairs a key only when every chain with an MSA has it, so a chain sent rows
-        # without pairing keys (only unpaired rows) leaves every chain in the complex unpaired
+        # without pairing keys (only unpaired rows) leaves its key step pairing nothing. The
+        # keyed chains' rows still sit in file order, so they may line up by position anyway;
+        # the report calls them unpaired because no row is matched across chains.
         if any(has_homolog_rows(record) and not record.paired for record in msa_sent.values()):
+            if any(record.paired for record in msa_sent.values()):
+                logger.warning(
+                    "Chai-1 pairs a row only when every chain with an MSA has it; a chain given only "
+                    "unpaired rows leaves no row paired by key, though rows may still line up by position"
+                )
             msa_sent = {index: replace(record, paired=False) for index, record in msa_sent.items()}
         msa_directory = pqt_dir if written else None
 

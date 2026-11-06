@@ -22,6 +22,7 @@ from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.entities.structures.msa_conditioning import MSASubsampling
 from proto_tools.tools.structure_prediction.msa_plan import (
     SentMSA,
+    af3_style_pairing,
     protein_chain_msas,
     short_chain_reason,
 )
@@ -644,6 +645,9 @@ def _write_msas_to_batch_json(
         chains = protein_chain_msas(sp_complex.chains, complex_msas)
         if not chains:
             continue
+        is_paired = af3_style_pairing(
+            (chain.chain.sequence for chain in chains), sum(chain.primary is not None for chain in chains), is_paired
+        )
         protein_chain_indices = [chain.index for chain in chains]
         n_protein_chains = len(protein_chain_indices)
 
@@ -672,7 +676,7 @@ def _write_msas_to_batch_json(
                     )
                 continue
             # unpairedMsaPath gets each chain's deep unpaired MSA when available, else the
-            # primary MSA; Protenix block-diagonalizes the unpaired rows itself (AF3-style).
+            # primary MSA; Protenix stacks every chain's unpaired rows itself (AF3-style).
             unpaired_msa = chain.unpaired or msa
             unpaired_msa.to_a3m_file(a3m_path, query_index=0)
             if is_paired:

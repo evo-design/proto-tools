@@ -319,7 +319,7 @@ def test_chai1_writes_unpaired_only_rows_with_no_pairing_key(monkeypatch):
     monkeypatch.setattr("proto_tools.tools.structure_prediction.chai1.chai1.ToolInstance.dispatch", fake_dispatch)
     structure = run_chai1_on_complex(_UNPAIRED_ONLY_COMPLEX, Chai1Config(), complex_msas=_UNPAIRED_ONLY_MSAS)
 
-    assert pairing_keys == {"AAAAA": ["", "1", ""], "GGGGG": ["", "", ""]}
+    assert pairing_keys == {"AAAAA": ["0", "1", ""], "GGGGG": ["", "", ""]}
     assert [chain.status for chain in structure.msa_conditioning.chains] == ["consumed"] * 3
     # chai-lab pairs a key only when every chain with an MSA has it, and chain C has none
     assert {chain.mode for chain in structure.msa_conditioning.chains} == {"unpaired"}

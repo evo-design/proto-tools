@@ -10,7 +10,12 @@ from typing import Any
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.msa import MSA
-from proto_tools.tools.structure_prediction.msa_plan import SentMSA, protein_chain_msas, short_chain_reason
+from proto_tools.tools.structure_prediction.msa_plan import (
+    SentMSA,
+    af3_style_pairing,
+    protein_chain_msas,
+    short_chain_reason,
+)
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     Complex,
@@ -74,7 +79,13 @@ def build_chain_msa_paths(
     os.makedirs(msa_dir, exist_ok=True)
     # Identical chains share the first chain's unpaired a3m.
     written: dict[str, tuple[str, int]] = {}
-    for chain in protein_chain_msas(sp_complex.chains, complex_msas):
+    chains = protein_chain_msas(sp_complex.chains, complex_msas)
+    pairs = af3_style_pairing(
+        (chain.chain.sequence for chain in chains),
+        sum(chain.primary is not None for chain in chains),
+        complex_msas.paired,
+    )
+    for chain in chains:
         chain_id, ch_idx = chain.chain_id, chain.index
         # Unpaired depth: prefer the deep unpaired MSA, fall back to the primary set.
         unpaired_msa: MSA | None = chain.unpaired or chain.primary
@@ -95,7 +106,7 @@ def build_chain_msa_paths(
                 logger.info("Assigned query-only MSA to chain %s, which has no alignment rows", chain_id)
 
         # Paired set is taxonomy-aligned by row; emit it with pairing-engaging UniProt headers.
-        paired_msa = chain.primary if complex_msas.paired else None
+        paired_msa = chain.primary if pairs else None
         paired = paired_msa is not None
         if paired_msa is not None:
             paired_path = os.path.join(msa_dir, f"chain_{chain_id}_{ch_idx}.paired.a3m")

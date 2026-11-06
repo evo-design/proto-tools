@@ -5,7 +5,7 @@ Writers walk ``protein_chain_msas`` to decide what to write for every protein ch
 is built from those records, so it cannot drift from what the writers do.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from proto_tools.entities.ligands import Fragment
@@ -73,6 +73,23 @@ def chain_base_rows(chain: ChainMSAs, bundle_paired: bool) -> tuple[MSA | None, 
     if chain.primary is None:
         return chain.unpaired, None, False
     return chain.primary, chain.unpaired, bundle_paired
+
+
+def af3_style_pairing(sequences: Iterable[str], chains_with_paired_rows: int, bundle_paired: bool) -> bool:
+    """Whether an AF3-lineage backend (AF3, Protenix, OpenDDE) pairs this complex's MSAs.
+
+    They pair only across two or more distinct protein sequences (``need_msa_pairing``), and a
+    chain's paired rows pair only with another chain's, so the paired MSAs are sent only then.
+
+    Args:
+        sequences (Iterable[str]): Every protein chain's sequence.
+        chains_with_paired_rows (int): Protein chains the bundle gives a paired alignment.
+        bundle_paired (bool): Whether the bundle's alignments are row-aligned across chains.
+
+    Returns:
+        bool: Whether the backend pairs, so the paired MSAs are worth sending.
+    """
+    return bundle_paired and chains_with_paired_rows >= 2 and len(set(sequences)) > 1
 
 
 def unpaired_depth_rows(rows: Sequence[str], unpaired: MSA | None) -> list[tuple[str, str]]:

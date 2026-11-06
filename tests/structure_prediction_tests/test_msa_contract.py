@@ -60,6 +60,8 @@ _SCENARIOS = {
         ComplexMSAs(per_chain={0: _rows(_A, 2)}, paired=True, unpaired_per_chain={1: _rows(_B, 3)}),
     ),
     "homodimer": _Scenario((_A, _A), ComplexMSAs(per_chain={0: _rows(_A, 3), 1: _rows(_A, 3)})),
+    # AF3-lineage backends (AF3, Protenix, OpenDDE) do not pair identical chains; the others do.
+    "homodimer_paired": _Scenario((_A, _A), ComplexMSAs(per_chain={0: _rows(_A, 3), 1: _rows(_A, 3)}, paired=True)),
     "heteromer_one_chain_without_msa": _Scenario((_A, _B), ComplexMSAs(per_chain={0: _rows(_A, 3)})),
 }
 
@@ -188,6 +190,10 @@ _EXEMPT = {
     "bioemu-sample": "samples single-chain ensembles and attaches no msa_conditioning report",
 }
 
+# Backends whose upstream pairs identical chains' rows with each other. AF3, Protenix and OpenDDE
+# pair only across distinct protein sequences (need_msa_pairing), and RF3 treats a homomer as unpaired.
+_PAIRS_IDENTICAL_CHAINS = {"boltz2-prediction", "boltz2-affinity", "chai1-prediction", "esmfold2-prediction"}
+
 # Ignored reasons that are genuine backend limitations rather than dropped rows.
 _BACKEND_LIMITS = {
     "esmfold-prediction": "ESMFold is a single-sequence model",
@@ -245,3 +251,6 @@ def test_supplied_msa_rows_reach_the_backend(tool_key, scenario_name, monkeypatc
             assert chain.mode != "paired", f"{where}: a chain with only unpaired rows was reported paired"
     modes = [chain.mode for chain in output.structures[0].msa_conditioning.chains]
     assert modes.count("paired") != 1, f"{tool_key} / {scenario_name}: one chain reported paired with no partner"
+    if scenario_name == "homodimer_paired":
+        expected = ["paired", "paired"] if tool_key in _PAIRS_IDENTICAL_CHAINS else [m for m in modes if m != "paired"]
+        assert modes == expected, f"{tool_key}: paired homodimer reported {modes}"
