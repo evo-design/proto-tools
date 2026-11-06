@@ -70,6 +70,7 @@ Sequence redesign for a known fold: driving a sequence toward a target backbone 
 
 - **The logits must cover exactly the reference chain.** The designed length comes from the reference, so a matrix of a different length is rejected rather than padded; supply one row per residue of `reference_chain`.
 - **`rmsd`, `dgram_cce` and `fape` exist only here.** They measure agreement with the reference, so they are meaningless without one and are absent from the other two tools.
+- **`rg`, `NC` and `beta_strand` are not offered here.** They are shape priors for protocols that have no reference: compactness, termini separation and strand spacing are already fixed by the backbone this tool is matching, so they add nothing a compact reference does not already say, and they pull against `rmsd`/`dgram_cce`/`fape` when the reference is elongated. Use them in the hallucination and binder tools.
 - **`reference_chain` defaults to `"A"`.** Name the chain whose backbone the sequence should reproduce.
 
 ### AlphaFold2 Binder Gradient (`alphafold2-binder-gradient`)
