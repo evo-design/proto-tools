@@ -33,6 +33,7 @@ from proto_tools.tools.structure_prediction.alphafold2.gradient_helpers import (
     AlphaFold2DgramCCETerm,
     AlphaFold2FapeTerm,
     AlphaFold2FrameworkContactTerm,
+    AlphaFold2HelixTerm,
     AlphaFold2InterfaceContactTerm,
     AlphaFold2InterfacePaeTerm,
     AlphaFold2InterfacePtmTerm,
@@ -74,6 +75,7 @@ AlphaFold2BinderRedesignTerm = Annotated[
     | AlphaFold2InterfaceContactTerm
     | AlphaFold2RgTerm
     | AlphaFold2TerminiDistanceTerm
+    | AlphaFold2HelixTerm
     | AlphaFold2BetaStrandTerm
     | AlphaFold2InterfacePtmTerm
     | AlphaFold2FrameworkContactTerm
@@ -90,6 +92,7 @@ _CATALOG: TermCatalog = {
     "i_con": AlphaFold2InterfaceContactTerm,
     "rg": AlphaFold2RgTerm,
     "NC": AlphaFold2TerminiDistanceTerm,
+    "helix": AlphaFold2HelixTerm,
     "beta_strand": AlphaFold2BetaStrandTerm,
     "i_ptm": AlphaFold2InterfacePtmTerm,
     "fw_i_con": AlphaFold2FrameworkContactTerm,
