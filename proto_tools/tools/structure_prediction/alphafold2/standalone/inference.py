@@ -247,7 +247,7 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
     def pae(inputs: Any, outputs: Any) -> dict[str, Any]:
         """ColabDesign's PAE loss over pairs within the selected positions, or with all residues."""
         mask = select(inputs, options.get("positions"))
-        columns = jnp.ones_like(mask) if options.get("include_target") else mask
+        columns = jnp.ones_like(mask) if options.get("pair_with_all") else mask
         return {key: get_pae_loss(outputs, mask_1d=mask, mask_1b=columns)}
 
     def i_pae(inputs: Any, outputs: Any) -> dict[str, Any]:
