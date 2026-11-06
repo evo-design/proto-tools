@@ -93,8 +93,42 @@ def test_esmfold2_payload_carries_deep_unpaired_msas():
     assert payload["unpaired_msas"] == {"0": [_HELIX_A] * 5, "1": [_HELIX_B] * 5}  # deep unpaired depth
 
 
+def test_esmfold2_payload_carries_unpaired_only_bundles():
+    """A bundle with no primary alignments still sends its unpaired rows to the worker."""
+    from unittest.mock import patch
+
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import _run_esmfold2_on_complex
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+
+    class _Stop(Exception):
+        pass
+
+    captured: dict = {}
+
+    def fake_dispatch(_name, input_data, **_kwargs):
+        captured["input"] = input_data
+        raise _Stop
+
+    complex_msas = ComplexMSAs(per_chain={}, unpaired_per_chain={0: MSA(aligned_sequences=[_HELIX_A] * 3)})
+    with (
+        patch(
+            "proto_tools.tools.structure_prediction.esmfold2.esmfold2.ToolInstance.dispatch",
+            side_effect=fake_dispatch,
+        ),
+        pytest.raises(_Stop),
+    ):
+        _run_esmfold2_on_complex(
+            ESMFold2Config(model_checkpoint="esmfold2"),
+            Complex(chains=[Chain(sequence=_HELIX_A, entity_type="protein")]),
+            complex_msas=complex_msas,
+        )
+
+    assert captured["input"]["unpaired_msas"] == {"0": [_HELIX_A] * 3}
+
+
 def test_esmfold2_full_checkpoint_reports_random_1024_row_draw(monkeypatch):
-    """The MSA checkpoint consumes primary rows under the pinned 1024-row msa_max_depth draw."""
+    """The MSA checkpoint consumes primary and unpaired-only rows under the pinned 1024-row draw."""
     from proto_tools.entities.msa import MSA
     from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import _run_esmfold2_on_complex
     from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
@@ -119,7 +153,7 @@ def test_esmfold2_full_checkpoint_reports_random_1024_row_draw(monkeypatch):
     )
 
     report = structure.msa_conditioning
-    assert [chain.status for chain in report.chains] == ["consumed", "ignored"]
+    assert [chain.status for chain in report.chains] == ["consumed", "consumed"]
     assert (report.subsampling.mode, report.subsampling.max_rows) == ("stochastic", 1024)
 
 

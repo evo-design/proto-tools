@@ -127,13 +127,30 @@ def test_download_archive_extracts_once(tmp_path: Path) -> None:
     assert _run(f'proto_download_archive "file://{archive}" "{dest}"').returncode == 0
 
 
+def test_download_archive_extracts_again_when_a_file_was_deleted(tmp_path: Path) -> None:
+    """A completed extraction that lost a file (e.g. to a scratch purge) is extracted again."""
+    archive = tmp_path / "params.tar"
+    with tarfile.open(archive, "w") as tar:
+        for name in ("params_model_1.npz", "params_model_2.npz"):
+            (tmp_path / name).write_bytes(_zip_bytes())
+            tar.add(tmp_path / name, arcname=name)
+    dest = tmp_path / "params"
+    assert _run(f'proto_download_archive "file://{archive}" "{dest}"').returncode == 0
+
+    (dest / "params_model_2.npz").unlink()
+    result = _run(f'proto_download_archive "file://{archive}" "{dest}"')
+
+    assert result.returncode == 0 and "Downloading and extracting" in result.stdout
+    assert (dest / "params_model_2.npz").read_bytes() == _zip_bytes()
+
+
 def test_download_archive_failure_is_not_marked_complete(tmp_path: Path) -> None:
     dest = tmp_path / "params"
     (dest).mkdir()
     (dest / "params_model_1.npz").write_bytes(b"partial")
 
     assert _run(f'proto_download_archive "file://{tmp_path}/missing.tar" "{dest}"').returncode != 0
-    assert not (dest / ".proto_download_complete").exists()
+    assert not (dest / ".proto_complete").exists()
 
 
 # ── Concurrent callers sharing a model cache ─────────────────────────────────
@@ -484,9 +501,7 @@ def test_download_aborts_a_stalled_transfer(tmp_path: Path) -> None:
     assert not dest.exists() and not list(tmp_path.glob(".model.pt.*.tmp"))
 
 
-@_needs_flock
-def test_concurrent_af2_param_setups_download_once(tmp_path: Path) -> None:
-    """Setups of the AF2-param toolkits racing on one cache: one extracts, all find a complete copy."""
+def _af2_params_archive(tmp_path: Path) -> Path:
     archive = tmp_path / "alphafold_params.tar"
     with tarfile.open(archive, "w") as tar:
         for model in range(1, 6):
@@ -494,6 +509,40 @@ def test_concurrent_af2_param_setups_download_once(tmp_path: Path) -> None:
                 member = tmp_path / f"params_model_{model}{variant}.npz"
                 member.write_bytes(_zip_bytes())
                 tar.add(member, arcname=member.name)
+    return archive
+
+
+def test_af2_params_download_again_when_a_file_was_deleted(tmp_path: Path) -> None:
+    """The completion marker is trusted only alongside all 15 parameter files."""
+    archive = _af2_params_archive(tmp_path)
+    setup = f'PROTO_MODEL_CACHE="{tmp_path}/cache" _PROTO_AF2_PARAMS_URL="file://{archive}" proto_ensure_af2_params'
+    assert _run(setup).returncode == 0
+    params = tmp_path / "cache" / "alphafold2" / "weights" / "params"
+
+    (params / "params_model_3_ptm.npz").unlink()
+    result = _run(setup)
+
+    assert result.returncode == 0 and "Downloading AlphaFold2 parameters" in result.stdout
+    assert len(list(params.glob("params_model_*.npz"))) == 15
+
+
+def test_resolve_weights_dir_records_each_folder(tmp_path: Path) -> None:
+    """Every folder setup.sh resolves is recorded, so proto-tools can check it later."""
+    record = tmp_path / "weights_dirs.tsv"
+    result = _run(
+        f'export PROTO_MODEL_CACHE="{tmp_path}/cache" PROTO_WEIGHTS_RECORD="{record}" '
+        f'PROTO_CHAI1_WEIGHTS_DIR="{tmp_path}/chai"; '
+        "proto_resolve_weights_dir germinal; proto_resolve_weights_dir chai1"
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert record.read_text() == f"germinal\t{tmp_path}/cache/germinal/weights\nchai1\t{tmp_path}/chai\n"
+
+
+@_needs_flock
+def test_concurrent_af2_param_setups_download_once(tmp_path: Path) -> None:
+    """Setups of the AF2-param toolkits racing on one cache: one extracts, all find a complete copy."""
+    archive = _af2_params_archive(tmp_path)
     env = {"PROTO_MODEL_CACHE": str(tmp_path / "cache"), "_PROTO_AF2_PARAMS_URL": f"file://{archive}"}
 
     results = _run_concurrently("proto_ensure_af2_params", 3, env=env)
@@ -503,3 +552,64 @@ def test_concurrent_af2_param_setups_download_once(tmp_path: Path) -> None:
     params = tmp_path / "cache" / "alphafold2" / "weights" / "params"
     assert len(list(params.glob("params_model_*.npz"))) == 15
     assert (params / ".params_complete").exists()
+
+
+# ── Git checkouts ─────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def upstream(tmp_path: Path) -> tuple[str, str]:
+    """A local repository with a weights file, as ``(url, commit)``."""
+    repo = tmp_path / "upstream"
+    (repo / "resources").mkdir(parents=True)
+    (repo / "resources" / "model.pth").write_bytes(b"weights")
+    (repo / "code.py").write_text("x = 1\n")
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run([*git, "add", "."], check=True)
+    subprocess.run([*git, "commit", "-qm", "init"], check=True)
+    commit = subprocess.run([*git, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+    return f"file://{repo}", commit
+
+
+def _ensure_checkout(url: str, dest: Path, commit: str) -> subprocess.CompletedProcess[str]:
+    return _run(f'proto_ensure_git_checkout "{url}" "{dest}" "{commit}"')
+
+
+@pytest.mark.parametrize("purge", ["working_tree", "working_tree_and_git"])
+def test_git_checkout_restores_purged_files(tmp_path: Path, upstream: tuple[str, str], purge: str) -> None:
+    """Deleted tracked files come back, even when the purge also emptied .git (its folders remain)."""
+    url, commit = upstream
+    dest = tmp_path / "weights" / "repo"
+    assert _ensure_checkout(url, dest, commit).returncode == 0
+    (dest / "notes.txt").write_text("untracked")
+
+    (dest / "resources" / "model.pth").unlink()
+    if purge == "working_tree_and_git":
+        for path in (dest / ".git").rglob("*"):
+            if path.is_file():
+                path.unlink()
+    result = _ensure_checkout(url, dest, commit)
+
+    assert result.returncode == 0, result.stderr
+    assert (dest / "resources" / "model.pth").read_bytes() == b"weights"
+    assert (dest / "notes.txt").read_text() == "untracked"
+
+
+def test_git_checkout_ignores_a_repository_in_a_parent_directory(tmp_path: Path, upstream: tuple[str, str]) -> None:
+    """A weights folder inside some other repository still gets its own checkout."""
+    url, commit = upstream
+    outer = tmp_path / "outer"
+    subprocess.run(["git", "init", "-q", str(outer)], check=True)
+
+    result = _ensure_checkout(url, outer / "repo", commit)
+
+    assert result.returncode == 0, result.stderr
+    assert (outer / "repo" / "resources" / "model.pth").read_bytes() == b"weights"
+
+
+def test_git_checkout_reports_a_failed_clone(tmp_path: Path) -> None:
+    result = _ensure_checkout(f"file://{tmp_path}/missing", tmp_path / "repo", "0" * 40)
+
+    assert result.returncode != 0
+    assert "could not clone" in result.stderr

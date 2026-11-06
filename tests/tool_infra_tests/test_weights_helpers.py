@@ -483,7 +483,38 @@ def test_download_archive_replaces_incomplete_extraction(monkeypatch, tmp_path: 
 
     download_archive("https://example.org/w.tar.gz", dest, marker="model.pt")
 
-    assert sorted(p.name for p in dest.iterdir()) == ["model.pt"]
+    assert sorted(p.name for p in dest.iterdir() if not p.name.startswith(".")) == ["model.pt"]
+
+
+def test_download_archive_unpacks_again_when_a_file_was_deleted(monkeypatch, tmp_path: Path, opener: _FakeOpener):
+    """An unpacked tree that lost a file other than the marker (e.g. to a scratch purge) is unpacked again."""
+    archive = _tar_gz_bytes({"model.pt": b"w", "vocab.txt": b"v"})
+    monkeypatch.setattr(
+        opener, "open", lambda request, timeout: (opener.requests.append(request), io.BytesIO(archive))[1]
+    )
+    dest = tmp_path / "model-weights"
+    download_archive("https://example.org/w.tar.gz", dest, marker="model.pt")
+
+    (dest / "vocab.txt").unlink()
+    download_archive("https://example.org/w.tar.gz", dest, marker="model.pt")
+
+    assert (dest / "vocab.txt").read_bytes() == b"v"
+    assert len(opener.requests) == 2
+
+
+def test_download_archive_keeps_a_tree_unpacked_before_trees_were_recorded(
+    monkeypatch, tmp_path: Path, opener: _FakeOpener
+):
+    """An earlier, valid extraction is recorded as it is rather than downloaded again."""
+    monkeypatch.setattr(opener, "open", lambda request, timeout: (opener.requests.append(request), io.BytesIO(b""))[1])
+    dest = tmp_path / "model-weights"
+    (dest).mkdir()
+    (dest / "model.pt").write_bytes(b"w")
+
+    download_archive("https://example.org/w.tar.gz", dest, marker="model.pt")
+
+    assert opener.requests == []
+    assert (dest / ".proto_complete").read_text() == "model.pt\n"
 
 
 def test_download_archive_missing_marker_raises(monkeypatch, tmp_path: Path, opener: _FakeOpener):

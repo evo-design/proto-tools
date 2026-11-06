@@ -75,7 +75,9 @@ class ComplexMSAs(BaseModel):
             When ``True``, all chains must share the same row count.
         unpaired_per_chain (dict[int, MSA] | None): For paired heterocomplexes only,
             each chain's deep *unpaired* MSA (independent homologs), retained alongside
-            the paired rows so predictors can use full per-chain depth. ``None`` otherwise.
+            the paired rows so predictors can use full per-chain depth. A chain with rows
+            here but none in ``per_chain`` is sent them as unpaired depth, never paired by
+            row (RF3 still pairs rows whose headers share a ``TaxID=``). ``None`` otherwise.
         source (MSABundleSource): Where the bundle came from: ``supplied`` by the caller,
             ``colabfold_server`` (ColabFold's hosted MSA API), ``local_mmseqs2`` (MMseqs2 against a
             local database).

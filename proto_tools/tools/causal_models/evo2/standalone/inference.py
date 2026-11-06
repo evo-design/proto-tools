@@ -3,6 +3,7 @@
 import json
 import os
 import secrets
+import shutil
 import sys
 import uuid
 from pathlib import Path
@@ -18,6 +19,25 @@ from standalone_helpers import (
 
 logger = get_logger(__name__)
 EVO2_VOCAB = [chr(j) for j in range(512)]
+
+
+def _drop_incomplete_conversions(cache: Path) -> None:
+    """Remove converted checkpoints under ``cache`` that lost files, so evo2_flash converts them again.
+
+    evo2_flash reuses a converted directory whenever its ``config.json`` is there, so one whose
+    ``model.safetensors`` (or the FP8 metadata its config names) a scratch purge deleted would fail
+    to load. evo2_flash writes ``config.json`` last into a staging directory, so a conversion in
+    progress is never mistaken for an incomplete one.
+    """
+    for config in cache.glob("*/config.json"):
+        try:
+            fp8 = json.loads(config.read_text()).get("hyena_in_proj_fp8") or {}
+        except (OSError, ValueError):
+            fp8 = {"metadata_file": "<unreadable config.json>"}
+        needed = ["model.safetensors", *([fp8["metadata_file"]] if fp8.get("metadata_file") else [])]
+        if not all((config.parent / rel).is_file() for rel in needed):
+            logger.warning("evo2: converted checkpoint %s is incomplete; converting it again", config.parent)
+            shutil.rmtree(config.parent, ignore_errors=True)
 
 
 class Evo2Model:
@@ -41,7 +61,9 @@ class Evo2Model:
         os.environ["CUDA_VISIBLE_DEVICES"] = get_subprocess_device_env(device)["CUDA_VISIBLE_DEVICES"]
         os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
         from evo2_flash import Evo2
+        from evo2_flash.api import default_cache_dir
 
+        _drop_incomplete_conversions(Path(default_cache_dir()))
         if verbose:
             logger.info("Loading Evo 2 Flash: %s on %s", self.model_checkpoint, device)
 

@@ -33,6 +33,14 @@ from .proto_logging import get_logger, install
 if os.environ.get("TOOL_VENV_PATH"):
     install()
 
+from .completeness import (
+    COMPLETE_MARKER,
+    ensure_complete,
+    list_files,
+    missing_files,
+    missing_recorded_files,
+    record_files,
+)
 from .compression import (
     _COMPRESS_MIN_SIZE,
     _COMPRESSED_ARRAY_SENTINEL,
@@ -133,6 +141,13 @@ __all__ = [
     "gather_indices",
     # subprocess
     "run_teed",
+    # completeness
+    "COMPLETE_MARKER",
+    "ensure_complete",
+    "list_files",
+    "missing_files",
+    "missing_recorded_files",
+    "record_files",
     # weights
     "download_archive",
     "download_weights",

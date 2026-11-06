@@ -8,6 +8,7 @@ files where RF3 can read them.
 import hashlib
 import json
 import os
+import re
 from logging import getLogger
 from typing import Any
 
@@ -22,9 +23,6 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
 )
 
 logger = getLogger(__name__)
-
-# RF3 is written a chain's a3m only alongside its primary alignment.
-_UNPAIRED_ONLY_REASON = "only unpaired rows were supplied; RF3 is sent a chain's primary alignment"
 
 
 def build_chain_a3m_paths(
@@ -50,7 +48,7 @@ def build_chain_a3m_paths(
     Returns:
         tuple[dict[str, str], dict[int, SentMSA]]: Chain ID (``"A"``, ``"B"``, …) to the
             ``.a3m`` file path on disk, and the rows written per protein chain index. Protein
-            chains with no primary MSA are omitted and an INFO message identifies query-only
+            chains with no alignment are omitted and an INFO message identifies query-only
             input for those chains.
     """
     chain_a3m_paths: dict[str, str] = {}
@@ -61,9 +59,8 @@ def build_chain_a3m_paths(
         return chain_a3m_paths, sent
     sequences: dict[int, str] = {}
     for chain in protein_chain_msas(sp_complex.chains, complex_msas):
-        if chain.primary is None:
-            if chain.unpaired is not None:
-                sent[chain.index] = SentMSA(ignored_reason=_UNPAIRED_ONLY_REASON)
+        msa = chain.unpaired or chain.primary
+        if msa is None:
             logger.info(
                 "Chain %s has no supplied homolog alignment; using query-only input for this chain. "
                 "Other chains may still use MSAs; inspect structure.msa_conditioning.",
@@ -77,15 +74,18 @@ def build_chain_a3m_paths(
             msa_dir = os.path.join(temp_dir, "msas")
             os.makedirs(msa_dir, exist_ok=True)
             a3m_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.a3m")
-            (chain.unpaired or chain.primary).to_a3m_file(a3m_path)
-            written[seq] = (a3m_path, chain.unpaired or chain.primary)
+            msa.to_a3m_file(a3m_path)
+            written[seq] = (a3m_path, msa)
         chain_a3m_paths[chain.chain_id], sent_msas[chain.index] = written[seq]
         if verbose:
             logger.info("Assigned MSA to chain %s (%d sequences)", chain.chain_id, len(sent_msas[chain.index]))
-    # RF3 pairs rows only when at least two distinct chain sequences carry TaxID= headers.
-    tagged = {sequences[i] for i, msa in sent_msas.items() if _has_taxonomy_headers(msa)}
+    # RF3 (atomworks) pairs rows across distinct chain sequences that share a TaxID= value;
+    # identical chains are a homomer, which it leaves unpaired.
+    tax_ids = {sequences[i]: _tax_ids(msa) for i, msa in sent_msas.items()}
     for index, msa in sent_msas.items():
-        sent[index] = SentMSA(rows=len(msa), paired=len(tagged) >= 2 and _has_taxonomy_headers(msa))
+        own = tax_ids[sequences[index]]
+        shared = any(own & ids for seq, ids in tax_ids.items() if seq != sequences[index])
+        sent[index] = SentMSA(rows=len(msa), paired=shared)
     return chain_a3m_paths, sent
 
 
@@ -146,6 +146,7 @@ def complex_to_rf3_json(
     return json.dumps([{"name": name, "components": components}], indent=2)
 
 
-def _has_taxonomy_headers(msa: MSA) -> bool:
-    """Whether any non-query row carries the ``TaxID=`` header RF3 (atomworks) pairs on."""
-    return any("TaxID=" in sequence_id for sequence_id in msa.sequence_ids[1:])
+def _tax_ids(msa: MSA) -> set[str]:
+    """The ``TaxID=`` values RF3 (atomworks) pairs non-query rows on: the first one in each header."""
+    matches = (re.search(r"TaxID=(\d+)", sequence_id) for sequence_id in msa.sequence_ids[1:])
+    return {match.group(1) for match in matches if match}

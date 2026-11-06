@@ -539,3 +539,87 @@ def test_boltz2_reported_msa_caps_match_boltz():
     accepts_pin, max_total = run_in_env("boltz2", code=code, timeout=1800).strip().splitlines()[-2:]
     assert accepts_pin == "True"
     assert int(max_total) == BOLTZ2_FEATURIZER_MAX_ROWS
+
+
+# ── Purged CCD molecules ─────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def boltz_cache(tmp_path: Path, monkeypatch):
+    """A boltz cache plus a stand-in ``download_boltz2`` that, like boltz's, extracts only when ``mols/`` is absent."""
+    import io
+    import sys
+    import tarfile
+    import types
+
+    source = io.BytesIO()
+    with tarfile.open(fileobj=source, mode="w") as tar:
+        for name in ("ALA.pkl", "GLY.pkl"):
+            info = tarfile.TarInfo(f"mols/{name}")
+            info.size = 1
+            tar.addfile(info, io.BytesIO(b"m"))
+    cache = tmp_path / "boltz2"
+    cache.mkdir()
+    downloads: list[str] = []
+
+    def download_boltz2(cache: Path) -> None:
+        if not (cache / "mols.tar").exists():
+            downloads.append("mols.tar")
+            (cache / "mols.tar").write_bytes(source.getvalue())
+        if not (cache / "mols").exists():
+            with tarfile.open(cache / "mols.tar") as tar:
+                tar.extractall(cache)
+
+    monkeypatch.setitem(sys.modules, "boltz.main", types.SimpleNamespace(download_boltz2=download_boltz2))
+    return cache, downloads
+
+
+def test_boltz2_purged_ccd_molecules_are_extracted_again(boltz_cache):
+    """Boltz trusts an existing mols/ folder, so the worker drops one that lost files."""
+    from proto_tools.tools.structure_prediction.boltz2.standalone.inference import _ensure_boltz_data
+
+    cache, _ = boltz_cache
+    _ensure_boltz_data(cache)
+    (cache / "mols" / "GLY.pkl").unlink()
+
+    _ensure_boltz_data(cache)
+
+    assert sorted(p.name for p in (cache / "mols").iterdir() if not p.name.startswith(".")) == ["ALA.pkl", "GLY.pkl"]
+
+
+def test_boltz2_complete_ccd_molecules_are_kept(boltz_cache):
+    from proto_tools.tools.structure_prediction.boltz2.standalone.inference import _ensure_boltz_data
+
+    cache, downloads = boltz_cache
+    _ensure_boltz_data(cache)
+    (cache / "mols" / ".kept-marker").write_text("x")
+
+    _ensure_boltz_data(cache)
+
+    assert (cache / "mols" / ".kept-marker").exists()
+    assert downloads == ["mols.tar"]
+
+
+def test_boltz2_purged_ccd_without_its_tar_is_downloaded_again(boltz_cache):
+    """With mols.tar purged too there is nothing to check mols/ against, so both come back."""
+    from proto_tools.tools.structure_prediction.boltz2.standalone.inference import _ensure_boltz_data
+
+    cache, downloads = boltz_cache
+    (cache / "mols").mkdir()
+
+    _ensure_boltz_data(cache)
+
+    assert sorted(p.name for p in (cache / "mols").iterdir() if not p.name.startswith(".")) == ["ALA.pkl", "GLY.pkl"]
+    assert downloads == ["mols.tar"]
+
+
+def test_boltz2_truncated_ccd_tar_is_downloaded_again(boltz_cache):
+    from proto_tools.tools.structure_prediction.boltz2.standalone.inference import _ensure_boltz_data
+
+    cache, downloads = boltz_cache
+    (cache / "mols.tar").write_bytes(b"truncated")
+
+    _ensure_boltz_data(cache)
+
+    assert sorted(p.name for p in (cache / "mols").iterdir() if not p.name.startswith(".")) == ["ALA.pkl", "GLY.pkl"]
+    assert downloads == ["mols.tar"]
