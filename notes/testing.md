@@ -31,7 +31,7 @@ Canonical reference is `pyproject.toml [tool.pytest.ini_options].markers`. Tool-
 - **`@pytest.mark.slow`**: Tests that may take several minutes. Skipped by default. Run with `--slow` or `--all`
 - **`@pytest.mark.extensive`**: Combinatorial tests (e.g. every tool × device transition). Skipped unless `--ext` (or `--extensive`) is passed
 - **`@pytest.mark.benchmark('<tool-key>')`**: E2E benchmark for one tool. Required arg. Skipped by default. Opt in via `--benchmark` (or `--benchmark-report` / `--benchmark-tool` / `--benchmark-toolkit`). Not enabled by `--all` or `--slow`
-- **`@pytest.mark.skip_ci`**: Only for tests requiring optional/external dependencies not in `pyproject.toml`. Do not add for core deps
+- **`@pytest.mark.skip_ci`**: Only for tests requiring optional/external dependencies not in `pyproject.toml`. Do not add for core deps, or for tests that submit jobs to shared public compute services (e.g. EBI Job Dispatcher), whose fair-use policies block automated submitters
 - **`@pytest.mark.include_in_env_report`**: Applied automatically by `test_env_report.py` parametrization. Do not add manually
 - **`@pytest.mark.test_on_platforms('x86_64', ...)`**: Restrict to specific architectures
 

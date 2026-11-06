@@ -603,6 +603,7 @@ def test_direct_lookup_tp53_matches_uniprot_and_pfam_anchor():
 
 @pytest.mark.integration
 @pytest.mark.slow
+@pytest.mark.skip_ci
 def test_submit_path_real_short_sequence():
     """End-to-end iprscan5 submit path against the first 200 residues of TP53.
 
