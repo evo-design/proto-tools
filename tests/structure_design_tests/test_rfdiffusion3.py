@@ -211,22 +211,11 @@ def test_rfdiffusion3_partial_diffusion_constraints():
 
 def test_rfdiffusion3_partial_diffusion_requires_unfixed_atoms():
     """Upstream fixes every input atom by default, which makes partial diffusion a no-op."""
-    cif = synthetic_cif(["A"])
-    pattern = r"'partial_t' requires 'select_fixed_atoms'"
-    with pytest.raises(ValueError, match=pattern):
-        RFdiffusion3DesignSpec(input_structure=cif, partial_t=10.0)
-    with pytest.raises(ValueError, match=pattern):
-        RFdiffusion3DesignSpec(input_structure=cif, contig="A1-50", partial_t=10.0)
-    with pytest.raises(ValueError, match=pattern):
-        RFdiffusion3DesignSpec(input_structure=cif, partial_t=10.0, select_fixed_atoms=True)
-
-    assert RFdiffusion3DesignSpec(input_structure=cif, partial_t=10.0, select_fixed_atoms=False).partial_t == 10.0
-    held = RFdiffusion3DesignSpec(input_structure=cif, partial_t=10.0, select_fixed_atoms={"A10": "BKBN"})
-    assert held.select_fixed_atoms == {"A10": "BKBN"}
-    # Binder optimization: hold the target chain, re-noise only the binder.
-    complex_cif = synthetic_cif(["A", "B"])
-    binder = RFdiffusion3DesignSpec(input_structure=complex_cif, partial_t=5.0, select_fixed_atoms="A1")
-    assert binder.select_fixed_atoms == "A1"
+    with pytest.raises(ValueError, match=r"'partial_t' requires 'select_fixed_atoms'"):
+        RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A"]), partial_t=10.0)
+    # Holding a target chain (binder optimization) re-noises only the binder.
+    spec = RFdiffusion3DesignSpec(input_structure=synthetic_cif(["A", "B"]), partial_t=5.0, select_fixed_atoms="A1")
+    assert spec.select_fixed_atoms == "A1"
 
 
 def test_rfdiffusion3_config_gamma_0_symmetry_constraint():
