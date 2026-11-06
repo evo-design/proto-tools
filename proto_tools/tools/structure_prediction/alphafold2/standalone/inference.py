@@ -1046,7 +1046,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 device=input_dict["device"],
                 verbose=input_dict["verbose"],
                 include_pae_matrix=input_dict.get("include_pae_matrix", False),
-                excluded_amino_acids=input_dict.get("excluded_amino_acids", []),
+                excluded_amino_acids=input_dict["excluded_amino_acids"],
             )
             for item in input_dict["items"]
         ]
