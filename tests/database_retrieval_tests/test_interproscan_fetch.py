@@ -4,6 +4,7 @@ Tests for the InterPro fetch tool — direct UniProt-accession lookup and
 sequence submit-and-poll paths against EBI's iprscan5 endpoint.
 """
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -380,6 +381,22 @@ def test_submit_iprscan_rejects_empty_body():
         _submit_iprscan("MKT", "dev@example.org", InterProScanFetchConfig(email="dev@example.org"), session)
 
 
+def test_submit_iprscan_surfaces_ebi_error_description():
+    """A 4xx from iprscan5 carries EBI's XML <description>, which must reach the raised error."""
+    response = requests.Response()
+    response.status_code = 400
+    response.url = "https://www.ebi.ac.uk/Tools/services/rest/iprscan5/run/"
+    response._content = (
+        b"<?xml version='1.0' encoding='UTF-8'?>\n<error>\n <description>You have been temporarily "
+        b"blocked from submitting new sequence analysis jobs.</description>\n</error>"
+    )
+    session = MagicMock()
+    session.post.return_value = response
+    with pytest.raises(requests.HTTPError, match="temporarily blocked") as exc_info:
+        _submit_iprscan("MKT", "dev@example.org", InterProScanFetchConfig(email="dev@example.org"), session)
+    assert exc_info.value.response is response
+
+
 _IPRSCAN5_RESULT_PAYLOAD = {
     "results": [
         {
@@ -592,7 +609,12 @@ def test_submit_path_real_short_sequence():
     Wall-clock 2-30 min depending on EBI queue depth. Validates that
     _submit_iprscan + poll_until_complete + _parse_iprscan_payload all
     work against the live service, which the mocked dispatch test cannot.
+
+    Requires a real contact address in ``INTERPROSCAN_EMAIL``: EBI's fair-use policy
+    mandates a valid email and blocks submitters that use placeholder addresses.
     """
+    if not os.environ.get("INTERPROSCAN_EMAIL"):
+        pytest.skip("INTERPROSCAN_EMAIL not set")
     # First 200 residues of P04637 — covers the P53 DNA-binding domain (residues 100-288 truncated to 100-200).
     sequence = (
         "MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDPGPDEAPRMPEAAPPVAPAPAAPTPAAPAPAPSWPLSSSVPSQK"
@@ -601,7 +623,7 @@ def test_submit_path_real_short_sequence():
     assert len(sequence) == 200
     output = run_interproscan_fetch(
         InterProScanFetchInput(sequence=sequence),
-        InterProScanFetchConfig(email="noreply@example.org"),
+        InterProScanFetchConfig(),
     )
     assert output.success, output.errors
     assert output.job_id.startswith("iprscan5-")

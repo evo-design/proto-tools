@@ -10,6 +10,7 @@ CATH-Gene3D, Panther, and the rest of the InterPro member-DB catalog.
 import csv
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -625,11 +626,23 @@ def _submit_iprscan(
         retries=_HTTP_RETRIES,
         backoff_seconds=_BACKOFF_SECONDS,
     )
-    response.raise_for_status()
+    if not response.ok:
+        # EBI explains rejections (bad params, fair-use blocks) in an XML <description>
+        # that raise_for_status() would discard.
+        raise requests.HTTPError(
+            f"iprscan5 submit failed with HTTP {response.status_code}: {_ebi_error_description(response.text)}",
+            response=response,
+        )
     job_id = response.text.strip()
     if not job_id:
         raise ValueError(f"iprscan5 submit returned an empty job ID; full response: {response.text!r}")
     return job_id
+
+
+def _ebi_error_description(body: str) -> str:
+    """Return the ``<description>`` text of an EBI Job Dispatcher XML error, else the raw body prefix."""
+    match = re.search(r"<description>(.*?)</description>", body, re.DOTALL)
+    return match.group(1).strip() if match else body[:200]
 
 
 def _parse_iprscan_payload(
