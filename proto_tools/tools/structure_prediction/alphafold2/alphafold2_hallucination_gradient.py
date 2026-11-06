@@ -10,13 +10,16 @@ from pydantic import Field, field_validator
 
 from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import AlphaFold2Metrics
 from proto_tools.tools.structure_prediction.alphafold2.gradient_helpers import (
+    AlphaFold2BetaStrandTerm,
     AlphaFold2ContactTerm,
     AlphaFold2DesignGradientConfig,
     AlphaFold2ExpResTerm,
     AlphaFold2HelixTerm,
     AlphaFold2PaeTerm,
     AlphaFold2PlddtTerm,
+    AlphaFold2RgTerm,
     AlphaFold2StructureGradientOutput,
+    AlphaFold2TerminiDistanceTerm,
     build_structure,
     build_terms,
     dispatch_design_gradient,
@@ -39,7 +42,14 @@ logger = logging.getLogger(__name__)
 
 #: The quantities ColabDesign's hallucination protocol computes over a free sequence.
 AlphaFold2HallucinationTerm = Annotated[
-    AlphaFold2PlddtTerm | AlphaFold2PaeTerm | AlphaFold2ContactTerm | AlphaFold2ExpResTerm | AlphaFold2HelixTerm,
+    AlphaFold2PlddtTerm
+    | AlphaFold2PaeTerm
+    | AlphaFold2ContactTerm
+    | AlphaFold2ExpResTerm
+    | AlphaFold2HelixTerm
+    | AlphaFold2RgTerm
+    | AlphaFold2TerminiDistanceTerm
+    | AlphaFold2BetaStrandTerm,
     Field(discriminator="id"),
 ]
 
@@ -49,6 +59,9 @@ _CATALOG: TermCatalog = {
     "con": AlphaFold2ContactTerm,
     "exp_res": AlphaFold2ExpResTerm,
     "helix": AlphaFold2HelixTerm,
+    "rg": AlphaFold2RgTerm,
+    "NC": AlphaFold2TerminiDistanceTerm,
+    "beta_strand": AlphaFold2BetaStrandTerm,
 }
 
 
@@ -187,7 +200,7 @@ def run_alphafold2_hallucination_gradient(
     for matrix, item in zip(inputs.inputs, worker_results, strict=True):
         built = build_terms(
             item["terms"],
-            _CATALOG,  # type: ignore[arg-type]
+            config.gradient_terms,
             matrix.root,
             temperature=inputs.temperature,
             soft=config.soft,

@@ -298,7 +298,7 @@ def run_alphafold2_fixbb_gradient(
     for candidate, reply in zip(inputs.inputs, worker_results, strict=True):
         built = build_terms(
             reply["terms"],
-            _CATALOG,  # type: ignore[arg-type]
+            config.gradient_terms,
             candidate.logits.root,
             temperature=inputs.temperature,
             soft=config.soft,
