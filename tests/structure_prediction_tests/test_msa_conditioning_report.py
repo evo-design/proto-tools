@@ -301,7 +301,7 @@ def test_boltz2_writes_unpaired_only_rows_with_no_pairing_key(tmp_path):
     assert sent[2] == _UNPAIRED_ONLY_RECORD
 
 
-def test_chai1_writes_unpaired_only_rows_with_no_pairing_key(monkeypatch):
+def test_chai1_writes_unpaired_only_rows_with_no_pairing_key(monkeypatch, caplog):
     import pandas as pd
 
     from proto_tools.tools.structure_prediction.chai1.chai1 import Chai1Config, _hash_sequence, run_chai1_on_complex
@@ -323,6 +323,11 @@ def test_chai1_writes_unpaired_only_rows_with_no_pairing_key(monkeypatch):
     assert [chain.status for chain in structure.msa_conditioning.chains] == ["consumed"] * 3
     # chai-lab pairs a key only when every chain with an MSA has it, and chain C has none
     assert {chain.mode for chain in structure.msa_conditioning.chains} == {"unpaired"}
+    assert (
+        "Chai-1 will not pair MSA rows across chains A, B: chain C has only unpaired MSA rows, and Chai-1 pairs "
+        "rows only when every chain with an MSA has paired rows. To keep A, B paired, give C a paired alignment "
+        "or no MSA."
+    ) in caplog.text
 
 
 def test_alphafold3_sends_unpaired_only_rows_without_a_paired_msa(tmp_path):

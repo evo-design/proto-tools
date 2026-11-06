@@ -43,6 +43,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionInput,
     StructurePredictionOutput,
     normalize_output_chain_ids,
+    resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
@@ -473,11 +474,22 @@ def run_chai1_on_complex(
         # without pairing keys (only unpaired rows) leaves its key step pairing nothing. The
         # keyed chains' rows still sit in file order, so they may line up by position anyway;
         # the report calls them unpaired because no row is matched across chains.
-        if any(has_homolog_rows(record) and not record.paired for record in msa_sent.values()):
-            if any(record.paired for record in msa_sent.values()):
+        unpaired_only = [index for index, record in msa_sent.items() if has_homolog_rows(record) and not record.paired]
+        if unpaired_only:
+            paired = [index for index, record in msa_sent.items() if record.paired]
+            if paired:
+                chain_ids = resolve_chain_ids(comp.chains)
+                kept = ", ".join(chain_ids[index] for index in paired)
+                blocking = ", ".join(chain_ids[index] for index in unpaired_only)
+                has = "chain {} has" if len(unpaired_only) == 1 else "chains {} have"
                 logger.warning(
-                    "Chai-1 pairs a row only when every chain with an MSA has it; a chain given only "
-                    "unpaired rows leaves no row paired by key, though rows may still line up by position"
+                    "Chai-1 will not pair MSA rows across chains %s: %s only unpaired MSA rows, and Chai-1 "
+                    "pairs rows only when every chain with an MSA has paired rows. To keep %s paired, give %s "
+                    "a paired alignment or no MSA.",
+                    kept,
+                    has.format(blocking),
+                    kept,
+                    blocking,
                 )
             msa_sent = {index: replace(record, paired=False) for index, record in msa_sent.items()}
         msa_directory = pqt_dir if written else None
