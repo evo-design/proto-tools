@@ -150,6 +150,10 @@ proto_install_cuda_toolkit() {
 #      - IN_ENV:          {VENV_PATH}/model_weight_cache (legacy, per-venv)
 #      - NONE:            {VENV_PATH}/weights (fallback)
 #
+# When PROTO_WEIGHTS_RECORD is set (proto-tools sets it while running setup.sh),
+# the toolkit and folder are appended to that file, so proto-tools can check the
+# folder's files on later runs and set the environment up again if they go missing.
+#
 # Example:
 #   proto_resolve_weights_dir fampnn
 #   echo "Weights at: $WEIGHTS_DIR"
@@ -177,6 +181,9 @@ proto_resolve_weights_dir() {
         WEIGHTS_DIR="${_proto_home}/proto_model_cache/${toolkit}/weights"
     fi
     mkdir -p "$WEIGHTS_DIR"
+    if [ -n "${PROTO_WEIGHTS_RECORD:-}" ]; then
+        printf '%s\t%s\n' "$toolkit" "$WEIGHTS_DIR" >> "$PROTO_WEIGHTS_RECORD"
+    fi
 }
 
 
@@ -189,7 +196,8 @@ proto_resolve_weights_dir() {
 # one place (tests/style_consistency_tests/test_shared_weights_pins.py).
 #
 # The copy counts as complete when all 15 model files are present; a partial
-# extraction is downloaded again. .params_complete records a verified copy.
+# extraction, or a copy whose files were since deleted, is downloaded again.
+# .params_complete records a verified copy, and is trusted only with its files.
 # Concurrent setups (any of those toolkits, on any node) take turns under
 # proto_with_lock: one downloads and extracts, the rest wait and find it complete.
 #
@@ -214,7 +222,7 @@ proto_ensure_af2_params() {
     }
 
     # A complete copy needs no lock, so read-only caches keep working
-    if [ -f "${AF2_PARAMS_DIR}/.params_complete" ]; then
+    if [ -f "${AF2_PARAMS_DIR}/.params_complete" ] && _proto_af2_params_complete; then
         echo "AlphaFold2 parameters already present at ${AF2_PARAMS_DIR}"
         return 0
     fi
@@ -222,7 +230,7 @@ proto_ensure_af2_params() {
 }
 
 _proto_af2_params_fetch() {
-    if [ -f "${AF2_PARAMS_DIR}/.params_complete" ] || _proto_af2_params_complete; then
+    if _proto_af2_params_complete; then
         touch "${AF2_PARAMS_DIR}/.params_complete"
         echo "AlphaFold2 parameters already present at ${AF2_PARAMS_DIR}"
         return 0
@@ -699,14 +707,45 @@ _proto_download_locked() {
 
 
 # ---------------------------------------------------------------------------
+# proto_record_files <dir> [marker]
+# proto_recorded_files_complete <dir> [marker]
+#
+# Mark <dir> complete by listing the files it holds in <dir>/<marker> (default
+# .proto_complete), and check that every listed file is still there. A marker
+# that only says "done" outlives the files a scratch purge deletes; this one is
+# trusted only alongside them. Same format and the same files as Python
+# record_files / missing_recorded_files in standalone_helpers.completeness:
+# dotfiles, dot-directories, and in-progress downloads (*.incomplete, *.lock,
+# *.tmp) are not recorded.
+#
+# Example:
+#   proto_recorded_files_complete "$DEST" || { build "$DEST" && proto_record_files "$DEST"; }
+# ---------------------------------------------------------------------------
+proto_record_files() {
+    local dir="$1" marker="${2:-.proto_complete}"
+    (cd "$dir" && find . -type f ! -path '*/.*' ! -name '*.incomplete' ! -name '*.lock' ! -name '*.tmp' \
+        | sed 's|^\./||' | sort) > "${dir}/${marker}.tmp"
+    mv -f "${dir}/${marker}.tmp" "${dir}/${marker}"
+}
+
+proto_recorded_files_complete() {
+    local dir="$1" marker="${2:-.proto_complete}" path
+    [ -s "${dir}/${marker}" ] || return 1
+    while IFS= read -r path; do
+        [ -z "$path" ] || [ -e "${dir}/${path}" ] || return 1
+    done < "${dir}/${marker}"
+}
+
+
+# ---------------------------------------------------------------------------
 # proto_download_archive <url> <dest_dir> [tar_flags...]
 #
-# Stream the tar archive at <url> into <dest_dir> and mark it complete. The
-# marker is written only after curl and tar both succeed, so a partial
-# extraction is re-extracted on the next run instead of being trusted because
-# some of its files exist. Concurrent callers for the same <dest_dir> take turns
-# under proto_with_lock, so one extracts and the rest find the marker. Extra
-# arguments go to tar (e.g. -z for .tar.gz).
+# Stream the tar archive at <url> into <dest_dir> and record its files with
+# proto_record_files, which happens only after curl and tar both succeed. An
+# extraction that is partial, or lost files since (a scratch purge), is
+# extracted again from scratch. Concurrent callers for the same <dest_dir> take
+# turns under proto_with_lock, so one extracts and the rest find it complete.
+# Extra arguments go to tar (e.g. -z for .tar.gz).
 #
 # Example:
 #   proto_download_archive "$AF2_PARAMS_URL" "${WEIGHTS_DIR}/params"
@@ -714,7 +753,7 @@ _proto_download_locked() {
 proto_download_archive() {
     local dest_dir="$2"
     # A completed extraction needs no lock, so read-only caches keep working
-    if [ -f "${dest_dir}/.proto_download_complete" ]; then
+    if proto_recorded_files_complete "$dest_dir"; then
         echo "$(basename "$dest_dir") already present."
         return 0
     fi
@@ -726,20 +765,21 @@ proto_download_archive() {
 _proto_download_archive_locked() {
     local url="$1" dest_dir="$2"
     shift 2
-    local marker="${dest_dir}/.proto_download_complete"
 
-    if [ -f "$marker" ]; then
+    if proto_recorded_files_complete "$dest_dir"; then
         echo "$(basename "$dest_dir") already present."
         return 0
     fi
 
     echo "Downloading and extracting $(basename "$url")..."
+    # Whatever is there is a partial or purged earlier extraction
+    rm -rf "$dest_dir"
     mkdir -p "$dest_dir"
     if ! (set -o pipefail; curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" "$url" | tar -x -C "$dest_dir" "$@"); then
         echo "ERROR: failed to download or extract ${url}" >&2
         return 1
     fi
-    touch "$marker"
+    proto_record_files "$dest_dir"
 }
 
 

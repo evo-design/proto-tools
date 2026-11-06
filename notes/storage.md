@@ -115,6 +115,10 @@ Like the JAX cache, every entry is keyed on the GPU and library versions, so a m
 
 The default (`proto_model_cache/` under `PROTO_HOME`) keeps weights outside tool envs so they survive env rebuilds. `IN_ENV` and `NONE` keep their per-venv and pass-through behavior and do not use per-toolkit folders.
 
+## Missing weights
+
+After setup, proto-tools records the files in each folder `setup.sh` resolved with `proto_resolve_weights_dir` (`weights_manifest.json` in the environment). If any go missing later, for example after a scratch filesystem purge, the environment is set up again and only the missing files are downloaded. Weights a worker downloads at run time are re-fetched by the worker itself.
+
 ## Shared weights for teams
 
 For teams sharing weights across collaborators, set `PROTO_MODEL_CACHE` to a shared directory while keeping `PROTO_HOME` per-user:
@@ -200,6 +204,8 @@ proto_resolve_weights_dir my_tool
 # $WEIGHTS_DIR is now set and the directory created
 proto_download_verified "https://example.com/model.pt" "$WEIGHTS_DIR/model.pt" "$MODEL_SHA256"
 ```
+
+Download setup-time weights into `$WEIGHTS_DIR` so they are tracked, and write files atomically (`proto_download`, `proto_download_verified`). Never trust a bare completion marker: use `ensure_complete(dest, build)` from `standalone_helpers` (in `setup.sh`, `proto_record_files` / `proto_recorded_files_complete`), which records the files a step produced and rebuilds when any are missing. Its docstring lists the options.
 
 `proto_download_verified` (checksum known), `proto_download` (no checksum), and `proto_download_archive` (tar into a directory) each lock their target, download into a temp file of their own, and move it into place only when complete, so concurrent setups sharing the cache never see or clobber a partial file. A file that is already present skips the lock, so read-only caches keep working. Wrap any other step that writes shared files in `proto_with_lock <lock_file> <command...>`; name the lock `.<file>.download.lock` beside a file or `.<dir>.extract.lock` beside a directory, matching the Python helpers, so bash and Python callers for the same target wait for each other.
 

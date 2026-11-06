@@ -127,13 +127,30 @@ def test_download_archive_extracts_once(tmp_path: Path) -> None:
     assert _run(f'proto_download_archive "file://{archive}" "{dest}"').returncode == 0
 
 
+def test_download_archive_extracts_again_when_a_file_was_deleted(tmp_path: Path) -> None:
+    """A completed extraction that lost a file (e.g. to a scratch purge) is extracted again."""
+    archive = tmp_path / "params.tar"
+    with tarfile.open(archive, "w") as tar:
+        for name in ("params_model_1.npz", "params_model_2.npz"):
+            (tmp_path / name).write_bytes(_zip_bytes())
+            tar.add(tmp_path / name, arcname=name)
+    dest = tmp_path / "params"
+    assert _run(f'proto_download_archive "file://{archive}" "{dest}"').returncode == 0
+
+    (dest / "params_model_2.npz").unlink()
+    result = _run(f'proto_download_archive "file://{archive}" "{dest}"')
+
+    assert result.returncode == 0 and "Downloading and extracting" in result.stdout
+    assert (dest / "params_model_2.npz").read_bytes() == _zip_bytes()
+
+
 def test_download_archive_failure_is_not_marked_complete(tmp_path: Path) -> None:
     dest = tmp_path / "params"
     (dest).mkdir()
     (dest / "params_model_1.npz").write_bytes(b"partial")
 
     assert _run(f'proto_download_archive "file://{tmp_path}/missing.tar" "{dest}"').returncode != 0
-    assert not (dest / ".proto_download_complete").exists()
+    assert not (dest / ".proto_complete").exists()
 
 
 # ── Concurrent callers sharing a model cache ─────────────────────────────────
@@ -484,9 +501,7 @@ def test_download_aborts_a_stalled_transfer(tmp_path: Path) -> None:
     assert not dest.exists() and not list(tmp_path.glob(".model.pt.*.tmp"))
 
 
-@_needs_flock
-def test_concurrent_af2_param_setups_download_once(tmp_path: Path) -> None:
-    """Setups of the AF2-param toolkits racing on one cache: one extracts, all find a complete copy."""
+def _af2_params_archive(tmp_path: Path) -> Path:
     archive = tmp_path / "alphafold_params.tar"
     with tarfile.open(archive, "w") as tar:
         for model in range(1, 6):
@@ -494,6 +509,40 @@ def test_concurrent_af2_param_setups_download_once(tmp_path: Path) -> None:
                 member = tmp_path / f"params_model_{model}{variant}.npz"
                 member.write_bytes(_zip_bytes())
                 tar.add(member, arcname=member.name)
+    return archive
+
+
+def test_af2_params_download_again_when_a_file_was_deleted(tmp_path: Path) -> None:
+    """The completion marker is trusted only alongside all 15 parameter files."""
+    archive = _af2_params_archive(tmp_path)
+    setup = f'PROTO_MODEL_CACHE="{tmp_path}/cache" _PROTO_AF2_PARAMS_URL="file://{archive}" proto_ensure_af2_params'
+    assert _run(setup).returncode == 0
+    params = tmp_path / "cache" / "alphafold2" / "weights" / "params"
+
+    (params / "params_model_3_ptm.npz").unlink()
+    result = _run(setup)
+
+    assert result.returncode == 0 and "Downloading AlphaFold2 parameters" in result.stdout
+    assert len(list(params.glob("params_model_*.npz"))) == 15
+
+
+def test_resolve_weights_dir_records_each_folder(tmp_path: Path) -> None:
+    """Every folder setup.sh resolves is recorded, so proto-tools can check it later."""
+    record = tmp_path / "weights_dirs.tsv"
+    result = _run(
+        f'export PROTO_MODEL_CACHE="{tmp_path}/cache" PROTO_WEIGHTS_RECORD="{record}" '
+        f'PROTO_CHAI1_WEIGHTS_DIR="{tmp_path}/chai"; '
+        "proto_resolve_weights_dir germinal; proto_resolve_weights_dir chai1"
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert record.read_text() == f"germinal\t{tmp_path}/cache/germinal/weights\nchai1\t{tmp_path}/chai\n"
+
+
+@_needs_flock
+def test_concurrent_af2_param_setups_download_once(tmp_path: Path) -> None:
+    """Setups of the AF2-param toolkits racing on one cache: one extracts, all find a complete copy."""
+    archive = _af2_params_archive(tmp_path)
     env = {"PROTO_MODEL_CACHE": str(tmp_path / "cache"), "_PROTO_AF2_PARAMS_URL": f"file://{archive}"}
 
     results = _run_concurrently("proto_ensure_af2_params", 3, env=env)

@@ -22,6 +22,7 @@ import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
 
+from .completeness import ensure_complete
 from .proto_logging import get_logger
 
 logger = get_logger(__name__)
@@ -451,14 +452,17 @@ def download_archive(
 ) -> Path:
     """Download and unpack an archive into ``dest_dir`` once, so readers never see a partial tree.
 
-    ``dest_dir`` counts as complete when ``dest_dir / marker`` exists. Otherwise, under a lock, the
-    archive is fetched with ``download_weights``, unpacked into a temp directory beside
-    ``dest_dir``, checked for ``marker``, and renamed into place; the archive is then deleted.
+    ``dest_dir`` counts as complete while every file the archive unpacked is there (see
+    ``ensure_complete``), so a tree that lost files since (e.g. to a scratch purge) is unpacked again.
+    A tree unpacked before files were recorded is kept, and recorded, when it holds ``marker``.
+    Otherwise, under a lock, the archive is fetched with ``download_weights``, unpacked into a staging
+    directory beside ``dest_dir``, checked for ``marker``, and swapped into place; the archive is
+    then deleted.
 
     Args:
         url (str): HTTPS URL of a ``.tar``, ``.tar.gz``, ``.tgz``, or ``.zip`` archive.
         dest_dir (str | Path): Directory that receives the archive's contents.
-        marker (str): Path, relative to ``dest_dir``, that exists once unpacking succeeded.
+        marker (str): Path, relative to ``dest_dir``, that the archive must contain.
         sha256 (str | None): Expected SHA-256 of the archive.
         md5 (str | None): Expected MD5 of the archive.
 
@@ -469,36 +473,26 @@ def download_archive(
         RuntimeError: If the unpacked archive does not contain ``marker``.
     """
     dest_dir = Path(dest_dir)
-    if (dest_dir / marker).exists():
-        return dest_dir
-    dest_dir.parent.mkdir(parents=True, exist_ok=True)
-    # The holder's archive download (and its temp file) and staging dir all sit beside dest_dir
-    staged = f"{glob.escape(str(dest_dir.parent))}/.*{glob.escape(dest_dir.name)}.*"
-    with file_lock(dest_dir.parent / f".{dest_dir.name}.extract.lock", progress=staged):
-        if (dest_dir / marker).exists():
-            return dest_dir
-        name = Path(urllib.parse.urlparse(url).path).name
+    name = Path(urllib.parse.urlparse(url).path).name
+    fmt = _archive_format(name)
+
+    def unpack(staging: Path) -> None:
         archive = download_weights(url, dest_dir.parent / f".{dest_dir.name}.{name}", sha256=sha256, md5=md5)
-        staging = Path(tempfile.mkdtemp(prefix=f".{dest_dir.name}.", dir=dest_dir.parent))
         try:
-            fmt = _archive_format(name)
             try:
                 # "data" refuses absolute paths, ../ escapes, and device files in the archive
                 shutil.unpack_archive(str(archive), str(staging), format=fmt, filter="data")
             except TypeError:  # Python without extraction filters (< 3.12 and unpatched)
                 shutil.unpack_archive(str(archive), str(staging), format=fmt)
-            if not (staging / marker).exists():
-                raise RuntimeError(f"archive from {redact_url(url)} does not contain {marker}")
-            # Anything already at dest_dir is an incomplete earlier extraction: it lacks the marker
-            if dest_dir.is_dir() and not dest_dir.is_symlink():
-                shutil.rmtree(dest_dir)
-            elif dest_dir.exists() or dest_dir.is_symlink():
-                dest_dir.unlink()
-            os.replace(staging, dest_dir)
         finally:
-            shutil.rmtree(staging, ignore_errors=True)
             archive.unlink(missing_ok=True)
-    return dest_dir
+        if not (staging / marker).exists():
+            raise RuntimeError(f"archive from {redact_url(url)} does not contain {marker}")
+
+    # The holder's archive download (and its temp file) and staging dir all sit beside dest_dir
+    staged = f"{glob.escape(str(dest_dir.parent))}/.*{glob.escape(dest_dir.name)}.*"
+    # A tree unpacked before trees were recorded is kept when it holds ``marker``, the old check
+    return ensure_complete(dest_dir, unpack, stage=True, progress=staged, adopt=lambda d: (d / marker).exists())
 
 
 def _archive_format(name: str) -> str:
