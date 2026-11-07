@@ -53,7 +53,8 @@ class CherimoyaCountsTerm(DifferentiableTerm):
     over it is a goal the caller composes, and the centre it should saturate around is
     experiment-specific. For the default model (ENCSR000EOT, K562 DNase-seq) the median fold 0
     ``log_counts`` over 5,000 sampled hg38 SCREEN cCREs is 4.5; a target span shorter than
-    1,000 bp holds fewer reads.
+    1,000 bp holds fewer reads, and a BATv1 ChIP-seq model run with its all-zero control
+    has its own scale.
 
     Attributes:
         model (str): ENCODE experiment accession or local ``.torch`` checkpoint path.
@@ -190,7 +191,7 @@ class CherimoyaGradientConfig(GradientConfig):
     collection: CherimoyaCollectionKey = ConfigField(
         title="Collection",
         default="catv1",
-        description="Model collection the accessions in gradient_terms come from.",
+        description="Collection of the gradient_terms models: catv1 (accessibility) or batv1 (ChIP-seq).",
     )
     gradient_terms: list[CherimoyaLogCountsTerm | CherimoyaLogTargetCountsTerm] = ConfigField(
         default_factory=lambda: [CherimoyaLogCountsTerm()],

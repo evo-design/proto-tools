@@ -3,12 +3,13 @@
 
 The catalog is what the ``cherimoya`` toolkit validates model accessions against and what
 ``cherimoya-catalog`` searches, so the parent process never needs network access to check a
-config. It joins the collection's experiment metadata, its per-fold validation metrics, and
-the default experiment per (assay, biosample) that Chorus committed in
-``chorus/oracles/cherimoya_source/catv1_defaults.py``.
+config. It joins the collection's experiment metadata, its per-fold validation metrics, and,
+for CATv1, the default experiment per (assay, biosample) that Chorus committed in
+``chorus/oracles/cherimoya_source/catv1_defaults.py``. BATv1 has no defaults yet.
 
 Usage:
     python scripts/build_cherimoya_catalog.py --collection catv1
+    python scripts/build_cherimoya_catalog.py --collection batv1
 """
 
 import argparse
@@ -32,13 +33,21 @@ from proto_tools.tools.sequence_scoring.cherimoya.catalog import (  # noqa: E402
 
 CHORUS_COMMIT = "7f0698e2631097dc835772f8c61723fa394e6948"
 CHORUS_DEFAULTS_PATH = "chorus/oracles/cherimoya_source/catv1_defaults.py"
-CHORUS_ASSAY = {"DNase-seq": "DNASE", "ATAC-seq": "ATAC"}
 TOOLKIT = REPO / "proto_tools/tools/sequence_scoring/cherimoya"
+
+# Release files per collection: metadata table, validation-chromosome metrics, assays the
+# collection holds, and the metadata column that says whether ENCODE marks an experiment as
+# perturbed (misspelled in CATv1-metadata.tsv).
+RELEASE_FILES = {
+    "catv1": ("CATv1-metadata.tsv", "performance.tsv", {"DNase-seq", "ATAC-seq"}, "experiment_peturbed"),
+    "batv1": ("BATv1-metadata.tsv", "performance.validation.tsv", {"ChIP-seq"}, "experiment_perturbed"),
+}
 
 COLUMNS = [
     "experiment_accession",
     "annotation_accession",
     "assay",
+    "target",
     "biosample",
     "biosample_term_id",
     "biosample_classification",
@@ -50,6 +59,7 @@ COLUMNS = [
     "profile_pearson_mean",
     "is_default",
     "default_reason",
+    "quality_flags",
 ]
 
 
@@ -75,10 +85,11 @@ def _chorus_defaults() -> dict[tuple[str, str], tuple[str, int, str]]:
     raise ValueError("CATV1_DEFAULT_EXPERIMENT not found in the Chorus defaults module")
 
 
-def build_catv1(spec: CherimoyaCollection) -> list[dict[str, str]]:
-    """Return one catalog row per CATv1 experiment."""
-    metadata = list(csv.DictReader(io.StringIO(_hf_file(spec, "CATv1-metadata.tsv")), delimiter="\t"))
-    performance = list(csv.DictReader(io.StringIO(_hf_file(spec, "performance.tsv")), delimiter="\t"))
+def build(spec: CherimoyaCollection) -> list[dict[str, str]]:
+    """Return one catalog row per experiment of the collection."""
+    metadata_file, performance_file, assays, perturbed_column = RELEASE_FILES[spec.key]
+    metadata = list(csv.DictReader(io.StringIO(_hf_file(spec, metadata_file)), delimiter="\t"))
+    performance = list(csv.DictReader(io.StringIO(_hf_file(spec, performance_file)), delimiter="\t"))
     manifest = list(csv.DictReader(io.StringIO(_hf_file(spec, "manifest.csv"))))
 
     folds_by_experiment: dict[str, set[int]] = defaultdict(set)
@@ -95,7 +106,9 @@ def build_catv1(spec: CherimoyaCollection) -> list[dict[str, str]]:
             "profile_pearson": float(row["profile_pearson"]),
         }
 
-    defaults = {accession: reason for (accession, _, reason) in _chorus_defaults().values()}
+    defaults = {}
+    if spec.key == "catv1":
+        defaults = {accession: reason for (accession, _, reason) in _chorus_defaults().values()}
 
     rows = []
     for record in metadata:
@@ -103,42 +116,56 @@ def build_catv1(spec: CherimoyaCollection) -> list[dict[str, str]]:
         if folds_by_experiment[accession] != set(spec.folds):
             raise ValueError(f"{accession} has folds {sorted(folds_by_experiment[accession])} in manifest.csv")
         if set(metrics[accession]) != set(spec.folds):
-            raise ValueError(f"{accession} has folds {sorted(metrics[accession])} in performance.tsv")
-        if CHORUS_ASSAY.get(record["assay_term_name"]) is None:
+            raise ValueError(f"{accession} has folds {sorted(metrics[accession])} in {performance_file}")
+        if record["assay_term_name"] not in assays:
             raise ValueError(f"{accession} has unknown assay {record['assay_term_name']!r}")
         by_fold = metrics[accession]
+        flags = record.get("quality_flags", "")
         rows.append(
             {
                 "experiment_accession": accession,
                 "annotation_accession": record["annotation_accession"],
                 "assay": record["assay_term_name"],
+                "target": record.get("target_label", ""),
                 "biosample": record["experiment_biosample_term_name"],
                 "biosample_term_id": record["biosample_term_id"],
                 "biosample_classification": record["biosample_classification"],
                 "biosample_summary": record["biosample_simple_summary"],
-                "perturbed": str(record["experiment_peturbed"].upper() == "TRUE"),
+                "perturbed": str(record[perturbed_column].upper() == "TRUE"),
                 "count_pearson_fold_0": f"{by_fold[0]['count_pearson']:.4f}",
                 "profile_pearson_fold_0": f"{by_fold[0]['profile_pearson']:.4f}",
                 "count_pearson_mean": f"{statistics.fmean(m['count_pearson'] for m in by_fold.values()):.4f}",
                 "profile_pearson_mean": f"{statistics.fmean(m['profile_pearson'] for m in by_fold.values()):.4f}",
                 "is_default": str(accession in defaults),
                 "default_reason": defaults.get(accession, ""),
+                "quality_flags": "" if flags == "none" else flags,
             }
         )
 
     accessions = {row["experiment_accession"] for row in rows}
+    if len(accessions) != len(rows):
+        raise ValueError(f"{metadata_file} lists an experiment twice")
     missing = sorted(set(defaults) - accessions)
     if missing:
         raise ValueError(f"Chorus defaults name experiments absent from the metadata: {missing}")
-    return sorted(rows, key=lambda row: (row["assay"], row["biosample"], row["experiment_accession"]))
+    return sorted(rows, key=lambda row: (row["assay"], row["target"], row["biosample"], row["experiment_accession"]))
 
 
 def header(spec: CherimoyaCollection) -> str:
     """Return the provenance and license comment written above the catalog rows."""
-    return f"""\
+    metadata_file, performance_file, _, _ = RELEASE_FILES[spec.key]
+    text = f"""\
 Cherimoya catalog for collection {spec.key}, generated by scripts/build_cherimoya_catalog.py.
 Experiments, metadata and validation metrics: huggingface.co/{spec.hf_repo} at revision {spec.revision}
-(CATv1-metadata.tsv, performance.tsv, manifest.csv). License CC-BY-4.0.
+({metadata_file}, {performance_file}, manifest.csv). License CC-BY-4.0."""
+    if spec.key != "catv1":
+        return (
+            text
+            + "\nis_default is False for every experiment: no default per (target, biosample) has been committed yet."
+        )
+    return (
+        text
+        + f"""
 is_default and default_reason: the default experiment per (assay, biosample) committed by Chorus in
 github.com/pinellolab/chorus/blob/{CHORUS_COMMIT}/{CHORUS_DEFAULTS_PATH}
 Copyright (c) 2024 Pinello Lab. Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -152,6 +179,7 @@ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVE
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE."""
+    )
 
 
 def main() -> None:
@@ -163,7 +191,7 @@ def main() -> None:
 
     spec = CHERIMOYA_COLLECTIONS[args.collection]
     output = args.output or TOOLKIT / spec.catalog_file
-    rows = build_catv1(spec)
+    rows = build(spec)
     with open(output, "w", newline="") as handle:
         handle.writelines(f"# {line}\n" for line in header(spec).splitlines())
         writer = csv.DictWriter(handle, fieldnames=COLUMNS, lineterminator="\n")

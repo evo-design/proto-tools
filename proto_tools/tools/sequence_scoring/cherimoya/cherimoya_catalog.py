@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, ValidationInfo, field_validator
 
 from proto_tools.tools.sequence_scoring.cherimoya.catalog import (
     CHERIMOYA_COLLECTIONS,
@@ -26,13 +26,16 @@ class CherimoyaCatalogInput(BaseToolInput):
     Attributes:
         biosample (str | None): Case-insensitive regular expression matched against the
             biosample term name and summary, e.g. ``"K562"`` or ``"hepat|liver"``.
-        assay (CherimoyaAssay | None): Restrict to ``"DNase-seq"`` or ``"ATAC-seq"``.
+        target (str | None): Case-insensitive regular expression matched against the ChIP-seq
+            target, e.g. ``"^CTCF$"`` or ``"GATA"``; matches nothing in an accessibility collection.
+        assay (CherimoyaAssay | None): Restrict to ``"DNase-seq"``, ``"ATAC-seq"`` or ``"ChIP-seq"``.
         biosample_classification (list[CherimoyaBiosampleClassification] | None): Restrict
             to these ENCODE biosample classifications.
         accessions (list[str] | None): Restrict to these experiment accessions.
         defaults_only (bool): Return only the default experiment of each (assay, biosample),
-            as Chorus committed it. Four of the 492 defaults are experiments ENCODE marks as
-            perturbed; they are returned whatever ``include_perturbed`` says.
+            as Chorus committed it (CATv1 only; BATv1 has no defaults yet). Four of the 492 CATv1
+            defaults are experiments ENCODE marks as perturbed; they are returned whatever
+            ``include_perturbed`` says.
         include_perturbed (bool): Include experiments ENCODE marks as perturbed. Accessions
             named in ``accessions`` are always returned.
         min_count_pearson (float | None): Minimum fold 0 validation count Pearson.
@@ -44,7 +47,14 @@ class CherimoyaCatalogInput(BaseToolInput):
         title="Biosample",
         description="Case-insensitive regex over biosample name and summary, e.g. 'K562' or 'hepat|liver'.",
     )
-    assay: CherimoyaAssay | None = InputField(default=None, title="Assay", description="DNase-seq or ATAC-seq")
+    target: str | None = InputField(
+        default=None,
+        title="Target",
+        description="Case-insensitive regex over the ChIP-seq target, e.g. '^CTCF$' or 'GATA'.",
+    )
+    assay: CherimoyaAssay | None = InputField(
+        default=None, title="Assay", description="DNase-seq, ATAC-seq or ChIP-seq"
+    )
     biosample_classification: list[CherimoyaBiosampleClassification] | None = InputField(
         default=None,
         title="Biosample Classification",
@@ -74,15 +84,15 @@ class CherimoyaCatalogInput(BaseToolInput):
         default=50, ge=1, title="Limit", description="Maximum experiments to return, best count Pearson first."
     )
 
-    @field_validator("biosample")
+    @field_validator("biosample", "target")
     @classmethod
-    def validate_regex(cls, value: str | None) -> str | None:
-        """Reject a biosample pattern that is not a valid regular expression."""
+    def validate_regex(cls, value: str | None, info: ValidationInfo) -> str | None:
+        """Reject a biosample or target pattern that is not a valid regular expression."""
         if value is not None:
             try:
                 re.compile(value)
             except re.error as error:
-                raise ValueError(f"biosample is not a valid regular expression: {error}") from error
+                raise ValueError(f"{info.field_name} is not a valid regular expression: {error}") from error
         return value
 
 
@@ -94,7 +104,9 @@ class CherimoyaCatalogConfig(BaseConfig):
     """
 
     collection: CherimoyaCollectionKey = ConfigField(
-        title="Collection", default="catv1", description="Model collection to search."
+        title="Collection",
+        default="catv1",
+        description="Model collection to search: catv1 (accessibility) or batv1 (ChIP-seq).",
     )
 
 
@@ -151,7 +163,7 @@ def example_input() -> Any:
     input_class=CherimoyaCatalogInput,
     config_class=CherimoyaCatalogConfig,
     output_class=CherimoyaCatalogOutput,
-    description="Search the ENCODE DNase-seq and ATAC-seq experiments a Cherimoya collection has models for",
+    description="Search the ENCODE accessibility (CATv1) or ChIP-seq (BATv1) experiments a Cherimoya collection has models for",
     example_input=example_input,
     local_only="cherimoya-catalog does not use a gpu and does not need an environment, so it can run in process",
     uses_gpu=False,
@@ -162,7 +174,7 @@ def run_cherimoya_catalog(
     config: CherimoyaCatalogConfig,
     instance: Any = None,  # noqa: ARG001 — required by tool interface
 ) -> CherimoyaCatalogOutput:
-    """Search a Cherimoya collection for experiments by biosample, assay, and quality.
+    """Search a Cherimoya collection for experiments by biosample, target, assay, and quality.
 
     Args:
         inputs (CherimoyaCatalogInput): Search filters.
@@ -174,6 +186,7 @@ def run_cherimoya_catalog(
     """
     catalog = load_catalog(config.collection)
     pattern = re.compile(inputs.biosample, re.IGNORECASE) if inputs.biosample else None
+    target_pattern = re.compile(inputs.target, re.IGNORECASE) if inputs.target else None
     wanted = set(inputs.accessions) if inputs.accessions else None
     classifications = set(inputs.biosample_classification) if inputs.biosample_classification else None
     unknown = sorted(wanted - set(catalog)) if wanted else []
@@ -190,6 +203,8 @@ def run_cherimoya_catalog(
         if classifications is not None and entry.biosample_classification not in classifications:
             continue
         if pattern is not None and not (pattern.search(entry.biosample) or pattern.search(entry.biosample_summary)):
+            continue
+        if target_pattern is not None and not target_pattern.search(entry.target):
             continue
         if inputs.defaults_only and not entry.is_default:
             continue

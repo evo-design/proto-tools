@@ -55,15 +55,35 @@ def _dump_json(value: Any) -> str:
     return json.dumps(value, indent=2, default=str)
 
 
-def _summary_line(key: str, category: str, uses_gpu: bool, description: str) -> str:
-    """One-line text summary of a tool for list-style output."""
+def _summary_line(
+    key: str, category: str, uses_gpu: bool, description: str, outage_scopes: list[str | None] | None = None
+) -> str:
+    """One-line text summary of a tool for list-style output.
+
+    ``outage_scopes`` holds each declared outage's ``affects``: ``None`` marks the whole tool offline,
+    a label marks only that mode degraded.
+    """
     gpu = " (GPU)" if uses_gpu else ""
-    return f"{key:40s}  [{category}]{gpu}  {description}"
+    scopes = outage_scopes or []
+    if None in scopes:
+        status = " (OFFLINE)"
+    elif scopes:
+        status = f" (DEGRADED: {', '.join(s for s in scopes if s)})"
+    else:
+        status = ""
+    return f"{key:40s}  [{category}]{gpu}{status}  {description}"
+
+
+def _entry_summary(entry: dict[str, Any]) -> str:
+    """One-line text summary of an MCP list/search entry."""
+    scopes = [o["affects"] for o in entry.get("outages", [])]
+    return _summary_line(entry["tool_key"], entry["category"], entry["uses_gpu"], entry["summary"], scopes)
 
 
 def _spec_summary(spec: ToolSpec) -> str:
     """One-line text summary of a ToolSpec for list-style output."""
-    return _summary_line(spec.key, spec.category, spec.uses_gpu, spec.description)
+    scopes = [o.affects for o in spec.outages]
+    return _summary_line(spec.key, spec.category, spec.uses_gpu, spec.description, scopes)
 
 
 def _emit(payload: dict[str, Any] | None) -> int:
@@ -97,7 +117,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
     if args.json or payload.get("ok") is False:
         return _emit(payload)
     for entry in payload["tools"]:
-        print(_summary_line(entry["tool_key"], entry["category"], entry["uses_gpu"], entry["summary"]))
+        print(_entry_summary(entry))
     return 0
 
 
@@ -109,8 +129,7 @@ def _cmd_search(args: argparse.Namespace) -> int:
     if args.json:
         return _emit(payload)
     for entry in payload["tools"]:
-        line = _summary_line(entry["tool_key"], entry["category"], entry["uses_gpu"], entry["summary"])
-        print(f"{entry['score']:3d}  {line}")
+        print(f"{entry['score']:3d}  {_entry_summary(entry)}")
     if "hint" in payload:
         print(payload["hint"], file=sys.stderr)
     return 0
