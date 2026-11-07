@@ -5,9 +5,18 @@ import tempfile
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
+from proto_tools.entities.complex import Complex
 from proto_tools.entities.structures import BFactorType, Structure
+from proto_tools.entities.structures.msa_conditioning import MSASubsampling
 from proto_tools.tools.structure_prediction.mol1.helpers import complex_to_mol1_json
+from proto_tools.tools.structure_prediction.msa_plan import (
+    SentMSA,
+    af3_style_pairing,
+    protein_chain_msas,
+    short_chain_reason,
+)
 from proto_tools.tools.structure_prediction.shared_data_models import (
+    ComplexMSAs,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
@@ -20,6 +29,10 @@ from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
+
+# MSA rows Mol-1 keeps (data.msa max_size / sample_cutoff, test); its MSA module samples rows
+# from them at random, as Protenix's does.
+MOL1_MSA_MAX_ROWS = 16384
 
 
 class Mol1Input(StructurePredictionInput):
@@ -228,20 +241,7 @@ def run_mol1_prediction(inputs: Mol1Input, config: Mol1Config, instance: Any = N
         with tempfile.TemporaryDirectory() as scratch:
             job = complex_to_mol1_json(comp.chains, "mol1_job")
             complex_msas = inputs.msas[index] if inputs.msas is not None else None
-            if complex_msas is not None:
-                primary, unpaired, paired = complex_msas.per_chain, complex_msas.unpaired_per_chain, complex_msas.paired
-                for chain_index, entry in enumerate(job["sequences"]):
-                    if "proteinChain" not in entry:
-                        continue
-                    msa = (unpaired or {}).get(chain_index) or primary.get(chain_index)
-                    if msa is not None:
-                        msa_path = str(Path(scratch) / f"chain_{chain_index}.a3m")
-                        msa.to_a3m_file(msa_path, query_index=0)
-                        entry["proteinChain"]["unpairedMsaPath"] = msa_path
-                    if paired and chain_index in primary:
-                        paired_path = str(Path(scratch) / f"chain_{chain_index}.paired.a3m")
-                        write_paired_a3m_with_uniprot_headers(primary[chain_index], paired_path)
-                        entry["proteinChain"]["pairedMsaPath"] = paired_path
+            msa_sent = _write_msas(job, comp, complex_msas, Path(scratch))
             output = ToolInstance.dispatch(
                 "mol1",
                 {
@@ -274,5 +274,71 @@ def run_mol1_prediction(inputs: Mol1Input, config: Mol1Config, instance: Any = N
             metrics=Mol1Metrics(**output["metrics"]),
             source="mol1-prediction",
         )
-        structures.append(normalize_output_chain_ids(structure, comp.chains))
+        structures.append(
+            normalize_output_chain_ids(
+                structure,
+                comp.chains,
+                complex_msas=complex_msas,
+                report_msa=True,
+                msa_sent=msa_sent,
+                msa_subsampling=MSASubsampling(mode="stochastic", max_rows=MOL1_MSA_MAX_ROWS),
+            )
+        )
     return Mol1Output(structures=structures)
+
+
+def _write_msas(
+    job: dict[str, Any], comp: Complex, complex_msas: ComplexMSAs | None, scratch: Path
+) -> dict[int, SentMSA]:
+    """Write each protein chain's alignments into the native job; return the rows sent per chain.
+
+    Mol-1 reads MSAs the way Protenix does. ``unpairedMsaPath`` gets the chain's deep unpaired
+    MSA when the bundle has one, else its primary MSA. A paired bundle also writes
+    ``pairedMsaPath``, which Mol-1 merges into the unpaired rows (``msa_pair_as_unpair``) and pairs
+    across chains only for two or more distinct protein sequences. Chains of four or fewer residues
+    get no MSA. The worker calls ``infer_predict`` directly, which runs no MSA search, so a chain
+    left without a path is predicted from its query alone.
+
+    Args:
+        job (dict[str, Any]): The native job from :func:`complex_to_mol1_json`, edited in place;
+            its ``sequences`` follow ``comp.chains`` one to one.
+        comp (Complex): The complex being predicted.
+        complex_msas (ComplexMSAs | None): The complex's MSA bundle, if any.
+        scratch (Path): Directory for the written A3M files.
+
+    Returns:
+        dict[int, SentMSA]: Rows sent per protein chain index, for the MSA conditioning report.
+    """
+    sent: dict[int, SentMSA] = {}
+    if complex_msas is None:
+        return sent
+    chains = protein_chain_msas(comp.chains, complex_msas)
+    is_paired = complex_msas.paired
+    pairs = af3_style_pairing(
+        (chain.chain.sequence for chain in chains), sum(chain.primary is not None for chain in chains), is_paired
+    )
+    for chain in chains:
+        entry = job["sequences"][chain.index]["proteinChain"]
+        short = short_chain_reason(chain.chain, "Mol-1")
+        unpaired_msa = chain.unpaired or chain.primary
+        if unpaired_msa is None:
+            continue
+        msa_path = scratch / f"chain_{chain.index}.a3m"
+        unpaired_msa.to_a3m_file(str(msa_path), query_index=0)
+        entry["unpairedMsaPath"] = str(msa_path)
+        if chain.primary is None:
+            # Unpaired-only chain: depth for this chain, never a pairing partner.
+            sent[chain.index] = SentMSA(rows=len(unpaired_msa), ignored_reason=short)
+            continue
+        if is_paired:
+            paired_path = scratch / f"chain_{chain.index}.paired.a3m"
+            write_paired_a3m_with_uniprot_headers(chain.primary, str(paired_path))
+            entry["pairedMsaPath"] = str(paired_path)
+        sent[chain.index] = SentMSA(
+            rows=len(chain.primary) if is_paired else len(unpaired_msa),
+            # Without a deep unpaired MSA the unpaired file repeats the paired rows: no extra depth.
+            unpaired_rows=len(unpaired_msa) - 1 if is_paired and chain.unpaired is not None else 0,
+            paired=pairs,
+            ignored_reason=short,
+        )
+    return sent
