@@ -79,7 +79,7 @@ def test_duplicate_terms_rejected(protocol: str) -> None:
 
 
 def test_a_term_may_repeat_with_different_selectors() -> None:
-    """Germinal scores pLDDT over the whole binder and over its CDRs; each is its own gradient."""
+    """The same term with different selectors is two terms, each with its own gradient."""
     whole, cdrs = AlphaFold2PlddtTerm(), AlphaFold2PlddtTerm(positions=[2, 3])
     config = AlphaFold2BinderRedesignGradientConfig(gradient_terms=[whole, cdrs])
     assert config.gradient_terms == [whole, cdrs]
