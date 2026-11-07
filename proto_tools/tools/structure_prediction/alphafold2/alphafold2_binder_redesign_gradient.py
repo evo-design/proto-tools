@@ -1,6 +1,6 @@
 """proto_tools/tools/structure_prediction/alphafold2/alphafold2_binder_redesign_gradient.py.
 
-Differentiable AlphaFold2 template-based binder redesign, as in Germinal.
+Differentiable AlphaFold2 template-based binder redesign.
 
 The binder is an existing chain of a template complex (for example a nanobody docked on its
 target). ColabDesign's binder protocol is prepared with that chain as ``binder_chain``, so its

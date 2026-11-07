@@ -92,7 +92,7 @@ class AlphaFold2PaeTerm(AlphaFold2Term):
         positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
             keeps the protocol's own region.
         pair_with_all (bool | None): Pair the selected positions with every residue, target
-            included, as Germinal does; ``None`` keeps pairs within the selection.
+            included; ``None`` keeps pairs within the selection.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -197,7 +197,7 @@ class AlphaFold2HelixTerm(AlphaFold2Term):
 
     Without selectors this is ColabDesign's native helix loss, a binary contact loss over the
     designed region. With ``positions`` or ``form`` set (and always under template redesign, where
-    the native loss is masked to nothing), it is Germinal's: the mean over selected i,i+3 pairs of
+    the native loss is masked to nothing), it is the mean over selected i,i+3 pairs of
     ``-log P(2 <= d <= 6.2)``, or of its complement under ``form="out_of_range"``. Lower values
     mean more (or, out of range, fewer) helical contacts, so it carries no advisory direction.
 
@@ -228,8 +228,8 @@ class AlphaFold2DgramCCETerm(AlphaFold2Term):
 
     Attributes:
         id (Literal["dgram_cce"]): Fixed identifier for this kind of quantity.
-        positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to, e.g.
-            Germinal's framework; ``None`` keeps the protocol's own region.
+        positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to, e.g. a
+            framework; ``None`` keeps the protocol's own region.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -277,8 +277,7 @@ class AlphaFold2RmsdTerm(AlphaFold2Term):
 class AlphaFold2RgTerm(AlphaFold2Term):
     """Radius of gyration of the designed chain's CA atoms beyond the compact-fold expectation.
 
-    The value is ``elu(rg - 2.38 * N**0.365)`` for ``N`` designed residues, as in BindCraft and
-    Germinal.
+    The value is ``elu(rg - 2.38 * N**0.365)`` for ``N`` designed residues, as in BindCraft.
 
     Attributes:
         id (Literal["rg"]): Fixed identifier for this kind of quantity.
@@ -321,7 +320,7 @@ class AlphaFold2BetaStrandTerm(AlphaFold2Term):
         positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
             keeps the protocol's own region.
         form (Literal["in_range", "out_of_range"]): Whether each pair scores ``-log P`` of falling
-            in the strand range or outside it; Germinal uses ``"out_of_range"``.
+            in the strand range or outside it.
         top_k (PositiveInt | None): Number of worst pairs averaged; ``None`` keeps a third of the
             selected positions.
     """
@@ -360,8 +359,7 @@ class AlphaFold2FrameworkContactTerm(AlphaFold2Term):
     """Contact loss between the target and the binder's framework residues.
 
     The same contact objective as ``i_con``, restricted to the framework, so higher values mean
-    the framework sits farther from the target. Germinal's framework penalty composes it with
-    ``i_con`` as ``i_con**2 / max(fw_i_con - offset, 1e-8)``.
+    the framework sits farther from the target.
 
     Attributes:
         id (Literal["fw_i_con"]): Fixed identifier for this kind of quantity.

@@ -207,13 +207,13 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
         return outputs["structure_module"]["final_atom_positions"][-designed_len:, residue_constants.atom_order["CA"]]
 
     def rg(outputs: Any) -> dict[str, Any]:
-        """Excess radius of gyration, as in BindCraft and Germinal."""
+        """Excess radius of gyration, as in BindCraft."""
         ca = designed_ca(outputs)
         radius = jnp.sqrt(jnp.square(ca - ca.mean(0)).sum(-1).mean() + 1e-8)
         return {key: jax.nn.elu(radius - 2.38 * designed_len**0.365)}
 
     def termini(outputs: Any) -> dict[str, Any]:
-        """Terminal CA distance beyond 7 angstroms, as in BindCraft and Germinal."""
+        """Terminal CA distance beyond 7 angstroms, as in BindCraft."""
         ca = designed_ca(outputs)
         return {key: jax.nn.relu(jax.nn.elu(jnp.linalg.norm(ca[0] - ca[-1]) - 7.0))}
 
@@ -222,20 +222,20 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
         return {key: 1 - get_ptm(inputs, outputs, interface=True)}
 
     def beta_strand(inputs: Any, outputs: Any) -> dict[str, Any]:
-        """Mean of the worst third of per-pair ``-log P`` over selected i,i+3 pairs, as in Germinal."""
+        """Mean of the worst third of per-pair ``-log P`` over selected i,i+3 pairs."""
         mask = select(inputs, options.get("positions"))
         worst = jnp.sort(jnp.diagonal(jnp.outer(mask, mask) * range_loss(outputs, 9.75, 11.5), 3))[::-1]
         count = options.get("top_k") or len(options.get("positions") or range(designed_len)) // 3
         return {key: worst[: max(count, 1)].mean()}
 
     def helix(inputs: Any, outputs: Any) -> dict[str, Any]:
-        """Mean per-pair ``-log P`` over selected i,i+3 pairs in the helical 2-6.2 A range, as in Germinal."""
+        """Mean per-pair ``-log P`` over selected i,i+3 pairs in the helical 2-6.2 A range."""
         mask = select(inputs, options.get("positions"))
         pairs = jnp.diagonal(jnp.outer(mask, mask), 3)
         return {key: (jnp.diagonal(range_loss(outputs, 2.0, 6.2), 3) * pairs).sum() / (pairs.sum() + 1e-8)}
 
     def fw_i_con(inputs: Any, outputs: Any, opt: Any) -> dict[str, Any]:
-        """Contact loss from the target to the framework residues, as in Germinal."""
+        """Contact loss from the target to the framework residues."""
         framework = select(inputs, options.get("framework_positions"))
         target = 1 - select(inputs, None)
         return {key: get_con_loss(inputs, outputs, contact_opt(opt, "i_con"), mask_1d=target, mask_1b=framework)}
