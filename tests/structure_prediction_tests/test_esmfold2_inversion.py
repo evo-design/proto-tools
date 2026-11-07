@@ -37,15 +37,12 @@ CHAIN_B = "MKTAYIAKQRQISFVKS"
 CHAIN_C = "LEERLGLIEVQAPILSR"
 
 _OBJECTIVE_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "proto_tools/tools/structure_prediction/esmfold2_inversion/standalone/objective.py"
+    Path(__file__).resolve().parents[2] / "proto_tools/tools/structure_prediction/esmfold2/standalone/objective.py"
 )
 
-_GENERAL_DISPATCH = (
-    "proto_tools.tools.structure_prediction.esmfold2_inversion.esmfold2_inversion_gradient.ToolInstance.dispatch"
-)
+_GENERAL_DISPATCH = "proto_tools.tools.structure_prediction.esmfold2.esmfold2_inversion_gradient.ToolInstance.dispatch"
 _BINDER_DISPATCH = (
-    "proto_tools.tools.structure_prediction.esmfold2_inversion.esmfold2_inversion_binder_gradient.ToolInstance.dispatch"
+    "proto_tools.tools.structure_prediction.esmfold2.esmfold2_inversion_binder_gradient.ToolInstance.dispatch"
 )
 
 
@@ -53,7 +50,7 @@ def _objective() -> Any:
     """Load the worker objective module, which needs only torch and a logger."""
     pytest.importorskip("torch")
     sys.modules.setdefault("standalone_helpers", types.SimpleNamespace(get_logger=logging.getLogger))
-    spec = importlib.util.spec_from_file_location("esmfold2_inversion_objective", _OBJECTIVE_PATH)
+    spec = importlib.util.spec_from_file_location("esmfold2_objective", _OBJECTIVE_PATH)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -369,7 +366,7 @@ def test_general_dispatch_sends_chains_and_resolved_chain_ids() -> None:
         )
 
     toolkit, payload = dispatch.call_args.args
-    assert toolkit == "esmfold2_inversion"
+    assert toolkit == "esmfold2"
     assert payload["operation"] == "complex_gradient"
     assert [chain["chain_id"] for chain in payload["chains"]] == ["A", "B", "C"]
     assert payload["chains"][0]["logits"] is None, "the fixed chain sends no relaxed state"
@@ -633,7 +630,7 @@ def test_esmfold2_inversion_gradient_benchmark(request: pytest.FixtureRequest) -
     config = ESMFold2InversionGradientConfig(
         gradient_terms=[ESMFold2IntraContactTerm(chain_id="B"), ESMFold2GlobularityTerm(chain_id="C")], seed=0
     )
-    result = benchmark_twice(request, "esmfold2_inversion", lambda: run_esmfold2_inversion_gradient(inputs, config))
+    result = benchmark_twice(request, "esmfold2", lambda: run_esmfold2_inversion_gradient(inputs, config))
     assert isinstance(result, ESMFold2InversionGradientOutput)
     assert all(term.gradient is not None for term in result.results[0].terms)
 
@@ -645,9 +642,7 @@ def test_esmfold2_inversion_binder_gradient_benchmark(request: pytest.FixtureReq
     """Benchmark: one fold of a binder/target complex plus a backward per term (cold + warm)."""
     inputs = ESMFold2BinderGradientInput(inputs=_binder())
     config = ESMFold2BinderGradientConfig(gradient_terms=["intra_contact", "inter_contact", "globularity"], seed=0)
-    result = benchmark_twice(
-        request, "esmfold2_inversion", lambda: run_esmfold2_inversion_binder_gradient(inputs, config)
-    )
+    result = benchmark_twice(request, "esmfold2", lambda: run_esmfold2_inversion_binder_gradient(inputs, config))
     assert result.tool_id == "esmfold2-inversion-binder-gradient"
     assert all(term.gradient is not None for term in result.results[0].terms)
 

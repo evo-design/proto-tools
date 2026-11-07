@@ -16,11 +16,16 @@ from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 
-#: Distogram bin count and the span its interior boundaries cover, in angstroms.
-DISTOGRAM_BINS = 128
+#: Distogram discretization: ``DISTOGRAM_BINS`` bins evenly dividing ``[_FIRST_EDGE, _LAST_EDGE]``
+#: angstroms, matching the convention ``compute_distogram_conditioning`` encodes upstream
+#: (``prepare_input.py``: ``min_dist=2.0``, ``max_dist=22.0``, ``num_bins=64``).
+DISTOGRAM_BINS = 64
 _FIRST_EDGE = 2.0
-_LAST_EDGE = 52.0
-#: The outermost bins are open-ended, so they are given finite stand-in edges to take a midpoint.
+_LAST_EDGE = 22.0
+#: Binning clamps out-of-range distances into the end bins, so each is open-ended in practice and
+#: is given a finite stand-in edge to take a midpoint. Putting the top bin's midpoint beyond
+#: ``_LAST_EDGE`` is what keeps a contact cutoff at the range edge from selecting it, which would
+#: otherwise turn a contact objective into the plain entropy of the distogram.
 _BELOW_FIRST = 1.0
 _BEYOND_LAST = _LAST_EDGE + 5.0
 
@@ -31,27 +36,37 @@ _RG_EXPONENT = 0.365
 _RG_DISTANCE_CLAMP = 27.0
 
 
-def bin_midpoints(device: torch.device | None = None) -> torch.Tensor:
+def bin_midpoints(n_bins: int, device: torch.device | None = None) -> torch.Tensor:
     """Distance in angstroms represented by each distogram bin.
 
-    The model emits ``DISTOGRAM_BINS`` bins whose interior boundaries are evenly spaced over
-    ``[_FIRST_EDGE, _LAST_EDGE]``. The first and last bins are open-ended, so finite stand-in
-    edges stand in for their outer sides and every bin is summarized by the midpoint of its span.
+    The head divides ``[_FIRST_EDGE, _LAST_EDGE]`` into ``DISTOGRAM_BINS`` equal bins and clamps
+    anything outside into the end ones, so the two end bins are open-ended and take a stand-in
+    outer edge. Every bin is then summarized by the midpoint of its span.
+
+    ``n_bins`` is the width of the distogram actually returned, checked against the discretization
+    these objectives encode. A checkpoint with a different distogram would otherwise be scored
+    against the wrong distances, which is silent rather than loud: the quantities stay finite and
+    differentiable while meaning something else entirely.
 
     Args:
+        n_bins (int): Bin count of the distogram being scored.
         device (torch.device | None): Device to build the tensor on; ``None`` means CPU.
 
     Returns:
-        torch.Tensor: Shape ``(DISTOGRAM_BINS,)`` of bin midpoint distances in angstroms.
+        torch.Tensor: Shape ``(n_bins,)`` of bin midpoint distances in angstroms.
+
+    Raises:
+        ValueError: If ``n_bins`` is not the discretization these objectives are written for.
     """
-    interior = torch.linspace(_FIRST_EDGE, _LAST_EDGE, DISTOGRAM_BINS - 1, device=device)
-    edges = torch.cat(
-        (
-            torch.tensor([_BELOW_FIRST], device=device),
-            interior,
-            torch.tensor([_BEYOND_LAST], device=device),
+    if n_bins != DISTOGRAM_BINS:
+        raise ValueError(
+            f"esmfold2: distogram has {n_bins} bins, but these objectives are written for "
+            f"{DISTOGRAM_BINS} over [{_FIRST_EDGE}, {_LAST_EDGE}] angstroms. Scoring it would "
+            "silently read the wrong distances."
         )
-    )
+    edges = torch.linspace(_FIRST_EDGE, _LAST_EDGE, n_bins + 1, device=device)
+    edges[0] = _BELOW_FIRST
+    edges[-1] = _BEYOND_LAST
     return (edges[:-1] + edges[1:]) / 2
 
 

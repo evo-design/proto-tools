@@ -85,15 +85,7 @@ from proto_tools.tools.structure_prediction.esmfold import (
     run_esmfold_gradient,
 )
 from proto_tools.tools.structure_prediction.esmfold2 import (
-    ESMFold2Config,
-    ESMFold2Input,
-    ESMFold2Metrics,
-    ESMFold2Output,
-    run_esmfold2,
-)
-from proto_tools.tools.structure_prediction.esmfold2_inversion import (
     BINDER_CHAIN_ID,
-    INVERSION_CHECKPOINTS,
     TARGET_CHAIN_ID,
     ESMFold2BinderCandidate,
     ESMFold2BinderGradientConfig,
@@ -105,8 +97,10 @@ from proto_tools.tools.structure_prediction.esmfold2_inversion import (
     ESMFold2Chain,
     ESMFold2ChainTermGradient,
     ESMFold2ComplexCandidate,
+    ESMFold2Config,
     ESMFold2EpitopeTerm,
     ESMFold2GlobularityTerm,
+    ESMFold2Input,
     ESMFold2InterContactTerm,
     ESMFold2IntraContactTerm,
     ESMFold2InversionGradientConfig,
@@ -114,7 +108,10 @@ from proto_tools.tools.structure_prediction.esmfold2_inversion import (
     ESMFold2InversionGradientMetrics,
     ESMFold2InversionGradientOutput,
     ESMFold2InversionGradientResult,
+    ESMFold2Metrics,
+    ESMFold2Output,
     ESMFold2PseudoPerplexityTerm,
+    run_esmfold2,
     run_esmfold2_inversion_binder_gradient,
     run_esmfold2_inversion_gradient,
 )
@@ -245,7 +242,6 @@ __all__ = [
     # ESMFold2
     "run_esmfold2",
     "BINDER_CHAIN_ID",
-    "INVERSION_CHECKPOINTS",
     "TARGET_CHAIN_ID",
     "ESMFold2BinderCandidate",
     "ESMFold2BinderGradientConfig",

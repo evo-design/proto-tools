@@ -1,3 +1,4 @@
 tqdm
-# Fork of Biohub/esm 3.4.2 with the ESM3 bf16 fix (Biohub/esm#417), branch fix/esm3-bf16.
-esm @ git+https://github.com/bviggiano/esm.git@1ad44674ef25f5a783273751ee3261617f4c5504
+# Fork of Biohub/esm 3.4.2 carrying the ESM3 bf16 fix (Biohub/esm#417) and a soft-sequence
+# entry point on EsmFold2Model, which the ESMFold2 inversion gradients differentiate through.
+esm @ git+https://github.com/bviggiano/esm.git@cbb02d1ec9e4db6af4826722a66c34b5bdaf7037
