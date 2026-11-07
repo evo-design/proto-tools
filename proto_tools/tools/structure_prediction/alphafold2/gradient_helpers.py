@@ -91,6 +91,8 @@ class AlphaFold2PaeTerm(AlphaFold2Term):
         id (Literal["pae"]): Fixed identifier for this kind of quantity.
         positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
             keeps the protocol's own region.
+        pair_with_all (bool | None): Pair the selected positions with every residue, target
+            included; ``None`` keeps pairs within the selection.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -102,6 +104,9 @@ class AlphaFold2PaeTerm(AlphaFold2Term):
     positions: list[PositiveInt] | None = Field(
         default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
     )
+    pair_with_all: bool | None = Field(
+        default=None, title="Pair With All", description="Pair the selected positions with every residue."
+    )
 
 
 class AlphaFold2InterfacePaeTerm(AlphaFold2Term):
@@ -109,6 +114,8 @@ class AlphaFold2InterfacePaeTerm(AlphaFold2Term):
 
     Attributes:
         id (Literal["i_pae"]): Fixed identifier for this kind of quantity.
+        positions (list[PositiveInt] | None): 1-indexed binder positions to restrict the binder side
+            to; ``None`` keeps the whole binder.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -116,6 +123,9 @@ class AlphaFold2InterfacePaeTerm(AlphaFold2Term):
 
     id: Literal["i_pae"] = Field(
         default="i_pae", title="Term ID", description="Identifies this quantity as interface PAE."
+    )
+    positions: list[PositiveInt] | None = Field(
+        default=None, min_length=1, title="Positions", description="1-indexed binder positions to restrict to."
     )
 
 
@@ -187,7 +197,7 @@ class AlphaFold2HelixTerm(AlphaFold2Term):
 
     Without selectors this is ColabDesign's native helix loss, a binary contact loss over the
     designed region. With ``positions`` or ``form`` set (and always under template redesign, where
-    the native loss is masked to nothing), it is Germinal's: the mean over selected i,i+3 pairs of
+    the native loss is masked to nothing), it is the mean over selected i,i+3 pairs of
     ``-log P(2 <= d <= 6.2)``, or of its complement under ``form="out_of_range"``. Lower values
     mean more (or, out of range, fewer) helical contacts, so it carries no advisory direction.
 
@@ -218,6 +228,8 @@ class AlphaFold2DgramCCETerm(AlphaFold2Term):
 
     Attributes:
         id (Literal["dgram_cce"]): Fixed identifier for this kind of quantity.
+        positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to, e.g. a
+            framework; ``None`` keeps the protocol's own region.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
@@ -225,6 +237,9 @@ class AlphaFold2DgramCCETerm(AlphaFold2Term):
 
     id: Literal["dgram_cce"] = Field(
         default="dgram_cce", title="Term ID", description="Identifies this quantity as distogram cross-entropy."
+    )
+    positions: list[PositiveInt] | None = Field(
+        default=None, min_length=1, title="Positions", description="1-indexed designed positions to restrict to."
     )
 
 
@@ -297,7 +312,7 @@ class AlphaFold2BetaStrandTerm(AlphaFold2Term):
     """Strand-geometry objective over i,i+3 pairs of the designed residues.
 
     Each pair scores ``-log P(9.75 <= d <= 11.5)`` from the distogram, or ``-log`` of the
-    complement under ``form="out_of_range"``; the value is the mean of the worst third. With
+    complement under ``form="out_of_range"``; the value is the mean of the worst ``top_k``. With
     ``positions``, only pairs with both ends listed count. Lower in-range values mean more
     strand-like spacing, so like ``helix`` it carries no advisory direction.
 
@@ -306,7 +321,9 @@ class AlphaFold2BetaStrandTerm(AlphaFold2Term):
         positions (list[PositiveInt] | None): 1-indexed designed positions to restrict to; ``None``
             keeps the protocol's own region.
         form (Literal["in_range", "out_of_range"]): Whether each pair scores ``-log P`` of falling
-            in the strand range or outside it; Germinal uses ``"out_of_range"``.
+            in the strand range or outside it.
+        top_k (PositiveInt | None): Number of worst pairs averaged; ``None`` keeps a third of the
+            selected positions.
     """
 
     SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
@@ -320,6 +337,9 @@ class AlphaFold2BetaStrandTerm(AlphaFold2Term):
     )
     form: Literal["in_range", "out_of_range"] = Field(
         default="in_range", title="Form", description="Score -log P of the strand range, or of outside it."
+    )
+    top_k: PositiveInt | None = Field(
+        default=None, title="Top K", description="Worst pairs averaged; None keeps a third of the positions."
     )
 
 
@@ -340,8 +360,7 @@ class AlphaFold2FrameworkContactTerm(AlphaFold2Term):
     """Contact loss between the target and the binder's framework residues.
 
     The same contact objective as ``i_con``, restricted to the framework, so higher values mean
-    the framework sits farther from the target. Germinal's framework penalty composes it with
-    ``i_con`` as ``i_con**2 / max(fw_i_con - offset, 1e-8)``.
+    the framework sits farther from the target.
 
     Attributes:
         id (Literal["fw_i_con"]): Fixed identifier for this kind of quantity.

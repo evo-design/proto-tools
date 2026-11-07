@@ -53,7 +53,7 @@ De novo design driven only by what AlphaFold2 believes about a sequence — maxi
 - **Select quantities with `gradient_terms`.** The protocol offers `plddt`, `pae`, `con`, `exp_res`, `helix`, `rg`, `NC` and `beta_strand`; each returns one `TermGradient` carrying its own value and its own gradient.
 - **Terms are raw quantities, not objectives.** `plddt` is the confidence itself, not a loss, and no weight or direction is folded into its gradient. Combine them downstream with goals and weights.
 - **`helix` and `beta_strand` have no built-in direction.** Lower means more helical contacts or more strand-like i,i+3 spacing, but whether that is wanted depends on the design, so composing them requires an explicit goal.
-- **`positions` restricts a term to part of the designed chain.** `plddt`, `pae`, `con` and `beta_strand` (and `i_con` on the binder tool) take optional 1-indexed `positions`, e.g. the CDRs; without it a term covers its usual region. `beta_strand` also takes `form="out_of_range"`, which scores `-log(1 - P)` as Germinal does.
+- **`positions` restricts a term to part of the designed chain.** `plddt`, `pae`, `con` and `beta_strand` (and `i_con` on the binder tool) take optional 1-indexed `positions`, e.g. the CDRs; without it a term covers its usual region. `beta_strand` also takes `form="out_of_range"`, which scores `-log(1 - P)`.
 - **Contact terms take `num_contacts` and `cutoff`.** `con` (and on the binder tool `i_con` and `fw_i_con`) default to ColabDesign's settings; BindCraft uses 2 within 14 Å for `con` and 2 within 20 Å for `i_con`.
 - **`rg` and `NC` shape the designed chain.** `rg` is the radius of gyration beyond `2.38 * N**0.365` and `NC` the terminal CA distance beyond 7 Å, as in BindCraft and Germinal; both are offered by all three tools.
 - **One sequence per call; this tool is not an optimization loop.** Drive it from an optimizer, or call it repeatedly.
@@ -84,7 +84,7 @@ Gradient-based binder design against a chosen epitope, optimizing interface cont
 #### Usage Tips
 
 - **`i_con`, `i_pae`, `i_ptm` and `fw_i_con` exist only here.** They describe the binder-target interface, so they require the two-chain setup this protocol builds.
-- **`fw_i_con` measures framework contact.** It is the `i_con` objective restricted to the 1-indexed binder `framework_positions` it is given, so higher means the framework sits farther from the target. Germinal's framework penalty is `i_con**2 / max(fw_i_con - offset, 1e-8)`, composed downstream from the two terms.
+- **`fw_i_con` measures framework contact.** It is the `i_con` objective restricted to the 1-indexed binder `framework_positions` it is given, so higher means the framework sits farther from the target.
 - **`target_hotspot` focuses the interface.** Supply ColabDesign-style residue selections on the target to bias the binder toward a specific epitope.
 - **The target's template is masked by default.** `rm_target_seq` and `rm_template_ic` default to `True` so the target's own sequence and inter-chain contacts do not leak into the prediction; `use_multimer` defaults to `True`.
 - **The binder length is the number of rows in the logits.** There is no binder template, so nothing else defines it.
@@ -95,14 +95,15 @@ Differentiates the redesign of an existing binder chain in a template complex, s
 
 #### Applications
 
-Template-based binder redesign as in Germinal: optimizing an antibody's CDRs on a fixed framework against an epitope, with the framework held fixed by the caller.
+Template-based binder redesign: optimizing part of an existing binder chain, e.g. an antibody's CDRs, with the rest held fixed by the caller.
 
 #### Usage Tips
 
 - **The logits cover the whole binder chain.** One row per residue of `binder_chain`; which rows may change is the caller's decision, e.g. by restricting updates to the CDRs.
-- **Confidence terms are measured over the binder.** ColabDesign masks its own `plddt`, `pae` and `con` to nothing under redesign, so the worker computes them over the binder instead; `positions` narrows them further, e.g. to the CDRs for Germinal's `i_plddt`.
+- **Confidence terms are measured over the binder.** ColabDesign masks its own `plddt`, `pae` and `con` to nothing under redesign, so the worker computes them over the binder instead; `positions` narrows them further, e.g. to the CDRs.
 - **`dgram_cce` and `fape` measure agreement with the binder template.** `rmsd` and `exp_res` are not offered, because ColabDesign masks them to nothing under this protocol.
-- **`helix` is Germinal's helix loss here.** ColabDesign's native helix is masked under redesign, so the worker computes the mean -log P(2-6.2 Å) over i,i+3 pairs of the binder (or of `positions`); `form="out_of_range"` penalizes helices instead, e.g. in the CDRs.
+- **`helix` is computed by the worker here.** ColabDesign's native helix is masked under redesign, so the worker computes the mean -log P(2-6.2 Å) over i,i+3 pairs of the binder (or of `positions`); `form="out_of_range"` penalizes helices instead, e.g. in the CDRs.
+- **More selectors**: `pae(pair_with_all=True)` pairs the selected positions with every residue, `i_pae` and `dgram_cce` take `positions`, and `beta_strand` takes `top_k`. A selector covering every position is not the same as none: `dgram_cce(positions=...)` drops the protocol's template-supervision mask.
 - **A term may repeat with different selectors**, e.g. `plddt` over the whole binder and `plddt(positions=CDRs)`; each comes back as its own `TermGradient`, in request order.
 - **Inter-chain template contacts are always masked**, so the interface terms measure an interface the template does not hand over.
 
