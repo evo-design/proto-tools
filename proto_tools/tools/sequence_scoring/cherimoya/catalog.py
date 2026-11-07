@@ -15,9 +15,9 @@ CHERIMOYA_OUTPUT = 1000
 CHERIMOYA_OUTPUT_FLANK = (CHERIMOYA_CONTEXT - CHERIMOYA_OUTPUT) // 2
 DEFAULT_CHERIMOYA_MODEL = "ENCSR000EOT"
 
-CherimoyaCollectionKey = Literal["catv1"]
+CherimoyaCollectionKey = Literal["catv1", "batv1"]
 CherimoyaFold = Literal[0, 1, 2, 3, 4]
-CherimoyaAssay = Literal["DNase-seq", "ATAC-seq"]
+CherimoyaAssay = Literal["DNase-seq", "ATAC-seq", "ChIP-seq"]
 CherimoyaBiosampleClassification = Literal[
     "cell line", "primary cell", "tissue", "in vitro differentiated cells", "organoid"
 ]
@@ -30,7 +30,7 @@ class CherimoyaCollection:
     """A released set of Cherimoya checkpoints with one catalog row per experiment.
 
     Attributes:
-        key (str): Collection name used in configs (``"catv1"``).
+        key (str): Collection name used in configs (``"catv1"`` or ``"batv1"``).
         hf_repo (str): Hugging Face model repository holding the checkpoints.
         revision (str): Pinned repository commit; every download uses it.
         checkpoint_template (str): Checkpoint path in the repository, formatted
@@ -60,6 +60,14 @@ CHERIMOYA_COLLECTIONS: dict[str, CherimoyaCollection] = {
         folds=(0, 1, 2, 3, 4),
         catalog_file="catv1_catalog.csv",
     ),
+    "batv1": CherimoyaCollection(
+        key="batv1",
+        hf_repo="programmable-genomics/BATv1",
+        revision="c631ebd86b46d78c2e239ee06f3fce5ff15f4ad9",
+        checkpoint_template="models/{accession}/cherimoya.fold_{fold}.torch",
+        folds=(0, 1, 2, 3, 4),
+        catalog_file="batv1_catalog.csv",
+    ),
 }
 
 
@@ -69,8 +77,10 @@ class CherimoyaCatalogEntry(BaseModel):
     Attributes:
         collection (str): Collection the experiment belongs to.
         experiment_accession (str): ENCODE experiment the models were trained on.
-        annotation_accession (str): ENCODE ChromBPNet model annotation for the same experiment.
-        assay (str): ``"DNase-seq"`` or ``"ATAC-seq"``.
+        annotation_accession (str): ENCODE ChromBPNet (CATv1) or BPNet (BATv1) model annotation
+            for the same experiment.
+        assay (str): ``"DNase-seq"``, ``"ATAC-seq"`` or ``"ChIP-seq"``.
+        target (str): ChIP-seq target as ENCODE names it (BATv1); empty for accessibility.
         biosample (str): ENCODE biosample term name.
         biosample_term_id (str): Ontology term ID of the biosample.
         biosample_classification (str): ENCODE biosample classification.
@@ -81,7 +91,10 @@ class CherimoyaCatalogEntry(BaseModel):
         count_pearson_mean (float): Count Pearson averaged over the five folds.
         profile_pearson_mean (float): Profile Pearson averaged over the five folds.
         is_default (bool): Whether this is the default experiment for its (assay, biosample).
+            Only CATv1 has defaults.
         default_reason (str): Why it is the default (Chorus rule); empty when not a default.
+        quality_flags (str): ``;``-separated reasons to use the models with care, from the
+            release's metadata (BATv1); empty when there are none.
         encode_url (str): ENCODE portal page of the experiment.
     """
 
@@ -90,8 +103,9 @@ class CherimoyaCatalogEntry(BaseModel):
 
     collection: str = Field(title="Collection", description="Collection the experiment belongs to")
     experiment_accession: str = Field(title="Experiment", description="ENCODE experiment accession")
-    annotation_accession: str = Field(title="Annotation", description="ENCODE ChromBPNet annotation accession")
-    assay: str = Field(title="Assay", description="DNase-seq or ATAC-seq")
+    annotation_accession: str = Field(title="Annotation", description="ENCODE ChromBPNet or BPNet annotation accession")
+    assay: str = Field(title="Assay", description="DNase-seq, ATAC-seq or ChIP-seq")
+    target: str = Field(title="Target", description="ChIP-seq target (BATv1); empty for accessibility")
     biosample: str = Field(title="Biosample", description="ENCODE biosample term name")
     biosample_term_id: str = Field(title="Biosample Term ID", description="Ontology term ID of the biosample")
     biosample_classification: str = Field(title="Classification", description="ENCODE biosample classification")
@@ -109,6 +123,7 @@ class CherimoyaCatalogEntry(BaseModel):
     )
     is_default: bool = Field(title="Default", description="Default experiment for its (assay, biosample)")
     default_reason: str = Field(title="Default Reason", description="Chorus rule that chose the default, if any")
+    quality_flags: str = Field(title="Quality Flags", description="Reasons to use the models with care, if any")
     encode_url: str = Field(title="ENCODE URL", description="ENCODE portal page of the experiment")
 
 
@@ -117,7 +132,7 @@ def load_catalog(collection: str) -> dict[str, CherimoyaCatalogEntry]:
     """Return the bundled catalog of a collection, keyed by experiment accession.
 
     Args:
-        collection (str): Collection key, e.g. ``"catv1"``.
+        collection (str): Collection key, ``"catv1"`` or ``"batv1"``.
 
     Returns:
         dict[str, CherimoyaCatalogEntry]: Catalog entries keyed by accession.
@@ -132,6 +147,7 @@ def load_catalog(collection: str) -> dict[str, CherimoyaCatalogEntry]:
                 experiment_accession=row["experiment_accession"],
                 annotation_accession=row["annotation_accession"],
                 assay=row["assay"],
+                target=row["target"],
                 biosample=row["biosample"],
                 biosample_term_id=row["biosample_term_id"],
                 biosample_classification=row["biosample_classification"],
@@ -143,6 +159,7 @@ def load_catalog(collection: str) -> dict[str, CherimoyaCatalogEntry]:
                 profile_pearson_mean=float(row["profile_pearson_mean"]),
                 is_default=row["is_default"] == "True",
                 default_reason=row["default_reason"],
+                quality_flags=row["quality_flags"],
                 encode_url=f"https://www.encodeproject.org/experiments/{row['experiment_accession']}/",
             )
             for row in rows
@@ -172,6 +189,11 @@ def validate_model_reference(model: str, collection: str) -> str:
     if not is_checkpoint_path(model):
         catalog = load_catalog(collection)
         if model not in catalog:
+            if model == DEFAULT_CHERIMOYA_MODEL:
+                raise ValueError(
+                    f"the default model {model!r} belongs to collection 'catv1'; name the models to run from "
+                    f"collection {collection!r} (search with cherimoya-catalog)"
+                )
             close = difflib.get_close_matches(model, list(catalog), n=3, cutoff=0.6)
             hint = f"; did you mean {', '.join(close)}?" if close else "; search with cherimoya-catalog"
             raise ValueError(f"{model!r} is not an experiment in collection {collection!r}{hint}")

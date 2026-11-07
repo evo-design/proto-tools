@@ -7,5 +7,5 @@ weights:
 commercial_use: 'yes'
 redistribution: true
 attribution_required: true
-notes: CATv1 checkpoints are trained on ENCODE DNase-seq and ATAC-seq data (ENCODE data use policy, no restrictions on use). The bundled catalog's default experiment per biosample comes from Chorus (MIT, Pinello Lab).
-last_updated: '2026-10-23'
+notes: CATv1 checkpoints are trained on ENCODE DNase-seq and ATAC-seq data and BATv1 checkpoints on ENCODE ChIP-seq data (ENCODE data use policy, no restrictions on use); both collections carry the same CC-BY-4.0 LICENSE (https://huggingface.co/programmable-genomics/BATv1/blob/main/LICENSE). The bundled CATv1 catalog's default experiment per biosample comes from Chorus (MIT, Pinello Lab).
+last_updated: '2026-10-30'

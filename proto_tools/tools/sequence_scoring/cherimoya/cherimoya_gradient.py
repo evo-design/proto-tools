@@ -49,7 +49,8 @@ class CherimoyaGradientLossTerm(BaseModel):
     Both quantities are natural-log read counts, which depend on each experiment's
     sequencing depth, so set ``sigmoid_center`` per model and quantity. The default 4.5 is
     the median fold 0 ``log_counts`` of the default model (ENCSR000EOT, K562 DNase-seq) over
-    5,000 sampled hg38 SCREEN cCREs; a target span shorter than 1,000 bp holds fewer reads.
+    5,000 sampled hg38 SCREEN cCREs; a target span shorter than 1,000 bp holds fewer reads,
+    and a BATv1 ChIP-seq model run with its all-zero control has its own scale.
 
     Attributes:
         model (str): ENCODE experiment accession or local ``.torch`` checkpoint path.
@@ -160,7 +161,7 @@ class CherimoyaGradientConfig(BaseConfig):
     collection: CherimoyaCollectionKey = ConfigField(
         title="Collection",
         default="catv1",
-        description="Model collection the accessions in loss_terms come from.",
+        description="Model collection the accessions in loss_terms come from: catv1 (accessibility) or batv1 (ChIP-seq).",
     )
     loss_terms: list[CherimoyaGradientLossTerm] = ConfigField(
         default_factory=lambda: [CherimoyaGradientLossTerm()],

@@ -100,6 +100,7 @@ class CherimoyaModelInfo(BaseModel):
         collection (str | None): Collection of a catalog model; ``None`` for a checkpoint path.
         revision (str | None): Hugging Face revision the checkpoints were downloaded at.
         assay (str | None): Assay the model was trained on, when known from the catalog.
+        target (str | None): ChIP-seq target of a BATv1 model, when known from the catalog.
         biosample (str | None): Biosample the model was trained on, when known from the catalog.
         folds (list[int]): Folds loaded for this model; empty for a checkpoint path.
         checkpoint_sha256 (list[str]): SHA-256 of each checkpoint file, in fold order.
@@ -109,6 +110,7 @@ class CherimoyaModelInfo(BaseModel):
     collection: str | None = Field(default=None, title="Collection", description="Collection of a catalog model")
     revision: str | None = Field(default=None, title="Revision", description="Hugging Face revision of the weights")
     assay: str | None = Field(default=None, title="Assay", description="Assay the model was trained on")
+    target: str | None = Field(default=None, title="Target", description="ChIP-seq target of a BATv1 model")
     biosample: str | None = Field(default=None, title="Biosample", description="Biosample the model was trained on")
     folds: list[int] = Field(default_factory=list, title="Folds", description="Folds loaded for this model")
     checkpoint_sha256: list[str] = Field(
@@ -154,6 +156,7 @@ def model_infos(
                 collection=None if record is None else collection,
                 revision=None if record is None else spec.revision,
                 assay=None if record is None else record.assay,
+                target=None if record is None or not record.target else record.target,
                 biosample=None if record is None else record.biosample,
                 folds=[] if record is None else [int(entry["fold"]) for entry in entries],
                 checkpoint_sha256=[str(entry["sha256"]) for entry in entries],
@@ -259,7 +262,9 @@ class CherimoyaModelsConfig(BaseConfig):
     """Model selection shared by the Cherimoya scoring and prediction tools.
 
     Attributes:
-        collection (CherimoyaCollectionKey): Collection the accessions in ``models`` come from.
+        collection (CherimoyaCollectionKey): Collection the accessions in ``models`` come from:
+            ``"catv1"`` (chromatin accessibility) or ``"batv1"`` (ChIP-seq). The default
+            ``models`` entry belongs to CATv1, so name the models when choosing BATv1.
         models (list[str]): ENCODE experiment accessions from the collection, or paths to
             Cherimoya ``.torch`` checkpoints with the same 2,114 bp in, 1,000 bp out geometry.
         folds (list[CherimoyaFold]): Folds to load for each accession; several are averaged.
@@ -278,7 +283,7 @@ class CherimoyaModelsConfig(BaseConfig):
     collection: CherimoyaCollectionKey = ConfigField(
         title="Collection",
         default="catv1",
-        description="Model collection the accessions in models come from.",
+        description="Model collection the accessions in models come from: catv1 (accessibility) or batv1 (ChIP-seq).",
     )
     models: list[str] = ConfigField(
         title="Models",
@@ -336,7 +341,8 @@ class CherimoyaScoreMetrics(Metrics):
     """Cherimoya predictions for one model on one sequence.
 
     Metrics documented in ``metric_spec``:
-        log_counts (float): Predicted ln(reads + 1) over the 1,000 bp output window.
+        log_counts (float): Predicted ln(reads + 1) over the 1,000 bp output window, summed
+            over both strands for a ChIP-seq model.
         target_counts (float): Expected reads inside ``target_range``.
 
     Attributes:

@@ -1,4 +1,4 @@
-"""Tests for the Cherimoya toolkit (CATv1 chromatin accessibility models)."""
+"""Tests for the Cherimoya toolkit (CATv1 chromatin accessibility and BATv1 ChIP-seq models)."""
 
 import math
 import random
@@ -17,8 +17,13 @@ from tests.tool_infra_tests.test_export_functionality import validate_output
 _HS2_FASTA = Path(__file__).parent.parent / "dummy_data" / "hbb_lcr_hs2_hg38.fna"
 _K562_DNASE = "ENCSR000EOT"
 _HEPG2_DNASE = "ENCSR149XIL"
+_K562_CTCF = "ENCSR000EGM"
+_K562_GATA1 = "ENCSR000EWM"
 # Fold 0 log counts of ENCSR000EOT at HS2, from cherimoya 0.3.0 called directly on the CPU.
 _HS2_K562_FOLD0_LOG_COUNTS = 7.7422
+# Fold 0 log counts of the BATv1 K562 CTCF model at HS2, from cherimoya 0.3.0 called directly on
+# the CPU with ControlWrapper (all-zero control), float32 matmuls at "highest" precision.
+_HS2_K562_CTCF_FOLD0_LOG_COUNTS = 1.4967
 
 
 def _hs2() -> str:
@@ -64,13 +69,33 @@ def test_cherimoya_catalog_bundles_every_catv1_experiment() -> None:
     assert len(defaults) == len({(entry.assay, entry.biosample) for entry in catalog.values()}) == 492
     assert set(defaults.values()) == {1}
     assert catalog[_K562_DNASE].biosample == "K562"
+    assert catalog[_K562_DNASE].target == ""
+    assert catalog[_K562_DNASE].quality_flags == ""
 
 
-def test_cherimoya_catalog_csv_names_the_pinned_revision() -> None:
+def test_cherimoya_catalog_bundles_every_batv1_experiment() -> None:
+    """The bundled snapshot covers all 3,429 BATv1 ChIP-seq experiments, with targets and quality flags."""
+    from proto_tools.tools.sequence_scoring.cherimoya.catalog import load_catalog
+
+    catalog = load_catalog("batv1")
+
+    assert len(catalog) == 3429
+    assert {entry.assay for entry in catalog.values()} == {"ChIP-seq"}
+    assert len({entry.target for entry in catalog.values()}) == 1139
+    assert not any(entry.is_default for entry in catalog.values())
+    assert sum(entry.perturbed for entry in catalog.values()) == 282
+    assert sum(bool(entry.quality_flags) for entry in catalog.values()) == 268
+    assert (catalog[_K562_CTCF].target, catalog[_K562_CTCF].biosample) == ("CTCF", "K562")
+    assert catalog[_K562_GATA1].target == "GATA1"
+    assert catalog["ENCSR343IFJ"].quality_flags == "early_checkpoint"
+
+
+@pytest.mark.parametrize("collection", ["catv1", "batv1"])
+def test_cherimoya_catalog_csv_names_the_pinned_revision(collection: str) -> None:
     """The bundled CSV was built from the revision the worker downloads checkpoints at."""
     from proto_tools.tools.sequence_scoring.cherimoya import CHERIMOYA_COLLECTIONS, catalog
 
-    spec = CHERIMOYA_COLLECTIONS["catv1"]
+    spec = CHERIMOYA_COLLECTIONS[collection]
     lines = Path(catalog.__file__).with_name(spec.catalog_file).read_text().splitlines()
     header = " ".join(line for line in lines if line.startswith("#"))
 
@@ -97,6 +122,37 @@ def test_cherimoya_catalog_filters_and_ranks() -> None:
     assert {entry.assay for entry in defaults.experiments} == {"DNase-seq", "ATAC-seq"}
     assert shown.n_matched - hidden.n_matched == 8
     assert k562.revision == CHERIMOYA_COLLECTIONS["catv1"].revision
+    assert all(entry.target == "" for entry in k562.experiments)
+
+
+def test_cherimoya_catalog_searches_batv1_by_target() -> None:
+    """In BATv1 the target filter narrows a biosample to one factor, and defaults_only matches nothing."""
+    from proto_tools.tools.sequence_scoring.cherimoya import (
+        CHERIMOYA_COLLECTIONS,
+        CherimoyaCatalogConfig,
+        CherimoyaCatalogInput,
+        run_cherimoya_catalog,
+    )
+
+    config = CherimoyaCatalogConfig(collection="batv1")
+    gata1 = run_cherimoya_catalog(CherimoyaCatalogInput(biosample="^K562$", target="^GATA1$"), config)
+    gata = run_cherimoya_catalog(CherimoyaCatalogInput(biosample="^K562$", target="gata", limit=5000), config)
+    chip = run_cherimoya_catalog(CherimoyaCatalogInput(target="^CTCF$", assay="ChIP-seq", limit=5000), config)
+    dnase = run_cherimoya_catalog(CherimoyaCatalogInput(target="^CTCF$", assay="DNase-seq"), config)
+    defaults = run_cherimoya_catalog(CherimoyaCatalogInput(defaults_only=True), config)
+    in_catv1 = run_cherimoya_catalog(CherimoyaCatalogInput(target="^CTCF$"))
+
+    assert {entry.experiment_accession for entry in gata1.experiments} == {_K562_GATA1, "ENCSR000EFT"}
+    assert gata.n_matched > gata1.n_matched
+    assert all(entry.target.startswith("GATA") for entry in gata.experiments)
+    assert {(entry.target, entry.assay) for entry in chip.experiments} == {("CTCF", "ChIP-seq")}
+    assert {entry.biosample for entry in chip.experiments} > {"K562", "HepG2", "GM12878"}
+    assert dnase.n_matched == 0
+    assert defaults.n_matched == 0
+    assert in_catv1.n_matched == 0
+    assert gata1.revision == CHERIMOYA_COLLECTIONS["batv1"].revision
+    with pytest.raises(ValidationError, match="target is not a valid regular expression"):
+        CherimoyaCatalogInput(target="CTCF(")
 
 
 def test_cherimoya_catalog_returns_named_and_default_perturbed_experiments() -> None:
@@ -136,6 +192,35 @@ def test_cherimoya_config_suggests_close_accessions() -> None:
         CherimoyaScoreConfig(models=[_K562_DNASE, _K562_DNASE])
     with pytest.raises(ValidationError, match="folds must be unique"):
         CherimoyaScoreConfig(folds=[0, 0])
+
+
+def test_cherimoya_config_resolves_batv1_models() -> None:
+    """BATv1 accessions resolve against their own catalog; the CATv1 default model must be replaced."""
+    from proto_tools.tools.sequence_scoring.cherimoya import (
+        CHERIMOYA_COLLECTIONS,
+        CherimoyaGradientConfig,
+        CherimoyaGradientLossTerm,
+        CherimoyaScoreConfig,
+    )
+    from proto_tools.tools.sequence_scoring.cherimoya.shared_data_models import checkpoint_specs
+
+    config = CherimoyaScoreConfig(collection="batv1", models=[_K562_CTCF, _K562_GATA1])
+    specs = checkpoint_specs(config.models, config.folds, config.collection)
+    revision = CHERIMOYA_COLLECTIONS["batv1"].revision
+
+    assert config.models == [_K562_CTCF, _K562_GATA1]
+    assert [spec["source"] for spec in specs] == [
+        f"programmable-genomics/BATv1@{revision}:models/{_K562_CTCF}/cherimoya.fold_0.torch",
+        f"programmable-genomics/BATv1@{revision}:models/{_K562_GATA1}/cherimoya.fold_0.torch",
+    ]
+    with pytest.raises(ValidationError, match="default model 'ENCSR000EOT' belongs to collection 'catv1'"):
+        CherimoyaScoreConfig(collection="batv1")
+    with pytest.raises(ValidationError, match="not an experiment in collection 'batv1'"):
+        CherimoyaScoreConfig(collection="batv1", models=[_HEPG2_DNASE])
+    with pytest.raises(ValidationError, match="not an experiment in collection 'catv1'"):
+        CherimoyaScoreConfig(models=[_K562_CTCF])
+    with pytest.raises(ValidationError, match="default model 'ENCSR000EOT' belongs to collection 'catv1'"):
+        CherimoyaGradientConfig(collection="batv1", loss_terms=[CherimoyaGradientLossTerm()])
 
 
 def test_cherimoya_config_checkpoint_paths_are_local_only(tmp_path: Path) -> None:
@@ -412,9 +497,48 @@ def test_cherimoya_checkpoint_path_matches_its_accession_on_cpu(tmp_path: Path) 
     assert result.models[1].checkpoint_sha256 == result.models[0].checkpoint_sha256
 
 
+@pytest.mark.integration
+def test_cherimoya_score_hs2_with_batv1_on_cpu() -> None:
+    """On CPU, a BATv1 ChIP-seq model scores HS2 with an all-zero control as the direct call does."""
+    from proto_tools.tools.sequence_scoring.cherimoya import (
+        CherimoyaPredictConfig,
+        CherimoyaPredictInput,
+        CherimoyaScoreConfig,
+        CherimoyaScoreInput,
+        run_cherimoya_predict,
+        run_cherimoya_score,
+    )
+
+    hs2 = _hs2()
+    result = run_cherimoya_score(
+        CherimoyaScoreInput(sequences=[hs2, *_shuffles(hs2, 4)]),
+        CherimoyaScoreConfig(collection="batv1", models=[_K562_CTCF, _K562_GATA1], device="cpu"),
+    )
+    profile = run_cherimoya_predict(
+        CherimoyaPredictInput(sequences=[hs2]),
+        CherimoyaPredictConfig(collection="batv1", models=[_K562_CTCF], values="probabilities", device="cpu"),
+    )
+
+    validate_output(result)
+    assert_metrics_in_spec(result)
+    values = [r.scores[0]["log_counts"] for r in result.results]
+    assert values[0] == pytest.approx(_HS2_K562_CTCF_FOLD0_LOG_COUNTS, abs=1e-3)
+    assert values[0] > max(values[1:])
+    assert [(info.collection, info.assay, info.target, info.biosample) for info in result.models] == [
+        ("batv1", "ChIP-seq", "CTCF", "K562"),
+        ("batv1", "ChIP-seq", "GATA1", "K562"),
+    ]
+    # The two strands' probabilities are summed into one 1,000 bp profile.
+    assert len(profile.results[0].profiles[0].values) == 1000
+    assert sum(profile.results[0].profiles[0].values) == pytest.approx(1.0, rel=1e-5)
+
+
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-def test_cherimoya_profiles_and_strands_are_consistent() -> None:
+@pytest.mark.parametrize(
+    ("collection", "models"), [("catv1", [_K562_DNASE, _HEPG2_DNASE]), ("batv1", [_K562_CTCF, _K562_GATA1])]
+)
+def test_cherimoya_profiles_and_strands_are_consistent(collection: str, models: list[str]) -> None:
     """Expected counts sum to expm1(log_counts), and strand-averaged scores ignore orientation."""
     from proto_tools.tools.sequence_scoring.cherimoya import (
         CherimoyaPredictConfig,
@@ -427,13 +551,17 @@ def test_cherimoya_profiles_and_strands_are_consistent() -> None:
 
     hs2 = _hs2()
     reverse_complement = hs2[::-1].translate(str.maketrans("ACGT", "TGCA"))
-    counts = run_cherimoya_predict(CherimoyaPredictInput(sequences=[hs2]), CherimoyaPredictConfig(folds=[0, 1]))
+    counts = run_cherimoya_predict(
+        CherimoyaPredictInput(sequences=[hs2]),
+        CherimoyaPredictConfig(collection=collection, models=models[:1], folds=[0, 1]),
+    )
     probabilities = run_cherimoya_predict(
-        CherimoyaPredictInput(sequences=[hs2]), CherimoyaPredictConfig(values="probabilities")
+        CherimoyaPredictInput(sequences=[hs2]),
+        CherimoyaPredictConfig(collection=collection, models=models[:1], values="probabilities"),
     )
     stranded = run_cherimoya_score(
         CherimoyaScoreInput(sequences=[hs2, reverse_complement]),
-        CherimoyaScoreConfig(models=[_K562_DNASE, _HEPG2_DNASE], reverse_complement_average=True),
+        CherimoyaScoreConfig(collection=collection, models=models, reverse_complement_average=True),
     )
 
     validate_output(counts)

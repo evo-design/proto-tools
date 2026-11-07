@@ -51,7 +51,7 @@ app = get_app_for_service("CherimoyaService")
 )
 @register_tools({"cherimoya-score": "score", "cherimoya-predict": "predict", "cherimoya-gradient": "gradient"})
 class CherimoyaService:
-    """Modal service for Cherimoya chromatin accessibility scoring, profiles, and gradients."""
+    """Modal service for Cherimoya accessibility (CATv1) and ChIP-seq (BATv1) scoring, profiles, and gradients."""
 
     @modal.enter()
     def setup(self) -> None:
