@@ -13,6 +13,7 @@ from proto_tools.modal.app import secrets_env
 from proto_tools.modal.hooks import CallContext, apply_payload_hooks, load_plugins, plugin_env, run_with_middleware
 from proto_tools.modal.progress import container_progress
 from proto_tools.utils.base_config import BaseConfig
+from proto_tools.utils.outage import outage_checks_skipped
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, MissingAssetError
 
 _utils_logger = logging.getLogger(__name__)
@@ -288,7 +289,10 @@ def dispatch_tool_call(
 
     partition = next((config._progress_partition for config in configs if config._progress_partition), None)
     level = next((config._progress_level for config in configs if config._progress_partition), logging.INFO)
-    with container_progress(partition, level=level):
+    # The entry point that sent this call already checked it against declared outages, with the
+    # caller's override in view; this container has neither that override nor a way to return the
+    # refusal other than as an opaque, retried exception.
+    with container_progress(partition, level=level), outage_checks_skipped():
         return run_with_middleware(CallContext(run_fn), lambda: apply_tool_envelope(run_fn, *args, **kwargs))
 
 

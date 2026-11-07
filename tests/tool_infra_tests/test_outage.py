@@ -7,6 +7,7 @@ raised the way a validation error is, and every agent-facing surface shows the o
 from __future__ import annotations
 
 import logging
+import pickle
 from datetime import date
 from typing import Any
 
@@ -42,8 +43,12 @@ class _OutageOutput(MockToolOutputBase):
     echoed: str = Field(default="", description="Echoed query")
 
 
-def _register(key: str, outage: Outage, calls: list[str]) -> None:
-    """Register a trivially local tool declaring ``outage`` that records each real execution."""
+def _register(key: str, outage: Outage, calls: list[str], *, uses_gpu: bool = False) -> None:
+    """Register a tool declaring ``outage`` that records each real execution.
+
+    ``uses_gpu=False`` makes it local_cpu, which the wrapper runs in-process even for a remote
+    device; ``True`` is what makes a remote device actually bind its dispatch endpoint.
+    """
 
     @tool(
         key=key,
@@ -53,6 +58,7 @@ def _register(key: str, outage: Outage, calls: list[str]) -> None:
         config_class=_OutageConfig,
         output_class=_OutageOutput,
         description="Stand-in tool for outage tests",
+        uses_gpu=uses_gpu,
         example_input=_OutageInput,
         outages=[outage],
     )
@@ -120,28 +126,84 @@ def test_ignore_outages_env_lets_the_call_through_with_a_warning(degraded_tool, 
     assert "ignoring declared outage" in caplog.text
 
 
-def test_outage_is_refused_before_remote_dispatch(offline_tool, monkeypatch):
-    """A remote device never receives a call that matches an outage."""
+def test_outage_is_refused_before_remote_dispatch(monkeypatch):
+    """A remote device never receives a call that matches an outage.
+
+    The tool uses a GPU so ``device="proto"`` really binds the remote endpoint; a local_cpu tool
+    would be run in-process instead, and the test would pass whatever the check's position.
+    """
     import proto_tools.proto as proto_module
 
-    def _must_not_dispatch(*args: Any, **kwargs: Any) -> Any:
-        raise AssertionError("dispatched to a remote device despite the outage")
+    dispatched: list[str] = []
 
-    monkeypatch.setattr(proto_module, "dispatch_to_proto", _must_not_dispatch, raising=False)
-    key, _ = offline_tool
-    with pytest.raises(OutageError):
+    def _record(tool_key: str, inputs: Any, config: Any) -> Any:
+        dispatched.append(tool_key)
+        return _OutageOutput(tool_id=tool_key, execution_time=0.0, success=True, echoed=inputs.query)
+
+    monkeypatch.setattr(proto_module, "dispatch_to_proto", _record, raising=False)
+    key, calls = "outage-probe-remote", []
+    _register(
+        key, Outage(reason="Upstream is down", since=date(2026, 1, 1), tracking_url=_TRACKING), calls, uses_gpu=True
+    )
+    try:
+        with pytest.raises(OutageError):
+            ToolRegistry.get(key).function(_OutageInput(), _OutageConfig(device="proto"))
+        assert dispatched == []
+        # The same call past the outage does reach the endpoint, so the refusal above is the check's doing.
+        monkeypatch.setenv("PROTO_IGNORE_OUTAGES", "1")
         ToolRegistry.get(key).function(_OutageInput(), _OutageConfig(device="proto"))
+        assert dispatched == [key]
+    finally:
+        ToolRegistry._registry.pop(key, None)
 
 
-@pytest.mark.parametrize(
-    "kwargs",
-    [{"affects": "mode"}, {"when": lambda inputs, config: True}],
-    ids=["affects-without-when", "when-without-affects"],
-)
-def test_scoped_outage_needs_both_label_and_predicate(kwargs):
-    """A scope without a test, or a test without a label for catalogues, is rejected."""
-    with pytest.raises(ValidationError, match=r"affects and Outage\.when must be set together"):
-        Outage(reason="r", since=date(2026, 1, 1), tracking_url=_TRACKING, **kwargs)
+def test_predicate_without_a_label_is_rejected():
+    """A test without a label would leave catalogues unable to say which mode is down."""
+    with pytest.raises(ValidationError, match=r"Outage\.when requires Outage\.affects"):
+        Outage(reason="r", since=date(2026, 1, 1), tracking_url=_TRACKING, when=lambda inputs, config: True)
+
+
+@pytest.mark.parametrize("scoped", [False, True], ids=["whole-tool", "scoped"])
+def test_outage_error_survives_pickling_and_its_outage_a_dump(scoped):
+    """Errors cross process boundaries pickled, and listings rebuild outages from their dumps.
+
+    The ``when`` lambda can do neither, so both carry the outage without it.
+    """
+    scope = {"affects": "mode", "when": lambda inputs, config: True} if scoped else {}
+    outage = Outage(reason="Upstream is down", since=date(2026, 1, 1), tracking_url=_TRACKING, **scope)
+    assert Outage(**outage.model_dump()).describe() == outage.describe()
+    error = pickle.loads(pickle.dumps(OutageError("k", outage)))  # noqa: S301 -- our own object, round-tripped
+    assert (error.tool_key, str(error)) == ("k", str(OutageError("k", outage)))
+    assert error.outage.affects == outage.affects
+
+
+def test_a_predicate_that_raises_does_not_block_the_tool(degraded_tool, caplog):
+    """A broken declaration is our bug, not the caller's: the call proceeds and the error is logged."""
+    key, _ = degraded_tool
+    spec = ToolRegistry.get(key)
+    broken = spec.outages[0].model_copy(update={"when": lambda inputs, config: config.no_such_field})
+    spec.outages = [broken]
+    with caplog.at_level(logging.ERROR, logger="proto_tools.utils.outage"):
+        out = spec.function(_OutageInput(query="q"), _OutageConfig(use_upstream=True))
+    assert out.echoed == "q"
+    assert "outage predicate raised" in caplog.text
+
+
+def test_modal_containers_skip_the_check(offline_tool, monkeypatch):
+    """A Modal container runs the call it was sent; the entry point already checked it.
+
+    The container can neither see the caller's override nor return OutageError usefully.
+    """
+    from proto_tools.modal.utils import dispatch_tool_call
+
+    monkeypatch.setenv("PROTO_IS_HOSTED_ENV", "0")  # dispatch_tool_call sets it; restored after the test
+    key, calls = offline_tool
+    result = dispatch_tool_call(ToolRegistry.get(key).function, _OutageInput(query="in-container"), _OutageConfig())
+    assert result["echoed"] == "in-container"
+    assert calls == ["in-container"]
+    # Outside a container the same call is still refused.
+    with pytest.raises(OutageError):
+        ToolRegistry.get(key).function(_OutageInput(), _OutageConfig())
 
 
 @pytest.mark.parametrize("device", ["local", "proto"])
