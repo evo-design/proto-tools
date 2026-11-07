@@ -277,7 +277,8 @@ class AlphaFold2RmsdTerm(AlphaFold2Term):
 class AlphaFold2RgTerm(AlphaFold2Term):
     """Radius of gyration of the designed chain's CA atoms beyond the compact-fold expectation.
 
-    The value is ``elu(rg - 2.38 * N**0.365)`` for ``N`` designed residues, as in BindCraft.
+    The value is ``elu(rg - 2.38 * N**0.365)`` for ``N`` designed residues, as in BindCraft and
+    Germinal.
 
     Attributes:
         id (Literal["rg"]): Fixed identifier for this kind of quantity.

@@ -207,13 +207,13 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
         return outputs["structure_module"]["final_atom_positions"][-designed_len:, residue_constants.atom_order["CA"]]
 
     def rg(outputs: Any) -> dict[str, Any]:
-        """Excess radius of gyration, as in BindCraft."""
+        """Excess radius of gyration, as in BindCraft and Germinal."""
         ca = designed_ca(outputs)
         radius = jnp.sqrt(jnp.square(ca - ca.mean(0)).sum(-1).mean() + 1e-8)
         return {key: jax.nn.elu(radius - 2.38 * designed_len**0.365)}
 
     def termini(outputs: Any) -> dict[str, Any]:
-        """Terminal CA distance beyond 7 angstroms, as in BindCraft."""
+        """Terminal CA distance beyond 7 angstroms, as in BindCraft and Germinal."""
         ca = designed_ca(outputs)
         return {key: jax.nn.relu(jax.nn.elu(jnp.linalg.norm(ca[0] - ca[-1]) - 7.0))}
 
