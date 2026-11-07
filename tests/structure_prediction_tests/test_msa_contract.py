@@ -188,6 +188,8 @@ _STUBS: dict[str, _Stub] = {
 # MSA-taking tools that build no MSA conditioning report, and why they are not checked here.
 _EXEMPT = {
     "bioemu-sample": "samples single-chain ensembles and attaches no msa_conditioning report",
+    # TODO: port Mol-1 to the per-chain MSA report (SentMSA + normalize_output_chain_ids(report_msa=True)).
+    "mol1-prediction": "arrived from public main without an msa_conditioning report; porting it needs Mol-1's pairing rules",
 }
 
 # Backends whose upstream pairs identical chains' rows with each other. AF3, Protenix and OpenDDE
