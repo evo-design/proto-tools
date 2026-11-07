@@ -42,8 +42,10 @@ the affected mode, run with `monkeypatch.setenv("PROTO_IGNORE_OUTAGES", "1")` un
 `@pytest.mark.xfail(strict=True, raises=<the upstream's error>)`. While the outage lasts it XFAILs;
 once the upstream recovers it passes, strict xfail fails the nightly integration run, and the fix is to
 delete the `Outage` and the marker. Example: `test_alphafold_db_msa_outage_recovery_probe`.
-`tests/style_consistency_tests/test_outage_declarations.py` checks every outage's `when` against the
-tool's example input and default config.
+`tests/style_consistency_tests/test_outage_declarations.py` evaluates every scoped outage's `when` on the
+tool's example input and default config, and requires `False`: a scoped outage the defaults reach refuses
+every default call, the example, and the hosted smoke run, so declare it with `affects=None` or change the
+default or example instead.
 
 ## Naming
 
