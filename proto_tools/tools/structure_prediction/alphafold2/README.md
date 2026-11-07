@@ -55,7 +55,7 @@ De novo design driven only by what AlphaFold2 believes about a sequence — maxi
 - **`helix` and `beta_strand` have no built-in direction.** Lower means more helical contacts or more strand-like i,i+3 spacing, but whether that is wanted depends on the design, so composing them requires an explicit goal.
 - **`positions` restricts a term to part of the designed chain.** `plddt`, `pae`, `con` and `beta_strand` (and `i_con` on the binder tool) take optional 1-indexed `positions`, e.g. the CDRs; without it a term covers its usual region. `beta_strand` also takes `form="out_of_range"`, which scores `-log(1 - P)`.
 - **Contact terms take `num_contacts` and `cutoff`.** `con` (and on the binder tool `i_con` and `fw_i_con`) default to ColabDesign's settings; BindCraft uses 2 within 14 Å for `con` and 2 within 20 Å for `i_con`.
-- **`rg` and `NC` shape the designed chain.** `rg` is the radius of gyration beyond `2.38 * N**0.365` and `NC` the terminal CA distance beyond 7 Å, as in BindCraft; both are offered by all three tools.
+- **`rg` and `NC` shape the designed chain.** `rg` is the radius of gyration beyond `2.38 * N**0.365` and `NC` the terminal CA distance beyond 7 Å, as in BindCraft and Germinal; both are offered by all three tools.
 - **One sequence per call; this tool is not an optimization loop.** Drive it from an optimizer, or call it repeatedly.
 
 ### AlphaFold2 FixBB Gradient (`alphafold2-fixbb-gradient`)
