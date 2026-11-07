@@ -319,8 +319,11 @@ proto_sha256() {
 # is kept only when its digest matches, so a truncated or altered download is
 # re-fetched instead of being trusted for merely existing. The transfer lands in
 # a .part file that is moved into place only once it matches, so an interrupted
-# run never leaves something that looks finished. Returns nonzero if the freshly
-# downloaded file does not match, which aborts a `set -e` setup.sh.
+# run never leaves something that looks finished. A dropped connection resumes
+# the .part from where it stopped, retrying up to PROTO_DOWNLOAD_ATTEMPTS times
+# (default 5); the .part is kept for the next run if every attempt fails. Returns
+# nonzero if the download fails or does not match, which aborts a `set -e`
+# setup.sh.
 #
 # Example:
 #   proto_download_verified "$URL" "$WEIGHTS_DIR/model.pth" "$MODEL_SHA256"
@@ -329,7 +332,7 @@ proto_sha256() {
 # ---------------------------------------------------------------------------
 proto_download_verified() {
     local url="$1" dest="$2" expected="$3"
-    local actual
+    local actual attempt max_attempts="${PROTO_DOWNLOAD_ATTEMPTS:-5}"
 
     actual="$(proto_sha256 "$dest")"
     if [ "$actual" = "$expected" ]; then
@@ -340,8 +343,21 @@ proto_download_verified() {
         echo "$(basename "$dest") failed checksum verification; re-downloading."
     fi
 
-    echo "Downloading $(basename "$dest")..."
-    curl -fsSL -o "${dest}.part" "$url"
+    # A .part that is already complete (interrupted before the move) needs no transfer.
+    if [ "$(proto_sha256 "${dest}.part")" != "$expected" ]; then
+        echo "Downloading $(basename "$dest")..."
+        attempt=1
+        # -C - resumes from the .part's current size, so each retry continues the transfer.
+        until curl -fsSL -C - -o "${dest}.part" "$url"; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "ERROR: download of ${url} failed after ${attempt} attempts; rerun setup to resume" >&2
+                return 1
+            fi
+            echo "Download interrupted (attempt ${attempt}/${max_attempts}); resuming..."
+            attempt=$((attempt + 1))
+            sleep 5
+        done
+    fi
     actual="$(proto_sha256 "${dest}.part")"
     if [ "$actual" != "$expected" ]; then
         rm -f "${dest}.part"

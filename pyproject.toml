@@ -217,6 +217,7 @@ module = [
     "faiss.*",
     "affine_gaps.*",
     "standalone_helpers.*",
+    "mol.*",
     "boltz.*",
     "ablang2.*",
     "minerva.*",
@@ -461,6 +462,7 @@ exclude = ["*.standalone.standalone_helpers", "*.standalone.standalone_helpers.*
 "proto_tools.modal.structure_prediction.chai1_deployment" = ["README.md"]
 "proto_tools.modal.structure_prediction.esmfold2_deployment" = ["README.md"]
 "proto_tools.modal.structure_prediction.esmfold_deployment" = ["README.md"]
+"proto_tools.modal.structure_prediction.mol1_deployment" = ["README.md"]
 "proto_tools.modal.structure_prediction.opendde_deployment" = ["README.md"]
 "proto_tools.modal.structure_prediction.protenix_deployment" = ["README.md"]
 "proto_tools.modal.structure_prediction.rf3_deployment" = ["README.md"]

@@ -99,6 +99,7 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "minerva-sample": ToolEntry("proto-tools-minerva", "MinervaService", "sample", True),
     "minerva-score": ToolEntry("proto-tools-minerva", "MinervaService", "score", True),
     "miranda-scan": ToolEntry("proto-tools-miranda", "MirandaService", "scan", False),
+    "mol1-prediction": ToolEntry("proto-tools-mol1", "Mol1Service", "predict", True),
     "opendde-prediction": ToolEntry("proto-tools-opendde", "OpenDDEService", "predict", True),
     "orfipy-prediction": ToolEntry("proto-tools-orfipy", "OrfipyService", "predict", False),
     "pangolin-predict": ToolEntry("proto-tools-pangolin", "PangolinService", "predict", True),
