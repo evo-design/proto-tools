@@ -15,22 +15,15 @@ uv pip install -r requirements.txt --constraint "$TORCH_CONSTRAINT"
 
 proto_resolve_weights_dir mol1
 mkdir -p "${WEIGHTS_DIR}/checkpoint"
-MOL1_DOWNLOAD_PARTIAL=""
-trap 'rm -f "${MOL1_DOWNLOAD_PARTIAL:-}"' EXIT
 
-download_atomic() {
-    local url="$1" destination="$2"
-    if [ ! -s "$destination" ]; then
-        MOL1_DOWNLOAD_PARTIAL="${destination}.partial.$$"
-        curl -fSL --retry 3 -o "$MOL1_DOWNLOAD_PARTIAL" "$url"
-        mv "$MOL1_DOWNLOAD_PARTIAL" "$destination"
-        MOL1_DOWNLOAD_PARTIAL=""
-    fi
-}
-
+# Official upstream release files. Both are unpickled when the model loads, so
+# each download is verified against its digest before anything uses it.
 MOL1_RELEASE="https://mol-1-release.oss-cn-shanghai.aliyuncs.com"
+MOL1_COMMON_SHA256="f6f953dac716bf89b46799738c85f5e0d4626e0cc905bb805a161671fd5cf898"
+MOL1_CHECKPOINT_SHA256="d5b83a86884aa6870565b1a249e8f13c232dfc6dfa311089ab0c7868212b6bd6"
+
 if [ ! -f "${WEIGHTS_DIR}/.mol1-common-ready" ]; then
-    download_atomic "${MOL1_RELEASE}/common.tar.gz" "${WEIGHTS_DIR}/common.tar.gz"
+    proto_download_verified "${MOL1_RELEASE}/common.tar.gz" "${WEIGHTS_DIR}/common.tar.gz" "$MOL1_COMMON_SHA256"
     python - "$WEIGHTS_DIR" <<'PY'
 import sys
 import tarfile
@@ -46,6 +39,6 @@ for name in ("components.cif", "components.cif.rdkit_mol.pkl", "clusters-by-enti
 (root / "common.tar.gz").unlink()
 PY
 fi
-download_atomic "${MOL1_RELEASE}/checkpoint/mol-1-base.pt" "${WEIGHTS_DIR}/checkpoint/mol-1-base.pt"
+proto_download_verified "${MOL1_RELEASE}/checkpoint/mol-1-base.pt" "${WEIGHTS_DIR}/checkpoint/mol-1-base.pt" "$MOL1_CHECKPOINT_SHA256"
 
 echo "Mol-1 setup complete: ${WEIGHTS_DIR}"
