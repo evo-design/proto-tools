@@ -35,6 +35,18 @@ Canonical reference is `pyproject.toml [tool.pytest.ini_options].markers`. Tool-
 - **`@pytest.mark.include_in_env_report`**: Applied automatically by `test_env_report.py` parametrization. Do not add manually
 - **`@pytest.mark.test_on_platforms('x86_64', ...)`**: Restrict to specific architectures
 
+## Upstream outages
+
+A declared `Outage` (see `notes/error-handling.md`) gets a recovery probe: the integration test for
+the affected mode, run with `monkeypatch.setenv("PROTO_IGNORE_OUTAGES", "1")` under
+`@pytest.mark.xfail(strict=True, raises=<the upstream's error>)`. While the outage lasts it XFAILs;
+once the upstream recovers it passes, strict xfail fails the nightly integration run, and the fix is to
+delete the `Outage` and the marker. Example: `test_alphafold_db_msa_outage_recovery_probe`.
+`tests/style_consistency_tests/test_outage_declarations.py` evaluates every scoped outage's `when` on the
+tool's example input and default config, and requires `False`: a scoped outage the defaults reach refuses
+every default call, the example, and the hosted smoke run, so declare it with `affects=None` or change the
+default or example instead.
+
 ## Naming
 
 - **Validation tests**: `test_{model}_rejects_{what}`

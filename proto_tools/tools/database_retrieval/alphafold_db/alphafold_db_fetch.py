@@ -7,6 +7,7 @@ from the AlphaFold Protein Structure Database by UniProt accession.
 import csv
 import json
 import logging
+from datetime import date
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
@@ -21,6 +22,7 @@ from proto_tools.utils import (
     BaseToolOutput,
     ConfigField,
     InputField,
+    Outage,
     build_http_session,
     request_with_retry,
 )
@@ -357,6 +359,15 @@ def example_input() -> Any:
     uses_gpu=False,
     example_input=example_input,
     cacheable=True,
+    outages=[
+        Outage(
+            reason="AlphaFold DB has temporarily restricted MSA downloads",
+            since=date(2026, 8, 24),
+            tracking_url="https://github.com/google-deepmind/alphafold/issues/1137",
+            affects="include_msa",
+            when=lambda _inputs, config: config.include_msa,
+        )
+    ],
 )
 def run_alphafold_db_fetch(
     inputs: AlphaFoldDBFetchInput,

@@ -25,6 +25,7 @@ from proto_tools.utils.interaction_models import (
 )
 from proto_tools.utils.logging_config import get_logger, setup_logging
 from proto_tools.utils.msa import extract_msa_sequences
+from proto_tools.utils.outage import Outage, OutageError
 from proto_tools.utils.polling import StatusExtractor, extract_text_status, poll_until_complete
 from proto_tools.utils.progress import SPINNER_STYLES, SpinnerStyle, progress_bar, set_substatus
 from proto_tools.utils.sequence import (
@@ -113,6 +114,8 @@ __all__ = [
     "BaseToolOutput",
     "InputField",
     "ToolExecutionError",
+    "Outage",
+    "OutageError",
     # Caching
     "clear_cache",
     "clear_tool_cache",
