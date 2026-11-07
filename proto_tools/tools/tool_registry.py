@@ -92,6 +92,7 @@ from proto_tools.utils.fanout import (
     merge_piece_outputs,
     on_partial_failure,
 )
+from proto_tools.utils.outage import Outage, OutageError, active_outage
 from proto_tools.utils.progress import (
     reset_current_tool_function,
     set_current_tool_function,
@@ -692,6 +693,8 @@ class ToolSpec(BaseModel):
             reconciliation and dedup expansion. Use for batch-level post-processing
             (e.g. UMAP projection of an embedding batch) that must see the full
             request, not the per-item cached subset visible inside the tool function.
+        outages (list[Outage]): Declared upstream outages. A call matching one is refused before
+            dispatch with ``OutageError``. Serialized, so catalogues can show them.
     """
 
     # Public fields - exposed in API
@@ -805,6 +808,10 @@ class ToolSpec(BaseModel):
             "(e.g. UMAP projection of an embedding batch) that must see the full request — "
             "not the per-item cached subset visible inside the tool function."
         ),
+    )
+    outages: list[Outage] = Field(
+        default_factory=list,
+        description="Declared upstream outages; a matching call is refused before dispatch with OutageError",
     )
 
     model_config = {
@@ -944,6 +951,7 @@ class ToolRegistry:
         cacheable: bool = False,
         stochastic: bool = False,
         post_process_iterable: Callable[[list[Any]], None] | None = None,
+        outages: list[Outage] | None = None,
     ) -> Callable[[Callable[..., BaseToolOutput]], Callable[..., BaseToolOutput]]:
         """Decorator to register a tool function and wrap execution with metadata tracking.
 
@@ -997,6 +1005,9 @@ class ToolRegistry:
                 Being static, it lets a catalogue list what is deployable without constructing a
                 config. For a refusal that depends on how the tool is configured, override
                 ``BaseConfig.remote_unsupported_reason`` instead.
+            outages (list[Outage] | None): Upstream outages affecting the whole tool or one mode
+                of it. A matching call is refused before dispatch, on every device, with
+                ``OutageError``; ``PROTO_IGNORE_OUTAGES=1`` lets it through.
             cacheable (bool): Declares that this tool's output is a
                 deterministic function of (input, config), making it
                 eligible for the program-scoped cache and the framework's
@@ -1133,6 +1144,9 @@ class ToolRegistry:
                 runtime_cacheable = cache_enabled and (not stochastic_tool or config.seed is not None)
 
                 _reject_empty_batch(key, spec, inputs)
+                declared_outages = spec.outages if spec is not None else (outages or [])
+                if (outage := active_outage(key, declared_outages, inputs, config)) is not None:
+                    raise OutageError(key, outage)
 
                 deduped = None
                 original_items = None
@@ -1584,6 +1598,7 @@ class ToolRegistry:
                 cacheable=cacheable,
                 stochastic=stochastic,
                 post_process_iterable=post_process_iterable,
+                outages=outages or [],
             )
             return wrapper
 

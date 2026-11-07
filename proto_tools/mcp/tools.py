@@ -14,8 +14,10 @@ from proto_tools.mcp.device import Device, is_remote
 
 if TYPE_CHECKING:  # imported for the annotation only; the runtime import stays inside deploy_tool
     from proto_tools.modal.deploy import ModalTokens
+    from proto_tools.tools.tool_registry import ToolSpec
 from proto_tools.utils.base_config import BaseConfig
 from proto_tools.utils.modal_status import credentials_checked, deployed_apps
+from proto_tools.utils.outage import OutageError, active_outage
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +276,9 @@ def list_tools(
         notes = ["Runs in this session; no deployment is needed."] if key in in_process else []
         if spec.local_only:
             notes.append(spec.local_only)
+        notes.extend(f"Outage: {o.describe()}" for o in spec.outages)
+        if spec.outages:
+            entry["outages"] = _outages(spec)
         if notes:
             entry["note"] = " ".join(notes)
         if key in in_process:
@@ -491,11 +496,18 @@ def _unknown_key(tool_key: str) -> dict[str, Any]:
     }
 
 
+def _outages(spec: ToolSpec) -> list[dict[str, Any]]:
+    """A tool's declared outages, JSON-ready (the ``when`` predicate is not serialized)."""
+    return [o.model_dump(mode="json") for o in spec.outages]
+
+
 def get_tool_schema(tool_key: str) -> dict[str, Any]:
     """Return the input, config and output JSON schemas for one tool, and whether it has an example.
 
     ``has_example`` makes the next step decidable from this call: asking for an example that does
     not exist is a wasted round trip, and not asking because none was expected is a guessed payload.
+    ``outages`` lists declared upstream outages; ``run_tool`` refuses a call that reaches one, so
+    they are here, on the call made before every run, rather than only in the catalogue.
     """
     from proto_tools.tools import ToolRegistry
 
@@ -510,6 +522,7 @@ def get_tool_schema(tool_key: str) -> dict[str, Any]:
         "config_schema": spec.config_model.model_json_schema(),
         "output_schema": spec.output_model.model_json_schema(),
         "has_example": ToolRegistry.get_example_input(tool_key) is not None,
+        "outages": _outages(spec),
     }
 
 
@@ -592,7 +605,7 @@ def get_tool_info(tool_key: str) -> dict[str, Any]:
     ``links`` are the model's own: its authors' repository, paper and published weights.
     ``license`` is the parsed ``license.yaml`` (code and weight terms, commercial use), or ``None``
     when the toolkit ships none; ``weights_access`` is how the weights are obtained: ``"open"``,
-    ``"hf-gated"`` or ``"request"``.
+    ``"hf-gated"`` or ``"request"``. ``outages`` lists declared upstream outages.
     """
     from proto_tools.tools import ToolRegistry
 
@@ -612,6 +625,7 @@ def get_tool_info(tool_key: str) -> dict[str, Any]:
         "docs_url": ToolRegistry.get_docs_url(tool_key),
         "license": ToolRegistry.get_license(tool_key),
         "weights_access": ToolRegistry.get_weights_access(tool_key),
+        "outages": _outages(spec),
     }
 
 
@@ -811,6 +825,9 @@ def run_tool(
     if not isinstance(cfg, BaseConfig):
         return {"ok": False, "error": f"config model is {type(cfg).__name__}, not a BaseConfig"}
     cfg.device = device if is_remote(device) else "cpu"
+    # The wrapper refuses this too, but the remote branches of _dispatch do not go through it.
+    if (outage := active_outage(tool_key, spec.outages, payload, cfg)) is not None:
+        return {"ok": False, "error": str(OutageError(tool_key, outage)), "outage": outage.model_dump(mode="json")}
     # The registry's wrapper asks this before dispatching, but this path does not go through it.
     # Without the check a setting the device cannot honour -- a custom checkpoint on Proto, a
     # local database on any remote worker -- reaches a container and fails there instead.

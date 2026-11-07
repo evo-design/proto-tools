@@ -30,6 +30,7 @@ from proto_tools.tools.database_retrieval.alphafold_db.alphafold_db_fetch import
     _fetch_prediction,
 )
 from proto_tools.tools.tool_registry import _make_error_output
+from proto_tools.utils import OutageError
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 
 
@@ -109,6 +110,13 @@ def test_fetch_prediction_retries_connection_reset(monkeypatch):
     result = _fetch_prediction("https://example/api", session)
     assert result == [{"modelEntityId": "AF-P04637-F1"}]
     assert session.calls == 3
+
+
+def test_include_msa_is_refused_by_the_declared_outage_without_a_request(monkeypatch):
+    """AFDB's MSA restriction is declared, so include_msa=True fails fast instead of on a 403."""
+    monkeypatch.setattr(alphafold_db_fetch, "build_http_session", lambda **kw: pytest.fail("opened an HTTP session"))
+    with pytest.raises(OutageError, match="affects include_msa"):
+        run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="P04637"), AlphaFoldDBFetchConfig(include_msa=True))
 
 
 # ---------------------------------------------------------------------------
@@ -267,22 +275,18 @@ def test_json_export_unchanged_after_sidecar_addition():
 
 @pytest.mark.integration
 def test_alphafold_db_fetch_csv_export_against_live_api_yields_usable_sidecars():
-    """Live AFDB fetch with include_msa=True + CSV export: each sidecar re-parses to match the manifest row."""
-    output = run_alphafold_db_fetch(
-        AlphaFoldDBFetchInput(uniprot_id="P04637"),
-        AlphaFoldDBFetchConfig(include_msa=True),
-    )
+    """Live AFDB fetch + CSV export: each sidecar re-parses to match the manifest row."""
+    output = run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="P04637"), AlphaFoldDBFetchConfig())
     assert output.success
 
     with tempfile.TemporaryDirectory() as tmp:
         output.export(name="tp53", export_path=tmp, file_format="csv")
         d = Path(tmp)
-        assert {p.name for p in d.iterdir()} == {"tp53.csv", "tp53.pdb", "tp53.a3m", "tp53_raw.json"}
+        assert {p.name for p in d.iterdir()} == {"tp53.csv", "tp53.pdb", "tp53_raw.json"}
 
         row = _read_csv_row(d / "tp53.csv")
         assert row["entry_id"] == "AF-P04637-F1"
         assert row["structure_path"] == "tp53.pdb"
-        assert row["msa_path"] == "tp53.a3m"
         assert row["raw_path"] == "tp53_raw.json"
 
         rehydrated = Structure(
@@ -294,10 +298,29 @@ def test_alphafold_db_fetch_csv_export_against_live_api_yields_usable_sidecars()
         chain_seqs = rehydrated.get_chain_sequences()
         assert chain_seqs[next(iter(chain_seqs))] == row["sequence"]
 
-        a3m_lines = (d / "tp53.a3m").read_text(encoding="utf-8").splitlines()
-        assert a3m_lines[0].startswith(">")
-        a3m_query = "".join(c for c in a3m_lines[1] if c.isalpha() and c.isupper())
-        assert a3m_query == row["sequence"]
+
+@pytest.mark.integration
+@pytest.mark.xfail(
+    strict=True,
+    raises=requests.HTTPError,
+    reason="AFDB restricted MSA downloads (google-deepmind/alphafold#1137); declared as an Outage",
+)
+def test_alphafold_db_msa_outage_recovery_probe(monkeypatch):
+    """Recovery probe for the declared MSA outage: fetches the MSA past the declaration.
+
+    Expected to fail with AFDB's 403 while the outage lasts. Once AFDB restores access this
+    passes, strict xfail turns that into a failure, and the fix is to delete the Outage from
+    ``alphafold_db_fetch.py`` along with this xfail marker.
+    """
+    monkeypatch.setenv("PROTO_IGNORE_OUTAGES", "1")
+    output = run_alphafold_db_fetch(
+        AlphaFoldDBFetchInput(uniprot_id="P04637"),
+        AlphaFoldDBFetchConfig(include_msa=True),
+    )
+    a3m_lines = (output.msa_a3m or "").splitlines()
+    assert a3m_lines[0].startswith(">")
+    a3m_query = "".join(c for c in a3m_lines[1] if c.isalpha() and c.isupper())
+    assert a3m_query == output.sequence
 
 
 @pytest.mark.integration

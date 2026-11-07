@@ -131,6 +131,16 @@ license bars commercial use and redistribution. For usage rights read
 `get_license()` (`commercial_use`, `redistribution`, `weights.text`), not
 `get_weights_access()`.
 
+## Outages
+
+`ToolSpec.outages` lists declared upstream outages (`proto_tools/utils/outage.py`), each with
+`reason`, `since`, `tracking_url`, and `affects` (`None` for the whole tool, or the affected mode).
+It is serialized, so `catalog --json` carries it. On the agent surface, `get_tool_schema` and
+`get_tool_info` always include `outages`, and `list_tools`/`search_tools` entries include it
+(plus an `Outage:` line in `note`) when any is declared. The CLI marks such tools `(OFFLINE)` or
+`(DEGRADED: <affects>)`. A call that reaches an outage raises `OutageError` before dispatch;
+see `notes/error-handling.md`.
+
 ## Calling a Tool
 
 Every registered tool follows the same shape, where the `Input` and `Config` together feed the `run_*()` call that produces an `Output`:

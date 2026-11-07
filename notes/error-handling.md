@@ -26,6 +26,7 @@ This is a process-wide setting, with no per-call kwarg.
 | Tool raises, default mode                | call raises, no output is returned |
 | Tool raises, `PROTO_CAPTURE_ERRORS=1`    | `False` | `["TypeName: msg", "<traceback>"]` |
 | Tool raises `MissingAssetError`, any mode | call raises, env var ignored |
+| Call matches a declared outage, any mode | call raises `OutageError` before dispatch, env var ignored |
 
 Treat the fields as the wire-format contract for capture mode, and don't write code that reads them under the default raise path, where they will only ever be `success=True, errors=[]`.
 
@@ -34,6 +35,14 @@ Treat the fields as the wire-format contract for capture mode, and don't write c
 ## Carve-out: `MissingAssetError` always raises
 
 `MissingAssetError` (signaled by the `ASSET_NOT_AVAILABLE` sentinel a tool's `setup.sh` prints before exiting 64, and raised in `proto_tools/utils/tool_instance.py`) **always propagates**, regardless of `PROTO_CAPTURE_ERRORS`. The pytest skip hook in `tests/conftest.py` relies on catching the real exception type to convert unprovisioned-asset failures into skips on machines that don't have gated weights / large databases.
+
+## Upstream outages: `OutageError`
+
+A tool declares upstream outages with `@tool(..., outages=[Outage(...)])` (`proto_tools/utils/outage.py`). An `Outage` covers the whole tool, or one mode of it when `affects` (a label such as `"include_msa"`) and `when` (a predicate over `(inputs, config)`) are set; the two must be set together. A call that matches is refused in the wrapper, right after the empty-batch check and before any dispatch backend, device, or network call, with `OutageError(ValueError)`. It is raised the way a pydantic `ValidationError` is, so `PROTO_CAPTURE_ERRORS` does not turn it into `output.errors`.
+
+`PROTO_IGNORE_OUTAGES=1` logs a warning and lets the call through, to check whether the upstream has recovered. The MCP `run_tool` runs the same check (`active_outage`) itself, since its remote branches do not go through the wrapper, and answers `{"ok": false, "error": ..., "outage": {...}}`.
+
+To lift an outage, delete the `Outage` and its recovery probe's xfail marker (see `notes/testing.md`).
 
 ## Retry loop is unchanged
 
