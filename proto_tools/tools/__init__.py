@@ -1077,7 +1077,6 @@ from proto_tools.tools.structure_dynamics import BioEmuConfig, BioEmuInput, BioE
 # Structure prediction tools
 from proto_tools.tools.structure_prediction import (
     BINDER_CHAIN_ID,
-    INVERSION_CHECKPOINTS,
     TARGET_CHAIN_ID,
     AlphaFold2BetaStrandTerm,
     AlphaFold2BinderGradientCandidate,
@@ -1740,7 +1739,6 @@ __all__ = [
     # Structure prediction - ESMFold2
     "run_esmfold2",
     "BINDER_CHAIN_ID",
-    "INVERSION_CHECKPOINTS",
     "TARGET_CHAIN_ID",
     "ESMFold2BinderCandidate",
     "ESMFold2BinderGradientConfig",
