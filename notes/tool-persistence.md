@@ -329,10 +329,28 @@ in full in `notes/device-management.md`.
 ## Timeouts
 
 Every tool call enforces a timeout, default 3600 seconds (`DEFAULT_TIMEOUT`,
-overridable per call via the `timeout` config field). The timeout bounds the
-**entire** wait for the worker's response — including any third-party or native
-output written to the worker's stdout, not just the first byte. If a call exceeds
-it, the worker subprocess is killed and a `TimeoutError` is raised. For a
+overridable per call via the `timeout` config field). The timeout bounds the wait
+for the worker's response — including any third-party or native output written to
+the worker's stdout, not just the first byte — except for time spent downloading
+weights. If a call exceeds it, the worker subprocess is killed and a `TimeoutError`
+is raised.
+
+A first call can download gigabytes of weights at whatever speed the link allows, so
+`ProgressDeadline` (`proto_tools/utils/download_progress.py`) adds back every interval
+in which the toolkit's download folders grew by at least 1 MiB: `HF_HOME`, `TORCH_HOME`,
+and its weights directory, checked every `PROTO_DOWNLOAD_POLL_SECONDS` (default 30).
+Smaller growth (a cache, a log) is not a download. A download that stalls stops growing,
+so the clock runs again and the remaining timeout bounds it. At most
+`PROTO_DOWNLOAD_MAX_SECONDS` (default 12 hours) is added back per request, so a writer
+mistaken for a download cannot keep a wedged worker alive. The JAX and compile caches
+are not watched. The same rule applies to one-shot runs and `run_in_env`. A timeout
+message reports any download time it excluded. With no timeout, the heartbeat watches
+the same folders, so a long download logs "Downloading weights", not a wedge.
+
+The first call of each `reload_on_change` combination (and the first one-shot run of an
+env) also gets at least 3600 s, the warm-up extension, for first-run work that is not a
+download, such as JIT compiles and model loading. A `.warmup_complete_*` marker in the env
+records each combination that has finished once. For a
 **persistent** worker the timeout is per-call: a call that trips the timeout tears
 down that worker, so the next call reloads the model in a fresh subprocess.
 `timeout` is `reload_on_change=False` and `include_in_key=False`, so changing it

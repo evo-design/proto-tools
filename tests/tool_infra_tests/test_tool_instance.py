@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from proto_tools.utils import download_progress
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT
 from proto_tools.utils.tool_instance import (
     UV_VERSION,
@@ -909,6 +910,22 @@ def test_reload_fields_excludes_non_reload():
 
 # ── Timeout tests ──────────────────────────────────────────────────────────
 
+# One-shot script that appends to a file in its HF cache for 5s, then writes its output.
+_GROWING_DOWNLOAD_SCRIPT = """\
+import json, os, pathlib, sys, time
+
+blob = pathlib.Path(os.environ["HF_HOME"]) / "hub" / "blob.incomplete"
+blob.parent.mkdir(parents=True, exist_ok=True)
+end = time.monotonic() + 5
+with open(blob, "ab") as f:
+    while time.monotonic() < end:
+        f.write(b"x" * 1024)
+        f.flush()
+        time.sleep(0.05)
+with open(sys.argv[2], "w") as out:
+    json.dump({"ok": True}, out)
+"""
+
 
 def test_oneshot_timeout_raises():
     """_run_oneshot() should SIGTERM/SIGKILL the process group and raise TimeoutError."""
@@ -918,23 +935,43 @@ def test_oneshot_timeout_raises():
     fake_proc.pid = 12345
     fake_proc.stderr = MagicMock()
     fake_proc.stderr.__iter__ = lambda self: iter([])  # drain thread sees EOF immediately
-    fake_proc.wait.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=10)
+
+    def _never_exits(timeout: float | None = None) -> int:
+        time.sleep(min(timeout or 0, 0.05))
+        raise subprocess.TimeoutExpired(cmd="x", timeout=timeout)
+
+    fake_proc.wait.side_effect = _never_exits
 
     with (
         patch("proto_tools.utils.tool_instance.subprocess.Popen", return_value=fake_proc),
         patch("proto_tools.utils.tool_instance.os.killpg") as mock_killpg,
-        pytest.raises(TimeoutError, match="timed out after 10s"),
+        pytest.raises(TimeoutError, match="timed out after 1s"),
     ):
         inst._run_oneshot(
             {"op": "score"},
             script_path=Path("/fake/inference.py"),
-            timeout=10,
+            timeout=1,
         )
 
     # SIGTERM first, then SIGKILL escalation when the SIGTERM wait also times out.
     sent_signals = [call.args[1] for call in mock_killpg.call_args_list]
     assert sent_signals == [signal.SIGTERM, signal.SIGKILL]
     assert all(call.args[0] == 12345 for call in mock_killpg.call_args_list)
+
+
+def test_oneshot_download_progress_is_not_charged_to_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A one-shot run that keeps growing its HF cache past ``timeout`` still completes."""
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("PROTO_DOWNLOAD_POLL_SECONDS", "0.2")
+    monkeypatch.setattr(download_progress, "_MIN_GROWTH_BYTES", 1)
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "python").symlink_to(sys.executable)
+    script = tmp_path / "download.py"
+    script.write_text(_GROWING_DOWNLOAD_SCRIPT)
+    inst = _make_fake_instance(toolkit="test_tool", _tmp_dir=venv)
+
+    assert inst._run_oneshot({}, script_path=script, timeout=2) == {"ok": True}
 
 
 @patch.object(ToolInstance, "_oneshot")

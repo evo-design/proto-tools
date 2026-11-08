@@ -139,7 +139,8 @@ class BaseConfig(BaseModel):
         verbose (int): Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess stderr).
             ``True`` is coerced to ``1`` and ``False`` to ``0``.
         device (str): Device to run the tool on.
-        timeout (int | None): Maximum execution time in seconds. ``None`` waits indefinitely.
+        timeout (int | None): Maximum execution time in seconds, not counting time spent while a
+            weights download keeps progressing. ``None`` waits indefinitely.
         seed (int | None): Random seed. When set, tools run reproducibly up to small
             GPU float noise (see ``BaseToolOutput.approx_equal``), and the seed
             participates in cache keys. When None, cacheable seed-sensitive tools
@@ -339,7 +340,7 @@ class BaseConfig(BaseModel):
         title="Timeout",
         default=DEFAULT_TIMEOUT,
         ge=1,
-        description="Maximum execution time in seconds. None waits indefinitely.",
+        description="Max seconds of execution, not counting weight downloads that keep progressing. None: no limit.",
         include_in_key=False,
     )
 

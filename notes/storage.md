@@ -209,6 +209,8 @@ Download setup-time weights into `$WEIGHTS_DIR` so they are tracked, and write f
 
 `proto_download_verified` (checksum known), `proto_download` (no checksum), and `proto_download_archive` (tar into a directory) each lock their target, download into a temp file of their own, and move it into place only when complete, so concurrent setups sharing the cache never see or clobber a partial file. A file that is already present skips the lock, so read-only caches keep working. Wrap any other step that writes shared files in `proto_with_lock <lock_file> <command...>`; name the lock `.<file>.download.lock` beside a file or `.<dir>.extract.lock` beside a directory, matching the Python helpers, so bash and Python callers for the same target wait for each other.
 
+A weights download is never cut off while it is still receiving data; it fails only once it stalls. `proto_download` and `proto_download_archive` retry a failed transfer 5 times, so a flaky host does not fail the setup. In `setup.sh`, always download through these helpers: never call `curl` or `wget` directly, and never cap a transfer with `--max-time` (`tests/style_consistency_tests/test_setup_download_consistency.py` enforces both). In a worker, a request's `timeout` does not count time in which the toolkit's download folders grew (see [tool-persistence.md](tool-persistence.md#timeouts)).
+
 Waiting has no fixed deadline, so a large download on a slow link is waited out however long it takes:
 
 - `PROTO_LOCK_STALL_SECONDS` (default 600): a waiter gives up only when the holder's download (its temp file, or the directory being extracted) has not grown for this long. `proto_with_lock --progress <path>` gives custom steps the same behavior; without `--progress`, a waiter waits until the lock is free.

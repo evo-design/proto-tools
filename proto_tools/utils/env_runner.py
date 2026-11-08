@@ -14,10 +14,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from proto_tools.utils.device_manager import DeviceManager
+from proto_tools.utils.download_progress import ProgressDeadline
 from proto_tools.utils.logging_config import verbose_level_from_env
 from proto_tools.utils.persistent_worker import (
     _apply_verbose_to_console_handlers,
     _build_subprocess_env,
+    _download_dirs,
     _drain_subprocess_stderr,
     _stderr_buffer_lines,
 )
@@ -51,8 +53,8 @@ def run_in_env(
     sees only the leased GPU(s), renumbered ``cuda:0..N-1``, so bare ``"cuda"`` and JAX land on
     the lease rather than on a GPU a tool worker holds; the device to use is exported as
     ``RUN_IN_ENV_DEVICE``. A ``cpu`` run sees no GPU at all (``JAX_PLATFORMS=cpu``), so it
-    cannot claim one. ``timeout`` bounds the whole run, so set it generously when the program
-    downloads weights on first use.
+    cannot claim one. ``timeout`` bounds the run, except for time spent while the toolkit's
+    weights download keeps progressing.
 
     Args:
         toolkit (str): Toolkit whose environment to run in (for example ``"esm2"``).
@@ -60,7 +62,7 @@ def run_in_env(
         script (Path | str | None): Path to a Python script to execute.
         args (Sequence[str]): Command-line arguments passed to the code/script as ``sys.argv[1:]``.
         device (str): Device to lease and run on; the resolved value is exported as ``RUN_IN_ENV_DEVICE``.
-        timeout (int): Maximum seconds to wait for the run.
+        timeout (int): Maximum seconds to wait for the run, not counting weight downloads.
         verbose (int): Verbosity for re-emitted logs; ``>= 3`` also tees raw stderr.
 
     Returns:
@@ -69,7 +71,7 @@ def run_in_env(
     Raises:
         ValueError: If not exactly one of ``code`` / ``script`` is provided.
         RuntimeError: If the subprocess exits with a non-zero status.
-        TimeoutError: If the run exceeds ``timeout`` seconds.
+        TimeoutError: If the run exceeds ``timeout`` seconds of non-download time.
     """
     if (code is None) == (script is None):
         raise ValueError("run_in_env requires exactly one of code= or script=.")
@@ -146,8 +148,9 @@ def run_in_env(
             stdout_thread.start()
             stderr_thread.start()
 
+            deadline = ProgressDeadline(timeout, _download_dirs(toolkit, env, instance.env_path), label=toolkit)
             try:
-                proc.wait(timeout=timeout)
+                deadline.wait_process(proc)
             except subprocess.TimeoutExpired:
                 # killpg, not proc.kill, so grandchildren don't orphan with live CUDA handles.
                 with suppress(OSError):
@@ -159,7 +162,9 @@ def run_in_env(
                         os.killpg(proc.pid, signal.SIGKILL)
                     with suppress(Exception):
                         proc.wait(timeout=5)
-                raise TimeoutError(f"run_in_env({toolkit!r}) timed out after {timeout}s.") from None
+                raise TimeoutError(
+                    f"run_in_env({toolkit!r}) timed out after {timeout}s{deadline.timeout_note()}."
+                ) from None
             finally:
                 stdout_thread.join(timeout=2)
                 stderr_thread.join(timeout=2)

@@ -50,6 +50,12 @@ def _run_concurrently(command: str, n: int, env: dict[str, str] | None = None) -
     return [(proc.wait(), proc.stdout.read()) for proc in procs]
 
 
+@pytest.fixture(autouse=True)
+def _no_download_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail at once by default; the retry test turns retries back on."""
+    monkeypatch.setenv("_PROTO_DOWNLOAD_RETRIES", "0")
+
+
 _needs_flock = pytest.mark.skipif(shutil.which("flock") is None, reason="flock(1) not available")
 
 
@@ -499,6 +505,49 @@ def test_download_aborts_a_stalled_transfer(tmp_path: Path) -> None:
     assert "failed to download" in result[0][1]
     assert elapsed < 20
     assert not dest.exists() and not list(tmp_path.glob(".model.pt.*.tmp"))
+
+
+def _flaky_handler(body: bytes, failures: int) -> type[http.server.BaseHTTPRequestHandler]:
+    """Answer the first ``failures`` requests with HTTP 503, then serve ``body``."""
+    seen = []
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            seen.append(self.path)
+            if len(seen) <= failures:
+                self.send_error(503)
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    return _Handler
+
+
+@pytest.mark.parametrize("helper", ["proto_download", "proto_download_archive"])
+def test_download_retries_a_transient_failure(tmp_path: Path, helper: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A flaky host that fails twice still delivers, and the archive is extracted from a clean folder."""
+    monkeypatch.setenv("_PROTO_DOWNLOAD_RETRIES", "3")
+    monkeypatch.setenv("_PROTO_DOWNLOAD_RETRY_DELAY", "1")
+    archive = tmp_path / "params.tar"
+    with tarfile.open(archive, "w") as tar:
+        (tmp_path / "params_model_1.npz").write_bytes(_zip_bytes())
+        tar.add(tmp_path / "params_model_1.npz", arcname="params_model_1.npz")
+    server = _serve(_flaky_handler(archive.read_bytes(), failures=2))
+    dest = tmp_path / "out"
+    try:
+        result = _run(f'{helper} "http://127.0.0.1:{server.server_address[1]}/params.tar" "{dest}"')
+    finally:
+        server.shutdown()
+    assert result.returncode == 0, result.stderr
+    if helper == "proto_download":
+        assert dest.read_bytes() == archive.read_bytes()
+    else:
+        assert (dest / "params_model_1.npz").read_bytes() == _zip_bytes()
 
 
 def _af2_params_archive(tmp_path: Path) -> Path:
