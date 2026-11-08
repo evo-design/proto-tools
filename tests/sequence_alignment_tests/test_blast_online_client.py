@@ -114,10 +114,23 @@ def test_submission_rejection_is_retried_twice_then_fails(monkeypatch, clock):
 
 
 def test_search_times_out_while_pending(monkeypatch, clock):
+    """The search fails when its timeout elapses, not before and not a poll interval later."""
     _use_session(monkeypatch, _Session(clock, posts=[_RID_PAGE], gets=["Status=WAITING"] * 10))
 
     with pytest.raises(TimeoutError):
         client.search_xml({"QUERY": "ACGT"}, timeout=150, client_identity=None)
+    assert clock[0] == pytest.approx(250)
+
+
+def test_rejection_cooldown_stops_at_the_timeout(monkeypatch, clock):
+    """A -99 cooldown that would outlast the timeout ends at it instead of sleeping past it (#343)."""
+    session = _Session(clock, posts=[_REJECTION] * 3, gets=[])
+    _use_session(monkeypatch, session)
+
+    with pytest.raises(TimeoutError):
+        client.search_xml({"QUERY": "ACGT"}, timeout=100, client_identity=None)
+    assert clock[0] == pytest.approx(200)
+    assert [at for _, at, _ in session.calls] == [100, 160]
 
 
 def test_submissions_are_spaced_within_a_process(clock):

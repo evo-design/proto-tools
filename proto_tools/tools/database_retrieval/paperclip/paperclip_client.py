@@ -27,7 +27,7 @@ from typing import Any
 
 import requests
 
-from proto_tools.utils import build_http_session, request_with_retry
+from proto_tools.utils import build_http_session, propagate, request_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +244,7 @@ class PaperclipClient:
         if not paths:
             return None, []
         with ThreadPoolExecutor(max_workers=min(_LOOKUP_WORKERS, len(paths))) as pool:
-            return None, [json.loads(text) for text in pool.map(self.read_file, paths)]
+            return None, [json.loads(text) for text in pool.map(propagate(self.read_file), paths)]
 
     def grep(
         self,

@@ -1,11 +1,14 @@
 """HTTP polling helper for submit-and-poll bio API patterns."""
 
 import logging
+import math
 import time
 from collections.abc import Callable
 from typing import Any
 
 import requests
+
+from proto_tools.utils.deadlines import sleep_within_deadline
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +61,7 @@ def poll_until_complete(
     status_url: str,
     *,
     poll_interval_seconds: float = 5.0,
-    timeout_seconds: float = 600.0,
+    timeout_seconds: float | None = 600.0,
     success_states: frozenset[str] = frozenset({"COMPLETE"}),
     failure_states: frozenset[str] = frozenset({"ERROR"}),
     status_extractor: StatusExtractor = _extract_json_status,
@@ -73,7 +76,8 @@ def poll_until_complete(
         session (requests.Session): HTTP session for polling GETs.
         status_url (str): URL whose body advertises the job status.
         poll_interval_seconds (float): Delay between polls.
-        timeout_seconds (float): Wall-clock cap.
+        timeout_seconds (float | None): Wall-clock cap; ``None`` for none of its own. Inside an
+            in-process tool call, the tool's deadline also bounds every poll and sleep.
         success_states (frozenset[str]): Terminal-success state values.
         failure_states (frozenset[str]): Terminal-failure state values.
         status_extractor (StatusExtractor): Maps a Response to
@@ -93,7 +97,7 @@ def poll_until_complete(
         (``ConnectionError`` / ``Timeout`` / post-retry 5xx /
         ``JSONDecodeError``) retry until the deadline.
     """
-    deadline = time.monotonic() + timeout_seconds
+    deadline = time.monotonic() + (math.inf if timeout_seconds is None else timeout_seconds)
     while True:
         try:
             response = session.get(status_url, timeout=15.0)
@@ -108,7 +112,7 @@ def poll_until_complete(
                     f"Timeout after {timeout_seconds}s polling {status_url}; last error={exc!r}"
                 ) from exc
             logger.warning("HTTP %s polling %s — retrying after %ss", code, status_url, poll_interval_seconds)
-            time.sleep(poll_interval_seconds)
+            sleep_within_deadline(poll_interval_seconds, f"polling {status_url}")
             continue
         except (requests.exceptions.InvalidURL, requests.exceptions.MissingSchema, requests.exceptions.URLRequired):
             raise
@@ -120,7 +124,7 @@ def poll_until_complete(
             logger.warning(
                 "Transient error polling %s: %r — retrying after %ss", status_url, exc, poll_interval_seconds
             )
-            time.sleep(poll_interval_seconds)
+            sleep_within_deadline(poll_interval_seconds, f"polling {status_url}")
             continue
 
         if status in success_states:
@@ -131,4 +135,4 @@ def poll_until_complete(
             raise TimeoutError(f"Timeout after {timeout_seconds}s polling {status_url}; last status={status!r}")
 
         logger.debug("Polling %s — status=%s, sleeping %ss", status_url, status, poll_interval_seconds)
-        time.sleep(poll_interval_seconds)
+        sleep_within_deadline(poll_interval_seconds, f"polling {status_url}")

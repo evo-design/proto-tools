@@ -48,6 +48,7 @@ from proto_tools.utils import (
     BaseToolInput,
     BaseToolOutput,
     ConfigField,
+    DeadlineExceededError,
     InputField,
     build_http_session,
 )
@@ -632,6 +633,9 @@ def _process_single_request(
             errors.append(f"NOT_FOUND[{sequence_type}]: {exc}")
         except requests.exceptions.HTTPError as exc:
             errors.append(f"HTTP_ERROR[{sequence_type}]: {exc}")
+        except DeadlineExceededError:
+            # The call's timeout elapsed: fail the call rather than record every remaining item as missing.
+            raise
         except Exception as exc:  # pragma: no cover
             errors.append(f"UNEXPECTED_ERROR[{sequence_type}]: {exc}")
 

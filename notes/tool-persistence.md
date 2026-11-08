@@ -356,6 +356,19 @@ down that worker, so the next call reloads the model in a fresh subprocess.
 `timeout` is `reload_on_change=False` and `include_in_key=False`, so changing it
 never restarts a worker on its own.
 
+A tool with no standalone environment runs in the caller's process, so the
+`@tool` wrapper enforces its `config.timeout` as a deadline
+(`proto_tools/utils/deadlines.py`) instead. Requests from `build_http_session`
+sessions, and the waits in `request_with_retry` and `poll_until_complete`, end at
+that deadline with `DeadlineExceededError`, a `TimeoutError`. In-process network
+code should use these helpers, and wrap work sent to a thread pool in `propagate()`;
+`tests/style_consistency_tests/test_thread_deadline_propagation.py` enforces that for tool code.
+
+The deadline is a hard wall-clock limit: a request still in flight when it passes is cut
+off, even one that is making progress. A config whose tool legitimately runs longer must say
+so. `NCBIReferenceBundleConfig` defaults `timeout` to None so a multi-GB download on a slow
+link finishes, and `GIConfig.effective_timeout()` grows to cover its own `timeout_seconds`.
+
 ## Lifecycle and cleanup
 
 - `tool.shutdown()` stops the worker and evicts the instance from its cache.

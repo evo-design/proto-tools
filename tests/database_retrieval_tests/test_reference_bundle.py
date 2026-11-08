@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
+from urllib3 import HTTPResponse
 
 from proto_tools.tools.database_retrieval.ncbi import reference_bundle as module
 from proto_tools.tools.database_retrieval.ncbi.reference_bundle import (
@@ -61,18 +62,21 @@ def _archive(extra: dict[str, str] | None = None) -> bytes:
 
 
 class _Response:
-    def __init__(self, *, summary: dict[str, Any] | None = None, payload: bytes = b"") -> None:
+    def __init__(self, url: str, *, summary: dict[str, Any] | None = None, payload: bytes = b"") -> None:
+        self.url = url
         self.summary = summary
+        # A call under a deadline streams the body through ``raw``; without one, ``iter_content``.
+        self.raw = HTTPResponse(body=io.BytesIO(payload), preload_content=False)
         self.payload = payload
+
+    def iter_content(self, chunk_size: int) -> Any:
+        return (self.payload[i : i + chunk_size] for i in range(0, len(self.payload), chunk_size))
 
     def raise_for_status(self) -> None:
         pass
 
     def json(self) -> dict[str, Any] | None:
         return self.summary
-
-    def iter_content(self, chunk_size: int):
-        yield from (self.payload[index : index + chunk_size] for index in range(0, len(self.payload), chunk_size))
 
 
 class _Session:
@@ -86,8 +90,8 @@ class _Session:
     def get(self, url: str, **_kwargs: Any) -> _Response:
         self.urls.append(url)
         if url.endswith("/download_summary"):
-            return _Response(summary=self.summary)
-        return _Response(payload=self.payload)
+            return _Response(url, summary=self.summary)
+        return _Response(url, payload=self.payload)
 
     def close(self) -> None:
         pass

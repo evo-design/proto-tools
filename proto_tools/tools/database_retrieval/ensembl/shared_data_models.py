@@ -187,9 +187,8 @@ def build_session(tool_key: str) -> requests.Session:
         tool_key (str): Tool registry key, used in the User-Agent string.
 
     Returns:
-        requests.Session: Session with retry adapter; urllib3's ``Retry()``
-            honors ``Retry-After`` by default so Ensembl's 429s sleep for
-            the server-directed interval.
+        requests.Session: Session with retry adapter. Ensembl's 429s wait out
+            the server's ``Retry-After``, up to the tool's timeout.
     """
     return build_http_session(
         http_retries=_HTTP_RETRIES,

@@ -54,6 +54,34 @@ RETRY_DELAY = 2.0  # Base delay in seconds (exponential backoff: 2s, 4s, 8s)
 # RequestException -> OSError), so a tool raising it via `requests` was never retried here.
 _RETRYABLE_EXCEPTIONS = (ConnectionError, requests.exceptions.ConnectionError)
 
+
+def _batch_timeout(spec: ToolSpec | None, inputs: BaseToolInput, config: BaseConfig) -> int | None:
+    """Return the call's timeout: ``effective_timeout()``, times the item count for a batch."""
+    effective = config.effective_timeout()
+    if effective is None or spec is None or spec.iterable_input_fields is None:
+        return effective
+    items = getattr(inputs, spec.iterable_input_fields[0], None)
+    return effective * max(len(items) if items is not None else 1, 1)
+
+
+def _wait_to_retry(delay: float, key: str) -> bool:
+    """Wait ``delay`` before retrying; return False once the call's timeout elapses during the wait."""
+    try:
+        sleep_within_deadline(delay, f"retrying {key}")
+    except DeadlineExceededError:
+        return False
+    return True
+
+
+def _retry_deadline_error(key: str, attempts: int, cause: BaseException) -> DeadlineExceededError:
+    """Build the error for a transient failure the timeout left no time to retry."""
+    error = DeadlineExceededError(
+        f"Tool {key}: timeout elapsed after {attempts} attempt(s); last error: {type(cause).__name__}: {cause}"
+    )
+    error.__cause__ = cause
+    return error
+
+
 # Set PROTO_CAPTURE_ERRORS=1 to capture tool exceptions into success=False outputs instead of raising.
 _CAPTURE_ERRORS_ENV_VAR = "PROTO_CAPTURE_ERRORS"
 
@@ -78,6 +106,7 @@ def _should_capture_errors() -> bool:
 
 from proto_tools.utils import BaseConfig, run_preprocess
 from proto_tools.utils.base_config import RANDOM_SEED_UPPER_BOUND
+from proto_tools.utils.deadlines import DeadlineExceededError, deadline, sleep_within_deadline
 from proto_tools.utils.device import (
     is_remote_device,
     parse_device_string,
@@ -1436,146 +1465,155 @@ class ToolRegistry:
                         is_pool_executing,
                     )
 
+                    # A batch gets effective_timeout() per item.
+                    budget = _batch_timeout(spec, inputs, config)
+                    # A tool without a standalone env runs here, in the caller's process, where no
+                    # ToolInstance enforces its timeout; the deadline does. Partitions and retries
+                    # share it. Tools with a ToolInstance keep their own timeout handling.
+                    in_process_deadline = None if has_standalone_env else budget
+
                     pool = get_active_pool()
                     if pool is not None and not is_pool_executing() and spec and spec.iterable_input_fields is not None:
-                        pooled = pool._parallel_dispatch(key, func, inputs, config)
+                        with deadline(in_process_deadline):
+                            pooled = pool._parallel_dispatch(key, func, inputs, config)
                         return _finish_dispatched(pooled, partial_result=_holds_failed_items(pooled, spec))
 
-                    # Scale effective_timeout() by the iterable batch size.
-                    if spec is not None and spec.iterable_input_fields is not None:
-                        effective = config.effective_timeout()
-                        if effective is not None:
-                            items = getattr(inputs, spec.iterable_input_fields[0], None)
-                            n_items = len(items) if items is not None else 1
-                            if n_items > 1:
-                                config = config.model_copy(update={"timeout": effective * n_items})
+                    if budget != config.effective_timeout():
+                        config = config.model_copy(update={"timeout": budget})
 
                     # Carry per-invocation flags (key, gpu_only, pin_visible_devices) to ToolInstance for eviction/dispatch.
                     from proto_tools.utils.tool_instance import _current_tool_invocation
 
-                    for attempt in range(1 + MAX_RETRIES):
-                        try:
-                            if attempt == 0:
-                                logger.debug(f"Tool {key}: starting execution")
+                    with deadline(in_process_deadline):
+                        for attempt in range(1 + MAX_RETRIES):
+                            try:
+                                if attempt == 0:
+                                    logger.debug(f"Tool {key}: starting execution")
 
-                            # Capture warnings during execution
-                            with warnings.catch_warnings(record=True) as warning_list:
-                                # Ensure all warnings are captured
-                                warnings.simplefilter("always")
+                                # Capture warnings during execution
+                                with warnings.catch_warnings(record=True) as warning_list:
+                                    # Ensure all warnings are captured
+                                    warnings.simplefilter("always")
 
-                                # Execute the tool function (ContextVar is read by
-                                # ``ToolInstance.dispatch`` / ``_run_persistent``).
-                                _inv_token = _current_tool_invocation.set(
-                                    {
-                                        "key": key,
-                                        "gpu_only": gpu_only_flag,
-                                        "pin_visible_devices": pin_visible_devices_flag,
-                                    }
-                                )
-                                try:
-                                    result = func(inputs, config, instance)
-                                finally:
-                                    _current_tool_invocation.reset(_inv_token)
+                                    # Execute the tool function (ContextVar is read by
+                                    # ``ToolInstance.dispatch`` / ``_run_persistent``).
+                                    _inv_token = _current_tool_invocation.set(
+                                        {
+                                            "key": key,
+                                            "gpu_only": gpu_only_flag,
+                                            "pin_visible_devices": pin_visible_devices_flag,
+                                        }
+                                    )
+                                    try:
+                                        result = func(inputs, config, instance)
+                                    finally:
+                                        _current_tool_invocation.reset(_inv_token)
 
-                                # Populate metadata fields
-                                result.tool_id = key
-                                result.tool_version = _tool_version(key)
-                                result.execution_time = time.time() - start_time
-                                if result.success is None:
-                                    result.success = True
+                                    # Populate metadata fields
+                                    result.tool_id = key
+                                    result.tool_version = _tool_version(key)
+                                    result.execution_time = time.time() - start_time
+                                    if result.success is None:
+                                        result.success = True
 
-                                # Add captured warnings to the result (filtered)
-                                if warning_list:
-                                    # Filter out ignored warnings
-                                    filtered_warnings = [
-                                        w
-                                        for w in warning_list
-                                        if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
-                                    ]
+                                    # Add captured warnings to the result (filtered)
+                                    if warning_list:
+                                        # Filter out ignored warnings
+                                        filtered_warnings = [
+                                            w
+                                            for w in warning_list
+                                            if not any(
+                                                ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS
+                                            )
+                                        ]
 
-                                    if filtered_warnings:
-                                        captured_warnings = [str(w.message) for w in filtered_warnings]
-                                        result.warnings = result.warnings + captured_warnings
-                                        for w in captured_warnings:
-                                            logger.warning(f"Tool {key}: {w}")
+                                        if filtered_warnings:
+                                            captured_warnings = [str(w.message) for w in filtered_warnings]
+                                            result.warnings = result.warnings + captured_warnings
+                                            for w in captured_warnings:
+                                                logger.warning(f"Tool {key}: {w}")
 
-                                        # Re-emit warnings so they still get logged/printed
-                                        _re_emit_warnings(filtered_warnings)
+                                            # Re-emit warnings so they still get logged/printed
+                                            _re_emit_warnings(filtered_warnings)
 
-                                # Post-dispatch: cache store, stitch, dedup expand
-                                result = _post_dispatch_cache_and_expand(
-                                    key,
-                                    spec,
-                                    runtime_cacheable,
-                                    stochastic_tool,
-                                    result,
-                                    strip,
-                                    deduped,
-                                    original_items,
-                                    whole_cache_key,
-                                    template_cache_key,
-                                )
+                                    # Post-dispatch: cache store, stitch, dedup expand
+                                    result = _post_dispatch_cache_and_expand(
+                                        key,
+                                        spec,
+                                        runtime_cacheable,
+                                        stochastic_tool,
+                                        result,
+                                        strip,
+                                        deduped,
+                                        original_items,
+                                        whole_cache_key,
+                                        template_cache_key,
+                                    )
 
-                                logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
-                                return result
+                                    logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
+                                    return result
 
-                        except (  # noqa: PERF203 -- retry loop
-                            _RETRYABLE_EXCEPTIONS
-                        ) as e:
-                            last_exception = e
-                            last_traceback = traceback.format_exc()
-                            if attempt < MAX_RETRIES:
-                                delay = RETRY_DELAY * (2**attempt)
-                                logger.warning(
-                                    f"Tool {key}: transient {type(e).__name__} on attempt "
-                                    f"{attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
-                                )
-                                time.sleep(delay)
-
-                        except Exception as e:
-                            if attempt < MAX_RETRIES and _is_transient_gpu_acquisition_error(e):
+                            except (  # noqa: PERF203 -- retry loop
+                                _RETRYABLE_EXCEPTIONS
+                            ) as e:
                                 last_exception = e
                                 last_traceback = traceback.format_exc()
-                                delay = RETRY_DELAY * (2**attempt)
-                                logger.warning(
-                                    f"Tool {key}: transient GPU acquisition failure (Exclusive_Process) on "
-                                    f"attempt {attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
+                                if attempt < MAX_RETRIES:
+                                    delay = RETRY_DELAY * (2**attempt)
+                                    logger.warning(
+                                        f"Tool {key}: transient {type(e).__name__} on attempt "
+                                        f"{attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
+                                    )
+                                    if has_standalone_env:
+                                        time.sleep(delay)
+                                    elif not _wait_to_retry(delay, key):
+                                        last_exception = _retry_deadline_error(key, attempt + 1, e)
+                                        break
+
+                            except Exception as e:
+                                if attempt < MAX_RETRIES and _is_transient_gpu_acquisition_error(e):
+                                    last_exception = e
+                                    last_traceback = traceback.format_exc()
+                                    delay = RETRY_DELAY * (2**attempt)
+                                    logger.warning(
+                                        f"Tool {key}: transient GPU acquisition failure (Exclusive_Process) on "
+                                        f"attempt {attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
+                                    )
+                                    time.sleep(delay)
+                                    continue
+
+                                # Non-retryable error; raise (or capture per policy)
+                                filtered_warnings = [
+                                    w
+                                    for w in warning_list
+                                    if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
+                                ]
+                                captured_warnings = [str(w.message) for w in filtered_warnings]
+                                _re_emit_warnings(filtered_warnings)
+
+                                logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
+                                return _make_error_output_or_raise(
+                                    output_class,
+                                    key,
+                                    start_time,
+                                    e,
+                                    traceback.format_exc(),
+                                    captured_warnings,
                                 )
-                                time.sleep(delay)
-                                continue
 
-                            # Non-retryable error; raise (or capture per policy)
-                            filtered_warnings = [
-                                w
-                                for w in warning_list
-                                if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
-                            ]
-                            captured_warnings = [str(w.message) for w in filtered_warnings]
-                            _re_emit_warnings(filtered_warnings)
-
-                            logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
-                            return _make_error_output_or_raise(
-                                output_class,
-                                key,
-                                start_time,
-                                e,
-                                traceback.format_exc(),
-                                captured_warnings,
-                            )
-
-                    # All retries exhausted for a retryable exception
-                    assert last_exception is not None  # set on first retry iteration
-                    logger.error(
-                        f"Tool {key}: failed after {1 + MAX_RETRIES} attempts with "
-                        f"{type(last_exception).__name__}: {last_exception}"
-                    )
-                    return _make_error_output_or_raise(
-                        output_class,
-                        key,
-                        start_time,
-                        last_exception,
-                        last_traceback,
-                    )
+                        # Retries exhausted, or the timeout elapsed before the next attempt
+                        assert last_exception is not None  # set on first retry iteration
+                        logger.error(
+                            f"Tool {key}: failed after {attempt + 1} attempts with "
+                            f"{type(last_exception).__name__}: {last_exception}"
+                        )
+                        return _make_error_output_or_raise(
+                            output_class,
+                            key,
+                            start_time,
+                            last_exception,
+                            last_traceback,
+                        )
 
             # Register the tool spec with the captured source file
             cls._registry[key] = ToolSpec(

@@ -30,6 +30,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     ToolInstance,
+    propagate,
     resolve_num_threads,
 )
 from proto_tools.utils.device import RemoteDevice
@@ -671,13 +672,13 @@ def _remote_paired_group(
     # concurrently so the added per-chain depth costs ~no extra wall-clock.
     with ThreadPoolExecutor(max_workers=2) as executor:
         paired_future = executor.submit(
-            _dispatch_remote,
+            propagate(_dispatch_remote),
             [{"sequences": [q.sequence for q in members]}],
             group_dir / "paired",
             config,
         )
         unpaired_future = executor.submit(
-            _dispatch_remote,
+            propagate(_dispatch_remote),
             [{"sequences": q.sequence} for q in members],
             group_dir / "unpaired",
             config,

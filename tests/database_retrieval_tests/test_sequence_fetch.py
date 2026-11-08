@@ -123,6 +123,30 @@ def test_pdb_protein_fetch_fails_when_no_protein_chains(monkeypatch):
     assert any("NOT_FOUND" in e for e in item.errors)
 
 
+def test_sequence_fetch_raises_when_its_timeout_elapses(monkeypatch):
+    """A fetch cut off by the call's timeout fails the call, not just that item."""
+    from proto_tools.utils import DeadlineExceededError
+
+    def timed_out(pdb_id, session):
+        raise DeadlineExceededError("Timed out requesting PDB: the tool's timeout elapsed")
+
+    monkeypatch.setattr(sf_module, "_fetch_pdb_fasta", timed_out)
+    inputs = SequenceFetchInput(
+        requests=[
+            {
+                "request_id": "slow",
+                "target_name": "test",
+                "organism": "test org",
+                "sequence_types": ["protein"],
+                "pdb_id": "1ABC",
+            }
+        ]
+    )
+
+    with pytest.raises(TimeoutError):
+        run_sequence_fetch(inputs, SequenceFetchConfig())
+
+
 def test_select_best_record_prefers_name_match():
     records = _parse_fasta_records(">rec1 unrelated protein\nAAAA\n>rec2 lacI repressor\nMMMM\n")
     selected = _select_best_record(records, "lacI")

@@ -15,7 +15,7 @@ import logging
 import threading
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from time import monotonic, sleep
+from time import monotonic
 from typing import Any, Literal
 
 import requests
@@ -27,9 +27,12 @@ from proto_tools.utils import (
     BaseToolInput,
     BaseToolOutput,
     ConfigField,
+    DeadlineExceededError,
     InputField,
     build_http_session,
     raise_for_status_with_body,
+    remaining,
+    sleep_within_deadline,
 )
 
 logger = logging.getLogger(__name__)
@@ -333,10 +336,14 @@ def _gated_get(session: requests.Session, params: dict[str, str | int]) -> reque
     The request starts no sooner than the interval (or a longer ``Retry-After``) after the previous
     one ended, and holds the gate until it ends, so only one connection is open at a time.
     """
-    with _gate.lock:
+    left = remaining()
+    # Queued behind other arXiv calls, a call still gives up when its own timeout elapses.
+    if not _gate.lock.acquire(timeout=-1 if left is None else max(left, 0.0)):
+        raise DeadlineExceededError("Timed out waiting for an earlier arXiv request: the tool's timeout elapsed")
+    try:
         delay = _gate.next_request_at - monotonic()
         if delay > 0:
-            sleep(delay)
+            sleep_within_deadline(delay, "spacing arXiv requests")
         wait = _REQUEST_INTERVAL_SECONDS
         try:
             response = session.get(_QUERY_URL, params=params, timeout=_REQUEST_TIMEOUT_SECONDS)
@@ -344,6 +351,8 @@ def _gated_get(session: requests.Session, params: dict[str, str | int]) -> reque
             return response
         finally:
             _gate.next_request_at = monotonic() + wait
+    finally:
+        _gate.lock.release()
 
 
 def _retry_after_seconds(response: requests.Response) -> float:
