@@ -1,6 +1,7 @@
 """Tests for ENCODE portal search."""
 
 import csv
+import hashlib
 import json
 from collections.abc import Callable
 from typing import Any
@@ -289,6 +290,106 @@ def test_negated_filter_that_excludes_nothing_warns_even_with_hits(monkeypatch: 
         EncodeSearchInput(queries={"target.label": "CTCF", "assembly!": "GRCh38"}), EncodeSearchConfig()
     )
     assert output.warnings == [] and len(session.calls) == 2  # only the negated filter is counted
+
+
+# ── Download ─────────────────────────────────────────────────────────────────
+
+_CONTENT = b"chr1\t100\t200\tpeak1\n" * 1000
+
+
+class _Stream:
+    def __init__(self, content: bytes) -> None:
+        self.content = content
+        self.status_code = 200
+        self.text = ""
+        self.closed = False
+
+    def raise_for_status(self) -> None:
+        pass
+
+    def iter_content(self, chunk_size: int) -> Any:
+        for start in range(0, len(self.content), chunk_size):
+            yield self.content[start : start + chunk_size]
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _DownloadSession:
+    """Fake session serving file content and recording requested URLs."""
+
+    def __init__(self, content: bytes = _CONTENT) -> None:
+        self.urls: list[str] = []
+        self.content = content
+
+    def get(self, url: str, **kwargs: Any) -> _Stream:
+        assert kwargs["stream"] is True
+        self.urls.append(url)
+        return _Stream(self.content)
+
+    def close(self) -> None:
+        pass
+
+
+def _search_output(*files: dict[str, Any]) -> Any:
+    search = _Session({"@graph": list(files), "total": len(files)})
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(module, "build_http_session", lambda **_kwargs: search)
+        return run_encode_search(EncodeSearchInput(queries={"target.label": "MAFK"}), EncodeSearchConfig())
+
+
+def _file(accession: str, content: bytes = _CONTENT) -> dict[str, Any]:
+    return {
+        **_FILE,
+        "@id": f"/files/{accession}/",
+        "accession": accession,
+        "href": f"/files/{accession}/@@download/{accession}.bed.gz",
+        "file_size": len(content),
+        "md5sum": hashlib.md5(content).hexdigest(),  # noqa: S324 -- test fixture checksum
+    }
+
+
+def test_download_verifies_md5_and_skips_files_already_present(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    output = _search_output(_file("ENCFF000AAA"), _file("ENCFF000BBB"))
+    session = _DownloadSession()
+    monkeypatch.setattr(module, "build_http_session", lambda **_kwargs: session)
+
+    paths = output.download(tmp_path / "encode")
+    assert list(paths) == ["ENCFF000AAA", "ENCFF000BBB"]
+    assert paths["ENCFF000AAA"] == tmp_path / "encode" / "ENCFF000AAA.bed.gz"
+    assert paths["ENCFF000AAA"].read_bytes() == _CONTENT
+    assert session.urls == [f"https://www.encodeproject.org/files/{a}/@@download/{a}.bed.gz" for a in paths]
+    assert sorted(path.name for path in (tmp_path / "encode").iterdir()) == ["ENCFF000AAA.bed.gz", "ENCFF000BBB.bed.gz"]
+
+    session.urls.clear()
+    assert output.download(tmp_path / "encode", ["ENCFF000BBB"]) == {"ENCFF000BBB": paths["ENCFF000BBB"]}
+    assert session.urls == []  # already present with the right MD5
+
+
+def test_download_rejects_a_corrupt_file_and_leaves_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    output = _search_output(_file("ENCFF000AAA"))
+    monkeypatch.setattr(module, "build_http_session", lambda **_kwargs: _DownloadSession(b"truncated"))
+    with pytest.raises(OSError, match=r"ENCFF000AAA MD5 .* does not match"):
+        output.download(tmp_path)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_download_refuses_over_budget_before_any_request(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    output = _search_output(_file("ENCFF000AAA"), _file("ENCFF000BBB"))
+    session = _DownloadSession()
+    monkeypatch.setattr(module, "build_http_session", lambda **_kwargs: session)
+    with pytest.raises(ValueError, match=r"Downloading 2 files needs .* over max_total_bytes"):
+        output.download(tmp_path, max_total_bytes=len(_CONTENT))
+    assert session.urls == []
+    assert len(output.download(tmp_path, max_total_bytes=None)) == 2
+
+
+def test_download_rejects_unknown_accessions_and_experiment_hits(tmp_path: Any) -> None:
+    output = _search_output(_file("ENCFF000AAA"))
+    with pytest.raises(ValueError, match=r"Not file hits .*ENCFF999ZZZ"):
+        output.download(tmp_path, ["ENCFF999ZZZ"])
+    with pytest.raises(ValueError, match="experiment searches have no download URLs"):
+        _search_output(_EXPERIMENT).download(tmp_path)
 
 
 # ── Export ───────────────────────────────────────────────────────────────────

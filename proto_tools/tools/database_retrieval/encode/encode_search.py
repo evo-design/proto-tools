@@ -7,10 +7,13 @@ processed files or experiments with their accessions, metadata and direct downlo
 
 import csv
 import difflib
+import hashlib
 import json
 import logging
+import os
 import warnings
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Literal
 from urllib.parse import urlencode
 
@@ -36,6 +39,11 @@ _REQUEST_TIMEOUT_SECONDS = 60
 _HTTP_RETRIES = 2
 _BACKOFF_SECONDS = 1.0
 _USER_AGENT = "proto-tools/encode-search-v1"
+_DOWNLOAD_CHUNK_BYTES = 1 << 20
+# Connect timeout, then the longest wait for the next chunk: a slow transfer that keeps sending data
+# is never cut off, only one that stalls.
+_DOWNLOAD_TIMEOUT_SECONDS = (30, 300)
+_DEFAULT_MAX_DOWNLOAD_BYTES = 1_000_000_000
 _RESERVED_PARAMS = frozenset({"type", "format", "limit", "field", "frame", "searchTerm"})
 _RETURN_FIELDS = (
     "@id",
@@ -291,6 +299,42 @@ class EncodeSearchOutput(BaseToolOutput):
             return
         raise ValueError(f"Unsupported format: {file_format}")
 
+    def download(
+        self,
+        directory: str | Path,
+        accessions: list[str] | None = None,
+        max_total_bytes: int | None = _DEFAULT_MAX_DOWNLOAD_BYTES,
+    ) -> dict[str, Path]:
+        """Download file hits from their ``download_url`` into ``directory``.
+
+        Each file is checked against its ENCODE MD5. A file already in ``directory`` with the right
+        MD5 is kept without downloading again, so repeat calls are cheap.
+
+        Args:
+            directory (str | Path): Folder to download into; created if missing.
+            accessions (list[str] | None): File accessions to download; all file hits when None.
+            max_total_bytes (int | None): Refuse, before downloading anything, when the files still to
+                download add up to more than this; None for no limit. Defaults to 1 GB, which covers
+                peak and quantification files; signal tracks, alignments and reads are often larger.
+
+        Returns:
+            dict[str, Path]: Local path of each file, keyed by accession, in hit order.
+
+        Raises:
+            ValueError: If a requested accession is not a file hit, there is nothing to download, or
+                the total size exceeds ``max_total_bytes``.
+            OSError: If a downloaded file does not match its ENCODE MD5.
+        """
+        hits = {hit.accession: hit for result in self.results for hit in result.hits if hit.download_url}
+        if accessions is not None:
+            missing = [accession for accession in accessions if accession not in hits]
+            if missing:
+                raise ValueError(f"Not file hits with a download URL in this output: {missing}")
+            hits = {accession: hits[accession] for accession in dict.fromkeys(accessions)}
+        if not hits:
+            raise ValueError("No file hits to download; experiment searches have no download URLs")
+        return _download_files(list(hits.values()), Path(directory), max_total_bytes)
+
 
 # ============================================================================
 # Tool Implementation
@@ -527,6 +571,67 @@ def _organism(item: dict[str, Any], assembly: Any) -> str | None:
         # Use a source only if it identifies every species; a partial answer would hide the rest.
         names = next((found for found in (donors, assemblies) if found and all(found)), [])
     return ", ".join(dict.fromkeys(str(name) for name in names)) or None
+
+
+def _download_files(hits: list[EncodeSearchHit], directory: Path, max_total_bytes: int | None) -> dict[str, Path]:
+    """Download hits into ``directory`` after checking the size budget; verify each MD5."""
+    directory.mkdir(parents=True, exist_ok=True)
+    targets = {hit.accession: directory / str(hit.download_url).rsplit("/", 1)[-1] for hit in hits}
+    pending = [hit for hit in hits if not _matches_md5(targets[hit.accession], hit.md5sum)]
+    total = sum(hit.file_size or 0 for hit in pending)
+    if max_total_bytes is not None and total > max_total_bytes:
+        sizes = ", ".join(f"{hit.accession} {(hit.file_size or 0) / 1e6:,.1f} MB" for hit in pending)
+        raise ValueError(
+            f"Downloading {len(pending)} files needs {total / 1e9:.2f} GB, over max_total_bytes "
+            f"({max_total_bytes:,}): {sizes}. Raise max_total_bytes or pass fewer accessions."
+        )
+    if pending:
+        session = build_http_session(
+            http_retries=_HTTP_RETRIES, backoff_seconds=_BACKOFF_SECONDS, user_agent=_USER_AGENT
+        )
+        try:
+            for hit in pending:
+                _download_file(session, hit, targets[hit.accession])
+        finally:
+            session.close()
+    return targets
+
+
+def _download_file(session: requests.Session, hit: EncodeSearchHit, target: Path) -> None:
+    """Stream one file into a scratch folder beside ``target``, verify its MD5, then move it into place."""
+    logger.info("Downloading %s (%s bytes) to %s", hit.accession, hit.file_size, target)
+    response = request_with_retry(
+        lambda: session.get(str(hit.download_url), stream=True, timeout=_DOWNLOAD_TIMEOUT_SECONDS),
+        retries=_HTTP_RETRIES,
+        backoff_seconds=_BACKOFF_SECONDS,
+    )
+    try:
+        _raise_for_status(response)
+        with TemporaryDirectory(dir=target.parent, prefix=".encode-download-") as scratch:
+            partial = Path(scratch) / target.name
+            digest = hashlib.md5()  # noqa: S324 -- matching ENCODE's published checksum, not security
+            with partial.open("wb") as handle:
+                for chunk in response.iter_content(chunk_size=_DOWNLOAD_CHUNK_BYTES):
+                    handle.write(chunk)
+                    digest.update(chunk)
+            if hit.md5sum and digest.hexdigest() != hit.md5sum:
+                raise OSError(f"{hit.accession} MD5 {digest.hexdigest()} does not match ENCODE's {hit.md5sum}")
+            os.replace(partial, target)
+    finally:
+        response.close()
+
+
+def _matches_md5(path: Path, md5sum: str | None) -> bool:
+    """Whether ``path`` exists and matches ``md5sum`` (any existing file, when ENCODE gives no MD5)."""
+    if not path.is_file():
+        return False
+    if not md5sum:
+        return True
+    digest = hashlib.md5()  # noqa: S324 -- matching ENCODE's published checksum, not security
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(_DOWNLOAD_CHUNK_BYTES), b""):
+            digest.update(chunk)
+    return digest.hexdigest() == md5sum
 
 
 def _close_matches(word: str, candidates: list[str]) -> list[str]:
