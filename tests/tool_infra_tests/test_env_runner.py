@@ -72,6 +72,6 @@ def test_jax_compilation_cache_reaches_env(monkeypatch: pytest.MonkeyPatch, tmp_
 
     out = run_in_env("mock_jax_tool", code=code)
 
-    cache_dir = tmp_path / "jax_cache" / "mock_jax_tool"
+    cache_dir = tmp_path / "mock_jax_tool" / "jax_cache"
     assert out.strip() == str(cache_dir)
     assert any(cache_dir.iterdir())
