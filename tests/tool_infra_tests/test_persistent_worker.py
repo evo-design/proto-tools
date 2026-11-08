@@ -10,12 +10,14 @@ import signal
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from proto_tools.utils import download_progress
 from proto_tools.utils.persistent_worker import (
     PersistentWorker,
     _build_subprocess_env,
@@ -241,6 +243,65 @@ def test_noise_line_before_real_header_still_returns_result(noise_then_result_sc
     worker = _make_worker(noise_then_result_script)
     try:
         assert worker.send({"v": 7}, timeout=10) == {"echo": {"v": 7}}
+    finally:
+        worker.stop()
+
+
+# ── Download-aware deadline ─────────────────────────────────────────────────
+
+
+def _download_script(tmp_path: Path, grow_seconds: float, then_sleep: float) -> Path:
+    """A standalone whose dispatch() grows a file in its HF cache, then sleeps, then returns."""
+    script = tmp_path / "download_script.py"
+    script.write_text(
+        textwrap.dedent(f"""\
+        import os, pathlib, time
+
+        def dispatch(input_dict):
+            blob = pathlib.Path(os.environ["HF_HOME"]) / "hub" / "blob.incomplete"
+            blob.parent.mkdir(parents=True, exist_ok=True)
+            end = time.monotonic() + {grow_seconds}
+            with open(blob, "ab") as f:
+                while time.monotonic() < end:
+                    f.write(b"x" * 1024)
+                    f.flush()
+                    time.sleep(0.05)
+            time.sleep({then_sleep})
+            return {{"ok": True}}
+        """)
+    )
+    return script
+
+
+@pytest.fixture
+def fast_download_polls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the model cache at ``tmp_path`` and check download progress every 0.2s."""
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("PROTO_DOWNLOAD_POLL_SECONDS", "0.2")
+    # The scripts write KBs, not real downloads; count any growth so the tests stay small.
+    monkeypatch.setattr(download_progress, "_MIN_GROWTH_BYTES", 1)
+
+
+@pytest.mark.usefixtures("fast_download_polls")
+def test_send_does_not_charge_a_progressing_download(tmp_path: Path):
+    """A request whose weights download keeps growing past ``timeout`` still returns."""
+    worker = _make_worker(_download_script(tmp_path, grow_seconds=5, then_sleep=0))
+    try:
+        assert worker.send({}, timeout=2) == {"ok": True}
+    finally:
+        worker.stop()
+
+
+@pytest.mark.usefixtures("fast_download_polls")
+def test_send_times_out_once_the_download_stalls(tmp_path: Path):
+    """After the download stops growing the clock runs again, and the error reports the excluded time."""
+    worker = _make_worker(_download_script(tmp_path, grow_seconds=3, then_sleep=20))
+    start = time.monotonic()
+    try:
+        with pytest.raises(TimeoutError, match=r"after 2s \(excluding \d+s spent downloading weights\)"):
+            worker.send({}, timeout=2)
+        assert time.monotonic() - start < 12
+        assert not worker.alive
     finally:
         worker.stop()
 
@@ -494,6 +555,29 @@ def test_request_heartbeat_warns_while_request_in_flight(monkeypatch, caplog):
 
     beats = [r for r in caplog.records if "still running" in r.message]
     assert len(beats) >= 1
+
+
+def test_request_heartbeat_reports_a_download_without_a_timeout(tmp_path: Path, monkeypatch, caplog):
+    """With no timeout there is no deadline measuring downloads, so the heartbeat watches the folders."""
+    monkeypatch.setenv("PROTO_WORKER_HEARTBEAT_SECONDS", "0.1")
+    worker = PersistentWorker(toolkit="bindcraft", env_path=Path("/x"), script_path=Path("/y"))
+    worker._download_dirs = [tmp_path]
+    stop = threading.Event()
+
+    def download() -> None:
+        with open(tmp_path / "blob.incomplete", "ab") as f:
+            while not stop.wait(0.01):
+                f.write(b"x" * download_progress._MIN_GROWTH_BYTES)
+
+    writer = threading.Thread(target=download)
+    with caplog.at_level(logging.WARNING), worker._request_heartbeat("req123", watch_downloads=True):
+        writer.start()
+        time.sleep(0.35)
+        stop.set()
+    writer.join()
+
+    assert any("Downloading weights" in r.message for r in caplog.records)
+    assert not any("may be wedged" in r.message for r in caplog.records)
 
 
 def test_request_heartbeat_silent_for_fast_request(monkeypatch, caplog):

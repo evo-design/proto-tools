@@ -46,19 +46,15 @@ else
   echo "[af3] Subject to DeepMind's AlphaFold 3 Model Parameters Terms of Use"
   echo "[af3] (non-commercial organizations only; redistribution prohibited):"
   echo "[af3]   https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md"
-  # Stage under a dot-prefixed name so an interrupted transfer cannot leave a
-  # truncated af3.bin.zst that the *.bin* checks here and in inference.py would
-  # both read as provisioned.
-  AF3_WEIGHTS_TMP="${WEIGHTS_DIR}/.af3.bin.zst.partial"
-  rm -f "$AF3_WEIGHTS_TMP"
-  if ! curl -fsSL --retry 3 --retry-delay 5 -o "$AF3_WEIGHTS_TMP" "$AF3_WEIGHTS_URL"; then
-    rm -f "$AF3_WEIGHTS_TMP"
+  # proto_download stages under a dot-prefixed temp name, so an interrupted
+  # transfer cannot leave a truncated af3.bin.zst that the *.bin* checks here
+  # and in inference.py would both read as provisioned.
+  if ! proto_download "$AF3_WEIGHTS_URL" "${WEIGHTS_DIR}/af3.bin.zst"; then
     echo "[af3] ERROR: failed to download AlphaFold3 parameters from $AF3_WEIGHTS_URL" >&2
     echo "[af3] Place af3.bin / af3.bin.zst in $WEIGHTS_DIR yourself, or point" >&2
     echo "[af3] PROTO_ALPHAFOLD3_WEIGHTS_DIR at an existing copy." >&2
     exit 1
   fi
-  mv "$AF3_WEIGHTS_TMP" "${WEIGHTS_DIR}/af3.bin.zst"
   echo "[af3] Model parameters downloaded to ${WEIGHTS_DIR}/af3.bin.zst"
 fi
 

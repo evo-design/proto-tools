@@ -664,8 +664,9 @@ sys.exit(0 if looks_like_zip and not zipfile.is_zipfile(sys.argv[1]) else 1)
 # interrupted run never leaves something that looks finished. An existing <dest>
 # is kept unless it is empty or a truncated zip-format checkpoint (see
 # proto_is_truncated_zip), which is re-downloaded. Concurrent callers for the same
-# <dest> take turns under proto_with_lock. Returns nonzero on a failed download,
-# which aborts a `set -e` setup.sh.
+# <dest> take turns under proto_with_lock. A failed transfer is retried 5 times;
+# each retry rewrites the temp file from the start. Returns nonzero on a failed
+# download, which aborts a `set -e` setup.sh.
 #
 # Example:
 #   proto_download "${REPO_BASE}/fampnn_0_3.pt" "${WEIGHTS_DIR}/fampnn_0_3.pt"
@@ -697,7 +698,8 @@ _proto_download_locked() {
     echo "Downloading $(basename "$dest")..."
     _proto_remove_stale_temps "$dest"
     tmp="$(mktemp "$(dirname "$dest")/.$(basename "$dest").XXXXXX.tmp")"
-    if ! curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
+    if ! curl -fsSL --retry "${_PROTO_DOWNLOAD_RETRIES:-5}" --retry-delay "${_PROTO_DOWNLOAD_RETRY_DELAY:-10}" \
+        --retry-all-errors --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" -o "$tmp" "$url"; then
         rm -f "$tmp"
         echo "ERROR: failed to download ${url}" >&2
         return 1
@@ -744,8 +746,10 @@ proto_recorded_files_complete() {
 # proto_record_files, which happens only after curl and tar both succeed. An
 # extraction that is partial, or lost files since (a scratch purge), is
 # extracted again from scratch. Concurrent callers for the same <dest_dir> take
-# turns under proto_with_lock, so one extracts and the rest find it complete.
-# Extra arguments go to tar (e.g. -z for .tar.gz).
+# turns under proto_with_lock, so one extracts and the rest find it complete. A
+# failed attempt is retried 5 times, each from an emptied <dest_dir>, since curl
+# cannot retry mid-stream without feeding tar a restarted archive. Extra
+# arguments go to tar (e.g. -z for .tar.gz).
 #
 # Example:
 #   proto_download_archive "$AF2_PARAMS_URL" "${WEIGHTS_DIR}/params"
@@ -771,15 +775,23 @@ _proto_download_archive_locked() {
         return 0
     fi
 
-    echo "Downloading and extracting $(basename "$url")..."
-    # Whatever is there is a partial or purged earlier extraction
-    rm -rf "$dest_dir"
-    mkdir -p "$dest_dir"
-    if ! (set -o pipefail; curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" "$url" | tar -x -C "$dest_dir" "$@"); then
-        echo "ERROR: failed to download or extract ${url}" >&2
-        return 1
-    fi
-    proto_record_files "$dest_dir"
+    local attempt retries="${_PROTO_DOWNLOAD_RETRIES:-5}"
+    for ((attempt = 0; attempt <= retries; attempt++)); do
+        echo "Downloading and extracting $(basename "$url")..."
+        # Whatever is there is a partial or purged earlier extraction
+        rm -rf "$dest_dir"
+        mkdir -p "$dest_dir"
+        if (set -o pipefail; curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" "$url" | tar -x -C "$dest_dir" "$@"); then
+            proto_record_files "$dest_dir"
+            return 0
+        fi
+        if [ "$attempt" -lt "$retries" ]; then
+            echo "Download or extraction of ${url} failed; retrying ($((attempt + 1))/${retries})..." >&2
+            sleep "${_PROTO_DOWNLOAD_RETRY_DELAY:-10}"
+        fi
+    done
+    echo "ERROR: failed to download or extract ${url}" >&2
+    return 1
 }
 
 

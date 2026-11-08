@@ -18,10 +18,11 @@ import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import IO, Any
 
+from proto_tools.utils.download_progress import DownloadWatch, ProgressDeadline
 from proto_tools.utils.weights_layout import (
     COMPILE_CACHE_VARS,
     GENERAL_COMPILE_CACHE_VARS,
@@ -458,6 +459,38 @@ def _compile_cache_dir(toolkit: str, cache_mode: str, tool_env_path: Path | str 
     return Path(cache_mode) / weights_key(toolkit) / "compile_cache"
 
 
+def _download_dirs(toolkit: str | None, env: Mapping[str, str], tool_env_path: Path | str | None) -> list[Path]:
+    """Return the folders a worker downloads weights into, for ``ProgressDeadline`` to watch.
+
+    These are ``HF_HOME``, ``TORCH_HOME``, and the toolkit's weights directory, resolved as
+    ``resolve_weights_dir`` resolves it in the worker. Compile caches are left out so JIT compile
+    time stays charged to the timeout.
+
+    Args:
+        toolkit (str | None): Toolkit name, or None for a subprocess not tied to one.
+        env (Mapping[str, str]): The subprocess environment from ``_build_subprocess_env``.
+        tool_env_path (Path | str | None): The tool's venv.
+
+    Returns:
+        list[Path]: The download folders. Some may not exist yet.
+    """
+    dirs = [Path(env[var]) for var in ("HF_HOME", "TORCH_HOME") if env.get(var)]
+    if toolkit is None:
+        return dirs
+    from proto_tools.utils.proto_home import get_proto_home
+
+    override = env.get(f"PROTO_{toolkit.upper()}_WEIGHTS_DIR")
+    cache_mode = env.get("PROTO_MODEL_CACHE") or str(get_proto_home() / "proto_model_cache")
+    if override:
+        dirs.append(Path(override))
+    elif cache_mode in ("IN_ENV", "NONE"):
+        if tool_env_path:
+            dirs.append(Path(tool_env_path) / ("model_weight_cache" if cache_mode == "IN_ENV" else "weights"))
+    else:
+        dirs.append(Path(cache_mode) / toolkit / "weights")
+    return dirs
+
+
 def _build_subprocess_env(
     device: str = "cpu",
     tool_env_path: Path | str | None = None,
@@ -783,6 +816,9 @@ class PersistentWorker:
         self._stderr_thread: threading.Thread | None = None
         # Bounded ring buffer for crash context; size from PROTO_WORKER_STDERR_BUFFER_LINES (default 20).
         self._stderr_lines: collections.deque[str] = collections.deque(maxlen=_stderr_buffer_lines())
+        # Folders the worker downloads weights into, and the deadline of the request in flight.
+        self._download_dirs: list[Path] = []
+        self._deadline: ProgressDeadline | None = None
 
     @property
     def alive(self) -> bool:
@@ -828,6 +864,7 @@ class PersistentWorker:
             toolkit=self.toolkit,
         )
         env["TOOL_VENV_PATH"] = str(self.env_path)
+        self._download_dirs = _download_dirs(self.toolkit, env, self.env_path)
 
         logger.debug(
             "Starting persistent worker for %s (script=%s, device=%s)",
@@ -863,7 +900,8 @@ class PersistentWorker:
 
         Args:
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
-            timeout (int | None): Maximum seconds to wait for a response. None means
+            timeout (int | None): Maximum seconds to wait for a response, not counting time in
+                which the worker's weight downloads grew (see ``ProgressDeadline``). None means
                 block indefinitely. On timeout the worker is killed and TimeoutError is raised.
 
         Returns:
@@ -896,8 +934,9 @@ class PersistentWorker:
             # process group and survives parent-side cancellation by the host platform;
             # without this, the worker's late response sits in the pipe and corrupts the next send.
             response_matched = False
+            self._deadline = None
             try:
-                with self._request_heartbeat(request_id):
+                with self._request_heartbeat(request_id, watch_downloads=timeout is None):
                     response = self._read_response(request_id, timeout)
 
                 if response.get("id") != request_id:
@@ -978,8 +1017,9 @@ class PersistentWorker:
         fd = self._process.stdout.fileno()
         buf = bytearray()
 
-        # Phase 1: wait for the PROTO_* header, skipping noise lines. Compute happens here.
-        deadline = time.monotonic() + timeout
+        # Phase 1: wait for the PROTO_* header, skipping noise lines. Compute happens here, and so
+        # do first-load weight downloads, which the deadline does not charge while they progress.
+        deadline = self._deadline = ProgressDeadline(timeout, self._download_dirs, label=self.toolkit)
         header_line = None
         while header_line is None:
             nl = buf.find(b"\n")
@@ -989,11 +1029,14 @@ class PersistentWorker:
                 if line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
                     header_line = line
                 continue  # noise line, or already-buffered bytes still to scan
-            remaining = deadline - time.monotonic()
-            if remaining <= 0 or not select.select([fd], [], [], remaining)[0]:
+            deadline.tick()
+            if deadline.expired():
                 raise TimeoutError(
-                    f"{self.toolkit} worker timed out waiting for response to request {request_id} after {timeout}s"
+                    f"{self.toolkit} worker timed out waiting for response to request {request_id} "
+                    f"after {timeout}s{deadline.timeout_note()}"
                 )
+            if not select.select([fd], [], [], deadline.wait_slice())[0]:
+                continue
             chunk = os.read(fd, _READ_CHUNK)
             if not chunk:
                 raise RuntimeError(
@@ -1066,13 +1109,16 @@ class PersistentWorker:
             os.killpg(self._process.pid, sig)
 
     @contextlib.contextmanager
-    def _request_heartbeat(self, request_id: str) -> Iterator[None]:
+    def _request_heartbeat(self, request_id: str, *, watch_downloads: bool = False) -> Iterator[None]:
         """Log a WARNING for as long as a request stays in flight past the heartbeat interval.
 
         A background daemon thread wakes every ``interval`` seconds and, while the request is
         still pending, emits a WARNING with elapsed time. This is the only live signal a wedged
         inference / model load produces in prod, where proto_tools INFO/DEBUG are dropped and the
-        worker itself is silent. Disabled when the interval is <= 0.
+        worker itself is silent. While weights are downloading, the warning says so instead of
+        suggesting a wedge: the request's deadline measures that, or, for a request with no timeout
+        and so no deadline (``watch_downloads``), the heartbeat watches the download folders itself.
+        Disabled when the interval is <= 0.
         """
         interval = _heartbeat_interval_seconds()
         if interval <= 0:
@@ -1082,7 +1128,28 @@ class PersistentWorker:
         start = time.monotonic()
 
         def _beat() -> None:
+            watch = DownloadWatch(self._download_dirs) if watch_downloads else None
+            if watch is not None:
+                watch.grew()  # baseline
             while not done.wait(interval):
+                deadline = self._deadline
+                if deadline is not None and deadline.downloading:
+                    logger.warning(
+                        "Downloading weights for %s: %.0fs elapsed (request %s, %.0fs downloading).",
+                        self.toolkit,
+                        time.monotonic() - start,
+                        request_id,
+                        deadline.download_seconds,
+                    )
+                    continue
+                if watch is not None and watch.grew():
+                    logger.warning(
+                        "Downloading weights for %s: %.0fs elapsed (request %s).",
+                        self.toolkit,
+                        time.monotonic() - start,
+                        request_id,
+                    )
+                    continue
                 logger.warning(
                     "Worker for %s still running after %.0fs (request %s, no response yet); worker may be wedged.",
                     self.toolkit,

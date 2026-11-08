@@ -67,11 +67,13 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
 from proto_tools.utils.device import parse_device_string
 from proto_tools.utils.device_manager import DeviceManager
+from proto_tools.utils.download_progress import ProgressDeadline
 from proto_tools.utils.logging_config import verbose_level_from_env
 from proto_tools.utils.persistent_worker import (
     PersistentWorker,
     _apply_verbose_to_console_handlers,
     _build_subprocess_env,
+    _download_dirs,
     _drain_subprocess_stderr,
     _parse_env_vars_file,
     _stderr_buffer_lines,
@@ -1407,8 +1409,11 @@ class ToolInstance:
                 )
                 drain_thread.start()
 
+                deadline = ProgressDeadline(
+                    effective_timeout, _download_dirs(self.toolkit, env, self.env_path), label=self.toolkit
+                )
                 try:
-                    rc = proc.wait(timeout=effective_timeout)
+                    rc = deadline.wait_process(proc)
                 except subprocess.TimeoutExpired:
                     # killpg, not proc.kill, so grandchildren don't orphan with live CUDA handles.
                     with suppress(OSError):
@@ -1420,7 +1425,9 @@ class ToolInstance:
                             os.killpg(proc.pid, signal.SIGKILL)
                         with suppress(Exception):
                             proc.wait(timeout=5)
-                    raise TimeoutError(f"{self.toolkit}: timed out after {effective_timeout}s") from None
+                    raise TimeoutError(
+                        f"{self.toolkit}: timed out after {effective_timeout}s{deadline.timeout_note()}"
+                    ) from None
                 finally:
                     drain_thread.join(timeout=2)
 
