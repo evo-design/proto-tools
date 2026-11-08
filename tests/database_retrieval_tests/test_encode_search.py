@@ -119,6 +119,8 @@ def test_bare_filter_mapping_is_one_query() -> None:
         ({"search_term": "  "}, "at least one filter"),
         ({"type": "Experiment"}, "must not set"),
         ({"target.label": ""}, "must not be empty"),
+        ({"target.label": ["CTCF", " "]}, "must not be empty"),
+        ({"target.label": []}, "at least one value"),
     ],
 )
 def test_invalid_queries_are_rejected(query: dict[str, Any], message: str) -> None:
@@ -127,6 +129,23 @@ def test_invalid_queries_are_rejected(query: dict[str, Any], message: str) -> No
 
 
 # ── Request construction and parsing ─────────────────────────────────────────
+
+
+def test_list_filters_repeat_the_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _install(monkeypatch, _Session({"@graph": [_FILE], "total": 14}))
+    output = run_encode_search(
+        EncodeSearchInput(queries={"target.label": [" CTCF ", "RAD21"], "assembly!": ["hg19", "GRCh37"]}),
+        EncodeSearchConfig(),
+    )
+    query = output.results[0].query
+    assert query.filters == {"target.label": ["CTCF", "RAD21"], "assembly!": ["hg19", "GRCh37"]}
+    params = session.calls[0]
+    assert [pair for pair in params if pair[0] in {"target.label", "assembly!"}] == [
+        ("target.label", "CTCF"),
+        ("target.label", "RAD21"),
+        ("assembly!", "hg19"),
+        ("assembly!", "GRCh37"),
+    ]
 
 
 def test_file_search_params_and_hit_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -290,6 +309,19 @@ def test_negated_filter_that_excludes_nothing_warns_even_with_hits(monkeypatch: 
         EncodeSearchInput(queries={"target.label": "CTCF", "assembly!": "GRCh38"}), EncodeSearchConfig()
     )
     assert output.warnings == [] and len(session.calls) == 2  # only the negated filter is counted
+
+
+def test_list_value_that_matches_nothing_warns_even_with_hits(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _install(monkeypatch, _Session(route=_portal({"@graph": [_FILE], "total": 1})))
+    output = run_encode_search(
+        EncodeSearchInput(queries={"target.label": ["CTCF", "ctcf"], "assembly": "GRCh38"}), EncodeSearchConfig()
+    )
+    (warning,) = output.warnings
+    assert "target.label='ctcf' in a list matches no released File, so it adds no hits" in warning
+    assert "did you mean 'CTCF'?" in warning
+    counts = [dict(params) for params in session.calls[1:]]
+    assert [params.get("target.label") for params in counts] == ["CTCF", "ctcf", None]  # then the facet lookup
+    assert not any("assembly" in params for params in counts)  # single values are not counted when there are hits
 
 
 # ── Download ─────────────────────────────────────────────────────────────────
