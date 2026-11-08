@@ -9,7 +9,7 @@
 
 ## Overview
 
-The RCSB Protein Data Bank is a database of experimentally determined three-dimensional structures of proteins, nucleic acids, and their complexes. This toolkit provides three CPU-only tools: `pdb-fetch-entry` retrieves structure metadata (title, experimental method, and resolution), `pdb-fetch-fasta` retrieves chain sequences, and `pdb-structure-similarity` searches experimental PDB chains or assemblies with RCSB's learned structure embedding. They require network access.
+The RCSB Protein Data Bank is a database of experimentally determined three-dimensional structures of proteins, nucleic acids, and their complexes. This toolkit provides four CPU-only tools: `pdb-fetch-entry` retrieves structure metadata (title, experimental method, and resolution), `pdb-fetch-fasta` retrieves chain sequences, `pdb-sequence-search` finds polymer entities whose sequences resemble a query, and `pdb-structure-similarity` searches experimental PDB chains or assemblies with RCSB's learned structure embedding. They require network access.
 
 ## Background
 
@@ -19,9 +19,12 @@ The tools call two RCSB HTTP endpoints directly. `pdb-fetch-entry` issues a GET 
 
 `pdb-structure-similarity` calls the RCSB Search API's structure service. The service represents structures with ESM3 residue embeddings followed by a learned aggregator whose cosine similarity was trained to approximate maximum TM-score ([Segura et al., 2026](https://doi.org/10.1093/bioinformatics/btag058)). It is an independent approximate-nearest-neighbor search, not Foldseek or an exact structural alignment. Public PDB references are queried by entry and chain/assembly ID. Custom structures are converted to PDB format and sent to RCSB's public upload service.
 
+`pdb-sequence-search` calls the same Search API's sequence service, which aligns the query against every polymer entity in the archive with MMseqs2 ([Steinegger and Söding, 2017](https://doi.org/10.1038/nbt.3988)) and returns ranked entities with their alignment statistics, typically in under a second. Hits are then annotated with one request to the RCSB Data API GraphQL endpoint (`https://data.rcsb.org/graphql`), which supplies each entity's description, source organism, UniProt accessions, author chain identifiers, and canonical sequence.
+
 ### Learning Resources
 
 - [RCSB PDB Data API documentation](https://www.rcsb.org/docs/programmatic-access/web-apis-overview) (RCSB PDB) - reference for the REST endpoints, query syntax, and rate limits.
+- [RCSB PDB sequence search](https://www.rcsb.org/docs/search-and-browse/advanced-search/sequence-similarity-search) (RCSB PDB) - MMseqs2 sequence-similarity search semantics, cutoffs, and limits.
 - [RCSB PDB 3D similarity search](https://www.rcsb.org/docs/search-and-browse/advanced-search/3d-similarity-search) (RCSB PDB) - structure-embedding search semantics and query modes.
 - [PDB-101 training and education](https://pdb101.rcsb.org/) (RCSB PDB) - guided material on PDB data, structure determination methods, and how to interpret entries.
 
@@ -56,6 +59,28 @@ Use this to extract reference sequences from an experimental structure for seque
 - **An unknown accession is not an error.** A missing or obsolete accession returns an empty `chains` list rather than raising.
 - **Exporting to `fasta` writes the original headers.** The `fasta` export emits each record using its stored FASTA header verbatim; `json` and `csv` are also supported, with the `csv` form joining shared chain identifiers with a semicolon.
 
+### PDB Sequence Search (`pdb-sequence-search`)
+
+Searches the PDB's polymer entities for sequences similar to each query using RCSB's MMseqs2 sequence service. A query is a protein, DNA, or RNA sequence of at least 10 residues. Each result lists ranked entity identifiers (`1BM7_1`) with the best alignment's identity, E-value, bit score, aligned ranges, and aligned strings, and, by default, the entity's description, source organism, UniProt accessions, author chain identifiers, and canonical sequence.
+
+#### Applications
+
+Use this to identify which protein a fragment or design comes from, to find experimental structures of a sequence or its homologs before structure-based work, or to check a designed sequence for close experimental neighbors. Because it tolerates mismatches and returns in about a second, it is a fast first pass before a slower whole-database search. Chain identifiers feed directly into [PDB Fetch FASTA](https://bio-pro.mintlify.app/tools/database-retrieval/pdb), and UniProt accessions into [UniProt](https://bio-pro.mintlify.app/tools/database-retrieval/uniprot).
+
+#### Usage Tips
+
+- **Coverage is the PDB, not all of UniProt.** Only sequences with a deposited structure can match. For proteins without one, search UniProt or NCBI with `blast-search` instead.
+- **Identity is over the aligned region.** A short fragment can match at 1.0 identity while covering a small part of the entity; check `query_beg`/`query_end` and `subject_beg`/`subject_end` before treating a hit as the same protein.
+- **`chain_ids` are author chain IDs.** They match what `pdb-fetch-fasta` reports, unlike the `label_asym_id` values `pdb-structure-similarity` uses.
+- **No match returns an empty result.** RCSB answers HTTP 204 when nothing passes the cutoffs, which comes back as an empty `hits` list with `total_count` 0. Loosen `evalue_cutoff` or `identity_cutoff` if you expected hits.
+- **Queries shorter than 10 residues are rejected.** RCSB does not search shorter sequences, so the input fails validation before any request is sent.
+- **Short nucleic-acid queries rarely match, even when the sequence is in the PDB.** A 12-nt Dickerson dodecamer, or the same sequence doubled to 24 nt, returns no hits even at `evalue_cutoff=10`, although hundreds of entries contain it. Use DNA or RNA queries of roughly 50 nt or more, or look up short oligonucleotides by PDB ID with `pdb-fetch-fasta`.
+- **RNA queries are converted from T to U.** RCSB rejects T in an RNA query, so a sequence copied from a DNA source is converted automatically and the conversion is logged at INFO.
+- **Unsupported characters fail validation.** Gaps (`-`), stops (`*`), and letters RCSB cannot search for the chosen `sequence_type` are rejected before any request. This includes `X` in proteins and `N` in nucleic acids: RCSB accepts them, but its sequence server then fails with HTTP 500. Remove or replace them before searching.
+- **Computed models are off by default.** `include_computed_models` adds RCSB's computed structure models to the search, but RCSB's sequence server often times out on that index.
+- **Turn off `annotate` for large result sets.** Annotation adds one GraphQL request per query; with `annotate=False`, hits carry only identifiers and alignment statistics.
+- **Annotation failures are reported, not hidden.** If the GraphQL request returns only errors, the tool raises. If some hits come back without annotation, those hits keep `None` annotation fields and the output's `warnings` lists their entity IDs.
+
 ### PDB Structure Similarity (`pdb-structure-similarity`)
 
 Searches the experimental PDB structure index for chains or assemblies similar to each query. A query is either a public PDB chain or assembly, or a custom `Structure`. Each result lists ranked hit identifiers with RCSB's normalized ranking score and the structure service's predicted TM-score.
@@ -77,7 +102,7 @@ Use this to find experimental structures related to a design or a known protein:
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every PDB tool in this toolkit (`pdb-fetch-entry`, `pdb-fetch-fasta`, `pdb-structure-similarity`).
+These apply to every PDB tool in this toolkit (`pdb-fetch-entry`, `pdb-fetch-fasta`, `pdb-sequence-search`, `pdb-structure-similarity`).
 
 - **Requires network access.** The tools call the live RCSB PDB HTTP endpoints; they do not run offline and keep no local copy of the archive.
 - **Subject to RCSB rate limits.** RCSB throttles clients that exceed a few requests per second and returns HTTP 429 when the limit is exceeded; space out high-volume requests, since no account or API key is available to raise the limit.
