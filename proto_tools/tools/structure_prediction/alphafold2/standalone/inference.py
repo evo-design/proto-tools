@@ -806,7 +806,7 @@ class AlphaFold2Model:
         }
 
     # -------------------------------------------------------------------------
-    # Binder gradient computation (base or Germinal backend)
+    # Design gradient computation (all protocols)
     # -------------------------------------------------------------------------
 
     def _run_gradient(
