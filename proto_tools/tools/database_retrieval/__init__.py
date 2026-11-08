@@ -18,6 +18,16 @@ from proto_tools.tools.database_retrieval.alphamissense_db import (
     run_alphamissense_db_fetch,
 )
 
+# arXiv search
+from proto_tools.tools.database_retrieval.arxiv import (
+    ArxivSearchConfig,
+    ArxivSearchHit,
+    ArxivSearchInput,
+    ArxivSearchOutput,
+    ArxivSearchResult,
+    run_arxiv_search,
+)
+
 # bioRxiv preprint details
 from proto_tools.tools.database_retrieval.biorxiv import (
     BiorxivDetailsConfig,
@@ -264,6 +274,13 @@ __all__ = [
     "AlphaMissenseDBFetchOutput",
     "AlphaMissensePrediction",
     "run_alphamissense_db_fetch",
+    # arXiv search
+    "ArxivSearchConfig",
+    "ArxivSearchHit",
+    "ArxivSearchInput",
+    "ArxivSearchOutput",
+    "ArxivSearchResult",
+    "run_arxiv_search",
     # bioRxiv preprint details
     "BiorxivDetailsConfig",
     "BiorxivDetailsInput",

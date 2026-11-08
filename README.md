@@ -97,6 +97,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 <a href="proto_tools/tools/database_retrieval/">database_retrieval/</a>             # Sequence and structure database access
 ├── <a href="proto_tools/tools/database_retrieval/alphafold_db/">alphafold_db/</a>
 ├── <a href="proto_tools/tools/database_retrieval/alphamissense_db/">alphamissense_db/</a>
+├── <a href="proto_tools/tools/database_retrieval/arxiv/">arxiv/</a>
 ├── <a href="proto_tools/tools/database_retrieval/biorxiv/">biorxiv/</a>
 ├── <a href="proto_tools/tools/database_retrieval/ccd_lookup/">ccd_lookup/</a>
 ├── <a href="proto_tools/tools/database_retrieval/encode/">encode/</a>
