@@ -21,7 +21,7 @@ from proto_tools.utils.persistent_worker import (
     _drain_subprocess_stderr,
     _stderr_buffer_lines,
 )
-from proto_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance, _local_visible_device
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -47,9 +47,12 @@ def run_in_env(
     only stdout is captured and returned.
 
     For ``cuda`` devices a transient :class:`DeviceManager` lease is held for the run — it
-    is never evicted and honors shared-GPU mode (``allow_multiple_per_device``) — and the
-    resolved device is exported to the program as ``RUN_IN_ENV_DEVICE``. ``timeout`` bounds
-    the whole run, so set it generously when the program downloads weights on first use.
+    is never evicted and honors shared-GPU mode (``allow_multiple_per_device``). The program
+    sees only the leased GPU(s), renumbered ``cuda:0..N-1``, so bare ``"cuda"`` and JAX land on
+    the lease rather than on a GPU a tool worker holds; the device to use is exported as
+    ``RUN_IN_ENV_DEVICE``. A ``cpu`` run sees no GPU at all (``JAX_PLATFORMS=cpu``), so it
+    cannot claim one. ``timeout`` bounds the whole run, so set it generously when the program
+    downloads weights on first use.
 
     Args:
         toolkit (str): Toolkit whose environment to run in (for example ``"esm2"``).
@@ -93,14 +96,19 @@ def run_in_env(
         else:
             run_device = device
 
+        # Restrict visible GPUs to the lease (none for cpu). An unleased process that opens a GPU
+        # a tool worker holds fails on an Exclusive_Process GPU, and JAX opens every visible GPU.
+        pinned = run_device == "cpu" or run_device.startswith("cuda")
         env = _build_subprocess_env(
             run_device,
             tool_env_path=instance.env_path,
             tool_env_vars=instance._tool_env_vars,
             toolkit=toolkit,
+            pin_visible_devices=pinned,
         )
         env["TOOL_VENV_PATH"] = str(instance.env_path)
-        env["RUN_IN_ENV_DEVICE"] = run_device  # resolved device for the in-env program to use
+        # The device as the program sees it: a pinned lease is renumbered cuda:0..N-1.
+        env["RUN_IN_ENV_DEVICE"] = _local_visible_device(run_device) if pinned else run_device
         # Append, so the published helpers stay ahead of any stale copy in the standalone dir.
         env["PYTHONPATH"] = os.pathsep.join(p for p in (env.get("PYTHONPATH", ""), standalone_dir) if p)
 
