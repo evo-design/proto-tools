@@ -255,6 +255,16 @@ _BASE_PASSTHROUGH = {
     "http_proxy",
     "https_proxy",
     "no_proxy",
+    # TLS trust: where to find CA certificates. Containers and TLS-inspecting proxies set these when
+    # the system default is missing or incomplete; without them setup.sh's git clones, uv/pip, and
+    # weight downloads fail certificate verification.
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+    "GIT_SSL_CAINFO",
+    "GIT_SSL_CAPATH",
+    "PIP_CERT",
 }
 
 # Standard system binary dirs, always present in reconstructed PATH
