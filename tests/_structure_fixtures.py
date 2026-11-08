@@ -6,6 +6,8 @@ Lives at the ``tests/`` root so every test package can import it.
 
 from __future__ import annotations
 
+import io
+
 
 def synthetic_cif(chain_names: list[str]) -> str:
     """Build a minimal valid mmCIF with one glycine residue per named chain.
@@ -81,3 +83,21 @@ def single_chain_pdb(num_residues: int) -> str:
             atom_id += 1
     lines.append("END")
     return "\n".join(lines) + "\n"
+
+
+def biopython_pdb(cif: str) -> str:
+    """Convert mmCIF text to PDB text with Biopython's MMCIFParser + PDBIO.
+
+    Args:
+        cif (str): mmCIF content.
+
+    Returns:
+        str: The PDB text Biopython writes, entity records dropped and a ``TER`` after every chain.
+    """
+    from Bio.PDB import PDBIO, MMCIFParser
+
+    writer = PDBIO()
+    writer.set_structure(MMCIFParser(QUIET=True).get_structure("af3", io.StringIO(cif)))
+    out = io.StringIO()
+    writer.save(out)
+    return out.getvalue()

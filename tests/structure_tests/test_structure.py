@@ -29,7 +29,7 @@ from proto_tools.entities.structures.utils import (
     pdb_file_to_atomarray,
 )
 from proto_tools.utils.tool_io import Metrics
-from tests._structure_fixtures import synthetic_cif
+from tests._structure_fixtures import biopython_pdb, synthetic_cif
 
 _TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
 _TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
@@ -1764,6 +1764,61 @@ def test_an_unrepresentable_polymer_is_reported_rather_than_dropped():
     assert hybrid.get_chain_types()["B"] == "polymer"
     with pytest.raises(ValueError, match="which a Chain cannot carry"):
         Complex.from_structure(hybrid)
+
+
+_DUMMY_DATA = Path(__file__).resolve().parents[1] / "dummy_data"
+
+
+def test_alphafold3_tyrosine_ligand_reads_as_a_ligand():
+    """A Biopython-converted AlphaFold3 PDB for MfnG + L-tyrosine reads the HETATM TYR chain as a ligand.
+
+    Biopython's PDB carries no entity records and ends the ligand chain with ``TER``, so gemmi
+    would otherwise type it as a one-residue polymer of unknown type, which ``num_chains`` rejects.
+    """
+    structure = Structure.from_file(_DUMMY_DATA / "predicted_ligand_chains" / "alphafold3_mfng_tyr.pdb")
+
+    assert structure.get_chain_types() == {"A": "protein", "B": "ligand"}
+    assert structure.num_chains == 1
+    assert structure.get_chain_ligands("B") == [("TYR", 1)]
+
+
+@pytest.mark.parametrize("source", ["mmcif", "biopython-pdb", "rcsb-pdb"])
+def test_deposited_free_tyrosine_stays_a_ligand(source: str):
+    """A free tyrosine bound in a deposited entry (2CSM, chorismate mutase) is a ligand of chain A in every format.
+
+    Covers the RCSB mmCIF, the same mmCIF converted to PDB by Biopython, and the RCSB PDB file:
+    the ligand sits in the protein's own chain and must neither extend its sequence nor become a
+    polymer.
+    """
+    cif = (_DUMMY_DATA / "2CSM.cif").read_text()
+    text, fmt = {
+        "mmcif": (cif, "cif"),
+        "biopython-pdb": (biopython_pdb(cif), "pdb"),
+        "rcsb-pdb": ((_DUMMY_DATA / "2CSM.pdb").read_text(), "pdb"),
+    }[source]
+    structure = Structure(structure=text, structure_format=fmt, source="2CSM")
+
+    assert structure.get_chain_types() == {"A": "protein"}
+    assert structure.get_chain_ligands("A") == [("TYR", 300)]
+    assert len(structure.get_chain_sequences()["A"]) == 245
+    assert structure.num_chains == 1
+
+
+@pytest.mark.parametrize(
+    ("filename", "chain"),
+    [("3MGN.cif", "G"), ("3MGN.pdb", "G"), ("6Q9T.cif", "B")],
+    ids=["d-peptide-mmcif", "d-peptide-pdb", "beta-peptide-foldamer-mmcif"],
+)
+def test_a_polymer_of_hetatm_residues_stays_a_polymer(filename: str, chain: str):
+    """A deposited polymer written entirely as HETATM residues is not mistaken for a ligand.
+
+    3MGN chain G is a 14-residue all-D peptide inhibitor and 6Q9T chain B a 16-residue
+    beta-peptide foldamer. Only a lone HETATM residue is read as a ligand.
+    """
+    structure = Structure.from_file(_DUMMY_DATA / filename)
+
+    assert structure.get_chain_types()[chain] == "protein"
+    assert structure.get_chain_ligands(chain) == []
 
 
 # ── Unnamed chains ──────────────────────────────────────────────────────────
