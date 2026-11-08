@@ -497,9 +497,9 @@ def test_proteinmpnn_score(pdb_structure: Structure):
         modified_sequence[index] = "C"
     modified_sequence = "".join(modified_sequence)
 
-    fixed_positions = random.sample(list(range(len(original_sequence))), 100)
-    fixed_positions = {
-        "A": [position + 1 for position in fixed_positions],
+    excluded_positions = random.sample(list(range(len(original_sequence))), 100)
+    excluded_positions = {
+        "A": [position + 1 for position in excluded_positions],
     }
 
     inp = ProteinMPNNScoringInput(
@@ -507,12 +507,12 @@ def test_proteinmpnn_score(pdb_structure: Structure):
             SequenceStructurePair(
                 sequence=original_sequence,
                 structure=pdb_structure,
-                fixed_positions=fixed_positions,
+                excluded_positions=excluded_positions,
             ),
             SequenceStructurePair(
                 sequence=modified_sequence,
                 structure=pdb_structure,
-                fixed_positions=fixed_positions,
+                excluded_positions=excluded_positions,
             ),
         ]
     )
@@ -526,7 +526,7 @@ def test_proteinmpnn_score(pdb_structure: Structure):
 
     assert len(output.scores) == 2
     assert all(isinstance(score, InverseFoldingScoringMetrics) for score in output.scores)
-    scored_len = len(original_sequence) - len(fixed_positions["A"])
+    scored_len = len(original_sequence) - len(excluded_positions["A"])
     assert all(
         np.isclose(score.log_likelihood, score.avg_log_likelihood * scored_len, rtol=1e-5) for score in output.scores
     )
