@@ -2,6 +2,8 @@
 
 # arXiv
 
+![arXiv](https://proto-bio.github.io/proto-assets/images/tool/arxiv/hero.png)
+
 > [!NOTE]
 > **License:** arXiv retrieves data from arXiv descriptive metadata, distributed under CC0-1.0 (public domain; no attribution required). The client wrapper code is MIT-licensed. Please refer to [the data terms](https://info.arxiv.org/help/api/tou.html) for full terms.
 

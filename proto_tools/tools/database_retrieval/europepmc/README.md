@@ -2,6 +2,8 @@
 
 # Europe PMC
 
+![Europe PMC](https://proto-bio.github.io/proto-assets/images/tool/europepmc/hero.png)
+
 > [!NOTE]
 > **License:** Europe PMC retrieves data from literature records and full text served by Europe PMC, distributed under source-specific terms. Attribution to literature records and full text served by Europe PMC is required when the data is redistributed. The client wrapper code is MIT-licensed. Please refer to [the data terms](https://europepmc.org/Copyright) for full terms.
 

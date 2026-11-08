@@ -2,6 +2,8 @@
 
 # Rule Set 3
 
+![Rule Set 3](https://proto-bio.github.io/proto-assets/images/tool/rs3/hero.png)
+
 > [!NOTE]
 > **License:** Rule Set 3 is open source and free for academic and commercial use under an Apache-2.0 license and may require explicit attribution when utilized. Please refer to [the license](https://github.com/gpp-rnd/rs3/blob/master/LICENSE) for full terms.
 
