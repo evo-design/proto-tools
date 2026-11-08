@@ -18,6 +18,16 @@ from proto_tools.tools.database_retrieval.alphamissense_db import (
     run_alphamissense_db_fetch,
 )
 
+# bioRxiv preprint details
+from proto_tools.tools.database_retrieval.biorxiv import (
+    BiorxivDetailsConfig,
+    BiorxivDetailsInput,
+    BiorxivDetailsOutput,
+    BiorxivPreprint,
+    BiorxivVersion,
+    run_biorxiv_details,
+)
+
 # CCD lookup
 from proto_tools.tools.database_retrieval.ccd_lookup import (
     CcdLookupConfig,
@@ -254,6 +264,13 @@ __all__ = [
     "AlphaMissenseDBFetchOutput",
     "AlphaMissensePrediction",
     "run_alphamissense_db_fetch",
+    # bioRxiv preprint details
+    "BiorxivDetailsConfig",
+    "BiorxivDetailsInput",
+    "BiorxivDetailsOutput",
+    "BiorxivPreprint",
+    "BiorxivVersion",
+    "run_biorxiv_details",
     # CCD lookup
     "CcdLookupResult",
     "CcdLookupConfig",
