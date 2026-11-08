@@ -796,6 +796,24 @@ def test_download_lock_settings_reach_setup_scripts(monkeypatch, var):
     assert _build_subprocess_env(device="cpu").get(var) == "1234"
 
 
+@pytest.mark.parametrize(
+    "var",
+    [
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
+        "GIT_SSL_CAINFO",
+        "GIT_SSL_CAPATH",
+        "PIP_CERT",
+    ],
+)
+def test_tls_trust_settings_reach_setup_scripts(monkeypatch, var):
+    """A user's CA-certificate location reaches setup.sh and workers, so HTTPS fetches can verify."""
+    monkeypatch.setenv(var, "/etc/ssl/certs/ca-certificates.crt")
+    assert _build_subprocess_env(device="cpu").get(var) == "/etc/ssl/certs/ca-certificates.crt"
+
+
 def test_base_whitelist_vars_present(monkeypatch):
     """Whitelisted vars should be passed through when set."""
     monkeypatch.setenv("HOME", "/home/test")
