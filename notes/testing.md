@@ -30,7 +30,7 @@ All tests use **flat functions** (no test classes). Follow these patterns when w
 Canonical reference is `pyproject.toml [tool.pytest.ini_options].markers`. Tool-author cheat sheet:
 
 - **`@pytest.mark.integration`**: Tests calling `ToolInstance.dispatch()` for CPU tools. Skipped by default. Run with `--integration`
-- **`@pytest.mark.uses_gpu`**: Tests calling `ToolInstance.dispatch()` for GPU tools. Auto-skipped when no GPU. Implies environment requirement. Do **not** also add `@pytest.mark.integration`. Optional arg `@pytest.mark.uses_gpu(n)` requires `n` visible GPUs
+- **`@pytest.mark.uses_gpu`**: Tests calling `ToolInstance.dispatch()` for GPU tools. Auto-skipped when no GPU. Implies environment requirement. Do **not** also add `@pytest.mark.integration`. Optional arg `@pytest.mark.uses_gpu(n)` requires `n` visible GPUs. Mark every test that needs more than one GPU with its count: `--multi-gpu` runs exactly the tests with `n >= 2`, slow ones included, since `-m` cannot select on the count
 - **`@pytest.mark.uses_cpu`**: CPU-only test. Optional arg `@pytest.mark.uses_cpu(n)` requires `n` CPUs (matches what `ToolPool._detect_cpus` would see)
 - **`@pytest.mark.slow`**: Tests that may take several minutes. Skipped by default. Run with `--slow` or `--all`
 - **`@pytest.mark.extensive`**: Combinatorial tests (e.g. every tool × device transition). Skipped unless `--ext` (or `--extensive`) is passed
