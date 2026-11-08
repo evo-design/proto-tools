@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
+import warnings
 from pathlib import Path
 from typing import Any, Literal
 
 import requests
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from proto_tools.tools.database_retrieval.pdb.shared_data_models import _raise_for_status
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -28,6 +31,8 @@ from proto_tools.utils import (
     request_with_retry,
 )
 
+logger = logging.getLogger(__name__)
+
 _SEARCH_URL = "https://search.rcsb.org/rcsbsearch/v2/query"
 _GRAPHQL_URL = "https://data.rcsb.org/graphql"
 _USER_AGENT = "proto-tools/pdb-sequence-search-v1"
@@ -38,6 +43,14 @@ _MIN_QUERY_LENGTH = 10  # RCSB rejects shorter queries with HTTP 400
 _NO_CONTENT = 204  # RCSB's response when nothing matches
 
 PdbSequenceType = Literal["protein", "dna", "rna"]
+
+# Letters RCSB's sequence service accepts, per polymer type. X and N are left out on purpose: RCSB
+# validates them, but its sequence server then fails with HTTP 500 instead of searching.
+_ALPHABETS: dict[str, frozenset[str]] = {
+    "protein": frozenset("ACDEFGHIKLMNPQRSTVWYBZUO"),
+    "dna": frozenset("ACGTIU"),
+    "rna": frozenset("ACGUI"),
+}
 
 _ANNOTATION_QUERY = """
 query ($ids: [String!]!) {
@@ -72,6 +85,7 @@ class PdbSequenceSearchQuery(BaseModel):
 
     Attributes:
         sequence (str): Query sequence in one-letter code, at least 10 residues; whitespace is removed.
+            For ``rna``, T is converted to U.
         sequence_type (PdbSequenceType): Polymer type to search: ``protein``, ``dna``, or ``rna``.
     """
 
@@ -79,7 +93,7 @@ class PdbSequenceSearchQuery(BaseModel):
 
     sequence: str = Field(
         title="Sequence",
-        description="Query sequence in one-letter code, at least 10 residues; whitespace is removed",
+        description="Query sequence in one-letter code, 10+ residues; whitespace removed, T to U for rna",
     )
     sequence_type: PdbSequenceType = Field(
         default="protein",
@@ -95,6 +109,21 @@ class PdbSequenceSearchQuery(BaseModel):
         if len(cleaned) < _MIN_QUERY_LENGTH:
             raise ValueError(f"RCSB sequence search needs at least {_MIN_QUERY_LENGTH} residues, got {len(cleaned)}")
         return cleaned
+
+    @model_validator(mode="after")
+    def _check_alphabet(self) -> PdbSequenceSearchQuery:
+        """Convert T to U in RNA queries, then reject letters RCSB cannot search for this polymer type."""
+        if self.sequence_type == "rna" and "T" in self.sequence:
+            logger.info("Converted T to U in an RNA query; RCSB searches RNA written with U")
+            self.sequence = self.sequence.replace("T", "U")
+        invalid = sorted(set(self.sequence) - _ALPHABETS[self.sequence_type])
+        if invalid:
+            hint = " (RCSB's sequence server fails on X and N)" if {"X", "N"} & set(invalid) else ""
+            raise ValueError(
+                f"{self.sequence_type} query contains characters RCSB cannot search: {''.join(invalid)}{hint}; "
+                f"allowed: {''.join(sorted(_ALPHABETS[self.sequence_type]))}"
+            )
+        return self
 
 
 class PdbSequenceSearchInput(BaseToolInput):
@@ -285,15 +314,6 @@ class PdbSequenceSearchOutput(BaseToolOutput):
         raise ValueError(f"Unsupported format: {file_format}")
 
 
-def _raise_for_status(response: Any, operation: str) -> None:
-    """Raise an HTTP error that includes a bounded RCSB response body."""
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as error:
-        body = str(getattr(response, "text", ""))[:1000]
-        raise requests.HTTPError(f"RCSB {operation} failed: {error}; body={body!r}", response=response) from error
-
-
 def _search_payload(query: PdbSequenceSearchQuery, config: PdbSequenceSearchConfig) -> dict[str, Any]:
     """Build the RCSB Search API request for one query."""
     content_types = ["experimental", "computational"] if config.include_computed_models else ["experimental"]
@@ -358,8 +378,23 @@ def _annotate(session: requests.Session, hits: list[PdbSequenceSearchHit]) -> li
         backoff_seconds=_BACKOFF_SECONDS,
     )
     _raise_for_status(response, "entity annotation")
-    entities = (response.json().get("data") or {}).get("polymer_entities") or []
+    body = response.json()
+    # GraphQL reports failures in an `errors` list, usually with HTTP 200.
+    errors = "; ".join(str(error.get("message", error)) for error in body.get("errors") or [] if error)
+    entities = (body.get("data") or {}).get("polymer_entities") or []
+    if errors and not entities:
+        raise RuntimeError(f"RCSB entity annotation failed: {errors[:1000]}")
     by_id = {entity["rcsb_id"]: entity for entity in entities if isinstance(entity, dict) and entity.get("rcsb_id")}
+    missing = [hit.entity_id for hit in hits if hit.entity_id not in by_id]
+    if missing:
+        shown = ", ".join(missing[:10]) + (", ..." if len(missing) > 10 else "")
+        detail = f"; GraphQL errors: {errors[:1000]}" if errors else ""
+        warnings.warn(
+            f"RCSB returned no annotation for {len(missing)} of {len(hits)} hits ({shown}); "
+            f"their annotation fields are None{detail}",
+            UserWarning,
+            stacklevel=2,
+        )
     annotated = []
     for hit in hits:
         entity = by_id.get(hit.entity_id)

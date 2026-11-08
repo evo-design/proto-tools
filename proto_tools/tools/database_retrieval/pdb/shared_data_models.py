@@ -1,7 +1,7 @@
 """proto_tools/tools/database_retrieval/pdb/shared_data_models.py.
 
-Contains configuration, chain models, and private helpers used by
-fetch_entry and fetch_fasta tool modules.
+Contains configuration, chain models, and private helpers used by the
+pdb tool modules.
 """
 
 import logging
@@ -75,6 +75,15 @@ class PdbFetchConfig(BaseConfig):
 # ============================================================================
 # Private Helpers
 # ============================================================================
+
+
+def _raise_for_status(response: Any, operation: str) -> None:
+    """Raise an HTTP error that includes a bounded RCSB response body."""
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as error:
+        body = str(getattr(response, "text", ""))[:1000]
+        raise requests.HTTPError(f"RCSB {operation} failed: {error}; body={body!r}", response=response) from error
 
 
 def _request_pdb(session: requests.Session, url: str, source_label: str) -> requests.Response | None:
