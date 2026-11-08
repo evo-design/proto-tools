@@ -547,20 +547,31 @@ def test_local_blastp_no_hits(prot_blast_db):
     assert result.num_hits == 0
 
 
+_ONLINE_BLAST_TIMEOUT = 900
+
+
 @pytest.mark.integration
 @pytest.mark.slow
 @pytest.mark.skip_ci
 def test_online_blastp():
-    """Search a known hemoglobin fragment against swissprot → expect hits."""
-    result = run_blast_search(
-        BlastSearchInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"),
-        BlastSearchConfig(
-            search_mode="online",
-            program="blastp",
-            database="swissprot",
-            hitlist_size=5,
-        ),
-    )
+    """Search a known hemoglobin fragment against swissprot → expect hits.
+
+    NCBI's public queue sometimes holds a search for over an hour, which says nothing about this
+    client, so the test waits at most ``_ONLINE_BLAST_TIMEOUT`` and skips when the queue is slower.
+    """
+    try:
+        result = run_blast_search(
+            BlastSearchInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"),
+            BlastSearchConfig(
+                search_mode="online",
+                program="blastp",
+                database="swissprot",
+                hitlist_size=5,
+                timeout=_ONLINE_BLAST_TIMEOUT,
+            ),
+        )
+    except TimeoutError as exc:
+        pytest.skip(f"NCBI BLAST queue did not finish within {_ONLINE_BLAST_TIMEOUT}s: {exc}")
     assert isinstance(result, BlastSearchOutput)
     assert result.success, f"BLAST search failed: {result.errors}"
     assert result.num_hits >= 1
