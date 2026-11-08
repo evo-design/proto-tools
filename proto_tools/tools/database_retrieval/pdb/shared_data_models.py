@@ -77,15 +77,6 @@ class PdbFetchConfig(BaseConfig):
 # ============================================================================
 
 
-def _raise_for_status(response: Any, operation: str) -> None:
-    """Raise an HTTP error that includes a bounded RCSB response body."""
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as error:
-        body = str(getattr(response, "text", ""))[:1000]
-        raise requests.HTTPError(f"RCSB {operation} failed: {error}; body={body!r}", response=response) from error
-
-
 def _request_pdb(session: requests.Session, url: str, source_label: str) -> requests.Response | None:
     """Execute an HTTP GET, returning None on 404."""
     response = request_with_retry(

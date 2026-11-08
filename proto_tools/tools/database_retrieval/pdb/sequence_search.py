@@ -19,7 +19,6 @@ from typing import Any, Literal
 import requests
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from proto_tools.tools.database_retrieval.pdb.shared_data_models import _raise_for_status
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -28,6 +27,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     build_http_session,
+    raise_for_status_with_body,
     request_with_retry,
 )
 
@@ -377,7 +377,7 @@ def _annotate(session: requests.Session, hits: list[PdbSequenceSearchHit]) -> li
         retries=_HTTP_RETRIES,
         backoff_seconds=_BACKOFF_SECONDS,
     )
-    _raise_for_status(response, "entity annotation")
+    raise_for_status_with_body(response, "RCSB entity annotation")
     body = response.json()
     # GraphQL reports failures in an `errors` list, usually with HTTP 200.
     errors = "; ".join(str(error.get("message", error)) for error in body.get("errors") or [] if error)
@@ -431,7 +431,7 @@ def _search(
     )
     if response.status_code == _NO_CONTENT:
         return PdbSequenceSearchResult()
-    _raise_for_status(response, "sequence search")
+    raise_for_status_with_body(response, "RCSB sequence search")
     payload = response.json()
     hits = _parse_hits(payload)
     if config.annotate:
