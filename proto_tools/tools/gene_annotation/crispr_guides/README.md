@@ -2,6 +2,8 @@
 
 # CRISPR Guide Enumeration
 
+![CRISPR Guide Enumeration](https://proto-bio.github.io/proto-assets/images/tool/crispr_guides/hero.png)
+
 > [!NOTE]
 > **License:** CRISPR Guide Enumeration is open source and free for academic and commercial use under an MIT license. Please refer to [the license](https://github.com/evo-design/proto-tools) for full terms.
 

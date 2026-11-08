@@ -2,6 +2,8 @@
 
 # CRISPRitz
 
+![CRISPRitz](https://proto-bio.github.io/proto-assets/images/tool/crispritz/hero.png)
+
 > [!NOTE]
 > **License:** CRISPRitz is licensed under Custom (CRISPRitz Dual License) and has restrictions around commercial use and may require explicit attribution when utilized. Please refer to [the license](https://github.com/pinellolab/CRISPRitz/blob/v2.8.1/LICENSE) for full terms.
 

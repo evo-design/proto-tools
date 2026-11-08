@@ -1,6 +1,8 @@
 <a href="https://bio-pro.mintlify.app/tools/sequence-scoring/na-mpnn-specificity"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 # NA-MPNN
 
+![NA-MPNN](https://proto-bio.github.io/proto-assets/images/tool/na_mpnn_specificity/hero.png)
+
 > [!NOTE]
 > **License:** NA-MPNN uses MIT for code and BSD-3-Clause for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/baker-laboratory/NA-MPNN/blob/main/LICENSE) and [model weights license](https://github.com/baker-laboratory/NA-MPNN/blob/main/LICENSE) for full terms.
 

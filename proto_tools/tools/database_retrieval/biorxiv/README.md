@@ -2,6 +2,8 @@
 
 # bioRxiv
 
+![bioRxiv](https://proto-bio.github.io/proto-assets/images/tool/biorxiv/hero.png)
+
 > [!NOTE]
 > **License:** bioRxiv retrieves data from preprint metadata served by the bioRxiv API, distributed under source-specific terms. Attribution to preprint metadata served by the bioRxiv API is required when the data is redistributed. The client wrapper code is MIT-licensed. Please refer to [the data terms](https://api.biorxiv.org/) for full terms.
 

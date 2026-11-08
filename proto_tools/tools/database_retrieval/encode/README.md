@@ -2,6 +2,8 @@
 
 # ENCODE
 
+![ENCODE](https://proto-bio.github.io/proto-assets/images/tool/encode/hero.png)
+
 
 > [!NOTE]
 > **License:** ENCODE retrieves data from the ENCODE portal, distributed under the ENCODE Data Use Policy. Attribution to the ENCODE portal is required when the data is redistributed. The client wrapper code is MIT-licensed. Please refer to [the data terms](https://www.encodeproject.org/help/citing-encode/) for full terms.

@@ -1,6 +1,8 @@
 <a href="https://bio-pro.mintlify.app/tools/sequence-scoring/deeppbs-specificity"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 # DeepPBS Specificity
 
+![DeepPBS Specificity](https://proto-bio.github.io/proto-assets/images/tool/deeppbs_specificity/hero.png)
+
 > [!NOTE]
 > **License:** DeepPBS Specificity is open source and free for academic and commercial use under a BSD-3-Clause license and may require explicit attribution when utilized. Please refer to [the license](https://github.com/timkartar/DeepPBS/blob/main/LICENSE.txt) for full terms.
 
