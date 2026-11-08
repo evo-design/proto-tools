@@ -27,6 +27,17 @@ from proto_tools.tools.database_retrieval.ccd_lookup import (
     run_ccd_lookup,
 )
 
+# ENCODE portal search
+from proto_tools.tools.database_retrieval.encode import (
+    EncodeSearchConfig,
+    EncodeSearchHit,
+    EncodeSearchInput,
+    EncodeSearchOutput,
+    EncodeSearchQuery,
+    EncodeSearchResult,
+    run_encode_search,
+)
+
 # Ensembl REST tools (lookup / sequence / overlap / xrefs + VEP)
 from proto_tools.tools.database_retrieval.ensembl import (
     EnsemblAssembly,
@@ -233,6 +244,14 @@ __all__ = [
     "CcdLookupInput",
     "CcdLookupOutput",
     "run_ccd_lookup",
+    # ENCODE portal search
+    "EncodeSearchConfig",
+    "EncodeSearchHit",
+    "EncodeSearchInput",
+    "EncodeSearchOutput",
+    "EncodeSearchQuery",
+    "EncodeSearchResult",
+    "run_encode_search",
     # Ensembl REST tools (lookup / sequence / overlap / xrefs + VEP)
     "EnsemblAssembly",
     "EnsemblExon",
