@@ -6,6 +6,15 @@ Config, helpers, sequence validation, I/O, caching, env management, device, logg
 from proto_tools.utils.auth import require_hf_token
 from proto_tools.utils.base_config import BaseConfig, ConfigField, run_preprocess
 from proto_tools.utils.chemistry import validate_smiles
+from proto_tools.utils.deadlines import (
+    DeadlineExceededError,
+    check_deadline,
+    deadline,
+    expired,
+    propagate,
+    remaining,
+    sleep_within_deadline,
+)
 from proto_tools.utils.device import (
     determine_visible_devices,
     display_gpu_memory_usage,
@@ -58,7 +67,10 @@ from proto_tools.utils.gradient.terms import (
     resolve_terms,
 )
 from proto_tools.utils.http_session import (
+    DeadlineAdapter,
+    DeadlineRetry,
     build_http_session,
+    iter_content_within_deadline,
     raise_for_status_with_body,
     request_with_retry,
     user_agent_for,
@@ -231,13 +243,24 @@ __all__ = [
     "OffloadStrategy",
     "SUPPORTED_DEVICE_PREFIXES",
     # HTTP
+    "DeadlineAdapter",
+    "DeadlineRetry",
     "build_http_session",
+    "iter_content_within_deadline",
     "raise_for_status_with_body",
     "request_with_retry",
     "user_agent_for",
     "extract_text_status",
     "poll_until_complete",
     "StatusExtractor",
+    # Deadlines
+    "DeadlineExceededError",
+    "check_deadline",
+    "deadline",
+    "expired",
+    "propagate",
+    "remaining",
+    "sleep_within_deadline",
     # Logging
     "get_logger",
     "setup_logging",

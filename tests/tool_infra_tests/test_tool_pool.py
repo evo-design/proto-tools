@@ -642,6 +642,27 @@ def test_interception_iterable_tool_intercepted_by_pool(clean_registry):
         _active_pool.reset(token)
 
 
+def test_pool_dispatch_runs_under_the_batch_timeout(clean_registry):
+    """A pooled batch of an in-process tool gets config.timeout per item as its deadline."""
+    from proto_tools.utils.deadlines import remaining
+
+    run_iterable, _ = _register_mock_tool(clean_registry, key="pooled-deadline")
+    seen: list[float | None] = []
+
+    def dispatch(key, func, inputs, config):
+        seen.append(remaining())
+        return MockOutput.model_construct(results=["x"] * 3, tool_id=key, success=True)
+
+    pool = MagicMock(spec=ToolPool)
+    pool._parallel_dispatch.side_effect = dispatch
+    token = _active_pool.set(pool)
+    try:
+        run_iterable(MockInput(items=["a", "b", "c"]), MockConfig(timeout=10))
+    finally:
+        _active_pool.reset(token)
+    assert seen and 20 < seen[0] <= 30
+
+
 def test_interception_pool_executing_prevents_re_interception(clean_registry):
     """When _pool_executing is True, tool calls should not re-route."""
 

@@ -380,6 +380,20 @@ def test_null_string_fields_are_empty_not_none() -> None:
 
 
 # ============================================================================
+# Timeout
+# ============================================================================
+
+
+def test_async_wait_longer_than_timeout_stretches_the_call_timeout() -> None:
+    """Raising timeout_seconds alone must not leave the async poll cut off at the default timeout."""
+    long_wait = GIConfig(respond_async=True, timeout_seconds=7200, timeout=3600)
+    assert long_wait.effective_timeout() == 7200 + 2 * 300
+    assert GIConfig(respond_async=True, timeout_seconds=60, timeout=3600).effective_timeout() == 3600
+    assert GIConfig(respond_async=False, timeout_seconds=7200, timeout=3600).effective_timeout() == 3600
+    assert GIConfig(respond_async=True, timeout=None).effective_timeout() is None
+
+
+# ============================================================================
 # Input validation
 # ============================================================================
 

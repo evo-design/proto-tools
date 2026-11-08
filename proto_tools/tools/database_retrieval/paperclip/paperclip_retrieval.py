@@ -23,7 +23,7 @@ from proto_tools.tools.database_retrieval.paperclip.paperclip_client import (
     PaperclipCommandError,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField
+from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField, propagate
 
 PaperclipSource = Literal["pmc", "papers", "abstracts", "biorxiv", "medrxiv", "arxiv"]
 PaperclipLookupField = Literal["doi", "pmid", "pmc", "arxiv", "title", "author", "journal", "year"]
@@ -775,8 +775,10 @@ def run_paperclip_document(
     content_path = f"{paper_dir}/content.lines"
     # The metadata and the requested text are independent reads, so they are fetched together.
     with ThreadPoolExecutor(max_workers=2) as pool:
-        metadata_read = pool.submit(client.read_file, f"{paper_dir}/meta.json")
-        content_read = pool.submit(_read_content, client, content_path, config) if config.read != "metadata" else None
+        metadata_read = pool.submit(propagate(client.read_file), f"{paper_dir}/meta.json")
+        content_read = (
+            pool.submit(propagate(_read_content), client, content_path, config) if config.read != "metadata" else None
+        )
         metadata_output = metadata_read.result()
         content = content_read.result() if content_read is not None else None
     try:

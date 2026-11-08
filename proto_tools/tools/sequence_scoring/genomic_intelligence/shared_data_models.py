@@ -19,6 +19,7 @@ https://genomicintelligence.ai.
 
 from __future__ import annotations
 
+import math
 import os
 from typing import Any, Literal
 
@@ -203,7 +204,8 @@ class GIConfig(BaseConfig):
         respond_async (bool): Request ``202`` + polling instead of a
             synchronous ``200``. A per-request delivery choice available on
             every endpoint; useful for long inputs.
-        timeout_seconds (float): Wall-clock cap on the async wait.
+        timeout_seconds (float): Wall-clock cap on the async wait. The call's own timeout
+            stretches to cover it, so raising this alone is enough for a long job.
     """
 
     gi_api_key: str | None = ConfigField(
@@ -229,6 +231,16 @@ class GIConfig(BaseConfig):
         description="Maximum wall-clock time to wait for an async job",
         include_in_key=False,
     )
+
+    def effective_timeout(self) -> int | None:
+        """Return ``timeout``, raised to fit an async wait of ``timeout_seconds`` plus submit and fetch.
+
+        Returns:
+            int | None: Effective timeout in seconds, or None for no cap.
+        """
+        if self.timeout is None or not self.respond_async:
+            return self.timeout
+        return max(self.timeout, math.ceil(self.timeout_seconds) + 2 * _REQUEST_TIMEOUT_SECONDS)
 
 
 # ============================================================================

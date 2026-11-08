@@ -34,6 +34,7 @@ from proto_tools.tools.database_retrieval.paperclip.paperclip_client import (
     PaperclipError,
     PaperclipToolResult,
 )
+from proto_tools.utils.deadlines import deadline, remaining
 
 _CONTENT = "/papers/PMC1/content.lines"
 
@@ -75,7 +76,7 @@ class _FakeSession:
         self.gets: list[dict[str, Any]] = []
 
     def post(self, url: str, *, json: dict[str, Any], headers: dict[str, str], timeout: float) -> _FakeResponse:
-        self.posts.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
+        self.posts.append({"url": url, "json": json, "headers": headers, "timeout": timeout, "deadline": remaining()})
         params = json["params"]
         reply = self.calls[_key(params["name"], **params["arguments"])]
         return reply if isinstance(reply, _FakeResponse) else _FakeResponse(200, reply)
@@ -288,6 +289,24 @@ def test_lookup_without_a_saved_result_reads_each_listed_paper():
         }
     )
     assert client.lookup("pmc", "PMC11754230", limit=10) == (None, [meta])
+
+
+def test_lookup_reads_listed_papers_under_the_callers_deadline():
+    """The per-paper reads run in worker threads, which must still see the tool's deadline."""
+    listing = "Found 2 papers\n\n  1. A\n     PMC1 · PMC · 2024\n  2. B\n     PMC2 · PMC · 2024\n"
+    client, session = _client(
+        {
+            _key("lookup", field="pmc", value="PMC1,PMC2", limit=10): _mcp_reply(listing),
+            _key("cat", path="/papers/PMC1/meta.json"): _mcp_reply("{}"),
+            _key("cat", path="/papers/PMC2/meta.json"): _mcp_reply("{}"),
+        }
+    )
+    with deadline(60):
+        client.lookup("pmc", "PMC1,PMC2", limit=10)
+
+    reads = [post for post in session.posts if post["json"]["params"]["name"] == "cat"]
+    assert len(reads) == 2
+    assert all(post["deadline"] is not None for post in reads)
 
 
 def test_read_lines_pages_past_the_character_limit_and_drops_the_cut_line():

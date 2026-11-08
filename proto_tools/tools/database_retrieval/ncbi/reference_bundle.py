@@ -23,6 +23,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     build_http_session,
+    iter_content_within_deadline,
     request_with_retry,
 )
 from proto_tools.utils.device import RemoteDevice
@@ -109,6 +110,8 @@ class NCBIReferenceBundleConfig(BaseConfig):
         annotation_types (list[AnnotationType]): Reference files to download.
         max_download_bytes (int): Largest compressed bundle to download.
         ncbi_api_key (str | None): Optional NCBI API key; defaults to ``NCBI_API_KEY``.
+        timeout (int | None): Seconds the whole call may take. None by default, so a large
+            bundle on a slow link finishes; a stalled connection still fails on its read timeout.
     """
 
     annotation_types: list[AnnotationType] = ConfigField(
@@ -127,6 +130,13 @@ class NCBIReferenceBundleConfig(BaseConfig):
         title="NCBI API Key",
         description="Optional NCBI API key; raises the request rate limit.",
         credential="NCBI_API_KEY",
+    )
+    timeout: int | None = ConfigField(
+        title="Timeout",
+        default=None,
+        ge=1,
+        description="Seconds the whole call may take; None lets a large download on a slow link finish",
+        include_in_key=False,
     )
 
     def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
@@ -271,7 +281,7 @@ def _download(
     )
     response.raise_for_status()
     downloaded = 0
-    for chunk in response.iter_content(chunk_size=_CHUNK_BYTES):
+    for chunk in iter_content_within_deadline(response, chunk_size=_CHUNK_BYTES):
         downloaded += len(chunk)
         if downloaded > max_bytes:
             raise ValueError(f"NCBI bundle exceeds max_download_bytes ({max_bytes:,})")

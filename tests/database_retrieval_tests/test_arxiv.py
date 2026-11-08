@@ -2,6 +2,7 @@
 
 import itertools
 import threading
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -58,14 +59,14 @@ class _WatchedLock:
         self._entries = 0
         self._count_lock = threading.Lock()
 
-    def __enter__(self) -> None:
+    def acquire(self, timeout: float = -1) -> bool:
         with self._count_lock:
             self._entries += 1
             if self._entries >= 2:
                 self.contended.set()
-        self._lock.acquire()
+        return self._lock.acquire(timeout=timeout)
 
-    def __exit__(self, *_exc: object) -> None:
+    def release(self) -> None:
         self._lock.release()
 
 
@@ -146,7 +147,7 @@ class _Session:
 def clock(monkeypatch: pytest.MonkeyPatch) -> _Clock:
     fake = _Clock()
     monkeypatch.setattr(module, "monotonic", fake.monotonic)
-    monkeypatch.setattr(module, "sleep", fake.sleep)
+    monkeypatch.setattr(module, "sleep_within_deadline", lambda seconds, _what: fake.sleep(seconds))
     monkeypatch.setattr(module._gate, "next_request_at", float("-inf"))
     return fake
 
@@ -214,6 +215,26 @@ def test_limit_holds_across_concurrent_calls_and_retries(monkeypatch: pytest.Mon
     for slot, queries in enumerate(batches):
         assert [result.query for result in outputs[slot].results] == queries
         assert all(result.error is None and result.total_count == 15 for result in outputs[slot].results)
+
+
+@pytest.mark.parametrize("blocked_by", ["held_lock", "pending_spacing"])
+def test_waiting_on_the_gate_ends_at_the_tool_timeout(monkeypatch: pytest.MonkeyPatch, blocked_by: str) -> None:
+    """A call queued behind another arXiv request, or its spacing, gives up when its own timeout elapses."""
+    session = _install(monkeypatch, _Session(_Clock()))
+    if blocked_by == "pending_spacing":
+        monkeypatch.setattr(module._gate, "next_request_at", module.monotonic() + 60)
+    else:
+        monkeypatch.setattr(module._gate, "next_request_at", float("-inf"))
+        module._gate.lock.acquire()
+    started = time.monotonic()
+    try:
+        with pytest.raises(TimeoutError):
+            run_arxiv_search(ArxivSearchInput(queries="ti:binder"), ArxivSearchConfig(timeout=1))
+    finally:
+        if blocked_by == "held_lock":
+            module._gate.lock.release()
+    assert 0.95 <= time.monotonic() - started < 1.5
+    assert session.calls == []
 
 
 # ── Errors ───────────────────────────────────────────────────────────────────

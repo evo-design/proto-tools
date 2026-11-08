@@ -66,6 +66,7 @@ dependencies = [
 
     "pyyaml",
     "requests",
+    "urllib3>=2.3",  # HTTPResponse.read1, used to end trickling responses at the tool's deadline
     "modal>=1.5.1",
     "tqdm",
     "filelock",

@@ -10,8 +10,6 @@ from urllib.parse import urlsplit
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -19,6 +17,8 @@ from proto_tools.utils import (
     BaseToolInput,
     BaseToolOutput,
     ConfigField,
+    DeadlineAdapter,
+    DeadlineRetry,
     InputField,
     build_http_session,
     request_with_retry,
@@ -32,7 +32,7 @@ _HTTP_RETRIES = 2
 _BACKOFF_SECONDS = 1.0
 _USER_AGENT = "proto-tools/synbiohub-fetch-v1"
 # A read timeout or gateway error usually means the registry is still building the document; retrying adds load
-_RETRY = Retry(
+_RETRY = DeadlineRetry(
     total=_HTTP_RETRIES,
     connect=_HTTP_RETRIES,
     read=0,
@@ -327,7 +327,7 @@ def run_synbiohub_fetch(
         backoff_seconds=_BACKOFF_SECONDS,
         user_agent=_USER_AGENT,
     )
-    session.mount("https://", HTTPAdapter(max_retries=_RETRY))
+    session.mount("https://", DeadlineAdapter(max_retries=_RETRY))
     try:
         if config.synbiohub_email and config.synbiohub_password:
             headers["X-authorization"] = _login(
