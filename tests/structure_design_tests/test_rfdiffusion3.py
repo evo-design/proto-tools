@@ -5,8 +5,6 @@ Tests for RFdiffusion3.
 
 import json
 import subprocess
-import sys
-import types
 from importlib import util
 from pathlib import Path
 
@@ -571,98 +569,24 @@ def test_rfdiffusion3_standalone_failure_reports_full_subprocess_output(monkeypa
     assert "stdout line 19" in message
 
 
-def test_rfdiffusion3_precision_site_promotes_low_precision_alignment(monkeypatch):
-    """The child-process patch must run Foundry's SVD in float32 and restore output dtype."""
-    from importlib import metadata
+@pytest.mark.uses_gpu
+def test_rfdiffusion3_precision_site_runs_alignment_under_bf16_autocast():
+    """The real sitecustomize, in the rfdiffusion3 env, lets Foundry's rigid alignment run under bf16 autocast.
 
-    monkeypatch.setattr(metadata, "version", lambda distribution: "0.2.0")
+    rfd3's ``bf16-mixed`` inference hands the alignment float32 coordinates inside a bfloat16 autocast
+    region, where the covariance einsum runs in bfloat16 and CUDA's SVD has no bfloat16 kernel. The
+    in-env checks confirm the unpatched alignment fails there, that an unaudited Foundry release is
+    left alone, and that the patched one returns the correct alignment with autocast restored.
+    """
+    from proto_tools.utils import run_in_env
 
-    torch = types.ModuleType("torch")
-    torch.float16 = "float16"
-    torch.bfloat16 = "bfloat16"
-    torch.float32 = "float32"
-
-    class FakeTensor:
-        def __init__(self, dtype):
-            self.dtype = dtype
-
-        def float(self):
-            return FakeTensor(torch.float32)
-
-        def to(self, dtype):
-            return FakeTensor(dtype)
-
-    torch.Tensor = FakeTensor
-
-    seen_dtypes = []
-    alignment = types.ModuleType("foundry.utils.alignment")
-
-    def original(X_L, X_gt_L, X_exists_L=None, w_L=None):
-        seen_dtypes.append((X_L.dtype, X_gt_L.dtype, None if w_L is None else w_L.dtype))
-        return X_gt_L
-
-    alignment.weighted_rigid_align = original
-    foundry = types.ModuleType("foundry")
-    utils = types.ModuleType("foundry.utils")
-    utils.alignment = alignment
-    monkeypatch.setitem(sys.modules, "foundry", foundry)
-    monkeypatch.setitem(sys.modules, "foundry.utils", utils)
-    monkeypatch.setitem(sys.modules, "foundry.utils.alignment", alignment)
-    monkeypatch.setitem(sys.modules, "torch", torch)
-
+    checks = Path(__file__).resolve().parent / "_rfd3_precision_site_env_checks.py"
     site = (
         Path(__file__).resolve().parents[2]
         / "proto_tools/tools/structure_design/rfdiffusion3/standalone/rfd3_precision_site/sitecustomize.py"
     )
-    spec = util.spec_from_file_location("_rfd3_precision_site_for_tests", site)
-    mod = util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(mod)
-
-    x = FakeTensor(torch.bfloat16)
-    weights = FakeTensor(torch.bfloat16)
-    result = alignment.weighted_rigid_align(x, x, w_L=weights)
-
-    assert seen_dtypes == [(torch.float32, torch.float32, torch.float32)]
-    assert result.dtype == torch.bfloat16
-
-
-def test_rfdiffusion3_precision_site_is_inert_for_unaffected_foundry(monkeypatch):
-    """A Foundry release outside the audited compatibility range must not be monkey-patched."""
-    from importlib import metadata
-
-    monkeypatch.setattr(metadata, "version", lambda distribution: "0.2.1")
-
-    torch = types.ModuleType("torch")
-    torch.Tensor = object
-    torch.float16 = "float16"
-    torch.bfloat16 = "bfloat16"
-
-    alignment = types.ModuleType("foundry.utils.alignment")
-
-    def original(X_L, X_gt_L, X_exists_L=None, w_L=None):
-        return X_gt_L
-
-    alignment.weighted_rigid_align = original
-    foundry = types.ModuleType("foundry")
-    utils = types.ModuleType("foundry.utils")
-    utils.alignment = alignment
-    monkeypatch.setitem(sys.modules, "foundry", foundry)
-    monkeypatch.setitem(sys.modules, "foundry.utils", utils)
-    monkeypatch.setitem(sys.modules, "foundry.utils.alignment", alignment)
-    monkeypatch.setitem(sys.modules, "torch", torch)
-
-    site = (
-        Path(__file__).resolve().parents[2]
-        / "proto_tools/tools/structure_design/rfdiffusion3/standalone/rfd3_precision_site/sitecustomize.py"
-    )
-    spec = util.spec_from_file_location("_rfd3_precision_site_unaffected_for_tests", site)
-    mod = util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(mod)
-
-    assert alignment.weighted_rigid_align is original
-    assert not hasattr(alignment.weighted_rigid_align, "_proto_low_precision_safe")
+    output = run_in_env("rfdiffusion3", script=str(checks), args=[str(site)], device="cuda", timeout=1800)
+    assert output.strip().splitlines()[-1] == "ok", output
 
 
 @pytest.mark.integration
