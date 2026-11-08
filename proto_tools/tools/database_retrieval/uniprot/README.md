@@ -43,7 +43,7 @@ Use this to pull a reference protein sequence and its annotation into a pipeline
 
 ### UniProt Search (`uniprot-search`)
 
-Runs one or more UniProtKB searches, written as free text (`"DNA polymerase Thermus aquaticus"`) or UniProt query syntax (`'protein_name:"programmed cell death protein 1"'`), and returns a ranked list of candidate entries per query: accession, entry name, protein name, gene names, organism and taxon, length, review status, annotation score, and optionally the sequence.
+Runs one or more UniProtKB searches, written as free text (`"thermostable DNA polymerase Thermus aquaticus"`) or UniProt query syntax (`'protein_name:"programmed cell death protein 1"'`), and returns a ranked list of candidate entries per query: accession, entry name, protein name, gene names, organism and taxon, length, review status, annotation score, and optionally the sequence.
 
 #### Applications
 
