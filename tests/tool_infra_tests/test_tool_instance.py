@@ -2347,6 +2347,7 @@ print(json.dumps({
     "tool_envs": str(ToolInstance._get_tool_envs_root()),
     "micromamba": str(ToolInstance._get_micromamba_root()),
     "hf_home": _build_subprocess_env(device="cpu").get("HF_HOME"),
+    "toolkit_hf_home": _build_subprocess_env(device="cpu", toolkit="test_tool").get("HF_HOME"),
     "weights": resolve_weights_dir("test_tool"),
 }))
 """
@@ -2385,7 +2386,8 @@ def test_non_editable_install_resolves_proto_home_paths(tmp_path, has_model_cach
     assert paths["tool_envs"] == str(proto_home / "proto_tool_envs")
     assert paths["micromamba"] == str(proto_home / ".micromamba")
     assert paths["hf_home"] == str(cache_root / "huggingface")
-    assert paths["weights"] == str(cache_root / "test_tool")
+    assert paths["toolkit_hf_home"] == str(cache_root / "test_tool" / "huggingface")
+    assert paths["weights"] == str(cache_root / "test_tool" / "weights")
 
 
 # ── Concurrent env-build serialization ───────────────────────────────────────
