@@ -27,6 +27,7 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
     FoldseekHit,
     _parse_m8_archive,
     _parse_m8_text,
+    _remote_row_to_m8,
     _submit,
 )
 from tests.conftest import benchmark_twice
@@ -96,12 +97,26 @@ def test_parse_m8_text_fills_the_metric_columns_a_short_row_reaches():
     assert "query_tm_score" not in hit.metrics
 
 
-def test_remote_12_and_local_15_column_rows_have_base_field_parity():
-    """Adding local TM columns must not alter any established server field."""
-    standard = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0"
-    remote_hit = _parse_m8_text(standard, "testdb", FoldseekHit)[0]
-    local_hit = _parse_m8_text(f"{standard}\t0.47\t0.61\t0.29", "testdb", FoldseekHit)[0]
+def test_a_real_search_foldseek_com_row_parses_into_the_right_fields():
+    """A real search.foldseek.com row (TP53 vs pdb100) reads the same fields as the local M8 row built from it.
 
+    The server writes ``prob`` before ``evalue`` and a ``theader`` with the target's description,
+    so reading its rows as M8 would put prob in ``evalue``, the e-value in ``bit_score``, and
+    bits/qlen/tlen in the TM-score metrics.
+    """
+    server = (Path(__file__).parent.parent / "dummy_data" / "foldseek_remote_tp53_pdb100_row.m8").read_text().strip()
+    columns = server.split("\t")
+    local = "\t".join([columns[0], columns[1].split()[0], *columns[2:10], *columns[11:13], "0.47", "0.61", "0.29"])
+
+    remote_hit = _parse_m8_text(server, "pdb100", FoldseekHit, _remote_row_to_m8)[0]
+    local_hit = _parse_m8_text(local, "pdb100", FoldseekHit)[0]
+
+    assert (remote_hit.target_id, remote_hit.evalue, remote_hit.bit_score) == (
+        "2pcx-assembly1.cif.gz_A",
+        8.981e-41,
+        1615.0,
+    )
+    assert (remote_hit.alignment_length, remote_hit.query_start, remote_hit.query_end) == (199, 93, 291)
     assert remote_hit.model_dump(exclude={"metrics"}) == local_hit.model_dump(exclude={"metrics"})
     assert remote_hit.metrics is None
 
