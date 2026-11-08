@@ -846,6 +846,12 @@ def pytest_addoption(parser):
         help="Run only GPU tests, skip CPU tests",
     )
     parser.addoption(
+        "--multi-gpu",
+        action="store_true",
+        default=False,
+        help="Run only tests that need two or more GPUs (uses_gpu(n), n >= 2), including slow ones",
+    )
+    parser.addoption(
         "--random-order",
         action="store_true",
         default=False,
@@ -1237,6 +1243,11 @@ def pytest_sessionfinish(session, exitstatus):
             print(f"[benchmark-report] {path}")
 
 
+def _required_gpus(item: pytest.Item) -> int:
+    """GPUs a test needs: the largest ``uses_gpu(n)`` count (1 for bare ``uses_gpu``, 0 if unmarked)."""
+    return max((marker.args[0] if marker.args else 1 for marker in item.iter_markers("uses_gpu")), default=0)
+
+
 def pytest_collection_modifyitems(config, items):
     """Modify test collection based on command line options and auto-mark tests."""
     # --env-report: keep only env-report smoke tests, deselect everything else
@@ -1297,6 +1308,15 @@ def pytest_collection_modifyitems(config, items):
         items[:] = selected
         config.hook.pytest_deselected(items=deselected)
 
+    # --multi-gpu: keep only tests that need two or more GPUs. uses_gpu(n) is the source of truth;
+    # pytest's -m cannot select on a marker's positional argument.
+    multi_gpu = config.getoption("--multi-gpu")
+    if multi_gpu:
+        single = [item for item in items if _required_gpus(item) < 2]
+        if single:
+            items[:] = [item for item in items if _required_gpus(item) >= 2]
+            config.hook.pytest_deselected(items=single)
+
     # Auto-mark CPU tests — skip if already tagged (uses_gpu or explicit uses_cpu(n))
     # so we don't stack a zero-arg duplicate on top of an explicit count.
     for item in items:
@@ -1344,7 +1364,8 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(skip_cpu)
 
     # Handle slow test filtering
-    run_all = config.getoption("--all")
+    # Multi-GPU tests are mostly slow; --multi-gpu runs them all rather than selecting and then skipping them.
+    run_all = config.getoption("--all") or multi_gpu
     run_slow_only = config.getoption("--slow")
     tool_filter = config.getoption("--benchmark-tool")
     toolkit_filter = config.getoption("--benchmark-toolkit")

@@ -75,3 +75,41 @@ def test_jax_compilation_cache_reaches_env(monkeypatch: pytest.MonkeyPatch, tmp_
     cache_dir = tmp_path / "mock_jax_tool" / "jax_cache"
     assert out.strip() == str(cache_dir)
     assert any(cache_dir.iterdir())
+
+
+_VISIBILITY = (
+    "import json, os\n"
+    "print(json.dumps({k: os.environ.get(k) for k in ('CUDA_VISIBLE_DEVICES', 'JAX_PLATFORMS', 'RUN_IN_ENV_DEVICE')}))\n"
+)
+
+
+@pytest.mark.integration
+def test_cpu_run_sees_no_gpu() -> None:
+    """A cpu run hides every GPU, so JAX initializes on CPU instead of claiming GPUs a worker may hold."""
+    code = _VISIBILITY + "import jax\nprint(jax.default_backend())\n"
+    visibility, backend = run_in_env("mock_jax_tool", code=code).strip().splitlines()[-2:]
+    assert json.loads(visibility) == {"CUDA_VISIBLE_DEVICES": "", "JAX_PLATFORMS": "cpu", "RUN_IN_ENV_DEVICE": "cpu"}
+    assert backend == "cpu"
+
+
+@pytest.mark.uses_gpu
+def test_cuda_run_sees_only_its_leased_gpu() -> None:
+    """A cuda run sees one GPU, renumbered cuda:0, so bare "cuda" lands on the lease."""
+    code = _VISIBILITY + "import torch\nprint(torch.cuda.device_count())\n"
+    visibility, count = run_in_env("esm2", code=code, device="cuda").strip().splitlines()[-2:]
+    assert json.loads(visibility)["RUN_IN_ENV_DEVICE"] == "cuda:0"
+    assert count == "1"
+
+
+@pytest.mark.uses_gpu(2)
+def test_cuda_run_lands_on_the_free_gpu_when_another_is_leased() -> None:
+    """With cuda:0 leased elsewhere, the run gets the other physical GPU, still seen as its cuda:0."""
+    from proto_tools.utils.device import determine_visible_devices
+    from proto_tools.utils.device_manager import DeviceManager
+
+    code = _VISIBILITY + "import torch\nprint(torch.cuda.device_count())\n"
+    with DeviceManager.get_instance().lease("other_tool", device="cuda:0"):
+        visibility, count = run_in_env("esm2", code=code, device="cuda").strip().splitlines()[-2:]
+    env = json.loads(visibility)
+    assert env["CUDA_VISIBLE_DEVICES"] == determine_visible_devices("cuda:1")
+    assert env["RUN_IN_ENV_DEVICE"] == "cuda:0" and count == "1"
