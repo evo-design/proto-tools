@@ -3,7 +3,6 @@
 import importlib
 import json
 import math
-import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -11,8 +10,7 @@ import pytest
 from standalone_helpers.mixed_sequence import tokenize_mixed_sequence
 
 from proto_tools.tools.masked_models.mixed_data_models import MIXED_VOCAB, one_hot_mixed_logits
-from proto_tools.utils import ToolInstance
-from proto_tools.utils.persistent_worker import _build_subprocess_env
+from proto_tools.utils import run_in_env
 from tests.conftest import benchmark_twice
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -140,15 +138,16 @@ def check_gradient_finite_difference(toolkit, checkpoint):
 
 
 _UPSTREAM_REFERENCE = """
-import importlib.util,json,sys,torch
+import importlib.util,json,os,sys,torch
+device=os.environ["RUN_IN_ENV_DEVICE"]
 path,checkpoint,sequence,depth=sys.argv[1:]
 spec=importlib.util.spec_from_file_location("mixed_reference_adapter",path)
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 adapter=module._MODEL
-adapter.load(checkpoint,"cuda")
+adapter.load(checkpoint,device)
 tokenizer=adapter.tokenizer
 encoded=tokenizer(sequence,add_special_tokens=False,return_tensors="pt")
-ids=encoded["input_ids"].to("cuda")
+ids=encoded["input_ids"].to(device)
 mask=torch.ones_like(ids)
 tokens=tokenizer.convert_ids_to_tokens(ids[0].tolist())
 vocab=list("ACDEFGHIKLMNPQRSTVWYacgt")
@@ -170,32 +169,25 @@ print("MIXED_REFERENCE="+json.dumps(result))
 
 
 def upstream_reference(toolkit, checkpoint, sequence, interaction_layers=0):
-    """Run native upstream forwards in the managed environment, outside the tool algorithms."""
-    instance = ToolInstance.get(toolkit)
-    instance.ensure_ready()
+    """Run native upstream forwards in the managed environment, outside the tool algorithms.
+
+    Goes through ``run_in_env`` so the GPU is leased from DeviceManager. The module's persistent
+    worker usually holds it by now, and on an ``Exclusive_Process`` GPU a process started beside
+    it cannot create a CUDA context; the lease evicts the worker first, and the next tool call
+    restarts it.
+    """
     inference = (
         Path(__file__).parents[2] / "proto_tools" / "tools" / "masked_models" / toolkit / "standalone" / "inference.py"
     )
-    process = subprocess.run(
-        [
-            str(instance.env_path / "bin" / "python"),
-            "-c",
-            _UPSTREAM_REFERENCE,
-            str(inference),
-            checkpoint,
-            sequence,
-            str(interaction_layers),
-        ],
-        env=_build_subprocess_env(device="cuda", tool_env_path=instance.env_path),
-        check=True,
-        capture_output=True,
-        text=True,
+    output = run_in_env(
+        toolkit,
+        code=_UPSTREAM_REFERENCE,
+        args=[str(inference), checkpoint, sequence, str(interaction_layers)],
+        device="cuda",
         timeout=600,
     )
     reference = next(
-        line.removeprefix("MIXED_REFERENCE=")
-        for line in process.stdout.splitlines()
-        if line.startswith("MIXED_REFERENCE=")
+        line.removeprefix("MIXED_REFERENCE=") for line in output.splitlines() if line.startswith("MIXED_REFERENCE=")
     )
     return json.loads(reference)
 
