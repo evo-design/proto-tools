@@ -79,6 +79,7 @@ Use these tools to collect source-backed design evidence and natural examples be
 - Prefer `read="lines"` (the default, first 100 lines) or `read="grep"` with a `pattern`; `max_matches` (20 by default) caps how many matching lines a grep returns. GXL advises against reading whole papers.
 - `read="full_text"` returns the complete paper as `content`, which can be long.
 - Set `PAPERCLIP_API_KEY` before retrieval, or `PAPERCLIP_TOKEN` for a bearer token; the config fields `paperclip_api_key` and `paperclip_token` take precedence. The tools do not read credentials saved by an interactive `paperclip login`.
+- Without a key, `europepmc-search` and `europepmc-fulltext` search and read open-access PMC articles and preprints through Europe PMC's public API, without line numbers.
 - `PAPERCLIP_BASE_URL` points the tools at a different Paperclip deployment.
 - Treat literature as evidence for candidate generation, not functional validation.
 

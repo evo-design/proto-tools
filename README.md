@@ -100,6 +100,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/database_retrieval/ccd_lookup/">ccd_lookup/</a>
 ├── <a href="proto_tools/tools/database_retrieval/encode/">encode/</a>
 ├── <a href="proto_tools/tools/database_retrieval/ensembl/">ensembl/</a>
+├── <a href="proto_tools/tools/database_retrieval/europepmc/">europepmc/</a>
 ├── <a href="proto_tools/tools/database_retrieval/interproscan/">interproscan/</a>
 ├── <a href="proto_tools/tools/database_retrieval/ncbi/">ncbi/</a>
 ├── <a href="proto_tools/tools/database_retrieval/paperclip/">paperclip/</a>
