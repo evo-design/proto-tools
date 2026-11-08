@@ -12,7 +12,7 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field, SerializeAsAny, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator
 from typing_extensions import Self
 
 from proto_tools.entities.complex import Chain, Complex, chain_label
@@ -51,6 +51,8 @@ class SequenceStructurePair(BaseModel):
             Sampling tools use ``fixed_positions`` instead, which holds an identity rather
             than omitting a position from a metric.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     sequence: str = Field(title="Sequence", description="Sequence to score against the structure")
     structure: Structure = Field(title="Input Structure", description="Structure to score the sequence against")
