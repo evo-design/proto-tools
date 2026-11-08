@@ -1,7 +1,7 @@
 """Terms, configuration and result assembly shared by the ESMFold2 inversion gradient tools."""
 
 import logging
-from typing import Any, ClassVar, Literal, get_args
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field
 
@@ -14,11 +14,6 @@ from proto_tools.utils import (
 from proto_tools.utils.tool_io import Directionality
 
 logger = logging.getLogger(__name__)
-
-#: Inversion checkpoints these tools differentiate. The maintained ESMFold2 prediction
-#: checkpoints are a separate family and are not interchangeable with these.
-ESMFold2InversionCheckpoint = Literal["ESMFold2-Experimental-Fast", "ESMFold2-Experimental-Fast-Cutoff2025"]
-INVERSION_CHECKPOINTS: tuple[str, ...] = get_args(ESMFold2InversionCheckpoint)
 
 
 class ESMFold2InversionTerm(DifferentiableTerm):
@@ -145,7 +140,8 @@ class ESMFold2InversionConfigBase(GradientConfig):
     """Settings shared by both ESMFold2 inversion gradient tools.
 
     Attributes:
-        model_name (ESMFold2InversionCheckpoint): Inversion checkpoint to fold with.
+        model_checkpoint (Literal["esmfold2", "esmfold2-fast"]): Which ESMFold2 variant to
+            fold with. Shared with the prediction tool, so one loaded checkpoint serves both.
         plm_passes (int): Independent mask draws averaged by the pseudo-perplexity term.
         plm_batch_size (int): Masked sequences per language-model forward pass.
         compute_gradient (bool): Run the backward passes; ``False`` returns values only.
@@ -155,10 +151,10 @@ class ESMFold2InversionConfigBase(GradientConfig):
         device (str): Inherited device to run the model on.
     """
 
-    model_name: ESMFold2InversionCheckpoint = ConfigField(
-        title="Model Name",
-        default=INVERSION_CHECKPOINTS[0],
-        description="Inversion checkpoint to fold with",
+    model_checkpoint: Literal["esmfold2", "esmfold2-fast"] = ConfigField(
+        title="Model Checkpoint",
+        default="esmfold2-fast",
+        description="'esmfold2' is the larger MSA-capable variant; 'esmfold2-fast' is single-sequence and faster.",
         reload_on_change=True,
     )
     plm_passes: int = ConfigField(

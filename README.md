@@ -182,7 +182,6 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/structure_prediction/chai1/">chai1/</a>
 ├── <a href="proto_tools/tools/structure_prediction/esmfold/">esmfold/</a>
 ├── <a href="proto_tools/tools/structure_prediction/esmfold2/">esmfold2/</a>
-├── <a href="proto_tools/tools/structure_prediction/esmfold2_inversion/">esmfold2_inversion/</a>
 ├── <a href="proto_tools/tools/structure_prediction/mol1/">mol1/</a>
 ├── <a href="proto_tools/tools/structure_prediction/opendde/">opendde/</a>
 ├── <a href="proto_tools/tools/structure_prediction/protenix/">protenix/</a>

@@ -7,7 +7,7 @@ from typing import Any, ClassVar, cast
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
 
-from proto_tools.tools.structure_prediction.esmfold2_inversion.shared_data_models import (
+from proto_tools.tools.structure_prediction.esmfold2.inversion_terms import (
     ESMFold2EpitopeTerm,
     ESMFold2GlobularityTerm,
     ESMFold2InterContactTerm,
@@ -252,7 +252,7 @@ class ESMFold2BinderGradientConfig(ESMFold2InversionConfigBase):
         gradient_terms (list[ESMFold2BinderTermType]): Quantities to differentiate, given as
             catalog names or as instances. The three single-chain quantities apply to the binder.
         epitope_contact_distance (float): Distance in angstroms defining a hotspot contact.
-        model_name (ESMFold2InversionCheckpoint): Inherited inversion checkpoint.
+        model_checkpoint (Literal["esmfold2", "esmfold2-fast"]): Inherited ESMFold2 variant.
         plm_passes (int): Inherited mask draws for the pseudo-perplexity term.
         plm_batch_size (int): Inherited masked sequences per language-model pass.
         compute_gradient (bool): Inherited; ``False`` returns values only.
@@ -347,7 +347,6 @@ def example_input() -> ESMFold2BinderGradientInput:
     metrics_class=ESMFold2BinderGradientMetrics,
     description="Differentiate ESMFold2 binder-design objectives against a fixed protein target",
     uses_gpu=True,
-    pin_visible_devices=True,
     example_input=example_input,
     cacheable=False,
     iterable_input_fields=["inputs"],
@@ -387,7 +386,7 @@ def run_esmfold2_inversion_binder_gradient(
     results = []
     for candidate in inputs.inputs:
         reply = ToolInstance.dispatch(
-            "esmfold2_inversion",
+            "esmfold2",
             {
                 "operation": "complex_gradient",
                 # The binder tool is the two-chain case of the general path: a fixed target
@@ -405,7 +404,7 @@ def run_esmfold2_inversion_binder_gradient(
                 "soft": config.soft,
                 "hard": config.hard,
                 "compute_gradient": config.compute_gradient,
-                "model_name": config.model_name,
+                "model_checkpoint": config.model_checkpoint,
                 "plm_passes": config.plm_passes,
                 "plm_batch_size": config.plm_batch_size,
                 "seed": config.seed,
