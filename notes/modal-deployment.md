@@ -423,7 +423,7 @@ only where a licence is required, which is how 34 of 35 warmups once ran without
 A JAX tool compiles its model with XLA on first call, which for AlphaFold3 or AlphaGenome
 costs minutes, and a cold container starts with nothing compiled. `env_for()` sets
 `PROTO_MODEL_CACHE=/weights`, so the subprocess env places the persistent JAX cache at
-`/weights/jax_cache/{toolkit}/` on the shared volume (see
+`/weights/{toolkit}/jax_cache/` on the shared volume (see
 [storage.md](storage.md#jax-compilation-cache)). Two consequences:
 
 - The deploy-time warmup's compile lands on the volume, and serving containers load it
