@@ -2,6 +2,7 @@
 
 import csv
 import json
+import logging
 from typing import Any
 
 import pytest
@@ -24,7 +25,10 @@ _RESULTS = {
             "annotationScore": 5.0,
             "organism": {"scientificName": "Thermus aquaticus", "taxonId": 271},
             "proteinDescription": {"recommendedName": {"fullName": {"value": "DNA polymerase I, thermostable"}}},
-            "genes": [{"geneName": {"value": "polA"}}],
+            "genes": [
+                {"geneName": {"value": "polA"}, "synonyms": [{"value": "pol1"}, {"value": "taqP"}]},
+                {"geneName": {"value": "polB"}, "synonyms": [{"value": "taqP"}]},
+            ],
             "sequence": {"value": "MRGMLPLFEPKG", "length": 832},
         },
         {
@@ -87,6 +91,17 @@ def test_bare_string_is_normalized_and_empty_rejected() -> None:
         UniProtSearchInput(queries=["TP53", " "])
 
 
+def test_organism_quotes_are_stripped_and_logged(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger=module.__name__):
+        assert UniProtSearchConfig(organism='Homo "sapiens"').organism == "Homo sapiens"
+    assert "Stripped double quotes" in caplog.text
+    assert UniProtSearchConfig(organism='""').organism is None
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger=module.__name__):
+        assert UniProtSearchConfig(organism=" Homo sapiens ").organism == "Homo sapiens"
+    assert "Stripped" not in caplog.text
+
+
 # ── Query construction and parsing ───────────────────────────────────────────
 
 
@@ -106,14 +121,21 @@ def test_filters_are_combined_and_hits_parsed(monkeypatch: pytest.MonkeyPatch) -
     (result,) = output.results
     assert result.total_count == 10 and result.query == params["query"]
     top, second = result.hits
-    assert (top.accession, top.entry_name, top.gene_names, top.reviewed) == ("P19821", "DPO1_THEAQ", ["polA"], True)
+    assert (top.accession, top.entry_name, top.gene_names, top.reviewed) == (
+        "P19821",
+        "DPO1_THEAQ",
+        ["polA", "polB"],
+        True,
+    )
     assert (top.protein_name, top.taxon_id, top.length, top.sequence) == (
         "DNA polymerase I, thermostable",
         271,
         832,
         None,
     )
+    assert top.gene_synonyms == ["pol1", "taqP"]  # deduplicated across genes, in order
     assert second.protein_name == "DNA polymerase" and second.reviewed is False and second.gene_names == []
+    assert second.gene_synonyms == []
 
 
 def test_unfiltered_query_is_sent_verbatim_with_sequences(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -150,7 +172,8 @@ def test_csv_fasta_and_json_export(monkeypatch: pytest.MonkeyPatch, tmp_path: An
     output._export_output(tmp_path / "hits", "csv")
     rows = list(csv.DictReader((tmp_path / "hits.csv").open()))
     assert [(row["rank"], row["accession"]) for row in rows] == [("1", "P19821"), ("2", "A0A0X1")]
-    assert rows[0]["gene_names"] == "polA" and rows[0]["query_index"] == "0"
+    assert rows[0]["gene_names"] == "polA;polB" and rows[0]["gene_synonyms"] == "pol1;taqP"
+    assert rows[0]["query_index"] == "0"
     output._export_output(tmp_path / "hits", "fasta")
     assert (tmp_path / "hits.fasta").read_text().startswith(">P19821 query=0 DNA polymerase I, thermostable\nMRGM")
     output._export_output(tmp_path / "hits", "json")

@@ -1,8 +1,8 @@
 {
   "tool_id": "uniprot-fetch",
   "tool_version": "1.0.3",
-  "execution_time": 1.1748936176300049,
-  "timestamp": "2026-11-08T10:50:54.775781",
+  "execution_time": 1.1442270278930664,
+  "timestamp": "2026-11-08T10:55:20.547325",
   "success": true,
   "warnings": [],
   "errors": [],
