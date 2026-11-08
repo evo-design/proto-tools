@@ -74,8 +74,12 @@ Use this to identify which protein a fragment or design comes from, to find expe
 - **`chain_ids` are author chain IDs.** They match what `pdb-fetch-fasta` reports, unlike the `label_asym_id` values `pdb-structure-similarity` uses.
 - **No match returns an empty result.** RCSB answers HTTP 204 when nothing passes the cutoffs, which comes back as an empty `hits` list with `total_count` 0. Loosen `evalue_cutoff` or `identity_cutoff` if you expected hits.
 - **Queries shorter than 10 residues are rejected.** RCSB does not search shorter sequences, so the input fails validation before any request is sent.
+- **Short nucleic-acid queries rarely match, even when the sequence is in the PDB.** A 12-nt Dickerson dodecamer, or the same sequence doubled to 24 nt, returns no hits even at `evalue_cutoff=10`, although hundreds of entries contain it. Use DNA or RNA queries of roughly 50 nt or more, or look up short oligonucleotides by PDB ID with `pdb-fetch-fasta`.
+- **RNA queries are converted from T to U.** RCSB rejects T in an RNA query, so a sequence copied from a DNA source is converted automatically and the conversion is logged at INFO.
+- **Unsupported characters fail validation.** Gaps (`-`), stops (`*`), and letters RCSB cannot search for the chosen `sequence_type` are rejected before any request. This includes `X` in proteins and `N` in nucleic acids: RCSB accepts them, but its sequence server then fails with HTTP 500. Remove or replace them before searching.
 - **Computed models are off by default.** `include_computed_models` adds RCSB's computed structure models to the search, but RCSB's sequence server often times out on that index.
 - **Turn off `annotate` for large result sets.** Annotation adds one GraphQL request per query; with `annotate=False`, hits carry only identifiers and alignment statistics.
+- **Annotation failures are reported, not hidden.** If the GraphQL request returns only errors, the tool raises. If some hits come back without annotation, those hits keep `None` annotation fields and the output's `warnings` lists their entity IDs.
 
 ### PDB Structure Similarity (`pdb-structure-similarity`)
 

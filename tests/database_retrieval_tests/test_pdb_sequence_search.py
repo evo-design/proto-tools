@@ -2,6 +2,7 @@
 
 import csv
 import json
+import logging
 from typing import Any
 
 import pytest
@@ -101,11 +102,14 @@ class _Response:
 class _Session:
     """Fake RCSB session that records calls and serves search and GraphQL responses."""
 
-    def __init__(self, search_status: int = 200, resets: int = 0) -> None:
+    def __init__(
+        self, search_status: int = 200, resets: int = 0, graphql_payload: dict[str, Any] | None = None
+    ) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.closed = False
         self.search_status = search_status
         self.resets = resets
+        self.graphql_payload = _GRAPHQL_PAYLOAD if graphql_payload is None else graphql_payload
 
     def post(self, url: str, **kwargs: Any) -> _Response:
         self.calls.append((url, kwargs))
@@ -113,7 +117,7 @@ class _Session:
             self.resets -= 1
             raise requests.exceptions.ConnectionError("Connection reset by peer")
         if url == module._GRAPHQL_URL:
-            return _Response(_GRAPHQL_PAYLOAD)
+            return _Response(self.graphql_payload)
         if self.search_status == 204:
             return _Response(None, status_code=204)
         return _Response(_SEARCH_PAYLOAD, status_code=self.search_status)
@@ -136,6 +140,32 @@ def test_query_is_cleaned_and_short_queries_rejected() -> None:
     assert PdbSequenceSearchQuery(sequence=" vrgspa inva\nvhvf ").sequence == "VRGSPAINVAVHVF"
     with pytest.raises(ValidationError, match="at least 10 residues"):
         PdbSequenceSearchQuery(sequence="MKV")
+
+
+def test_rna_t_is_converted_to_u_and_logged(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO, logger=module.__name__):
+        query = PdbSequenceSearchQuery(sequence="GCGGATTTAGCTCAG", sequence_type="rna")
+    assert query.sequence == "GCGGAUUUAGCUCAG"
+    assert "Converted T to U" in caplog.text
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger=module.__name__):
+        assert PdbSequenceSearchQuery(sequence="ACGTACGTACGT", sequence_type="dna").sequence == "ACGTACGTACGT"
+    assert "Converted" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("sequence", "sequence_type", "message"),
+    [
+        ("VRGSPAINV-AVHVF", "protein", "cannot search: -"),
+        ("VRGSPAINVAVHVF*", "protein", "cannot search: \\*"),
+        ("VRGSPAINXAVHVF", "protein", "cannot search: X .*fails on X and N"),
+        ("ACGTACNGTACGT", "dna", "cannot search: N .*fails on X and N"),
+        ("VRGSPAINVAVHVF", "dna", "cannot search: FHNPRSV"),
+    ],
+)
+def test_unsearchable_characters_are_rejected(sequence: str, sequence_type: str, message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        PdbSequenceSearchQuery(sequence=sequence, sequence_type=sequence_type)
 
 
 def test_bare_strings_and_single_queries_are_normalized() -> None:
@@ -182,6 +212,27 @@ def test_annotation_off_makes_one_request(session: _Session) -> None:
     output = run_pdb_sequence_search(PdbSequenceSearchInput(queries=_QUERY), PdbSequenceSearchConfig(annotate=False))
     assert [url for url, _kwargs in session.calls] == [module._SEARCH_URL]
     assert output.results[0].hits[0].description is None and output.results[0].hits[0].uniprot_ids is None
+
+
+def test_graphql_errors_without_data_raise(monkeypatch: pytest.MonkeyPatch) -> None:
+    failing = _Session(graphql_payload={"errors": [{"message": "Query timed out"}], "data": None})
+    monkeypatch.setattr(module, "build_http_session", lambda **_kwargs: failing)
+    with pytest.raises(RuntimeError, match="RCSB entity annotation failed: Query timed out"):
+        run_pdb_sequence_search(PdbSequenceSearchInput(queries=_QUERY), PdbSequenceSearchConfig())
+
+
+def test_unannotated_hits_are_reported_in_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    partial_payload = {
+        "data": {"polymer_entities": _GRAPHQL_PAYLOAD["data"]["polymer_entities"][1:]},
+        "errors": [{"message": "Entity 4ZQK_1 failed"}],
+    }
+    partial = _Session(graphql_payload=partial_payload)
+    monkeypatch.setattr(module, "build_http_session", lambda **_kwargs: partial)
+    output = run_pdb_sequence_search(PdbSequenceSearchInput(queries=_QUERY), PdbSequenceSearchConfig())
+    top, second = output.results[0].hits
+    assert top.description == "PROTEIN (TRANSTHYRETIN)" and second.description is None
+    (warning,) = output.warnings
+    assert "no annotation for 1 of 2 hits (4ZQK_1)" in warning and "Entity 4ZQK_1 failed" in warning
 
 
 def test_computed_models_widen_content_type(session: _Session) -> None:
