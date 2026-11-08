@@ -44,7 +44,7 @@ class UniProtSearchInput(BaseToolInput):
     """Queries to run against UniProtKB.
 
     Attributes:
-        queries (list[str]): Free-text queries (e.g. ``"DNA polymerase Thermus aquaticus"``) or
+        queries (list[str]): Free-text queries (e.g. ``"thermostable DNA polymerase Thermus aquaticus"``) or
             UniProt query syntax (e.g. ``'protein_name:"programmed cell death protein 1"'``). A
             bare string is normalized to a one-item list.
     """
@@ -205,7 +205,7 @@ class UniProtSearchOutput(BaseToolOutput):
 
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
-    return UniProtSearchInput(queries=["DNA polymerase Thermus aquaticus"])
+    return UniProtSearchInput(queries=["thermostable DNA polymerase Thermus aquaticus"])
 
 
 @tool(

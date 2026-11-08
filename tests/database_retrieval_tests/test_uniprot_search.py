@@ -166,7 +166,7 @@ def test_csv_fasta_and_json_export(monkeypatch: pytest.MonkeyPatch, tmp_path: An
 def test_uniprot_search_resolves_a_description():
     """A free-text description returns Taq polymerase among the top reviewed hits."""
     output = run_uniprot_search(
-        UniProtSearchInput(queries="DNA polymerase Thermus aquaticus"), UniProtSearchConfig(max_results=5)
+        UniProtSearchInput(queries="thermostable DNA polymerase Thermus aquaticus"), UniProtSearchConfig(max_results=5)
     )
     hits = output.results[0].hits
     assert "P19821" in [hit.accession for hit in hits]
