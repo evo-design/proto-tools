@@ -63,13 +63,24 @@ def build_http_session(
     user_agent: str,
     allowed_methods: list[str] | None = None,
     mount_http: bool = False,
+    status_forcelist: list[int] | None = None,
 ) -> requests.Session:
-    """Build a requests session with retry adapter."""
+    """Build a requests session with retry adapter.
+
+    Args:
+        http_retries (int): Retries for connection errors and retryable statuses.
+        backoff_seconds (float): urllib3 backoff factor between retries.
+        user_agent (str): ``User-Agent`` header for every request.
+        allowed_methods (list[str] | None): Methods that may be retried. Defaults to ``["GET"]``.
+        mount_http (bool): Also mount the adapter for plain ``http://`` URLs.
+        status_forcelist (list[int] | None): Statuses the adapter retries. Defaults to 429 and
+            5xx; ``[]`` returns every response to the caller, for callers that retry themselves.
+    """
     retry = Retry(
         total=http_retries,
         connect=http_retries,
         backoff_factor=backoff_seconds,
-        status_forcelist=_RETRY_STATUS_CODES,
+        status_forcelist=_RETRY_STATUS_CODES if status_forcelist is None else status_forcelist,
         allowed_methods=allowed_methods or ["GET"],
     )
     adapter = HTTPAdapter(max_retries=retry)

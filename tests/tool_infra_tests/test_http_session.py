@@ -3,10 +3,13 @@
 Tests for proto_tools.utils.http_session.request_with_retry and raise_for_status_with_body.
 """
 
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
 import pytest
 import requests
 
-from proto_tools.utils.http_session import raise_for_status_with_body, request_with_retry
+from proto_tools.utils.http_session import build_http_session, raise_for_status_with_body, request_with_retry
 
 
 def test_retries_until_success_within_budget():
@@ -97,3 +100,27 @@ def test_raise_for_status_with_body_truncates_a_long_body():
 
 def test_raise_for_status_with_body_passes_a_success():
     raise_for_status_with_body(_response(200, "ok"), "Example search")
+
+
+def test_empty_status_forcelist_hands_a_429_back_to_the_caller():
+    """The default forcelist would raise RetryError here, hiding the response and its Retry-After."""
+
+    class _RateLimited(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(429)
+            self.send_header("Retry-After", "7")
+            self.end_headers()
+
+        def log_message(self, *_args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), _RateLimited)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        session = build_http_session(
+            http_retries=0, backoff_seconds=0.0, user_agent="test", mount_http=True, status_forcelist=[]
+        )
+        response = session.get(f"http://127.0.0.1:{server.server_port}/", timeout=5)
+    finally:
+        server.shutdown()
+    assert (response.status_code, response.headers["Retry-After"]) == (429, "7")
