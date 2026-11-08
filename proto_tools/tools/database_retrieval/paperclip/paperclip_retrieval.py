@@ -100,7 +100,7 @@ class PaperclipPaper(BaseModel):
     Attributes:
         document_id (str): Stable Paperclip document identifier.
         title (str): Publication title.
-        authors (str | None): Author list as Paperclip formats it.
+        authors (list[str]): Author names in the order Paperclip lists them.
         journal (str | None): Journal, or the preprint server for a preprint.
         publication_date (str | None): Publication date, ``YYYY-MM-DD`` where known.
         year (int | None): Publication year.
@@ -115,7 +115,9 @@ class PaperclipPaper(BaseModel):
 
     document_id: str = Field(title="Document ID", description="Stable Paperclip document identifier")
     title: str = Field(title="Title", description="Publication title")
-    authors: str | None = Field(default=None, title="Authors", description="Author list as Paperclip formats it")
+    authors: list[str] = Field(
+        default_factory=list, title="Authors", description="Author names in the order Paperclip lists them"
+    )
     journal: str | None = Field(default=None, title="Journal", description="Journal or preprint server")
     publication_date: str | None = Field(default=None, title="Publication Date", description="Publication date")
     year: int | None = Field(default=None, title="Year", description="Publication year")
@@ -126,6 +128,16 @@ class PaperclipPaper(BaseModel):
     article_type: str | None = Field(default=None, title="Article Type", description="Article type, where recorded")
     abstract: str | None = Field(default=None, title="Abstract", description="Publication abstract when available")
     source_url: str = Field(title="Source URL", description="Paperclip citation page for the paper")
+
+    @field_validator("authors", mode="before")
+    @classmethod
+    def _split_authors(cls, value: Any) -> Any:
+        """Split the ``"; "``-joined author string Paperclip returns into one name per entry."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [name.strip() for name in value.split(";") if name.strip()]
+        return value
 
 
 class PaperclipSearchHit(PaperclipPaper):
