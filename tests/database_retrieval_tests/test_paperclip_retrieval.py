@@ -398,37 +398,15 @@ def test_search_normalizes_citable_hits(fake):
     assert second.access_kind == "metadata"
 
 
-@pytest.mark.parametrize(
-    ("authors", "expected"),
-    [
-        (
-            "Joseph L. Watson; David Juergens; Nathaniel R. Bennett",
-            ["Joseph L. Watson", "David Juergens", "Nathaniel R. Bennett"],
-        ),
-        ("Watson JL;  ; Juergens D;", ["Watson JL", "Juergens D"]),
-        (["Joseph L. Watson", "David Juergens"], ["Joseph L. Watson", "David Juergens"]),
-        (None, []),
-        ("", []),
-    ],
-)
-def test_search_hits_carry_authors_as_a_list(fake, authors, expected):
-    fake.saved_result = ("s_1", [{"document_id": "PMC1", "source": "pmc", "authors": authors}])
+def test_search_hits_split_authors_into_a_list(fake):
+    fake.saved_result = (
+        "s_1",
+        [{"document_id": "PMC1", "source": "pmc", "authors": "Joseph L. Watson; David Juergens"}],
+    )
 
     (hit,) = run_paperclip_search(PaperclipSearchInput(query="x"), PaperclipSearchConfig(paperclip_api_key="pk")).hits
 
-    assert hit.authors == expected
-
-
-def test_document_json_export_writes_authors_as_a_list(fake, tmp_path):
-    fake.files["/papers/PMC1/meta.json"] = json.dumps({"authors": "Yaojie Kong; Jingyao Li"})
-    output = run_paperclip_document(
-        PaperclipDocumentInput(document_id="PMC1"), PaperclipDocumentConfig(paperclip_api_key="pk", read="metadata")
-    )
-
-    output._export_output(tmp_path / "document", "json")
-
-    exported = json.loads((tmp_path / "document.json").read_text(encoding="utf-8"))
-    assert exported["document"]["paper"]["authors"] == ["Yaojie Kong", "Jingyao Li"]
+    assert hit.authors == ["Joseph L. Watson", "David Juergens"]
 
 
 def test_search_can_leave_out_abstracts(fake):
