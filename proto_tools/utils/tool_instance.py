@@ -49,6 +49,7 @@ import collections
 import contextvars
 import datetime
 import hashlib
+import itertools
 import json
 import logging
 import os
@@ -105,6 +106,8 @@ ENV_BUILD_LOCK_TIMEOUT = 60 * 60
 # Singleton registry
 # ============================================================================
 _lock = threading.Lock()  # protects _instances dict
+# Numbers the DeviceManager allocations of instances that have no cache key (see _device_manager_name).
+_uncached_allocation_ids = itertools.count(1)
 _instances: dict[str, "ToolInstance"] = {}
 
 _scope_override: contextvars.ContextVar[dict[str, "ToolInstance"] | None] = contextvars.ContextVar(
@@ -596,7 +599,9 @@ class ToolInstance:
                     "will NOT be automatically used by tool calls and "
                     "must be explicitly specified — pass instance=<this "
                     "instance> to run_*() calls, or use instance_name= "
-                    "to give it a unique cache key.",
+                    "to give it a unique cache key. It runs its own worker, "
+                    "so unless GPU sharing is enabled it evicts the cached "
+                    "instance's worker from a GPU they both want.",
                     toolkit,
                 )
                 inst = cls(toolkit, env_overrides=env_overrides)
@@ -748,6 +753,8 @@ class ToolInstance:
 
         self._env_ready = False
         self._cache_keys: set[str] = set()
+        # Name of this instance's DeviceManager allocation; fixed at its first device request.
+        self._dm_name: str | None = None
         self._instance_lock = threading.RLock()  # protects _worker lifecycle
         self._worker: PersistentWorker | None = None
         # Tracks previous reload-field values for restart detection
@@ -944,18 +951,38 @@ class ToolInstance:
             worker.stop()
 
         # Release device from DeviceManager
-        cache_keys: set[str] = getattr(self, "_cache_keys", set())
-        if cache_keys:
-            instance_name = next(iter(cache_keys))
-            device_manager = DeviceManager.get_instance()
-            device_manager.release_device(instance_name)
+        dm_name = getattr(self, "_dm_name", None)
+        if dm_name is not None:
+            DeviceManager.get_instance().release_device(dm_name)
 
         # Optionally evict from cache by stored keys
+        cache_keys: set[str] = getattr(self, "_cache_keys", set())
         if remove_from_cache:
             with _lock:
                 cache = _active_cache()
                 for k in cache_keys:
                     cache.pop(k, None)
+
+    def _device_manager_name(self) -> str:
+        """Return the name of this instance's DeviceManager allocation, fixing it on first use.
+
+        An instance owns at most one worker process, so it gets its own allocation record: its
+        cache key when it has one, otherwise a unique ``<toolkit>#<n>``. Falling back to the
+        toolkit name would let an uncached instance (a nested ``persist_tool``, a direct
+        ``ToolInstance(toolkit)``) share a cached instance's record. DeviceManager would then
+        see one process on a GPU that two hold, skip eviction, and on an ``Exclusive_Process``
+        GPU the second worker could not create a CUDA context. The name never changes once
+        set, since the allocation is released under it at shutdown. Callers hold
+        ``_instance_lock``.
+
+        Returns:
+            str: The allocation name.
+        """
+        if self._dm_name is None:
+            self._dm_name = (
+                next(iter(self._cache_keys)) if self._cache_keys else f"{self.toolkit}#{next(_uncached_allocation_ids)}"
+            )
+        return self._dm_name
 
     def _to(self, device: str) -> "ToolInstance":
         """Move this tool instance to a different device (internal).
@@ -976,8 +1003,7 @@ class ToolInstance:
             ToolInstance: Self, for method chaining.
         """
         with self._instance_lock:
-            # Get instance name for DeviceManager
-            instance_name = next(iter(self._cache_keys)) if self._cache_keys else self.toolkit
+            instance_name = self._device_manager_name()
 
             # If no worker exists yet, just update internal device tracking
             if self._worker is None:
@@ -1204,8 +1230,7 @@ class ToolInstance:
             assert reload_params is not None
             self._reload_params = reload_params
 
-        # Get instance name for DeviceManager (use first cache key if available)
-        instance_name = next(iter(self._cache_keys)) if self._cache_keys else self.toolkit
+        instance_name = self._device_manager_name()
 
         if self._worker is None:
             # Request device from DeviceManager
