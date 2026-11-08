@@ -74,7 +74,8 @@ class UniProtSearchConfig(BaseConfig):
 
     Attributes:
         organism (str | None): Restrict to an organism by name (``organism_name:"..."``), e.g.
-            ``"Homo sapiens"``. Combined with the query using AND.
+            ``"Homo sapiens"``. Combined with the query using AND. Double quotes are stripped,
+            since the name is sent inside quotes.
         taxon_id (int | None): Restrict to an NCBI taxonomy ID (``taxonomy_id:...``), including
             all descendant taxa. Combined with the query using AND.
         reviewed_only (bool): Restrict to reviewed Swiss-Prot entries. Defaults to True, which
@@ -86,6 +87,18 @@ class UniProtSearchConfig(BaseConfig):
     organism: str | None = ConfigField(
         default=None, title="Organism", description="Restrict to an organism name, e.g. 'Homo sapiens'"
     )
+
+    @field_validator("organism")
+    @classmethod
+    def _strip_quotes(cls, value: str | None) -> str | None:
+        """Remove double quotes, which would break the quoted ``organism_name`` clause."""
+        if value is None:
+            return None
+        cleaned = value.replace('"', "").strip()
+        if cleaned != value.strip():
+            logger.info("Stripped double quotes from organism %r; UniProt receives %r", value, cleaned)
+        return cleaned or None
+
     taxon_id: int | None = ConfigField(
         default=None, ge=1, title="Taxon ID", description="Restrict to an NCBI taxonomy ID and its descendants"
     )
@@ -108,6 +121,7 @@ class UniProtSearchHit(BaseModel):
         entry_name (str | None): UniProtKB entry name (e.g. ``DPO1_THEAQ``).
         protein_name (str | None): Recommended (or submitted) full protein name.
         gene_names (list[str]): Primary gene names.
+        gene_synonyms (list[str]): Gene name synonyms, such as older or alternative symbols.
         organism (str | None): Source organism scientific name.
         taxon_id (int | None): NCBI taxonomy ID of the source organism.
         length (int | None): Sequence length.
@@ -122,6 +136,9 @@ class UniProtSearchHit(BaseModel):
     entry_name: str | None = Field(default=None, title="Entry Name", description="UniProtKB entry name")
     protein_name: str | None = Field(default=None, title="Protein Name", description="Recommended full name")
     gene_names: list[str] = Field(default_factory=list, title="Gene Names", description="Primary gene names")
+    gene_synonyms: list[str] = Field(
+        default_factory=list, title="Gene Synonyms", description="Gene name synonyms, e.g. older or alternative symbols"
+    )
     organism: str | None = Field(default=None, title="Organism", description="Source organism scientific name")
     taxon_id: int | None = Field(default=None, title="Taxon ID", description="NCBI taxonomy ID")
     length: int | None = Field(default=None, title="Length", description="Sequence length")
@@ -186,6 +203,7 @@ class UniProtSearchOutput(BaseToolOutput):
                     for rank, hit in enumerate(result.hits, start=1):
                         row = hit.model_dump()
                         row["gene_names"] = ";".join(row["gene_names"])
+                        row["gene_synonyms"] = ";".join(row["gene_synonyms"])
                         writer.writerow({"query_index": index, "query": result.query, "rank": rank, **row})
             return
         if file_format == "fasta":
@@ -311,6 +329,14 @@ def _parse_hit(entry: dict[str, Any], include_sequence: bool) -> UniProtSearchHi
         gene_names=[
             gene["geneName"]["value"] for gene in entry.get("genes", []) if gene.get("geneName", {}).get("value")
         ],
+        gene_synonyms=list(
+            dict.fromkeys(
+                synonym["value"]
+                for gene in entry.get("genes", [])
+                for synonym in gene.get("synonyms") or []
+                if synonym.get("value")
+            )
+        ),
         organism=organism.get("scientificName"),
         taxon_id=organism.get("taxonId"),
         length=sequence.get("length"),
