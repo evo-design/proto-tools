@@ -113,3 +113,17 @@ def test_cuda_run_lands_on_the_free_gpu_when_another_is_leased() -> None:
     env = json.loads(visibility)
     assert env["CUDA_VISIBLE_DEVICES"] == determine_visible_devices("cuda:1")
     assert env["RUN_IN_ENV_DEVICE"] == "cuda:0" and count == "1"
+
+
+@pytest.mark.uses_gpu(2)
+@pytest.mark.parametrize("device", ["cudax2", "cuda:1,0"])
+def test_multi_gpu_run_sees_its_leased_gpus_renumbered(device: str) -> None:
+    """A multi-GPU lease is visible as cuda:0..N-1, in the order it was leased."""
+    from proto_tools.utils.device import determine_visible_devices
+
+    code = _VISIBILITY + "import torch\nprint(torch.cuda.device_count())\n"
+    visibility, count = run_in_env("esm2", code=code, device=device).strip().splitlines()[-2:]
+    env = json.loads(visibility)
+    assert env["RUN_IN_ENV_DEVICE"] == "cuda:0,cuda:1" and count == "2"
+    if device == "cuda:1,0":
+        assert env["CUDA_VISIBLE_DEVICES"] == determine_visible_devices("cuda:1,0")  # leased order kept
