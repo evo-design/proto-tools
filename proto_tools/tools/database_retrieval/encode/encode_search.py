@@ -97,18 +97,22 @@ class EncodeSearchQuery(BaseModel):
     A plain dict without ``filters``/``search_term`` keys is read as the ``filters`` mapping.
 
     Attributes:
-        filters (dict[str, str]): ENCODE facet filters, e.g. ``{"assay_title": "TF ChIP-seq",
-            "target.label": "CTCF", "biosample_ontology.term_name": "K562", "output_type":
-            "IDR thresholded peaks", "assembly": "GRCh38", "file_format": "bed"}``. Values must
-            match the portal's facet terms exactly. A key ending in ``!`` negates the filter.
+        filters (dict[str, str | list[str]]): ENCODE facet filters, e.g. ``{"assay_title": "TF
+            ChIP-seq", "target.label": "CTCF", "biosample_ontology.term_name": "K562",
+            "output_type": "IDR thresholded peaks", "assembly": "GRCh38", "file_format": "bed"}``.
+            Values must match the portal's facet terms exactly. A list matches any of its values,
+            e.g. ``{"target.label": ["CTCF", "RAD21"]}``. A key ending in ``!`` negates the filter;
+            with a list, it excludes every value.
         search_term (str | None): Free-text search (the portal's ``searchTerm``), e.g.
             ``"MAFK HepG2"``.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    filters: dict[str, str] = Field(
-        default_factory=dict, title="Filters", description="ENCODE facet filters, e.g. {'target.label': 'CTCF'}"
+    filters: dict[str, str | list[str]] = Field(
+        default_factory=dict,
+        title="Filters",
+        description="ENCODE facet filters, e.g. {'target.label': 'CTCF'}; a list matches any of its values",
     )
     search_term: str | None = Field(default=None, title="Search Term", description="Free-text search term")
 
@@ -123,16 +127,25 @@ class EncodeSearchQuery(BaseModel):
     @model_validator(mode="after")
     def _validate(self) -> "EncodeSearchQuery":
         """Strip values and reject empty queries and reserved parameters."""
-        self.filters = {key.strip(): val.strip() for key, val in self.filters.items()}
+        self.filters = {
+            key.strip(): val.strip() if isinstance(val, str) else [item.strip() for item in val]
+            for key, val in self.filters.items()
+        }
         self.search_term = (self.search_term or "").strip() or None
         reserved = _RESERVED_PARAMS & self.filters.keys()
         if reserved:
             raise ValueError(f"filters must not set {sorted(reserved)}; use search_term or the config instead")
-        if any(not key or not val for key, val in self.filters.items()):
+        if any(not key for key in self.filters) or any(not val for _key, val in self.filter_pairs()):
             raise ValueError("filter keys and values must not be empty")
+        if any(isinstance(val, list) and not val for val in self.filters.values()):
+            raise ValueError("a filter list needs at least one value")
         if not self.filters and self.search_term is None:
             raise ValueError("a query needs at least one filter or a search_term")
         return self
+
+    def filter_pairs(self) -> list[tuple[str, str]]:
+        """Return the filters as ``(key, value)`` pairs, one per value of a list filter."""
+        return [(key, item) for key, val in self.filters.items() for item in ([val] if isinstance(val, str) else val)]
 
 
 class EncodeSearchInput(BaseToolInput):
@@ -419,7 +432,7 @@ def _request_url(query: EncodeSearchQuery, config: EncodeSearchConfig) -> str:
         params.append(("status", "released"))
     if config.default_only and config.item_type == "File" and "preferred_default" not in query.filters:
         params.append(("preferred_default", "true"))
-    params.extend(query.filters.items())
+    params.extend(query.filter_pairs())
     if query.search_term:
         params.append(("searchTerm", query.search_term))
     params.extend([("format", "json"), ("limit", str(config.max_results))])
@@ -482,13 +495,15 @@ def _diagnose(
     """Explain filters whose value matches no item.
 
     The portal echoes unknown facet names and misspelled values back without complaint, so a typo
-    looks like a real empty result. Each suspect filter is counted on its own: every filter when the
-    search found nothing, and negated filters always, since a misspelled ``key!`` excludes nothing.
+    looks like a real empty result. Each suspect value is counted on its own: every value when the
+    search found nothing; otherwise negated values and values in lists, since a misspelled ``key!``
+    excludes nothing and a misspelled list value adds nothing, with no effect on the hit count.
     """
-    suspects = query.filters if no_hits else {key: val for key, val in query.filters.items() if key.endswith("!")}
+    in_list = {key for key, val in query.filters.items() if isinstance(val, list)}
+    suspects = [(key, value) for key, value in query.filter_pairs() if no_hits or key.endswith("!") or key in in_list]
     messages: list[str] = []
     facets: dict[str, list[str]] | None = None
-    for key, value in suspects.items():
+    for key, value in suspects:
         field = key.removesuffix("!")
         if int(_fetch(session, _count_url(config, [(field, value)])).get("total", 0)) > 0:
             continue
@@ -498,15 +513,19 @@ def _diagnose(
                 for facet in _fetch(session, _count_url(config, [])).get("facets") or []
                 if isinstance(facet, dict) and facet.get("field")
             }
-        messages.append(_explain(key, field, value, facets, config))
+        messages.append(_explain(key, field, value, facets, config, key in in_list))
     return messages
 
 
-def _explain(key: str, field: str, value: str, facets: dict[str, list[str]], config: EncodeSearchConfig) -> str:
-    """Describe a filter that matches nothing, with likely corrections from the portal's facets."""
+def _explain(
+    key: str, field: str, value: str, facets: dict[str, list[str]], config: EncodeSearchConfig, in_list: bool
+) -> str:
+    """Describe a filter value that matches nothing, with likely corrections from the portal's facets."""
     scope = f"{'released ' if config.released_only else ''}{config.item_type}"
     if key.endswith("!"):
         message = f"Filter {key}={value!r} excludes nothing: no {scope} has {field}={value!r}"
+    elif in_list:
+        message = f"Filter {field}={value!r} in a list matches no {scope}, so it adds no hits"
     else:
         message = f"Filter {field}={value!r} matches no {scope}, so the search cannot return hits"
     if field in facets:
