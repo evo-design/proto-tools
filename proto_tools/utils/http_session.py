@@ -22,6 +22,9 @@ from proto_tools.utils.base_config import client_identity
 
 _RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
 
+#: Keeps a server's error page from flooding the exception message.
+_ERROR_BODY_CHARS = 1000
+
 #: Spreads retries across callers hitting the same failure at once; not a security primitive.
 _JITTER_FRACTION = 0.1
 
@@ -76,6 +79,26 @@ def build_http_session(
         session.mount("http://", adapter)
     session.headers.update({"User-Agent": user_agent})
     return session
+
+
+def raise_for_status_with_body(response: requests.Response, operation: str) -> None:
+    """Raise ``requests.HTTPError`` naming *operation* and quoting the start of the response body.
+
+    ``response.raise_for_status()`` reports only the status line, but APIs explain a rejected
+    query in the body, so the body is the part a caller needs to fix the request.
+
+    Args:
+        response (requests.Response): Response to check.
+        operation (str): What the request was doing, such as ``"UniProt search"``.
+
+    Raises:
+        requests.HTTPError: If the response has an error status.
+    """
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as error:
+        body = str(getattr(response, "text", ""))[:_ERROR_BODY_CHARS]
+        raise requests.HTTPError(f"{operation} failed: {error}; body={body!r}", response=response) from error
 
 
 def request_with_retry(

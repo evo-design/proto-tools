@@ -18,7 +18,6 @@ import requests
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities import Structure
-from proto_tools.tools.database_retrieval.pdb.shared_data_models import _raise_for_status
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -27,6 +26,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     build_http_session,
+    raise_for_status_with_body,
     request_with_retry,
 )
 
@@ -268,7 +268,7 @@ def _upload_structure(session: requests.Session, structure: Structure) -> str:
         retries=_HTTP_RETRIES,
         backoff_seconds=_BACKOFF_SECONDS,
     )
-    _raise_for_status(response, "structure upload")
+    raise_for_status_with_body(response, "RCSB structure upload")
     payload = response.json()
     key = payload.get("key")
     if not isinstance(key, str) or not key:
@@ -327,7 +327,7 @@ def _search(
         retries=_HTTP_RETRIES,
         backoff_seconds=_BACKOFF_SECONDS,
     )
-    _raise_for_status(response, "structure search")
+    raise_for_status_with_body(response, "RCSB structure search")
     payload = response.json()
     hits = [
         PdbStructureSimilarityHit(

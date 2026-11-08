@@ -57,7 +57,12 @@ from proto_tools.utils.gradient.terms import (
     TermGradient,
     resolve_terms,
 )
-from proto_tools.utils.http_session import build_http_session, request_with_retry, user_agent_for
+from proto_tools.utils.http_session import (
+    build_http_session,
+    raise_for_status_with_body,
+    request_with_retry,
+    user_agent_for,
+)
 from proto_tools.utils.interaction_models import (
     SequenceInteractionMap,
     SequenceInteractions,
@@ -224,6 +229,7 @@ __all__ = [
     "SUPPORTED_DEVICE_PREFIXES",
     # HTTP
     "build_http_session",
+    "raise_for_status_with_body",
     "request_with_retry",
     "user_agent_for",
     "extract_text_status",

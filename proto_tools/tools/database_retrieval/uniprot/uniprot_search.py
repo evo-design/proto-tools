@@ -22,6 +22,7 @@ from proto_tools.utils import (
     ConfigField,
     InputField,
     build_http_session,
+    raise_for_status_with_body,
     request_with_retry,
 )
 
@@ -289,15 +290,6 @@ def _full_query(query: str, config: UniProtSearchConfig) -> str:
     return " AND ".join(clauses) if len(clauses) > 1 else query
 
 
-def _raise_for_status(response: Any) -> None:
-    """Raise an HTTP error that includes a bounded UniProt response body (e.g. query syntax errors)."""
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as error:
-        body = str(getattr(response, "text", ""))[:1000]
-        raise requests.HTTPError(f"UniProt search failed: {error}; body={body!r}", response=response) from error
-
-
 def _search(query: str, config: UniProtSearchConfig, session: requests.Session) -> UniProtSearchResult:
     """Run one search request and parse its hits."""
     full_query = _full_query(query, config)
@@ -308,7 +300,7 @@ def _search(query: str, config: UniProtSearchConfig, session: requests.Session) 
         retries=_HTTP_RETRIES,
         backoff_seconds=_BACKOFF_SECONDS,
     )
-    _raise_for_status(response)
+    raise_for_status_with_body(response, "UniProt search")
     entries = response.json().get("results", [])
     total = response.headers.get("X-Total-Results")
     return UniProtSearchResult(
