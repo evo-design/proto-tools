@@ -1,8 +1,8 @@
 {
   "tool_id": "pdb-fetch-fasta",
-  "tool_version": "2.1.0",
-  "execution_time": 0.18976712226867676,
-  "timestamp": "2026-11-01T14:02:05.806522",
+  "tool_version": "2.1.1",
+  "execution_time": 0.11508584022521973,
+  "timestamp": "2026-11-05T19:34:34.965545",
   "success": true,
   "warnings": [],
   "errors": [],

@@ -18,6 +18,7 @@ import requests
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities import Structure
+from proto_tools.tools.database_retrieval.pdb.shared_data_models import _raise_for_status
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -235,15 +236,6 @@ class PdbStructureSimilarityOutput(BaseToolOutput):
                     writer.writerows({"query_index": index, **hit.model_dump()} for hit in result.hits)
             return
         raise ValueError(f"Unsupported format: {file_format}")
-
-
-def _raise_for_status(response: Any, operation: str) -> None:
-    """Raise an HTTP error that includes a bounded RCSB response body."""
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as error:
-        body = str(getattr(response, "text", ""))[:1000]
-        raise requests.HTTPError(f"RCSB {operation} failed: {error}; body={body!r}", response=response) from error
 
 
 def _original_structure_score(result: dict[str, Any]) -> float | None:

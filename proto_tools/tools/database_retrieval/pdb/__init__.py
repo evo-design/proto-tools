@@ -1,4 +1,4 @@
-"""PDB database entry and FASTA retrieval."""
+"""PDB database entry and FASTA retrieval, and sequence and structure search."""
 
 from proto_tools.tools.database_retrieval.pdb.fetch_entry import (
     PdbFetchEntryConfig,
@@ -11,6 +11,15 @@ from proto_tools.tools.database_retrieval.pdb.fetch_fasta import (
     PdbFetchFastaInput,
     PdbFetchFastaOutput,
     run_pdb_fetch_fasta,
+)
+from proto_tools.tools.database_retrieval.pdb.sequence_search import (
+    PdbSequenceSearchConfig,
+    PdbSequenceSearchHit,
+    PdbSequenceSearchInput,
+    PdbSequenceSearchOutput,
+    PdbSequenceSearchQuery,
+    PdbSequenceSearchResult,
+    run_pdb_sequence_search,
 )
 from proto_tools.tools.database_retrieval.pdb.shared_data_models import PdbChain, PdbFetchConfig
 from proto_tools.tools.database_retrieval.pdb.structure_similarity import (
@@ -34,6 +43,13 @@ __all__ = [
     "PdbFetchFastaInput",
     "PdbFetchFastaOutput",
     "run_pdb_fetch_fasta",
+    "PdbSequenceSearchConfig",
+    "PdbSequenceSearchHit",
+    "PdbSequenceSearchInput",
+    "PdbSequenceSearchOutput",
+    "PdbSequenceSearchQuery",
+    "PdbSequenceSearchResult",
+    "run_pdb_sequence_search",
     "PdbStructureSimilarityConfig",
     "PdbStructureSimilarityHit",
     "PdbStructureSimilarityQuery",
