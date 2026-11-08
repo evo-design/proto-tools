@@ -43,7 +43,7 @@ Searches locate specific processed ENCODE files, such as the default IDR thresho
 - **`released_only` drops archived and revoked items.** It adds `status=released` unless the query sets its own `status` filter. A key ending in `!`, e.g. `"assembly!": "hg19"`, negates a filter.
 - **`organism` is exact for experiments and inferred for files.** Experiments report their biosamples' species. Files have no organism field, so it comes from the donor (human or mouse) or the assembly (`dm6`, `ce11`, ...), and is `None` when neither identifies the species. To restrict files to a species, filter on `assembly`; for experiments, filter on `replicates.library.biosample.donor.organism.scientific_name`.
 - **Free text is fuzzy.** `search_term` matches across descriptions and metadata, which helps when facet terms are unknown. Combine it with filters to narrow the hits.
-- **The tool returns metadata, not files.** Fetch a file from its `download_url`. Results export as JSON (full output) or CSV (one row per hit).
+- **The tool returns metadata, not files.** Call `output.download(directory)` to fetch the file hits; it verifies each file's MD5, skips files already downloaded, and refuses before starting when the total exceeds `max_total_bytes` (1 GB by default). Peak and quantification files are a few MB; signal tracks, alignments and reads are often hundreds of MB to several GB. Pass `accessions` to fetch only some hits. Results export as JSON (full output) or CSV (one row per hit).
 
 ## Toolkit Notes
 
