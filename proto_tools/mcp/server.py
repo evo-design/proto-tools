@@ -154,7 +154,8 @@ def build_server(device: Device = "modal") -> FastMCP:
         catalogue, which also shows what you could deploy.
 
         Entries arrive under `tools`, the same as search_tools, each carrying the key to run under
-        `tool_key`.
+        `tool_key`. An entry with `outages` has an upstream service down; its `note` says which
+        mode is affected.
         """
         return impl.catalogue(deployed_only=deployed_only, category=category, device=device)
 
@@ -173,7 +174,9 @@ def build_server(device: Device = "modal") -> FastMCP:
         """Get the input, config and output schemas for a tool.
 
         Step 1 of the workflow: get_tool_schema, then get_tool_example when available, then one
-        run_tool call. `has_example` says whether step 2 has anything to return.
+        run_tool call. `has_example` says whether step 2 has anything to return. `outages` lists
+        upstream outages: run_tool refuses a call that reaches one (`affects` names the mode, or
+        null for the whole tool), so choose a setting that avoids it or tell the user it is down.
         """
         return impl.get_tool_schema(tool_key)
 
@@ -198,6 +201,7 @@ def build_server(device: Device = "modal") -> FastMCP:
         `source` is this project's implementation -- the wrapper, environment, and example. `links`
         are the model's own: its authors' repository, paper and weights. `license` and
         `weights_access` say on what terms the weights may be used and how they are obtained.
+        `outages` lists declared upstream outages, as get_tool_schema does.
         """
         return impl.get_tool_info(tool_key)
 
