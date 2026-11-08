@@ -35,9 +35,21 @@ Canonical reference is `pyproject.toml [tool.pytest.ini_options].markers`. Tool-
 - **`@pytest.mark.slow`**: Tests that may take several minutes. Skipped by default. Run with `--slow` or `--all`
 - **`@pytest.mark.extensive`**: Combinatorial tests (e.g. every tool × device transition). Skipped unless `--ext` (or `--extensive`) is passed
 - **`@pytest.mark.benchmark('<tool-key>')`**: E2E benchmark for one tool. Required arg. Skipped by default. Opt in via `--benchmark` (or `--benchmark-report` / `--benchmark-tool` / `--benchmark-toolkit`). Not enabled by `--all` or `--slow`
-- **`@pytest.mark.skip_ci`**: Only for tests requiring optional/external dependencies not in `pyproject.toml`. Do not add for core deps
+- **`@pytest.mark.skip_ci`**: Only for tests requiring optional/external dependencies not in `pyproject.toml`. Do not add for core deps, or for tests that submit jobs to shared public compute services (e.g. EBI Job Dispatcher), whose fair-use policies block automated submitters
 - **`@pytest.mark.include_in_env_report`**: Applied automatically by `test_env_report.py` parametrization. Do not add manually
 - **`@pytest.mark.test_on_platforms('x86_64', ...)`**: Restrict to specific architectures
+
+## Upstream outages
+
+A declared `Outage` (see `notes/error-handling.md`) gets a recovery probe: the integration test for
+the affected mode, run with `monkeypatch.setenv("PROTO_IGNORE_OUTAGES", "1")` under
+`@pytest.mark.xfail(strict=True, raises=<the upstream's error>)`. While the outage lasts it XFAILs;
+once the upstream recovers it passes, strict xfail fails the nightly integration run, and the fix is to
+delete the `Outage` and the marker. Example: `test_alphafold_db_msa_outage_recovery_probe`.
+`tests/style_consistency_tests/test_outage_declarations.py` evaluates every scoped outage's `when` on the
+tool's example input and default config, and requires `False`: a scoped outage the defaults reach refuses
+every default call, the example, and the hosted smoke run, so declare it with `affects=None` or change the
+default or example instead.
 
 ## Naming
 

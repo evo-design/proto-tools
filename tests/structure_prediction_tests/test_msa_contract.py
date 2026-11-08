@@ -152,6 +152,12 @@ _STUBS: dict[str, _Stub] = {
         _cif_reply("structure_cif_output", {"plddt": 0.8, "ptm": 0.7, "avg_pae": 1.0}),
         config={"model_checkpoint": "esmfold2"},
     ),
+    "mol1-prediction": _Stub(
+        _cif_reply(
+            "structure_cif_output",
+            {"avg_plddt": 91.2, "ptm": 0.85, "iptm": 0.0, "gpde": 1.2, "ranking_score": 0.17, "has_clash": False},
+        )
+    ),
     "opendde-prediction": _Stub(
         _cif_reply(
             "structure_cif_output",
@@ -191,7 +197,7 @@ _EXEMPT = {
 }
 
 # Backends whose upstream pairs identical chains' rows with each other. AF3, Protenix and OpenDDE
-# pair only across distinct protein sequences (need_msa_pairing), and RF3 treats a homomer as unpaired.
+# pair only across distinct protein sequences (need_msa_pairing), as does Mol-1, and RF3 treats a homomer as unpaired.
 _PAIRS_IDENTICAL_CHAINS = {"boltz2-prediction", "boltz2-affinity", "chai1-prediction", "esmfold2-prediction"}
 
 # Ignored reasons that are genuine backend limitations rather than dropped rows.

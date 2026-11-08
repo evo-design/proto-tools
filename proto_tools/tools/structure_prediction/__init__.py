@@ -115,6 +115,13 @@ from proto_tools.tools.structure_prediction.esmfold2 import (
     run_esmfold2_inversion_binder_gradient,
     run_esmfold2_inversion_gradient,
 )
+from proto_tools.tools.structure_prediction.mol1 import (
+    Mol1Config,
+    Mol1Input,
+    Mol1Metrics,
+    Mol1Output,
+    run_mol1_prediction,
+)
 from proto_tools.tools.structure_prediction.msa_plan import SentMSA
 from proto_tools.tools.structure_prediction.msa_reporting import build_msa_conditioning
 from proto_tools.tools.structure_prediction.opendde import (
@@ -269,6 +276,12 @@ __all__ = [
     "ESMFold2Config",
     "ESMFold2Output",
     "ESMFold2Metrics",
+    # Mol-1
+    "Mol1Config",
+    "Mol1Input",
+    "Mol1Metrics",
+    "Mol1Output",
+    "run_mol1_prediction",
     # OpenDDE
     "run_opendde",
     "OpenDDEInput",

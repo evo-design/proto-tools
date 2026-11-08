@@ -149,16 +149,19 @@ def test_ccd_lookup_offline_full_pass():
 @pytest.mark.skip_ci
 @pytest.mark.integration
 def test_ccd_lookup_returns_metadata_for_entries_rdkit_cannot_sanitize():
-    """CZL (CIP labeler digraph overflow) and HB1 (kekulization failure) still return their CCD metadata."""
-    result = run_ccd_lookup(CcdLookupInput(identifiers=["CZL", "HB1"]), CcdLookupConfig())
-    validate_output(result)
-    czl, hb1 = result.results
+    """C8L (cucurbit[8]uril) overflows RDKit's CIP labeler, yet still returns its CCD metadata.
 
-    assert czl.formula == "Fe8 H6 S9"
-    assert hb1.formula == "C23 H13 N3 O3 Ru"
-    assert czl.formula_weight == pytest.approx(741.35, abs=1.0)
-    assert hb1.formula_weight == pytest.approx(480.44, abs=1.0)
-    assert not czl.errors and not hb1.errors
+    wwPDB revisions can make an entry sanitizable (CZL and HB1 were, in 2026-09), so the test
+    first checks that C8L still takes the unsanitized fallback.
+    """
+    result = run_ccd_lookup(CcdLookupInput(identifiers=["C8L"]), CcdLookupConfig())
+    validate_output(result)
+    (c8l,) = result.results
+
+    assert any("sanitization failed" in w for w in c8l.warnings), "C8L no longer exercises the fallback"
+    assert c8l.formula == "C48 H48 N32 O16"
+    assert c8l.formula_weight == pytest.approx(1329.10, abs=1.0)
+    assert not c8l.errors
 
 
 @pytest.mark.skip_ci
