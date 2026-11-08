@@ -75,6 +75,22 @@ from proto_tools.tools.database_retrieval.ensembl import (
     run_ensembl_xrefs,
 )
 
+# Europe PMC literature search and full text
+from proto_tools.tools.database_retrieval.europepmc import (
+    EuropePMCFullTextConfig,
+    EuropePMCFullTextDocument,
+    EuropePMCFullTextInput,
+    EuropePMCFullTextOutput,
+    EuropePMCSearchConfig,
+    EuropePMCSearchHit,
+    EuropePMCSearchInput,
+    EuropePMCSearchOutput,
+    EuropePMCSearchResult,
+    EuropePMCSection,
+    run_europepmc_fulltext,
+    run_europepmc_search,
+)
+
 # InterPro fetch
 from proto_tools.tools.database_retrieval.interproscan import (
     InterProApp,
@@ -286,6 +302,19 @@ __all__ = [
     "run_ensembl_sequence",
     "run_ensembl_vep",
     "run_ensembl_xrefs",
+    # Europe PMC literature search and full text
+    "EuropePMCFullTextConfig",
+    "EuropePMCFullTextDocument",
+    "EuropePMCFullTextInput",
+    "EuropePMCFullTextOutput",
+    "EuropePMCSection",
+    "EuropePMCSearchConfig",
+    "EuropePMCSearchHit",
+    "EuropePMCSearchInput",
+    "EuropePMCSearchOutput",
+    "EuropePMCSearchResult",
+    "run_europepmc_fulltext",
+    "run_europepmc_search",
     # InterPro fetch
     "InterProApp",
     "InterProDomain",
