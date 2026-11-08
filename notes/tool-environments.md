@@ -178,6 +178,8 @@ Each tool's `standalone/env_vars.txt` supports three sections:
 - `[set]`: Literal `KEY=VALUE` assignments, with `${VENV_PATH}` interpolation
 - `[no_passthrough]`: Variable names whose parent value is **blocked** from leaking into the subprocess. For `LD_LIBRARY_PATH` this also skips the `$CONDA_PREFIX/lib` append, though the host directory containing `libcuda.so.1` is still added so GPU init works, and `[set]` entries still apply. Use this for tools whose pip-bundled libs (e.g. JAX's RPATH'd CUDA wheels) get ABI-shadowed by the parent's libs.
 
+**Always passed through** (`_BASE_PASSTHROUGH` in `persistent_worker.py`): identity, locale, temp dirs, Hugging Face and proto paths, package caches, network proxies, and TLS trust (`SSL_CERT_FILE`, `SSL_CERT_DIR`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`, `GIT_SSL_CAPATH`, `PIP_CERT`). Everything else is blocked unless a tool lists it under `[passthrough]`. If HTTPS fetches in `setup.sh` fail certificate verification, for example `git` reporting `error setting certificate file: /etc/pki/tls/certs/ca-bundle.crt` inside a container whose CA bundle lives elsewhere than where the host's `git` was built to look, export the matching variable before running, e.g. `GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt`.
+
 **Auto-set environment variables** (always injected by `_build_subprocess_env()`):
 - `CONDA_PREFIX`: set to the **tool env path** (not the parent conda env) so uv/pip install into the correct environment
 - `VIRTUAL_ENV`: set to the **tool env path** for uv >=0.10 compatibility
