@@ -67,6 +67,7 @@ def _make_fake_instance(
     inst._env_overrides = None
     inst._env_ready = True
     inst._cache_keys = set()
+    inst._dm_name = None
     inst._instance_lock = threading.Lock()
     inst._worker = None
     inst._reload_params = {}
