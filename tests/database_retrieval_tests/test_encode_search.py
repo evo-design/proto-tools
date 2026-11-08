@@ -2,6 +2,7 @@
 
 import csv
 import json
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
@@ -64,18 +65,31 @@ class _Response:
 
 
 class _Session:
-    """Fake ENCODE session that records request query parameters."""
+    """Fake ENCODE session that records request query parameters.
 
-    def __init__(self, payload: dict[str, Any], status_code: int = 200) -> None:
+    ``route`` answers requests by their parameters (e.g. diagnosis counts); otherwise every request
+    gets ``payload``.
+    """
+
+    def __init__(
+        self,
+        payload: dict[str, Any] | None = None,
+        status_code: int = 200,
+        route: Callable[[dict[str, str]], _Response] | None = None,
+    ) -> None:
         self.calls: list[list[tuple[str, str]]] = []
         self.closed = False
-        self.payload = payload
+        self.payload = payload or {}
         self.status_code = status_code
+        self.route = route
 
     def get(self, url: str, **kwargs: Any) -> _Response:
         assert url.startswith(module._SEARCH_URL + "?")
         assert kwargs["headers"]["Accept"] == "application/json"
-        self.calls.append(parse_qsl(urlsplit(url).query))
+        params = parse_qsl(urlsplit(url).query)
+        self.calls.append(params)
+        if self.route is not None:
+            return self.route(dict(params))
         return _Response(self.payload, self.status_code)
 
     def close(self) -> None:
@@ -173,6 +187,108 @@ def test_http_error_propagates_with_response_body(monkeypatch: pytest.MonkeyPatc
     with pytest.raises(requests.HTTPError, match=r"ENCODE search failed.*bad request"):
         run_encode_search(EncodeSearchInput(queries={"assembly": "GRCh38"}), EncodeSearchConfig())
     assert session.closed is True
+
+
+# ── Organism ─────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("item", "expected"),
+    [
+        (
+            {"replicates": [{"library": {"biosample": {"organism": {"scientific_name": "Mus musculus"}}}}]},
+            "Mus musculus",
+        ),
+        ({"donors": ["/human-donors/ENCDO000ABC/"], "assembly": "GRCh38"}, "Homo sapiens"),
+        ({"donors": ["/human-donors/A/", "/mouse-donors/B/"]}, "Homo sapiens, Mus musculus"),
+        ({"donors": ["/fly-donors/ENCDO000FLY/"], "assembly": "dm6"}, "Drosophila melanogaster"),
+        ({"donors": ["/fly-donors/ENCDO000FLY/"]}, None),  # fly donors span several species
+        ({"assembly": ["hg19", "GRCh38"]}, "Homo sapiens"),
+        ({"assembly": "unknown-build"}, None),
+    ],
+)
+def test_organism_comes_from_biosamples_donors_or_assembly(item: dict[str, Any], expected: str | None) -> None:
+    assert module._organism(item, item.get("assembly")) == expected
+
+
+# ── Filter diagnosis ─────────────────────────────────────────────────────────
+
+_FACETS = {
+    "facets": [
+        {"field": "biosample_ontology.term_name", "terms": [{"key": "K562"}, {"key": "HepG2"}]},
+        {"field": "target.label", "terms": [{"key": "CTCF"}, {"key": "MAFK"}]},
+        {"field": "assembly", "terms": [{"key": "GRCh38"}, {"key": "mm10"}]},
+    ]
+}
+_KNOWN = {("biosample_ontology.term_name", "K562"), ("target.label", "CTCF"), ("assembly", "GRCh38")}
+
+
+def _portal(search: dict[str, Any]) -> Callable[[dict[str, str]], _Response]:
+    """Answer the search with ``search``, and count requests (limit=0) by whether the filter is known."""
+
+    def route(params: dict[str, str]) -> _Response:
+        if params["limit"] != "0":
+            return _Response(search, 200 if search["@graph"] else 404)
+        filters = {(key, val) for key, val in params.items() if key not in {"type", "status", "format", "limit"}}
+        if not filters:
+            return _Response({"@graph": [], "total": 50, **_FACETS})
+        return _Response(
+            {"@graph": [], "total": 9} if filters <= _KNOWN else {"@graph": []}, 200 if filters <= _KNOWN else 404
+        )
+
+    return route
+
+
+_NO_HITS = {"@graph": [], "notification": "No results found"}
+
+
+@pytest.mark.parametrize(
+    ("filters", "fragments"),
+    [
+        (
+            {"target.label": "CTCF", "biosample_ontology.term_name": "k562"},
+            ["biosample_ontology.term_name='k562' matches no released File", "(did you mean 'K562'?)"],
+        ),
+        ({"target.lable": "CTCF"}, ["'target.lable' is not a File search facet; did you mean 'target.label'?"]),
+        (
+            {"assembly": "GRCh38", "target.label": "ZZZ9"},
+            ["target.label='ZZZ9' matches no released File", "(values must match the portal's terms exactly)"],
+        ),
+    ],
+)
+def test_filters_matching_nothing_are_explained(
+    monkeypatch: pytest.MonkeyPatch, filters: dict[str, str], fragments: list[str]
+) -> None:
+    _install(monkeypatch, _Session(route=_portal(_NO_HITS)))
+    output = run_encode_search(EncodeSearchInput(queries=filters), EncodeSearchConfig())
+    (warning,) = output.warnings
+    assert all(fragment in warning for fragment in fragments), warning
+
+
+def test_valid_filters_with_no_common_match_do_not_warn(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _install(monkeypatch, _Session(route=_portal(_NO_HITS)))
+    output = run_encode_search(
+        EncodeSearchInput(queries={"target.label": "CTCF", "assembly": "GRCh38"}), EncodeSearchConfig()
+    )
+    assert output.results[0].total_count == 0 and output.warnings == []
+    assert len(session.calls) == 3  # the search, then one count per filter; no facet request
+
+
+def test_negated_filter_that_excludes_nothing_warns_even_with_hits(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _install(monkeypatch, _Session(route=_portal({"@graph": [_FILE], "total": 1})))
+    output = run_encode_search(
+        EncodeSearchInput(queries={"target.label": "CTCF", "assembly!": "grch38"}), EncodeSearchConfig()
+    )
+    assert output.results[0].total_count == 1
+    (warning,) = output.warnings
+    assert "assembly!='grch38' excludes nothing" in warning and "did you mean 'GRCh38'?" in warning
+    assert dict(session.calls[1])["assembly"] == "grch38"  # counted in its positive form
+
+    session.calls.clear()
+    output = run_encode_search(
+        EncodeSearchInput(queries={"target.label": "CTCF", "assembly!": "GRCh38"}), EncodeSearchConfig()
+    )
+    assert output.warnings == [] and len(session.calls) == 2  # only the negated filter is counted
 
 
 # ── Export ───────────────────────────────────────────────────────────────────

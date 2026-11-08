@@ -29,7 +29,7 @@ The tool queries the portal's [REST API](https://www.encodeproject.org/help/rest
 
 ### ENCODE Search (`encode-search`)
 
-Runs one portal search per query. A query is a mapping of ENCODE facet filters, such as `assay_title`, `target.label`, `biosample_ontology.term_name`, `output_type`, `assembly` and `file_format`, with optional free text. It returns files (default) or experiments with accession, parent experiment, assay, target, biosample, output type, assembly, file format and type, size, MD5 checksum, replicates, preferred-default flag, lab, portal page URL and, for files, the direct download URL. Each result also reports the total match count and the request URL.
+Runs one portal search per query. A query is a mapping of ENCODE facet filters, such as `assay_title`, `target.label`, `biosample_ontology.term_name`, `output_type`, `assembly` and `file_format`, with optional free text. It returns files (default) or experiments with accession, parent experiment, assay, target, biosample, organism, output type, assembly, file format and type, size, MD5 checksum, replicates, preferred-default flag, lab, portal page URL and, for files, the direct download URL. Each result also reports the total match count and the request URL.
 
 #### Applications
 
@@ -37,9 +37,11 @@ Searches locate specific processed ENCODE files, such as the default IDR thresho
 
 #### Usage Tips
 
-- **Filter values must match portal terms exactly.** Facets match exact strings, e.g. `"TF ChIP-seq"`, `"IDR thresholded peaks"`, `"HepG2"`. Copy terms from the facet lists on the [portal search page](https://www.encodeproject.org/search/?type=File); a misspelled value or unknown facet name returns no hits rather than an error.
+- **Filter values must match portal terms exactly.** Facets match exact, case-sensitive strings, e.g. `"TF ChIP-seq"`, `"IDR thresholded peaks"`, `"HepG2"`. Copy terms from the facet lists on the [portal search page](https://www.encodeproject.org/search/?type=File).
+- **Filters that match nothing are reported in `warnings`.** The portal accepts a misspelled value or unknown facet name without error and simply returns no hits. When a search returns nothing, the tool counts each filter on its own and warns about any that match no item, with suggestions such as `'k562'` → `'K562'` or `target.lable` → `target.label`. A search with no hits and no warning means the filters are valid but no item matches all of them. Negated filters are always checked, since a misspelled `key!` silently excludes nothing.
 - **Use `default_only` for the canonical file.** `default_only=True` adds `preferred_default=true`, which usually leaves one file per experiment, output type and assembly. Leave it off to see per-replicate and superseded outputs.
 - **`released_only` drops archived and revoked items.** It adds `status=released` unless the query sets its own `status` filter. A key ending in `!`, e.g. `"assembly!": "hg19"`, negates a filter.
+- **`organism` is exact for experiments and inferred for files.** Experiments report their biosamples' species. Files have no organism field, so it comes from the donor (human or mouse) or the assembly (`dm6`, `ce11`, ...), and is `None` when neither identifies the species. To restrict files to a species, filter on `assembly`; for experiments, filter on `replicates.library.biosample.donor.organism.scientific_name`.
 - **Free text is fuzzy.** `search_term` matches across descriptions and metadata, which helps when facet terms are unknown. Combine it with filters to narrow the hits.
 - **The tool returns metadata, not files.** Fetch a file from its `download_url`. Results export as JSON (full output) or CSV (one row per hit).
 

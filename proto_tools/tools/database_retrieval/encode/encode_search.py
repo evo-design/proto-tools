@@ -6,8 +6,10 @@ processed files or experiments with their accessions, metadata and direct downlo
 """
 
 import csv
+import difflib
 import json
 import logging
+import warnings
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlencode
@@ -56,7 +58,24 @@ _RETURN_FIELDS = (
     "lab.title",
     "target.label",
     "biosample_ontology.term_name",
+    "donors",
+    "replicates.library.biosample.organism.scientific_name",
 )
+# Files carry no organism field, only donor links such as /human-donors/ENCDO.../. Human and mouse
+# donors are one species each; fly and worm donors span several species, so those fall back to the
+# assembly, and stay None when neither identifies the species.
+_DONOR_ORGANISMS = {"human-donors": "Homo sapiens", "mouse-donors": "Mus musculus"}
+_ASSEMBLY_ORGANISMS = {
+    "GRCh38": "Homo sapiens",
+    "hg19": "Homo sapiens",
+    "GRCm39": "Mus musculus",
+    "mm10": "Mus musculus",
+    "mm9": "Mus musculus",
+    "dm6": "Drosophila melanogaster",
+    "dm3": "Drosophila melanogaster",
+    "ce11": "Caenorhabditis elegans",
+    "ce10": "Caenorhabditis elegans",
+}
 
 
 # ============================================================================
@@ -163,6 +182,7 @@ class EncodeSearchHit(BaseModel):
         assay_title (str | None): Assay, e.g. ``TF ChIP-seq``.
         target (str | None): Assay target label, e.g. ``CTCF``.
         biosample (str | None): Biosample term name, e.g. ``K562``.
+        organism (str | None): Source species, e.g. ``Homo sapiens``; comma-joined if several.
         output_type (str | None): File output type, e.g. ``IDR thresholded peaks``.
         assembly (str | None): Genome assembly; comma-joined for experiments with several.
         file_format (str | None): File format, e.g. ``bed``.
@@ -187,6 +207,9 @@ class EncodeSearchHit(BaseModel):
     assay_title: str | None = Field(default=None, title="Assay", description="Assay title")
     target: str | None = Field(default=None, title="Target", description="Assay target label")
     biosample: str | None = Field(default=None, title="Biosample", description="Biosample term name")
+    organism: str | None = Field(
+        default=None, title="Organism", description="Source species, e.g. Homo sapiens; None if not identifiable"
+    )
     output_type: str | None = Field(default=None, title="Output Type", description="File output type")
     assembly: str | None = Field(default=None, title="Assembly", description="Genome assembly")
     file_format: str | None = Field(default=None, title="File Format", description="File format")
@@ -369,27 +392,87 @@ def _raise_for_status(response: Any) -> None:
         raise requests.HTTPError(f"ENCODE search failed: {error}; body={body!r}", response=response) from error
 
 
-def _search(query: EncodeSearchQuery, config: EncodeSearchConfig, session: requests.Session) -> EncodeSearchResult:
-    """Run one search request and parse its hits."""
-    url = _request_url(query, config)
+def _fetch(session: requests.Session, url: str) -> dict[str, Any]:
+    """GET one portal search; the portal's no-match answer (404 with an empty @graph) becomes total 0."""
     response = request_with_retry(
         lambda: session.get(url, headers={"Accept": "application/json"}, timeout=_REQUEST_TIMEOUT_SECONDS),
         retries=_HTTP_RETRIES,
         backoff_seconds=_BACKOFF_SECONDS,
     )
     if response.status_code == 404 and "@graph" in response.text:
-        # The portal answers a search with no matches with 404 and an empty @graph.
-        logger.info("ENCODE search returned no matches: %s", url)
-        return EncodeSearchResult(query=query, request_url=url, total_count=0)
+        return {"total": 0, "@graph": []}
     _raise_for_status(response)
-    payload = response.json()
+    payload: dict[str, Any] = response.json()
+    return payload
+
+
+def _search(query: EncodeSearchQuery, config: EncodeSearchConfig, session: requests.Session) -> EncodeSearchResult:
+    """Run one search request, parse its hits, and warn about filters that match nothing."""
+    url = _request_url(query, config)
+    payload = _fetch(session, url)
     items = payload.get("@graph", [])
+    total = int(payload.get("total", len(items)))
+    if total == 0:
+        logger.info("ENCODE search returned no matches: %s", url)
+    for message in _diagnose(query, config, session, no_hits=total == 0):
+        warnings.warn(message, UserWarning, stacklevel=2)
     return EncodeSearchResult(
         query=query,
         request_url=url,
-        total_count=int(payload.get("total", len(items))),
+        total_count=total,
         hits=[_parse_hit(item) for item in items],
     )
+
+
+def _count_url(config: EncodeSearchConfig, params: list[tuple[str, str]]) -> str:
+    """Build a count-only search URL (no hits returned) for the item type and status filter."""
+    base: list[tuple[str, str]] = [("type", config.item_type)]
+    if config.released_only and "status" not in dict(params):
+        base.append(("status", "released"))
+    return f"{_SEARCH_URL}?{urlencode([*base, *params, ('format', 'json'), ('limit', '0')])}"
+
+
+def _diagnose(
+    query: EncodeSearchQuery, config: EncodeSearchConfig, session: requests.Session, no_hits: bool
+) -> list[str]:
+    """Explain filters whose value matches no item.
+
+    The portal echoes unknown facet names and misspelled values back without complaint, so a typo
+    looks like a real empty result. Each suspect filter is counted on its own: every filter when the
+    search found nothing, and negated filters always, since a misspelled ``key!`` excludes nothing.
+    """
+    suspects = query.filters if no_hits else {key: val for key, val in query.filters.items() if key.endswith("!")}
+    messages: list[str] = []
+    facets: dict[str, list[str]] | None = None
+    for key, value in suspects.items():
+        field = key.removesuffix("!")
+        if int(_fetch(session, _count_url(config, [(field, value)])).get("total", 0)) > 0:
+            continue
+        if facets is None:
+            facets = {
+                facet["field"]: [str(term.get("key")) for term in facet.get("terms") or []]
+                for facet in _fetch(session, _count_url(config, [])).get("facets") or []
+                if isinstance(facet, dict) and facet.get("field")
+            }
+        messages.append(_explain(key, field, value, facets, config))
+    return messages
+
+
+def _explain(key: str, field: str, value: str, facets: dict[str, list[str]], config: EncodeSearchConfig) -> str:
+    """Describe a filter that matches nothing, with likely corrections from the portal's facets."""
+    scope = f"{'released ' if config.released_only else ''}{config.item_type}"
+    if key.endswith("!"):
+        message = f"Filter {key}={value!r} excludes nothing: no {scope} has {field}={value!r}"
+    else:
+        message = f"Filter {field}={value!r} matches no {scope}, so the search cannot return hits"
+    if field in facets:
+        close = _close_matches(value, facets[field])
+        hint = f"did you mean {_either(close)}?" if close else "values must match the portal's terms exactly"
+    else:
+        close = _close_matches(field, list(facets))
+        hint = f"{field!r} is not a {config.item_type} search facet"
+        hint += f"; did you mean {_either(close)}?" if close else ""
+    return f"{message} ({hint})"
 
 
 def _parse_hit(item: dict[str, Any]) -> EncodeSearchHit:
@@ -404,6 +487,7 @@ def _parse_hit(item: dict[str, Any]) -> EncodeSearchHit:
         assay_title=item.get("assay_title"),
         target=_linked_name(item.get("target"), "label"),
         biosample=_linked_name(item.get("biosample_ontology"), "term_name"),
+        organism=_organism(item, assembly),
         output_type=item.get("output_type"),
         assembly=", ".join(assembly) if isinstance(assembly, list) else assembly,
         file_format=item.get("file_format"),
@@ -420,6 +504,40 @@ def _parse_hit(item: dict[str, Any]) -> EncodeSearchHit:
         download_url=f"{_PORTAL_URL}{href}" if href else None,
         portal_url=f"{_PORTAL_URL}{item_path}",
     )
+
+
+def _organism(item: dict[str, Any], assembly: Any) -> str | None:
+    """Return the item's species: from biosamples (experiments), else donor links or assembly (files)."""
+    names = [
+        name
+        for replicate in item.get("replicates") or []
+        if (
+            name := (((replicate.get("library") or {}).get("biosample") or {}).get("organism") or {}).get(
+                "scientific_name"
+            )
+        )
+    ]
+    if not names:
+        donors = [_DONOR_ORGANISMS.get(str(donor).strip("/").split("/")[0]) for donor in item.get("donors") or []]
+        assemblies = [
+            _ASSEMBLY_ORGANISMS.get(str(name))
+            for name in (assembly if isinstance(assembly, list) else [assembly])
+            if name
+        ]
+        # Use a source only if it identifies every species; a partial answer would hide the rest.
+        names = next((found for found in (donors, assemblies) if found and all(found)), [])
+    return ", ".join(dict.fromkeys(str(name) for name in names)) or None
+
+
+def _close_matches(word: str, candidates: list[str]) -> list[str]:
+    """Return up to three candidates resembling ``word``, ignoring case (portal matching is case-sensitive)."""
+    by_lower = {candidate.lower(): candidate for candidate in candidates}
+    return [by_lower[match] for match in difflib.get_close_matches(word.lower(), list(by_lower), n=3, cutoff=0.6)]
+
+
+def _either(options: list[str]) -> str:
+    """Join options as ``'a' or 'b'``."""
+    return " or ".join(repr(option) for option in options)
 
 
 def _linked_name(value: Any, key: str) -> str | None:
