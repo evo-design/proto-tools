@@ -19,6 +19,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    summarize_positions,
     unreadable_positions,
 )
 from proto_tools.tools.tool_registry import tool
@@ -273,6 +274,47 @@ class LigandMPNNSampleOutput(InverseFoldingOutput):
     )
 
 
+def _resolvable_fixed_positions(inp: Any, readable: dict[str, list[int]] | None) -> Any:
+    """Drop fixed positions LigandMPNN's parser never puts in the designed chain.
+
+    AtomWorks moves every ``HETATM`` residue into a non-polymer chain of its own, so a
+    position naming one no longer exists under the chain the caller asked for.
+    ``MPNNInferenceInput._mask_from_ids`` raises on an ID that matches nothing rather than
+    ignoring it, so the whole run fails on what is a satisfiable constraint: the residue is
+    preserved anyway, because the model never redesigns it.
+
+    Residue numbers are not renumbered. The model matches a fixed position by residue id,
+    which staging leaves at the chain's own ordinal, so the ones it can resolve are unchanged.
+
+    Args:
+        inp (Any): One structure input, exposing ``fixed_positions``.
+        readable (dict[str, list[int]] | None): Positions the model designs, per chain ID, or
+            ``None`` for the original implementation, whose parser is not mirrored here.
+
+    Returns:
+        Any: A ``ResidueSelection`` the model can resolve, or ``None`` when nothing is left.
+    """
+    selection = inp.fixed_positions
+    if selection is None or readable is None:
+        return selection
+    resolvable: dict[str, list[int]] = {}
+    for chain_id, positions in selection.chains.items():
+        chain_readable = set(readable.get(chain_id, ()))
+        kept = sorted(set(positions) & chain_readable)
+        dropped = sorted(set(positions) - chain_readable)
+        if dropped:
+            logger.warning(
+                "ligandmpnn-sample: Chain %s, position %s is read as ligand context rather than a "
+                "design position, so it cannot be fixed at the model. The original residue is "
+                "preserved in the output regardless.",
+                chain_id,
+                summarize_positions(inp.structure, chain_id, dropped),
+            )
+        if kept:
+            resolvable[chain_id] = kept
+    return type(selection)(chains=resolvable) if resolvable else None
+
+
 def _fixed_positions_cover_structure(inp: InverseFoldingStructureInput) -> bool:
     """Return whether fixed_positions cover every residue in every structure chain."""
     if inp.fixed_positions is None:
@@ -350,6 +392,8 @@ def run_ligandmpnn_sample(
         all_pmpnn: list[float | None] = []
         all_pdb_strings: list[str | None] = []
         remaining = config.num_sequences_per_structure
+        readable = config.readable_positions(inp)
+        worker_fixed = _resolvable_fixed_positions(inp, readable)
         # Staged once per input and reused across chunks, numbered 1..N per chain so LigandMPNN,
         # which addresses residues by number alone, sees every insertion-coded residue.
         with inp.staged() as staged:
@@ -363,7 +407,7 @@ def run_ligandmpnn_sample(
                     "chains_explicitly_set": inp.chains_to_redesign is not None and not all_positions_fixed,
                     "batch_size": chunk,
                     "temperature": config.temperature,
-                    "fixed_positions": staged.positions(inp.fixed_positions),
+                    "fixed_positions": staged.positions(worker_fixed),
                     "excluded_amino_acids": config.excluded_amino_acids,
                     "seed": base_seed + dispatch_idx,
                     "device": config.device,
@@ -396,7 +440,6 @@ def run_ligandmpnn_sample(
         redesign_ids = set(inp.chain_ids_to_redesign)
         redesigned_ids = set() if _fixed_positions_cover_structure(inp) else redesign_ids
 
-        readable = config.readable_positions(inp)
         preserved = unreadable_positions(readable, inp.structure) if readable is not None else None
         complexes: list[LigandMPNNDesign] = []
         for chain_seqs, recovery, interface_recovery, pmpnn, pdb_string in zip(
