@@ -40,7 +40,7 @@ This tool predicts the structure of multi-component assemblies such as protein-D
 - **`num_samples` draws independent diffusion samples.** OpenDDE draws `num_samples` (default `1`) structures per complex and keeps the best by ranking score, so raising it explores more candidate conformations at proportional cost. Predictions are stochastic; set `seed` for reproducibility.
 - **`num_steps` and `num_cycles` trade accuracy for time.** `num_steps` (default `200`) sets the number of diffusion denoising steps and `num_cycles` (default `10`) sets the recycling iterations; higher values refine the prediction but increase runtime.
 - **`use_template` and `use_rna_msa` enable OpenDDE's extra pipelines.** Both default to `False`; enable `use_template` for OpenDDE's template search and `use_rna_msa` for its RNA MSA pipeline when folding RNA-containing complexes.
-- **Confidence is reported as pLDDT, pTM, ipTM, gPDE, and a ranking score.** `avg_plddt` (0 to 100) is the primary per-structure quality metric; `iptm` is 0.0 for single-chain inputs, and `gpde` is in angstroms. OpenDDE writes only scalar summary confidences, so no per-token PAE matrix is available and the inherited `include_pae_matrix` is ignored.
+- **Confidence is reported as pLDDT, pTM, ipTM, gPDE, and a ranking score.** `avg_plddt` (0 to 100) is the primary per-structure quality metric; `iptm` is 0.0 for single-chain inputs, and `gpde` is in angstroms. Set the inherited `include_pae_matrix=True` to also attach the per-token PAE matrix (`pae`) and its mean (`avg_pae`), both in angstroms.
 
 ## Toolkit Notes
 

@@ -25,8 +25,8 @@ Tools with PyTorch/JAX dependencies use **centralized hardware detection** (`uti
 | `DETECTED_COMPUTE_PLATFORM` | `"cuda"` or `"cpu"` | Hardware platform detected |
 | `DETECTED_DRIVER_VERSION` | `"570"` | NVIDIA driver major version |
 | `DETECTED_CUDA_VERSION` | `"12"` | CUDA toolkit major version |
-| `RECOMMENDED_TORCH_SPEC` | `"torch>=2.10,<3"` | PyTorch version constraint for detected driver |
-| `RECOMMENDED_JAX_SPEC` | `"jax[cuda12]>=0.5,<1"` | JAX version constraint with CUDA plugin |
+| `RECOMMENDED_TORCH_SPEC` | `"torch>=2.8,<3"` | PyTorch version constraint for detected driver |
+| `RECOMMENDED_JAX_SPEC` | `"jax[cuda12]>=0.4.20,<1"` | JAX version constraint with CUDA plugin |
 | `RECOMMENDED_JAX_VARIANT` | `"cuda12"` | JAX CUDA variant (cuda12, cuda13) |
 
 Every tool env is created with `pip` and `uv` (pinned by `UV_VERSION` in `proto_tools/utils/tool_instance.py`, or by the tool's optional `uv_version.txt`; see [uv Version Override](#uv-version-override)), so `setup.sh` calls `uv pip install` directly and never installs uv itself.
@@ -97,14 +97,14 @@ Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibili
 **PyTorch** (driver → torch version):
 - Driver 570+: torch 2.8+ (CUDA 12.8 native support)
 - Driver 550-569: torch 2.5+ (CUDA 12.4 native support)
-- Driver 535-549: torch 2.4-2.6.x (CUDA 12.2, and 2.7+ ships CUDA 12.8 runtime libs)
-- Driver 525-534: torch 2.4-2.6.x (CUDA 12.0-12.1)
+- Driver 535-549: torch 2.4+ (CUDA 12.2, cu126 via forward compat)
+- Driver 525-534: torch 2.4+ (CUDA 12.0-12.1, cu126 via forward compat)
 - Driver &lt;525: torch 2.1-2.3 (CUDA 11.x era)
 
 **JAX** (driver + CUDA → jax version + variant):
 - Driver 525+: jax[cuda12] 0.4.20+ (all CUDA 12.x)
 - Driver 580+: jax[cuda13] 0.4.20+ (CUDA 13.x)
-- Driver &lt;525: jax[cuda11] 0.4.20+ (CUDA 11.x)
+- CUDA &lt;12: jax[cuda11] 0.4.20+ (CUDA 11.x)
 
 See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverage.
 

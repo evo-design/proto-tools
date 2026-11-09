@@ -300,8 +300,7 @@ def run_splice_transformer(
 
     Note:
         - GPU is strongly recommended (CPU inference is very slow)
-        - Context length of 4000bp is recommended for best accuracy
-        - Target length is typically 1000bp but can vary
+        - Context length is fixed at 4000bp per side and target length at 1000bp
         - Each subprocess is fresh (no in-process caching)
     """
     logger.debug("Using local device for SpliceTransformer inference (context_length=%d)", CONTEXT_LENGTH)

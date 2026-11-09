@@ -9,7 +9,7 @@
 
 ## Overview
 
-[Enformer](https://github.com/google-deepmind/deepmind-research/tree/master/enformer) is a deep learning model that predicts [gene expression](https://en.wikipedia.org/wiki/Gene_expression) and chromatin activity directly from DNA sequence, developed by Google DeepMind and Calico Life Sciences. It reads a fixed 196,608 base-pair input window and predicts activity across thousands of genomic measurement tracks, summarized over 896 output bins of 128 base pairs each. This toolkit exposes Enformer through a single registered tool that returns the predicted track activity for one or more sequences.
+[Enformer](https://github.com/google-deepmind/deepmind-research/tree/master/enformer) is a deep learning model that predicts [gene expression](https://en.wikipedia.org/wiki/Gene_expression) and chromatin activity directly from DNA sequence, developed by Google DeepMind and Calico Life Sciences. It reads a fixed 196,608 base-pair input window and predicts activity across thousands of genomic measurement tracks, summarized over 896 output bins of 128 base pairs each. This toolkit exposes Enformer through a prediction tool that returns the predicted track activity for one or more sequences and a gradient tool that differentiates that activity for sequence design.
 
 ## Background
 
@@ -61,7 +61,7 @@ This is the differentiable form of Enformer prediction, intended as an objective
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every Enformer tool in this toolkit (`enformer-prediction`).
+These apply to every Enformer tool in this toolkit (`enformer-prediction`, `enformer-gradient`).
 
 - **Enformer runs on a GPU and downloads its published weights on first use.** The model parameters are retrieved from the hosted `enformer-official-rough` checkpoint the first time the tool runs and are reused on subsequent runs. A CUDA-capable GPU is recommended because the 196,608 base-pair context makes CPU inference slow.
 - **Output coordinates are 0-based with exclusive ends, following the genomics interval convention rather than the 1-based residue numbering used elsewhere in proto-tools.** The `context_start`, `context_end`, `output_start`, and `output_end` fields locate the model window and the output-bin span within the source sequence using this convention.

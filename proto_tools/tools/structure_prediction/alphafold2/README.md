@@ -53,9 +53,9 @@ De novo design driven only by what AlphaFold2 believes about a sequence — maxi
 - **Select quantities with `gradient_terms`.** The protocol offers `plddt`, `pae`, `con`, `exp_res`, `helix`, `rg`, `NC` and `beta_strand`; each returns one `TermGradient` carrying its own value and its own gradient.
 - **Terms are raw quantities, not objectives.** `plddt` is the confidence itself, not a loss, and no weight or direction is folded into its gradient. Combine them downstream with goals and weights.
 - **`helix` and `beta_strand` have no built-in direction.** Lower means more helical contacts or more strand-like i,i+3 spacing, but whether that is wanted depends on the design, so composing them requires an explicit goal.
-- **`positions` restricts a term to part of the designed chain.** `plddt`, `pae`, `con` and `beta_strand` (and `i_con` on the binder tool) take optional 1-indexed `positions`, e.g. the CDRs; without it a term covers its usual region. `beta_strand` also takes `form="out_of_range"`, which scores `-log(1 - P)`.
-- **Contact terms take `num_contacts` and `cutoff`.** `con` (and on the binder tool `i_con` and `fw_i_con`) default to ColabDesign's settings; BindCraft uses 2 within 14 Å for `con` and 2 within 20 Å for `i_con`.
-- **`rg` and `NC` shape the designed chain.** `rg` is the radius of gyration beyond `2.38 * N**0.365` and `NC` the terminal CA distance beyond 7 Å, as in BindCraft and Germinal; both are offered by all three tools.
+- **`positions` restricts a term to part of the designed chain.** `plddt`, `pae`, `con`, `helix` and `beta_strand` (and `i_con` on the binder tools) take optional 1-indexed `positions`, e.g. the CDRs; without it a term covers its usual region. `beta_strand` also takes `form="out_of_range"`, which scores `-log(1 - P)`.
+- **Contact terms take `num_contacts` and `cutoff`.** `con` (and on the binder tools `i_con` and `fw_i_con`) default to ColabDesign's settings; BindCraft uses 2 within 14 Å for `con` and 2 within 20 Å for `i_con`.
+- **`rg` and `NC` shape the designed chain.** `rg` is the radius of gyration beyond `2.38 * N**0.365` and `NC` the terminal CA distance beyond 7 Å, as in BindCraft and Germinal; both are offered by the hallucination tool and the two binder tools.
 - **One sequence per call; this tool is not an optimization loop.** Drive it from an optimizer, or call it repeatedly.
 
 ### AlphaFold2 FixBB Gradient (`alphafold2-fixbb-gradient`)
@@ -69,7 +69,7 @@ Sequence redesign for a known fold: driving a sequence toward a target backbone 
 #### Usage Tips
 
 - **The logits must cover exactly the reference chain.** The designed length comes from the reference, so a matrix of a different length is rejected rather than padded; supply one row per residue of `reference_chain`.
-- **`rmsd`, `dgram_cce` and `fape` exist only here.** They measure agreement with the reference, so they are meaningless without one and are absent from the other two tools.
+- **`rmsd` exists only here, and `dgram_cce` and `fape` only here and on the binder redesign tool.** They measure agreement with the reference, so they are meaningless without one and are absent from the hallucination and de novo binder tools.
 - **`rg`, `NC` and `beta_strand` are not offered here.** They are shape priors for protocols that have no reference: compactness, termini separation and strand spacing are already fixed by the backbone this tool is matching, so they add nothing a compact reference does not already say, and they pull against `rmsd`/`dgram_cce`/`fape` when the reference is elongated. Use them in the hallucination and binder tools.
 - **`reference_chain` defaults to `"A"`.** Name the chain whose backbone the sequence should reproduce.
 
@@ -83,7 +83,7 @@ Gradient-based binder design against a chosen epitope, optimizing interface cont
 
 #### Usage Tips
 
-- **`i_con`, `i_pae`, `i_ptm` and `fw_i_con` exist only here.** They describe the binder-target interface, so they require the two-chain setup this protocol builds.
+- **`i_con`, `i_pae`, `i_ptm` and `fw_i_con` exist only on the two binder tools.** They describe the binder-target interface, so they require the two-chain setup this protocol builds.
 - **`fw_i_con` measures framework contact.** It is the `i_con` objective restricted to the 1-indexed binder `framework_positions` it is given, so higher means the framework sits farther from the target.
 - **`target_hotspot` focuses the interface.** Supply ColabDesign-style residue selections on the target to bias the binder toward a specific epitope.
 - **The target's template is masked by default.** `rm_target_seq` and `rm_template_ic` default to `True` so the target's own sequence and inter-chain contacts do not leak into the prediction; `use_multimer` defaults to `True`.
@@ -112,7 +112,7 @@ These four gradient tools return one raw gradient per quantity, which the caller
 - **Pick the tool that matches the design.** De novo with no reference → `alphafold2-hallucination-gradient`. Sequence against a known backbone → `alphafold2-fixbb-gradient`. Binder against a target → `alphafold2-binder-gradient`; an existing template binder chain → `alphafold2-binder-redesign-gradient`.
 
 ## Toolkit Notes
-bin
+
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
 These apply to every AlphaFold2 tool in this toolkit (`alphafold2-prediction`, `alphafold2-hallucination-gradient`, `alphafold2-fixbb-gradient`, `alphafold2-binder-gradient`, `alphafold2-binder-redesign-gradient`).

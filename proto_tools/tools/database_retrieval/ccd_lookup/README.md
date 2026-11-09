@@ -9,7 +9,7 @@
 
 ## Overview
 
-CCD Lookup wraps [`pdbeccdutils`](https://github.com/PDBeurope/ccdutils), the PDBe Python library for the [wwPDB Chemical Component Dictionary (CCD)](https://www.wwpdb.org/data/ccd). Given a CCD code (e.g. `ATP`) or a SMILES string, the `ccd-lookup` tool returns a `Ligands` collection of standard `Fragment` objects, plus a parallel list of `CcdEnrichment` records carrying formula, descriptors, parent component, [RDKit](https://www.rdkit.org/) physicochemical properties, optional UniChem cross-references, and PDB structures using the ligand. It runs on CPU and is fully offline by default.
+CCD Lookup wraps [`pdbeccdutils`](https://github.com/PDBeurope/ccdutils), the PDBe Python library for the [wwPDB Chemical Component Dictionary (CCD)](https://www.wwpdb.org/data/ccd). Given a CCD code (e.g. `ATP`) or a SMILES string, the `ccd-lookup` tool returns a `Ligands` collection of standard `Fragment` objects, plus a parallel list of `CcdLookupResult` records carrying formula, descriptors, parent component, [RDKit](https://www.rdkit.org/) physicochemical properties, optional UniChem cross-references, and PDB structures using the ligand. It runs on CPU and is fully offline by default.
 
 ## Background
 
@@ -27,7 +27,7 @@ Cross-references via [UniChem](https://www.ebi.ac.uk/unichem/) link CCD entries 
 
 ### CCD Lookup (`ccd-lookup`)
 
-Enriches wwPDB Chemical Component Dictionary entries. Accepts CCD codes (such as `"ATP"`) or SMILES strings, in mixed batches, and returns a `CcdLookupOutput` containing a `Ligands` collection plus parallel `CcdEnrichment` records: formula, descriptors, parent component, RDKit physicochemical properties, optional UniChem cross-references, and optional PDB usage.
+Enriches wwPDB Chemical Component Dictionary entries. Accepts CCD codes (such as `"ATP"`) or SMILES strings, in mixed batches, and returns a `CcdLookupOutput` containing a `Ligands` collection plus parallel `CcdLookupResult` records: formula, descriptors, parent component, RDKit physicochemical properties, optional UniChem cross-references, and optional PDB usage.
 
 #### Applications
 
@@ -36,7 +36,7 @@ Use this for user-facing enrichment workflows such as notebooks, scripts, dashbo
 #### Usage Tips
 
 - **For per-fragment SMILES-to-CCD lookups, use `proto_tools.entities.ligands.ccd_utils.map_smiles_to_ccd_code` instead.** It runs the same lookup in the current Python process, without the subprocess startup this tool incurs, so when you are not using the persistent tool context it can be much faster.
-- **A SMILES with no CCD match returns `ccd_code=None` rather than an error.** Check `enrichment.ccd_code is not None` before treating an entry as found. `result.num_unresolved` gives the batch-level count.
+- **A SMILES with no CCD match returns `ccd_code=None` rather than an error.** Check `result.results[i].fragment.ccd_code is not None` before treating an entry as found. `result.num_unresolved` gives the batch-level count.
 - **`parent_ccd_code` is populated only when the CCD entry declares a canonical parent component.** Modified residues like `SEP` (phosphoserine, parent `SER`), `MSE` (selenomethionine, parent `MET`), or `PTR` (phosphotyrosine, parent `TYR`) carry a parent code. Most small-molecule ligands have no parent and return `None`.
 - **`pdb_structures` can be very large.** For common cofactors and ions (`HEM`, `ATP`, `NAG`, `MG`, `ZN`) the list runs to many thousands of PDB IDs. It may be helpful to process it in chunks rather than loading every entry at once when you pass it to a downstream step.
 

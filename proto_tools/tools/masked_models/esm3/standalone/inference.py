@@ -26,7 +26,7 @@ ESM3_MODEL_CHECKPOINTS = Literal["esm3_sm_open_v1",]
 class ESM3Model:
     """ESM3 model for protein sequence embeddings, logits, and structure prediction.
 
-    Multi-modal protein language model from EvolutionaryScale.
+    Multi-modal protein language model from Biohub.
     """
 
     def __init__(self, model_checkpoint: ESM3_MODEL_CHECKPOINTS = "esm3_sm_open_v1"):

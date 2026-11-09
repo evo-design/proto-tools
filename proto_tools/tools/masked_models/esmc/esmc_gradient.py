@@ -79,10 +79,10 @@ class ESMCGradientOutput(GradientOutput):
     """ESM C masked PLL output; gradient is optional in forward-only mode.
 
     Attributes:
-        results (list[GradientResult]): One per input item, in input order, each holding that
-            item's gradient w.r.t. its logits (``None`` in forward-only mode), its mean negative
-            log-likelihood over AA positions, and its log-likelihood, perplexity, sequence length
-            and objective details.
+        results (list[GradientResult]): One per input item, in input order. Contains a single
+            masked-PLL term carrying that item's mean negative log-likelihood over AA positions
+            and its raw gradient w.r.t. its logits (``None`` in forward-only mode), plus
+            log-likelihood, perplexity, sequence length and objective details in ``metrics``.
         vocab (list[str]): Amino-acid column ordering for the input logits.
     """
 
