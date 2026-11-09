@@ -77,14 +77,17 @@ def _one_chain(residues: list[tuple[str, bool, tuple[str, ...]]]) -> Structure:
 # Each case names a structure and the positions every toolkit's parser reads from it. The
 # expectations are derived from each upstream parser's own source, not from observed output.
 CASES: dict[str, tuple[Structure, dict[str, list[int]]]] = {
-    # ColabDesign rewrites its MODRES table to ATOM, biotite maps MSE to M and FAMPNN lists
-    # it as an NCAA, but AtomWorks has already moved every HETATM to a non-polymer chain.
+    # Every model reads selenomethionine, by a different route: ColabDesign rewrites its
+    # MODRES table to ATOM, biotite maps MSE to M, FAMPNN lists it as an NCAA, and LigandMPNN
+    # relies on AtomWorks' own MSE-to-MET conversion, which only applies once
+    # LIGANDMPNN_ATOM_RECORD_RESIDUES has staged it as ATOM so the HETATM split leaves it in
+    # the polymer chain.
     "mse_written_as_hetatm": (
         _one_chain([("ALA", False, BACKBONE), ("MSE", True, BACKBONE), ("GLY", False, BACKBONE)]),
         {
             "esm-if1-sample": [1, 2, 3],
             "fampnn-sample": [1, 2, 3],
-            "ligandmpnn-sample": [1, 3],
+            "ligandmpnn-sample": [1, 2, 3],
             "proteinmpnn-sample": [1, 2, 3],
         },
     ),
@@ -228,6 +231,23 @@ def test_a_short_design_is_placed_back_around_the_skipped_residue(tool: str):
     assert len(chain.sequence) == 228
     assert chain.sequence[63] == "X", "the chromophore keeps its input identity"
     assert [(m.position, m.modification_code) for m in chain.modifications] == [(64, "CRO")]
+
+
+def test_selenomethionine_is_read_by_every_toolkit():
+    """The one modified residue all four agree on, each reaching it a different way.
+
+    LigandMPNN only reaches it because ``ligandmpnn-sample`` stages ``MSE`` as ``ATOM``:
+    AtomWorks renames it to ``MET`` itself, but that runs after the HETATM chain split, so
+    left as ``HETATM`` it is read as ligand context and the packed structure comes back with
+    a synthetic chain the input has no IDs for.
+    """
+    from proto_tools.tools.inverse_folding.ligandmpnn._readable import LIGANDMPNN_ATOM_RECORD_RESIDUES
+
+    assert "MSE" in LIGANDMPNN_ATOM_RECORD_RESIDUES
+    structure, expected = CASES["mse_written_as_hetatm"]
+    for tool in RULES:
+        assert expected[tool] == [1, 2, 3], f"{tool} should read the selenomethionine"
+        assert RULES[tool](structure)["A"] == [1, 2, 3]
 
 
 def test_every_migrated_toolkit_declares_a_rule():
