@@ -9,6 +9,7 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import Field
 
+from proto_tools.tools.inverse_folding.esm_if1._readable import esm_if1_readable_positions
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -16,6 +17,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    unreadable_positions,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField
@@ -59,6 +61,17 @@ class ESMIF1SampleConfig(InverseFoldingConfig):
         description="Sampling temperature; lower = greedier, higher = more diverse",
         examples=[0.5, 1.0, 2.0],
     )
+
+    def readable_positions(self, inp: Any) -> dict[str, list[int]]:
+        """Positions ESM-IF1 reads, which excludes residues biotite cannot name.
+
+        Args:
+            inp (Any): One structure input.
+
+        Returns:
+            dict[str, list[int]]: Ascending readable positions per chain ID.
+        """
+        return esm_if1_readable_positions(inp.structure)
 
 
 class ESMIF1DesignMetrics(Metrics):
@@ -244,6 +257,8 @@ def run_esm_if1_sample(
 
         # ESM-IF1 complexes exactly one chain; standalone falls back to chain_ids[0].
         target = inp.chain_ids_to_redesign[0]
+        readable = config.readable_positions(inp)
+        preserved = unreadable_positions(readable, inp.structure)
         complexes = [
             ESMIF1Design.from_design(
                 inp.structure,
@@ -251,6 +266,8 @@ def run_esm_if1_sample(
                 {target},
                 tool="esm-if1-sample",
                 include_ligands=False,
+                readable_positions=readable,
+                fixed_positions=preserved,
                 metrics=ESMIF1DesignMetrics(**metrics),
             )
             for designed_seq, metrics in zip(all_seqs, all_metrics, strict=True)

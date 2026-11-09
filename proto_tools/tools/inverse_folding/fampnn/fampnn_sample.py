@@ -11,12 +11,14 @@ from typing import Any, ClassVar
 from pydantic import Field
 
 from proto_tools.entities.structures import ResidueSelection, Structure
+from proto_tools.tools.inverse_folding.fampnn._readable import fampnn_readable_positions
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
     InverseFoldingConfig,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    unreadable_positions,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -144,6 +146,17 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
         gt=0.0,
         description="Step scale (eta) for sidechain diffusion",
     )
+
+    def readable_positions(self, inp: Any) -> dict[str, list[int]]:
+        """Positions FAMPNN reads, which excludes HETATM residues outside its NCAA table.
+
+        Args:
+            inp (Any): One structure input.
+
+        Returns:
+            dict[str, list[int]]: Ascending readable positions per chain ID.
+        """
+        return fampnn_readable_positions(inp.structure)
 
 
 class FAMPNNDesignMetrics(Metrics):
@@ -341,6 +354,8 @@ def run_fampnn_sample(
                 dispatch_idx += 1
                 remaining -= chunk  # type: ignore[operator]
 
+        readable = config.readable_positions(inp)
+        preserved = unreadable_positions(readable, inp.structure)
         complexes: list[FAMPNNDesign] = []
         for chain_seqs, psce, pdb in zip(all_chain_seqs, all_psce, all_pdbs, strict=True):
             if len(chain_seqs) != len(chain_ids):
@@ -363,6 +378,8 @@ def run_fampnn_sample(
                     redesign_set,
                     tool="fampnn-sample",
                     include_ligands=False,
+                    readable_positions=readable,
+                    fixed_positions=preserved,
                     structure=structure,
                     metrics=FAMPNNDesignMetrics(avg_psce=avg_psce, psce=psce),
                 )

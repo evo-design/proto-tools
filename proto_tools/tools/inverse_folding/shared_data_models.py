@@ -211,6 +211,29 @@ def validate_residue_mapping(readable: dict[str, list[int]], structure: Any) -> 
             raise ValueError(f"residue mapping for chain {chain_id} falls outside its {lengths[chain_id]} residues")
 
 
+def unreadable_positions(readable: dict[str, list[int]], structure: Any) -> dict[str, list[int]]:
+    """Polymer positions a model's rule does not read, per chain, ascending.
+
+    The complement of a ``readable_positions`` mapping. These are the positions whose input
+    residue is preserved rather than designed, so passing them as ``fixed_positions`` to
+    :meth:`DesignedComplex.from_design` is what lets a modification annotation survive there.
+
+    Args:
+        readable (dict[str, list[int]]): Positions the model processes, per chain ID.
+        structure (Any): The structure the mapping describes.
+
+    Returns:
+        dict[str, list[int]]: Skipped positions per chain; chains with none are omitted.
+    """
+    skipped: dict[str, list[int]] = {}
+    for chain_id, residues in structure.get_chain_residue_atoms().items():
+        processed = set(readable.get(chain_id, ()))
+        missing = [position for position in range(1, len(residues) + 1) if position not in processed]
+        if missing:
+            skipped[chain_id] = missing
+    return skipped
+
+
 class InverseFoldingConfig(BaseConfig):
     """Base configuration for inverse folding models.
 

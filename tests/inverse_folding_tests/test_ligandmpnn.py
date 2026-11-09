@@ -141,8 +141,10 @@ def test_ligandmpnn_sample_carries_input_ligands(monkeypatch):
     """LigandMPNN conditions on the input's ligands, so each design keeps them as undesigned context."""
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        # Five residues, not the chain's eight: AtomWorks moves every HETATM to a non-polymer
+        # chain, so MSE, SEP and DAL are read as ligand context and hold no design position.
         return {
-            "chain_sequences": [[{"id": "A", "sequence": "MKTAYIAK"}]],
+            "chain_sequences": [[{"id": "A", "sequence": "MKTAY"}]],
             "metrics": [{"sequence_recovery": 1.0, "ligand_interface_sequence_recovery": math.nan, "pmpnn": 0.5}],
             "pdb_strings": [None],
         }
