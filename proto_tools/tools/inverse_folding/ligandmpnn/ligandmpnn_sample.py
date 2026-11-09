@@ -11,6 +11,7 @@ from typing import Any, ClassVar, Literal
 from pydantic import Field, field_validator, model_validator
 
 from proto_tools.entities.structures import Structure
+from proto_tools.tools.inverse_folding.ligandmpnn._readable import ligandmpnn_readable_positions
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -18,6 +19,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    unreadable_positions,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
@@ -151,6 +153,24 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
                     f"{', '.join(misused)} only apply when model_type='original'; got model_type={self.model_type!r}."
                 )
         return self
+
+    def readable_positions(self, inp: Any) -> dict[str, list[int]] | None:
+        """Positions LigandMPNN designs, which excludes every HETATM residue.
+
+        Only the Foundry path has a declared rule. ``model_type='original'`` parses the
+        structure with the original implementation's own ``parse_PDB``, whose behaviour is
+        not mirrored here, so it keeps strict length matching.
+
+        Args:
+            inp (Any): One structure input.
+
+        Returns:
+            dict[str, list[int]] | None: Ascending readable positions per chain ID, or
+                ``None`` for the original implementation.
+        """
+        if self.model_type in LIGANDMPNN_LEGACY_MODEL_TYPES:
+            return None
+        return ligandmpnn_readable_positions(inp.structure)
 
 
 class LigandMPNNDesignMetrics(Metrics):
@@ -376,6 +396,8 @@ def run_ligandmpnn_sample(
         redesign_ids = set(inp.chain_ids_to_redesign)
         redesigned_ids = set() if _fixed_positions_cover_structure(inp) else redesign_ids
 
+        readable = config.readable_positions(inp)
+        preserved = unreadable_positions(readable, inp.structure) if readable is not None else None
         complexes: list[LigandMPNNDesign] = []
         for chain_seqs, recovery, interface_recovery, pmpnn, pdb_string in zip(
             all_chain_sequences, all_recovery, all_interface_recovery, all_pmpnn, all_pdb_strings, strict=True
@@ -391,6 +413,8 @@ def run_ligandmpnn_sample(
                     redesigned_ids,
                     tool="ligandmpnn-sample",
                     include_ligands=True,
+                    readable_positions=readable,
+                    fixed_positions=preserved,
                     metrics=LigandMPNNDesignMetrics(
                         sequence_recovery=(recovery if math.isfinite(recovery) else None),
                         # Foundry returns NaN when no ligand interface; route to None so the conditional key is dropped.
