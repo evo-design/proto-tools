@@ -28,6 +28,7 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
     FoldseekSearchMode,
     _parse_m8_archive,
     _parse_m8_text,
+    _remote_row_to_m8,
     _require_linux_x86_64_for_gpu,
     _submit,
 )
@@ -416,7 +417,7 @@ def _remote_multimer_search(
             backoff_seconds=_BACKOFF_SECONDS,
         )
         archive_response.raise_for_status()
-        hits = _parse_m8_archive(archive_response.content, FoldseekMultimerHit)
+        hits = _parse_m8_archive(archive_response.content, FoldseekMultimerHit, row_to_m8=_remote_row_to_m8)
         return FoldseekMultimerSearchOutput(
             ticket_id=ticket_id,
             hits=hits,

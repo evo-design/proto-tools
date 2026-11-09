@@ -13,6 +13,7 @@ import json
 import logging
 import platform
 import tarfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, ClassVar, Literal, TypeVar
 
@@ -520,7 +521,7 @@ def _remote_search(inputs: FoldseekSearchInput, config: FoldseekSearchConfig) ->
             backoff_seconds=_BACKOFF_SECONDS,
         )
         archive_response.raise_for_status()
-        hits = _parse_m8_archive(archive_response.content, FoldseekHit)
+        hits = _parse_m8_archive(archive_response.content, FoldseekHit, row_to_m8=_remote_row_to_m8)
         return FoldseekSearchOutput(
             ticket_id=ticket_id,
             hits=hits,
@@ -601,15 +602,61 @@ def _submit(
     return ticket_id
 
 
-def _parse_m8_text(text: str, database: str, hit_class: type[_HitT]) -> list[_HitT]:
+# search.foldseek.com (MMseqs2-App backend/worker.go) writes its own layout rather than M8, for
+# both easy-search and easy-complexsearch:
+#   query,theader,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,prob,evalue,bits,qlen,tlen,
+#   qaln,taln,tca,tseq[,complexassignid,complexqtmscore,complexttmscore,complexu,complext][,taxid,taxname]
+# It has prob before evalue, and theader is the target ID followed by its description.
+_REMOTE_PROB_COLUMN = 10
+
+
+def _remote_row_to_m8(row: list[str]) -> list[str]:
+    """Rearrange one search.foldseek.com result row into the 12 standard M8 columns.
+
+    Drops ``prob``, keeps only the target ID from ``theader``, and leaves out the columns past
+    ``bits``, so remote hits carry no metrics.
+
+    Args:
+        row (list[str]): One tab-split row in the server layout above.
+
+    Returns:
+        list[str]: The row in M8 column order.
+    """
+    target_id = row[1].split(maxsplit=1)[0] if row[1].strip() else row[1]
+    return [
+        row[0],
+        target_id,
+        *row[2:_REMOTE_PROB_COLUMN],
+        *row[_REMOTE_PROB_COLUMN + 1 : _REMOTE_PROB_COLUMN + 3],
+    ]
+
+
+def _parse_m8_text(
+    text: str,
+    database: str,
+    hit_class: type[_HitT],
+    row_to_m8: Callable[[list[str]], list[str]] | None = None,
+) -> list[_HitT]:
     """Parse standard or locally extended BLAST M8 text into hits of ``hit_class``.
 
     Rows with fewer than 12 columns, non-numeric fields, or out-of-range
     coordinates are skipped (logged at warning level).
+
+    Args:
+        text (str): M8 text, one tab-separated hit per line.
+        database (str): Database the hits came from.
+        hit_class (type[_HitT]): Hit model to build each row into.
+        row_to_m8 (Callable[[list[str]], list[str]] | None): Rearranges a row whose
+            columns are in another layout into M8 order first; ``None`` takes rows as M8.
+
+    Returns:
+        list[_HitT]: One hit per well-formed row.
     """
     hits: list[_HitT] = []
     for line in text.splitlines():
         row = line.split("\t")
+        if row_to_m8 is not None and len(row) >= _M8_STANDARD_COLUMNS:
+            row = row_to_m8(row)
         if len(row) < _M8_STANDARD_COLUMNS:
             continue
         try:
@@ -620,12 +667,16 @@ def _parse_m8_text(text: str, database: str, hit_class: type[_HitT]) -> list[_Hi
     return hits
 
 
-def _parse_m8_archive(archive_bytes: bytes, hit_class: type[_HitT]) -> list[_HitT]:
+def _parse_m8_archive(
+    archive_bytes: bytes,
+    hit_class: type[_HitT],
+    row_to_m8: Callable[[list[str]], list[str]] | None = None,
+) -> list[_HitT]:
     """Extract per-database M8 files from a Foldseek result tarball and parse them.
 
     The archive contains one file per queried database, named ``alis_{db}.m8``.
     Raises ValueError if the bytes aren't a valid gzipped tar (e.g. the server
-    returned an HTML error page).
+    returned an HTML error page). ``row_to_m8`` is passed to :func:`_parse_m8_text`.
     """
     hits: list[_HitT] = []
     try:
@@ -638,7 +689,7 @@ def _parse_m8_archive(archive_bytes: bytes, hit_class: type[_HitT]) -> list[_Hit
                 if extracted is None:
                     continue
                 text = extracted.read().decode("utf-8", errors="replace")
-                hits.extend(_parse_m8_text(text, database, hit_class))
+                hits.extend(_parse_m8_text(text, database, hit_class, row_to_m8))
     except (tarfile.TarError, EOFError) as e:
         raise ValueError(f"Foldseek result is not a valid tar.gz archive (server error?): {e}") from e
     return hits
