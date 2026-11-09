@@ -10,8 +10,6 @@
 > netMHCpan cannot be auto-downloaded and the license forbids redistribution, so in order to use these tools you must accept terms to download the software. The agreement is shown on the [Linux download request form](https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=4.2&packageversion=4.2estatic&platform=Linux), also reachable from the **Downloads** tab of the [netMHCpan 4.2 service page](https://services.healthtech.dtu.dk/services/NetMHCpan-4.2/). After agreeing to terms of use, you will be able to submit a request to download the software. An institutional e-mail address is required, and a download link is e-mailed to you once approved.
 >
 > The license is free for publicly funded academic, educational, and research institutions. Commercial use requires a separate license from <health-software@dtu.dk>. The 4.2 archive bundles its network weights and threshold tables, so the one download is all you need. See [SETUP.md](SETUP.md) for setup steps. Please cite Nilsson et al. (2025).
->
-> Section 7 also bars publishing results of benchmark tests run on the software to a third party without DTU's written consent, so this toolkit sets `output_sharing: false` and its [example notebook](examples/example.ipynb) ships unexecuted: run it yourself to see the scores. See [notes/licensing.md](../../../../notes/licensing.md).
 
 ## Overview
 

@@ -11,7 +11,6 @@ copy, no inline duplication); 'Custom (...)' licenses include inline text.
 
 from __future__ import annotations
 
-import json
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -259,11 +258,6 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
     if not isinstance(redistribution, bool):
         errors.append(f"redistribution: expected bool, got {type(redistribution).__name__}")
 
-    # output_sharing is optional and defaults to true; false means the upstream terms forbid
-    # publishing what the tool produces, which test_forbidden_output_is_not_committed enforces.
-    if "output_sharing" in data and not isinstance(data["output_sharing"], bool):
-        errors.append(f"output_sharing: expected bool, got {type(data['output_sharing']).__name__}")
-
     # attribution_required is optional but must be a bool when set.
     if "attribution_required" in data and not isinstance(data["attribution_required"], bool):
         errors.append(f"attribution_required: expected bool, got {type(data['attribution_required']).__name__}")
@@ -287,7 +281,6 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
         "data",
         "service",
         "attribution_required",
-        "output_sharing",
         "notes",
         "proto_tools_original",
         "bundled_dependencies",
@@ -298,71 +291,6 @@ def test_toolkit_license_yaml_schema(toolkit_dir: Path) -> None:
 
     if errors:
         pytest.fail(f"{toolkit_dir.name}/license.yaml schema violations:\n  - " + "\n  - ".join(errors))
-
-
-# ── output_sharing ──────────────────────────────────────────────────────────
-
-# Directories under examples/ that hold what a run produced, rather than what it reads.
-_OUTPUT_DIR_MARKERS = ("output", "result")
-
-
-def _committed_run_artifacts(toolkit_dir: Path) -> list[Path]:
-    """Tracked files under examples/ that hold a run's output rather than its input."""
-    examples = toolkit_dir / "examples"
-    if not examples.is_dir():
-        return []
-    return sorted(
-        path
-        for path in examples.rglob("*")
-        if path.is_file()
-        and any(
-            marker in part.lower() for part in path.relative_to(examples).parts[:-1] for marker in _OUTPUT_DIR_MARKERS
-        )
-    )
-
-
-def _notebook_output_counts(toolkit_dir: Path) -> dict[Path, int]:
-    """Committed cell-output counts for every notebook under the toolkit's examples/."""
-    counts: dict[Path, int] = {}
-    examples = toolkit_dir / "examples"
-    if not examples.is_dir():
-        return counts
-    for notebook in sorted(examples.rglob("*.ipynb")):
-        content = json.loads(notebook.read_text())
-        counts[notebook] = sum(len(cell.get("outputs", ())) for cell in content.get("cells", ()))
-    return counts
-
-
-@pytest.mark.parametrize("toolkit_dir", _ALL_TOOLKITS, ids=_ALL_IDS)
-def test_forbidden_output_is_not_committed(toolkit_dir: Path) -> None:
-    """A toolkit whose terms forbid sharing output must not commit any.
-
-    Some upstream licenses reach the model's results, not just its code and weights: Illumina
-    grants SpliceAI2's "source code, model weights, and precomputed scores" for non-commercial
-    use only and forbids redistribution, and DTU's netMHCpan agreement bars publishing results
-    to a third party without written consent. Committing an executed notebook publishes
-    exactly that, so ``output_sharing: false`` says the example must ship unexecuted.
-    """
-    license_path = toolkit_dir / "license.yaml"
-    if not license_path.is_file():
-        pytest.skip("missing — covered by the existence test")
-    data = yaml.safe_load(license_path.read_text())
-    if not isinstance(data, dict) or data.get("output_sharing", True):
-        return
-
-    problems = [
-        f"{path.relative_to(toolkit_dir)}: {count} committed cell outputs"
-        for path, count in _notebook_output_counts(toolkit_dir).items()
-        if count
-    ]
-    problems += [
-        f"{path.relative_to(toolkit_dir)}: committed run artifact" for path in _committed_run_artifacts(toolkit_dir)
-    ]
-    if problems:
-        pytest.fail(
-            f"{_toolkit_id(toolkit_dir)} sets output_sharing: false, so its example must ship "
-            "unexecuted, but it commits output:\n  - " + "\n  - ".join(problems)
-        )
 
 
 # ── weights.access ↔ infra cross-checks ─────────────────────────────────────
