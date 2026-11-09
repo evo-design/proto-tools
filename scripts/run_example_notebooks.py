@@ -187,12 +187,17 @@ def _build_redaction_rules() -> list[tuple[re.Pattern[str], str]]:
     into this repo (rewritten repo-relative), any user's home directory, the
     running user's own home and username, and the author field embedded in
     generated structure files (CIF/PDB).
+
+    The repo-relative rewrite drops the checkout directory's own name along with
+    the absolute prefix. That name is whatever the clone happens to be called, so
+    keeping it would leak it; ``tests/style_consistency_tests/test_production_identity.py``
+    rejects some of the names it can take.
     """
     repo = re.escape(REPO_ROOT.name)
     rules: list[tuple[re.Pattern[str], str]] = [
-        # Absolute path descending into this repo -> repo-relative. The lookbehind
-        # leaves URLs like https://github.com/org/<repo>/ untouched.
-        (re.compile(r"(?<![\w:/])(?:/[\w.+-]+)+/" + repo + r"/"), REPO_ROOT.name + "/"),
+        # Absolute path descending into this repo -> repo-relative, checkout name and
+        # all. The lookbehind leaves URLs like https://github.com/org/<repo>/ untouched.
+        (re.compile(r"(?<![\w:/])(?:/[\w.+-]+)+/" + repo + r"/"), ""),
         # Any user's home directory.
         (re.compile(r"/home/[^/\s\"']+"), "/home/user"),
         (re.compile(r"/Users/[^/\s\"']+"), "/Users/user"),
