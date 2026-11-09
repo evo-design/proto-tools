@@ -822,6 +822,7 @@ class AlphaFold2Model:
         sample_models: bool,
         gradient_terms: list[str] | None,
         seed: int | None,
+        dropout: bool = True,
         backprop: bool = True,
         include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
@@ -843,6 +844,8 @@ class AlphaFold2Model:
 
         opt = af_model.opt
         opt["num_recycles"] = num_recycles
+        # ColabDesign defaults dropout on for design; predict() runs without it.
+        opt["dropout"] = dropout
         opt.update(_relaxation_opt(temperature=temperature, soft=soft, hard=hard))
         if seed is not None:
             af_model.set_seed(seed)
@@ -914,6 +917,7 @@ class AlphaFold2Model:
         recycle_mode: str = "last",
         model_num: int = 1,
         sample_models: bool = False,
+        dropout: bool = True,
         use_multimer: bool = False,
         seed: int | None = None,
         compute_gradient: bool = True,
@@ -944,6 +948,7 @@ class AlphaFold2Model:
             recycle_mode (str): ColabDesign recycle mode.
             model_num (int): Which AF2 parameter set to run.
             sample_models (bool): Whether to sample the parameter set at random.
+            dropout (bool): Keep ColabDesign's dropout on during the pass.
             use_multimer (bool): Use multimer parameters.
             seed (int | None): Seed for the model's RNG.
             compute_gradient (bool): Run the backward passes.
@@ -1001,6 +1006,7 @@ class AlphaFold2Model:
             sample_models=sample_models,
             gradient_terms=loss_keys,
             seed=seed,
+            dropout=dropout,
             backprop=compute_gradient,
             include_pae_matrix=include_pae_matrix,
         )
@@ -1064,6 +1070,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 recycle_mode=input_dict.get("recycle_mode", "last"),
                 model_num=input_dict.get("model_num", 1),
                 sample_models=input_dict.get("sample_models", False),
+                dropout=input_dict.get("dropout", True),
                 use_multimer=input_dict.get("use_multimer", False),
                 seed=input_dict["seed"],
                 compute_gradient=input_dict.get("compute_gradient", True),
