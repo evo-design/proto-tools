@@ -2,11 +2,13 @@
 
 The model reads the sequence around a transcription start site. Submit at least
 9,198 bp with the TSS at least 4,599 bp from each end, plus ``tss_index`` unless
-the sequence is exactly 9,198 bp. Longer input is welcome: each model's
-``bio_spec.recommended_flank_bp`` says how many bp to fetch on each side of the
-TSS, and how much it reads is its own. The part of the submission the model
-used is echoed back as ``scored_window``. A TSS too close to either end is
-rejected rather than padded.
+the sequence is exactly 9,198 bp. That is the floor, not a target. Read
+``GET /v1/tasks/expression/models`` (public) and take F, the largest
+``bio_spec.recommended_flank_bp`` among the listed models, with 2F within
+``request_max_bp``; submit 2F bp in transcript orientation with the TSS at
+offset F and ``tss_index=F``. One such sequence serves every listed model. The
+part of the submission the model used is echoed back as ``scored_window``. A
+TSS too close to either end is rejected rather than padded.
 
 Two properties are easy to get wrong:
 

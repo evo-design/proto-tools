@@ -107,7 +107,7 @@ Use this to estimate the transcriptional output of a locus or a designed promote
 
 #### Usage Tips
 
-- **Give it enough flank.** Submit at least 9,198 bp with the TSS at least 4,599 bp from each end, plus `tss_index` unless the sequence is exactly 9,198 bp. Each model's `bio_spec.recommended_flank_bp` says how much to fetch on each side of the TSS. A TSS too close to either end is rejected rather than padded.
+- **Give it enough flank.** Submit at least 9,198 bp with the TSS at least 4,599 bp from each end, plus `tss_index` unless the sequence is exactly 9,198 bp. That is the floor, not a target: longer-window models read much further. Read `GET /v1/tasks/expression/models` (public, no key) and take F, the largest `bio_spec.recommended_flank_bp` among the listed models, with 2F within `request_max_bp`. Submit 2F bp in transcript orientation with the TSS at offset F (0-based: plus strand `[tss - F, tss + F)`, minus strand `(tss - F, tss + F]` reverse-complemented) and set `tss_index` to F. One such sequence serves every listed model, so a new default needs no change. A TSS too close to either end is rejected rather than padded.
 - **`description` is conditioning text, not a label.** It is fed to the model, so rewording it changes the prediction. Hold it fixed across runs you intend to compare.
 - **An in-range but wrong `tss_index` still scores.** It simply scores a different window, so the tool reads the applied window back from the response as `scored_window` rather than assuming it. Its width depends on the model.
 - **The sequence is never reverse-complemented.** Submit minus-strand genes in transcript orientation.
@@ -124,7 +124,7 @@ Use this when the TSS positions are not known in advance — annotating and scor
 
 - **Minimum input is 1,000 bp**, and the ceiling is the endpoint's own 500,000 bp, which is not the expression model's window.
 - **This is the only endpoint with a delivery rule.** A synchronous request above 50,000 bp is refused; the tool switches to polling automatically.
-- **Genes too close to a sequence boundary are skipped**, with the reason reported, because there is not enough flanking sequence for a full window.
+- **Each gene's window takes as much flank as the expression model can use**, limited by what the submitted sequence holds, so a longer region around the genes scores better. Near a boundary the window is padded with `N` on the short side; a gene whose window would be more than half padding is skipped, with the reason reported.
 - **JSON only.** Unlike the predict endpoints, it declares no text output format.
 
 ## Toolkit Notes
