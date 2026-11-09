@@ -369,7 +369,7 @@ def run_fampnn_sample(
                     f"does not match per-residue pSCE length {len(psce)}"
                 )
             sequences = {cid: seq for cid, seq in zip(chain_ids, chain_seqs, strict=True) if cid in redesign_set}
-            structure = staged.restore(pdb, source="fampnn-sample")
+            structure = staged.restore(pdb, source="fampnn-sample", readable_positions=readable)
             avg_psce = statistics.fmean(psce) if psce else 0.0
             complexes.append(
                 FAMPNNDesign.from_design(
