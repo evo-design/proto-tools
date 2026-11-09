@@ -822,7 +822,7 @@ class AlphaFold2Model:
         sample_models: bool,
         gradient_terms: list[str] | None,
         seed: int | None,
-        dropout: bool = True,
+        dropout: bool,
         backprop: bool = True,
         include_pae_matrix: bool = False,
     ) -> dict[str, Any]:
@@ -844,7 +844,7 @@ class AlphaFold2Model:
 
         opt = af_model.opt
         opt["num_recycles"] = num_recycles
-        # ColabDesign defaults dropout on for design; predict() runs without it.
+        # Set on every call: the model is cached, and ColabDesign's design default is dropout on.
         opt["dropout"] = dropout
         opt.update(_relaxation_opt(temperature=temperature, soft=soft, hard=hard))
         if seed is not None:
@@ -917,7 +917,7 @@ class AlphaFold2Model:
         recycle_mode: str = "last",
         model_num: int = 1,
         sample_models: bool = False,
-        dropout: bool = True,
+        dropout: bool,
         use_multimer: bool = False,
         seed: int | None = None,
         compute_gradient: bool = True,
@@ -1070,7 +1070,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 recycle_mode=input_dict.get("recycle_mode", "last"),
                 model_num=input_dict.get("model_num", 1),
                 sample_models=input_dict.get("sample_models", False),
-                dropout=input_dict.get("dropout", True),
+                dropout=input_dict["dropout"],
                 use_multimer=input_dict.get("use_multimer", False),
                 seed=input_dict["seed"],
                 compute_gradient=input_dict.get("compute_gradient", True),
