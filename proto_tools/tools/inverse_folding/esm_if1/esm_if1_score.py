@@ -10,6 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from proto_tools.entities.structures import SingleChainSelection, Structure
+from proto_tools.tools.inverse_folding.esm_if1._readable import esm_if1_readable_positions
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
@@ -21,39 +22,6 @@ from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import BaseToolInput, InputField
 
 logger = logging.getLogger(__name__)
-
-# Three-letter residue codes biotite's ProteinSequence.convert_letter_3to1 can
-# convert. Mirrors the standalone's filter so wrapper-side length validation
-# matches the count the model will actually consume.
-_KNOWN_AA_3LETTER: frozenset[str] = frozenset(
-    {
-        "ALA",
-        "ARG",
-        "ASN",
-        "ASP",
-        "CYS",
-        "GLU",
-        "GLN",
-        "GLY",
-        "HIS",
-        "ILE",
-        "LEU",
-        "LYS",
-        "MET",
-        "PHE",
-        "PRO",
-        "SER",
-        "THR",
-        "TRP",
-        "TYR",
-        "VAL",
-        "ASX",
-        "GLX",
-        "UNK",
-        "SEC",
-        "MSE",
-    }
-)
 
 
 # ============================================================================
@@ -153,9 +121,7 @@ class ESMIF1ScoringConfig(BaseConfig):
 # ============================================================================
 def _model_visible_chain_length(structure: Structure, target_chain: str) -> int:
     """Count residues in ``target_chain`` that the standalone's filter will keep."""
-    structure.gemmi_struct.setup_entities()
-    chain = structure.gemmi_struct[0][target_chain]
-    return sum(1 for res in chain.get_polymer() if res.name in _KNOWN_AA_3LETTER)
+    return len(esm_if1_readable_positions(structure).get(target_chain, ()))
 
 
 def example_input() -> Any:
