@@ -44,6 +44,18 @@ instance name). Each `DeviceAllocation` records `toolkit`, `device_ids`,
 - `AllocationType.PERSISTENT`. A long-lived worker. Evictable by LRU.
 - `AllocationType.TRANSIENT`. A one-shot lease (see [Leases](#device-leases-for-one-shot-calls)). Non-evictable, auto-released.
 
+A `ToolInstance` owns at most one worker, so each instance holds its own
+allocation. Its name is the instance's cache key when it has one (`"esm2"`,
+`"esm2_1"`). An uncached instance gets a unique `"<toolkit>#<n>"`: a direct
+`ToolInstance(toolkit)`, or a `persist_tool` nested inside one that already holds
+the toolkit's default slot. The name is fixed at the instance's first device
+request and released under it at shutdown. Two instances never share a name, so a
+second same-toolkit worker on a busy GPU is a real conflict and evicts the first
+(see [LRU eviction](#lru-eviction)), rather than starting beside it unseen. On an
+`Exclusive_Process` GPU that second worker could not create a CUDA context at all.
+To reuse a worker, pass the same instance (`instance=`, or its cache key) rather
+than creating another.
+
 `get_device_status()` returns the full picture. It reports `available_devices`,
 `allocations` (name → device, ages, type), `offload_strategy`,
 `allow_multiple_per_device`, and per-GPU `gpu_memory` (used/free/total GB), and it is
