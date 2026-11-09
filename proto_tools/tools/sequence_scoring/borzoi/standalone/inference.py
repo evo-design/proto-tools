@@ -193,11 +193,11 @@ class BorzoiModel:
         device: str = "cuda",
         verbose: bool = False,
     ) -> dict[str, Any]:
-        """Weighted track-and-bin objective gradient for relaxed positions in a Borzoi context.
+        """Per-term track-and-bin activity gradients for relaxed positions in a Borzoi context.
 
         The context is one-hot encoded, the relaxed distribution is written into the designed
-        positions, and the objective is a weighted sum of mean track activity over each term's
-        bin span. Only the designed positions carry gradient; the rest of the context is fixed.
+        positions, and each term's mean track activity over its bin span is differentiated on its
+        own. Only the designed positions carry gradient; the rest of the context is fixed.
 
         Args:
             sequence: Full ``BORZOI_CONTEXT`` bp context window.

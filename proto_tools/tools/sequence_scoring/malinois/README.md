@@ -58,7 +58,7 @@ These apply to every Malinois tool in this toolkit (`malinois-score`, `malinois-
 
 - **Requires a GPU.** Both tools load a PyTorch Malinois checkpoint and run most practically on CUDA.
 - **Weights are provisioned automatically.** By default, the standalone worker downloads the CODA Zenodo artifact into the managed model cache and verifies its MD5 checksum.
-- **The gradient tool is a single evaluation.** It returns one loss and optional gradient for the provided logits; run it from an optimizer for iterative design.
+- **The gradient tool is a single evaluation.** It returns each requested cell's raw activity and optional gradient for the provided logits; run it from an optimizer for iterative design.
 
 ## References
 

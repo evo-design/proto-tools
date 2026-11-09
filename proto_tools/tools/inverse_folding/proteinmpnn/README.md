@@ -93,8 +93,8 @@ Use this when ProteinMPNN is one term in a larger optimization over a continuous
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every ProteinMPNN tool in this toolkit (`proteinmpnn-sample`, `proteinmpnn-score`, `proteinmpnn-gradient`).
+These apply to every ProteinMPNN tool in this toolkit (`proteinmpnn-sample`, `proteinmpnn-sample-homooligomer`, `proteinmpnn-score`, `proteinmpnn-gradient`).
 
 - **GPU recommended; CPU works but is slower.** ProteinMPNN is a small model and runs on CPU, but a GPU is far faster when sampling or scoring many sequences. Model weights (a few hundred MB across variants) download automatically on first use.
-- **Reproducibility.** `proteinmpnn-sample` and `proteinmpnn-gradient` are stochastic; set `seed` for reproducible runs.
-- **Multi-chain sequences are "/"-delimited.** Designs spanning multiple chains are returned as a single string with chains separated by `/` (for example `"MASCQT/EVQLVE"`).
+- **Reproducibility.** `proteinmpnn-sample`, `proteinmpnn-sample-homooligomer` and `proteinmpnn-gradient` are stochastic; set `seed` for reproducible runs.
+- **Multi-chain designs come back chain by chain.** A design spanning several chains is returned as a complex holding one entry per chain, read through `design.chains` or `design.chain_sequence_map()`, not as one delimited string.

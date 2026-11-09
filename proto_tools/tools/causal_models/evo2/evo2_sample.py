@@ -270,9 +270,9 @@ def run_evo2_sample(
 
     Returns:
         Evo2SampleOutput: Structured output containing:
+            - ``results``: One ``Evo2Sample`` per prompt with ``sequence``, optional ``logits``,
+              and an optional worker-local ``kv_cache`` handle
             - ``sequences``: List of generated DNA sequences
-            - ``logits``: Optional per-position logits for each sequence
-            - ``kv_caches``: Optional worker-local KV cache handles for continuing generation
             - Metadata about generation parameters and execution mode
 
     Examples:

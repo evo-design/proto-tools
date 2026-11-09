@@ -692,7 +692,7 @@ def run_esmfold(
             sequences are empty.
         RuntimeError: If model loading or prediction fails, or if GPU memory is
             insufficient even after batching.
-        ImportError: If required dependencies (``esm``, ``torch``, ``biotite``) are not installed.
+        ImportError: If required dependencies (``transformers``, ``torch``, ``biopython``) are not installed.
 
     See Also:
         - ESMFold paper: https://doi.org/10.1126/science.ade2574

@@ -9,7 +9,7 @@
 
 ## Overview
 
-Puffin is a sequence-based deep learning model for transcription initiation that predicts per-base initiation signal from DNA and decomposes the prediction into a small set of learned promoter motifs. This toolkit exposes a fast prediction path (`puffin-prediction`) and a gradient-based motif-decomposition path (`puffin-interpretation`) over the same checkpoint.
+Puffin is a sequence-based deep learning model for transcription initiation that predicts per-base initiation signal from DNA and decomposes the prediction into a small set of learned promoter motifs. This toolkit exposes a fast prediction path (`puffin-prediction`), a gradient-based motif-decomposition path (`puffin-interpretation`), and a differentiable track-signal objective (`puffin-gradient`) over the same checkpoint.
 
 ## Background
 
@@ -69,11 +69,11 @@ This is the differentiable form of Puffin prediction, intended as an objective i
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every Puffin tool in this toolkit (`puffin-prediction`, `puffin-interpretation`).
+These apply to every Puffin tool in this toolkit (`puffin-prediction`, `puffin-interpretation`, `puffin-gradient`).
 
-- **GPU recommended but not required.** Both tools run on CPU; `puffin-interpretation` is materially slower than `puffin-prediction` on either device because it backpropagates through every output position and motif.
+- **GPU recommended but not required.** All three tools run on CPU; `puffin-interpretation` is materially slower than `puffin-prediction` on either device because it backpropagates through every output position and motif.
 - **Sequence input only.** The upstream CLI's coordinate / region / FASTA-file modes require an `hg38.fa` reference and are intentionally not wrapped; callers extract DNA themselves and pass it as a string.
-- **Both tools share one persistent worker.** They dispatch against the same `puffin` toolkit and load the Puffin model once per worker process; switching between prediction and interpretation does not reload weights.
+- **All three tools share one persistent worker.** They dispatch against the same `puffin` toolkit and load the Puffin model once per worker process; switching between prediction and interpretation does not reload weights.
 
 ## References
 
