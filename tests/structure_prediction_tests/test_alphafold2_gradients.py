@@ -555,3 +555,45 @@ def test_alphafold2_binder_redesign_gradient_benchmark(request: pytest.FixtureRe
 
     _assert_gradient_result(result, expected_terms=["plddt", "dgram_cce"], length=len(binder))
     assert result.results[0].terms[0].term_value > 0
+
+
+@pytest.mark.parametrize("dropout", [True, False])
+def test_dropout_reaches_the_colabdesign_model(dropout: bool) -> None:
+    """ColabDesign defaults dropout on, so the worker must set it explicitly before run()."""
+    from proto_tools.tools.structure_prediction.alphafold2.standalone import inference as af2_inference
+
+    class _StopAfterRun(Exception):
+        pass
+
+    seen: dict[str, Any] = {}
+
+    class FakeDesignModel:
+        def __init__(self) -> None:
+            self.opt: dict[str, Any] = {"dropout": not dropout}
+            self._params = {"seq": np.zeros((1, 3, 20), dtype=np.float32)}
+            self._args: dict[str, Any] = {}
+
+        def set_seed(self, seed: int) -> None:
+            pass
+
+        def run(self, **kwargs: Any) -> None:
+            seen["dropout"] = self.opt["dropout"]
+            raise _StopAfterRun
+
+    model = af2_inference.AlphaFold2Model()
+    model._jnp = np
+    with pytest.raises(_StopAfterRun):
+        model._run_gradient(
+            FakeDesignModel(),
+            logits=[[0.0] * 20] * 3,
+            temperature=1.0,
+            soft=1.0,
+            hard=0.0,
+            num_recycles=0,
+            model_num=1,
+            sample_models=False,
+            gradient_terms=None,
+            seed=0,
+            dropout=dropout,
+        )
+    assert seen["dropout"] is dropout

@@ -506,6 +506,8 @@ class AlphaFold2DesignGradientConfig(GradientConfig):
             gradient.
         model_num (int): Which AlphaFold2 parameter set to run.
         sample_models (bool): Draw the parameter set at random instead of using ``model_num``.
+        dropout (bool): Keep ColabDesign's dropout on during the gradient pass. ``False`` makes
+            the terms deterministic for a fixed seed and match the forward prediction.
         include_pae_matrix (bool): Attach the full per-residue PAE matrix to the metrics.
         excluded_amino_acids (list[AminoAcid] | None): Amino acids the softmax branch may not
             choose at any designed position, applied as ColabDesign's ``rm_aa`` bias. The raw-input
@@ -527,6 +529,11 @@ class AlphaFold2DesignGradientConfig(GradientConfig):
     model_num: int = ConfigField(title="Model Number", default=1, ge=1, le=5, description="AlphaFold2 parameter set")
     sample_models: bool = ConfigField(
         title="Sample Models", default=False, description="Draw the parameter set at random"
+    )
+    dropout: bool = ConfigField(
+        title="Dropout",
+        default=True,
+        description="ColabDesign dropout during the gradient pass; False makes terms match forward prediction",
     )
     include_pae_matrix: bool = ConfigField(
         title="Include PAE Matrix", default=False, description="Attach the full per-residue PAE matrix"
@@ -648,6 +655,7 @@ def dispatch_design_gradient(
             "recycle_mode": config.recycle_mode,
             "model_num": config.model_num,
             "sample_models": config.sample_models,
+            "dropout": config.dropout,
             "seed": config.seed,
             "compute_gradient": config.compute_gradient,
             "device": config.device,

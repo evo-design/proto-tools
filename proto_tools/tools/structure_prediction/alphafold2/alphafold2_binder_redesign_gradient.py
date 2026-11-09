@@ -258,6 +258,8 @@ class AlphaFold2BinderRedesignGradientConfig(AlphaFold2DesignGradientConfig):
         model_num (int): Inherited parameter set; see :class:`AlphaFold2DesignGradientConfig`.
         sample_models (bool): Inherited random parameter choice; see
             :class:`AlphaFold2DesignGradientConfig`.
+        dropout (bool): Inherited gradient-pass dropout switch; see
+            :class:`AlphaFold2DesignGradientConfig`.
         include_pae_matrix (bool): Inherited PAE matrix switch; see
             :class:`AlphaFold2DesignGradientConfig`.
         excluded_amino_acids (list[AminoAcid] | None): Inherited softmax-branch exclusions; see
