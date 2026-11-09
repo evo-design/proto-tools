@@ -17,6 +17,8 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    summarize_positions,
+    to_model_numbering,
     unreadable_positions,
 )
 from proto_tools.tools.tool_registry import tool
@@ -177,6 +179,42 @@ def example_input() -> Any:
     )
 
 
+def _worker_fixed_positions(inp: Any, readable: dict[str, list[int]]) -> Any:
+    """Renumber the caller's fixed positions into the numbering ESM-IF1 addresses.
+
+    The model never sees a residue its parser skipped, and the sequence it holds is numbered
+    from 1 with no gaps for the skipped ones. A caller's position therefore has to be
+    renumbered before it names the same residue to the model, and a position the model does
+    not read is dropped: the residue keeps its input identity through ``readable_positions``
+    at reconstruction instead.
+
+    Args:
+        inp (Any): One structure input, exposing ``fixed_positions``.
+        readable (dict[str, list[int]]): Positions the model reads, per chain ID.
+
+    Returns:
+        Any: A ``ResidueSelection`` in the model's numbering, or ``None`` when nothing is left.
+    """
+    selection = inp.fixed_positions
+    if selection is None:
+        return None
+    renumbered: dict[str, list[int]] = {}
+    for chain_id, positions in selection.chains.items():
+        chain_readable = readable.get(chain_id, [])
+        kept = to_model_numbering(chain_readable, positions)
+        dropped = sorted(set(positions) - set(chain_readable))
+        if dropped:
+            logger.warning(
+                "esm-if1-sample: Chain %s, position %s cannot be fixed because ESM-IF1's parser "
+                "does not read it. The original residue is preserved in the output regardless.",
+                chain_id,
+                summarize_positions(inp.structure, chain_id, dropped),
+            )
+        if kept:
+            renumbered[chain_id] = kept
+    return type(selection)(chains=renumbered) if renumbered else None
+
+
 @tool(
     key="esm-if1-sample",
     label="ESM-IF1 Sampling",
@@ -227,6 +265,9 @@ def run_esm_if1_sample(
     ):
         all_seqs, all_metrics = [], []
         remaining = config.num_sequences_per_structure
+        readable = config.readable_positions(inp)
+        preserved = unreadable_positions(readable, inp.structure)
+        worker_fixed = _worker_fixed_positions(inp, readable)
         # Staged once per input and reused across chunks, numbered 1..N per chain so ESM-IF1,
         # which addresses residues by number alone, sees every insertion-coded residue.
         with inp.staged() as staged:
@@ -242,7 +283,7 @@ def run_esm_if1_sample(
                     "device": config.device,
                     "weights_variant": config.weights_variant,
                     "verbose": config.verbose,
-                    "fixed_positions": staged.positions(inp.fixed_positions),
+                    "fixed_positions": staged.positions(worker_fixed),
                 }
                 result = ToolInstance.dispatch(
                     "esm_if1",
@@ -257,8 +298,6 @@ def run_esm_if1_sample(
 
         # ESM-IF1 complexes exactly one chain; standalone falls back to chain_ids[0].
         target = inp.chain_ids_to_redesign[0]
-        readable = config.readable_positions(inp)
-        preserved = unreadable_positions(readable, inp.structure)
         complexes = [
             ESMIF1Design.from_design(
                 inp.structure,

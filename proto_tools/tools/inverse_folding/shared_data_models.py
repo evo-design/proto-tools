@@ -8,7 +8,7 @@ import csv
 import json
 import logging
 from abc import ABC
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -232,6 +232,50 @@ def unreadable_positions(readable: dict[str, list[int]], structure: Any) -> dict
         if missing:
             skipped[chain_id] = missing
     return skipped
+
+
+def flat_readable_positions(readable: dict[str, list[int]], structure: Any) -> list[int]:
+    """The positions a model reads, numbered across the whole structure, in chain order.
+
+    A model that skips residues numbers what it reads from 1 with no gaps, so its *n*-th
+    position is this list's *n*-th entry. Entry ``i`` is 1-indexed over every polymer residue
+    of the structure, counting chains in the order ``get_chain_residue_atoms`` reports them,
+    which is the order the parser sees them in the staged file.
+
+    Args:
+        readable (dict[str, list[int]]): Positions the model reads, per chain ID, each
+            1-indexed within its own chain.
+        structure (Any): The structure the mapping describes.
+
+    Returns:
+        list[int]: Structure-wide 1-indexed positions, ascending.
+    """
+    flat: list[int] = []
+    offset = 0
+    for chain_id, residues in structure.get_chain_residue_atoms().items():
+        flat.extend(offset + position for position in readable.get(chain_id, ()))
+        offset += len(residues)
+    return flat
+
+
+def to_model_numbering(readable: Sequence[int], positions: Iterable[int]) -> list[int]:
+    """Renumber positions from the structure's numbering into the model's own.
+
+    The inverse of indexing into ``readable``. A model that skips residues numbers what it
+    reads from 1 with no gaps, so a caller's position has to be renumbered before it can
+    name the same residue to the model. Positions the model does not read have no
+    counterpart and are dropped: it cannot act on a residue it never saw.
+
+    Args:
+        readable (Sequence[int]): Positions the model reads, ascending, in the caller's
+            numbering. Either one chain's or a whole structure's, matching ``positions``.
+        positions (Iterable[int]): Positions in the caller's numbering.
+
+    Returns:
+        list[int]: The same residues in the model's 1-indexed numbering, ascending.
+    """
+    rank = {position: index for index, position in enumerate(readable, start=1)}
+    return sorted(rank[position] for position in positions if position in rank)
 
 
 class InverseFoldingConfig(BaseConfig):
