@@ -101,6 +101,35 @@ def test_restoring_a_short_output_without_the_mapping_is_rejected():
         staged.restore(model_output, source="test")
 
 
+def test_staging_can_write_a_modified_residue_as_an_atom_record():
+    """A parser that keys on the record type loses a modified residue unless it is staged ATOM.
+
+    LigandMPNN is that parser: AtomWorks moves every ``HETATM`` into a non-polymer chain
+    before its own ``MSE``-to-``MET`` conversion can run, so selenomethionine is read as
+    ligand context and the packed structure comes back with a chain the input cannot name.
+    """
+    from proto_tools.entities.structures.structure import Structure as _Structure
+
+    source = Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb"
+    structure = _Structure.from_file(source)
+
+    with staged_structure(structure) as staged:
+        default = staged.path.read_text()
+    with staged_structure(structure, atom_record_residues=frozenset({"MSE"})) as staged:
+        rewritten = staged.path.read_text()
+
+    def record_types(text: str, residue: str) -> set[str]:
+        return {
+            line[:6].strip()
+            for line in text.splitlines()
+            if line.startswith(("ATOM", "HETATM")) and line[17:20].strip() == residue
+        }
+
+    assert record_types(default, "MSE") == {"HETATM"}, "the input's record type is kept by default"
+    assert record_types(rewritten, "MSE") == {"ATOM"}, "and rewritten only for the named residues"
+    assert record_types(rewritten, "SEP") == {"HETATM"}, "an unnamed modified residue is untouched"
+
+
 def test_staged_ensemble_stages_every_conformer(insertion_coded_structure, staging_structure):
     """Conformers are staged alongside the primary, which carries the maps."""
     with staged_ensemble([insertion_coded_structure, staging_structure]) as (staged, conformer_paths):

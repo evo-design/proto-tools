@@ -55,6 +55,13 @@ LIGANDMPNN_RESIDUE_NAMES = frozenset(
 #: mpnn/pipelines/mpnn.py:127-133: MPNN needs the backbone plus the carbonyl oxygen.
 LIGANDMPNN_BACKBONE_ATOMS = frozenset({"N", "CA", "C", "O"})
 
+#: Residue names ``ligandmpnn_sample`` stages as ``ATOM`` so gate 1 does not lose them.
+#: Only ``MSE`` earns a place: AtomWorks renames it to ``MET`` itself
+#: (``convert_mse_to_met`` at ``atomworks/io/parser.py:72``), so once the chain split leaves
+#: it in the polymer it clears gate 2 as methionine. Any other modified residue would clear
+#: gate 1 only to be atomized by name, which is where it ends up anyway.
+LIGANDMPNN_ATOM_RECORD_RESIDUES = frozenset({"MSE"})
+
 
 def ligandmpnn_readable_positions(structure: Structure) -> dict[str, list[int]]:
     """Positions LigandMPNN designs, 1-indexed, per chain.
@@ -69,7 +76,7 @@ def ligandmpnn_readable_positions(structure: Structure) -> dict[str, list[int]]:
     for chain_id, residues in structure.get_chain_residue_atoms().items():
         positions = []
         for position, residue in enumerate(residues, start=1):
-            if residue.is_hetatm:
+            if residue.is_hetatm and residue.name not in LIGANDMPNN_ATOM_RECORD_RESIDUES:
                 continue  # gate 1: split into a non-polymer chain, so read only as context
             if residue.name not in LIGANDMPNN_RESIDUE_NAMES:
                 continue  # gate 2: atomized by name, so read only as context

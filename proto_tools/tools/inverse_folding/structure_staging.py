@@ -118,7 +118,9 @@ class StagedStructure:
 
 
 @contextlib.contextmanager
-def staged_structure(structure: Structure) -> Iterator[StagedStructure]:
+def staged_structure(
+    structure: Structure, *, atom_record_residues: frozenset[str] = frozenset()
+) -> Iterator[StagedStructure]:
     """Materialize one structure as a sequentially numbered temp PDB file.
 
     PDB rather than CIF because these models read chain IDs from a PDB's chain column, and
@@ -126,16 +128,45 @@ def staged_structure(structure: Structure) -> Iterator[StagedStructure]:
 
     Args:
         structure (Structure): The structure to stage.
+        atom_record_residues (frozenset[str]): Residue names to write as ``ATOM`` rather than
+            ``HETATM``; see :func:`staged_ensemble`.
 
     Yields:
         StagedStructure: The staged file and the maps needed to read output back.
     """
-    with staged_ensemble([structure]) as (staged, _):
+    with staged_ensemble([structure], atom_record_residues=atom_record_residues) as (staged, _):
         yield staged
 
 
+def _as_atom_records(pdb_content: str, residue_names: frozenset[str]) -> str:
+    """Rewrite the named residues' ``HETATM`` lines to ``ATOM``.
+
+    A modified amino acid is part of the polymer, but the PDB convention writes it as
+    ``HETATM``. A parser that recovers it from a table of known names does not care, while one
+    that keys on the record type alone reads it as a ligand instead. This lets a toolkit stage
+    the names its model would otherwise lose, so the same residue is read the same way across
+    toolkits.
+
+    Args:
+        pdb_content (str): The staged PDB text.
+        residue_names (frozenset[str]): Residue names to write as ``ATOM``.
+
+    Returns:
+        str: The same text with those residues' record type rewritten.
+    """
+    if not residue_names:
+        return pdb_content
+    # Columns 1-6 are the record name and 18-20 the residue name.
+    return "".join(
+        "ATOM  " + line[6:] if line.startswith("HETATM") and line[17:20].strip() in residue_names else line
+        for line in pdb_content.splitlines(keepends=True)
+    )
+
+
 @contextlib.contextmanager
-def staged_ensemble(structures: list[Structure]) -> Iterator[tuple[StagedStructure, list[Path]]]:
+def staged_ensemble(
+    structures: list[Structure], *, atom_record_residues: frozenset[str] = frozenset()
+) -> Iterator[tuple[StagedStructure, list[Path]]]:
     """Materialize an ensemble to sequentially numbered temp PDB files, primary conformer first.
 
     Each file is renumbered by ``Structure.renumbered_sequentially``, so a 1-indexed position
@@ -143,6 +174,9 @@ def staged_ensemble(structures: list[Structure]) -> Iterator[tuple[StagedStructu
 
     Args:
         structures (list[Structure]): The ensemble, primary conformer first.
+        atom_record_residues (frozenset[str]): Residue names to write as ``ATOM`` rather than
+            ``HETATM``, for a model whose parser reads the record type rather than a table of
+            known modified residues.
 
     Yields:
         tuple[StagedStructure, list[Path]]: The primary conformer as a
@@ -157,6 +191,7 @@ def staged_ensemble(structures: list[Structure]) -> Iterator[tuple[StagedStructu
         chain_maps = []
         for index, structure in enumerate(structures):
             pdb_content, chain_map = structure.renumbered_sequentially()
+            pdb_content = _as_atom_records(pdb_content, atom_record_residues)
             path = Path(tmp_dir) / f"structure_{index}.pdb"
             path.write_text(pdb_content)
             paths.append(path)

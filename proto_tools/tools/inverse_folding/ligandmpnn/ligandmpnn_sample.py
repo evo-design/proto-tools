@@ -11,7 +11,10 @@ from typing import Any, ClassVar, Literal
 from pydantic import Field, field_validator, model_validator
 
 from proto_tools.entities.structures import Structure
-from proto_tools.tools.inverse_folding.ligandmpnn._readable import ligandmpnn_readable_positions
+from proto_tools.tools.inverse_folding.ligandmpnn._readable import (
+    LIGANDMPNN_ATOM_RECORD_RESIDUES,
+    ligandmpnn_readable_positions,
+)
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -396,7 +399,7 @@ def run_ligandmpnn_sample(
         worker_fixed = _resolvable_fixed_positions(inp, readable)
         # Staged once per input and reused across chunks, numbered 1..N per chain so LigandMPNN,
         # which addresses residues by number alone, sees every insertion-coded residue.
-        with inp.staged() as staged:
+        with inp.staged(atom_record_residues=LIGANDMPNN_ATOM_RECORD_RESIDUES) as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 all_positions_fixed = _fixed_positions_cover_structure(inp)

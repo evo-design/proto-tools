@@ -131,17 +131,22 @@ class InverseFoldingStructureInput(StructureInputBase):
         return self.structure.structure_pdb
 
     @contextlib.contextmanager
-    def staged(self) -> Iterator[StagedStructure]:
+    def staged(self, *, atom_record_residues: frozenset[str] = frozenset()) -> Iterator[StagedStructure]:
         """Stage this input's structure for the model, numbered 1..N per chain.
 
         Translate this input's own selections with the yielded object, since staging renumbers
         residues and may shorten chain IDs:
         ``staged.chains(self.chain_ids_to_redesign)`` and ``staged.positions(self.fixed_positions)``.
 
+        Args:
+            atom_record_residues (frozenset[str]): Residue names to write as ``ATOM`` rather
+                than ``HETATM``, for a model that reads the record type rather than a table of
+                known modified residues.
+
         Yields:
             StagedStructure: The staged file and the maps needed to read model output back.
         """
-        with staged_structure(self.structure) as staged:
+        with staged_structure(self.structure, atom_record_residues=atom_record_residues) as staged:
             yield staged
 
 
