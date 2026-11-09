@@ -81,7 +81,14 @@ class StagedStructure:
             return None
         return {self.chain_map[chain_id]: list(positions) for chain_id, positions in selection.chains.items()}
 
-    def restore(self, content: str, *, source: str, structure_format: Literal["pdb", "cif"] = "pdb") -> Structure:
+    def restore(
+        self,
+        content: str,
+        *,
+        source: str,
+        structure_format: Literal["pdb", "cif"] = "pdb",
+        readable_positions: dict[str, list[int]] | None = None,
+    ) -> Structure:
         """Put the input structure's chain IDs and residue numbering back on model output.
 
         Args:
@@ -89,12 +96,25 @@ class StagedStructure:
             source (str): ``source`` label for the returned structure.
             structure_format (Literal["pdb", "cif"]): Format of ``content``, which the
                 returned structure keeps where it can.
+            readable_positions (dict[str, list[int]] | None): Per chain, the 1-indexed input
+                positions the model reads, from ``Config.readable_positions``. A model that
+                skips a residue writes a structure covering only the positions it read, so
+                its residues are matched against those IDs rather than the whole chain's.
+                ``None`` expects one output residue per input residue.
 
         Returns:
             Structure: The output structure in the input structure's numbering.
         """
         written = Structure(structure=content, structure_format=structure_format, source=source)
-        return written.with_residue_ids(self.residue_ids, chain_map=self.chain_map)
+        residue_ids = self.residue_ids
+        if readable_positions is not None:
+            residue_ids = {
+                chain_id: [ids[position - 1] for position in readable_positions[chain_id]]
+                if chain_id in readable_positions
+                else ids
+                for chain_id, ids in residue_ids.items()
+            }
+        return written.with_residue_ids(residue_ids, chain_map=self.chain_map)
 
 
 @contextlib.contextmanager

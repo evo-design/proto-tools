@@ -423,7 +423,11 @@ def run_ligandmpnn_sample(
                         ),
                         pmpnn=(pmpnn if pmpnn is not None and math.isfinite(pmpnn) else None),
                     ),
-                    structure=(staged.restore(pdb_string, source="ligandmpnn-sample") if pdb_string else None),
+                    structure=(
+                        staged.restore(pdb_string, source="ligandmpnn-sample", readable_positions=readable)
+                        if pdb_string
+                        else None
+                    ),
                 )
             )
         design_sets.append(LigandMPNNDesignSet(complexes=complexes))
