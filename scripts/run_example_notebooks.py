@@ -142,16 +142,28 @@ class Snapshotter:
             self._browser = self._playwright = None
 
 
+#: Warnings that describe the state of the machine that ran a notebook rather than the tool's
+#: behaviour. A reader of the committed output cannot act on them and they name local cache
+#: paths, so they are dropped here while the registry still raises them for a real caller.
+LOCAL_ONLY_WARNING_SUBSTRINGS = (
+    "not migrating",
+    "Setup files changed for",
+    "Removing environment at",
+    "env registrations from",
+)
+
+
 def _ignored_warning_substrings() -> tuple[str, ...]:
     """Warning substrings the registry suppresses at runtime, mirrored for sanitizing.
 
     Notebooks executed before a substring was added to the registry's ignore list
     carry the warning baked into saved stderr output. Re-using the same list lets
-    ``--sanitize-only`` scrub them without a full GPU re-run.
+    ``--sanitize-only`` scrub them without a full GPU re-run. The machine-specific
+    warnings in :data:`LOCAL_ONLY_WARNING_SUBSTRINGS` are dropped alongside them.
     """
     from proto_tools.tools.tool_registry import IGNORED_WARNING_SUBSTRINGS
 
-    return tuple(IGNORED_WARNING_SUBSTRINGS)
+    return tuple(IGNORED_WARNING_SUBSTRINGS) + LOCAL_ONLY_WARNING_SUBSTRINGS
 
 
 def _scrub_warning_lines(text: object, ignored: tuple[str, ...]) -> tuple[object, int]:
