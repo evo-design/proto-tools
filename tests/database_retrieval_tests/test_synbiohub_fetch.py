@@ -2,7 +2,7 @@
 
 import os
 import xml.etree.ElementTree as ET
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -281,15 +281,15 @@ def test_parses_design_across_download_and_public_hosts(monkeypatch):
     assert design.roles == ["SO:0000804"]
     assert design.sequence == "AAAGGATGCATGCC"
     assert design.topology == "circular"
-    assert design.modified == datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)
+    assert design.modified == datetime(2015, 8, 31, 4, 7, 34, tzinfo=timezone.utc)
 
 
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        ("2015-08-31T04:07:34Z", datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)),
-        ("2015-08-31T04:07:34", datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)),
-        ("2015-08-31T06:07:34+02:00", datetime(2015, 8, 31, 4, 7, 34, tzinfo=UTC)),
+        ("2015-08-31T04:07:34Z", datetime(2015, 8, 31, 4, 7, 34, tzinfo=timezone.utc)),
+        ("2015-08-31T04:07:34", datetime(2015, 8, 31, 4, 7, 34, tzinfo=timezone.utc)),
+        ("2015-08-31T06:07:34+02:00", datetime(2015, 8, 31, 4, 7, 34, tzinfo=timezone.utc)),
         ("last Tuesday", None),
     ],
 )
@@ -300,7 +300,7 @@ def test_timestamps_parse_to_utc(value, expected):
     parsed = synbiohub_fetch._timestamp(element, "modified")
 
     assert parsed == expected
-    assert parsed is None or parsed.tzinfo is UTC
+    assert parsed is None or parsed.tzinfo is timezone.utc
 
 
 def test_malformed_modification_time_falls_back_to_creation_time(monkeypatch):
@@ -308,7 +308,7 @@ def test_malformed_modification_time_falls_back_to_creation_time(monkeypatch):
 
     output = _fetch()
 
-    assert output.design.modified == datetime(2005, 5, 30, 11, tzinfo=UTC)
+    assert output.design.modified == datetime(2005, 5, 30, 11, tzinfo=timezone.utc)
     assert '"modified":"2005-05-30T11:00:00Z"' in output.model_dump_json()
 
 
