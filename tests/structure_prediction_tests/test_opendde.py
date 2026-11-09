@@ -229,17 +229,12 @@ def _load_standalone_inference():
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    # The console script only exists inside the tool venv; argv assembly is what is under test.
-    module._resolve_opendde_bin = lambda: "/venv/bin/opendde"
     return module
 
 
-def _build_cmd(model, **overrides):
-    """Call ``OpenDDEModel._build_cmd`` with defaults for the args under test."""
+def _runner_kwargs(model, **overrides):
+    """Call ``OpenDDEModel._runner_kwargs`` with defaults for the args under test."""
     kwargs = {
-        "input_json_path": "input.json",
-        "output_dir": "output",
-        "job_name": "job",
         "model_checkpoint": "opendde_v1",
         "num_samples": 1,
         "num_steps": 200,
@@ -247,29 +242,26 @@ def _build_cmd(model, **overrides):
         "use_msa": False,
         "use_template": False,
         "use_rna_msa": False,
-        "seed": 0,
         "device": "cuda",
         "include_pae_matrix": False,
     }
     kwargs.update(overrides)
-    return model._build_cmd(**kwargs)
+    return model._runner_kwargs(**kwargs)
 
 
 def test_opendde_need_atom_confidence_tracks_include_pae_matrix(tmp_path):
-    """--need_atom_confidence is 'true' only when the PAE matrix is requested."""
+    """need_atom_confidence is set only when the PAE matrix is requested."""
     mod = _load_standalone_inference()
     model = mod.OpenDDEModel()
     model.root_dir = str(tmp_path)
     model._loaded = True
 
-    off = _build_cmd(model, include_pae_matrix=False)
-    on = _build_cmd(model, include_pae_matrix=True)
-    assert off[off.index("--need_atom_confidence") + 1] == "false"
-    assert on[on.index("--need_atom_confidence") + 1] == "true"
+    assert _runner_kwargs(model, include_pae_matrix=False)["need_atom_confidence"] is False
+    assert _runner_kwargs(model, include_pae_matrix=True)["need_atom_confidence"] is True
 
 
 def test_opendde_bundled_abag_routes_via_checkpoint_path(tmp_path):
-    """The ``opendde_abag`` name routes to its bundled checkpoint via --load_checkpoint_path (-n stays opendde_v1)."""
+    """The ``opendde_abag`` name routes to its bundled checkpoint via load_checkpoint_path (model_name stays opendde_v1)."""
     mod = _load_standalone_inference()
     model = mod.OpenDDEModel()
     model.root_dir = str(tmp_path)
@@ -278,24 +270,24 @@ def test_opendde_bundled_abag_routes_via_checkpoint_path(tmp_path):
     ckpt_dir.mkdir()
     (ckpt_dir / "opendde_abag.pt").write_bytes(b"")
 
-    cmd = _build_cmd(model, model_checkpoint="opendde_abag")
+    kwargs = _runner_kwargs(model, model_checkpoint="opendde_abag")
 
-    assert cmd[cmd.index("-n") + 1] == "opendde_v1"
-    assert cmd[cmd.index("--load_checkpoint_path") + 1] == str(ckpt_dir / "opendde_abag.pt")
+    assert kwargs["model_name"] == "opendde_v1"
+    assert kwargs["load_checkpoint_path"] == str(ckpt_dir / "opendde_abag.pt")
 
 
 def test_opendde_default_model_sends_no_checkpoint_override(tmp_path):
-    """``opendde_v1`` lets OpenDDE load its own default weights (no --load_checkpoint_path)."""
+    """``opendde_v1`` lets OpenDDE load its own default weights (no checkpoint override)."""
     mod = _load_standalone_inference()
     model = mod.OpenDDEModel()
     model.root_dir = str(tmp_path)
     model._loaded = True
 
-    assert "--load_checkpoint_path" not in _build_cmd(model, model_checkpoint="opendde_v1")
+    assert _runner_kwargs(model, model_checkpoint="opendde_v1")["load_checkpoint_path"] == ""
 
 
 def test_opendde_missing_bundled_checkpoint_fails_before_dispatch(tmp_path):
-    """A bundled checkpoint that hasn't been downloaded fails here, not inside the CLI."""
+    """A bundled checkpoint that hasn't been downloaded fails before the model is built."""
     mod = _load_standalone_inference()
     model = mod.OpenDDEModel()
     model.root_dir = str(tmp_path)
@@ -303,7 +295,7 @@ def test_opendde_missing_bundled_checkpoint_fails_before_dispatch(tmp_path):
     (tmp_path / "checkpoint").mkdir()
 
     with pytest.raises(FileNotFoundError, match="checkpoint not found"):
-        _build_cmd(model, model_checkpoint="opendde_abag")
+        _runner_kwargs(model, model_checkpoint="opendde_abag")
 
 
 def test_opendde_explicit_checkpoint_path_is_passed_through(tmp_path):
@@ -315,9 +307,7 @@ def test_opendde_explicit_checkpoint_path_is_passed_through(tmp_path):
     custom = tmp_path / "custom.pt"
     custom.write_bytes(b"")
 
-    cmd = _build_cmd(model, model_checkpoint=str(custom))
-
-    assert cmd[cmd.index("--load_checkpoint_path") + 1] == str(custom)
+    assert _runner_kwargs(model, model_checkpoint=str(custom))["load_checkpoint_path"] == str(custom)
 
 
 def test_opendde_unknown_checkpoint_value_raises(tmp_path):
@@ -328,7 +318,7 @@ def test_opendde_unknown_checkpoint_value_raises(tmp_path):
     model._loaded = True
 
     with pytest.raises(FileNotFoundError, match="checkpoint not found"):
-        _build_cmd(model, model_checkpoint="opendde_v2")
+        _runner_kwargs(model, model_checkpoint="opendde_v2")
 
 
 def test_opendde_bundled_checkpoints_are_downloaded_by_setup():
