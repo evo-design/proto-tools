@@ -19,7 +19,7 @@ from proto_tools.tools.structure_prediction.boltz2.helpers import (
 from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
     resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
@@ -343,7 +343,7 @@ def run_boltz2_affinity_on_complex(
         metrics=Boltz2AffinityMetrics(**metrics_dict),
         source="boltz2-affinity",
     )
-    return normalize_output_chain_ids(
+    return align_with_input(
         structure,
         sp_complex.chains,
         complex_msas=complex_msas,

@@ -1782,6 +1782,17 @@ def test_alphafold3_tyrosine_ligand_reads_as_a_ligand():
     assert structure.get_chain_ligands("B") == [("TYR", 1)]
 
 
+def test_esmfold2_tyrosine_ligand_reads_as_a_ligand_despite_its_polymer_entity():
+    """ESMFold2's real mmCIF declares the L-tyrosine ligand a ``polypeptide(L)`` entity; it reads as a ligand."""
+    structure = Structure.from_file(_DUMMY_DATA / "predicted_ligand_chains" / "esmfold2_mfng_tyr.cif")
+
+    assert structure.get_chain_types() == {"A": "protein", "B": "ligand"}
+    assert structure.num_chains == 1
+    assert structure.get_chain_ligands("B") == [("TYR", 1)]
+    reparsed = Structure(structure=structure.structure_cif, structure_format="cif")
+    assert reparsed.get_chain_types() == {"A": "protein", "B": "ligand"}
+
+
 @pytest.mark.parametrize("source", ["mmcif", "biopython-pdb", "rcsb-pdb"])
 def test_deposited_free_tyrosine_stays_a_ligand(source: str):
     """A free tyrosine bound in a deposited entry (2CSM, chorismate mutase) is a ligand of chain A in every format.

@@ -97,7 +97,7 @@ def _cif_reply(cif_key: str, metrics: dict[str, Any], metrics_key: str = "metric
 def _alphafold3_reply(payload: dict[str, Any], sequences: list[str]) -> dict[str, Any]:
     path = Path(payload["output_dir"]) / "stub.cif"
     path.write_text(synthetic_cif(_chain_ids(sequences)))
-    return {"structure_pdb": str(path), "metrics": {"avg_plddt": 0.9, "ptm": 0.8}}
+    return {"structure_cif": str(path), "metrics": {"avg_plddt": 0.9, "ptm": 0.8}}
 
 
 def _esmfold_reply(_payload: dict[str, Any], sequences: list[str]) -> dict[str, Any]:

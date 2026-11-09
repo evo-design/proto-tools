@@ -2,7 +2,7 @@
 
 Shared data models (configs, outputs) and helpers for structure prediction tools.
 
-Chain-ID convention (see ``resolve_chain_ids`` / ``normalize_output_chain_ids``):
+Chain-ID convention (see ``resolve_chain_ids`` / ``align_with_input``):
 a predicted structure's chain IDs match the input ``Complex`` — explicit ``id``
 when set, else positional ``chain_label(i)``; PDB tools are single-character only.
 """
@@ -846,7 +846,7 @@ def resolve_chain_ids(chains: Sequence[Chain | Fragment]) -> list[str]:
     return ids
 
 
-def normalize_output_chain_ids(
+def align_with_input(
     structure: Structure,
     chains: Sequence[Chain | Fragment],
     *,
@@ -855,35 +855,50 @@ def normalize_output_chain_ids(
     msa_sent: "Mapping[int, SentMSA] | None" = None,
     msa_subsampling: MSASubsampling | None = None,
 ) -> Structure:
-    """Remap a predicted structure's polymer chain IDs to ``resolve_chain_ids(chains)``.
+    """Align a predicted structure's chains with the complex it was predicted from.
 
-    Predictors may emit positional or entity-derived names that differ from the
-    IDs we sent. Remap output polymer chains by order when the counts match;
-    ligand-only chains are excluded on both sides (mirrors
-    :meth:`Structure.get_chain_ids`). No-op when already aligned, when the
-    expected polymer IDs are already an in-order prefix of the observed list
-    (some predictors — RF3, for example — emit ligand chains classified as
-    "polymer" by gemmi, appending them after the real polymer chains), or on
-    count mismatch.
+    Each output chain is matched to the input chain it came from, renamed to that chain's ID,
+    and typed from its ``entity_type`` with :meth:`Structure.with_chain_types`. The input is
+    the source of truth for chain types, because predictors' writers misstate them: ESMFold2's
+    mmCIF declares an amino-acid ligand a one-residue polymer, and RF3 writes its ligands as ATOM
+    residues with no entity records.
+
+    Chains are matched by ID when the output IDs are those of ``resolve_chain_ids(chains)``.
+    Otherwise they are matched by position, which assumes the predictor kept the input order,
+    so each pairing is checked first: an output chain matched to a polymer must hold as many
+    residues as that polymer's sequence. A completed prediction is never discarded: when the
+    chain counts differ, a positional pairing fails that check (a predictor that renamed the
+    chains and also dropped a terminal residue, say), the chains cannot be renamed, or a chain
+    sent as one polymer type reads as another, the structure is returned as written, with the
+    predictor's own chain IDs and a warning, and the parser's own typing applies.
 
     When ``report_msa`` is true, attach the MSA conditioning report built from ``complex_msas``
     and ``msa_sent``, the writer's per-chain record of the rows it sent the backend.
     """
-    expected_ids = [
-        cid for chain, cid in zip(chains, resolve_chain_ids(chains), strict=True) if chain.entity_type != "ligand"
-    ]
-    observed_ids = structure.get_chain_ids()
-    if observed_ids == expected_ids or observed_ids[: len(expected_ids)] == expected_ids:
-        normalized = structure
-    elif len(observed_ids) != len(expected_ids):
+    expected_ids = resolve_chain_ids(chains)
+    observed_ids = [chain.name for chain in structure.gemmi_struct[0]]
+    # Every input chain has an entity type by now: Chain infers it when not given, Fragment is always a ligand.
+    types = {cid: chain.entity_type for chain, cid in zip(chains, expected_ids, strict=True) if chain.entity_type}
+    normalized = structure
+    problem = None
+    try:
+        if sorted(observed_ids) == sorted(expected_ids):
+            matched = structure
+        elif len(observed_ids) == len(expected_ids):
+            matched = structure.with_renamed_chains(dict(zip(observed_ids, expected_ids, strict=True)))
+            problem = _positional_mismatch(matched, chains, expected_ids)
+        else:
+            problem = f"it returned {len(observed_ids)} chain(s) for {len(expected_ids)} input chain(s)"
+        if problem is None:
+            normalized = matched.with_chain_types(types)
+    except ValueError as exc:
+        problem = str(exc)
+    if problem is not None:
         logger.warning(
-            "structure prediction returned %d polymer chain(s) but input had %d; leaving chain IDs unchanged.",
-            len(observed_ids),
-            len(expected_ids),
+            "%s: not typing chains from the input because %s; chain IDs and types are left as written.",
+            structure.source or "structure prediction",
+            problem,
         )
-        normalized = structure
-    else:
-        normalized = structure.with_renamed_chains(dict(zip(observed_ids, expected_ids, strict=True)))
 
     if report_msa:
         from proto_tools.tools.structure_prediction.msa_reporting import (
@@ -896,6 +911,31 @@ def normalize_output_chain_ids(
         )
         logger.debug("%s MSA sent: %s", structure.source, describe_msa_conditioning(normalized.msa_conditioning))
     return normalized
+
+
+def _positional_mismatch(structure: Structure, chains: Sequence[Chain | Fragment], ids: list[str]) -> str | None:
+    """Return why a by-position pairing of output and input chains is wrong, or ``None`` if it holds.
+
+    An output chain paired with an input polymer must hold as many residues as the polymer's
+    sequence. Two chains swapped by a predictor that also renamed them would fail this for at
+    least one polymer, so a protein is never typed as a ligand, or the reverse, by mistake.
+
+    Args:
+        structure (Structure): The prediction, its chains already renamed to ``ids`` by position.
+        chains (Sequence[Chain | Fragment]): The input chains, in order.
+        ids (list[str]): The input chain IDs, ``resolve_chain_ids(chains)``.
+
+    Returns:
+        str | None: A description of the first mismatched pairing, or ``None``.
+    """
+    residues = {chain.name: len(chain) for chain in structure.gemmi_struct[0]}
+    for chain, cid in zip(chains, ids, strict=True):
+        if isinstance(chain, Chain) and chain.entity_type != "ligand" and residues[cid] != len(chain.sequence):
+            return (
+                f"by position, output chain {cid!r} has {residues[cid]} residue(s) but input {chain.entity_type} "
+                f"chain {cid!r} has {len(chain.sequence)}"
+            )
+    return None
 
 
 # ============================================================================
