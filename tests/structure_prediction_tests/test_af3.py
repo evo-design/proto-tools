@@ -26,6 +26,7 @@ from proto_tools.utils.standalone_helpers_source.standalone_helpers.containers i
     ContainerRuntime,
     ResolvedExecutable,
 )
+from tests._structure_fixtures import synthetic_cif
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
@@ -142,11 +143,8 @@ def mock_af3_inference(tmp_path):
     The mock runs synchronously inside run_alphafold3's tempfile.TemporaryDirectory
     context, so input_json_path is still live when mock_dispatch reads it.
     """
-    dummy_pdb_file = tmp_path / "dummy.pdb"
-    dummy_pdb_file.write_text(
-        "HEADER    DUMMY PDB\nATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00  0.95           C\nEND\n"
-    )
-    dummy_pdb_path = str(dummy_pdb_file)
+    dummy_cif_file = tmp_path / "dummy_model.cif"
+    dummy_cif_file.write_text(synthetic_cif(["A"]))
     mock_metrics = {"avg_plddt": 0.95, "ptm": 0.8}
 
     captured_data = {}
@@ -156,7 +154,7 @@ def mock_af3_inference(tmp_path):
             captured_data["input_json"] = json.load(f)
         captured_data["input_data"] = input_data
         return {
-            "structure_pdb": dummy_pdb_path,
+            "structure_cif": str(dummy_cif_file),
             "metrics": mock_metrics,
         }
 

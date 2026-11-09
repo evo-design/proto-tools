@@ -21,7 +21,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
     resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
@@ -411,7 +411,7 @@ def _run_esmfold2_on_complex(
         source="esmfold2-prediction",
     )
     msa_sent = _esmfold2_sent_msas(config.model_checkpoint, sp_complex, complex_msas)
-    return normalize_output_chain_ids(
+    return align_with_input(
         structure,
         sp_complex.chains,
         complex_msas=complex_msas,

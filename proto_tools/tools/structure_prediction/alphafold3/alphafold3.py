@@ -30,7 +30,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
     resolve_chain_ids,
     write_paired_a3m_with_uniprot_headers,
 )
@@ -356,17 +356,17 @@ def run_alphafold3(
             )
 
             # Extract results from dict
-            pdb_path = output_data["structure_pdb"]
+            cif_path = output_data["structure_cif"]
             metrics = AlphaFold3Metrics(**output_data["metrics"])
 
             structure = Structure.from_file(
-                pdb_path,
+                cif_path,
                 b_factor_type=BFactorType.PLDDT,
                 metrics=metrics,
                 source="alphafold3-prediction",
             )
             output_structures.append(
-                normalize_output_chain_ids(
+                align_with_input(
                     structure,
                     comp.chains,
                     complex_msas=inputs.msas[dispatch_idx] if inputs.msas else None,
