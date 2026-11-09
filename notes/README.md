@@ -19,6 +19,7 @@ signatures and behavior.
 - `tool-environments.md`: how isolated tool environments are built, plus compute dependency management (GCC/nvcc), caches, binaries, overriding a tool's packaged env, and the `to_device()` protocol.
 - `troubleshooting.md`: working around cluster-specific problems (failed env builds, old glibc/containers, storage quotas, GPU scheduling).
 - `gated-models.md`: gated models and software (AlphaGenome, SpliceAI2, X3DNA), accepting licenses, and authenticating with HuggingFace.
+- `licensing.md`: what each `license.yaml` field records, which ones a test enforces, and `output_sharing` — the flag for terms that govern the tool's results, not just its code.
 
 ## Runtime and behavior
 
