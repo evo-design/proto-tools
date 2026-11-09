@@ -31,9 +31,9 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
+    align_with_input,
     chain_label,
     count_structure_tokens,
-    normalize_output_chain_ids,
     resolve_chain_ids,
     write_paired_a3m_with_uniprot_headers,
     write_query_only_a3m,
@@ -581,7 +581,7 @@ def run_protenix(
         )
         msa_sent = msa_sent_by_job[dispatch_idx]
         results.append(
-            normalize_output_chain_ids(
+            align_with_input(
                 structure,
                 comp.chains,
                 complex_msas=inputs.msas[dispatch_idx] if inputs.msas else None,

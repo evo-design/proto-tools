@@ -16,10 +16,16 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     Complex,
     ComplexMSAs,
-    normalize_output_chain_ids,
+    align_with_input,
 )
 
-_PDB = "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C  \nEND\n"
+# Three alanines, one per residue of the "AAA" chain the prediction tests send.
+_PDB = (
+    "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 50.00           C  \n"
+    "ATOM      2  CA  ALA A   2       3.800   0.000   0.000  1.00 50.00           C  \n"
+    "ATOM      3  CA  ALA A   3       7.600   0.000   0.000  1.00 50.00           C  \n"
+    "END\n"
+)
 
 
 def _msa(*rows, ids=None):
@@ -111,9 +117,7 @@ def test_normalized_output_attaches_report_and_logs_it_at_debug(caplog):
     chains = [Chain(sequence="AAA", entity_type="protein", id="T")]
     msas = ComplexMSAs(per_chain={0: _msa("AAA", "AAG")}, source="colabfold_server")
     with caplog.at_level(logging.DEBUG, logger="proto_tools"):
-        result = normalize_output_chain_ids(
-            structure, chains, complex_msas=msas, report_msa=True, msa_sent={0: SentMSA(rows=2)}
-        )
+        result = align_with_input(structure, chains, complex_msas=msas, report_msa=True, msa_sent={0: SentMSA(rows=2)})
     restored = Structure.model_validate_json(result.model_dump_json())
     assert [(c.chain_id, c.status, c.rows) for c in restored.msa_conditioning.chains] == [("T", "consumed", 2)]
     [record] = [r for r in caplog.records if "MSA sent" in r.getMessage()]
@@ -237,7 +241,7 @@ def test_structure_transforms_carry_the_conditioning_report_for_their_chains():
     """Renames relabel the report's chains and selections drop the chains they remove."""
     from tests._structure_fixtures import synthetic_cif
 
-    structure = normalize_output_chain_ids(
+    structure = align_with_input(
         Structure(structure=synthetic_cif(["A", "B"]), structure_format="cif"),
         [Chain(sequence="AAA", entity_type="protein"), Chain(sequence="GGG", entity_type="protein")],
         complex_msas=ComplexMSAs(per_chain={0: _msa("AAA", "AAG"), 1: _msa("GGG", "GGA")}),

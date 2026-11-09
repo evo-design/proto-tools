@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from Bio import PDB
 
 # Import from the published standalone_helpers
 from standalone_helpers import (
@@ -108,18 +107,11 @@ def _extract_structure_and_scores(
         include_pae_matrix (bool): Attach the full per-residue PAE matrix.
 
     Returns:
-        tuple[str, dict[str, Any]]: Tuple of (pdb_path, scores_dict).
+        tuple[str, dict[str, Any]]: Tuple of (path to AlphaFold3's own mmCIF, scores_dict). The
+            mmCIF is returned as AlphaFold3 wrote it, entity records included.
     """
     alphafold3_results_folder = os.path.join(output_dir, name)
-    alphafold3_structure = os.path.join(alphafold3_results_folder, f"{name}_model.cif")
-
-    # Convert mmCIF structure file to PDB format.
-    pdb_path = os.path.join(output_dir, f"{name}_af3.pdb")
-    parser = PDB.MMCIFParser(QUIET=True)  # type: ignore[attr-defined, no-untyped-call]
-    io = PDB.PDBIO()  # type: ignore[attr-defined, no-untyped-call]
-    structure = parser.get_structure("structure", alphafold3_structure)  # type: ignore[no-untyped-call]
-    io.set_structure(structure)  # type: ignore[no-untyped-call]
-    io.save(pdb_path)  # type: ignore[no-untyped-call]
+    cif_path = os.path.join(alphafold3_results_folder, f"{name}_model.cif")
 
     # Extract confidence scores from AlphaFold3 JSON output files.
     summary_confidences_path = os.path.join(alphafold3_results_folder, f"{name}_summary_confidences.json")
@@ -143,7 +135,7 @@ def _extract_structure_and_scores(
     with open(f"{output_dir}/metadata.json", "w") as f:
         json.dump(alphafold3_scores, f, indent=2)
 
-    return pdb_path, alphafold3_scores
+    return cif_path, alphafold3_scores
 
 
 # ============================================================================
@@ -319,7 +311,7 @@ class AlphaFold3Model:
             num_diffusion_samples (int): Diffusion samples per seed (AF3 --num_diffusion_samples, default 5).
 
         Returns:
-            dict[str, Any]: Dict with ``structure_pdb`` (path to generated PDB) and
+            dict[str, Any]: Dict with ``structure_cif`` (path to AlphaFold3's mmCIF) and
                 ``metrics`` (confidence scores).
 
         Raises:
@@ -371,7 +363,7 @@ class AlphaFold3Model:
 
         logger.debug("AlphaFold3 execution completed successfully.")
 
-        pdb_path, alphafold3_scores = _extract_structure_and_scores(
+        cif_path, alphafold3_scores = _extract_structure_and_scores(
             output_dir,
             input_json["name"],
             verbose=verbose,
@@ -379,7 +371,7 @@ class AlphaFold3Model:
         )
 
         return {
-            "structure_pdb": pdb_path,
+            "structure_cif": cif_path,
             "metrics": alphafold3_scores,
         }
 
@@ -400,7 +392,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         input_dict (dict[str, Any]): Input parameters from ToolInstance.dispatch().
 
     Returns:
-        dict[str, Any]: Dict with structure_pdb and metrics.
+        dict[str, Any]: Dict with structure_cif and metrics.
     """
     global _model
 

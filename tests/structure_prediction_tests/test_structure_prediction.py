@@ -34,6 +34,9 @@ from proto_tools.tools.structure_prediction import (
     ESMFoldConfig,
     ESMFoldInput,
     ESMFoldOutput,
+    Mol1Config,
+    Mol1Input,
+    Mol1Output,
     OpenDDEConfig,
     OpenDDEInput,
     OpenDDEOutput,
@@ -50,10 +53,12 @@ from proto_tools.tools.structure_prediction import (
     run_chai1,
     run_esmfold,
     run_esmfold2,
+    run_mol1_prediction,
     run_opendde,
     run_protenix,
     run_rf3_prediction,
 )
+from proto_tools.tools.structure_prediction.shared_data_models import resolve_chain_ids
 from proto_tools.utils.tool_cache import (
     ToolCache,
     _program_tool_cache,
@@ -76,6 +81,7 @@ _STRUCTURE_PREDICTORS = {
     "opendde": (run_opendde, OpenDDEInput, OpenDDEConfig, OpenDDEOutput),
     "protenix": (run_protenix, ProtenixInput, ProtenixConfig, ProtenixOutput),
     "rf3": (run_rf3_prediction, RF3Input, RF3Config, RF3Output),
+    "mol1": (run_mol1_prediction, Mol1Input, Mol1Config, Mol1Output),
 }
 
 _FAST_PREDICTORS = ["esmfold"]
@@ -453,6 +459,15 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
             pytest.fail(f"Predicted structure {i} is not valid: {structure.structure_cif}")
 
     assert_metrics_in_spec(output)
+
+    # Chain types come from the input complex, whatever the predictor's file says.
+    for complex_, structure in zip(complexes, output.structures, strict=True):
+        expected = {
+            cid: chain.entity_type
+            for chain, cid in zip(complex_.chains, resolve_chain_ids(complex_.chains), strict=True)
+        }
+        assert structure.get_chain_types() == expected, f"{predictor_name} chain types differ from the input"
+        assert structure.num_chains == sum(kind != "ligand" for kind in expected.values())
 
 
 # ── Cache test (GPU) ───────────────────────────────────────────────────────────

@@ -19,7 +19,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
@@ -435,7 +435,7 @@ def run_rf3_prediction_on_complex(
         metrics=RF3Metrics(**metrics_kwargs),
         source="rf3-prediction",
     )
-    return normalize_output_chain_ids(
+    return align_with_input(
         structure,
         sp_complex.chains,
         complex_msas=complex_msas,
