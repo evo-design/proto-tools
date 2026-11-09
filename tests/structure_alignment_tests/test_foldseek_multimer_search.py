@@ -3,6 +3,8 @@
 Tests for foldseek-multimer-search (remote + local).
 """
 
+import io
+import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +16,11 @@ from proto_tools.tools.structure_alignment import (
     FoldseekMultimerSearchInput,
     run_foldseek_multimer_search,
 )
+from proto_tools.tools.structure_alignment.foldseek.foldseek_multimer_search import (
+    FoldseekMultimerHit,
+    _remote_row_to_m8,
+)
+from proto_tools.tools.structure_alignment.foldseek.foldseek_search import _parse_m8_archive
 from tests.conftest import benchmark_twice
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -129,6 +136,65 @@ def test_local_mode_validator_requires_local_db():
 
 # Note: invalid-ticket-id error path is covered by `test_submit_raises_on_invalid_id`
 # in test_foldseek_search.py — multimer reuses the same `_submit` helper.
+
+
+# ── Remote result layout ──────────────────────────────────────────────────
+
+# One row as search.foldseek.com's foldmulti worker writes it (26 columns, from a real pdl1 search):
+# theader carries a description, prob precedes evalue, and alignment strings follow bits.
+_FOLDMULTI_ROW = "\t".join(
+    [
+        "job_A",
+        "3pv6-assembly1.cif.gz_A Crystal structure of NKp30 bound to its ligand B7-H6",
+        "17.300", "121", "86", "5", "1", "113", "2", "116",
+        "1.000", "3.239E-07", "276", "115", "214",
+        "AFTVTV-PKDLYVV", "DLKVEMMAGGTQI", "5.902,17.425,-1.671", "ADLKVEMMAGG",
+        "10", "6.026E-01", "4.307E-01", "0.711349,-0.362544,0.602116", "-7.821611,11.154739,-10.161250",
+        "9606", "Homo sapiens",
+    ]
+)  # fmt: skip
+
+
+def _archive(text: str, database: str = "pdb100") -> bytes:
+    """A result tarball holding one ``alis_{database}.m8`` file, as the server returns it."""
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        data = text.encode()
+        info = tarfile.TarInfo(f"alis_{database}.m8")
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+    return buffer.getvalue()
+
+
+def test_remote_multimer_row_maps_onto_m8_columns():
+    """Prob is dropped and theader trimmed to the ID, so evalue and bits land in their M8 slots."""
+    row = _remote_row_to_m8(_FOLDMULTI_ROW.split("\t"))
+    assert row == [
+        "job_A",
+        "3pv6-assembly1.cif.gz_A",
+        "17.300",
+        "121",
+        "86",
+        "5",
+        "1",
+        "113",
+        "2",
+        "116",
+        "3.239E-07",
+        "276",
+    ]
+
+
+def test_remote_multimer_archive_parses_foldmulti_rows():
+    """Every foldmulti row becomes a hit; before, each was skipped as malformed and searches returned none."""
+    hits = _parse_m8_archive(_archive(_FOLDMULTI_ROW + "\n"), FoldseekMultimerHit, row_to_m8=_remote_row_to_m8)
+    (hit,) = hits
+    assert hit.database == "pdb100"
+    assert hit.target_id == "3pv6-assembly1.cif.gz_A"
+    assert hit.sequence_identity == pytest.approx(0.173)
+    assert hit.evalue == pytest.approx(3.239e-07)
+    assert hit.bit_score == 276
+    assert hit.metrics is None
 
 
 # ── Integration ───────────────────────────────────────────────────────────────

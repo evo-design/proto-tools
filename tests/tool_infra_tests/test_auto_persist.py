@@ -33,6 +33,7 @@ def _make_fake_instance(toolkit: str = "pyrosetta") -> ToolInstance:
     inst._instance_lock = threading.RLock()
     inst._worker = None
     inst._cache_keys = set()
+    inst._dm_name = None
     inst._reload_params = {}
     inst._env_ready = True
     inst._tool_env_vars = {"passthrough": [], "set": []}

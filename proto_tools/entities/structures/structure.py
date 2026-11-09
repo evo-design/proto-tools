@@ -572,6 +572,8 @@ class Structure(BaseModel):
             # Files often list a chain's ligands after every polymer chain; gemmi reads those as a
             # second chain with the same ID unless the parts are merged.
             self._gemmi_struct.merge_chain_parts()
+            if self.structure_format != "cif":
+                _mark_lone_hetatm_residues_nonpolymer(self._gemmi_struct)
             _name_unnamed_chains(self._gemmi_struct)
         return self._gemmi_struct  # type: ignore[no-any-return]
 
@@ -1961,6 +1963,28 @@ def _has_unnamed_chain(pdb_content: str) -> bool:
     return any(
         len(line) > 21 and line[21] == " " for line in pdb_content.splitlines() if line.startswith(("ATOM", "HETATM"))
     )
+
+
+def _mark_lone_hetatm_residues_nonpolymer(struct: gemmi.Structure) -> None:
+    """Mark every chain whose only residue is HETATM as a non-polymer, before entities are set up.
+
+    A PDB file has no entity records, so gemmi types each residue from its name: a ligand whose
+    CCD code is an amino acid or nucleotide (a Biopython-converted AlphaFold3 PDB writes an
+    L-tyrosine ligand as one HETATM ``TYR``, then ``TER``) would become a one-residue polymer of
+    unknown type, which no ``Chain`` can carry. Only single-residue chains are retyped: real
+    polymers can be HETATM throughout (D-peptides such as 3MGN chain G), and a one-residue chain
+    is no polymer. Waters are left alone. ``setup_entities`` keeps types that are already set.
+    mmCIF files declare their entities and are left as written.
+
+    Args:
+        struct (gemmi.Structure): The structure, read from PDB, to correct in place.
+    """
+    import gemmi
+
+    for model in struct:
+        for chain in model:
+            if len(chain) == 1 and chain[0].het_flag == "H" and not chain[0].is_water():
+                chain[0].entity_type = gemmi.EntityType.NonPolymer
 
 
 def _name_unnamed_chains(gemmi_struct: gemmi.Structure) -> None:
