@@ -877,7 +877,8 @@ def align_with_input(
     """
     expected_ids = resolve_chain_ids(chains)
     observed_ids = [chain.name for chain in structure.gemmi_struct[0]]
-    types = {cid: chain.entity_type for chain, cid in zip(chains, expected_ids, strict=True)}
+    # Every input chain has an entity type by now: Chain infers it when not given, Fragment is always a ligand.
+    types = {cid: chain.entity_type for chain, cid in zip(chains, expected_ids, strict=True) if chain.entity_type}
     normalized = structure
     problem = None
     try:
@@ -929,7 +930,7 @@ def _positional_mismatch(structure: Structure, chains: Sequence[Chain | Fragment
     """
     residues = {chain.name: len(chain) for chain in structure.gemmi_struct[0]}
     for chain, cid in zip(chains, ids, strict=True):
-        if chain.entity_type != "ligand" and residues[cid] != len(chain.sequence):
+        if isinstance(chain, Chain) and chain.entity_type != "ligand" and residues[cid] != len(chain.sequence):
             return (
                 f"by position, output chain {cid!r} has {residues[cid]} residue(s) but input {chain.entity_type} "
                 f"chain {cid!r} has {len(chain.sequence)}"
