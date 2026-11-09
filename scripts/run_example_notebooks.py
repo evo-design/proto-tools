@@ -252,29 +252,6 @@ def discover_notebooks(only: str | None) -> list[Path]:
     return notebooks
 
 
-def forbids_output_sharing(notebook: Path) -> bool:
-    """Whether the notebook's toolkit may not publish what the tool produces.
-
-    Some upstream terms reach the model's results, not just its code and weights, so an
-    executed notebook would redistribute something the licence withholds. Those toolkits set
-    ``output_sharing: false`` in ``license.yaml`` and ship their example unexecuted;
-    ``tests/style_consistency_tests/test_license_consistency.py`` fails if output appears.
-
-    Args:
-        notebook (Path): Path to the toolkit's ``example.ipynb``.
-
-    Returns:
-        bool: True when the toolkit's licence forbids publishing its output.
-    """
-    import yaml
-
-    license_path = notebook.parent.parent / "license.yaml"
-    if not license_path.is_file():
-        return False
-    data = yaml.safe_load(license_path.read_text())
-    return isinstance(data, dict) and data.get("output_sharing", True) is False
-
-
 def execute_notebook(path: Path, timeout: int) -> tuple[bool, str]:
     """Run the notebook in place via ``jupyter nbconvert --execute --inplace``.
 
@@ -480,7 +457,6 @@ def main() -> int:
 
     failures: list[tuple[Path, str]] = []
     all_mimes: set[str] = set()
-    skipped_by_licence: list[Path] = []
     total_stripped = 0
     total_scrubbed = 0
     total_redacted = 0
@@ -491,11 +467,6 @@ def main() -> int:
         for nb_path in progress:
             rel = _rel(nb_path)
             progress.set_postfix_str(nb_path.parent.parent.name)
-
-            if forbids_output_sharing(nb_path):
-                skipped_by_licence.append(nb_path)
-                print(f"  skip  {rel}  (licence forbids sharing this tool's output)", flush=True)
-                continue
 
             if args.sanitize_only:
                 ok, msg = True, "ok"
@@ -523,15 +494,8 @@ def main() -> int:
             snapshotter.close()
 
     print(flush=True)
-    if skipped_by_licence:
-        print(
-            f"Skipped {len(skipped_by_licence)} notebook(s) whose licence forbids sharing the tool's "
-            "output; they ship unexecuted: " + ", ".join(p.parent.parent.name for p in skipped_by_licence),
-            flush=True,
-        )
     print(
-        f"Summary: {len(notebooks) - len(failures) - len(skipped_by_licence)}/"
-        f"{len(notebooks) - len(skipped_by_licence)} notebooks processed; "
+        f"Summary: {len(notebooks) - len(failures)}/{len(notebooks)} notebooks processed; "
         f"{total_stripped} widget views stripped, {total_scrubbed} warning lines scrubbed, "
         f"{total_redacted} identifiers redacted, {total_snapshots} py3Dmol viewers snapshotted.",
         flush=True,

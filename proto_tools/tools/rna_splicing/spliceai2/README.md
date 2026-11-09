@@ -8,8 +8,6 @@
 > **License:** SpliceAI2 is licensed under Custom (SpliceAI2 Model Terms of Use) and has restrictions around commercial use and may require explicit attribution when utilized. Model weights are gated and require accepting the provider's terms and authenticating with a HuggingFace token. Please refer to [the license](https://github.com/Illumina/SpliceAI2/blob/main/LICENSE) for full terms.
 >
 > SpliceAI2 (code, weights, and precomputed scores) may only be used for non-commercial purposes by, or on behalf of, non-commercial organizations such as universities, academic research institutions, and government entities. Hosting, managed services, redistribution, and third-party access are prohibited, and any publication using its output must cite the SpliceAI2 manuscript. For commercial licensing, contact Illumina at AI_licensing@illumina.com.
->
-> Because those terms name the model's scores alongside its code and weights, this toolkit sets `output_sharing: false` and its [example notebook](examples/example.ipynb) ships unexecuted: run it yourself to see the results. See [notes/licensing.md](../../../../notes/licensing.md).
 
 ## Overview
 
