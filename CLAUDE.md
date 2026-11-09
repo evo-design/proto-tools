@@ -177,6 +177,7 @@ targets are:
 - Logging: `notes/logging.md`.
 - Seeding and cache behavior: `notes/seeding.md`.
 - Toolkit versions and the output `tool_version` field: `notes/versioning.md`.
+- License metadata and `output_sharing`: `notes/licensing.md`.
 - Storage and weights: `notes/storage.md`.
 - Test markers, placement, and patterns: `notes/testing.md`.
 - Tool implementation details: toolkit README, example notebook, metadata,

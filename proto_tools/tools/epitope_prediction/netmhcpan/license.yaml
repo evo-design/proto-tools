@@ -35,6 +35,7 @@ code:
     netMHCpan-4.2_license.txt with the download.'
 commercial_use: 'no'
 redistribution: false
+output_sharing: false
 attribution_required: true
 weights:
   spdx: Custom (DTU Health Tech Academic Software License)

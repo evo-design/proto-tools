@@ -1,0 +1,4 @@
+# Illumina's SpliceAI2 Model Terms of Use cover the model's precomputed scores as well as its
+# code and weights, and prohibit redistribution and third-party access. Run the notebook to
+# generate these locally; they are never committed. See license.yaml (output_sharing: false).
+example_output/
