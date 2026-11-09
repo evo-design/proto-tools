@@ -26,7 +26,6 @@ from proto_tools.entities.structures.msa_conditioning import MSAConditioning
 from proto_tools.entities.structures.utils import (
     _serialize_gemmi,
     convert_cif_str_to_pdb_str,
-    convert_pdb_str_to_cif_str,
     detect_structure_format,
     is_valid_structure,
     load_structure_file,
@@ -322,6 +321,8 @@ class Structure(BaseModel):
     )
 
     _gemmi_struct: Any = PrivateAttr(default=None)
+    # Whether parsing had to correct an mmCIF file's own entity typing (see _mark_lone_hetatm_residues_nonpolymer).
+    _typing_corrected: bool = PrivateAttr(default=False)
     msa_conditioning: MSAConditioning | None = Field(
         default=None,
         title="MSA Conditioning",
@@ -572,8 +573,9 @@ class Structure(BaseModel):
             # Files often list a chain's ligands after every polymer chain; gemmi reads those as a
             # second chain with the same ID unless the parts are merged.
             self._gemmi_struct.merge_chain_parts()
-            if self.structure_format != "cif":
-                _mark_lone_hetatm_residues_nonpolymer(self._gemmi_struct)
+            corrected = _mark_lone_hetatm_residues_nonpolymer(self._gemmi_struct)
+            # Only mmCIF declares entities, so only an mmCIF file's own typing can be wrong.
+            self._typing_corrected = corrected and self.structure_format == "cif"
             _name_unnamed_chains(self._gemmi_struct)
         return self._gemmi_struct  # type: ignore[no-any-return]
 
@@ -774,6 +776,69 @@ class Structure(BaseModel):
             msa_conditioning=self.msa_conditioning.with_renamed_chains(mapping) if self.msa_conditioning else None,
         )
 
+    def with_chain_types(self, types: dict[str, str]) -> Structure:
+        """Return a new CIF Structure whose chains are typed as given, with matching entity records.
+
+        A file's own entity records (or, in PDB, their absence) can misstate what a chain holds:
+        predictors write ligands as one-residue polymers, or omit entities entirely. When the
+        true type of each chain is known, as it is for a predicted complex, this sets it
+        directly, so :meth:`get_chain_types`, :attr:`num_chains`, and the written ``_entity``
+        records all agree with it. A structure whose own file already types its chains as given
+        is returned unchanged. Otherwise the result is CIF, because PDB cannot carry entity types;
+        ``b_factor_type``, ``source``, ``metrics``, and ``msa_conditioning`` are preserved.
+
+        Args:
+            types (dict[str, str]): Chain ID to ``"protein"``, ``"dna"``, ``"rna"``, or
+                ``"ligand"``. Chains not listed keep the type their file gives them.
+
+        Returns:
+            Structure: ``self`` if its file already has these chain types, else a new CIF Structure with them.
+
+        Raises:
+            ValueError: If a listed chain is missing, a type is not one of the four above, or a
+                chain typed as a polymer reads as a different polymer type (a chain sent as
+                protein that comes back as RNA).
+        """
+        import gemmi
+
+        allowed = {"protein", "dna", "rna", "ligand"}
+        unknown = {chain_id: kind for chain_id, kind in types.items() if kind not in allowed}
+        if unknown:
+            raise ValueError(f"Chain types must be one of {sorted(allowed)}, got {unknown}")
+        current = self.get_chain_types()
+        missing = set(types) - set(current)
+        if missing:
+            raise ValueError(f"Chains {sorted(missing)} not found. Available chains: {list(current)}")
+        if not self._typing_corrected and all(current[chain_id] == kind for chain_id, kind in types.items()):
+            return self
+        struct = self.gemmi_struct.clone()
+        # A ligand chain's residues are all ligand; a polymer chain keeps its own ligands and waters.
+        for model in struct:
+            for chain in model:
+                if types.get(chain.name) == "ligand":
+                    for residue in chain:
+                        if not residue.is_water():
+                            residue.entity_type = gemmi.EntityType.NonPolymer
+        struct.entities.clear()
+        struct.setup_entities()
+        for chain in struct[0]:
+            kind = types.get(chain.name)
+            if kind not in ("protein", "dna", "rna"):
+                continue
+            polymer = chain.get_polymer()
+            read_as = _polymer_entity_type(chain.name, polymer, strict=False) if polymer else "no polymer residues"
+            if read_as != kind:
+                raise ValueError(f"Chain {chain.name!r} was given as {kind} but reads as {read_as}")
+
+        return Structure(
+            structure=_serialize_gemmi(struct, "cif", source_format=self.structure_format),
+            structure_format="cif",
+            b_factor_type=self.b_factor_type,
+            source=self.source,
+            metrics=self.metrics.model_copy(deep=True),
+            msa_conditioning=self.msa_conditioning,
+        )
+
     @classmethod
     def concat(cls, structures: list[Structure]) -> Structure:
         """Merge Structures with distinct chain IDs into a single multi-chain Structure.
@@ -936,7 +1001,11 @@ class Structure(BaseModel):
     def structure_cif(self) -> str:
         """Get the structure content as a CIF string, converting from PDB if needed."""
         if self.structure_format == "pdb":
-            return convert_pdb_str_to_cif_str(self.structure)
+            if not self.structure.strip():
+                return ""
+            struct = self.gemmi_struct.clone()
+            struct.setup_entities()
+            return _serialize_gemmi(struct, "cif", source_format="pdb")
         return self.structure
 
     # ============================================================================
@@ -1965,26 +2034,41 @@ def _has_unnamed_chain(pdb_content: str) -> bool:
     )
 
 
-def _mark_lone_hetatm_residues_nonpolymer(struct: gemmi.Structure) -> None:
+def _mark_lone_hetatm_residues_nonpolymer(struct: gemmi.Structure) -> bool:
     """Mark every chain whose only residue is HETATM as a non-polymer, before entities are set up.
 
-    A PDB file has no entity records, so gemmi types each residue from its name: a ligand whose
-    CCD code is an amino acid or nucleotide (a Biopython-converted AlphaFold3 PDB writes an
-    L-tyrosine ligand as one HETATM ``TYR``, then ``TER``) would become a one-residue polymer of
-    unknown type, which no ``Chain`` can carry. Only single-residue chains are retyped: real
-    polymers can be HETATM throughout (D-peptides such as 3MGN chain G), and a one-residue chain
-    is no polymer. Waters are left alone. ``setup_entities`` keeps types that are already set.
-    mmCIF files declare their entities and are left as written.
+    This is the fallback for files read without a known complex; a predicted structure is
+    typed from its input instead (see :meth:`Structure.with_chain_types`). A ligand whose CCD
+    code is an amino acid or nucleotide can otherwise read as a one-residue polymer of unknown
+    type, which no ``Chain`` can carry: PDB has no entity records, so gemmi types residues by
+    name (a Biopython-converted AlphaFold3 PDB writes an L-tyrosine ligand as one HETATM ``TYR``),
+    and some mmCIF writers declare
+    such a ligand a polymer entity (ESMFold2 writes it as ``polypeptide(L)`` ``Y``). Only
+    single-residue chains are retyped: real polymers can be HETATM throughout (D-peptides such
+    as 3MGN chain G, beta-peptide foldamers such as 6Q9T chain B), and a one-residue chain is
+    no polymer. When this changes an mmCIF file's typing, its entity records no longer hold and
+    are rebuilt by ``setup_entities``.
 
     Args:
-        struct (gemmi.Structure): The structure, read from PDB, to correct in place.
+        struct (gemmi.Structure): The structure to correct in place.
+
+    Returns:
+        bool: Whether any chain was retyped.
     """
     import gemmi
 
+    retyped = False
     for model in struct:
         for chain in model:
-            if len(chain) == 1 and chain[0].het_flag == "H" and not chain[0].is_water():
-                chain[0].entity_type = gemmi.EntityType.NonPolymer
+            residue = chain[0] if len(chain) == 1 else None
+            if residue is None or residue.het_flag != "H" or residue.is_water():
+                continue
+            if residue.entity_type != gemmi.EntityType.NonPolymer:
+                residue.entity_type = gemmi.EntityType.NonPolymer
+                retyped = True
+    if retyped:
+        struct.entities.clear()
+    return retyped
 
 
 def _name_unnamed_chains(gemmi_struct: gemmi.Structure) -> None:

@@ -20,7 +20,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
     write_paired_a3m_with_uniprot_headers,
 )
 from proto_tools.tools.tool_registry import tool
@@ -275,7 +275,7 @@ def run_mol1_prediction(inputs: Mol1Input, config: Mol1Config, instance: Any = N
             source="mol1-prediction",
         )
         structures.append(
-            normalize_output_chain_ids(
+            align_with_input(
                 structure,
                 comp.chains,
                 complex_msas=complex_msas,

@@ -42,7 +42,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
     resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
@@ -529,7 +529,7 @@ def run_chai1_on_complex(
         metrics=Chai1Metrics(**result["metrics"]),
         source="chai1-prediction",
     )
-    return normalize_output_chain_ids(
+    return align_with_input(
         structure,
         comp.chains,
         complex_msas=complex_msas,

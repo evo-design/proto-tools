@@ -38,6 +38,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
+    align_with_input,
     resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
@@ -794,19 +795,22 @@ def run_esmfold(
         pdb_output = _relabel_chains(result["pdb"], metadata["seq_lengths"], chain_ids=resolve_chain_ids(comp.chains))
 
         structure_outputs.append(
-            Structure(
-                structure=pdb_output,
-                b_factor_type=BFactorType.NORMALIZED_PLDDT,
-                metrics=ESMFoldMetrics(
-                    avg_plddt=result["avg_plddt"],
-                    ptm=result["ptm"],
-                    avg_pae=result["avg_pae"],
-                    pae=result.get("pae"),
+            align_with_input(
+                Structure(
+                    structure=pdb_output,
+                    b_factor_type=BFactorType.NORMALIZED_PLDDT,
+                    metrics=ESMFoldMetrics(
+                        avg_plddt=result["avg_plddt"],
+                        ptm=result["ptm"],
+                        avg_pae=result["avg_pae"],
+                        pae=result.get("pae"),
+                    ),
+                    source="esmfold-prediction",
+                    msa_conditioning=_esmfold_msa_conditioning(
+                        comp.chains, inputs.msas[metadata["complex_idx"]] if inputs.msas else None
+                    ),
                 ),
-                source="esmfold-prediction",
-                msa_conditioning=_esmfold_msa_conditioning(
-                    comp.chains, inputs.msas[metadata["complex_idx"]] if inputs.msas else None
-                ),
+                comp.chains,
             )
         )
 
