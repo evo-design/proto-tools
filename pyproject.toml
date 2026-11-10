@@ -44,7 +44,6 @@ dependencies = [
     "numpy>=1.20",
     "pandas>=1.5",
     "pyarrow",
-    "umap-learn>=0.5.3",
     "numba>=0.60.0",
 
     "biopython",
@@ -243,7 +242,6 @@ module = [
     "cuequivariance_ops_torch_cu12.*",
     "pyrosetta.*",
     "scipy.*",
-    "umap.*",
     "hydra.*",
     "rfproteina.*",
     "zstandard.*",

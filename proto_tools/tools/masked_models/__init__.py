@@ -171,7 +171,6 @@ from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelScoringConfig,
     MaskedModelScoringMetrics,
     MaskedModelScoringOutput,
-    Projection2D,
     SequenceEmbedding,
 )
 from proto_tools.transforms.masking import MaskingMethod, MaskingStrategy
@@ -248,7 +247,6 @@ __all__ = [
     "MaskedModelScoringConfig",
     "MaskedModelScoringMetrics",
     "MaskedModelScoringOutput",
-    "Projection2D",
     "SequenceEmbedding",
     # AbLang - Embeddings
     "AbLangEmbeddingsConfig",

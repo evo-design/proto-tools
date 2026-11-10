@@ -8,7 +8,6 @@ from typing import Any, Literal
 
 from pydantic import field_validator
 
-from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelEmbeddingsConfig,
     MaskedModelEmbeddingsOutput,
@@ -157,7 +156,6 @@ def example_input() -> Any:
     iterable_output_field="results",
     max_chunk_size=32,
     cacheable=True,
-    post_process_iterable=attach_projections,
 )
 def run_esm2_embeddings(
     inputs: ESM2EmbeddingsInput, config: ESM2EmbeddingsConfig, instance: Any = None
