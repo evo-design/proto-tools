@@ -60,4 +60,4 @@ default or example instead.
 
 ## Test order randomization
 
-`pytest-randomly` shuffles test order each run to catch hidden inter-test dependencies. The seed is printed in the test header. Reproduce a specific order with `--randomly-seed=N`.
+`pytest-randomly` is installed, but this suite disables its reordering by default. Pass `--random-order` to shuffle test order and catch hidden inter-test dependencies. The seed is printed in the test header. Reproduce a specific order with `--randomly-seed=N`.

@@ -141,8 +141,19 @@ def test_ligandmpnn_sample_carries_input_ligands(monkeypatch):
     """LigandMPNN conditions on the input's ligands, so each design keeps them as undesigned context."""
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        # The tool must stage MSE as ATOM, or AtomWorks splits it into a non-polymer chain and
+        # the packed structure comes back with a chain the input has no residue IDs for.
+        staged_lines = Path(payload["pdb_path"]).read_text().splitlines()
+
+        def record_types(residue: str) -> set[str]:
+            return {line[:6].strip() for line in staged_lines if line[17:20].strip() == residue}
+
+        assert record_types("MSE") == {"ATOM"}, "selenomethionine must reach the parser as a polymer residue"
+        assert record_types("SEP") == {"HETATM"}, "an unlisted modified residue is left alone"
+        # Six residues, not the chain's eight: SEP and DAL are read as ligand context and hold
+        # no design position, while MSE stays and reads as MET.
         return {
-            "chain_sequences": [[{"id": "A", "sequence": "MKTAYIAK"}]],
+            "chain_sequences": [[{"id": "A", "sequence": "MKTAYI"}]],
             "metrics": [{"sequence_recovery": 1.0, "ligand_interface_sequence_recovery": math.nan, "pmpnn": 0.5}],
             "pdb_strings": [None],
         }

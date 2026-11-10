@@ -1,10 +1,12 @@
-"""tests/inverse_folding_tests/test_readable_positions.py.
+"""tests/inverse_folding_tests/test_proteinmpnn_constraints.py.
 
-Tests for ProteinMPNN's residue mapping and the constraints derived from it.
+ProteinMPNN's constraint resolution: what it fixes, what it warns about, what it sends.
 
-Parsers disagree about which residues they process, so the mapping is per model. These pin
-ProteinMPNN's rule against the upstream behaviour it mirrors, the constraints resolved from
-it, and the worker payload that results. CPU-only, no model execution.
+Which residues each model reads is pinned for every toolkit in
+``test_readable_positions_all_toolkits.py``. What is here is ProteinMPNN's own machinery on
+top of that rule: the constraints resolved from it, the warnings they produce, tied
+protomers, the scoring trim, and the worker payload that results. CPU-only, no model
+execution.
 """
 
 import logging
@@ -89,25 +91,6 @@ def test_the_gfp_chromophore_is_the_only_excluded_position():
     native = structure.get_chain_sequence("A")
     assert native[63] == "X"
     assert _resolve(structure).readable["A"] == [p for p in range(1, len(native) + 1) if p != 64]
-
-
-def test_the_mapping_is_the_same_before_and_after_staging():
-    """The model reads the staged file, so a mapping taken from the input must agree with it."""
-    from proto_tools.tools.inverse_folding.structure_staging import staged_structure
-
-    structure = get_gfp_structure()
-    before = proteinmpnn_readable_positions(structure)
-    with staged_structure(structure) as staged:
-        restaged = Structure(structure=staged.path.read_text(), structure_format="pdb", source="staged")
-        after = proteinmpnn_readable_positions(restaged)
-    assert before["A"] == after["A"]
-
-
-def test_the_mapping_survives_an_mmcif_round_trip():
-    """CIF input is converted before staging; the mapping must not shift."""
-    structure = get_gfp_structure()
-    as_cif = Structure(structure=structure.structure_cif, structure_format="cif", source="cif")
-    assert proteinmpnn_readable_positions(structure)["A"] == proteinmpnn_readable_positions(as_cif)["A"]
 
 
 # ── resolved constraints and warnings ───────────────────────────────────────

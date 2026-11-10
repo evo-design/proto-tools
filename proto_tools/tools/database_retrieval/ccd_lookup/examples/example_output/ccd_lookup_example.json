@@ -1,7 +1,8 @@
 {
   "tool_id": "ccd-lookup",
-  "execution_time": 60.7732994556427,
-  "timestamp": "2026-07-25T14:00:51.714385",
+  "tool_version": "1.0.3",
+  "execution_time": 7.043381452560425,
+  "timestamp": "2026-11-08T20:35:20.835198",
   "success": true,
   "warnings": [],
   "errors": [],
@@ -27,19 +28,20 @@
       "release_status": "REL",
       "parent_ccd_code": null,
       "physchem_properties": {
-        "molecular_weight": 507.182,
-        "exact_molecular_weight": 506.9957454620005,
-        "logp": -2.4380299999999995,
+        "molecular_weight": 507.18200000000024,
+        "exact_molecular_weight": 506.99574546200006,
+        "logp": -1.6290000000000007,
         "tpsa": 279.12999999999994,
         "num_h_donors": 8.0,
         "num_h_acceptors": 18.0,
-        "num_rotatable_bonds": 15.0,
+        "num_rotatable_bonds": 8.0,
         "num_heavy_atoms": 31.0,
         "num_aromatic_rings": 2.0,
         "fraction_csp3": 0.5
       },
       "cross_references": null,
       "pdb_structures": null,
+      "resolved_without_structure": false,
       "warnings": [],
       "errors": []
     }

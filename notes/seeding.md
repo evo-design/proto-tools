@@ -233,10 +233,11 @@ This is an inherent consequence of wrapping third-party samplers, not a gap we e
 ### Gradient tools
 
 A gradient tool evaluates a derivative at the state it is given, so identical logits must yield
-identical gradients. Only ProteinMPNN (`set_jax_seed`, random decoding order) and AlphaFold2
-(`af_model.set_seed`, MSA subsampling) carry the flag. The masked-PLL gradients mask every scored
-position in turn and run under `eval()`, so they draw nothing — the `torch.multinomial` calls in
-their toolkits belong to the *sample* tools sharing the same `standalone/inference.py`.
+identical gradients. Only ProteinMPNN (`set_jax_seed`, random decoding order), AlphaFold2
+(`af_model.set_seed`, MSA subsampling) and ESMFold2's inversion gradients (a seeded model load)
+carry the flag. The masked-PLL gradients mask every scored position in turn and run under
+`eval()`, so they draw nothing — the `torch.multinomial` calls in their toolkits belong to the
+*sample* tools sharing the same `standalone/inference.py`.
 
 ESMFold's two tools both go unflagged: prediction is a single forward pass, and the gradient path
 sends no seed.
