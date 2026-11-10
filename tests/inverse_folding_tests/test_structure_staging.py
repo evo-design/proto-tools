@@ -52,6 +52,102 @@ def test_staged_structure_restores_output_written_in_staged_numbering(insertion_
     assert restored.get_chain_residue_ids() == insertion_coded_structure.get_chain_residue_ids()
 
 
+def _staged_output_without_residue(staged, chain_id: str, number: int) -> str:
+    """The staged file as a model would write it back, minus one polymer residue."""
+    import gemmi
+
+    written = gemmi.read_pdb_string(staged.path.read_text())
+    written.setup_entities()
+    chain = written[0][chain_id]
+    for index, residue in enumerate(chain):
+        if residue.seqid.num == number and residue.name != "HOH":
+            del chain[index]
+            break
+    written.setup_entities()
+    return written.make_pdb_string()
+
+
+def test_restoring_output_that_skips_a_residue_matches_the_positions_the_model_read():
+    """A model that skips a residue writes a shorter structure, which still restores.
+
+    FAMPNN and LigandMPNN pack only the residues their parser reads, so the output has one
+    residue fewer than the input. Matching it against the whole chain's IDs by position
+    would silently shift every residue past the skipped one.
+    """
+    from proto_tools.entities.structures.examples import get_gfp_structure
+    from proto_tools.tools.inverse_folding.ligandmpnn._readable import ligandmpnn_readable_positions
+
+    structure = get_gfp_structure()
+    readable = ligandmpnn_readable_positions(structure)
+    assert readable["A"] == [p for p in range(1, 229) if p != 64], "GFP's chromophore is skipped"
+
+    with staged_structure(structure) as staged:
+        model_output = _staged_output_without_residue(staged, "A", 64)
+
+    restored = staged.restore(model_output, source="test", readable_positions=readable)
+
+    expected = [ids for position, ids in enumerate(structure.get_chain_residue_ids()["A"], start=1) if position != 64]
+    assert restored.get_chain_residue_ids()["A"] == expected, "every residue keeps its own input ID"
+
+
+def test_restoring_keeps_whole_chain_ids_for_a_chain_the_model_wrote_in_full():
+    """A chain read only as context comes back whole even when the rule designs none of it.
+
+    LigandMPNN atomizes a nucleic chain, so its rule reports no design positions for it, but
+    the model still writes every residue. Trimming that chain's IDs to the empty design set
+    would reject output that is perfectly well formed.
+    """
+    from proto_tools.entities.structures.examples import get_gfp_structure
+
+    structure = get_gfp_structure()
+    with staged_structure(structure) as staged:
+        whole = Structure(structure=staged.path.read_text(), structure_format="pdb", source="test").structure
+
+    # The model designs nothing in this chain yet writes all 228 residues.
+    restored = staged.restore(whole, source="test", readable_positions={"A": []})
+    assert restored.get_chain_residue_ids()["A"] == structure.get_chain_residue_ids()["A"]
+
+
+def test_restoring_a_short_output_without_the_mapping_is_rejected():
+    """Without the mapping there is no way to tell which residue the model dropped."""
+    from proto_tools.entities.structures.examples import get_gfp_structure
+
+    with staged_structure(get_gfp_structure()) as staged:
+        model_output = _staged_output_without_residue(staged, "A", 64)
+
+    with pytest.raises(ValueError, match="residue IDs were given for it"):
+        staged.restore(model_output, source="test")
+
+
+def test_staging_can_write_a_modified_residue_as_an_atom_record():
+    """A parser that keys on the record type loses a modified residue unless it is staged ATOM.
+
+    LigandMPNN is that parser: AtomWorks moves every ``HETATM`` into a non-polymer chain
+    before its own ``MSE``-to-``MET`` conversion can run, so selenomethionine is read as
+    ligand context and the packed structure comes back with a chain the input cannot name.
+    """
+    from proto_tools.entities.structures.structure import Structure as _Structure
+
+    source = Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb"
+    structure = _Structure.from_file(source)
+
+    with staged_structure(structure) as staged:
+        default = staged.path.read_text()
+    with staged_structure(structure, atom_record_residues=frozenset({"MSE"})) as staged:
+        rewritten = staged.path.read_text()
+
+    def record_types(text: str, residue: str) -> set[str]:
+        return {
+            line[:6].strip()
+            for line in text.splitlines()
+            if line.startswith(("ATOM", "HETATM")) and line[17:20].strip() == residue
+        }
+
+    assert record_types(default, "MSE") == {"HETATM"}, "the input's record type is kept by default"
+    assert record_types(rewritten, "MSE") == {"ATOM"}, "and rewritten only for the named residues"
+    assert record_types(rewritten, "SEP") == {"HETATM"}, "an unnamed modified residue is untouched"
+
+
 def test_staged_ensemble_stages_every_conformer(insertion_coded_structure, staging_structure):
     """Conformers are staged alongside the primary, which carries the maps."""
     with staged_ensemble([insertion_coded_structure, staging_structure]) as (staged, conformer_paths):

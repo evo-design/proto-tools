@@ -141,10 +141,11 @@ class AbLangGradientOutput(GradientOutput):
     """AbLang masked PLL output; gradient is optional in forward-only mode.
 
     Attributes:
-        results (list[GradientResult]): One per input antibody, each holding its gradient
-            w.r.t. the supplied logits (``None`` in forward-only mode), its mean negative
-            log-likelihood over AA positions, and its ``log_likelihood``,
-            ``avg_log_likelihood``, ``perplexity`` and chain-length metrics.
+        results (list[GradientResult]): One per input antibody. Contains a single masked-PLL
+            term carrying that item's mean negative log-likelihood over AA positions and its raw
+            gradient w.r.t. the supplied logits (``None`` in forward-only mode), plus
+            ``log_likelihood``, ``avg_log_likelihood``, ``perplexity`` and sequence length in
+            ``metrics``.
         vocab (list[str]): Amino-acid column ordering for the input logits.
     """
 

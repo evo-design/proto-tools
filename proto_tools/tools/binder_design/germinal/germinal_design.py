@@ -1,4 +1,7 @@
-"""Germinal de novo epitope-targeted antibody design (VHH or scFv)."""
+"""proto_tools/tools/binder_design/germinal/germinal_design.py.
+
+Germinal de novo epitope-targeted antibody design (VHH or scFv).
+"""
 
 from __future__ import annotations
 
@@ -466,7 +469,7 @@ class GerminalConfig(BaseConfig):
         structure_model (Literal["chai", "af3", "protenix"]): Cofolding backend
             for structure validation. Default ``"chai"`` (auto-installed);
             ``"af3"`` and ``"protenix"`` require user-provisioned weights/env
-            (see README → Backend Configuration).
+            (see README → Toolkit Notes).
         plddt_threshold (float | None): Override final ``external_plddt``
             (VHH: ``> 0.87``, scFv: ``> 0.85``). Distinct from upstream's
             in-loop ``plddt_threshold`` save filter — use ``germinal_overrides``.

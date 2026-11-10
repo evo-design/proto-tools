@@ -567,7 +567,7 @@ class GradientOutput(BaseToolOutput):
 
     results: list[GradientResult] = Field(
         title="Results",
-        description="One result per input item, in input order, each carrying its own gradient, loss and metrics",
+        description="One result per input item, in input order, each carrying its own terms and metrics",
     )
     vocab: list[str] = Field(
         title="Vocabulary",

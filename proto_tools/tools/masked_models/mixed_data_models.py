@@ -449,14 +449,15 @@ class MixedGradientOutput(GradientOutput):
     """Token-aligned masked-PLL gradient with fixed-context rows preserved.
 
     Attributes:
-        results (list[GradientResult]): One per input item, each holding its derivative of the
-            masked NLL with respect to its input state (``None`` in forward-only mode), its mean
-            masked negative log-likelihood, and its masked-PLL metrics and checkpoint metadata.
+        results (list[GradientResult]): One per input item, in input order. Contains a single
+            masked-PLL term carrying that item's mean masked negative log-likelihood and its raw
+            derivative with respect to its input state (``None`` in forward-only mode), plus its
+            masked-PLL metrics and checkpoint metadata in ``metrics``.
         vocab (list[str]): Protein/DNA column order shared by input and gradient.
     """
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Export the gradient, loss, metrics, and vocabulary as JSON."""
+        """Export the per-item gradient terms, metrics, and the vocabulary as JSON."""
         if file_format != "json":
             raise ValueError(f"Unsupported format: {file_format}")
         payload = self.model_dump(include={"results", "vocab"}, mode="json")

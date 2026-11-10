@@ -9,7 +9,7 @@
 
 ## Overview
 
-[Borzoi](https://github.com/calico/borzoi) is a deep learning model that predicts cell-type and tissue-specific RNA-seq coverage and other regulatory genomics tracks directly from DNA sequence, developed by the Kelley lab at [Calico Life Sciences](https://www.calicolabs.com/). Given a fixed 524,288 bp input window, it returns activity across 6,144 bins of 32 bp each for thousands of human or mouse genomic assays. This toolkit exposes single-replicate prediction and a four-replicate ensemble for uncertainty estimation.
+[Borzoi](https://github.com/calico/borzoi) is a deep learning model that predicts cell-type and tissue-specific RNA-seq coverage and other regulatory genomics tracks directly from DNA sequence, developed by the Kelley lab at [Calico Life Sciences](https://www.calicolabs.com/). Given a fixed 524,288 bp input window, it returns activity across 6,144 bins of 32 bp each for thousands of human or mouse genomic assays. This toolkit exposes single-replicate prediction, a four-replicate ensemble for uncertainty estimation, and a differentiable gradient form of the same prediction.
 
 ## Background
 
@@ -78,9 +78,9 @@ This is the differentiable form of Borzoi prediction, intended as an objective i
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every Borzoi tool in this toolkit (`borzoi-prediction`, `borzoi-ensemble`).
+These apply to every Borzoi tool in this toolkit (`borzoi-prediction`, `borzoi-ensemble`, `borzoi-gradient`).
 
-- **A CUDA GPU is required.** Both tools run on GPU, and human prediction uses FlashAttention kernels that are available only on CUDA hardware. The model checkpoints are downloaded from Hugging Face on first use and cached for subsequent runs.
+- **A CUDA GPU is required.** All three tools run on GPU, and human prediction uses FlashAttention kernels that are available only on CUDA hardware. The model checkpoints are downloaded from Hugging Face on first use and cached for subsequent runs.
 - **Input sequences accept only the bases A, C, G, T, and N.** Other characters are rejected during validation. The base N is permitted but encoded as the absence of any base, so a high N content reduces prediction quality and is best minimized.
 - **Predicted values are the model's raw track-activity outputs, returned without any additional post-processing.** Higher values correspond to stronger predicted signal. The values are best used for relative comparisons, for example between alleles or across positions, rather than as absolute experimental counts.
 - **Output bins map to source coordinates through the reported window.** Each result reports the output-bin span in source-sequence coordinates at a resolution of 32 bp per bin, so a bin index can be converted to a genomic position using the output start and the bin resolution.

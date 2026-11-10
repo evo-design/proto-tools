@@ -153,8 +153,10 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
     Attributes:
         name (str): Name of the folding job. Default: ``"af3_job"``.
 
-        seeds (list[int]): Seeds to use for AlphaFold3 when the common
-            ``BaseConfig.seed`` field is unset. Default: ``[0]``. Note:
+        seeds (list[int]): How many seeds AlphaFold3 runs when the common
+            ``BaseConfig.seed`` field is unset; the listed values themselves
+            are ignored and a fresh random seed is drawn per entry.
+            Default: ``[0]``. Note:
             AlphaFold3 does ``num_diffusion_samples`` (default 5) diffusion
             samples per seed, so this often can be set to a single seed. More
             seeds are required for complex docking tasks, such as
@@ -210,7 +212,7 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
     seeds: list[int] = ConfigField(
         title="AlphaFold3 Seeds",
         default=[0],
-        description="Seeds to use for AlphaFold3 when the common seed field is unset.",
+        description="Number of random seeds AlphaFold3 runs when the common seed field is unset.",
     )
 
     output_dir: str | None = ConfigField(

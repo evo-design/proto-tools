@@ -1,6 +1,6 @@
 """proto_tools/tools/structure_prediction/alphafold2/gradient_helpers.py.
 
-Differentiable quantities and shared machinery for the three AlphaFold2 gradient tools.
+Differentiable quantities and shared machinery for the four AlphaFold2 gradient tools.
 
 Each quantity is one class, reused by whichever protocols actually compute it, so a term means
 the same thing wherever it appears. A tool exposes only the quantities measured to be live under

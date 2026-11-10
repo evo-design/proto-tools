@@ -24,7 +24,7 @@ NA-MPNN ([Kubaney et al., 2025](https://www.biorxiv.org/content/10.1101/2025.10.
 
 ### NA-MPNN Specificity (`na-mpnn-specificity`)
 
-Predicts the DNA base preference of a bound protein from one or more protein–DNA complex structures. For each input PDB, the tool runs NA-MPNN specificity inference, restricts the output to valid DNA positions, and returns a canonical PPM (`L x 4`, `A,C,G,T` order), the recovered true DNA sequence (indices `0..3`), per-row masks, and chain labels. Each result is also written to a canonical `.npz` file whose path is returned in `output_npz_path`.
+Predicts the DNA base preference of a bound protein from one or more protein–DNA complex structures. For each input PDB, the tool runs NA-MPNN specificity inference, restricts the output to valid DNA positions, and returns a canonical PPM (`L x 4`, `A,C,G,T` order), the recovered true DNA sequence (indices `0..3`), per-row masks, and chain labels. When `output_directory` is set, each result is also written to a canonical `.npz` file whose path is returned in `output_npz_path`.
 
 #### Applications
 

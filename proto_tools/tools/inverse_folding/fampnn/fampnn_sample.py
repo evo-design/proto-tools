@@ -11,12 +11,14 @@ from typing import Any, ClassVar
 from pydantic import Field
 
 from proto_tools.entities.structures import ResidueSelection, Structure
+from proto_tools.tools.inverse_folding.fampnn._readable import fampnn_readable_positions
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
     InverseFoldingConfig,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    preserved_positions,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -72,6 +74,47 @@ class FAMPNNSampleInput(BaseToolInput):
         title="Structure Inputs",
         description="List of structure inputs for sequence design.",
     )
+
+
+def _psce_per_design_residue(
+    chain_ids: list[str],
+    chain_seqs: list[str],
+    psce: list[float],
+    readable: dict[str, list[int]],
+    structure: Any,
+) -> list[float | None]:
+    """Spread FAMPNN's per-read-residue pSCE over every residue of the design.
+
+    FAMPNN reports one value per residue its parser read, while the design carries every
+    polymer residue, so the two lists diverge after the first skipped residue and a consumer
+    indexing pSCE by chain position would read its neighbour's value. Skipped residues get
+    ``None``: the model did not pack them, so there is no error to report.
+
+    Args:
+        chain_ids (list[str]): The protein chain IDs handed to the model, in its order.
+        chain_seqs (list[str]): The model's sequence per chain, covering read residues only.
+        psce (list[float]): Per-read-residue pSCE, concatenated in chain order.
+        readable (dict[str, list[int]]): Positions the model reads, per chain ID.
+        structure (Any): The input structure, for each chain's full length.
+
+    Returns:
+        list[float | None]: One entry per design residue, concatenated in chain order.
+    """
+    chunks: dict[str, list[float]] = {}
+    offset = 0
+    for chain_id, sequence in zip(chain_ids, chain_seqs, strict=True):
+        chunks[chain_id] = psce[offset : offset + len(sequence)]
+        offset += len(sequence)
+
+    # Walk the design's own chains, not the model's: FAMPNN is handed protein chains only,
+    # while the design carries every polymer chain, so a nucleic chain holds its own places.
+    spread: list[float | None] = []
+    for chain_id, residues in structure.get_chain_residue_atoms().items():
+        per_chain: list[float | None] = [None] * len(residues)
+        for value, position in zip(chunks.get(chain_id, []), readable.get(chain_id, []), strict=True):
+            per_chain[position - 1] = value
+        spread.extend(per_chain)
+    return spread
 
 
 class FAMPNNSampleConfig(InverseFoldingConfig):
@@ -145,6 +188,17 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
         description="Step scale (eta) for sidechain diffusion",
     )
 
+    def readable_positions(self, inp: Any) -> dict[str, list[int]]:
+        """Positions FAMPNN reads, which excludes HETATM residues outside its NCAA table.
+
+        Args:
+            inp (Any): One structure input.
+
+        Returns:
+            dict[str, list[int]]: Ascending readable positions per chain ID.
+        """
+        return fampnn_readable_positions(inp.structure)
+
 
 class FAMPNNDesignMetrics(Metrics):
     """Per-design full-atom sidechain confidence metrics for FAMPNN sampling.
@@ -155,9 +209,12 @@ class FAMPNNDesignMetrics(Metrics):
             more confident. Always present.
 
     Attributes:
-        psce (list[float]): Per-residue predicted sidechain error (mean over
+        psce (list[float | None]): Per-residue predicted sidechain error (mean over
             atoms) in Angstroms, concatenated across all chains in input chain
-            order.
+            order, one entry per residue of the design. ``None`` marks a residue
+            FAMPNN's parser did not read, which it therefore did not pack and has
+            no error for, so entry ``i`` always describes the design's residue
+            ``i + 1``.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
@@ -169,10 +226,10 @@ class FAMPNNDesignMetrics(Metrics):
         description="Headline metric used to rank results.",
     )
 
-    psce: list[float] = Field(
+    psce: list[float | None] = Field(
         default_factory=list,
         title="pSCE",
-        description="Per-residue predicted sidechain error (Angstroms), concatenated in input chain order.",
+        description="Predicted sidechain error (A) per design residue; None where FAMPNN skipped it.",
     )
 
 
@@ -341,6 +398,8 @@ def run_fampnn_sample(
                 dispatch_idx += 1
                 remaining -= chunk  # type: ignore[operator]
 
+        readable = config.readable_positions(inp)
+        preserved = preserved_positions(readable, inp.structure, inp.fixed_positions)
         complexes: list[FAMPNNDesign] = []
         for chain_seqs, psce, pdb in zip(all_chain_seqs, all_psce, all_pdbs, strict=True):
             if len(chain_seqs) != len(chain_ids):
@@ -354,8 +413,10 @@ def run_fampnn_sample(
                     f"does not match per-residue pSCE length {len(psce)}"
                 )
             sequences = {cid: seq for cid, seq in zip(chain_ids, chain_seqs, strict=True) if cid in redesign_set}
-            structure = staged.restore(pdb, source="fampnn-sample")
-            avg_psce = statistics.fmean(psce) if psce else 0.0
+            structure = staged.restore(pdb, source="fampnn-sample", readable_positions=readable)
+            per_residue_psce = _psce_per_design_residue(chain_ids, chain_seqs, psce, readable, inp.structure)
+            scored = [value for value in per_residue_psce if value is not None]
+            avg_psce = statistics.fmean(scored) if scored else 0.0
             complexes.append(
                 FAMPNNDesign.from_design(
                     inp.structure,
@@ -363,8 +424,10 @@ def run_fampnn_sample(
                     redesign_set,
                     tool="fampnn-sample",
                     include_ligands=False,
+                    readable_positions=readable,
+                    fixed_positions=preserved,
                     structure=structure,
-                    metrics=FAMPNNDesignMetrics(avg_psce=avg_psce, psce=psce),
+                    metrics=FAMPNNDesignMetrics(avg_psce=avg_psce, psce=per_residue_psce),
                 )
             )
 
