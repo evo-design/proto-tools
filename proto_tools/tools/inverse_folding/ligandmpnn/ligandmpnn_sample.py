@@ -22,9 +22,9 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    preserved_positions,
     split_fixed_positions,
     summarize_positions,
-    unreadable_positions,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
@@ -391,7 +391,12 @@ def run_ligandmpnn_sample(
         worker_fixed = _resolvable_fixed_positions(inp, readable)
         # Staged once per input and reused across chunks, numbered 1..N per chain so LigandMPNN,
         # which addresses residues by number alone, sees every insertion-coded residue.
-        with inp.staged(atom_record_residues=LIGANDMPNN_ATOM_RECORD_RESIDUES) as staged:
+        # Only the Foundry parser loses a HETATM residue to the chain split; the original
+        # implementation reads the staged file its own way and is not mirrored here.
+        record_residues = (
+            frozenset() if config.model_type in LIGANDMPNN_LEGACY_MODEL_TYPES else LIGANDMPNN_ATOM_RECORD_RESIDUES
+        )
+        with inp.staged(atom_record_residues=record_residues) as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 all_positions_fixed = _fixed_positions_cover_structure(inp)
@@ -435,7 +440,7 @@ def run_ligandmpnn_sample(
         redesign_ids = set(inp.chain_ids_to_redesign)
         redesigned_ids = set() if _fixed_positions_cover_structure(inp) else redesign_ids
 
-        preserved = unreadable_positions(readable, inp.structure) if readable is not None else None
+        preserved = preserved_positions(readable, inp.structure, inp.fixed_positions) if readable is not None else None
         complexes: list[LigandMPNNDesign] = []
         for chain_seqs, recovery, interface_recovery, pmpnn, pdb_string in zip(
             all_chain_sequences, all_recovery, all_interface_recovery, all_pmpnn, all_pdb_strings, strict=True

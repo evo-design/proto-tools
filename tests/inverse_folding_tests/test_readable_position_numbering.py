@@ -12,6 +12,7 @@ dispatch, no model execution.
 
 import logging
 import re
+from pathlib import Path
 
 import pytest
 
@@ -32,7 +33,7 @@ GFP_LENGTH = 228
 # ── the translations themselves ─────────────────────────────────────────────
 
 
-def test_flat_positions_number_across_chains_in_order():
+def test_flat_positions_step_over_a_skipped_residue():
     """A structure-wide position counts every polymer residue, skipped ones included."""
     structure = get_gfp_structure()
     flat = flat_readable_positions(esm_if1_readable_positions(structure), structure)
@@ -40,6 +41,25 @@ def test_flat_positions_number_across_chains_in_order():
     assert flat[:3] == [1, 2, 3]
     assert flat[62:65] == [63, 65, 66], "the chromophore is stepped over, not renumbered away"
     assert flat[-1] == GFP_LENGTH
+
+
+def test_flat_positions_offset_each_chain_by_the_ones_before_it():
+    """The second chain's positions continue the count rather than restarting at 1.
+
+    Both FAMPNN scoring tools key results by a structure-wide position and accept multi-chain
+    input, so an unoffset second chain would collide with the first.
+    """
+    from tests.inverse_folding_tests.test_readable_positions_all_toolkits import BACKBONE, _structure
+
+    structure = _structure(
+        {
+            "A": [("ALA", False, BACKBONE), ("LIG", True, BACKBONE), ("GLY", False, BACKBONE)],
+            "B": [("ALA", False, BACKBONE), ("LIG", True, BACKBONE), ("GLY", False, BACKBONE)],
+        }
+    )
+    readable = esm_if1_readable_positions(structure)
+    assert readable == {"A": [1, 3], "B": [1, 3]}, "each chain is numbered within itself"
+    assert flat_readable_positions(readable, structure) == [1, 3, 4, 6], "chain B is offset by chain A"
 
 
 def test_model_numbering_is_the_inverse_of_indexing_into_readable():
@@ -166,6 +186,17 @@ def test_a_fixed_position_reaches_the_model_in_its_own_numbering(tool, monkeypat
     assert design.chains[0].sequence[CHROMOPHORE - 1] == "X", "and preserved regardless"
 
 
+def test_a_selection_of_only_unreadable_positions_sends_nothing():
+    """With nothing the model can address, the worker is given no selection at all."""
+    from proto_tools.entities.structures import ResidueSelection
+    from proto_tools.tools.inverse_folding.shared_data_models import split_fixed_positions
+
+    readable = esm_if1_readable_positions(get_gfp_structure())
+    resolved, dropped = split_fixed_positions(ResidueSelection(chains={"A": [CHROMOPHORE]}), readable, renumber=True)
+    assert resolved is None, "an empty selection must not reach the model as an empty dict"
+    assert dropped == {"A": [CHROMOPHORE]}
+
+
 # ── fampnn: scores carry positions in both directions ───────────────────────
 
 
@@ -249,6 +280,30 @@ def test_fampnn_returns_nothing_when_no_mutation_can_be_scored(monkeypatch, capl
 
     assert output.results[0].mutations == [] and output.results[0].scores == []
     assert not called, "the model is never dispatched with an empty mutation list"
+
+
+def test_fampnn_psce_holds_a_place_for_a_chain_the_model_never_sees():
+    """The design carries every polymer chain; FAMPNN is handed only the protein ones.
+
+    Spreading pSCE over the chains the model was given would leave the list short, and
+    shifted whenever a nucleic chain sorts before a protein one.
+    """
+    from proto_tools.entities.structures.structure import Structure
+    from proto_tools.tools.inverse_folding.fampnn.fampnn_sample import _psce_per_design_residue
+
+    structure = Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb")
+    readable = fampnn_readable_positions(structure)
+    protein_chains = [cid for cid, kind in structure.get_chain_types().items() if kind == "protein"]
+    assert protein_chains == ["A"], "the fixture must have a non-protein polymer chain too"
+
+    model_sequence = "".join("W" for _ in readable["A"])
+    spread = _psce_per_design_residue(
+        protein_chains, [model_sequence], [float(i) for i in range(1, len(readable["A"]) + 1)], readable, structure
+    )
+
+    total = sum(len(residues) for residues in structure.get_chain_residue_atoms().values())
+    assert len(spread) == total, "one entry per polymer residue of the design, every chain"
+    assert spread[-3:] == [None, None, None], "the nucleic chain holds its places"
 
 
 def test_fampnn_psce_has_one_entry_per_design_residue(monkeypatch):

@@ -57,5 +57,9 @@ Use this to rank candidate sequences or assess point mutations by structural com
 
 These apply to every ESM-IF1 tool in this toolkit (`esm-if1-sample`, `esm-if1-score`).
 
+- **Residues ESM-IF1's parser cannot read are designed around, not refused.** Its parser keeps a residue only when biotite maps the residue name to one letter and the residue carries at least one atom named `N`, `CA`, `C` or `O`; GFP's CRO chromophore fails both. The design comes back covering the whole chain with those residues at their input identity, and `chains[].modifications` records them.
+- **`fixed_positions` is renumbered into the model's own numbering for you.** ESM-IF1 addresses a residue by its ordinal among the residues it read, which diverges from the chain's numbering after the first residue it skips. Give positions in the structure's numbering, counted from 1. A position naming a residue the parser cannot read is dropped with a warning, since the model never redesigns it anyway.
+- **`esm-if1-score` takes only the residues the parser reads.** Its `sequence` must be that shorter sequence, not the whole chain; the error names the expected length and both gates.
+
 - **Requires a GPU.** The geometric encoder and autoregressive decoder are not practical on CPU. Model weights download automatically on first use through the `fair-esm` package.
 - **ProteinDPO is the default for both tools.** `esm-if1-sample` and `esm-if1-score` both default `weights_variant` to `protein_dpo`, the stability-aligned variant, so by default designs are biased toward stability and scores reflect predicted stability rather than the original ESM-IF1 likelihood. Set `weights_variant` to `esmif` for the original ESM-IF1 model in either tool.

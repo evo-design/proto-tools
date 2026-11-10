@@ -17,9 +17,9 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    preserved_positions,
     split_fixed_positions,
     summarize_positions,
-    unreadable_positions,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField
@@ -254,7 +254,7 @@ def run_esm_if1_sample(
         all_seqs, all_metrics = [], []
         remaining = config.num_sequences_per_structure
         readable = config.readable_positions(inp)
-        preserved = unreadable_positions(readable, inp.structure)
+        preserved = preserved_positions(readable, inp.structure, inp.fixed_positions)
         worker_fixed = _worker_fixed_positions(inp, readable)
         # Staged once per input and reused across chunks, numbered 1..N per chain so ESM-IF1,
         # which addresses residues by number alone, sees every insertion-coded residue.

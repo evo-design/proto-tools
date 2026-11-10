@@ -68,7 +68,8 @@ class ESMIF1ScoringPair(BaseModel):
             raise ValueError(
                 f"esm-if1-score: sequence length {len(self.sequence)} does not match target chain "
                 f"{target!r} length {expected}. ESM-IF1 scores one chain at a time; `sequence` must "
-                f"cover only the residues the model sees (standard amino acids plus MSE/SEC/UNK)."
+                "cover only the residues its parser reads: a name biotite maps to one letter, and at "
+                "least one atom named N, CA, C or O."
             )
         return self
 
