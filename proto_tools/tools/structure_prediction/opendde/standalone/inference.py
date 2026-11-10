@@ -284,12 +284,15 @@ class OpenDDEModel:
             OpenDDEExecutionError: If OpenDDE reports a prediction error.
             GpuOutOfMemoryError: If prediction runs out of GPU memory.
         """
+        if not self._loaded:
+            self.load()
+        # After load(): OpenDDE reads OPENDDE_ROOT_DIR into module constants (checkpoint dir, data
+        # root) when first imported, so importing it earlier would bind its own fallback root and
+        # download the weights there instead of using the managed cache.
         from runner.batch_inference import get_default_runner, preprocess_input  # type: ignore[import-not-found]
         from runner.inference import infer_predict  # type: ignore[import-not-found]
         from standalone_helpers import oom_guard
 
-        if not self._loaded:
-            self.load()
         kwargs = self._runner_kwargs(
             model_checkpoint=model_checkpoint,
             num_samples=num_samples,

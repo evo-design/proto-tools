@@ -3,6 +3,7 @@
 Tests for OpenDDE all-atom structure prediction (``opendde-prediction``).
 """
 
+import contextlib
 import importlib.util
 import json
 import logging
@@ -284,6 +285,55 @@ def test_opendde_default_model_sends_no_checkpoint_override(tmp_path):
     model._loaded = True
 
     assert _runner_kwargs(model, model_checkpoint="opendde_v1")["load_checkpoint_path"] == ""
+
+
+def test_opendde_imports_upstream_only_after_resolving_its_root(tmp_path, monkeypatch):
+    """OpenDDE reads OPENDDE_ROOT_DIR into module constants at import, so the root must be set first.
+
+    With the managed weights cache (no OPENDDE_ROOT_DIR in the worker env), importing OpenDDE before
+    ``load()`` binds its own fallback root, where it would download the checkpoint again.
+    """
+    root = tmp_path / "weights"
+    (root / "checkpoint").mkdir(parents=True)
+    (root / "checkpoint" / "opendde.pt").write_bytes(b"")
+    fake = tmp_path / "fake_upstream" / "runner"
+    fake.mkdir(parents=True)
+    (fake / "__init__.py").write_text("")
+    (fake / "inference.py").write_text("def infer_predict(runner, configs):\n    pass\n")
+    (fake / "batch_inference.py").write_text(
+        "import os\n"
+        "ROOT_AT_IMPORT = os.environ.get('OPENDDE_ROOT_DIR')\n"
+        "def get_default_runner(**kwargs):\n"
+        "    raise RuntimeError('stop after import')\n"
+        "def preprocess_input(*args, **kwargs):\n"
+        "    raise AssertionError('not reached')\n"
+    )
+    monkeypatch.syspath_prepend(str(fake.parent))
+    for name in ("runner", "runner.batch_inference", "runner.inference"):
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    monkeypatch.delenv("OPENDDE_ROOT_DIR", raising=False)
+    mod = _load_standalone_inference()
+    helpers = sys.modules["standalone_helpers"]
+    monkeypatch.setattr(helpers, "resolve_weights_dir", lambda toolkit: str(root), raising=False)
+    monkeypatch.setattr(helpers, "oom_guard", lambda *args, **kwargs: contextlib.nullcontext(), raising=False)
+
+    with pytest.raises(RuntimeError, match="stop after import"):
+        mod.OpenDDEModel()(
+            input_json_path=str(tmp_path / "in.json"),
+            output_dir=str(tmp_path / "out"),
+            job_name="j",
+            model_checkpoint="opendde_v1",
+            num_samples=1,
+            num_steps=1,
+            num_cycles=1,
+            use_msa=False,
+            use_template=False,
+            use_rna_msa=False,
+            seed=0,
+            device="cpu",
+        )
+
+    assert str(root) == sys.modules["runner.batch_inference"].ROOT_AT_IMPORT
 
 
 def test_opendde_missing_bundled_checkpoint_fails_before_dispatch(tmp_path):

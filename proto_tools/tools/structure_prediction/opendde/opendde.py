@@ -266,6 +266,9 @@ def example_input() -> Any:
     metrics_class=OpenDDEMetrics,
     description="All-atom biomolecular structure prediction using OpenDDE",
     uses_gpu=True,
+    # The worker holds OpenDDE's runner in-process, and OpenDDE resolves "cuda" to cuda:0 of the
+    # visible GPUs, so the worker must see only the GPU(s) it was leased.
+    pin_visible_devices=True,
     device_count="1-2",
     example_input=example_input,
     iterable_input_fields=["complexes", "msas"],
