@@ -4,7 +4,6 @@ import glob
 import json
 import os
 import re
-import shutil
 import sys
 from typing import Any
 
@@ -20,35 +19,7 @@ _BUNDLED_CHECKPOINTS: dict[str, str | None] = {
 
 
 class OpenDDEExecutionError(Exception):
-    """Raised when the ``opendde pred`` CLI fails for a non-OOM reason."""
-
-
-def _bool_str(value: bool) -> str:
-    """Render a Python bool as the lowercase ``true``/``false`` string OpenDDE's CLI expects."""
-    return "true" if value else "false"
-
-
-def _resolve_opendde_bin() -> str:
-    """Locate the ``opendde`` console-script installed into the tool venv.
-
-    The worker runs with the venv's interpreter, so the entry point lives next to
-    ``sys.executable``; fall back to a ``PATH`` lookup for atypical layouts.
-
-    Returns:
-        str: Absolute path to the ``opendde`` executable.
-
-    Raises:
-        FileNotFoundError: If the executable cannot be located.
-    """
-    candidate = os.path.join(os.path.dirname(sys.executable), "opendde")
-    if os.path.exists(candidate):
-        return candidate
-    found = shutil.which("opendde")
-    if found:
-        return found
-    raise FileNotFoundError(
-        "opendde: could not locate the 'opendde' console script; re-run setup.sh to install the 'opendde' package"
-    )
+    """Raised when an OpenDDE prediction fails for a non-OOM reason."""
 
 
 def _extract_structure_and_scores(output_dir: str, include_pae_matrix: bool = False) -> dict[str, Any]:
@@ -176,12 +147,21 @@ def _warn_on_chains_without_msa(input_json_path: str) -> None:
 
 
 class OpenDDEModel:
-    """Wrapper for the ``opendde pred`` CLI (fresh subprocess per prediction)."""
+    """OpenDDE co-folding model held in-process across calls.
+
+    Builds one upstream ``InferenceRunner`` (model + checkpoint) and reuses it; it is rebuilt
+    only when a weight- or sampling-affecting field changes (checkpoint, cycles, steps,
+    samples, MSA/template flags, PAE output). Per-call inputs (input JSON, output dir, seed)
+    are set on the held runner, as the ``opendde pred`` CLI does for each input file.
+    """
 
     def __init__(self) -> None:
-        """Initialize with an unresolved OpenDDE root directory."""
+        """Initialize with an unresolved OpenDDE root directory and no runner."""
         self._loaded = False
         self.root_dir: str | None = None
+        self.runner: Any = None
+        self.device: str | None = None
+        self._cache_key: tuple[Any, ...] | None = None
 
     def load(self) -> None:
         """Resolve ``OPENDDE_ROOT_DIR`` (checkpoints + common assets) and verify it holds weights.
@@ -212,13 +192,29 @@ class OpenDDEModel:
             )
 
         self.root_dir = root
+        # OpenDDE reads checkpoints and common assets from OPENDDE_ROOT_DIR in-process.
+        os.environ["OPENDDE_ROOT_DIR"] = root
         self._loaded = True
 
-    def _build_cmd(
+    def _resolve_checkpoint(self, model_checkpoint: str) -> str:
+        """Bundled name -> file under root (``""`` = OpenDDE's default weights); anything else is an explicit path."""
+        assert self.root_dir is not None  # set by load()
+        if model_checkpoint in _BUNDLED_CHECKPOINTS:
+            rel = _BUNDLED_CHECKPOINTS[model_checkpoint]
+            resolved = os.path.join(self.root_dir, rel) if rel else ""
+        else:
+            resolved = model_checkpoint
+        if resolved and not os.path.exists(resolved):
+            known = ", ".join(sorted(_BUNDLED_CHECKPOINTS))
+            raise FileNotFoundError(
+                f"opendde: checkpoint not found at {resolved!r} (model_checkpoint={model_checkpoint!r}); "
+                f"use a bundled model name ({known}) and re-run setup.sh to fetch weights, "
+                "or pass a path to an existing .pt checkpoint"
+            )
+        return resolved
+
+    def _runner_kwargs(
         self,
-        input_json_path: str,
-        output_dir: str,
-        job_name: str,  # noqa: ARG002 -- OpenDDE derives the job name from the input JSON
         model_checkpoint: str,
         num_samples: int,
         num_steps: int,
@@ -226,63 +222,23 @@ class OpenDDEModel:
         use_msa: bool,
         use_template: bool,
         use_rna_msa: bool,
-        seed: int,
         device: str,
         include_pae_matrix: bool = False,
-    ) -> list[str]:
-        """Build the ``opendde pred`` argv."""
-        assert self.root_dir is not None  # set by load()
-
-        device_arg = "cpu" if device == "cpu" else "cuda"
-
-        cmd = [
-            _resolve_opendde_bin(),
-            "pred",
-            "-i",
-            input_json_path,
-            "-o",
-            output_dir,
-            "-n",
-            "opendde_v1",
-            "--sample",
-            str(num_samples),
-            "--step",
-            str(num_steps),
-            "--cycle",
-            str(num_cycles),
-            "--use_msa",
-            _bool_str(use_msa),
-            "--use_template",
-            _bool_str(use_template),
-            "--use_rna_msa",
-            _bool_str(use_rna_msa),
-            "--seeds",
-            str(seed),
-            "--device",
-            device_arg,
+    ) -> dict[str, Any]:
+        """``get_default_runner`` arguments matching the ``opendde pred`` CLI defaults."""
+        return {
+            "model_name": "opendde_v1",
+            "load_checkpoint_path": self._resolve_checkpoint(model_checkpoint),
+            "n_sample": num_samples,
+            "n_step": num_steps,
+            "n_cycle": num_cycles,
+            "use_msa": use_msa,
+            "use_template": use_template,
+            "use_rna_msa": use_rna_msa,
             # Emit the full-data PAE file only when requested (it is O(n_token^2) to write).
-            "--need_atom_confidence",
-            _bool_str(include_pae_matrix),
-        ]
-
-        # Bundled name -> file under root (opendde_v1 -> None = default weights); anything else is an explicit path.
-        if model_checkpoint in _BUNDLED_CHECKPOINTS:
-            rel = _BUNDLED_CHECKPOINTS[model_checkpoint]
-            resolved_ckpt = os.path.join(self.root_dir, rel) if rel else None
-        else:
-            resolved_ckpt = model_checkpoint
-
-        if resolved_ckpt and not os.path.exists(resolved_ckpt):
-            known = ", ".join(sorted(_BUNDLED_CHECKPOINTS))
-            raise FileNotFoundError(
-                f"opendde: checkpoint not found at {resolved_ckpt!r} (model_checkpoint={model_checkpoint!r}); "
-                f"use a bundled model name ({known}) and re-run setup.sh to fetch weights, "
-                "or pass a path to an existing .pt checkpoint"
-            )
-        if resolved_ckpt:
-            cmd += ["--load_checkpoint_path", resolved_ckpt]
-
-        return cmd
+            "need_atom_confidence": include_pae_matrix,
+            "device": "cpu" if device == "cpu" else "cuda",
+        }
 
     def __call__(
         self,
@@ -309,32 +265,35 @@ class OpenDDEModel:
             job_name (str): Folding job name (drives OpenDDE's output subdirectory).
             model_checkpoint (str): Bundled model name (``opendde_v1``/``opendde_abag``) or
                 a path to a custom ``.pt`` checkpoint.
-            num_samples (int): Independent diffusion samples (``--sample``).
-            num_steps (int): Diffusion denoising steps (``--step``).
-            num_cycles (int): Recycling iterations (``--cycle``).
-            use_msa (bool): Featurize the supplied MSA files (``--use_msa``); every chain has one.
-            use_template (bool): Run OpenDDE's template pipeline (``--use_template``).
-            use_rna_msa (bool): Run OpenDDE's RNA MSA pipeline (``--use_rna_msa``).
-            seed (int): Random seed (``--seeds``).
+            num_samples (int): Independent diffusion samples.
+            num_steps (int): Diffusion denoising steps.
+            num_cycles (int): Recycling iterations.
+            use_msa (bool): Featurize the supplied MSA files; every chain has one.
+            use_template (bool): Run OpenDDE's template pipeline.
+            use_rna_msa (bool): Run OpenDDE's RNA MSA pipeline.
+            seed (int): Random seed.
             device (str): Device string (e.g. ``"cuda"``, ``"cpu"``).
-            verbose (bool): Tee subprocess stdout/stderr to this process.
-            include_pae_matrix (bool): Pass ``--need_atom_confidence`` and return the
-                per-token PAE matrix (``pae``) plus a derived ``avg_pae`` scalar.
+            verbose (bool): Log the prediction parameters at INFO.
+            include_pae_matrix (bool): Write the full-data file and return the per-token
+                PAE matrix (``pae``) plus a derived ``avg_pae`` scalar.
 
         Returns:
             dict[str, Any]: ``{"structure_cif_output": <cif str>, "metrics": {...}}``.
 
         Raises:
-            OpenDDEExecutionError: If the ``opendde pred`` CLI exits non-zero (non-OOM).
-            GpuOutOfMemoryError: If the CLI failed with a CUDA out-of-memory error.
+            OpenDDEExecutionError: If OpenDDE reports a prediction error.
+            GpuOutOfMemoryError: If prediction runs out of GPU memory.
         """
         if not self._loaded:
             self.load()
+        # After load(): OpenDDE reads OPENDDE_ROOT_DIR into module constants (checkpoint dir, data
+        # root) when first imported, so importing it earlier would bind its own fallback root and
+        # download the weights there instead of using the managed cache.
+        from runner.batch_inference import get_default_runner, preprocess_input  # type: ignore[import-not-found]
+        from runner.inference import infer_predict  # type: ignore[import-not-found]
+        from standalone_helpers import oom_guard
 
-        cmd = self._build_cmd(
-            input_json_path=input_json_path,
-            output_dir=output_dir,
-            job_name=job_name,
+        kwargs = self._runner_kwargs(
             model_checkpoint=model_checkpoint,
             num_samples=num_samples,
             num_steps=num_steps,
@@ -342,40 +301,56 @@ class OpenDDEModel:
             use_msa=use_msa,
             use_template=use_template,
             use_rna_msa=use_rna_msa,
-            seed=seed,
             device=device,
             include_pae_matrix=include_pae_matrix,
         )
+        key = tuple(sorted(kwargs.items()))
+        os.makedirs(output_dir, exist_ok=True)
+        (logger.info if verbose else logger.debug)(
+            f"OpenDDE prediction: {kwargs}, seed={seed}, input={input_json_path}"
+        )
+        if self.runner is None or self._cache_key != key:
+            self.close()
+            # InferenceRunner.__init__ loads the model and checkpoint once; later calls reuse it.
+            with oom_guard("opendde", hint="Reduce num_samples/num_steps/num_cycles or use a larger GPU."):
+                self.runner = get_default_runner(seeds=[seed], dump_dir=output_dir, **kwargs)
+            self._cache_key = key
+            self.device = str(self.runner.device)
 
-        # Pin the subprocess to the caller-specified GPU, and make sure OpenDDE reads
-        # checkpoints/assets from the resolved root (env copy already carries any
-        # config-supplied OPENDDE_ROOT_DIR; overwrite with the verified path).
-        from standalone_helpers import get_subprocess_device_env, is_cuda_oom, raise_oom, run_teed
-
-        env = get_subprocess_device_env(device)
-        assert self.root_dir is not None
-        env["OPENDDE_ROOT_DIR"] = self.root_dir
+        # Re-point the held runner at this call's output dir; the dumper's base_dir is fixed at construction.
+        self.runner.dump_dir = output_dir
+        self.runner.error_dir = os.path.join(output_dir, "ERR")
+        self.runner.dumper.base_dir = output_dir
 
         if use_msa:
             _warn_on_chains_without_msa(input_json_path)
-        logger.debug("Executing OpenDDE: %s", " ".join(cmd))
-        returncode, stdout, stderr = run_teed(cmd, env=env, verbose=verbose)
-        if "starting to update msa result" in f"{stdout}\n{stderr}" or os.path.isdir(
-            os.path.join(output_dir, job_name, "msa")
+        configs = self.runner.configs
+        configs["input_json_path"] = preprocess_input(
+            input_json_path, out_dir=output_dir, use_msa=use_msa, use_template=use_template, use_rna_msa=use_rna_msa
+        )
+        configs["seeds"] = [seed]
+        configs["dump_dir"] = output_dir
+        with oom_guard(
+            "opendde", hint="Reduce num_samples/num_steps/num_cycles, shorten the complex, or use a larger GPU."
         ):
+            infer_predict(self.runner, configs)
+        if os.path.isdir(os.path.join(output_dir, job_name, "msa")):
             logger.warning("opendde: OpenDDE ran its own MSA server search, replacing the MSAs proto-tools supplied")
 
-        if returncode != 0:
-            stderr_tail = " | ".join(stderr.strip().splitlines()) or "<no stderr>"
-            if is_cuda_oom(stderr_tail):
-                raise_oom(
-                    "opendde",
-                    hint="Reduce --sample/--step/--cycle, shorten the complex, or use a GPU with more memory.",
-                )
-            raise OpenDDEExecutionError(f"opendde: prediction failed (exit {returncode}): {stderr_tail}")
-
-        logger.debug("OpenDDE execution completed successfully.")
+        err_dir = os.path.join(output_dir, "ERR")
+        if os.path.isdir(err_dir) and os.listdir(err_dir):
+            messages = []
+            for name in sorted(os.listdir(err_dir)):
+                with open(os.path.join(err_dir, name)) as f:
+                    messages.append(f"{name}: {f.read()}")
+            raise OpenDDEExecutionError("opendde: prediction failed: " + " | ".join(messages))
         return _extract_structure_and_scores(output_dir, include_pae_matrix=include_pae_matrix)
+
+    def close(self) -> None:
+        """Release the held runner (its model and GPU memory)."""
+        if self.runner is not None:
+            self.runner.close()
+        self.runner, self._cache_key, self.device = None, None, None
 
 
 # ============================================================================
@@ -422,25 +397,11 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"opendde: unknown operation {operation!r}; valid: ['predict']")
 
 
-def to_device(device: str) -> dict[str, Any]:
-    """DeviceManager callback for moving the model to a different device.
-
-    OpenDDE runs as a fresh subprocess per call (no persistent in-process state),
-    so device assignment is a passthrough — CUDA_VISIBLE_DEVICES on the subprocess
-    handles allocation.
-
-    Args:
-        device (str): Target device (e.g., "cpu", "cuda:0").
-
-    Returns:
-        dict[str, Any]: Success status dict.
-    """
-    return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
-
-
 def get_memory_stats() -> dict[str, Any]:
-    """CLI tool, no persistent GPU state to report."""
-    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
+    """Report GPU memory held by the persistent model (the pinned worker's GPU is local cuda:0)."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
 
 
 # Worker protocol entry point
