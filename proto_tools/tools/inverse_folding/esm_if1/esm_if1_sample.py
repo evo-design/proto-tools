@@ -17,8 +17,8 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    split_fixed_positions,
     summarize_positions,
-    to_model_numbering,
     unreadable_positions,
 )
 from proto_tools.tools.tool_registry import tool
@@ -182,11 +182,8 @@ def example_input() -> Any:
 def _worker_fixed_positions(inp: Any, readable: dict[str, list[int]]) -> Any:
     """Renumber the caller's fixed positions into the numbering ESM-IF1 addresses.
 
-    The model never sees a residue its parser skipped, and the sequence it holds is numbered
-    from 1 with no gaps for the skipped ones. A caller's position therefore has to be
-    renumbered before it names the same residue to the model, and a position the model does
-    not read is dropped: the residue keeps its input identity through ``readable_positions``
-    at reconstruction instead.
+    The model holds only the residues it read, numbered from 1 with no gaps, so a caller's
+    position has to be renumbered before it names the same residue to the model.
 
     Args:
         inp (Any): One structure input, exposing ``fixed_positions``.
@@ -195,24 +192,15 @@ def _worker_fixed_positions(inp: Any, readable: dict[str, list[int]]) -> Any:
     Returns:
         Any: A ``ResidueSelection`` in the model's numbering, or ``None`` when nothing is left.
     """
-    selection = inp.fixed_positions
-    if selection is None:
-        return None
-    renumbered: dict[str, list[int]] = {}
-    for chain_id, positions in selection.chains.items():
-        chain_readable = readable.get(chain_id, [])
-        kept = to_model_numbering(chain_readable, positions)
-        dropped = sorted(set(positions) - set(chain_readable))
-        if dropped:
-            logger.warning(
-                "esm-if1-sample: Chain %s, position %s cannot be fixed because ESM-IF1's parser "
-                "does not read it. The original residue is preserved in the output regardless.",
-                chain_id,
-                summarize_positions(inp.structure, chain_id, dropped),
-            )
-        if kept:
-            renumbered[chain_id] = kept
-    return type(selection)(chains=renumbered) if renumbered else None
+    resolved, dropped = split_fixed_positions(inp.fixed_positions, readable, renumber=True)
+    for chain_id, positions in dropped.items():
+        logger.warning(
+            "esm-if1-sample: Chain %s, position %s cannot be fixed because ESM-IF1's parser does not "
+            "read it. The original residue is preserved in the output regardless.",
+            chain_id,
+            summarize_positions(inp.structure, chain_id, positions),
+        )
+    return resolved
 
 
 @tool(

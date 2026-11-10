@@ -109,36 +109,11 @@ def test_esm_if1_fixes_the_residue_the_caller_named(monkeypatch, position):
     assert design.chains[0].sequence[position - 1] == native[position - 1]
 
 
-def test_esm_if1_renumbers_a_fixed_position_for_the_worker(monkeypatch):
-    """Position 100 of the chain is position 99 of what the model reads."""
-    sent: list[dict] = []
-    _run_esm_if1(monkeypatch, {"A": [100]}, sent)
-    assert sent[0]["fixed_positions"] == {"A": [99]}
+# ── both: how a fixed position crosses into the model's numbering ──────────
 
 
-def test_esm_if1_leaves_positions_before_the_skip_alone(monkeypatch):
-    """Nothing is skipped yet, so the two numberings still agree."""
-    sent: list[dict] = []
-    _run_esm_if1(monkeypatch, {"A": [10]}, sent)
-    assert sent[0]["fixed_positions"] == {"A": [10]}
-
-
-def test_esm_if1_drops_an_unreadable_fixed_position_and_says_so(monkeypatch, caplog):
-    """The model cannot fix a residue it never saw; reconstruction preserves it instead."""
-    sent: list[dict] = []
-    with caplog.at_level(logging.WARNING):
-        design = _run_esm_if1(monkeypatch, {"A": [CHROMOPHORE]}, sent)
-
-    assert sent[0]["fixed_positions"] is None
-    assert "64 (CRO)" in caplog.text
-    assert design.chains[0].sequence[CHROMOPHORE - 1] == "X", "preserved regardless"
-
-
-# ── ligandmpnn: the model matches by residue id, so positions are filtered ──
-
-
-def test_ligandmpnn_filters_rather_than_renumbers(monkeypatch, caplog):
-    """AtomWorks keeps each designed residue's own number, and raises on one it cannot find."""
+def _run_ligandmpnn(monkeypatch, fixed, sent):
+    """Run LigandMPNN against a worker stand-in, returning its design."""
     from proto_tools.tools.inverse_folding import (
         InverseFoldingInput,
         InverseFoldingStructureInput,
@@ -150,12 +125,11 @@ def test_ligandmpnn_filters_rather_than_renumbers(monkeypatch, caplog):
     structure = get_gfp_structure()
     readable = ligandmpnn_readable_positions(structure)["A"]
     native = structure.get_chain_sequence("A")
-    sent: list[dict] = []
 
     def dispatch(_tool, input_dict, **_kwargs):
         sent.append(input_dict)
-        fixed = set((input_dict.get("fixed_positions") or {}).get("A", ()))
-        sequence = "".join(native[p - 1] if p in fixed else "W" for p in readable)
+        fixed_ids = set((input_dict.get("fixed_positions") or {}).get("A", ()))
+        sequence = "".join(native[p - 1] if p in fixed_ids else "W" for p in readable)
         return {
             "chain_sequences": [[{"id": "A", "sequence": sequence}]],
             "metrics": [{"sequence_recovery": 1.0, "pmpnn": 0.5}],
@@ -163,18 +137,33 @@ def test_ligandmpnn_filters_rather_than_renumbers(monkeypatch, caplog):
         }
 
     monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(dispatch))
-    with caplog.at_level(logging.WARNING):
-        run_ligandmpnn_sample(
-            InverseFoldingInput(
-                inputs=[
-                    InverseFoldingStructureInput(structure=structure, fixed_positions={"A": [10, CHROMOPHORE, 100]})
-                ]
-            ),
-            LigandMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=0, device="cpu"),
-        )
+    output = run_ligandmpnn_sample(
+        InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=structure, fixed_positions=fixed)]),
+        LigandMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=0, device="cpu"),
+    )
+    return output.design_sets[0].complexes[0]
 
-    assert sent[0]["fixed_positions"] == {"A": [10, 100]}, "kept positions keep their own numbers"
-    assert "64 (CRO)" in caplog.text
+
+#: Per toolkit, the runner and the payload it should send for {"A": [10, 64, 100]}. The two
+#: differ because ESM-IF1 addresses a residue by its ordinal among what it read, so 100
+#: renumbers to 99, while AtomWorks matches by residue id, which staging leaves alone.
+FIXED_POSITION_CASES = {
+    "esm-if1-sample": (_run_esm_if1, {"A": [10, 99]}),
+    "ligandmpnn-sample": (_run_ligandmpnn, {"A": [10, 100]}),
+}
+
+
+@pytest.mark.parametrize("tool", sorted(FIXED_POSITION_CASES))
+def test_a_fixed_position_reaches_the_model_in_its_own_numbering(tool, monkeypatch, caplog):
+    """Renumbered or filtered, a position the model cannot read is dropped and reported."""
+    runner, expected = FIXED_POSITION_CASES[tool]
+    sent: list[dict] = []
+    with caplog.at_level(logging.WARNING):
+        design = runner(monkeypatch, {"A": [10, CHROMOPHORE, 100]}, sent)
+
+    assert sent[0]["fixed_positions"] == expected
+    assert "64 (CRO)" in caplog.text, "the dropped position is reported, not silently ignored"
+    assert design.chains[0].sequence[CHROMOPHORE - 1] == "X", "and preserved regardless"
 
 
 # ── fampnn: scores carry positions in both directions ───────────────────────
@@ -260,29 +249,6 @@ def test_fampnn_returns_nothing_when_no_mutation_can_be_scored(monkeypatch, capl
 
     assert output.results[0].mutations == [] and output.results[0].scores == []
     assert not called, "the model is never dispatched with an empty mutation list"
-
-
-def test_fampnn_sends_mutations_in_the_models_numbering(monkeypatch):
-    """A mutation at chain position 100 is position 99 to the model."""
-    from proto_tools.tools.inverse_folding import FAMPNNScoreConfig, FAMPNNScoreInput, MutationInput, run_fampnn_score
-
-    structure = get_gfp_structure()
-    native = structure.get_chain_sequence("A")
-    sent: list[dict] = []
-
-    def dispatch(_tool, input_dict, **_kwargs):
-        sent.append(input_dict)
-        return {"mutations": input_dict["mutations"], "scores": [0.0] * len(input_dict["mutations"])}
-
-    monkeypatch.setattr(ToolInstance, "dispatch", staticmethod(dispatch))
-    requested = [f"{native[9]}10A", f"{native[99]}100A"]
-    output = run_fampnn_score(
-        FAMPNNScoreInput(inputs=[MutationInput(structure=structure, mutations=requested)]),
-        FAMPNNScoreConfig(seed=0),
-    )
-
-    assert sent[0]["mutations"] == [f"{native[9]}10A", f"{native[99]}99A"]
-    assert output.results[0].mutations == requested, "the caller is answered in their own numbering"
 
 
 def test_fampnn_psce_has_one_entry_per_design_residue(monkeypatch):

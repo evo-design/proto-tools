@@ -19,6 +19,7 @@ from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.esm_if1._readable import esm_if1_readable_positions
 from proto_tools.tools.inverse_folding.fampnn._readable import fampnn_readable_positions
 from proto_tools.tools.inverse_folding.ligandmpnn._readable import ligandmpnn_readable_positions
+from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import LIGANDMPNN_LEGACY_MODEL_TYPES
 from proto_tools.tools.inverse_folding.proteinmpnn._readable import proteinmpnn_readable_positions
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
@@ -33,6 +34,9 @@ RULES = {
     "ligandmpnn-sample": ligandmpnn_readable_positions,
     "proteinmpnn-sample": proteinmpnn_readable_positions,
 }
+
+CHROMOPHORE = 64
+GFP_LENGTH = 228
 
 BACKBONE = ("N", "CA", "C", "O")
 #: A nucleotide's atoms share no name with any protein backbone or AlphaFold heavy atom.
@@ -76,7 +80,7 @@ def _one_chain(residues: list[tuple[str, bool, tuple[str, ...]]]) -> Structure:
 
 # Each case names a structure and the positions every toolkit's parser reads from it. The
 # expectations are derived from each upstream parser's own source, not from observed output.
-CASES: dict[str, tuple[Structure, dict[str, list[int]]]] = {
+CASES: dict[str, tuple[Structure, dict[str, dict[str, list[int]]]]] = {
     # Every model reads selenomethionine, by a different route: ColabDesign rewrites its
     # MODRES table to ATOM, biotite maps MSE to M, FAMPNN lists it as an NCAA, and LigandMPNN
     # relies on AtomWorks' own MSE-to-MET conversion, which only applies once
@@ -85,10 +89,10 @@ CASES: dict[str, tuple[Structure, dict[str, list[int]]]] = {
     "mse_written_as_hetatm": (
         _one_chain([("ALA", False, BACKBONE), ("MSE", True, BACKBONE), ("GLY", False, BACKBONE)]),
         {
-            "esm-if1-sample": [1, 2, 3],
-            "fampnn-sample": [1, 2, 3],
-            "ligandmpnn-sample": [1, 2, 3],
-            "proteinmpnn-sample": [1, 2, 3],
+            "esm-if1-sample": {"A": [1, 2, 3]},
+            "fampnn-sample": {"A": [1, 2, 3]},
+            "ligandmpnn-sample": {"A": [1, 2, 3]},
+            "proteinmpnn-sample": {"A": [1, 2, 3]},
         },
     ),
     # Phosphoserine is in ColabDesign's MODRES table and FAMPNN's NCAA table, but biotite has
@@ -96,20 +100,20 @@ CASES: dict[str, tuple[Structure, dict[str, list[int]]]] = {
     "sep_written_as_hetatm": (
         _one_chain([("ALA", False, BACKBONE), ("SEP", True, BACKBONE), ("GLY", False, BACKBONE)]),
         {
-            "esm-if1-sample": [1, 3],
-            "fampnn-sample": [1, 2, 3],
-            "ligandmpnn-sample": [1, 3],
-            "proteinmpnn-sample": [1, 2, 3],
+            "esm-if1-sample": {"A": [1, 3]},
+            "fampnn-sample": {"A": [1, 2, 3]},
+            "ligandmpnn-sample": {"A": [1, 3]},
+            "proteinmpnn-sample": {"A": [1, 2, 3]},
         },
     ),
     # A residue no table lists is skipped by every parser.
     "unlisted_hetatm_residue": (
         _one_chain([("ALA", False, BACKBONE), ("LIG", True, BACKBONE), ("GLY", False, BACKBONE)]),
         {
-            "esm-if1-sample": [1, 3],
-            "fampnn-sample": [1, 3],
-            "ligandmpnn-sample": [1, 3],
-            "proteinmpnn-sample": [1, 3],
+            "esm-if1-sample": {"A": [1, 3]},
+            "fampnn-sample": {"A": [1, 3]},
+            "ligandmpnn-sample": {"A": [1, 3]},
+            "proteinmpnn-sample": {"A": [1, 3]},
         },
     ),
     # ProteinMPNN requires a backbone nitrogen and LigandMPNN requires all four atoms;
@@ -117,30 +121,30 @@ CASES: dict[str, tuple[Structure, dict[str, list[int]]]] = {
     "missing_backbone_nitrogen": (
         _one_chain([("ALA", False, BACKBONE), ("LYS", False, ("CA", "C", "O")), ("GLY", False, BACKBONE)]),
         {
-            "esm-if1-sample": [1, 2, 3],
-            "fampnn-sample": [1, 2, 3],
-            "ligandmpnn-sample": [1, 3],
-            "proteinmpnn-sample": [1, 3],
+            "esm-if1-sample": {"A": [1, 2, 3]},
+            "fampnn-sample": {"A": [1, 2, 3]},
+            "ligandmpnn-sample": {"A": [1, 3]},
+            "proteinmpnn-sample": {"A": [1, 3]},
         },
     ),
     # Only LigandMPNN asks for the carbonyl oxygen.
     "missing_carbonyl_oxygen": (
         _one_chain([("ALA", False, BACKBONE), ("LYS", False, ("N", "CA", "C")), ("GLY", False, BACKBONE)]),
         {
-            "esm-if1-sample": [1, 2, 3],
-            "fampnn-sample": [1, 2, 3],
-            "ligandmpnn-sample": [1, 3],
-            "proteinmpnn-sample": [1, 2, 3],
+            "esm-if1-sample": {"A": [1, 2, 3]},
+            "fampnn-sample": {"A": [1, 2, 3]},
+            "ligandmpnn-sample": {"A": [1, 3]},
+            "proteinmpnn-sample": {"A": [1, 2, 3]},
         },
     ),
     # UNK is a position every parser keeps, so an unknown residue is designed, not skipped.
     "unknown_residue_written_as_atom": (
         _one_chain([("ALA", False, BACKBONE), ("UNK", False, BACKBONE), ("GLY", False, BACKBONE)]),
         {
-            "esm-if1-sample": [1, 2, 3],
-            "fampnn-sample": [1, 2, 3],
-            "ligandmpnn-sample": [1, 2, 3],
-            "proteinmpnn-sample": [1, 2, 3],
+            "esm-if1-sample": {"A": [1, 2, 3]},
+            "fampnn-sample": {"A": [1, 2, 3]},
+            "ligandmpnn-sample": {"A": [1, 2, 3]},
+            "proteinmpnn-sample": {"A": [1, 2, 3]},
         },
     ),
     # A nucleic chain contributes no design positions to any protein inverse-folding model,
@@ -153,10 +157,10 @@ CASES: dict[str, tuple[Structure, dict[str, list[int]]]] = {
             }
         ),
         {
-            "esm-if1-sample": [1, 2],
-            "fampnn-sample": [1, 2],
-            "ligandmpnn-sample": [1, 2],
-            "proteinmpnn-sample": [1, 2],
+            "esm-if1-sample": {"A": [1, 2], "B": []},
+            "fampnn-sample": {"A": [1, 2], "B": []},
+            "ligandmpnn-sample": {"A": [1, 2], "B": []},
+            "proteinmpnn-sample": {"A": [1, 2], "B": []},
         },
     ),
 }
@@ -165,35 +169,23 @@ CASES: dict[str, tuple[Structure, dict[str, list[int]]]] = {
 @pytest.mark.parametrize("tool", sorted(RULES))
 @pytest.mark.parametrize("case", sorted(CASES))
 def test_each_toolkit_reads_the_positions_its_parser_reads(case: str, tool: str):
-    """Pin every rule against the same awkward structures, one assertion per pair."""
+    """Pin every rule against the same awkward structures, chain by chain.
+
+    The expectation names every polymer chain, so a chain the model reads none of has to come
+    back present and empty rather than missing, and the mapping has to be well formed.
+    """
     structure, expected = CASES[case]
-    assert RULES[tool](structure)["A"] == expected[tool]
-
-
-@pytest.mark.parametrize("tool", sorted(RULES))
-def test_a_nucleic_chain_is_empty_rather_than_absent(tool: str):
-    """A chain with no design positions must still appear, so reconstruction can see it."""
-    structure, _ = CASES["nucleic_acid_chain"]
     readable = RULES[tool](structure)
-    assert readable["B"] == [], "a nucleic chain yields no design positions"
-    assert set(readable) == {"A", "B"}, "every polymer chain is reported"
+    validate_residue_mapping(readable, structure)
+    assert readable == expected[tool]
 
 
 @pytest.mark.parametrize("tool", sorted(RULES))
 def test_the_gfp_chromophore_is_the_only_position_no_toolkit_reads(tool: str):
     """The motivating case: every model skips CRO at 64 and reads the other 227 residues."""
     structure = get_gfp_structure()
-    total = len(structure.get_chain_residue_atoms()["A"])
-    assert total == 228
-    assert RULES[tool](structure)["A"] == [p for p in range(1, 229) if p != 64]
-
-
-@pytest.mark.parametrize("tool", sorted(RULES))
-@pytest.mark.parametrize("case", sorted(CASES))
-def test_every_mapping_is_well_formed(case: str, tool: str):
-    """Ascending, unique, 1-indexed and inside the chain, for every rule and fixture."""
-    structure, _ = CASES[case]
-    validate_residue_mapping(RULES[tool](structure), structure)
+    assert len(structure.get_chain_residue_atoms()["A"]) == GFP_LENGTH
+    assert RULES[tool](structure)["A"] == [p for p in range(1, GFP_LENGTH + 1) if p != CHROMOPHORE]
 
 
 @pytest.mark.parametrize("tool", sorted(RULES))
@@ -233,21 +225,17 @@ def test_a_short_design_is_placed_back_around_the_skipped_residue(tool: str):
     assert [(m.position, m.modification_code) for m in chain.modifications] == [(64, "CRO")]
 
 
-def test_selenomethionine_is_read_by_every_toolkit():
-    """The one modified residue all four agree on, each reaching it a different way.
+def _inverse_folding_config_subclasses() -> list[type]:
+    """Every config that inherits the readable_positions hook, however deeply."""
+    from proto_tools.tools.inverse_folding import InverseFoldingConfig
 
-    LigandMPNN only reaches it because ``ligandmpnn-sample`` stages ``MSE`` as ``ATOM``:
-    AtomWorks renames it to ``MET`` itself, but that runs after the HETATM chain split, so
-    left as ``HETATM`` it is read as ligand context and the packed structure comes back with
-    a synthetic chain the input has no IDs for.
-    """
-    from proto_tools.tools.inverse_folding.ligandmpnn._readable import LIGANDMPNN_ATOM_RECORD_RESIDUES
-
-    assert "MSE" in LIGANDMPNN_ATOM_RECORD_RESIDUES
-    structure, expected = CASES["mse_written_as_hetatm"]
-    for tool in RULES:
-        assert expected[tool] == [1, 2, 3], f"{tool} should read the selenomethionine"
-        assert RULES[tool](structure)["A"] == [1, 2, 3]
+    found: list[type] = []
+    pending = [InverseFoldingConfig]
+    while pending:
+        for subclass in pending.pop().__subclasses__():
+            found.append(subclass)
+            pending.append(subclass)
+    return found
 
 
 def test_every_migrated_toolkit_declares_a_rule():
@@ -256,23 +244,23 @@ def test_every_migrated_toolkit_declares_a_rule():
     ``InverseFoldingConfig.readable_positions`` returns ``None`` by default, which keeps
     strict length matching. That is a safe default for a toolkit nobody has mirrored yet, but
     for one that ships it means any structure with a skipped residue raises instead of
-    designing. Naming the configs here forces a decision when a toolkit is added.
+    designing. Discovering the subclasses rather than listing them is what makes this catch a
+    toolkit added later.
     """
-    from proto_tools.entities.structures.examples import get_gfp_structure
-    from proto_tools.tools.inverse_folding import (
-        ESMIF1SampleConfig,
-        FAMPNNSampleConfig,
-        InverseFoldingStructureInput,
-        LigandMPNNSampleConfig,
-        ProteinMPNNSampleConfig,
-    )
+    from proto_tools.tools.inverse_folding import InverseFoldingStructureInput, LigandMPNNSampleConfig
 
     inp = InverseFoldingStructureInput(structure=get_gfp_structure())
-    configs = [ESMIF1SampleConfig(), FAMPNNSampleConfig(), LigandMPNNSampleConfig(), ProteinMPNNSampleConfig()]
-    for config in configs:
+    expected = [p for p in range(1, GFP_LENGTH + 1) if p != CHROMOPHORE]
+    subclasses = _inverse_folding_config_subclasses()
+    assert len(subclasses) >= 4, f"expected every sample config to be discovered, got {subclasses}"
+
+    for config_class in subclasses:
+        config = config_class()
+        if isinstance(config, LigandMPNNSampleConfig) and config.model_type in LIGANDMPNN_LEGACY_MODEL_TYPES:
+            continue
         readable = config.readable_positions(inp)
-        assert readable is not None, f"{type(config).__name__} declares no residue mapping"
-        assert readable["A"] == [p for p in range(1, 229) if p != 64]
+        assert readable is not None, f"{config_class.__name__} declares no residue mapping"
+        assert readable["A"] == expected, f"{config_class.__name__} disagrees about GFP"
 
 
 def test_the_legacy_ligandmpnn_implementation_declares_no_rule():

@@ -25,7 +25,10 @@ Keep this in step with the pin: a bump to the FAMPNN commit should be checked ag
 gates.
 """
 
+from typing import Any
+
 from proto_tools.entities.structures import Structure
+from proto_tools.tools.inverse_folding.shared_data_models import readable_positions_where
 
 #: fampnn/data/residue_constants.py:1302-1315 at aaf788b. Membership alone decides whether a
 #: HETATM residue is read; the letter each name maps to is not consulted by the parser.
@@ -50,14 +53,10 @@ def fampnn_readable_positions(structure: Structure) -> dict[str, list[int]]:
     Returns:
         dict[str, list[int]]: Ascending readable positions per polymer chain ID.
     """
-    readable: dict[str, list[int]] = {}
-    for chain_id, residues in structure.get_chain_residue_atoms().items():
-        positions = []
-        for position, residue in enumerate(residues, start=1):
-            if residue.is_hetatm and residue.name not in FAMPNN_NCAA:
-                continue  # gate 1: a HETATM outside the NCAA table never reaches the features
-            if FAMPNN_ATOM_TYPES.isdisjoint(residue.atom_names):
-                continue  # gate 2: an all-zero atom mask skips the residue
-            positions.append(position)
-        readable[chain_id] = positions
-    return readable
+
+    def is_read(residue: Any) -> bool:
+        if residue.is_hetatm and residue.name not in FAMPNN_NCAA:
+            return False  # gate 1: a HETATM outside the NCAA table never reaches the features
+        return not FAMPNN_ATOM_TYPES.isdisjoint(residue.atom_names)  # gate 2: all-zero mask
+
+    return readable_positions_where(structure, is_read)

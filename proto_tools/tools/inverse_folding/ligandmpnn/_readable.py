@@ -41,7 +41,10 @@ Keep this in step with the pins: a bump to rc-foundry or atomworks should be che
 all three gates.
 """
 
+from typing import Any
+
 from proto_tools.entities.structures import Structure
+from proto_tools.tools.inverse_folding.shared_data_models import readable_positions_where
 
 #: atomworks/constants.py:386-388 (STANDARD_AA) and :347 (UNKNOWN_AA), plus MSE, which the
 #: parser rewrites to MET before gate 2 whenever gate 1 has not already excluded it.
@@ -72,16 +75,13 @@ def ligandmpnn_readable_positions(structure: Structure) -> dict[str, list[int]]:
     Returns:
         dict[str, list[int]]: Ascending readable positions per polymer chain ID.
     """
-    readable: dict[str, list[int]] = {}
-    for chain_id, residues in structure.get_chain_residue_atoms().items():
-        positions = []
-        for position, residue in enumerate(residues, start=1):
-            if residue.is_hetatm and residue.name not in LIGANDMPNN_ATOM_RECORD_RESIDUES:
-                continue  # gate 1: split into a non-polymer chain, so read only as context
-            if residue.name not in LIGANDMPNN_RESIDUE_NAMES:
-                continue  # gate 2: atomized by name, so read only as context
-            if not LIGANDMPNN_BACKBONE_ATOMS.issubset(residue.atom_names):
-                continue  # gate 3: an incomplete backbone leaves the residue unresolved
-            positions.append(position)
-        readable[chain_id] = positions
-    return readable
+
+    def is_read(residue: Any) -> bool:
+        if residue.is_hetatm and residue.name not in LIGANDMPNN_ATOM_RECORD_RESIDUES:
+            return False  # gate 1: split into a non-polymer chain, so read only as context
+        if residue.name not in LIGANDMPNN_RESIDUE_NAMES:
+            return False  # gate 2: atomized by name, so read only as context
+        # gate 3: an incomplete backbone leaves the residue unresolved
+        return LIGANDMPNN_BACKBONE_ATOMS.issubset(residue.atom_names)
+
+    return readable_positions_where(structure, is_read)

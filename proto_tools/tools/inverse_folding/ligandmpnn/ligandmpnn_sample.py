@@ -22,6 +22,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    split_fixed_positions,
     summarize_positions,
     unreadable_positions,
 )
@@ -280,14 +281,12 @@ class LigandMPNNSampleOutput(InverseFoldingOutput):
 def _resolvable_fixed_positions(inp: Any, readable: dict[str, list[int]] | None) -> Any:
     """Drop fixed positions LigandMPNN's parser never puts in the designed chain.
 
-    AtomWorks moves every ``HETATM`` residue into a non-polymer chain of its own, so a
-    position naming one no longer exists under the chain the caller asked for.
-    ``MPNNInferenceInput._mask_from_ids`` raises on an ID that matches nothing rather than
-    ignoring it, so the whole run fails on what is a satisfiable constraint: the residue is
-    preserved anyway, because the model never redesigns it.
-
-    Residue numbers are not renumbered. The model matches a fixed position by residue id,
-    which staging leaves at the chain's own ordinal, so the ones it can resolve are unchanged.
+    AtomWorks moves every unlisted ``HETATM`` residue into a non-polymer chain, so a position
+    naming one no longer exists under the chain the caller asked for.
+    ``MPNNInferenceInput._mask_from_ids`` raises on an ID matching nothing rather than
+    ignoring it, so the whole run fails on a constraint that is already satisfied: the model
+    never redesigns that residue. Kept positions are not renumbered, because the model
+    matches a fixed position by residue id, which staging leaves at the chain's own ordinal.
 
     Args:
         inp (Any): One structure input, exposing ``fixed_positions``.
@@ -297,25 +296,18 @@ def _resolvable_fixed_positions(inp: Any, readable: dict[str, list[int]] | None)
     Returns:
         Any: A ``ResidueSelection`` the model can resolve, or ``None`` when nothing is left.
     """
-    selection = inp.fixed_positions
-    if selection is None or readable is None:
-        return selection
-    resolvable: dict[str, list[int]] = {}
-    for chain_id, positions in selection.chains.items():
-        chain_readable = set(readable.get(chain_id, ()))
-        kept = sorted(set(positions) & chain_readable)
-        dropped = sorted(set(positions) - chain_readable)
-        if dropped:
-            logger.warning(
-                "ligandmpnn-sample: Chain %s, position %s is read as ligand context rather than a "
-                "design position, so it cannot be fixed at the model. The original residue is "
-                "preserved in the output regardless.",
-                chain_id,
-                summarize_positions(inp.structure, chain_id, dropped),
-            )
-        if kept:
-            resolvable[chain_id] = kept
-    return type(selection)(chains=resolvable) if resolvable else None
+    if readable is None:
+        return inp.fixed_positions
+    resolved, dropped = split_fixed_positions(inp.fixed_positions, readable, renumber=False)
+    for chain_id, positions in dropped.items():
+        logger.warning(
+            "ligandmpnn-sample: Chain %s, position %s is read as ligand context rather than a design "
+            "position, so it cannot be fixed at the model. The original residue is preserved in the "
+            "output regardless.",
+            chain_id,
+            summarize_positions(inp.structure, chain_id, positions),
+        )
+    return resolved
 
 
 def _fixed_positions_cover_structure(inp: InverseFoldingStructureInput) -> bool:
