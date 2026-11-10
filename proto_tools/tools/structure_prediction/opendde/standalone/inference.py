@@ -346,17 +346,6 @@ class OpenDDEModel:
             raise OpenDDEExecutionError("opendde: prediction failed: " + " | ".join(messages))
         return _extract_structure_and_scores(output_dir, include_pae_matrix=include_pae_matrix)
 
-    def to_device(self, device: str) -> None:
-        """Move the held runner's model between devices."""
-        import torch
-        from standalone_helpers import move_model_to_device
-
-        if self.runner is None or self.device == device:
-            return
-        self.runner.model = move_model_to_device(self.runner.model, self.device, device)
-        self.runner.device = torch.device(device)
-        self.device = device
-
     def close(self) -> None:
         """Release the held runner (its model and GPU memory)."""
         if self.runner is not None:
@@ -408,32 +397,11 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"opendde: unknown operation {operation!r}; valid: ['predict']")
 
 
-def to_device(device: str) -> dict[str, Any]:
-    """DeviceManager callback for moving the held model to a different device.
-
-    Args:
-        device (str): Target device (e.g., "cpu", "cuda:0").
-
-    Returns:
-        dict[str, Any]: Success status dict.
-    """
-    if _model is not None:
-        _model.to_device(device)
-    return {"success": True, "device": device}
-
-
 def get_memory_stats() -> dict[str, Any]:
-    """Report GPU memory held by the persistent model."""
-    import torch
+    """Report GPU memory held by the persistent model (the pinned worker's GPU is local cuda:0)."""
+    from standalone_helpers import get_pytorch_memory_stats
 
-    if _model is None or _model.runner is None or not torch.cuda.is_available():
-        return {"available": False, "framework": "torch", "reason": "no model loaded on a GPU"}
-    return {
-        "available": True,
-        "framework": "torch",
-        "allocated_bytes": torch.cuda.memory_allocated(),
-        "reserved_bytes": torch.cuda.memory_reserved(),
-    }
+    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
 
 
 # Worker protocol entry point
