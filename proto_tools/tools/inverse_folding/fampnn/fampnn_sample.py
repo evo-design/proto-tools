@@ -18,7 +18,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingConfig,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
-    unreadable_positions,
+    preserved_positions,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -91,7 +91,7 @@ def _psce_per_design_residue(
     ``None``: the model did not pack them, so there is no error to report.
 
     Args:
-        chain_ids (list[str]): Input chain IDs, in the order the model returned them.
+        chain_ids (list[str]): The protein chain IDs handed to the model, in its order.
         chain_seqs (list[str]): The model's sequence per chain, covering read residues only.
         psce (list[float]): Per-read-residue pSCE, concatenated in chain order.
         readable (dict[str, list[int]]): Positions the model reads, per chain ID.
@@ -100,15 +100,18 @@ def _psce_per_design_residue(
     Returns:
         list[float | None]: One entry per design residue, concatenated in chain order.
     """
-    residues = structure.get_chain_residue_atoms()
-    spread: list[float | None] = []
+    chunks: dict[str, list[float]] = {}
     offset = 0
     for chain_id, sequence in zip(chain_ids, chain_seqs, strict=True):
-        chain_readable = readable.get(chain_id, [])
-        chunk = psce[offset : offset + len(sequence)]
+        chunks[chain_id] = psce[offset : offset + len(sequence)]
         offset += len(sequence)
-        per_chain: list[float | None] = [None] * len(residues.get(chain_id, ()))
-        for value, position in zip(chunk, chain_readable, strict=True):
+
+    # Walk the design's own chains, not the model's: FAMPNN is handed protein chains only,
+    # while the design carries every polymer chain, so a nucleic chain holds its own places.
+    spread: list[float | None] = []
+    for chain_id, residues in structure.get_chain_residue_atoms().items():
+        per_chain: list[float | None] = [None] * len(residues)
+        for value, position in zip(chunks.get(chain_id, []), readable.get(chain_id, []), strict=True):
             per_chain[position - 1] = value
         spread.extend(per_chain)
     return spread
@@ -396,7 +399,7 @@ def run_fampnn_sample(
                 remaining -= chunk  # type: ignore[operator]
 
         readable = config.readable_positions(inp)
-        preserved = unreadable_positions(readable, inp.structure)
+        preserved = preserved_positions(readable, inp.structure, inp.fixed_positions)
         complexes: list[FAMPNNDesign] = []
         for chain_seqs, psce, pdb in zip(all_chain_seqs, all_psce, all_pdbs, strict=True):
             if len(chain_seqs) != len(chain_ids):

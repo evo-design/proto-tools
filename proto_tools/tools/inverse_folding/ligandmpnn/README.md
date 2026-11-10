@@ -60,5 +60,9 @@ Use this to rank designs or assess mutations near ligands, nucleic acids, or met
 
 These apply to every LigandMPNN tool in this toolkit (`ligandmpnn-sample`, `ligandmpnn-score`).
 
+- **Only standard residues hold a design position; everything else is ligand context.** AtomWorks moves each `HETATM` residue into a non-polymer chain, where LigandMPNN reads its atoms as context but designs nothing there. The design still covers the whole chain, with those residues at their input identity and recorded in `chains[].modifications`.
+- **Selenomethionine is the exception, and is designed as methionine.** `ligandmpnn-sample` stages `MSE` as an `ATOM` record so AtomWorks' own `MSE`-to-`MET` conversion applies; left as `HETATM` the residue is lost to the chain split before that conversion runs.
+- **`fixed_positions` keeps the structure's numbering.** The model matches a fixed position by residue number, so no renumbering is needed. A position naming a residue read only as context is dropped with a warning rather than failing the run, since the model never redesigns it.
+
 - **A GPU is recommended.** LigandMPNN is a small message-passing model that also runs on CPU, but a GPU is much faster when designing or scoring many sequences.
 - **The non-protein context must be in the input structure.** LigandMPNN only conditions on ligands, nucleotides, or metals that are present in the supplied structure; if they are absent, it behaves like backbone-only ProteinMPNN.

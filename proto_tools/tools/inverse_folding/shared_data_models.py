@@ -264,6 +264,34 @@ def unreadable_positions(
     return skipped
 
 
+def preserved_positions(
+    readable: dict[str, list[int]], structure: Structure, selection: Any = None
+) -> dict[str, list[int]]:
+    """Positions that will not be redesigned: the parser's skips plus the caller's own.
+
+    What :meth:`DesignedComplex.from_design` wants as ``fixed_positions``. Passing only the
+    parser's skips would make its fixed-position check vacuous, since those positions are by
+    definition absent from ``readable``, and would drop the annotation on a modified residue
+    the caller fixed deliberately.
+
+    Args:
+        readable (dict[str, list[int]]): Positions the model processes, per chain ID.
+        structure (Structure): The structure the mapping describes.
+        selection (Any): The caller's ``ResidueSelection``, or ``None``.
+
+    Returns:
+        dict[str, list[int]]: Preserved positions per chain, ascending, omitting chains with
+            none.
+    """
+    preserved = unreadable_positions(readable, structure)
+    requested = (selection.chains if selection is not None else {}) or {}
+    for chain_id, positions in requested.items():
+        combined = set(preserved.get(chain_id, ())) | set(positions)
+        if combined:
+            preserved[chain_id] = sorted(combined)
+    return preserved
+
+
 def flat_readable_positions(readable: dict[str, list[int]], structure: Structure) -> list[int]:
     """The positions a model reads, numbered across the whole structure, in chain order.
 
@@ -584,9 +612,10 @@ class DesignedComplex(Complex):
                 than one per polymer residue; the design is then placed on those positions
                 and the skipped residues keep their input identity. ``None`` requires one
                 residue per polymer residue.
-            fixed_positions (dict[str, list[int]] | None): Positions the caller asked to keep
-                unchanged. A modification annotation survives at a fixed position when the
-                output residue still matches the modification's parent amino acid.
+            fixed_positions (dict[str, list[int]] | None): Positions that will not be
+                redesigned, whether the caller fixed them or the parser skipped them, as
+                :func:`preserved_positions` builds them. A modification annotation survives at
+                one of these when the output residue still matches its parent amino acid.
             fields (Any): Remaining fields of the subclass, such as ``metrics``.
 
         Returns:
