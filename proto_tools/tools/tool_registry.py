@@ -721,7 +721,7 @@ class ToolSpec(BaseModel):
         post_process_iterable (Callable[[list[Any]], None] | None): Optional in-place
             hook invoked on the stitched ``iterable_output_field`` list after cache
             reconciliation and dedup expansion. Use for batch-level post-processing
-            (e.g. UMAP projection of an embedding batch) that must see the full
+            (a batch-wide dimensionality reduction, say) that must see the full
             request, not the per-item cached subset visible inside the tool function.
         outages (list[Outage]): Declared upstream outages. A call matching one is refused before
             dispatch with ``OutageError``. Serialized, so catalogues can show them.
@@ -835,7 +835,7 @@ class ToolSpec(BaseModel):
         description=(
             "Optional in-place hook invoked on the stitched ``iterable_output_field`` after "
             "cache reconciliation and dedup expansion. Use for batch-level post-processing "
-            "(e.g. UMAP projection of an embedding batch) that must see the full request — "
+            "(a batch-wide dimensionality reduction, say) that must see the full request — "
             "not the per-item cached subset visible inside the tool function."
         ),
     )
@@ -1054,7 +1054,7 @@ class ToolRegistry:
             post_process_iterable (Callable[[list[Any]], None] | None): Optional
                 in-place hook invoked on the stitched ``iterable_output_field``
                 list after cache reconciliation. Required when a derived field
-                (e.g. UMAP projection) is meaningful only across the full request
+                is meaningful only across the full request
                 — running it inside the tool function would only see the uncached
                 subset and produce incoherent results once stitched against
                 cached items.
