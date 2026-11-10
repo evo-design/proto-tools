@@ -49,6 +49,7 @@ This tool predicts the structure of multi-component assemblies such as protein-D
 These apply to every OpenDDE tool in this toolkit (`opendde-prediction`).
 
 - **Requires a GPU.** OpenDDE runs through a PyTorch backend and needs an NVIDIA GPU; CPU execution is not practical.
+- **The model stays loaded between predictions.** The worker builds OpenDDE's inference runner once and reuses it for every complex and call; it reloads only when the checkpoint or a sampling setting (`num_samples`, `num_steps`, `num_cycles`, MSA/template flags) changes.
 - **Open AlphaFold3-style co-folding model.** OpenDDE releases both code and weights under Apache-2.0 for academic and commercial use, and follows the AlphaFold3 diffusion architecture like Boltz-2 and Protenix. Its `opendde_abag` checkpoint additionally specializes in antibody-antigen complexes.
 - **Predictions are stochastic.** Structures come from a diffusion process, so repeated runs vary unless sampling is seeded.
 - **Early preview upstream.** Checkpoints and interfaces may change, so pin the version you validate against.
