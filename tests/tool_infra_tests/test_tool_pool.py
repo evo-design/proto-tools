@@ -1505,9 +1505,9 @@ def test_a_pool_partial_result_is_never_cached(monkeypatch):
 def test_post_process_hook_is_not_handed_placeholders(monkeypatch):
     """A tool's post-process hook works on the item type it declares, not on failure placeholders.
 
-    Four shipped tools attach UMAP projections this way and reach for a field only a real item
-    has, so handing one a FailedItem raises and destroys the partial result the caller asked to
-    receive. The mock has no hook of its own, so one is attached here to reach the path.
+    A hook reaches for a field only a real item has, so handing one a FailedItem raises and
+    destroys the partial result the caller asked to receive. No shipped tool declares a hook
+    today, and the mock has none of its own, so one is attached here to reach the path.
     """
     import proto_tools.tools.testing.mock_iterable_deterministic  # noqa: F401 -- registers the tool
     from proto_tools.utils.fanout import FailedItem

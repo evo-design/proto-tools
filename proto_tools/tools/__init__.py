@@ -568,7 +568,6 @@ from proto_tools.tools.masked_models import (
     MixedSequenceInput,
     MixedSequenceSample,
     MixedSequenceSampleInput,
-    Projection2D,
     SAELayerFeatures,
     SequenceEmbedding,
     SequenceInteractionMap,
@@ -2457,7 +2456,6 @@ __all__ = [
     # Masked models - shared
     "MaskedModelScoringMetrics",
     "MaskingStrategy",
-    "Projection2D",
     "SequenceEmbedding",
     # Masked models - AbLang Embeddings
     "AbLangEmbeddingsConfig",
