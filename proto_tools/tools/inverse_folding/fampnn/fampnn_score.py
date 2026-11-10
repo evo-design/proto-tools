@@ -73,6 +73,11 @@ def _to_model_numbering(mutations: list[str], structure: Structure) -> tuple[lis
     Returns:
         tuple[list[str], list[str]]: The scorable mutations in FAMPNN's numbering, and the
             same mutations as the caller wrote them.
+
+    Raises:
+        ValueError: If a mutation is not ``'<WT><position><MUT>'``, optionally ``:``-joined.
+            Renumbering only the parts that parse would put two numberings in one string, so
+            a malformed part rejects its whole mutation.
     """
     readable = flat_readable_positions(fampnn_readable_positions(structure), structure)
     renumbered: list[str] = []
@@ -82,14 +87,16 @@ def _to_model_numbering(mutations: list[str], structure: Structure) -> tuple[lis
             renumbered.append(mutation)
             kept.append(mutation)
             continue
+        matches = [re.fullmatch(r"([A-Z])(\d+)([A-Z])", part) for part in mutation.split(":")]
+        if any(match is None for match in matches):
+            raise ValueError(
+                f"fampnn-score: invalid mutation {mutation!r}; expected '<WT><position><MUT>' such as "
+                "'A1V', with ':' between simultaneous mutations."
+            )
         parts: list[str] = []
         unreadable: list[int] = []
-        for part in mutation.split(":"):
-            match = re.fullmatch(r"([A-Z])(\d+)([A-Z])", part)
-            if match is None:
-                parts.append(part)  # the standalone raises on a malformed mutation
-                continue
-            wild_type, position, mutant = match.group(1), int(match.group(2)), match.group(3)
+        for wild_type, position_text, mutant in (match.groups() for match in matches if match is not None):
+            position = int(position_text)
             model_position = to_model_numbering(readable, [position])
             if not model_position:
                 unreadable.append(position)

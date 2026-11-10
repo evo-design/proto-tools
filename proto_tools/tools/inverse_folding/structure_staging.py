@@ -98,8 +98,10 @@ class StagedStructure:
                 returned structure keeps where it can.
             readable_positions (dict[str, list[int]] | None): Per chain, the 1-indexed input
                 positions the model reads, from ``Config.readable_positions``. A model that
-                skips a residue writes a structure covering only the positions it read, so
-                its residues are matched against those IDs rather than the whole chain's.
+                skips a residue may write a chain covering only the positions it read, so a
+                chain that comes back that short is matched against those IDs instead of the
+                whole chain's. A chain written in full keeps the whole chain's IDs either way,
+                which is what a model that reads a chain only as context does with it.
                 ``None`` expects one output residue per input residue.
 
         Returns:
@@ -109,12 +111,43 @@ class StagedStructure:
         residue_ids = self.residue_ids
         if readable_positions is not None:
             residue_ids = {
-                chain_id: [ids[position - 1] for position in readable_positions[chain_id]]
-                if chain_id in readable_positions
-                else ids
+                chain_id: self._ids_matching_output(chain_id, ids, readable_positions, written)
                 for chain_id, ids in residue_ids.items()
             }
         return written.with_residue_ids(residue_ids, chain_map=self.chain_map)
+
+    def _ids_matching_output(
+        self,
+        chain_id: str,
+        ids: list[tuple[int, str]],
+        readable_positions: dict[str, list[int]],
+        written: Structure,
+    ) -> list[tuple[int, str]]:
+        """Pick the ID list for one chain that matches what the model actually wrote.
+
+        A chain can come back either way. FAMPNN packs only the residues it read, so its
+        chains are as short as ``readable_positions`` says. LigandMPNN writes a chain it reads
+        only as ligand context in full, even though it designs none of it. Choosing by the
+        length the model wrote keeps both, and leaves a genuine mismatch to
+        :meth:`Structure.with_residue_ids`, which reports it.
+
+        Args:
+            chain_id (str): The input's chain ID.
+            ids (list[tuple[int, str]]): That chain's residue IDs, whole chain.
+            readable_positions (dict[str, list[int]]): Positions the model reads, per chain.
+            written (Structure): What the model wrote.
+
+        Returns:
+            list[tuple[int, str]]: The whole chain's IDs, or only the readable ones.
+        """
+        readable = readable_positions.get(chain_id)
+        if readable is None or len(readable) == len(ids):
+            return ids
+        staged_id = self.chain_map.get(chain_id, chain_id)
+        written_length = len(written.get_chain_residue_atoms().get(staged_id, ()))
+        if written_length == len(readable) != len(ids):
+            return [ids[position - 1] for position in readable]
+        return ids
 
 
 @contextlib.contextmanager

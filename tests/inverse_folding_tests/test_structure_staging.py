@@ -90,6 +90,24 @@ def test_restoring_output_that_skips_a_residue_matches_the_positions_the_model_r
     assert restored.get_chain_residue_ids()["A"] == expected, "every residue keeps its own input ID"
 
 
+def test_restoring_keeps_whole_chain_ids_for_a_chain_the_model_wrote_in_full():
+    """A chain read only as context comes back whole even when the rule designs none of it.
+
+    LigandMPNN atomizes a nucleic chain, so its rule reports no design positions for it, but
+    the model still writes every residue. Trimming that chain's IDs to the empty design set
+    would reject output that is perfectly well formed.
+    """
+    from proto_tools.entities.structures.examples import get_gfp_structure
+
+    structure = get_gfp_structure()
+    with staged_structure(structure) as staged:
+        whole = Structure(structure=staged.path.read_text(), structure_format="pdb", source="test").structure
+
+    # The model designs nothing in this chain yet writes all 228 residues.
+    restored = staged.restore(whole, source="test", readable_positions={"A": []})
+    assert restored.get_chain_residue_ids()["A"] == structure.get_chain_residue_ids()["A"]
+
+
 def test_restoring_a_short_output_without_the_mapping_is_rejected():
     """Without the mapping there is no way to tell which residue the model dropped."""
     from proto_tools.entities.structures.examples import get_gfp_structure

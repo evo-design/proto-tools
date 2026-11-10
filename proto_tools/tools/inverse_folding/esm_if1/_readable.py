@@ -27,7 +27,10 @@ Keep this in step with the pins: a bump to fair-esm or biotite should be checked
 gates, and gate 1 against ``setup.sh`` as well.
 """
 
+from typing import Any
+
 from proto_tools.entities.structures import Structure
+from proto_tools.tools.inverse_folding.shared_data_models import readable_positions_where
 
 #: esm/inverse_folding/util.py:41, the atom-name mask setup.sh patches in.
 ESM_IF1_BACKBONE_ATOMS = frozenset({"N", "CA", "C", "O"})
@@ -52,14 +55,10 @@ def esm_if1_readable_positions(structure: Structure) -> dict[str, list[int]]:
     Returns:
         dict[str, list[int]]: Ascending readable positions per polymer chain ID.
     """
-    readable: dict[str, list[int]] = {}
-    for chain_id, residues in structure.get_chain_residue_atoms().items():
-        positions = []
-        for position, residue in enumerate(residues, start=1):
-            if ESM_IF1_BACKBONE_ATOMS.isdisjoint(residue.atom_names):
-                continue  # gate 1: every atom is masked out, so the residue disappears
-            if residue.name not in BIOTITE_THREE_TO_ONE:
-                continue  # gate 2: biotite has no one-letter code for the residue
-            positions.append(position)
-        readable[chain_id] = positions
-    return readable
+
+    def is_read(residue: Any) -> bool:
+        if ESM_IF1_BACKBONE_ATOMS.isdisjoint(residue.atom_names):
+            return False  # gate 1: every atom is masked out, so the residue disappears
+        return residue.name in BIOTITE_THREE_TO_ONE  # gate 2: biotite has no code for it
+
+    return readable_positions_where(structure, is_read)
