@@ -34,7 +34,7 @@ Use this to triage candidate variants from a sequencing study for splicing impac
 
 #### Usage Tips
 
-- **`reference_fasta` is required and `position` is 1-based.** SpliceAI extracts the wild-type window around each variant from the genome you supply, so the FASTA, the annotation, and each variant's `chromosome` must use consistent identifiers. Note this is the opposite of `AlphaGenome`, whose coordinates are 0-based.
+- **`reference_fasta` is required and `position` is 1-based.** Pass `'grch38'` (or `'grch37'`; `'hg38'`/`'hg19'` also work), which is downloaded on first use, or a path to a local FASTA. SpliceAI extracts the wild-type window around each variant from it, so the FASTA, the annotation, and each variant's `chromosome` must use consistent identifiers. Note this is the opposite of `AlphaGenome`, whose coordinates are 0-based.
 - **`annotation` selects the gene model.** `grch37` and `grch38` load the GENCODE files bundled with SpliceAI; pass a path to score against a custom tab-separated annotation. Changing it restarts the worker.
 - **`max_distance` (default 50) and `mask` mirror the SpliceAI `-D`/`-M` flags.** Widen `max_distance` to report splice sites farther from the variant; enable `mask` to suppress scores for annotated-gain and unannotated-loss positions.
 
@@ -58,5 +58,5 @@ Use this to scan an engineered construct, a minigene, or a transcript for latent
 These apply to both SpliceAI tools in this toolkit (`spliceai-score`, `spliceai-predict`).
 
 - **Runs on GPU or CPU via TensorFlow.** SpliceAI is the only TensorFlow tool in the catalog; the standalone env pins TensorFlow 2.15 (Keras 2) so the bundled `.h5` models load, which constrains the runtime to Python 3.11. TensorFlow falls back to CPU automatically when no GPU is visible.
-- **Weights and annotations ship with the package.** The five ensemble models and the GENCODE `grch37`/`grch38` annotations are bundled in `pip install spliceai`, so no weight download is needed. The reference genome FASTA for `spliceai-score` is user-supplied at call time.
+- **Weights and annotations ship with the package.** The five ensemble models and the GENCODE `grch37`/`grch38` annotations are bundled in `pip install spliceai`, so no weight download is needed. The reference genome for `spliceai-score` is named or supplied at call time, and a named assembly is downloaded on first use.
 - **Non-commercial license.** SpliceAI's code is PolyForm Strict and its bundled models are CC-BY-NC-4.0 — both noncommercial, so the toolkit is not hostable on Proto; commercial use requires a license from Illumina.

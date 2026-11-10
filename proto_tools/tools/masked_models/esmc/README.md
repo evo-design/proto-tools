@@ -73,7 +73,7 @@ Feature activations show which concepts the model recognizes at each residue, wh
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every ESM C tool in this toolkit (`esmc-embedding`, `esmc-sae-features`).
+These apply to every ESM C tool in this toolkit (`esmc-embedding`, `esmc-gradient`, `esmc-sae-features`).
 
 - **ESM C shares the Biohub `esm` environment with ESM3.** Both are distributed in the same `esm` package and use a single shared on-disk environment (`biohub_esm`); installing either tool installs the environment for both.
 - **All checkpoints are MIT-licensed and ungated.** `esmc_300m`, `esmc_600m`, and `esmc_6b` are all free for academic and commercial use, and none require a HuggingFace token. Weights download automatically on first use; `esmc_6b` downloads roughly 25 GB.

@@ -20,7 +20,10 @@ and both are easy to get wrong from the outside:
 Keep this in step with the pin: a bump to ColabDesign should be checked against both gates.
 """
 
+from typing import Any
+
 from proto_tools.entities.structures import Structure
+from proto_tools.tools.inverse_folding.shared_data_models import readable_positions_where
 
 # colabdesign/shared/protein.py:8-22 at v1.1.3; staged PDBs carry no MODRES records to extend it.
 COLABDESIGN_MODRES = frozenset(
@@ -43,14 +46,10 @@ def proteinmpnn_readable_positions(structure: Structure) -> dict[str, list[int]]
     Returns:
         dict[str, list[int]]: Ascending readable positions per polymer chain ID.
     """
-    readable: dict[str, list[int]] = {}
-    for chain_id, residues in structure.get_chain_residue_atoms().items():
-        positions = []
-        for position, residue in enumerate(residues, start=1):
-            if residue.is_hetatm and residue.name not in COLABDESIGN_MODRES:
-                continue  # gate 1: never rewritten to ATOM, so the parser never sees it
-            if "N" not in residue.atom_names:
-                continue  # gate 2: ignore_missing drops anything without a backbone N
-            positions.append(position)
-        readable[chain_id] = positions
-    return readable
+
+    def is_read(residue: Any) -> bool:
+        if residue.is_hetatm and residue.name not in COLABDESIGN_MODRES:
+            return False  # gate 1: never rewritten to ATOM, so the parser never sees it
+        return "N" in residue.atom_names  # gate 2: ignore_missing drops a missing backbone N
+
+    return readable_positions_where(structure, is_read)

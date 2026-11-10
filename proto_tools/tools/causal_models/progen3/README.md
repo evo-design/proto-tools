@@ -59,6 +59,6 @@ This tool gives a zero-shot measure of how consistent a protein sequence is with
 
 These apply to every ProGen3 tool in this toolkit (`progen3-sample`, `progen3-score`).
 
-- **Requires a GPU; memory scales with checkpoint size.** This toolkit exposes the `progen3-112m` through `progen3-3b` checkpoints; larger checkpoints are more capable but need substantially more GPU memory. CPU execution is not practical.
-- **`batch_size` trades memory for throughput across both tools.** It sets how many same-length prompts (`progen3-sample`) or sequences (`progen3-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it (default `1`) if generation or scoring runs out of GPU memory.
+- **Requires a GPU; memory scales with checkpoint size.** This toolkit exposes the `progen3-112m` through `progen3-3b` checkpoints; larger checkpoints are more capable but need substantially more GPU memory. `device="cpu"` is rejected: the model code places tensors with `torch.cuda`.
+- **`batch_size` trades memory for throughput across both tools.** It sets how many same-length prompts (`progen3-sample`) or sequences (`progen3-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it (default `8`) if generation or scoring runs out of GPU memory.
 - **`model_checkpoint` selects the model size.** The default is `progen3-762m`; smaller checkpoints (`progen3-112m`, `progen3-219m`, `progen3-339m`) are faster and lighter, while `progen3-1b` and `progen3-3b` are more capable at higher memory cost.

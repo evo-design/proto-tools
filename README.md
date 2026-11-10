@@ -68,7 +68,7 @@ For shared filesystems, model weights can be reused to avoid downloading duplica
 
 ### Step 3: Gated model access (optional)
 
-A few tools use gated models or software that require accepting a license / terms-of-use first (e.g. ESM3, AlphaGenome, X3DNA). See [notes/gated-models.md](notes/gated-models.md) for the full list and per-model access steps.
+A few tools use gated models or software that require accepting a license / terms-of-use first (e.g. AlphaGenome, SpliceAI2, X3DNA). See [notes/gated-models.md](notes/gated-models.md) for the full list and per-model access steps.
 
 ### Step 4: Remote compute (optional) <a href="https://modal.com"><img src="guides/assets/modal/modal-logo.png" alt="Modal" height="20" align="absmiddle"></a>
 

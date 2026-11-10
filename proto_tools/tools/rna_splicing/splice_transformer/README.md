@@ -9,7 +9,7 @@
 
 ## Overview
 
-[SpliceTransformer](https://github.com/ShenLab-Genomics/SpliceTransformer) (SpTransformer) is a deep learning model from the Shen Lab that predicts [pre-mRNA splice sites](https://en.wikipedia.org/wiki/RNA_splicing) directly from genomic sequence with tissue-specific resolution. For each position in a target sequence it reports the probability of an acceptor (3' splice site) or donor (5' splice site) along with the predicted usage of that site across fifteen human tissues. This toolkit runs SpliceTransformer through a single registered tool that returns per-position probabilities for the three splice-site classes and the fifteen tissues.
+[SpliceTransformer](https://github.com/ShenLab-Genomics/SpliceTransformer) (SpTransformer) is a deep learning model from the Shen Lab that predicts [pre-mRNA splice sites](https://en.wikipedia.org/wiki/RNA_splicing) directly from genomic sequence with tissue-specific resolution. For each position in a target sequence it reports the probability of an acceptor (3' splice site) or donor (5' splice site) along with the predicted usage of that site across fifteen human tissues. This toolkit runs SpliceTransformer through two registered tools: a prediction tool returning per-position probabilities for the three splice-site classes and fifteen tissues, and a gradient tool adding their derivatives.
 
 ## Background
 
@@ -59,7 +59,7 @@ This is the differentiable form of SpliceTransformer prediction, intended as an 
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every SpliceTransformer tool in this toolkit (`splice-transformer-prediction`).
+These apply to every SpliceTransformer tool in this toolkit (`splice-transformer-prediction`, `splice-transformer-gradient`).
 
 - **The eighteen output channels follow a fixed order.** Channel 0 is the probability of neither site, channel 1 the acceptor probability, and channel 2 the donor probability, and these three form a softmax that sums to one. Channels 3 through 17 carry the per-tissue usage in the order adipose tissue, blood, blood vessel, brain, colon, heart, kidney, liver, lung, muscle, nerve, small intestine, skin, spleen, and stomach. The `SPLICE_TISSUE_CHANNEL_INDEX` mapping exported by the toolkit resolves a tissue name to its channel.
 - **The prediction is returned as a nested list and is most convenient to work with as an array.** The `prediction` field has shape `[batch, 1000, 18]` and can be converted with `numpy.array(...)` for slicing by position or channel. Results can be exported to NumPy `.npy` or JSON through the standard export method.

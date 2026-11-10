@@ -68,7 +68,7 @@ This exposes Encodon as a differentiable, codon-level naturalness prior for cont
 - **`temperature`** controls how the input logits are converted into codon probabilities using `softmax(logits / temperature)`. Lower temperatures make the distribution more concentrated around the most likely codon at each position, while higher temperatures produce more uniform distributions. The default is `1.0`, and the returned gradient is calculated with respect to the input logits.
 - **Advanced option:** `temperature=None` skips softmax and treats the input as probabilities rather than logits. Most users should leave the default in place. In this case, each row must contain nonnegative values that sum to 1, and the returned gradient is calculated with respect to those probabilities. This is generally less convenient for gradient-based optimization because updating probabilities directly can cause them to become negative or no longer sum to 1. Optimizing logits avoids this issue, since softmax always produces a valid probability distribution. However, working directly with probabilities can be useful when using an optimizer designed for probability distributions or when exact zero probabilities are needed to exclude particular tokens.
 - **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator — the forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, which is differentiable but outside the model's training distribution.
-- **`compute_gradient=False` runs forward-only.** The `gradient` field is `None` but `loss` and `metrics` are still populated. This is a masked pseudo-log-likelihood objective; it is distinct from the visible-token objective returned by `codonfm-fitness`.
+- **`compute_gradient=False` runs forward-only.** The term's `gradient` is `None` but its `term_value` and the item `metrics` are still populated. This is a masked pseudo-log-likelihood objective; it is distinct from the visible-token objective returned by `codonfm-fitness`.
 
 ### CodonFM Sampling (`codonfm-sample`)
 
@@ -80,7 +80,7 @@ Masked-codon resampling is the local-edit primitive behind coding-sequence desig
 
 #### Usage Tips
 
-- **`num_mutations` overrides `mask_fraction`.** It sets an exact number of positions to resample, not a guaranteed Hamming distance: the model can draw the original codon again.
+- **`num_mutations` and `mask_fraction` are mutually exclusive.** `num_mutations` sets an exact number of positions to resample, not a guaranteed Hamming distance: the model can draw the original codon again.
 - **`temperature` controls diversity.** Below 1.0 sharpens toward the model's favorite codon; above 1.0 broadens exploration. Because sampling is stochastic, pass a `seed` for reproducible proposals.
 - **`excluded_amino_acids` bans residues from resampled codons.** Pass uppercase single-letter codes (e.g. `["C"]` to forbid new cysteines); every codon encoding one of them is dropped from the draw, so the constraint is on the translated residue rather than on any specific codon. Codons outside the resampled positions are untouched, so an excluded residue already present in the input survives unless its codon is masked.
 

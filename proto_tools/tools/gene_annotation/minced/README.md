@@ -9,7 +9,7 @@
 
 ## Overview
 
-[MinCED](https://github.com/ctSkennerton/minced) (Mining CRISPRs in Environmental Datasets) is a fast Java program that locates [CRISPR](https://en.wikipedia.org/wiki/CRISPR) arrays in nucleotide sequences from isolate genomes or metagenomic contigs. It returns each detected array as an ordered list of repeat-spacer units with their genomic coordinates, the repeat consensus, and per-spacer sequence.
+[MinCED](https://github.com/ctSkennerton/minced) (Mining CRISPRs in Environmental Datasets) is a fast Java program that locates [CRISPR](https://en.wikipedia.org/wiki/CRISPR) arrays in nucleotide sequences from isolate genomes or metagenomic contigs. It returns each detected array as an ordered list of repeat-spacer units with their start positions, repeat sequence, and per-spacer sequence.
 
 ## Background
 

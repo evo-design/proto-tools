@@ -6,12 +6,15 @@ FAMPNN mutation scoring tool.
 import csv
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from proto_tools.entities.structures import Structure
+from proto_tools.tools.inverse_folding.fampnn._readable import fampnn_readable_positions
+from proto_tools.tools.inverse_folding.shared_data_models import flat_readable_positions, to_model_numbering
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -49,6 +52,69 @@ class MutationInput(BaseModel):
         title="Mutations",
         description="Mutation strings (format: 'A1V' or 'A1V:G5L' for multi-site, 1-indexed)",
     )
+
+
+def _to_model_numbering(mutations: list[str], structure: Structure) -> tuple[list[str], list[str]]:
+    """Renumber mutation positions from the structure's numbering into FAMPNN's.
+
+    FAMPNN numbers what its parser reads from 1 with no gaps, so a caller's position has to
+    be renumbered before it names the same residue to the model. The two diverge after the
+    first residue it skips, which would otherwise score the neighbouring residue instead.
+
+    A mutation naming a residue the parser does not read has no counterpart to score, so it
+    is dropped with a warning rather than failing the batch. The returned lists stay aligned
+    with each other, so the caller can be answered in their own numbering.
+
+    Args:
+        mutations (list[str]): Mutation strings, ``'<WT><1-indexed position><MUT>'``, joined
+            with ``:`` for simultaneous mutations, in the structure's numbering.
+        structure (Structure): The structure the mutations apply to.
+
+    Returns:
+        tuple[list[str], list[str]]: The scorable mutations in FAMPNN's numbering, and the
+            same mutations as the caller wrote them.
+
+    Raises:
+        ValueError: If a mutation is not ``'<WT><position><MUT>'``, optionally ``:``-joined.
+            Renumbering only the parts that parse would put two numberings in one string, so
+            a malformed part rejects its whole mutation.
+    """
+    readable = flat_readable_positions(fampnn_readable_positions(structure), structure)
+    renumbered: list[str] = []
+    kept: list[str] = []
+    for mutation in mutations:
+        if mutation.lower() == "wt":
+            renumbered.append(mutation)
+            kept.append(mutation)
+            continue
+        matches = [re.fullmatch(r"([A-Z])(\d+)([A-Z])", part) for part in mutation.split(":")]
+        if any(match is None for match in matches):
+            raise ValueError(
+                f"fampnn-score: invalid mutation {mutation!r}; expected '<WT><position><MUT>' such as "
+                "'A1V', with ':' between simultaneous mutations."
+            )
+        parts: list[str] = []
+        unreadable: list[int] = []
+        for wild_type, position_text, mutant in (match.groups() for match in matches if match is not None):
+            position = int(position_text)
+            model_position = to_model_numbering(readable, [position])
+            if not model_position:
+                unreadable.append(position)
+                continue
+            parts.append(f"{wild_type}{model_position[0]}{mutant}")
+        if unreadable:
+            logger.warning(
+                "fampnn-score: mutation %r names position %s, which FAMPNN's structure parser does "
+                "not read, so it cannot be scored and is omitted from the results. Models skip "
+                "residues they cannot read, such as a chromophore or a residue with no recognized "
+                "atom.",
+                mutation,
+                ", ".join(str(position) for position in unreadable),
+            )
+            continue
+        renumbered.append(":".join(parts))
+        kept.append(mutation)
+    return renumbered, kept
 
 
 class FAMPNNScoreInput(BaseToolInput):
@@ -119,7 +185,9 @@ class MutationScoreResult(BaseModel):
     """Mutation score for a single structure.
 
     Attributes:
-        mutations (list[str]): Mutation strings that were scored.
+        mutations (list[str]): Mutation strings that were scored, as the caller wrote them.
+            A requested mutation naming a residue FAMPNN's parser does not read cannot be
+            scored and is absent here, so this stays aligned with ``scores``.
         scores (list[float]): Log-likelihood ratio scores for each mutation.
             Positive = mutation is more likely than wild-type.
     """
@@ -235,11 +303,20 @@ def run_fampnn_score(
         unit="structure",
         disable=not config.verbose,
     ):
+        model_mutations, scored_mutations = _to_model_numbering(inp.mutations, inp.structure)
+        if not model_mutations:
+            logger.warning(
+                "fampnn-score: none of the %d requested mutation(s) name a residue FAMPNN reads; "
+                "returning no scores for this structure.",
+                len(inp.mutations),
+            )
+            results.append(MutationScoreResult(mutations=[], scores=[]))
+            continue
         with inp.structure.temp_file() as pdb_path:
             input_dict = {
                 "operation": "score_mutations",
                 "pdb_path": str(pdb_path),
-                "mutations": inp.mutations,
+                "mutations": model_mutations,
                 "batch_size": config.batch_size,
                 "seq_only": config.seq_only,
                 "scn_diffusion_steps": config.scn_diffusion_steps,
@@ -257,7 +334,7 @@ def run_fampnn_score(
             )
         results.append(
             MutationScoreResult(
-                mutations=result["mutations"],
+                mutations=scored_mutations,
                 scores=result["scores"],
             )
         )

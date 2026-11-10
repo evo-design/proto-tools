@@ -1,4 +1,6 @@
-"""Protein structure prediction using AlphaFold2 via ColabDesign.
+"""proto_tools/tools/structure_prediction/alphafold2/alphafold2.py.
+
+Protein structure prediction using AlphaFold2 via ColabDesign.
 
 This module provides standardized interfaces for protein structure prediction
 using the original AlphaFold2 model through the ColabDesign JAX wrapper.
@@ -171,7 +173,7 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
     Attributes:
         num_recycles (int): Number of recycling iterations through the model.
             Higher values can improve accuracy at the cost of computation time.
-            Range: 0-48. Default: 3.
+            Range: 0 or greater. Default: 3.
 
         model_num (int): Which AlphaFold2 model parameter set to use (1-5).
             AF2 ships 5 independently trained parameter sets. Different sets can

@@ -72,7 +72,7 @@ class ESM2ScoringConfig(MaskedModelScoringConfig):
         batch_size (int): Masked variants per forward pass, pooled across all input sequences.
             Larger batches improve throughput but use more memory.
         device (str): Device to run the model on.
-        verbose (bool): Print status messages during scoring.
+        verbose (int): Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess stderr).
         return_logits (bool): Include per-position logits in the output (large; disable to
             save memory).
 
