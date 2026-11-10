@@ -173,22 +173,10 @@ class MaskedModelEmbeddingsConfig(BaseConfig):
     )
 
 
-class Projection2D(BaseModel):
-    """A single 2D point produced by dimensionality reduction (UMAP).
-
-    Attributes:
-        x (float): First reduced coordinate.
-        y (float): Second reduced coordinate.
-    """
-
-    x: float = Field(title="X", description="First reduced coordinate")
-    y: float = Field(title="Y", description="Second reduced coordinate")
-
-
 class SequenceEmbedding(BaseModel):
     """Per-sequence embedding data bundle.
 
-    Bundles all per-sequence outputs (embedding, attention mask, logits, projection)
+    Bundles all per-sequence outputs (embedding, attention mask, logits)
     into a single object so the caching/dedup system in tool_registry can correctly
     expand all parallel fields together via ``iterable_output_field="results"``.
 
@@ -198,9 +186,6 @@ class SequenceEmbedding(BaseModel):
         mean_embedding (list[float]): Mean-pooled embedding vector for one sequence.
         attention_mask (list[int]): Binary mask indicating valid positions (1) vs padding (0).
         logits (list[list[float]] | None): Optional per-position amino acid logits for one sequence.
-        projection (Projection2D | None): Optional 2D coordinate from a UMAP projection
-            of all embeddings in the same call. Populated when ``n_sequences >= 4``;
-            ``None`` otherwise (single-point or 2-3-point UMAP is meaningless).
     """
 
     mean_embedding: list[float] = Field(
@@ -215,11 +200,6 @@ class SequenceEmbedding(BaseModel):
         default=None,
         title="Logits",
         description="Per-position amino acid logits (seq_len, vocab_size)",
-    )
-    projection: Projection2D | None = Field(
-        default=None,
-        title="UMAP Projection",
-        description="2D UMAP projection of this sequence's embedding within the call's batch",
     )
 
 
