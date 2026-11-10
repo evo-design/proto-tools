@@ -23,7 +23,7 @@ The reference implementation is open-sourced as part of the [RosettaCommons/foun
 
 ### RoseTTAFold3 Prediction (`rf3-prediction`)
 
-Predicts the 3D structure of a biomolecular complex. Each input complex can combine protein, DNA, RNA, and ligand chains. The assembly is folded by RF3 and returned as a predicted `Structure` per complex with confidence metrics, including average pLDDT, pTM, interface pTM for multi-chain inputs, per-chain pTM, an overall and chain-pair PAE and PDE in angstroms, a composite ranking score, and a steric-clash flag.
+Predicts the 3D structure of a biomolecular complex. Each input complex can combine protein, DNA, RNA, and ligand chains. The assembly is folded by RF3 and returned as a predicted `Structure` per complex with confidence metrics, including average pLDDT, pTM, interface pTM for multi-chain inputs, per-chain pLDDT (under upstream's `chain_ptm` key), an overall and chain-pair PAE and PDE in angstroms, a composite ranking score, and a steric-clash flag.
 
 #### Applications
 

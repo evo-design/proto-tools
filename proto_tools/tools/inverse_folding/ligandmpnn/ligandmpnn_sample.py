@@ -11,6 +11,10 @@ from typing import Any, ClassVar, Literal
 from pydantic import Field, field_validator, model_validator
 
 from proto_tools.entities.structures import Structure
+from proto_tools.tools.inverse_folding.ligandmpnn._readable import (
+    LIGANDMPNN_ATOM_RECORD_RESIDUES,
+    ligandmpnn_readable_positions,
+)
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -18,6 +22,9 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    preserved_positions,
+    split_fixed_positions,
+    summarize_positions,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
@@ -152,6 +159,24 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
                 )
         return self
 
+    def readable_positions(self, inp: Any) -> dict[str, list[int]] | None:
+        """Positions LigandMPNN designs, which excludes every HETATM residue.
+
+        Only the Foundry path has a declared rule. ``model_type='original'`` parses the
+        structure with the original implementation's own ``parse_PDB``, whose behaviour is
+        not mirrored here, so it keeps strict length matching.
+
+        Args:
+            inp (Any): One structure input.
+
+        Returns:
+            dict[str, list[int]] | None: Ascending readable positions per chain ID, or
+                ``None`` for the original implementation.
+        """
+        if self.model_type in LIGANDMPNN_LEGACY_MODEL_TYPES:
+            return None
+        return ligandmpnn_readable_positions(inp.structure)
+
 
 class LigandMPNNDesignMetrics(Metrics):
     """Per-design recovery metrics emitted by LigandMPNN sampling.
@@ -253,6 +278,38 @@ class LigandMPNNSampleOutput(InverseFoldingOutput):
     )
 
 
+def _resolvable_fixed_positions(inp: Any, readable: dict[str, list[int]] | None) -> Any:
+    """Drop fixed positions LigandMPNN's parser never puts in the designed chain.
+
+    AtomWorks moves every unlisted ``HETATM`` residue into a non-polymer chain, so a position
+    naming one no longer exists under the chain the caller asked for.
+    ``MPNNInferenceInput._mask_from_ids`` raises on an ID matching nothing rather than
+    ignoring it, so the whole run fails on a constraint that is already satisfied: the model
+    never redesigns that residue. Kept positions are not renumbered, because the model
+    matches a fixed position by residue id, which staging leaves at the chain's own ordinal.
+
+    Args:
+        inp (Any): One structure input, exposing ``fixed_positions``.
+        readable (dict[str, list[int]] | None): Positions the model designs, per chain ID, or
+            ``None`` for the original implementation, whose parser is not mirrored here.
+
+    Returns:
+        Any: A ``ResidueSelection`` the model can resolve, or ``None`` when nothing is left.
+    """
+    if readable is None:
+        return inp.fixed_positions
+    resolved, dropped = split_fixed_positions(inp.fixed_positions, readable, renumber=False)
+    for chain_id, positions in dropped.items():
+        logger.warning(
+            "ligandmpnn-sample: Chain %s, position %s is read as ligand context rather than a design "
+            "position, so it cannot be fixed at the model. The original residue is preserved in the "
+            "output regardless.",
+            chain_id,
+            summarize_positions(inp.structure, chain_id, positions),
+        )
+    return resolved
+
+
 def _fixed_positions_cover_structure(inp: InverseFoldingStructureInput) -> bool:
     """Return whether fixed_positions cover every residue in every structure chain."""
     if inp.fixed_positions is None:
@@ -330,9 +387,16 @@ def run_ligandmpnn_sample(
         all_pmpnn: list[float | None] = []
         all_pdb_strings: list[str | None] = []
         remaining = config.num_sequences_per_structure
+        readable = config.readable_positions(inp)
+        worker_fixed = _resolvable_fixed_positions(inp, readable)
         # Staged once per input and reused across chunks, numbered 1..N per chain so LigandMPNN,
         # which addresses residues by number alone, sees every insertion-coded residue.
-        with inp.staged() as staged:
+        # Only the Foundry parser loses a HETATM residue to the chain split; the original
+        # implementation reads the staged file its own way and is not mirrored here.
+        record_residues = (
+            frozenset() if config.model_type in LIGANDMPNN_LEGACY_MODEL_TYPES else LIGANDMPNN_ATOM_RECORD_RESIDUES
+        )
+        with inp.staged(atom_record_residues=record_residues) as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 all_positions_fixed = _fixed_positions_cover_structure(inp)
@@ -343,7 +407,7 @@ def run_ligandmpnn_sample(
                     "chains_explicitly_set": inp.chains_to_redesign is not None and not all_positions_fixed,
                     "batch_size": chunk,
                     "temperature": config.temperature,
-                    "fixed_positions": staged.positions(inp.fixed_positions),
+                    "fixed_positions": staged.positions(worker_fixed),
                     "excluded_amino_acids": config.excluded_amino_acids,
                     "seed": base_seed + dispatch_idx,
                     "device": config.device,
@@ -376,6 +440,7 @@ def run_ligandmpnn_sample(
         redesign_ids = set(inp.chain_ids_to_redesign)
         redesigned_ids = set() if _fixed_positions_cover_structure(inp) else redesign_ids
 
+        preserved = preserved_positions(readable, inp.structure, inp.fixed_positions) if readable is not None else None
         complexes: list[LigandMPNNDesign] = []
         for chain_seqs, recovery, interface_recovery, pmpnn, pdb_string in zip(
             all_chain_sequences, all_recovery, all_interface_recovery, all_pmpnn, all_pdb_strings, strict=True
@@ -391,6 +456,8 @@ def run_ligandmpnn_sample(
                     redesigned_ids,
                     tool="ligandmpnn-sample",
                     include_ligands=True,
+                    readable_positions=readable,
+                    fixed_positions=preserved,
                     metrics=LigandMPNNDesignMetrics(
                         sequence_recovery=(recovery if math.isfinite(recovery) else None),
                         # Foundry returns NaN when no ligand interface; route to None so the conditional key is dropped.
@@ -399,7 +466,11 @@ def run_ligandmpnn_sample(
                         ),
                         pmpnn=(pmpnn if pmpnn is not None and math.isfinite(pmpnn) else None),
                     ),
-                    structure=(staged.restore(pdb_string, source="ligandmpnn-sample") if pdb_string else None),
+                    structure=(
+                        staged.restore(pdb_string, source="ligandmpnn-sample", readable_positions=readable)
+                        if pdb_string
+                        else None
+                    ),
                 )
             )
         design_sets.append(LigandMPNNDesignSet(complexes=complexes))

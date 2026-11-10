@@ -1,7 +1,8 @@
 {
   "tool_id": "spliceai2-score",
-  "execution_time": 6.553805828094482,
-  "timestamp": "2026-10-10T13:01:42.282526",
+  "tool_version": "1.0.1",
+  "execution_time": 6.9717934131622314,
+  "timestamp": "2026-11-08T21:05:09.763361",
   "success": true,
   "warnings": [],
   "errors": [],

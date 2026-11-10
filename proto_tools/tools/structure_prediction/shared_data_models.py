@@ -494,9 +494,9 @@ class StructurePredictionOutput(BaseToolOutput):
 
     Attributes:
         structures (list[Structure]): List of predicted structures, one per
-            input complex. Each structure contains the 3D coordinates in CIF format
-            along with model-specific confidence metrics. The order matches the input
-            complexes order.
+            input complex. Each structure contains the 3D coordinates in PDB or CIF
+            format along with model-specific confidence metrics. The order matches the
+            input complexes order.
 
     Note:
         This class supports list-like operations for convenient access to individual

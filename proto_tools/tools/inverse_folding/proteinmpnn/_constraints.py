@@ -15,6 +15,7 @@ from typing import Any
 
 from proto_tools.entities.structures import ResidueSelection, Structure
 from proto_tools.tools.inverse_folding.proteinmpnn._readable import proteinmpnn_readable_positions
+from proto_tools.tools.inverse_folding.shared_data_models import unreadable_positions
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +50,7 @@ def parser_excluded_positions(structure: Structure, chain_ids: list[str]) -> dic
     Returns:
         dict[str, list[int]]: Skipped positions per chain; chains with none are omitted.
     """
-    readable = proteinmpnn_readable_positions(structure)
-    residues = structure.get_chain_residue_atoms()
-    skipped = {}
-    for chain_id in chain_ids:
-        processed = set(readable.get(chain_id, ()))
-        total = len(residues.get(chain_id, ()))
-        missing = [p for p in range(1, total + 1) if p not in processed]
-        if missing:
-            skipped[chain_id] = missing
-    return skipped
+    return unreadable_positions(proteinmpnn_readable_positions(structure), structure, chain_ids)
 
 
 def describe_positions(structure: Structure, chain_id: str, positions: list[int]) -> str:

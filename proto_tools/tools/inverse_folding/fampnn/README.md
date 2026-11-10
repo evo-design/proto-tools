@@ -81,5 +81,9 @@ Use this for a full in-silico deep mutational scan, to find stabilizing or toler
 
 These apply to every FAMPNN tool in this toolkit (`fampnn-sample`, `fampnn-pack`, `fampnn-score`, `fampnn-score-all-mutations`).
 
+- **Residues FAMPNN's parser cannot read are designed around, not refused.** Its parser skips a `HETATM` residue whose name is outside its modified-residue table, and any residue with no atom in the 37-atom AlphaFold set. The design covers the whole chain, with those residues at their input identity and recorded in `chains[].modifications`.
+- **`psce` has one entry per residue of the design, `None` where the model packed nothing.** It is indexable by chain position. `avg_psce` is the mean over the residues that have a value.
+- **Scoring positions are the structure's, not the model's.** `fampnn-score-all-mutations` keys results by position in the structure, so a key names the residue you would find at that position in your own file. `fampnn-score` takes mutation positions the same way; one naming a residue the parser cannot read cannot be scored, so it is omitted from the returned `mutations` and `scores` with a warning, and the rest of the batch is scored normally.
+
 - **Requires a GPU.** The diffusion-based sidechain model is not practical on CPU.
 - **Each tool already defaults `model_variant` to the right checkpoint.** `0.3` for design (`fampnn-sample`), `0.0` for packing (`fampnn-pack`), and `0.3_cath` for scoring (`fampnn-score`, `fampnn-score-all-mutations`). Each checkpoint is trained and calibrated for its own task, so reusing one across tasks degrades results.

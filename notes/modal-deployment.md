@@ -270,7 +270,7 @@ proto-tools deploy --apps tmalign --env proto-env
 Packages and source are added by `with_proto_tools`, below proto-tools' own layers, so editing
 proto-tools does not rebuild them. The plugin list travels in `RUNTIME_ENV` instead, applied
 *above* the warmup: it is runtime metadata, and renaming a module would otherwise rebuild and
-re-warm all 54 images. Guard tests assert every service applies both, since the two that once
+re-warm all 66 images. Guard tests assert every service applies both, since the two that once
 omitted `RUNTIME_ENV` loaded no plugins at all while deploying and smoke-testing green.
 
 Plugins are imported once per process, on the first call a worker serves — not at `@modal.enter`.

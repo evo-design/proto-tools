@@ -65,7 +65,7 @@ fails every predictor that nests it.
   management, docs extraction, storage, and logging infrastructure.
 - `proto_tools/shared_envs/`: reusable standalone environment definitions.
 - `tests/`: style, registry, infrastructure, and tool-specific tests.
-- `tutorials/` and `scripts/`: examples, runtime guides, and repository
+- `guides/` and `scripts/`: examples, runtime guides, and repository
   utilities.
 - `notes/`: canonical long-form developer references.
 

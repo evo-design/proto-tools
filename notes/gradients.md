@@ -211,7 +211,7 @@ Setting `compute_gradient=False` runs forward-only scoring and returns `gradient
 
 ### How the objective relates to the relaxation
 
-The relaxation controls change the input representation evaluated by the model. They do not change the rule used to choose training or scoring targets. The masked models (ESM2, AbLang, CodonFM, Minerva, and GLM2) derive their targets from `P`. ProteinMPNN uses decoded sequence identities for its negative-log-likelihood labels.
+The relaxation controls change the input representation evaluated by the model. They do not change the rule used to choose training or scoring targets. The masked models (ESM2, ESM C, AbLang, CodonFM, Minerva, and GLM2) derive their targets from `P`. ProteinMPNN uses decoded sequence identities for its negative-log-likelihood labels.
 
 That **does not** mean the reported loss is unchanged when you adjust `soft` or `hard`: changing the model input can change its predictions and therefore its loss and gradient. It only means the target-selection rule is unchanged for fixed sequence logits.
 

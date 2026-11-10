@@ -50,8 +50,8 @@ class ProGen3ScoringConfig(CausalModelScoringConfig):
         local_path (str | None): Override HuggingFace download with a local weights directory.
         batch_size (int): Number of sequences to process simultaneously on GPU.
         return_logits (bool): Whether to include forward-pass per-position logits in the
-            output. Reverse-pass info is already exposed via ``per_position_metrics``
-            (forward/reverse/bidirectional log-likelihoods).
+            output. Reverse-pass info is already exposed via the ``_pp`` per-position
+            metrics (forward/reverse/bidirectional log-likelihoods).
 
     Note:
         - Lower perplexity indicates higher model confidence.

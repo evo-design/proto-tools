@@ -8,7 +8,7 @@ import csv
 import json
 import logging
 from abc import ABC
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -131,17 +131,22 @@ class InverseFoldingStructureInput(StructureInputBase):
         return self.structure.structure_pdb
 
     @contextlib.contextmanager
-    def staged(self) -> Iterator[StagedStructure]:
+    def staged(self, *, atom_record_residues: frozenset[str] = frozenset()) -> Iterator[StagedStructure]:
         """Stage this input's structure for the model, numbered 1..N per chain.
 
         Translate this input's own selections with the yielded object, since staging renumbers
         residues and may shorten chain IDs:
         ``staged.chains(self.chain_ids_to_redesign)`` and ``staged.positions(self.fixed_positions)``.
 
+        Args:
+            atom_record_residues (frozenset[str]): Residue names to write as ``ATOM`` rather
+                than ``HETATM``, for a model that reads the record type rather than a table of
+                known modified residues.
+
         Yields:
             StagedStructure: The staged file and the maps needed to read model output back.
         """
-        with staged_structure(self.structure) as staged:
+        with staged_structure(self.structure, atom_record_residues=atom_record_residues) as staged:
             yield staged
 
 
@@ -191,12 +196,12 @@ def summarize_positions(structure: Any, chain_id: str, positions: Sequence[int],
     return ", ".join(labelled) + (f", and {remainder} more" if remainder > 0 else "")
 
 
-def validate_residue_mapping(readable: dict[str, list[int]], structure: Any) -> None:
+def validate_residue_mapping(readable: dict[str, list[int]], structure: Structure) -> None:
     """Reject a malformed residue mapping before anything relies on it.
 
     Args:
         readable (dict[str, list[int]]): Positions the model processes, per chain ID.
-        structure (Any): The structure the mapping describes.
+        structure (Structure): The structure the mapping describes.
 
     Raises:
         ValueError: If a mapping is unordered, repeats a position, or falls outside its chain.
@@ -209,6 +214,165 @@ def validate_residue_mapping(readable: dict[str, list[int]], structure: Any) -> 
             raise ValueError(f"residue mapping for chain {chain_id} must be ascending and unique")
         if positions and not (positions[0] >= 1 and positions[-1] <= lengths[chain_id]):
             raise ValueError(f"residue mapping for chain {chain_id} falls outside its {lengths[chain_id]} residues")
+
+
+def readable_positions_where(structure: Structure, is_read: Callable[[Any], bool]) -> dict[str, list[int]]:
+    """Positions a model reads, 1-indexed per chain, from a per-residue gate.
+
+    Every polymer chain is reported, with an empty list where the model reads none of it, so
+    a caller can tell a chain the model skips entirely from one the structure does not have.
+
+    Args:
+        structure (Structure): The structure that will be staged for the model.
+        is_read (Callable[[Any], bool]): Whether the model reads one ``ResidueAtoms``.
+
+    Returns:
+        dict[str, list[int]]: Ascending readable positions per polymer chain ID.
+    """
+    return {
+        chain_id: [position for position, residue in enumerate(residues, start=1) if is_read(residue)]
+        for chain_id, residues in structure.get_chain_residue_atoms().items()
+    }
+
+
+def unreadable_positions(
+    readable: dict[str, list[int]], structure: Structure, chain_ids: Sequence[str] | None = None
+) -> dict[str, list[int]]:
+    """Polymer positions a model's rule does not read, per chain, ascending.
+
+    The complement of a ``readable_positions`` mapping. These are the positions whose input
+    residue is preserved rather than designed, so passing them as ``fixed_positions`` to
+    :meth:`DesignedComplex.from_design` is what lets a modification annotation survive there.
+
+    Args:
+        readable (dict[str, list[int]]): Positions the model processes, per chain ID.
+        structure (Structure): The structure the mapping describes.
+        chain_ids (Sequence[str] | None): Report only these chains, or every polymer chain.
+
+    Returns:
+        dict[str, list[int]]: Skipped positions per chain; chains with none are omitted.
+    """
+    wanted = None if chain_ids is None else set(chain_ids)
+    skipped: dict[str, list[int]] = {}
+    for chain_id, residues in structure.get_chain_residue_atoms().items():
+        if wanted is not None and chain_id not in wanted:
+            continue
+        processed = set(readable.get(chain_id, ()))
+        missing = [position for position in range(1, len(residues) + 1) if position not in processed]
+        if missing:
+            skipped[chain_id] = missing
+    return skipped
+
+
+def preserved_positions(
+    readable: dict[str, list[int]], structure: Structure, selection: Any = None
+) -> dict[str, list[int]]:
+    """Positions that will not be redesigned: the parser's skips plus the caller's own.
+
+    What :meth:`DesignedComplex.from_design` wants as ``fixed_positions``. Passing only the
+    parser's skips would make its fixed-position check vacuous, since those positions are by
+    definition absent from ``readable``, and would drop the annotation on a modified residue
+    the caller fixed deliberately.
+
+    Args:
+        readable (dict[str, list[int]]): Positions the model processes, per chain ID.
+        structure (Structure): The structure the mapping describes.
+        selection (Any): The caller's ``ResidueSelection``, or ``None``.
+
+    Returns:
+        dict[str, list[int]]: Preserved positions per chain, ascending, omitting chains with
+            none.
+    """
+    preserved = unreadable_positions(readable, structure)
+    requested = (selection.chains if selection is not None else {}) or {}
+    for chain_id, positions in requested.items():
+        combined = set(preserved.get(chain_id, ())) | set(positions)
+        if combined:
+            preserved[chain_id] = sorted(combined)
+    return preserved
+
+
+def flat_readable_positions(readable: dict[str, list[int]], structure: Structure) -> list[int]:
+    """The positions a model reads, numbered across the whole structure, in chain order.
+
+    A model that skips residues numbers what it reads from 1 with no gaps, so its *n*-th
+    position is this list's *n*-th entry. Entry ``i`` is 1-indexed over every polymer residue
+    of the structure, counting chains in the order ``get_chain_residue_atoms`` reports them,
+    which is the order the parser sees them in the staged file.
+
+    Args:
+        readable (dict[str, list[int]]): Positions the model reads, per chain ID, each
+            1-indexed within its own chain.
+        structure (Structure): The structure the mapping describes.
+
+    Returns:
+        list[int]: Structure-wide 1-indexed positions, ascending.
+    """
+    flat: list[int] = []
+    offset = 0
+    for chain_id, residues in structure.get_chain_residue_atoms().items():
+        flat.extend(offset + position for position in readable.get(chain_id, ()))
+        offset += len(residues)
+    return flat
+
+
+def split_fixed_positions(
+    selection: Any, readable: dict[str, list[int]], *, renumber: bool
+) -> tuple[Any, dict[str, list[int]]]:
+    """Restrict a fixed-position selection to the positions the model can address.
+
+    A model cannot fix a residue it never reads, so those positions are reported back to the
+    caller's tool rather than sent on; the residue keeps its input identity through
+    ``readable_positions`` at reconstruction. Whether the kept positions need renumbering
+    depends on how the model addresses a residue: by its ordinal among what it read, or by
+    the residue number the staged file gives it.
+
+    Args:
+        selection (Any): The caller's ``ResidueSelection``, or ``None``.
+        readable (dict[str, list[int]]): Positions the model reads, per chain ID.
+        renumber (bool): Whether to renumber kept positions into the model's own numbering.
+
+    Returns:
+        tuple[Any, dict[str, list[int]]]: The selection the model can resolve, or ``None``
+            when nothing is left, and the dropped positions per chain in the caller's
+            numbering, omitting chains that lost none.
+    """
+    if selection is None:
+        return None, {}
+    kept_chains: dict[str, list[int]] = {}
+    dropped_chains: dict[str, list[int]] = {}
+    for chain_id, positions in selection.chains.items():
+        chain_readable = readable.get(chain_id, [])
+        kept = (
+            to_model_numbering(chain_readable, positions) if renumber else sorted(set(positions) & set(chain_readable))
+        )
+        dropped = sorted(set(positions) - set(chain_readable))
+        if kept:
+            kept_chains[chain_id] = kept
+        if dropped:
+            dropped_chains[chain_id] = dropped
+    resolved = type(selection)(chains=kept_chains) if kept_chains else None
+    return resolved, dropped_chains
+
+
+def to_model_numbering(readable: Sequence[int], positions: Iterable[int]) -> list[int]:
+    """Renumber positions from the structure's numbering into the model's own.
+
+    The inverse of indexing into ``readable``. A model that skips residues numbers what it
+    reads from 1 with no gaps, so a caller's position has to be renumbered before it can
+    name the same residue to the model. Positions the model does not read have no
+    counterpart and are dropped: it cannot act on a residue it never saw.
+
+    Args:
+        readable (Sequence[int]): Positions the model reads, ascending, in the caller's
+            numbering. Either one chain's or a whole structure's, matching ``positions``.
+        positions (Iterable[int]): Positions in the caller's numbering.
+
+    Returns:
+        list[int]: The same residues in the model's 1-indexed numbering, ascending.
+    """
+    rank = {position: index for index, position in enumerate(readable, start=1)}
+    return sorted(rank[position] for position in positions if position in rank)
 
 
 class InverseFoldingConfig(BaseConfig):
@@ -251,7 +415,7 @@ class InverseFoldingConfig(BaseConfig):
 
         Structure parsers disagree about modified residues: ProteinMPNN renames the residues in
         ColabDesign's MODRES table and drops anything without a backbone N, ESM-IF1 keeps only
-        names biotite maps to one letter, LigandMPNN's rule depends on ``model_choice``. A
+        names biotite maps to one letter, LigandMPNN's rule depends on ``model_type``. A
         toolkit overrides this with its own model's rule.
 
         ``None`` means no rule is declared, which keeps a toolkit's existing strict behaviour.
@@ -448,9 +612,10 @@ class DesignedComplex(Complex):
                 than one per polymer residue; the design is then placed on those positions
                 and the skipped residues keep their input identity. ``None`` requires one
                 residue per polymer residue.
-            fixed_positions (dict[str, list[int]] | None): Positions the caller asked to keep
-                unchanged. A modification annotation survives at a fixed position when the
-                output residue still matches the modification's parent amino acid.
+            fixed_positions (dict[str, list[int]] | None): Positions that will not be
+                redesigned, whether the caller fixed them or the parser skipped them, as
+                :func:`preserved_positions` builds them. A modification annotation survives at
+                one of these when the output residue still matches its parent amino acid.
             fields (Any): Remaining fields of the subclass, such as ``metrics``.
 
         Returns:
