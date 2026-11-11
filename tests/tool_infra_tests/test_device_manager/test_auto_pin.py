@@ -254,12 +254,23 @@ def test_move_model_to_device_takes_cached_tensors_along() -> None:
 
 
 @pytest.mark.parametrize(
-    ("torch_loaded", "device", "called_with"),
-    [(True, "cuda:1", "cuda:1"), (False, "cuda:1", None), (True, "cpu", None), (True, None, None)],
-    ids=["torch_worker", "no_torch", "cpu", "no_device"],
+    ("torch_state", "device", "called_with"),
+    [
+        ("cuda_up", "cuda:1", "cuda:1"),
+        ("imported_only", "cuda:1", None),
+        ("absent", "cuda:1", None),
+        ("cuda_up", "cpu", None),
+        ("cuda_up", None, None),
+    ],
+    ids=["torch_cuda_worker", "torch_without_cuda", "no_torch", "cpu", "no_device"],
 )
-def test_worker_makes_the_request_device_current(monkeypatch, torch_loaded, device, called_with) -> None:
-    """Code using PyTorch's current device must run on the dispatched GPU; non-torch workers are left alone."""
+def test_worker_makes_the_request_device_current(monkeypatch, torch_state, device, called_with) -> None:
+    """Code using PyTorch's current device must run on the dispatched GPU.
+
+    Only in a worker that already uses CUDA through torch. One that merely imported torch (a
+    per-call CLI tool reporting memory stats, say) must not open a context: on an
+    Exclusive_Process GPU it would lock out the subprocess doing the work.
+    """
     import sys
     import types
 
@@ -268,10 +279,12 @@ def test_worker_makes_the_request_device_current(monkeypatch, torch_loaded, devi
     calls: list[str] = []
     helpers = types.SimpleNamespace(set_current_cuda_device=calls.append)
     monkeypatch.setitem(sys.modules, "standalone_helpers", helpers)
-    if torch_loaded:
-        monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace())
-    else:
+    if torch_state == "absent":
         monkeypatch.delitem(sys.modules, "torch", raising=False)
+    else:
+        initialized = torch_state == "cuda_up"
+        fake_torch = types.SimpleNamespace(cuda=types.SimpleNamespace(is_initialized=lambda: initialized))
+        monkeypatch.setitem(sys.modules, "torch", fake_torch)
     _worker_bootstrap._follow_request_device({} if device is None else {"device": device})
     assert calls == ([] if called_with is None else [called_with])
 
