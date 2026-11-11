@@ -443,6 +443,11 @@ def to_device(device: str) -> dict[str, Any]:
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
+def get_memory_stats() -> dict[str, Any]:
+    """CLI tool, no persistent GPU state to report."""
+    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print(f"Usage: python {sys.argv[0]} <input_json> <output_json>", file=sys.stderr)

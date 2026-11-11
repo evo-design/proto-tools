@@ -13,6 +13,10 @@ Each GPU toolkit's representative key runs through, in one persistent worker:
 3. **Evict and return**: a mock tool claims the tool's GPU, DeviceManager evicts it (to CPU, or
    by restart on Exclusive_Process hosts), and the tool must run again on a GPU.
 
+Pipeline tools that start a fresh process for every call (BindCraft, AlphaFold3, RF3, ...) stop
+after phase 1. Their worker holds no GPU state, so a move or an eviction only reruns the pipeline;
+they say so by reporting ``framework="cli"`` memory stats.
+
 Exclusive_Process auto-pinning is turned off (``_auto_pin_exclusive``), so on such a host each tool
 still runs as on a normal-mode one and its own device routing is what is tested. With one visible
 GPU, the tool lands on ``cuda:0`` and phase 2 is skipped. Each case runs ``config_model.minimal()``,
@@ -41,9 +45,12 @@ from tests.tool_infra_tests.test_device_manager._gpu_watch import GpuProcessWatc
 # releases the GPU when it exits — so there is no residency for this lifecycle to exercise.
 _NO_EVICTION_TOOLS = frozenset({"mmseqs2-homology-search", "mmseqs2-search-proteins"})
 
-# Toolkits whose worker holds no framework-tracked GPU state, so get_memory_stats() reports
-# available=False: fresh CLI subprocess per call, or TensorFlow (whose stats are not tracked).
-_NO_MEMORY_STATS_TOOLKITS = frozenset({"alphafold3", "deeppbs_specificity", "germinal", "spliceai"})
+# Toolkits whose worker holds GPU state its framework does not track (TensorFlow), so
+# get_memory_stats() reports available=False. Per-call CLI tools report framework="cli" instead.
+_NO_MEMORY_STATS_TOOLKITS = frozenset({"spliceai"})
+
+# The framework a worker reports when every call runs in a fresh subprocess.
+_PER_CALL_FRAMEWORK = "cli"
 
 # Key tokens in order of preference when choosing a toolkit's representative key: the cheapest
 # call that still loads the toolkit's model.
@@ -82,6 +89,9 @@ def _assert_memory_stats(tool_key: str, toolkit: str, stats: dict) -> None:
     nothing between calls. JAX workers run XLA's platform allocator, which tracks no stats, so
     they may report unavailable, but only with ``JAX_UNTRACKED_MEMORY_REASON``.
     """
+    if stats.get("framework") == _PER_CALL_FRAMEWORK:
+        assert stats["available"] is False, f"{tool_key}: a per-call CLI worker holds no GPU state: {stats}"
+        return
     if toolkit in _NO_MEMORY_STATS_TOOLKITS:
         assert stats["available"] is False, (
             f"{tool_key}: listed in _NO_MEMORY_STATS_TOOLKITS but reports memory stats; drop it from the set"
@@ -160,7 +170,10 @@ def test_gpu_tool_device_lifecycle(tool_spec: ToolSpec) -> None:
         stray = {pid: sorted(gpus) for pid, gpus in landing.seen.items() if gpus - {physical_index(leased)}}
         assert landing.seen, f"{key}: no GPU process was observed; the poll may have missed a short run"
         assert not stray, f"{key} was leased {leased} but its processes used other GPUs: {stray}"
-        _assert_memory_stats(key, toolkit, instance.get_memory_stats())
+        stats = instance.get_memory_stats()
+        _assert_memory_stats(key, toolkit, stats)
+        if stats.get("framework") == _PER_CALL_FRAMEWORK:
+            return  # each call is a fresh process: a move or an eviction only reruns the pipeline
 
         # 2. Follow a move to the other GPU.
         if two_gpus:
