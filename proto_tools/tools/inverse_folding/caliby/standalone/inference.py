@@ -665,22 +665,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"caliby: unknown operation {operation!r}; valid: {list(_OPERATIONS)}")
 
 
-def to_device(device: str) -> dict[str, Any]:
-    """Move the loaded model to a device (called by DeviceManager).
-
-    Args:
-        device (str): Torch device string to move to.
-
-    Returns:
-        dict[str, Any]: Move status, noting when no model is loaded yet.
-    """
-    global _runner
-    if _runner is not None and _runner.model is not None:
-        _runner.to_device(device)
-        return {"success": True, "device": device}
-    return {"success": True, "device": device, "note": "model not loaded yet"}
-
-
 def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring).
 

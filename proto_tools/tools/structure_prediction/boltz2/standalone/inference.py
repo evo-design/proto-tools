@@ -442,22 +442,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"boltz2: unknown operation {operation!r}; valid: ['predict', 'predict_affinity']")
 
 
-def to_device(device: str) -> dict[str, Any]:
-    """Relocate resident in-process checkpoints to ``device``; frees the GPU on CPU offload.
-
-    The resident model stays on the GPU between calls, so DeviceManager offload must move it
-    (and empty the CUDA cache) to actually reclaim memory.
-    """
-    from standalone_helpers import move_model_to_device
-
-    moved = 0
-    for key, model in list(_checkpoint_cache.items()):
-        old_device = str(next(model.parameters()).device)
-        _checkpoint_cache[key] = move_model_to_device(model, old_device, device)
-        moved += 1
-    return {"success": True, "device": device, "note": f"moved {moved} resident model(s)"}
-
-
 def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats

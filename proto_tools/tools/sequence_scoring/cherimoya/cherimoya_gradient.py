@@ -411,6 +411,7 @@ def _target_span(config: CherimoyaGradientConfig, length: int) -> tuple[int, int
     output_class=CherimoyaGradientOutput,
     description="Compute differentiable Cherimoya accessibility losses and gradients for relaxed DNA logits",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     cacheable=False,
 )

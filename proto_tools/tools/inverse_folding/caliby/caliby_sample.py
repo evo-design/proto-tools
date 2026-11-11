@@ -634,6 +634,7 @@ def example_input() -> Any:
     output_class=CalibySampleOutput,
     description="Design protein sequences with Caliby, optionally conditioned on a conformer ensemble",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["inputs"],
     iterable_output_field="design_sets",

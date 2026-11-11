@@ -333,12 +333,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def to_device(device: str) -> dict[str, Any]:
-    """Move model to the specified device."""
-    _model.to_device(device)
-    return {"success": True, "device": device}
-
-
 def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage."""
     from standalone_helpers import get_pytorch_memory_stats

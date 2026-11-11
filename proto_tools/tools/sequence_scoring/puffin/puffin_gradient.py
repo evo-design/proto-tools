@@ -287,6 +287,7 @@ def example_input() -> PuffinGradientInput:
     output_class=PuffinGradientOutput,
     description="Compute Puffin transcription-initiation gradients for relaxed DNA sequences",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     cacheable=False,
     iterable_input_fields=["inputs"],

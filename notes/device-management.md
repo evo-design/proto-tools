@@ -169,13 +169,20 @@ independent examples and in tests).
   Without it, the tool falls back to RESTART.
 - Mark a tool `gpu_only=True` when it cannot run on CPU. LRU eviction then
   restarts it instead of offloading, and direct `device="cpu"` is rejected.
-- Mark a tool `pin_visible_devices=True` for JAX tools, whose runtime
-  initializes a context on every visible GPU. The worker is then spawned with
+- Mark a tool `pin_visible_devices=True` unless every GPU access it makes goes
+  through the leased `device` string. An unpinned worker sees every GPU, so
+  anything that picks "the GPU" itself lands on GPU 0: JAX and TensorFlow
+  (which initialize every visible GPU), PyTorch Lightning's `devices=1`, Triton
+  kernels on the current device, and upstream code that calls `.cuda()` or
+  hardcodes `cuda:0`. The worker is then spawned with
   `CUDA_VISIBLE_DEVICES` restricted to its assigned physical GPU(s) — which it
   addresses as local `cuda:0..N-1` — and it **respawns** on a device change
   instead of moving in-process (a fixed `CUDA_VISIBLE_DEVICES` cannot see other
   GPUs). Such tools do not implement `to_device()`. The user-facing `device=`
   selection is unchanged; the logical→physical mapping is internal.
+  `tests/tool_infra_tests/test_device_manager/test_leased_gpu.py` (2 GPUs,
+  `--all --ext`) leases `cuda:1` to every GPU toolkit and fails if any of its
+  processes opens a context on another GPU.
 - Set `device_count` on the `@tool` registration so allocation requests are
   validated (under-allocation errors, over-allocation warns).
 

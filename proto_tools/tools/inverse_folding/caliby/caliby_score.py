@@ -293,6 +293,7 @@ def example_input() -> Any:
     output_class=CalibyScoreOutput,
     description="Score a structure's native sequence under the Caliby Potts model",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["inputs"],
     iterable_output_field="scores",
