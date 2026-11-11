@@ -9,7 +9,6 @@ from pydantic import Field, ValidationInfo, field_validator, model_validator
 from typing_extensions import Self
 
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
-    _CUSTOM_CHECKPOINT_REJECTED,
     PARADE_CELL_PANEL,
     PARADE_CELL_TYPES,
     ParadeCellType,
@@ -33,7 +32,6 @@ from proto_tools.utils import (
     TermGradient,
     ToolInstance,
 )
-from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import Directionality
 
 
@@ -99,7 +97,7 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, RelaxationConfig):
         checkpoint (str): Your own checkpoint to use instead of the pinned one, given as a local
             ``.ckpt`` path or an ``https`` download link (a schemeless ``host.tld/path`` is
             accepted). Works on ``device="cpu"``, ``device="cuda"``, and ``device="modal"``.
-            Rejected on ``device="proto"``. Leave empty to use the pinned per-target checkpoint.
+            Leave empty to use the pinned per-target checkpoint.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
             (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
             and ColabDesign parity. See
@@ -189,12 +187,6 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, RelaxationConfig):
         if duplicates:
             raise ValueError(f"gradient_terms names cells {duplicates} more than once; each cell yields one term")
         return self
-
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """Proto will not load a custom checkpoint; a deployment the caller owns may."""
-        if device == "proto" and self.checkpoint:
-            return _CUSTOM_CHECKPOINT_REJECTED
-        return None
 
 
 class ParadeTermGradient(TermGradient):

@@ -16,12 +16,13 @@ def test_local_is_resolved_and_is_not_remote() -> None:
     """The server can be pointed at this machine, and the rest of the code can tell."""
     assert resolve_device("local") == "local"
     assert not is_remote("local")
-    assert is_remote("modal") and is_remote("proto")
+    assert is_remote("modal")
+    assert not is_remote("proto"), "device='proto' was removed"
 
 
-def test_an_unknown_device_names_all_three() -> None:
+def test_an_unknown_device_names_both() -> None:
     """The error is the only place a caller learns what the choices are."""
-    with pytest.raises(DeviceUnavailableError, match="'modal', 'proto', or 'local'"):
+    with pytest.raises(DeviceUnavailableError, match="'modal' or 'local'"):
         resolve_device("laptop")
 
 
