@@ -1,8 +1,7 @@
 """Replayed progress records name the call that produced them.
 
-Both remote paths replay a worker's output through a module-level logger: ``device='modal'`` from
-a Modal queue partition, ``device='proto'`` from the server's NDJSON log stream. A session with
-one call in flight needs nothing more, and that is the case these were written for.
+The remote path replays a worker's output through a module-level logger: ``device='modal'`` from
+a Modal queue partition. A session with one call in flight needs nothing more, and that is the case these were written for.
 
 A process replaying for several callers at once is a different matter. Without a call id on the
 record, a handler cannot tell two callers' output apart, and progress lines carry sequence names,

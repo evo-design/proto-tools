@@ -11,7 +11,6 @@ from pydantic import ValidationError, field_validator
 from pydantic_core import InitErrorDetails, core_schema
 
 from proto_tools.utils import BaseConfig, BaseToolInput, ConfigField, InputField
-from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.sequence import return_invalid_nucleotide_chars
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
@@ -108,13 +107,6 @@ def resolve_cell_type(value: str) -> ParadeCellType:
 
 
 _VALID_INPUT_CHARS = "N"  # U is normalized to T; A/C/G/T come from DNA_NUCLEOTIDES.
-
-_CUSTOM_CHECKPOINT_REJECTED = (
-    "A custom checkpoint cannot be used with device='proto'. Loading a checkpoint executes "
-    "the code inside it, and Proto's hosted service runs only the pinned checkpoints it can "
-    "verify. Leave checkpoint empty to use the pinned one, run locally with device='cpu' or "
-    "device='cuda', or use device='modal' to run it in a Modal workspace you own."
-)
 
 
 def normalize_utr_sequence(sequence: str) -> str:
@@ -363,9 +355,7 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
             as a local ``.ckpt`` path or an ``https`` download link (a schemeless
             ``host.tld/path`` is accepted and normalized to ``https://``). Works on
             ``device="cpu"``, ``device="cuda"``, and ``device="modal"``, all of which run on
-            hardware you control. Rejected on ``device="proto"``, because loading a checkpoint
-            executes the code inside it and Proto's hosted service runs only checkpoints it can
-            verify. Leave empty to use the pinned per-target checkpoint.
+            hardware you control. Leave empty to use the pinned per-target checkpoint.
         batch_size (int): Number of sequences to run per GPU batch.
     """
 
@@ -395,12 +385,6 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
     def _validate_checkpoint(cls, value: str) -> str:
         """Validate a checkpoint override: an https link (schemeless allowed) or a local path."""
         return normalize_checkpoint_override(value)
-
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """Proto will not load a custom checkpoint; a deployment the caller owns may."""
-        if device == "proto" and self.checkpoint:
-            return _CUSTOM_CHECKPOINT_REJECTED
-        return None
 
 
 class ParadeActivityMetrics(Metrics):

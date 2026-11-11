@@ -2,8 +2,7 @@
 
 A config that defines a differently named hook is never called. The tool still
 runs, so nothing fails, and the restriction the hook expresses silently does not
-apply. Three configs were in that state after ``device="cloud"`` became
-``device="proto"``.
+apply. Three configs were once in that state after the hook was renamed.
 """
 
 import ast
