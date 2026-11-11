@@ -43,12 +43,6 @@ def resolve_device(requested: str | None = None) -> Device:
     if choice == "local":
         return "local"
 
-    if choice == "proto":
-        raise DeviceUnavailableError(
-            "device='proto' has been removed. Omit --device to run tools in your own Modal "
-            "workspace, or pass --device local to run them on this machine."
-        )
-
     raise DeviceUnavailableError(f"unknown device {choice!r}; expected 'modal' or 'local'")
 
 

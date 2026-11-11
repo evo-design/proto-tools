@@ -523,16 +523,6 @@ def test_default_is_modal(monkeypatch):
     assert resolve_device() == "modal"
 
 
-def test_removed_proto_device_says_so():
-    """device='proto' was removed; naming it says so rather than reporting an unknown device."""
-    import pytest as _pytest
-
-    from proto_tools.mcp.device import DeviceUnavailableError, resolve_device
-
-    with _pytest.raises(DeviceUnavailableError, match="has been removed"):
-        resolve_device("proto")
-
-
 def test_unknown_device_is_rejected(monkeypatch):
     """A typo must not silently fall back to a working backend."""
     import pytest as _pytest

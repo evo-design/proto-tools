@@ -37,7 +37,7 @@ def test_only_one_hook_name_exists():
 
 @pytest.mark.parametrize("path,name", _config_methods(), ids=lambda v: getattr(v, "name", str(v)))
 def test_every_hook_takes_the_device(path: Path, name: str):
-    """A hook that ignores the device cannot distinguish proto from a caller's own workspace."""
+    """A hook that ignores the device cannot restrict one remote device without the others."""
     for node in ast.walk(ast.parse(path.read_text())):
         if isinstance(node, ast.FunctionDef) and node.name == name:
             args = [a.arg for a in node.args.args]

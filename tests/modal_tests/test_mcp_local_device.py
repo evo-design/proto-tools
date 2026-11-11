@@ -17,7 +17,6 @@ def test_local_is_resolved_and_is_not_remote() -> None:
     assert resolve_device("local") == "local"
     assert not is_remote("local")
     assert is_remote("modal")
-    assert not is_remote("proto"), "device='proto' was removed"
 
 
 def test_an_unknown_device_names_both() -> None:

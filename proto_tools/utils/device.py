@@ -349,13 +349,6 @@ def _validate_cuda_index(idx_str: str, device: str) -> int:
 # "cudax4", ...) are unconstrained and validated by parse_device_string.
 RemoteDevice = Literal["modal"]
 
-# Proto's hosted service was once reachable as device="proto". It was removed;
-# naming it gets this message instead of a bare "Invalid device".
-_REMOVED_PROTO_DEVICE = (
-    "device='proto' has been removed. Use device='modal' to run on your own Modal deployment, "
-    "or a local device ('cpu', 'cuda', 'cuda:N', 'cudaxN')."
-)
-
 # Derived, so the type and the runtime set cannot drift apart.
 _REMOTE_DEVICES: frozenset[str] = frozenset(get_args(RemoteDevice))
 
@@ -417,8 +410,6 @@ def parse_device_string(device: str) -> DeviceSpec:
     # count is nominal: the remote side decides its own physical hardware.
     if device in _REMOTE_DEVICES:
         return DeviceSpec(kind=device, devices=[device], count=1)
-    if device == "proto":
-        raise ValueError(_REMOVED_PROTO_DEVICE)
 
     # Auto-allocate N GPUs: "cudax2", "cudax3", etc.
     if device.startswith("cudax"):
