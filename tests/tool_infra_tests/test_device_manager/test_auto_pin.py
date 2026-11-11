@@ -209,3 +209,68 @@ def test_set_current_cuda_device(device: str, expected: int | None) -> None:
         fake_torch.cuda.set_device.assert_not_called()
     else:
         fake_torch.cuda.set_device.assert_called_once_with(expected)
+
+
+# ── Moving a model between GPUs in-process ────────────────────────────────────
+
+_MOVE_CHECK = """
+import json, torch
+from standalone_helpers import move_model_to_device
+
+class Cached(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.lin = torch.nn.Linear(4, 4)
+        self.owner = torch.nn.LayerNorm(4)
+        self.norm_weight = self.owner.weight  # a parameter used here after its module leaves
+        with torch.inference_mode():
+            self.t = torch.arange(8)  # a cached inference tensor, as stripedhyena keeps
+
+model = Cached().to("cuda:1")
+model.t = model.t.to("cuda:1")
+ref = model.norm_weight
+del model.owner  # norm_weight is now an attribute only, which .to() does not move
+model = move_model_to_device(model, "cuda:1", "cuda:0")
+print(json.dumps({
+    "lin": str(model.lin.weight.device), "cached": str(model.t.device), "param_ref": str(model.norm_weight.device),
+    "same_param": ref is model.norm_weight, "current": torch.cuda.current_device(),
+}))
+"""
+
+
+@pytest.mark.integration
+@pytest.mark.uses_gpu(2)
+def test_move_model_to_device_takes_cached_tensors_along() -> None:
+    """``.to()`` skips tensors held as plain attributes; the move helper must not leave them behind."""
+    import json
+
+    from proto_tools.utils import run_in_env
+
+    out = json.loads(run_in_env("esm2", code=_MOVE_CHECK, device="cudax2").strip().splitlines()[-1])
+    assert out == {"lin": "cuda:0", "cached": "cuda:0", "param_ref": "cuda:0", "same_param": True, "current": 0}
+
+
+# ── The worker follows each request's device ─────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("torch_loaded", "device", "called_with"),
+    [(True, "cuda:1", "cuda:1"), (False, "cuda:1", None), (True, "cpu", None), (True, None, None)],
+    ids=["torch_worker", "no_torch", "cpu", "no_device"],
+)
+def test_worker_makes_the_request_device_current(monkeypatch, torch_loaded, device, called_with) -> None:
+    """Code using PyTorch's current device must run on the dispatched GPU; non-torch workers are left alone."""
+    import sys
+    import types
+
+    from proto_tools.utils import _worker_bootstrap
+
+    calls: list[str] = []
+    helpers = types.SimpleNamespace(set_current_cuda_device=calls.append)
+    monkeypatch.setitem(sys.modules, "standalone_helpers", helpers)
+    if torch_loaded:
+        monkeypatch.setitem(sys.modules, "torch", types.SimpleNamespace())
+    else:
+        monkeypatch.delitem(sys.modules, "torch", raising=False)
+    _worker_bootstrap._follow_request_device({} if device is None else {"device": device})
+    assert calls == ([] if called_with is None else [called_with])

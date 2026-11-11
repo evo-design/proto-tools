@@ -128,7 +128,11 @@ class ESMFold2Model:
     def load(self, device: str, verbose: bool = False) -> None:
         """Load the ESMFold2 model and input builder onto ``device``."""
         from esm.models.esmfold2 import ESMFold2InputBuilder, EsmFold2Model
+        from standalone_helpers import set_current_cuda_device
 
+        # ESMFold2's Triton kernels launch on the current device and cache their compiled form
+        # under it, so it must be the GPU the model is on from the first call.
+        set_current_cuda_device(device)
         repo = _CHECKPOINT_REPOS[self.model_checkpoint]
         if verbose:
             logger.info(f"Loading ESMFold2 model: {repo} on {device}")
