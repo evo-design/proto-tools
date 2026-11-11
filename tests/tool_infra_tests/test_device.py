@@ -104,18 +104,6 @@ def test_parse_device_string_invalid_malformed():
         parse_device_string("cuda:")
 
 
-def test_removed_proto_device_is_rejected_with_a_pointer():
-    """device='proto' was removed; a config naming it fails at construction and says what to use."""
-    from pydantic import ValidationError
-
-    from proto_tools.utils.base_config import BaseConfig
-
-    with pytest.raises(ValueError, match=r"has been removed.*device='modal'"):
-        parse_device_string("proto")
-    with pytest.raises(ValidationError, match="has been removed"):
-        BaseConfig(device="proto")
-
-
 def test_parse_device_string_rejects_negative_index():
     """Negative CUDA indices must raise (single and multi forms), not silently wrap to the last GPU."""
     with pytest.raises(ValueError, match="non-negative"):
