@@ -37,7 +37,7 @@ class DeviceSpec:
     """Structured result from :func:`parse_device_string`.
 
     Attributes:
-        kind (str): ``"cpu"``, ``"cuda"``, ``"proto"``, or ``"modal"``.
+        kind (str): ``"cpu"``, ``"cuda"``, or ``"modal"``.
         devices (list[str] | None): Explicit device IDs when provided (e.g. ``["cuda:0"]``),
             ``None`` for auto-allocate CUDA.
         count (int): Number of CUDA devices requested (always 1 for cpu and remote devices).
@@ -343,13 +343,11 @@ def _validate_cuda_index(idx_str: str, device: str) -> int:
 
 
 # Device strings that dispatch the tool somewhere else instead of running it
-# locally. "proto" is Proto's hosted service; "modal" is the caller's own
-# Modal deployment. What each can run differs, so availability is decided per
-# device rather than shared.
+# locally. "modal" is the caller's own Modal deployment.
 #
 # This is only the remote set. Local device strings ("cpu", "cuda", "cuda:0",
 # "cudax4", ...) are unconstrained and validated by parse_device_string.
-RemoteDevice = Literal["proto", "modal"]
+RemoteDevice = Literal["modal"]
 
 # Derived, so the type and the runtime set cannot drift apart.
 _REMOTE_DEVICES: frozenset[str] = frozenset(get_args(RemoteDevice))
@@ -360,8 +358,8 @@ def is_remote_device(device: str) -> TypeGuard[RemoteDevice]:
 
     Narrows to :data:`RemoteDevice`, so a caller inside the guard may pass ``device`` where a
     remote device is required without asserting the type by hand. The comparison is exact for
-    that reason: accepting ``" proto"`` would narrow a value that no later comparison against
-    ``"proto"`` will match. Normalize before calling.
+    that reason: accepting ``" modal"`` would narrow a value that no later comparison against
+    ``"modal"`` will match. Normalize before calling.
 
     Args:
         device (str): Device string to classify, already stripped.
@@ -376,9 +374,8 @@ def parse_device_string(device: str) -> DeviceSpec:
     """Parse a device string into a structured :class:`DeviceSpec`.
 
     Supports CPU, CUDA (single/multi, auto/explicit), and the remote device
-    strings ``"proto"`` and ``"modal"``. ``"proto"`` runs the tool on Proto's
-    hosted service (see :mod:`proto_tools.proto`); ``"modal"`` runs it on the
-    caller's own Modal deployment. Both always have ``count`` 1.
+    string ``"modal"``, which runs the tool on the caller's own Modal
+    deployment and always has ``count`` 1.
 
     Args:
         device (str): Device string to parse.
@@ -389,8 +386,6 @@ def parse_device_string(device: str) -> DeviceSpec:
     Examples:
         >>> parse_device_string("cpu")
         DeviceSpec(kind='cpu', devices=['cpu'], count=1)
-        >>> parse_device_string("proto")
-        DeviceSpec(kind='proto', devices=['proto'], count=1)
         >>> parse_device_string("modal")
         DeviceSpec(kind='modal', devices=['modal'], count=1)
         >>> parse_device_string("cuda")
