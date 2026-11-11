@@ -747,8 +747,8 @@ class ToolSpec(BaseModel):
             "Pin the worker's CUDA_VISIBLE_DEVICES to its assigned physical GPU(s); "
             "the worker addresses them as local cuda:0..N-1 and respawns on a "
             "physical-device change. For tools whose runtime picks a GPU itself "
-            "(JAX, TensorFlow, Lightning, upstream .cuda()/cuda:0) rather than "
-            "taking the leased device. Implies uses_gpu=True."
+            "and cannot be routed to the leased device (JAX, TensorFlow). Every "
+            "GPU tool is pinned on Exclusive_Process hosts regardless. Implies uses_gpu=True."
         ),
     )
     device_count: str = Field(
@@ -1011,8 +1011,9 @@ class ToolRegistry:
                 to its assigned physical GPU(s); the worker sees them as local
                 ``cuda:0..N-1`` and respawns on a physical-device change instead
                 of moving in-process. For tools whose runtime picks a GPU itself
-                (JAX, TensorFlow, Lightning, upstream ``.cuda()``/``cuda:0``)
-                rather than taking the leased device. Implies ``uses_gpu=True``.
+                and cannot be routed to the leased device (JAX, TensorFlow). Every
+                GPU tool is pinned on Exclusive_Process hosts regardless
+                (``DeviceManager.pins_gpu_workers``). Implies ``uses_gpu=True``.
             device_count (str): Expected device count (e.g., "1", "1-2", ">=1", "<=2").
                 Validates allocation: errors on under-allocation, warns on over-allocation.
             example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal valid
@@ -1171,6 +1172,13 @@ class ToolRegistry:
                 cache_enabled = spec.cacheable if spec is not None else cacheable
                 gpu_only_flag = spec.gpu_only if spec is not None else gpu_only
                 pin_visible_devices_flag = spec.pin_visible_devices if spec is not None else pin_visible_devices
+                # Read by ToolInstance (dispatch, one-shot, persistent) to place and pin this tool's worker.
+                invocation = {
+                    "key": key,
+                    "gpu_only": gpu_only_flag,
+                    "pin_visible_devices": pin_visible_devices_flag,
+                    "uses_gpu": spec.uses_gpu if spec is not None else uses_gpu,
+                }
                 stochastic_tool = spec.stochastic if spec is not None else stochastic
                 # Unseeded calls to stochastic tools skip cache so repeat dispatches advance RNG.
                 runtime_cacheable = cache_enabled and (not stochastic_tool or config.seed is not None)
@@ -1474,17 +1482,22 @@ class ToolRegistry:
                     # share it. Tools with a ToolInstance keep their own timeout handling.
                     in_process_deadline = None if has_standalone_env else budget
 
+                    # Carry per-invocation flags (key, gpu_only, pin_visible_devices, uses_gpu) to ToolInstance.
+                    from proto_tools.utils.tool_instance import _current_tool_invocation
+
                     pool = get_active_pool()
                     if pool is not None and not is_pool_executing() and spec and spec.iterable_input_fields is not None:
-                        with deadline(in_process_deadline):
-                            pooled = pool._parallel_dispatch(key, func, inputs, config)
+                        # Partitions run in copies of this context, so they place their workers by the same flags.
+                        _pool_token = _current_tool_invocation.set(invocation)
+                        try:
+                            with deadline(in_process_deadline):
+                                pooled = pool._parallel_dispatch(key, func, inputs, config)
+                        finally:
+                            _current_tool_invocation.reset(_pool_token)
                         return _finish_dispatched(pooled, partial_result=_holds_failed_items(pooled, spec))
 
                     if budget != config.effective_timeout():
                         config = config.model_copy(update={"timeout": budget})
-
-                    # Carry per-invocation flags (key, gpu_only, pin_visible_devices) to ToolInstance for eviction/dispatch.
-                    from proto_tools.utils.tool_instance import _current_tool_invocation
 
                     with deadline(in_process_deadline):
                         for attempt in range(1 + MAX_RETRIES):
@@ -1499,13 +1512,7 @@ class ToolRegistry:
 
                                     # Execute the tool function (ContextVar is read by
                                     # ``ToolInstance.dispatch`` / ``_run_persistent``).
-                                    _inv_token = _current_tool_invocation.set(
-                                        {
-                                            "key": key,
-                                            "gpu_only": gpu_only_flag,
-                                            "pin_visible_devices": pin_visible_devices_flag,
-                                        }
-                                    )
+                                    _inv_token = _current_tool_invocation.set(invocation)
                                     try:
                                         result = func(inputs, config, instance)
                                     finally:
