@@ -340,7 +340,6 @@ def example_input() -> PuffinInterpretationInput:
     output_class=PuffinInterpretationOutput,
     description="Motif-level interpretation of transcription initiation with Puffin",
     uses_gpu=True,
-    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",

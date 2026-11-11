@@ -28,6 +28,8 @@ def _prepare_output_values(value: Any) -> Any:
 _checkpoint_cache_installed = False
 # Resident Boltz2 models keyed by checkpoint path; lives at module scope so to_device() can relocate them.
 _checkpoint_cache: dict[str, Any] = {}
+# The GPU index the last prediction ran on, for get_memory_stats.
+_gpu_index = 0
 
 
 def _install_checkpoint_cache() -> None:
@@ -264,7 +266,7 @@ class Boltz2Model:
         self,
         input_yaml_path: str,
         output_dir: str,
-        device: str,  # noqa: ARG002 -- worker already runs on its assigned GPU
+        device: str,
         recycling_steps: int,
         sampling_steps: int,
         diffusion_samples: int,
@@ -296,13 +298,24 @@ class Boltz2Model:
         _ensure_boltz_data(self.cache_dir)
 
         import torch
+        from standalone_helpers import _parse_cuda_indices, set_current_cuda_device
 
-        num_devices = 1 if torch.cuda.is_available() else 0
+        global _gpu_index
+        # This worker sees every GPU, and Lightning reads ``devices=1`` as GPU 0. Hand it the leased
+        # GPU's index instead (a one-element list runs on that GPU alone); CPU calls run on CPU.
+        indices = _parse_cuda_indices(device) if torch.cuda.is_available() else None
+        if indices is None and device.startswith("cuda") and torch.cuda.is_available():
+            indices = [torch.cuda.current_device()]  # bare "cuda"
+        set_current_cuda_device(device)
+        accelerator, devices = ("gpu", indices[:1]) if indices else ("cpu", 1)
+        if indices:
+            _gpu_index = indices[0]
         kwargs: dict[str, Any] = {
             "data": input_yaml_path,
             "out_dir": output_dir,
             "cache": str(self.cache_dir),
-            "devices": num_devices,
+            "accelerator": accelerator,
+            "devices": devices,
             "recycling_steps": recycling_steps,
             "sampling_steps": sampling_steps,
             "diffusion_samples": diffusion_samples,
@@ -442,11 +455,27 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"boltz2: unknown operation {operation!r}; valid: ['predict', 'predict_affinity']")
 
 
+def to_device(device: str) -> dict[str, Any]:
+    """Relocate resident in-process checkpoints to ``device``; frees the GPU on CPU offload.
+
+    The resident model stays on the GPU between calls, so DeviceManager offload must move it
+    (and empty the CUDA cache) to actually reclaim memory.
+    """
+    from standalone_helpers import move_model_to_device
+
+    moved = 0
+    for key, model in list(_checkpoint_cache.items()):
+        old_device = str(next(model.parameters()).device)
+        _checkpoint_cache[key] = move_model_to_device(model, old_device, device)
+        moved += 1
+    return {"success": True, "device": device, "note": f"moved {moved} resident model(s)"}
+
+
 def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
-    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
+    return get_pytorch_memory_stats(device=_gpu_index)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

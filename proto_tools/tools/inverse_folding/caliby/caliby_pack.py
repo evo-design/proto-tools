@@ -176,7 +176,6 @@ def example_input() -> Any:
     output_class=CalibyPackOutput,
     description="Pack protein sidechains onto a backbone using Caliby's diffusion packer",
     uses_gpu=True,
-    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["structures"],
     iterable_output_field="packed_structures",

@@ -46,12 +46,15 @@ class ProGen3Model:
     def load(self, device: str, verbose: bool = False) -> None:
         """Load ProGen3 model to device.
 
-        progen3 places tensors on ``dist.get_device()`` (``torch.cuda.current_device()``), which is
-        GPU 0 of the visible ones. The worker is pinned (``pin_visible_devices``), so it sees only its
-        leased GPU, and local ``cuda:0`` is that GPU.
+        progen3 places its tensors on ``dist.get_device()``, which is ``torch.cuda.current_device()``,
+        so the leased GPU is made current before loading and the model goes to that same device.
         """
         if verbose:
             logger.info(f"Loading ProGen3 model: {self.model_checkpoint} on {device}")
+
+        from standalone_helpers import set_current_cuda_device
+
+        set_current_cuda_device(device)
 
         import torch
         from progen3.modeling import ProGen3ForCausalLM
@@ -65,8 +68,7 @@ class ProGen3Model:
             )
         except OSError as e:
             raise RuntimeError(f"progen3: HF weight load from {model_path!r} failed: {e}") from e
-        # The pinned worker's only GPU.
-        self.model.eval().to("cuda:0")
+        self.model.eval().to(device)
         self.device = device
         self._loaded = True
 
@@ -76,21 +78,17 @@ class ProGen3Model:
     def to_device(self, device: str) -> None:
         """Move model to a different device.
 
-        GPU → CPU uses standard PyTorch ``.to("cpu")``; CPU → GPU reloads onto the pinned GPU.
+        ``move_model_to_device`` also makes ``device`` current, which progen3's
+        ``dist.get_device()`` follows.
         """
         if not self._loaded:
             raise ValueError("progen3: cannot move unloaded model to device — call load() first")
         if self.device == device:
             return
-        if device == "cpu":
-            from standalone_helpers import move_model_to_device
+        from standalone_helpers import move_model_to_device
 
-            self.model = move_model_to_device(self.model, self.device, device)
-            self.device = device
-        else:
-            self._loaded = False
-            self.model = None
-            self.load(device)
+        self.model = move_model_to_device(self.model, self.device, device)
+        self.device = device
 
     def sample(
         self,
@@ -521,6 +519,15 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             seed=input_dict["seed"],
         )
     raise ValueError(f"progen3: unknown operation {operation!r}; valid: ['sample', 'score']")
+
+
+def to_device(device: str) -> dict[str, Any]:
+    """Move model to specified device (called by DeviceManager); the new GPU becomes current."""
+    global _model
+    if _model is not None and _model._loaded:
+        _model.to_device(device)
+        return {"success": True, "device": device}
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict[str, Any]:

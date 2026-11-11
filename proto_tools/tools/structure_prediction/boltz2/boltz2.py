@@ -303,7 +303,6 @@ def example_input() -> Any:
     metrics_class=Boltz2Metrics,
     description="Multi-modal structure prediction using Boltz2",
     uses_gpu=True,
-    pin_visible_devices=True,
     device_count="1-2",
     example_input=example_input,
     iterable_input_fields=["complexes", "msas"],
