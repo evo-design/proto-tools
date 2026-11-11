@@ -197,11 +197,14 @@ independent examples and in tests).
   persistent workers. Tests turn it off with the private
   `DeviceManager.get_instance()._auto_pin_exclusive = False` to exercise routing
   on such a node.
-- `tests/tool_infra_tests/test_device_manager/test_leased_gpu.py` (2 GPUs,
-  `--all --ext`) checks every GPU toolkit:
-  - it leases `cuda:1` and fails if any process opens a context on another GPU,
-    both routed and auto-pinned;
-  - it moves the tool to `cuda:0` and checks the next run follows.
+- `tests/tool_infra_tests/test_device_manager/test_gpu_lifecycle.py`
+  (`--all --ext`, 2 GPUs for the move) runs every GPU toolkit through one worker:
+  - it leases `cuda:1` and fails if any process opens a context on another GPU;
+  - it moves the tool to `cuda:0` and checks the next run follows;
+  - a mock tool evicts it, and it must run on a GPU again.
+
+  Auto-pinning on real GPUs is covered by the spec-pinned toolkits there and by
+  `test_auto_pin.py`.
 
   Run it when changing a GPU tool's device handling or bumping its env, since
   CI has no GPUs.

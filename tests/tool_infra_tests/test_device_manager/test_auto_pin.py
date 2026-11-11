@@ -274,3 +274,44 @@ def test_worker_makes_the_request_device_current(monkeypatch, torch_loaded, devi
         monkeypatch.delitem(sys.modules, "torch", raising=False)
     _worker_bootstrap._follow_request_device({} if device is None else {"device": device})
     assert calls == ([] if called_with is None else [called_with])
+
+
+# ── Auto-pinning on real GPUs ─────────────────────────────────────────────────
+
+
+@pytest.mark.integration
+@pytest.mark.uses_gpu(2)
+def test_auto_pinned_worker_sees_only_its_gpu() -> None:
+    """On an Exclusive_Process host a GPU worker lands on its lease alone, and a move respawns it."""
+    from proto_tools.tools.testing.mock_pytorch_tool import (
+        MockPyTorchToolConfig,
+        MockPyTorchToolInput,
+        run_mock_pytorch_tool,
+    )
+    from tests.tool_infra_tests.test_device_manager._gpu_watch import GpuProcessWatcher, physical_index
+
+    def run(device: str) -> str:
+        result = run_mock_pytorch_tool(
+            MockPyTorchToolInput(), MockPyTorchToolConfig(device=device, memory_mb=64), instance="auto_pinned"
+        )
+        assert result.success, result.errors
+        return result.results[0].device_used
+
+    with _host(exclusive=True) as dm:
+        dm.configure(managed_devices=["cuda:0", "cuda:1"])
+        try:
+            with ToolInstance.persist_tool("mock_pytorch_tool", instance_name="auto_pinned") as instance:
+                with GpuProcessWatcher() as landing:
+                    assert run("cuda:1") == "cuda:0"  # the pinned worker addresses its lease locally
+                    landing.sample()
+                assert landing.used == {physical_index("cuda:1")}, landing.seen
+                pid = instance._worker._process.pid
+
+                with GpuProcessWatcher() as moved:
+                    assert run("cuda:0") == "cuda:0"
+                    moved.sample()
+                new_pid = instance._worker._process.pid
+                assert new_pid != pid, "a pinned worker must respawn on a device change"
+                assert moved.seen.get(new_pid) == {physical_index("cuda:0")}, moved.seen
+        finally:
+            ToolInstance.clear_all()
