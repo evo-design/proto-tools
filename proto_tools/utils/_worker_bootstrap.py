@@ -104,6 +104,21 @@ def _load_module(script_path: str) -> Any:
     return module
 
 
+def _follow_request_device(input_dict: dict[str, Any]) -> None:
+    """Make the request's GPU PyTorch's current device, if this worker uses PyTorch.
+
+    A worker that is not pinned sees every GPU. Code that takes no device argument (``.cuda()``,
+    a bare ``"cuda"``, Triton kernel launches, which also key their compiled-kernel cache on it)
+    uses the current device, so it must be the GPU the tool was dispatched to. Only when torch is
+    already imported: a JAX or CLI worker should not load torch and open a context for this.
+    """
+    device = input_dict.get("device")
+    if isinstance(device, str) and device.startswith("cuda:") and "torch" in sys.modules:
+        from standalone_helpers import set_current_cuda_device
+
+        set_current_cuda_device(device)
+
+
 def _find_dispatch(module: Any) -> Any | None:
     """Return the module's ``dispatch`` function, or None."""
     return getattr(module, "dispatch", None)
@@ -285,7 +300,10 @@ def main() -> None:
                     raise ValueError(f"Unknown command: {command!r}; valid: {list(_VALID_COMMANDS)}")
             else:
                 # Normal dispatch
+                _follow_request_device(input_dict)
                 result = dispatch(input_dict)
+                # A tool that imports torch during its first call follows from the next one on.
+                _follow_request_device(input_dict)
                 result = _serialize(result)
                 response = {"id": request_id, "result": result}
         except Exception:

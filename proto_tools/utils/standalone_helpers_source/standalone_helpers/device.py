@@ -248,6 +248,44 @@ def set_current_cuda_device(device: str) -> None:
         torch.cuda.set_device(indices[0])
 
 
+def _move_unregistered_tensors(module: Any, new_device: str) -> int:
+    """Move tensors that a module tree holds as plain attributes, which ``nn.Module.to`` skips.
+
+    ``.to()`` moves only registered parameters and buffers. Models also cache tensors as plain
+    attributes (rotary ``cos``/``sin`` tables, a time vector, a reference to a parameter whose
+    owning module left the tree), and after a move those still point at the old GPU, so the next
+    forward pass mixes devices. Each such tensor on a CUDA device other than ``new_device`` is
+    moved: a parameter in place (``.data``), so every reference to it follows, and a cached
+    tensor by replacing the attribute.
+
+    Args:
+        module (Any): The root ``nn.Module``.
+        new_device (str): Target device string.
+
+    Returns:
+        int: How many tensors were moved.
+    """
+    import torch
+
+    target = torch.device(new_device.split(",")[0])
+    moved = 0
+    for sub in module.modules():
+        for name, value in vars(sub).items():
+            if name in ("_parameters", "_buffers") or not isinstance(value, torch.Tensor):
+                continue
+            if value.device.type == "cuda" and value.device != target:
+                if isinstance(value, torch.nn.Parameter):
+                    # A parameter whose owning module left the tree: move it in place so every
+                    # reference (e.g. the module that still uses it) follows.
+                    value.data = value.data.to(target)
+                else:
+                    # A cached tensor. Replace it, since a tensor made under inference_mode
+                    # cannot have its .data reassigned.
+                    setattr(sub, name, value.to(target))
+                moved += 1
+    return moved
+
+
 def move_model_to_device(
     model_or_params: Any,
     old_device: str,
@@ -327,6 +365,8 @@ def move_model_to_device(
         # Check if model has PyTorch's .to() method
         if hasattr(model_or_params, "to") and callable(model_or_params.to):
             model_or_params = model_or_params.to(new_device)
+            if isinstance(model_or_params, torch.nn.Module):
+                _move_unregistered_tensors(model_or_params, new_device)
 
             # Free GPU memory when moving off CUDA device (while the old GPU is still current)
             if old_device != "cpu" and old_device.startswith("cuda") and torch.cuda.is_available():
