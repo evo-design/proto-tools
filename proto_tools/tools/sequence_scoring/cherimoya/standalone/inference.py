@@ -144,6 +144,10 @@ class CherimoyaWorker:
             tuple: The models in spec order, and ``{"model", "fold", "source", "sha256"}``
                 per spec, where source and SHA-256 are those recorded when it was loaded.
         """
+        from standalone_helpers import set_current_cuda_device
+
+        # Cherimoya's Triton kernels launch on the current device, not the tensors' device.
+        set_current_cuda_device(device)
         self.to_device(device)
         models, applied = [], []
         for spec in specs:
@@ -345,6 +349,14 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "gradient":
         return _worker.gradient(input_dict)
     raise ValueError(f"cherimoya: unknown operation {operation!r}; valid: ['score', 'predict', 'gradient']")
+
+
+def to_device(device: str) -> dict[str, Any]:
+    """Move every cached checkpoint to the specified device (called by DeviceManager)."""
+    if not _worker._checkpoints:
+        return {"success": True, "device": device, "note": "model not loaded yet"}
+    _worker.to_device(device)
+    return {"success": True, "device": device}
 
 
 def get_memory_stats() -> dict[str, Any]:

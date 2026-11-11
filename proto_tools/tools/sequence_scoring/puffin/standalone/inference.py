@@ -110,7 +110,11 @@ class PuffinModel:
         if verbose:
             logger.info(f"Loading Puffin on {device}")
         from puffin import Puffin  # type: ignore[import-not-found]
+        from standalone_helpers import set_current_cuda_device
 
+        # Puffin's predict/interpret call ``self.cuda()`` and ``.cuda()`` on inputs, which use the
+        # current device: make that the leased GPU before anything touches CUDA.
+        set_current_cuda_device(device)
         with _chdir(repo_dir):
             model = Puffin(use_cuda=device.startswith("cuda"))
         model.to(device)
@@ -336,6 +340,15 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation == "compute_gradient":
         return _compute_gradient(_state, input_dict)
     raise ValueError(f"puffin: unknown operation {operation!r}; valid: ['predict', 'interpret', 'compute_gradient']")
+
+
+def to_device(device: str) -> dict[str, Any]:
+    """Move loaded model to a specified device (called by DeviceManager)."""
+    global _state
+    if _state is not None and _state.model is not None:
+        _state.to_device(device)
+        return {"success": True, "device": device}
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict[str, Any]:

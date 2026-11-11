@@ -421,7 +421,6 @@ def example_input() -> Any:
     metrics_class=ProtenixMetrics,
     description="Multi-modal structure prediction using Protenix (open-source AlphaFold3)",
     uses_gpu=True,
-    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["complexes", "msas"],
     iterable_output_field="structures",

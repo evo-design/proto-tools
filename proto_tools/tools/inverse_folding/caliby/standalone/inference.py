@@ -332,8 +332,18 @@ class CalibyRunner:
         """
         _configure_caliby_env(model_checkpoint)
 
-        from caliby import load_model
+        from caliby import checkpoint_utils, load_model
+        from standalone_helpers import set_current_cuda_device
 
+        # The bundled checkpoints hold cuda:0 tensors, and caliby loads them with no map_location, so
+        # Lightning restores them onto GPU 0 before load_model moves the model to ``device``. Load to
+        # CPU instead; load_model then places it.
+        load_kwargs = getattr(checkpoint_utils, "_LOAD_CKPT_KWARGS", None)
+        if isinstance(load_kwargs, dict):
+            load_kwargs["map_location"] = "cpu"
+        else:
+            logger.warning("caliby: checkpoint_utils._LOAD_CKPT_KWARGS is gone; checkpoints may load onto GPU 0 first")
+        set_current_cuda_device(device)
         logger.debug("Loading Caliby checkpoint %s on %s", model_checkpoint, device)
         self.model = load_model(model_checkpoint, device=device)
         self.device = device
@@ -663,6 +673,22 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
         )
     raise ValueError(f"caliby: unknown operation {operation!r}; valid: {list(_OPERATIONS)}")
+
+
+def to_device(device: str) -> dict[str, Any]:
+    """Move the loaded model to a device (called by DeviceManager).
+
+    Args:
+        device (str): Torch device string to move to.
+
+    Returns:
+        dict[str, Any]: Move status, noting when no model is loaded yet.
+    """
+    global _runner
+    if _runner is not None and _runner.model is not None:
+        _runner.to_device(device)
+        return {"success": True, "device": device}
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict[str, Any]:

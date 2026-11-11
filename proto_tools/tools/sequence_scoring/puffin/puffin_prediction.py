@@ -235,7 +235,6 @@ def example_input() -> PuffinPredictionInput:
     output_class=PuffinPredictionOutput,
     description="Basepair-resolution transcription initiation prediction with Puffin",
     uses_gpu=True,
-    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",

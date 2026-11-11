@@ -154,7 +154,6 @@ def example_input() -> Any:
     output_class=CherimoyaPredictOutput,
     description="Predict base-resolution accessibility (CATv1) or ChIP-seq (BATv1) profiles with Cherimoya models",
     uses_gpu=True,
-    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",

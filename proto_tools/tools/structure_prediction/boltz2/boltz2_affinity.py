@@ -241,7 +241,6 @@ def example_input() -> Boltz2AffinityInput:
         "against a protein target, via Boltz-2."
     ),
     uses_gpu=True,
-    pin_visible_devices=True,
     device_count="1-2",
     example_input=example_input,
     iterable_input_fields=["complexes", "msas", "binder_chain"],

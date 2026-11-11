@@ -170,7 +170,7 @@ class MalinoisModel:
             return
         if self.device == device:
             return
-        previous_device = self.device or "cpu"
+        previous_device = self.device or "cpu"  # a fresh load is on CPU (load_malinois places nothing)
         self.model = move_model_to_device(self.model, previous_device, device)
         self.flank_builder = move_model_to_device(self.flank_builder, previous_device, device)
         self.device = device
@@ -331,6 +331,12 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
         )
     }
+
+
+def to_device(device: str) -> dict[str, Any]:
+    """Move model to the specified device."""
+    _model.to_device(device)
+    return {"success": True, "device": device}
 
 
 def get_memory_stats() -> dict[str, Any]:
