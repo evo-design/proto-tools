@@ -11,9 +11,11 @@ leases ``cuda:1`` and watches, through ``nvidia-smi``, which GPUs the tool's pro
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 import threading
+from collections.abc import Iterator
 from unittest.mock import patch
 
 import psutil
@@ -94,34 +96,58 @@ class _GpuProcessWatcher:
         self._thread.join()
 
 
-@pytest.mark.extensive
-@pytest.mark.uses_gpu(2)
-@pytest.mark.slow
-@pytest.mark.parametrize("tool_spec", _GPU_TOOLKITS)
-def test_gpu_tool_computes_on_its_leased_gpu(tool_spec):
-    """Lease cuda:1 to the tool; every GPU context its processes open must be on that GPU."""
-    if tool_spec.key in _NO_EVICTION_TOOLS:
-        pytest.skip(f"{tool_spec.key}: minimal() config runs on CPU")
-    toolkit = tool_spec.source_file.parent.name
-    instance_name = f"leased_{tool_spec.key.replace('-', '_')}"
-    config = tool_spec.config_model.minimal().model_copy(update={"device": _LEASED})
+@contextlib.contextmanager
+def _two_gpu_manager(*, auto_pin: bool) -> Iterator[DeviceManager]:
+    """A fresh DeviceManager over cuda:0 and cuda:1, with Exclusive_Process auto-pinning on or off.
 
+    Off, every tool runs as on a normal-mode host: it sees both GPUs, so this checks that its own
+    code lands on the lease. On (an Exclusive_Process host), every GPU worker sees only its lease.
+    """
     with patch("proto_tools.utils.device_manager.number_of_visible_gpus", return_value=2):
         DeviceManager.reset_instance()
         ToolInstance.clear_all()
         dm = DeviceManager.get_instance()
+        dm._auto_pin_exclusive = auto_pin
         dm.configure(managed_devices=["cuda:0", "cuda:1"])
         try:
-            with _GpuProcessWatcher() as watcher, ToolInstance.persist_tool(toolkit, instance_name=instance_name):
-                result = tool_spec.function(tool_spec.example_input(), config, instance=instance_name)
-                assert result.success, f"{tool_spec.key} failed: {result.errors}"
-                # A fast tool can finish between polls; its idle persistent worker still holds its context.
-                watcher.sample()
-                lease = dm.get_device_status()["allocations"].get(instance_name)
-                assert lease is not None and lease["device_id"] == _LEASED, f"{tool_spec.key} lease: {lease}"
+            yield dm
         finally:
             ToolInstance.clear_all()
             DeviceManager.reset_instance()
+
+
+def _run_on(tool_spec, device: str, instance_name: str):
+    config = tool_spec.config_model.minimal().model_copy(update={"device": device})
+    result = tool_spec.function(tool_spec.example_input(), config, instance=instance_name)
+    assert result.success, f"{tool_spec.key} failed on {device}: {result.errors}"
+    return result
+
+
+def _skip_cpu_only(tool_spec) -> None:
+    if tool_spec.key in _NO_EVICTION_TOOLS:
+        pytest.skip(f"{tool_spec.key}: minimal() config runs on CPU")
+
+
+@pytest.mark.extensive
+@pytest.mark.uses_gpu(2)
+@pytest.mark.slow
+@pytest.mark.parametrize("auto_pin", [False, True], ids=["routed", "auto_pinned"])
+@pytest.mark.parametrize("tool_spec", _GPU_TOOLKITS)
+def test_gpu_tool_computes_on_its_leased_gpu(tool_spec, auto_pin):
+    """Lease cuda:1 to the tool; every GPU context its processes open must be on that GPU."""
+    _skip_cpu_only(tool_spec)
+    toolkit = tool_spec.source_file.parent.name
+    instance_name = f"leased_{tool_spec.key.replace('-', '_')}"
+
+    with _two_gpu_manager(auto_pin=auto_pin) as dm:
+        if auto_pin and not dm.pins_gpu_workers:
+            pytest.skip("not an Exclusive_Process host: auto-pinning is off, as in the routed case")
+        with _GpuProcessWatcher() as watcher, ToolInstance.persist_tool(toolkit, instance_name=instance_name):
+            _run_on(tool_spec, _LEASED, instance_name)
+            # A fast tool can finish between polls; its idle persistent worker still holds its context.
+            watcher.sample()
+            lease = dm.get_device_status()["allocations"].get(instance_name)
+            assert lease is not None and lease["device_id"] == _LEASED, f"{tool_spec.key} lease: {lease}"
 
     expected = _physical_index(_LEASED)
     stray = {pid: sorted(gpus) for pid, gpus in watcher.seen.items() if gpus - {expected}}
@@ -129,3 +155,41 @@ def test_gpu_tool_computes_on_its_leased_gpu(tool_spec):
     assert not stray, (
         f"{tool_spec.key} was leased {_LEASED} (GPU {expected}) but its processes used other GPUs: {stray}"
     )
+
+
+@pytest.mark.extensive
+@pytest.mark.uses_gpu(2)
+@pytest.mark.slow
+@pytest.mark.parametrize("tool_spec", _GPU_TOOLKITS)
+def test_gpu_tool_follows_a_move_to_another_gpu(tool_spec):
+    """Move a loaded tool from cuda:1 to cuda:0; its next run must use cuda:0.
+
+    Routed tools (all GPUs visible) move in-process, keeping their worker; the context they opened on
+    cuda:1 stays, as CUDA keeps it until the process exits. Pinned tools respawn on cuda:0 alone.
+    """
+    _skip_cpu_only(tool_spec)
+    toolkit = tool_spec.source_file.parent.name
+    instance_name = f"mover_{tool_spec.key.replace('-', '_')}"
+    old, new = _physical_index(_LEASED), _physical_index("cuda:0")
+
+    with (
+        _two_gpu_manager(auto_pin=False),
+        ToolInstance.persist_tool(toolkit, instance_name=instance_name) as instance,
+    ):
+        _run_on(tool_spec, _LEASED, instance_name)
+        worker = instance._worker
+        pid_before = worker._process.pid if worker is not None and worker._process is not None else None
+        with _GpuProcessWatcher() as watcher:
+            _run_on(tool_spec, "cuda:0", instance_name)
+            watcher.sample()
+            worker = instance._worker
+            pid_after = worker._process.pid if worker is not None and worker._process is not None else None
+
+    used = set().union(*watcher.seen.values()) if watcher.seen else set()
+    assert new in used, f"{tool_spec.key}: after moving to cuda:0, nothing ran on GPU {new}: {watcher.seen}"
+    assert used <= {old, new}, f"{tool_spec.key}: a GPU other than its old and new lease was used: {watcher.seen}"
+    if tool_spec.pin_visible_devices:
+        assert pid_after != pid_before, f"{tool_spec.key} is pinned, so the move should respawn its worker"
+        assert used == {new}, f"{tool_spec.key}: the respawned pinned worker touched GPU {old}: {watcher.seen}"
+    else:
+        assert pid_after == pid_before, f"{tool_spec.key} should move in-process, not respawn"

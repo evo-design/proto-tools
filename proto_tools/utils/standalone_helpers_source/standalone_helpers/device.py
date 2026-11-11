@@ -222,6 +222,32 @@ def resolve_jax_device(device: str) -> Any:
 # ============================================================================
 
 
+def set_current_cuda_device(device: str) -> None:
+    """Make the first GPU ``device`` names PyTorch's current CUDA device.
+
+    A worker that is not pinned sees every GPU, and code that does not take a device argument
+    (``.cuda()``, a bare ``"cuda"``, ``torch.cuda.current_device()``, Triton kernel launches,
+    ``empty_cache()``) uses the current device, which starts as GPU 0. Call this with the leased
+    device before anything touches CUDA, so that code lands on the lease. A literal ``"cuda:0"``
+    is not affected, nor is anything that already passes an explicit device.
+
+    No-op for ``"cpu"``, a bare ``"cuda"`` (no index), a malformed string, or when torch or CUDA
+    is unavailable. For a multi-GPU lease (``"cuda:2,3"``) the first GPU becomes current.
+
+    Args:
+        device (str): Device string, e.g. ``"cuda:1"``.
+    """
+    indices = _parse_cuda_indices(device)
+    if not indices:
+        return
+    try:
+        import torch
+    except ImportError:
+        return
+    if torch.cuda.is_available():
+        torch.cuda.set_device(indices[0])
+
+
 def move_model_to_device(
     model_or_params: Any,
     old_device: str,
@@ -239,6 +265,8 @@ def move_model_to_device(
     For PyTorch models (nn.Module or objects with .to()):
         - Calls model.to(new_device)
         - Calls torch.cuda.empty_cache() when moving off CUDA
+        - Makes ``new_device`` the current CUDA device (``set_current_cuda_device``), so later
+          ``.cuda()``, bare ``"cuda"`` and Triton launches follow the model
 
     For non-ML models (CLI tools, etc.):
         - Returns as-is (no device movement needed)
@@ -289,6 +317,7 @@ def move_model_to_device(
                     torch.cuda.empty_cache()
             except ImportError:
                 pass
+        set_current_cuda_device(new_device)
         return model_or_params
 
     # Try PyTorch first (most common case for GPU tools)
@@ -299,9 +328,10 @@ def move_model_to_device(
         if hasattr(model_or_params, "to") and callable(model_or_params.to):
             model_or_params = model_or_params.to(new_device)
 
-            # Free GPU memory when moving off CUDA device
+            # Free GPU memory when moving off CUDA device (while the old GPU is still current)
             if old_device != "cpu" and old_device.startswith("cuda") and torch.cuda.is_available():
                 torch.cuda.empty_cache()
+            set_current_cuda_device(new_device)
 
             return model_or_params
     except ImportError:

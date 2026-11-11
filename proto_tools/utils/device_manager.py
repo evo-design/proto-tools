@@ -153,8 +153,27 @@ class DeviceManager:
         self._allow_multiple_per_device: bool = False
         self._offload_strategy: OffloadStrategy = OffloadStrategy.RESTART
 
+        # Exclusive_Process hosts: an in-process GPU->GPU move cannot release the old GPU's
+        # CUDA context, so every GPU worker is pinned to its lease (see ``pins_gpu_workers``).
+        # Read once; nvidia-smi is too slow to ask per dispatch.
+        self._exclusive_process: bool = is_exclusive_process_mode()
+        # Tests turn this off to exercise unpinned, in-process routing on an Exclusive_Process
+        # node. Internal only: not a configure() option, env var, or tool config field.
+        self._auto_pin_exclusive: bool = True
+
         # Apply environment variable configuration
         self._apply_env_overrides()
+
+    @property
+    def pins_gpu_workers(self) -> bool:
+        """Whether every GPU tool's worker is pinned to its leased GPU(s), whatever its spec says.
+
+        True on Exclusive_Process hosts. There a worker that moved between GPUs in-process would
+        keep its context on the old GPU, which then refuses every other process, so a device
+        change must respawn the worker anyway. Elsewhere, only tools that declare
+        ``pin_visible_devices`` are pinned, and the rest move in-process.
+        """
+        return self._exclusive_process and self._auto_pin_exclusive
 
     @classmethod
     def get_instance(cls) -> "DeviceManager":
