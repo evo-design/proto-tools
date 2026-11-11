@@ -746,8 +746,9 @@ class ToolSpec(BaseModel):
         description=(
             "Pin the worker's CUDA_VISIBLE_DEVICES to its assigned physical GPU(s); "
             "the worker addresses them as local cuda:0..N-1 and respawns on a "
-            "physical-device change. For JAX tools, whose runtime spans every "
-            "visible GPU. Implies uses_gpu=True."
+            "physical-device change. For tools whose runtime picks a GPU itself "
+            "(JAX, TensorFlow, Lightning, upstream .cuda()/cuda:0) rather than "
+            "taking the leased device. Implies uses_gpu=True."
         ),
     )
     device_count: str = Field(
@@ -1009,8 +1010,9 @@ class ToolRegistry:
             pin_visible_devices (bool): Pin the worker's ``CUDA_VISIBLE_DEVICES``
                 to its assigned physical GPU(s); the worker sees them as local
                 ``cuda:0..N-1`` and respawns on a physical-device change instead
-                of moving in-process. For JAX tools, whose runtime initializes a
-                context on every visible GPU. Implies ``uses_gpu=True``.
+                of moving in-process. For tools whose runtime picks a GPU itself
+                (JAX, TensorFlow, Lightning, upstream ``.cuda()``/``cuda:0``)
+                rather than taking the leased device. Implies ``uses_gpu=True``.
             device_count (str): Expected device count (e.g., "1", "1-2", ">=1", "<=2").
                 Validates allocation: errors on under-allocation, warns on over-allocation.
             example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal valid

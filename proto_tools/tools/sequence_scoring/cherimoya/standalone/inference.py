@@ -347,14 +347,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"cherimoya: unknown operation {operation!r}; valid: ['score', 'predict', 'gradient']")
 
 
-def to_device(device: str) -> dict[str, Any]:
-    """Move every cached checkpoint to the specified device (called by DeviceManager)."""
-    if not _worker._checkpoints:
-        return {"success": True, "device": device, "note": "model not loaded yet"}
-    _worker.to_device(device)
-    return {"success": True, "device": device}
-
-
 def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats

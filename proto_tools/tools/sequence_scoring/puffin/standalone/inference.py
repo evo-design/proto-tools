@@ -338,15 +338,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"puffin: unknown operation {operation!r}; valid: ['predict', 'interpret', 'compute_gradient']")
 
 
-def to_device(device: str) -> dict[str, Any]:
-    """Move loaded model to a specified device (called by DeviceManager)."""
-    global _state
-    if _state is not None and _state.model is not None:
-        _state.to_device(device)
-        return {"success": True, "device": device}
-    return {"success": True, "device": device, "note": "model not loaded yet"}
-
-
 def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     global _state

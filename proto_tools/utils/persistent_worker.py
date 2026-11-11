@@ -517,7 +517,7 @@ def _build_subprocess_env(
             ``OMP_NUM_THREADS`` / ``MKL_NUM_THREADS`` / etc., but available to
             any caller that needs to override a specific variable for one
             worker subprocess.
-        pin_visible_devices (bool): Restrict ``CUDA_VISIBLE_DEVICES`` to ``device``'s physical GPU(s) (local cuda:0..N-1) instead of the parent's value. For JAX tools.
+        pin_visible_devices (bool): Restrict ``CUDA_VISIBLE_DEVICES`` to ``device``'s physical GPU(s) (local cuda:0..N-1) instead of the parent's value. For tools whose runtime picks a GPU itself.
         toolkit (str | None): Toolkit the subprocess runs, which names its JAX compilation cache directory. ``None`` leaves the cache off.
     """
     from proto_tools.utils.foundation_env import active_foundation_bin
@@ -580,7 +580,7 @@ def _build_subprocess_env(
         path_parts.append(str(foundation_bin))
     env["PATH"] = ":".join(path_parts)
 
-    # CUDA_VISIBLE_DEVICES: pinned workers (JAX) see only their physical GPU(s) as local cuda:0..N-1; else pass parent's through.
+    # CUDA_VISIBLE_DEVICES: pinned workers see only their physical GPU(s) as local cuda:0..N-1; else pass parent's through.
     if pin_visible_devices:
         from proto_tools.utils.device import determine_visible_devices
 

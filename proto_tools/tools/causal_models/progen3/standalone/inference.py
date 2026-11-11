@@ -1,7 +1,6 @@
 """ProGen3 standalone inference."""
 
 import json
-import os
 import re
 import sys
 from collections import defaultdict
@@ -47,22 +46,12 @@ class ProGen3Model:
     def load(self, device: str, verbose: bool = False) -> None:
         """Load ProGen3 model to device.
 
-        Restricts CUDA_VISIBLE_DEVICES before loading so that progen3's
-        internal ``dist.get_device()`` (which calls ``torch.cuda.current_device()``)
-        returns the correct (and only visible) GPU.
+        progen3 places tensors on ``dist.get_device()`` (``torch.cuda.current_device()``), which is
+        GPU 0 of the visible ones. The worker is pinned (``pin_visible_devices``), so it sees only its
+        leased GPU, and local ``cuda:0`` is that GPU.
         """
         if verbose:
             logger.info(f"Loading ProGen3 model: {self.model_checkpoint} on {device}")
-
-        # Restrict GPU visibility to the allocated device. progen3's scorer
-        # and generator use dist.get_device() → torch.cuda.current_device()
-        # internally for tensor placement, so we must ensure only the
-        # allocated GPU is visible.
-        from standalone_helpers import get_subprocess_device_env
-
-        restricted_env = get_subprocess_device_env(device)
-        os.environ["CUDA_VISIBLE_DEVICES"] = restricted_env["CUDA_VISIBLE_DEVICES"]
-        logger.debug(f"Restricted CUDA_VISIBLE_DEVICES to {os.environ['CUDA_VISIBLE_DEVICES']} for device {device}")
 
         import torch
         from progen3.modeling import ProGen3ForCausalLM
@@ -76,7 +65,7 @@ class ProGen3Model:
             )
         except OSError as e:
             raise RuntimeError(f"progen3: HF weight load from {model_path!r} failed: {e}") from e
-        # After CUDA_VISIBLE_DEVICES restriction, cuda:0 is the allocated GPU
+        # The pinned worker's only GPU.
         self.model.eval().to("cuda:0")
         self.device = device
         self._loaded = True
@@ -87,10 +76,7 @@ class ProGen3Model:
     def to_device(self, device: str) -> None:
         """Move model to a different device.
 
-        GPU → CPU uses standard PyTorch ``.to("cpu")``.
-        CPU → GPU (or GPU → GPU) fully reloads so that
-        CUDA_VISIBLE_DEVICES is updated for progen3's internal
-        ``dist.get_device()`` calls.
+        GPU → CPU uses standard PyTorch ``.to("cpu")``; CPU → GPU reloads onto the pinned GPU.
         """
         if not self._loaded:
             raise ValueError("progen3: cannot move unloaded model to device — call load() first")
@@ -102,7 +88,6 @@ class ProGen3Model:
             self.model = move_model_to_device(self.model, self.device, device)
             self.device = device
         else:
-            # Reload to update CUDA_VISIBLE_DEVICES for the new GPU
             self._loaded = False
             self.model = None
             self.load(device)
@@ -536,19 +521,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             seed=input_dict["seed"],
         )
     raise ValueError(f"progen3: unknown operation {operation!r}; valid: ['sample', 'score']")
-
-
-def to_device(device: str) -> dict[str, Any]:
-    """Move model to specified device (called by DeviceManager).
-
-    Updates CUDA_VISIBLE_DEVICES when moving to a GPU device so that
-    progen3's internal dist.get_device() returns the correct device.
-    """
-    global _model
-    if _model is not None and _model._loaded:
-        _model.to_device(device)
-        return {"success": True, "device": device}
-    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict[str, Any]:
