@@ -385,12 +385,13 @@ def test_opendde_bundled_checkpoints_are_downloaded_by_setup():
 # ── Config: cloud support gate ───────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("device", ["proto", "modal"])
-def test_opendde_local_checkpoint_is_unavailable_on_any_remote(device):
+def test_opendde_local_checkpoint_is_unavailable_on_any_remote():
     """A local file exists only on this machine, so no remote worker can read it."""
-    assert OpenDDEConfig(use_msa=False).remote_unsupported_reason(device) is None
-    assert OpenDDEConfig(use_msa=False, model_checkpoint="opendde_abag").remote_unsupported_reason(device) is None
-    assert OpenDDEConfig(use_msa=False, model_checkpoint="/local/ckpt.pt").remote_unsupported_reason(device) is not None
+    assert OpenDDEConfig(use_msa=False).remote_unsupported_reason("modal") is None
+    assert OpenDDEConfig(use_msa=False, model_checkpoint="opendde_abag").remote_unsupported_reason("modal") is None
+    assert (
+        OpenDDEConfig(use_msa=False, model_checkpoint="/local/ckpt.pt").remote_unsupported_reason("modal") is not None
+    )
 
 
 # ── Dispatch / metric assembly (mocked worker) ───────────────────────────────

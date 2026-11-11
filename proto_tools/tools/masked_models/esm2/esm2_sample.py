@@ -25,7 +25,6 @@ from proto_tools.utils import (
     ConfigField,
     ToolInstance,
 )
-from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -158,15 +157,6 @@ class ESM2SampleConfig(MaskedModelSampleConfig):
         default=False,
         description="Include per-position logits in the output (large; disable to save memory)",
     )
-
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """The 15B variant is too large for Proto to host; other remotes are unaffected."""
-        if device == "proto" and self.model_checkpoint == "esm2_t48_15B_UR50D":
-            return (
-                "The 15B variant (esm2_t48_15B_UR50D) is not hosted on device='proto'. Choose a "
-                "smaller variant, run locally, or deploy it yourself with device='modal'."
-            )
-        return None
 
     def preprocess(self, inputs: Any) -> Any:
         """Apply masking strategy unless sequences are already pre-masked."""

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from collections.abc import Callable, Coroutine
 from pathlib import Path
@@ -50,14 +49,6 @@ def app_for_tool(tool_key: str) -> str | None:
         return None
 
 
-def _hosted_catalogue() -> dict[str, dict[str, Any]]:
-    """Tools Proto hosts, keyed by tool key, with an ``unhosted_reason`` when it does not."""
-    from proto_tools.proto import _get_client
-
-    entries = _get_client(None).tools.catalogue()
-    return {entry["key"]: entry for entry in entries}
-
-
 def _all_registered() -> set[str]:
     """Every tool key in the registry, deployable or not."""
     from proto_tools.tools import ToolRegistry
@@ -101,8 +92,6 @@ def deployed_keys(device: Device, *, environment: str | None = None, client: Any
     """
     if device == "local":
         return set()
-    if device == "proto":
-        return {key for key, entry in _hosted_catalogue().items() if entry.get("hosted")}
     live = deployed_apps(environment=environment, client=client)
     return {key for key in _registry() if _app_for(key) in live}
 
@@ -141,20 +130,6 @@ def workspace_info(
                 "Tools run in this process. Each builds its standalone environment and downloads "
                 "its weights on first use, so a first call can be slow."
                 + ("" if gpus else " No GPU is visible, so GPU-only tools cannot run here.")
-            ),
-        }
-
-    if device == "proto":
-        catalogue = _hosted_catalogue()
-        return {
-            "device": "proto",
-            "authenticated": bool(os.environ.get("PROTO_API_KEY")),
-            "tools_hosted": sum(1 for e in catalogue.values() if e.get("hosted")),
-            "tools_total": len(catalogue),
-            "deployable": False,
-            "note": (
-                "Proto hosts a fixed catalogue. You cannot deploy to it; use device='modal' "
-                "to run a tool in your own Modal workspace instead."
             ),
         }
 
@@ -239,8 +214,7 @@ def list_tools(
     can never be deployed, is answered in this process instead, so it runs on a remote device
     too. Those carry ``runs_in_process`` to explain why they are usable without a deployment.
 
-    When using ``modal``, "deployed" means deployed in your workspace, which you can change. When
-    using ``proto``, it means hosted by Proto, which you cannot.
+    When using ``modal``, "deployed" means deployed in your workspace, which you can change.
     """
     from proto_tools.tools import ToolRegistry
 
@@ -667,9 +641,6 @@ def _setup_errors(device: Device) -> tuple[type[Exception], ...]:
     if device == "local":
         # Nothing to configure: a failure here is the tool's own, reported as such.
         return ()
-    if device == "proto":
-        # No key configured, or a key the server will not accept.
-        return (NotImplementedError, PermissionError)
     from proto_tools.modal.client import ModalDispatchError
 
     return (ModalDispatchError,)
@@ -747,10 +718,6 @@ def _dispatch(
         cfg.device = local_device
         return spec.function(payload, cfg), "local"
 
-    if device == "proto":
-        from proto_tools.proto import dispatch_to_proto
-
-        return dispatch_to_proto(tool_key, payload, cfg), device
     from proto_tools.modal.client import dispatch_to_modal
 
     return (
@@ -767,27 +734,13 @@ def _dispatch(
     )
 
 
-def _unavailable(device: Device, tool_key: str, error: str) -> dict[str, Any]:
-    """Explain a setup failure in terms the caller can act on, if anyone can.
+def _unavailable(error: str) -> dict[str, Any]:
+    """Explain a setup failure in terms the caller can act on.
 
-    When using ``modal``, the remedy is a deployment the user can perform, and the
-    message therefore carries the command and ``needs_human``. When using ``proto``,
-    the catalogue is fixed: no such command exists, and offering one would direct
-    the caller toward something impossible.
+    Only ``modal`` has setup failures, and their remedy is a deployment the user can perform, so
+    the message carries the command and ``needs_human``.
     """
-    if device == "modal":
-        return {"error": error, "needs_human": True}
-
-    entry = _hosted_catalogue().get(tool_key, {})
-    reason = entry.get("unhosted_reason") or error
-    return {
-        "error": f"{tool_key} is not available on Proto: {reason}",
-        "needs_human": False,
-        "fix": (
-            "Proto's catalogue is fixed and cannot be deployed to. Run this tool in your own "
-            "Modal workspace with device='modal', or ask Proto to host it."
-        ),
-    }
+    return {"error": error, "needs_human": True}
 
 
 def run_tool(
@@ -855,8 +808,8 @@ def run_tool(
     if (outage := active_outage(tool_key, spec.outages, payload, cfg)) is not None:
         return {"ok": False, "error": str(OutageError(tool_key, outage)), "outage": outage.model_dump(mode="json")}
     # The registry's wrapper asks this before dispatching, but this path does not go through it.
-    # Without the check a setting the device cannot honour -- a custom checkpoint on Proto, a
-    # local database on any remote worker -- reaches a container and fails there instead.
+    # Without the check a setting the device cannot honour -- a local database on a remote
+    # worker -- reaches a container and fails there instead.
     #
     # A call answered in this process never reaches a remote worker, so the refusal does not
     # apply; _dispatch runs it here, as a direct call through the wrapper does. A tool that is
@@ -880,7 +833,7 @@ def run_tool(
             local_device=local_device,
         )
     except _setup_errors(device) as exc:
-        return {"ok": False, **_unavailable(device, tool_key, str(exc))}
+        return {"ok": False, **_unavailable(str(exc))}
     except Exception as exc:
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 

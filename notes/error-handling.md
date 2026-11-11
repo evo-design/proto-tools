@@ -2,7 +2,7 @@
 
 This note covers how `proto_tools` decides whether a tool exception is raised or captured, including capture mode, the retry loop, the `MissingAssetError` carve-out, pool error aggregation, and GPU out-of-memory handling.
 
-The `@tool` decorator in `proto_tools/tools/tool_registry.py` **raises by default** when a tool function (or its retry-exhausted `_RETRYABLE_EXCEPTIONS` loop, or the `dispatch_to_proto` call) lets an exception escape. Callers see the original exception with a meaningful traceback at the call site.
+The `@tool` decorator in `proto_tools/tools/tool_registry.py` **raises by default** when a tool function (or its retry-exhausted `_RETRYABLE_EXCEPTIONS` loop, or the `dispatch_to_modal` call) lets an exception escape. Callers see the original exception with a meaningful traceback at the call site.
 
 Capture mode, where the exception is packed into `output.errors` with `success=False` and returned to the caller instead of raising, is opt-in.
 
@@ -104,9 +104,9 @@ Indices reaching a caller are always the caller's own positions. Dedup and the p
 
 A chunk is all-or-nothing — one returning the wrong number of items is recorded as that chunk's failure — which is what makes caching a survivor safe.
 
-## Remote dispatch / `dispatch_to_proto`
+## Remote dispatch / `dispatch_to_modal`
 
-`proto_tools.proto.dispatch_to_proto` raises on remote failure, and the wrapper propagates that exception to the caller by default. Setting `PROTO_CAPTURE_ERRORS=1` packs the remote exception into a `success=False` output, identical to the local-execution capture path.
+`proto_tools.modal.dispatch_to_modal` raises on remote failure, and the wrapper propagates that exception to the caller by default. Setting `PROTO_CAPTURE_ERRORS=1` packs the remote exception into a `success=False` output, identical to the local-execution capture path.
 
 ## GPU out-of-memory
 

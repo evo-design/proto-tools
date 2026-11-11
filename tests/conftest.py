@@ -509,8 +509,8 @@ _env_report_collector: EnvReportCollector | None = None
 # ============================================================================
 # Benchmark Report Collector
 # ============================================================================
-# Benchmarks that pin ``device=``, and why. Pinning defeats ``--use-modal`` and ``--use-proto``,
-# which route a run by patching config defaults — an explicit value wins. An entry here says the
+# Benchmarks that pin ``device=``, and why. Pinning defeats ``--use-modal``,
+# which routes a run by patching config defaults — an explicit value wins. An entry here says the
 # benchmark can only run on this machine, and the report writer labels its backend accordingly
 # rather than repeating the run's remote one. ``test_benchmark_coverage`` keeps the two in step.
 DEVICE_PINNED_BENCHMARKS: dict[str, str] = {
@@ -896,15 +896,9 @@ def pytest_addoption(parser):
         help="Run only @pytest.mark.benchmark tests. Selecting benchmark mode deselects "
         "everything that isn't benchmark-marked (similar to --env-report). The 'slow' gate is "
         "bypassed for benchmarks (no need to also pass --slow); hardware gates (uses_gpu, GPU "
-        "count) are bypassed only when --use-proto is set. Without this flag (or any of "
+        "count) are bypassed only when --use-modal is set. Without this flag (or any of "
         "--benchmark-report / --benchmark-tool / --benchmark-toolkit, which imply --benchmark), "
         "benchmark-marked tests are skipped — they do NOT run under --all or --slow.",
-    )
-    parser.addoption(
-        "--use-proto",
-        action="store_true",
-        default=False,
-        help="Route every tool run through device='proto'. Requires PROTO_API_KEY in the environment.",
     )
     parser.addoption(
         "--use-modal",
@@ -969,13 +963,6 @@ def pytest_configure(config):
     global _env_report_collector  # noqa: PLW0603 -- test infrastructure
     global _benchmark_report_collector  # noqa: PLW0603 -- test infrastructure
 
-    # Both patch the same field, so the second would silently win. Refuse rather than pick.
-    if config.getoption("--use-proto") and config.getoption("--use-modal"):
-        raise pytest.UsageError(
-            "--use-proto and --use-modal are mutually exclusive: each routes every tool run to a "
-            "different remote device. Pass one."
-        )
-
     if hasattr(config.option, "randomly_reorganize"):
         config.option.randomly_reorganize = bool(config.getoption("--random-order"))
 
@@ -1016,15 +1003,10 @@ def pytest_configure(config):
     # Handle --benchmark-report (implies --benchmark via pytest_collection_modifyitems below)
     benchmark_report_opt = config.getoption("--benchmark-report")
     if benchmark_report_opt:
-        use_proto = config.getoption("--use-proto")
         use_modal = config.getoption("--use-modal")
 
         # Name the backend the numbers came from, or the report claims "local (default device)".
-        if use_proto:
-            from proto_tools.proto._client import _resolve_base_url
-
-            backend_url = _resolve_base_url(None)
-        elif use_modal:
+        if use_modal:
             from proto_tools.modal.app import resolve_environment
 
             backend_url = f"modal environment {resolve_environment(None)!r}"
@@ -1034,7 +1016,7 @@ def pytest_configure(config):
         _benchmark_report_collector = BenchmarkReportCollector(
             output_dir=Path(benchmark_report_opt),
             backend_url=backend_url,
-            remote_device=("proto" if use_proto else "modal" if use_modal else None),
+            remote_device="modal" if use_modal else None,
         )
 
 
@@ -1335,7 +1317,7 @@ def pytest_collection_modifyitems(config, items):
     # Whether a uses_gpu test runs is decided solely by the CUDA probe below
     # (tests/_cuda_probe.py). A remote device bypasses every hardware gate because
     # the GPUs live on the server, not on this machine.
-    use_proto = config.getoption("--use-proto") or config.getoption("--use-modal")
+    use_remote = config.getoption("--use-modal")
 
     # Under --use-modal a benchmark can only run where a deployment exists, and TOOL_MAP is that
     # set. A tool with no deployment has nothing to measure, so skip rather than fail.
@@ -1353,7 +1335,7 @@ def pytest_collection_modifyitems(config, items):
     if config.getoption("--cpu-only"):
         skip_gpu = pytest.mark.skip(reason="--cpu-only specified")
         for item in items:
-            if "uses_gpu" in item.keywords and not use_proto:
+            if "uses_gpu" in item.keywords and not use_remote:
                 item.add_marker(skip_gpu)
 
     # Skip CPU tests when --gpu-only is specified
@@ -1442,9 +1424,9 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(pytest.mark.skip(reason=f"Requires platform {allowed}, current is {current_arch}"))
 
     # Skip uses_gpu(n) tests when fewer than n visible GPUs can run CUDA — bypassed
-    # under --use-proto (the GPUs live on the server). The probe only runs when a
+    # under --use-modal (the GPUs live on the server). The probe only runs when a
     # GPU test could actually execute here.
-    gpu_items = [] if use_proto or config.getoption("--cpu-only") else [i for i in items if "uses_gpu" in i.keywords]
+    gpu_items = [] if use_remote or config.getoption("--cpu-only") else [i for i in items if "uses_gpu" in i.keywords]
     if gpu_items:
         visible_gpus, gpu_reason = _visible_gpus()
         for item in gpu_items:
@@ -1641,16 +1623,12 @@ def _env_report_clean_envs(request, setup_test_logging):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _route_tests_to_proto(request):
-    """Patch BaseConfig.device default to a remote device when --use-proto or --use-modal is set.
+def _route_tests_to_modal(request):
+    """Patch BaseConfig.device default to ``"modal"`` when --use-modal is set.
 
     Lets a test that already passes ``Config()`` without an explicit ``device=`` run locally
-    (default ``"cpu"``), against Proto's hosted execution service (``--use-proto``), or against the
-    apps in your own Modal workspace (``--use-modal``), without any change to the test body. Proto
-    activates on ``PROTO_API_KEY``; Modal on your Modal credentials plus a deployed app.
-
-    The two options are refused together in ``pytest_configure`` — they patch one field to
-    different values, so there is no coherent meaning for both at once.
+    (default ``"cpu"``) or against the apps in your own Modal workspace (``--use-modal``), without
+    any change to the test body. Modal activates on your Modal credentials plus a deployed app.
 
     Configs belonging to ``local_only`` tools keep their own default. A tool can construct one
     internally — a structure predictor builds an ``Mmseqs2HomologySearchConfig`` to generate an MSA
@@ -1658,8 +1636,8 @@ def _route_tests_to_proto(request):
     search to a backend that has already said no, failing the outer tool for a reason the test never
     asked for.
     """
-    device = "modal" if request.config.getoption("--use-modal") else "proto"
-    if not (request.config.getoption("--use-proto") or request.config.getoption("--use-modal")):
+    device = "modal"
+    if not request.config.getoption("--use-modal"):
         yield
         return
 
