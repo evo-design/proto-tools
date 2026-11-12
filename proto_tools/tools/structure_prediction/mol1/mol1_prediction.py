@@ -3,7 +3,7 @@
 import logging
 import tempfile
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from proto_tools.entities.complex import Complex
 from proto_tools.entities.structures import BFactorType, Structure
@@ -116,6 +116,24 @@ class Mol1Config(MSAStructurePredictionConfig):
         if self.model_checkpoint != "mol-1-base":
             return f"Custom model_checkpoint paths are local files unavailable on device={device!r}. Use 'mol-1-base' remotely or run locally."
         return None
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "Mol1Config":
+        """One sample over 20 diffusion steps and one recycle (defaults: 5, 200, 20).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            Mol1Config: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("num_samples", 1)
+        kwargs.setdefault("num_steps", 20)
+        kwargs.setdefault("num_cycles", 1)
+        return cast("Mol1Config", super().minimal(**kwargs))
 
 
 class Mol1Metrics(Metrics):
