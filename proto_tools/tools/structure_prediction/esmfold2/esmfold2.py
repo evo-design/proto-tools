@@ -4,7 +4,7 @@ All-atom biomolecular complex structure prediction using ESMFold2 from Biohub.
 """
 
 from logging import getLogger
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import model_validator
 
@@ -228,6 +228,25 @@ class ESMFold2Config(MSAStructurePredictionConfig):
                 "Either set model_checkpoint='esmfold2' or use_msa=False."
             )
         return self
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "ESMFold2Config":
+        """Twenty diffusion sampling steps (default 100), on a checkpoint that matches ``use_msa``.
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            ESMFold2Config: Config with cheap-mode sampling applied.
+        """
+        if kwargs.get("use_msa"):
+            # esmfold2-fast is single-sequence and rejects use_msa=True; the MSA path needs the full model.
+            kwargs.setdefault("model_checkpoint", "esmfold2")
+        kwargs.setdefault("num_sampling_steps", 20)
+        return cast("ESMFold2Config", super().minimal(**kwargs))
 
 
 # ============================================================================
