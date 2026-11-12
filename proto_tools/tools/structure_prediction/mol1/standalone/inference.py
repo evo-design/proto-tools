@@ -137,11 +137,7 @@ class Mol1Model:
         self.runner.model = move_model_to_device(self.runner.model, self.device or "cpu", str(target))
         self.runner.device = target
         self.runner.use_cuda = target.type == "cuda"
-        self.runner.configs.device = str(target)
-        if target.type == "cuda":
-            import torch
-
-            torch.cuda.set_device(target)
+        self.runner.configs.device = str(target)  # move_model_to_device also made target current
         self.device = str(target)
 
 
