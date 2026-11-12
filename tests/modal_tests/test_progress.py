@@ -336,13 +336,11 @@ def test_the_client_hydrates_the_queue_it_asks_to_create(monkeypatch):
 # ============================================================================
 # The wait before a worker reports
 # ============================================================================
-def test_both_backends_name_themselves_while_connecting():
+def test_the_backend_names_itself_while_connecting():
     """A cold start is seconds of silence, and the spinner should say which machine it waits on."""
-    from proto_tools.proto import _PROTO_INITIAL_PHASE
     from proto_tools.utils.progress import remote_connecting_status
 
     assert remote_connecting_status("modal") == "Connecting to modal container"
-    assert remote_connecting_status("proto") == _PROTO_INITIAL_PHASE
 
 
 def test_the_modal_dispatch_says_so_before_it_dispatches(monkeypatch):

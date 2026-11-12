@@ -129,10 +129,10 @@ def test_ignore_outages_env_lets_the_call_through_with_a_warning(degraded_tool, 
 def test_outage_is_refused_before_remote_dispatch(monkeypatch):
     """A remote device never receives a call that matches an outage.
 
-    The tool uses a GPU so ``device="proto"`` really binds the remote endpoint; a local_cpu tool
+    The tool uses a GPU so ``device="modal"`` really binds the remote endpoint; a local_cpu tool
     would be run in-process instead, and the test would pass whatever the check's position.
     """
-    import proto_tools.proto as proto_module
+    import proto_tools.modal as modal_module
 
     dispatched: list[str] = []
 
@@ -140,18 +140,18 @@ def test_outage_is_refused_before_remote_dispatch(monkeypatch):
         dispatched.append(tool_key)
         return _OutageOutput(tool_id=tool_key, execution_time=0.0, success=True, echoed=inputs.query)
 
-    monkeypatch.setattr(proto_module, "dispatch_to_proto", _record, raising=False)
+    monkeypatch.setattr(modal_module, "dispatch_to_modal", _record)
     key, calls = "outage-probe-remote", []
     _register(
         key, Outage(reason="Upstream is down", since=date(2026, 1, 1), tracking_url=_TRACKING), calls, uses_gpu=True
     )
     try:
         with pytest.raises(OutageError):
-            ToolRegistry.get(key).function(_OutageInput(), _OutageConfig(device="proto"))
+            ToolRegistry.get(key).function(_OutageInput(), _OutageConfig(device="modal"))
         assert dispatched == []
         # The same call past the outage does reach the endpoint, so the refusal above is the check's doing.
         monkeypatch.setenv("PROTO_IGNORE_OUTAGES", "1")
-        ToolRegistry.get(key).function(_OutageInput(), _OutageConfig(device="proto"))
+        ToolRegistry.get(key).function(_OutageInput(), _OutageConfig(device="modal"))
         assert dispatched == [key]
     finally:
         ToolRegistry._registry.pop(key, None)
@@ -206,14 +206,12 @@ def test_modal_containers_skip_the_check(offline_tool, monkeypatch):
         ToolRegistry.get(key).function(_OutageInput(), _OutageConfig())
 
 
-@pytest.mark.parametrize("device", ["local", "proto"])
+@pytest.mark.parametrize("device", ["local", "modal"])
 def test_mcp_run_tool_refuses_with_the_outage(degraded_tool, monkeypatch, device):
     """Both MCP branches refuse: the remote one never reaches the wrapper's own check."""
-    import proto_tools.proto as proto_module
+    import proto_tools.modal.client as modal_client
 
-    monkeypatch.setattr(
-        proto_module, "dispatch_to_proto", lambda *a, **k: pytest.fail("dispatched despite outage"), raising=False
-    )
+    monkeypatch.setattr(modal_client, "dispatch_to_modal", lambda *a, **k: pytest.fail("dispatched despite outage"))
     key, calls = degraded_tool
     answer = impl.run_tool(key, inputs={"query": "q"}, config={"use_upstream": True}, device=device)
     assert answer["ok"] is False
