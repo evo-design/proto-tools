@@ -164,7 +164,7 @@ def _require_modal_credentials(client: Any | None = None) -> None:
 def _resolve_device(config: BaseConfig | None, service_class: str) -> BaseConfig | None:
     """Replace a logical device with the physical device of the target container.
 
-    proto-tools' ``BaseConfig`` defaults to ``device="cpu"``, and ``"proto"``
+    proto-tools' ``BaseConfig`` defaults to ``device="cpu"``, and ``"modal"``
     is not a device any container can bind. Either would run a GPU model on
     the CPU of a GPU container, so the caller's intent is translated here
     rather than silently honoured.
@@ -446,7 +446,7 @@ def dispatch_to_modal(
         key (str): Registry key (e.g. ``"esm2-embedding"``).
         inputs (BaseToolInput): Tool input payload.
         config (BaseConfig | None): Tool configuration. A logical
-            ``device`` (``"proto"``/``"modal"``) or the ``"cpu"`` default is
+            ``device`` (``"modal"``) or the ``"cpu"`` default is
             replaced with the physical device of the target container.
         environment (str | None): Modal environment. Defaults to ``MODAL_ENVIRONMENT``
             when set, otherwise to ``proto-env``.

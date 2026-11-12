@@ -240,7 +240,7 @@ SERVICE_MODAL_TIMEOUTS: dict[str, int] = {
 
 
 # Services whose containers are scheduled with a GPU. Callers translate a
-# logical device ("proto"/"modal") into "cuda" for these and "cpu" otherwise —
+# logical device ("modal") into "cuda" for these and "cpu" otherwise —
 # proto-tools' BaseConfig defaults to "cpu", which would otherwise run a model
 # on the CPU of a GPU container.
 GPU_SERVICES: frozenset[str] = frozenset(

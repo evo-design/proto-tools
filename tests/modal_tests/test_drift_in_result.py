@@ -67,10 +67,9 @@ def test_the_check_is_made_against_the_deployment_the_call_reached(stale):
     assert stale == [(TOOL_KEY, "someones-env", client)]
 
 
-@pytest.mark.parametrize("ran_on", ["local", "proto"])
-def test_a_call_that_never_reached_modal_reports_nothing(stale, ran_on):
+def test_a_call_that_never_reached_modal_reports_nothing(stale):
     """There is no deployment to be stale against, and the volume read would be wasted."""
-    assert impl.drift_for(TOOL_KEY, ran_on) == []
+    assert impl.drift_for(TOOL_KEY, "local") == []
     assert stale == []
 
 
