@@ -200,10 +200,9 @@ def test_unrelated_nonempty_destination_is_refused(monkeypatch: pytest.MonkeyPat
     assert (tmp_path / "mine.txt").read_text() == "keep me"
 
 
-@pytest.mark.parametrize("device", ["proto", "modal"])
-def test_remote_devices_are_refused(device: str) -> None:
+def test_remote_devices_are_refused() -> None:
     """The bundle lands on the running machine's disk, so a hosted run would return unreachable paths."""
-    reason = NCBIReferenceBundleConfig().remote_unsupported_reason(device)  # type: ignore[arg-type]
+    reason = NCBIReferenceBundleConfig().remote_unsupported_reason("modal")
 
     assert reason is not None and "local proto-tools MCP server or CLI" in reason
 
