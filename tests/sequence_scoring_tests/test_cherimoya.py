@@ -233,8 +233,8 @@ def test_cherimoya_config_checkpoint_paths_are_local_only(tmp_path: Path) -> Non
     config = CherimoyaScoreConfig(models=[_K562_DNASE, str(checkpoint)])
 
     assert config.models == [_K562_DNASE, str(checkpoint.resolve())]
-    assert "local checkpoint files" in (config.remote_unsupported_reason("proto") or "")
-    assert CherimoyaScoreConfig(models=[_K562_DNASE]).remote_unsupported_reason("proto") is None
+    assert "local checkpoint files" in (config.remote_unsupported_reason("modal") or "")
+    assert CherimoyaScoreConfig(models=[_K562_DNASE]).remote_unsupported_reason("modal") is None
     with pytest.raises(ValidationError, match="does not exist"):
         CherimoyaScoreConfig(models=[str(tmp_path / "missing.torch")])
 

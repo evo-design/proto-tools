@@ -58,18 +58,16 @@ def test_existing_local_path_is_accepted(tmp_path) -> None:
     assert config.annotation == "grch38"
 
 
-@pytest.mark.parametrize("device", ["modal", "proto"])
-def test_named_assembly_runs_remotely(device: str) -> None:
+def test_named_assembly_runs_remotely() -> None:
     """A worker can provision an assembly by name, so it is the form that travels."""
-    assert SpliceAIScoreConfig(reference_fasta=ASSEMBLIES[0]).remote_unsupported_reason(device) is None
+    assert SpliceAIScoreConfig(reference_fasta=ASSEMBLIES[0]).remote_unsupported_reason("modal") is None
 
 
-@pytest.mark.parametrize("device", ["modal", "proto"])
-def test_local_path_is_refused_remotely(tmp_path, device: str) -> None:
+def test_local_path_is_refused_remotely(tmp_path) -> None:
     """The path names a file on the caller's machine; a container would read something else or fail."""
     fasta = tmp_path / "custom.fa"
     fasta.write_text(">1\nACGT\n")
-    reason = SpliceAIScoreConfig(reference_fasta=str(fasta)).remote_unsupported_reason(device)
+    reason = SpliceAIScoreConfig(reference_fasta=str(fasta)).remote_unsupported_reason("modal")
     assert reason is not None
     assert "local path" in reason
 
