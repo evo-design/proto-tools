@@ -40,8 +40,7 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
             resolved to canonical codes. Empty means the full panel for ``construct_type``.
             Requested codes must belong to that panel.
         checkpoint (str): Optional override for the pinned checkpoint — a local ``.ckpt`` path or an
-            ``https`` link (a schemeless ``host.tld/path`` is accepted). Caller overrides run on local
-            devices only (rejected on ``device="proto"``). Empty uses the pinned per-target checkpoint.
+            ``https`` link (a schemeless ``host.tld/path`` is accepted). Empty uses the pinned per-target checkpoint.
         batch_size (int): Number of sequences to run per GPU batch.
     """
 

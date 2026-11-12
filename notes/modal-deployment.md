@@ -142,7 +142,7 @@ reuses warm containers, with `return_exceptions=True` so a failed chunk does not
 chunks that already succeeded and were already billed, and `order_outputs=True` so each
 entry stays aligned with the input that produced it.
 
-`_resolve_device` rewrites a logical device (`"proto"`, `"modal"`, or the `"cpu"` default)
+`_resolve_device` rewrites a logical device (`"modal"` or the `"cpu"` default)
 into the physical device of the container that will actually run it. The caller does not
 know, and should not need to know, what hardware the deployment sits on.
 
@@ -196,8 +196,7 @@ returning, the stop event is usually what ends the tailer, and the last lines of
 be lost. Progress tolerates that by design.
 
 Records replay through `proto_tools.modal.remote` carrying the `update_status` flag the
-spinner keys on, so a remote line renders exactly as the same line does locally. This
-mirrors the `device="proto"` path rather than introducing a second convention.
+spinner keys on, so a remote line renders exactly as the same line does locally.
 
 One gap worth knowing: progress opens per call, inside `dispatch_tool_call`. A container
 still waking up has not reached that point, so a cold start streams nothing for its first
@@ -209,21 +208,19 @@ A config declares `remote_unsupported_reason(device)` when a setting cannot work
 remote worker. The registry calls it once before dispatch, for whichever remote device
 was chosen.
 
-The hook takes the device because remote targets differ in what they can run. A local
-checkpoint path exists on no remote machine, so both devices refuse it. A custom
-checkpoint is a different matter: loading one executes the pickle inside it, which Proto's
-shared service will not do with a caller's file, while a Modal workspace belongs to the
-caller and has no such objection.
+The hook takes the device so an override can tell remote targets apart should there be
+more than one; today `"modal"` is the only one. A local checkpoint path exists on no
+remote machine, so it is refused there.
 
-The name matters more than it looks. Three configs still spelled it
-`cloud_unsupported_reason` after `device="cloud"` became `device="proto"`, so the registry
-never called them, nothing failed, and the restrictions silently did not apply.
+The name matters more than it looks. Three configs once spelled it
+`cloud_unsupported_reason` after the hook was renamed, so the registry never called them,
+nothing failed, and the restrictions silently did not apply.
 `tests/style_consistency_tests/test_remote_capability_hooks.py` now fails on any config
 defining a differently named hook.
 
 **The guard is client-side.** It runs in the caller's process, so a modified client or a
 request crafted directly against the API bypasses it entirely. Server-side enforcement
-belongs at Proto's submission path.
+belongs wherever requests are submitted.
 
 ## Worker extension points
 

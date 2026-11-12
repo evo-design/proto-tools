@@ -189,17 +189,17 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 
 **No config fields for internal/ephemeral plumbing:** Don't expose a config field that doesn't change the computation result — e.g., an internal job name, a scratch/output directory, or intermediate-file labels. The wrapper returns results via the `Output` object, and the **export API** (`_export_output()` / `output.export(...)`) owns user-facing output files and naming — so such fields add API surface without behavior, and (unless marked `include_in_key=False`) wrongly split the cache so identical calls miss each other. Hardcode the internal value instead. Contributors reflexively add these; drop them. Example: `opendde` removed its `name` (job label → ephemeral temp-file names) and `root_dir` (duplicated the managed weights-cache resolution) fields for exactly this reason.
 
-**Remote fail-fast for local-resource configs:** If a config setting needs a **local resource that can't be staged to the hosted service** — a local database/index, an on-disk weights/artifact directory, or a local file path — override `BaseConfig.remote_unsupported_reason(self, device: str) -> str | None` so `device='proto'` fails fast at dispatch with a clear message instead of a late runtime error (a missing-file crash, or silently ignoring the override). Return a user-facing reason when the offending setting is active, `None` otherwise (the default means remote-compatible). Guard on the setting actually being non-default so ordinary remote runs are untouched:
+**Remote fail-fast for local-resource configs:** If a config setting needs a **local resource that can't be staged to a remote worker** — a local database/index, an on-disk weights/artifact directory, or a local file path — override `BaseConfig.remote_unsupported_reason(self, device: str) -> str | None` so `device='modal'` fails fast at dispatch with a clear message instead of a late runtime error (a missing-file crash, or silently ignoring the override). Return a user-facing reason when the offending setting is active, `None` otherwise (the default means remote-compatible). Guard on the setting actually being non-default so ordinary remote runs are untouched:
 
 ```python
 def remote_unsupported_reason(self, device: str) -> str | None:
-    """A local weights directory (``local_path``) isn't present on a hosted worker."""
+    """A local weights directory (``local_path``) isn't present on a remote worker."""
     if self.local_path:  # optional override; unset by default → remote-OK
-        return "local_path points to a local weights directory not available on device='proto'. Unset it, or run locally with device='cpu'."
+        return "local_path points to a local weights directory not available on device='modal'. Unset it, or run locally with device='cpu'."
     return None
 ```
 
-A tool whose *only* mode needs a local file (e.g. a required local DB/HMM input, like `blast-search` local mode or `pyhmmer-hmmscan`) returns the reason unconditionally. Scope this to **intrinsically** local configs — do **not** encode deployment-specific hosting knowledge here (e.g. which model checkpoints are pre-warmed on the hosted service); that stays in the private hosting layer. The router invokes this on any remote device path, after the `local_cpu` no-op and the license gate. Branch on `device` when a restriction reflects what Proto chooses to host rather than an intrinsically local resource: a caller running on their own compute is not bound by our hosting limits.
+A tool whose *only* mode needs a local file (e.g. a required local DB/HMM input, like `blast-search` local mode or `pyhmmer-hmmscan`) returns the reason unconditionally. Scope this to **intrinsically** local configs — do **not** encode deployment-specific hosting knowledge here (e.g. which model checkpoints are pre-warmed on a hosted service); that stays in the private hosting layer. The router invokes this on any remote device path, after the `local_cpu` no-op and the license gate.
 
 ## Mutual-exclusion fields (XOR groups)
 
@@ -827,7 +827,7 @@ Per-field checklist:
    - `include_in_key=False` for fields that don't affect results (`device`, `verbose`, `timeout` are already excluded on `BaseConfig`; a tool-level `device` override must re-set it).
    - `xor_group="<slug>"` for mutually exclusive siblings, paired with the `@model_validator`.
 7. **Inherited fields** — confirm the Phase 2 inherited-field audit holds: every field from a shared base is implemented or rejected with `ValueError`, never silently ignored.
-8. **Local-resource field → remote hook.** If the field points at a local file/database/index or an on-disk weights/artifact path, confirm the config overrides `remote_unsupported_reason(device)` so `device='proto'` fails fast (see "Cloud fail-fast for local-resource configs" in Phase 2). Skip for AssetRef-stageable uploads and `Structure`-typed inputs (the gateway stages those).
+8. **Local-resource field → remote hook.** If the field points at a local file/database/index or an on-disk weights/artifact path, confirm the config overrides `remote_unsupported_reason(device)` so `device='modal'` fails fast (see "Cloud fail-fast for local-resource configs" in Phase 2). Skip for AssetRef-stageable uploads and `Structure`-typed inputs (the gateway stages those).
 
 **Output:** edit the contract directly. If you remove/rename/retype a field, propagate to standalone `dispatch()`, README, notebook, tests, and the export chain — leave no dangling references. Re-run Phase 4 import/test checks. Do this deliberately yourself, or delegate to a focused subagent given the Phase 1 upstream param surface + the contract.
 

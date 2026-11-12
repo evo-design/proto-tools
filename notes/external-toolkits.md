@@ -152,7 +152,7 @@ def run_mytool_score(inputs: MyToolScoreInput, config: MyToolScoreConfig, instan
 
 - Each tool needs a separate config class.
 - Tool keys must be unique across all registered tools.
-- Running on remote devices (`device="modal"` or `device="proto"`) is coming soon.
+- Running on remote devices (`device="modal"`) is coming soon.
 
 ## Step 5: Add docs and metadata
 
