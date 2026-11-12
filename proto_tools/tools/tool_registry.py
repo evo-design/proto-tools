@@ -1296,20 +1296,13 @@ class ToolRegistry:
                                 if (reason := config.remote_unsupported_reason(device_str)) is not None:
                                     raise ValueError(f"{key}: {reason}")
 
-                                # --- Proto endpoint ---
-                                if device_str == "proto":
-                                    from proto_tools.proto import dispatch_batch_to_proto, dispatch_to_proto
-
-                                    remote_dispatch = functools.partial(dispatch_to_proto, key)
-                                    remote_dispatch_many = functools.partial(dispatch_batch_to_proto, key)
                                 # --- Modal endpoint ---
-                                else:
-                                    # Imported here rather than at module scope to keep the Modal SDK
-                                    # off the import path of callers who never dispatch to it.
-                                    from proto_tools.modal import dispatch_batch_to_modal, dispatch_to_modal
+                                # Imported here rather than at module scope to keep the Modal SDK
+                                # off the import path of callers who never dispatch to it.
+                                from proto_tools.modal import dispatch_batch_to_modal, dispatch_to_modal
 
-                                    remote_dispatch = functools.partial(dispatch_to_modal, key)
-                                    remote_dispatch_many = functools.partial(dispatch_batch_to_modal, key)
+                                remote_dispatch = functools.partial(dispatch_to_modal, key)
+                                remote_dispatch_many = functools.partial(dispatch_batch_to_modal, key)
 
                     # --- Local hardware ---
                     # A remote endpoint allocates its own, so this validates only local devices.

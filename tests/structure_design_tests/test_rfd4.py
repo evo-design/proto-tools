@@ -886,15 +886,15 @@ def test_input_len_counts_the_specs_that_are_actually_dispatched(tmp_path):
 
 
 def test_remote_unsupported_reason_flags_local_adapters_and_bundles(tmp_path):
-    """Local adapter and model-bundle directories do not exist on a hosted worker."""
-    reason = RFD4DesignConfig(adapter_path=str(tmp_path)).remote_unsupported_reason("proto")
+    """Local adapter and model-bundle directories do not exist on a remote worker."""
+    reason = RFD4DesignConfig(adapter_path=str(tmp_path)).remote_unsupported_reason("modal")
     assert reason is not None and "adapter_path" in reason
 
-    bundle_reason = RFD4DesignConfig(model_checkpoint=str(tmp_path)).remote_unsupported_reason("proto")
+    bundle_reason = RFD4DesignConfig(model_checkpoint=str(tmp_path)).remote_unsupported_reason("modal")
     assert bundle_reason is not None and "local directory" in bundle_reason
 
     # The default pinned HuggingFace repo id is fine remotely.
-    assert RFD4DesignConfig().remote_unsupported_reason("proto") is None
+    assert RFD4DesignConfig().remote_unsupported_reason("modal") is None
     assert RFD4InverseFoldingConfig().remote_unsupported_reason("modal") is None
 
 

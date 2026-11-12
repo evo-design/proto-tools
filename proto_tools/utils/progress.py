@@ -601,7 +601,7 @@ def remote_spinner_style(device: str) -> tuple[str, str | None]:
     encode it falls back to the dotted spinner with a badge naming the device.
 
     Args:
-        device (str): The remote device, ``"proto"`` or ``"modal"``.
+        device (str): The remote device, ``"modal"``.
 
     Returns:
         tuple[str, str | None]: The style name and an optional static prefix.
@@ -616,8 +616,7 @@ def remote_spinner_style(device: str) -> tuple[str, str | None]:
 def remote_progress(device: str) -> Generator[None, None, None]:
     """Hold a status-only spinner for the round trip to a remote worker.
 
-    Both remote devices use this, so a call reads the same however it was dispatched. Nothing
-    else opens a bar on either path: the tool wrapper's bar belongs to local subprocess
+    Nothing else opens a bar on the remote path: the tool wrapper's bar belongs to local subprocess
     execution, and a tool's own bar runs inside the remote container. Without this a remote call
     shows nothing at all, and the machinery that streams a worker's log output finds no active
     bar to write into.
@@ -652,7 +651,7 @@ def remote_connecting_status(device: str) -> str:
     machine is being waited on.
 
     Args:
-        device (str): The remote device, ``"proto"`` or ``"modal"``.
+        device (str): The remote device, ``"modal"``.
 
     Returns:
         str: The status line.

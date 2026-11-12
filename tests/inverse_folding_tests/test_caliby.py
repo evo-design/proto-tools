@@ -215,7 +215,7 @@ def test_setup_script_downloads_every_bundled_checkpoint():
 @pytest.mark.parametrize("config_class", _ALL_CONFIG_CLASSES)
 def test_caliby_configs_block_remote_execution_for_custom_checkpoint(config_class):
     """A local .ckpt file is not present on a hosted worker, so remote execution is refused."""
-    reason = config_class(model_checkpoint="/models/custom_caliby.ckpt").remote_unsupported_reason("proto")
+    reason = config_class(model_checkpoint="/models/custom_caliby.ckpt").remote_unsupported_reason("modal")
     assert reason is not None
     assert ".ckpt" in reason
 
@@ -223,7 +223,7 @@ def test_caliby_configs_block_remote_execution_for_custom_checkpoint(config_clas
 @pytest.mark.parametrize("config_class", _ALL_CONFIG_CLASSES)
 def test_caliby_configs_allow_remote_execution_for_bundled_checkpoint(config_class):
     """A bundled checkpoint ships with the hosted worker, so remote execution is allowed."""
-    assert config_class().remote_unsupported_reason("proto") is None
+    assert config_class().remote_unsupported_reason("modal") is None
 
 
 def test_caliby_sample_config_deduplicates_excluded_amino_acids():

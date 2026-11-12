@@ -50,21 +50,6 @@ Large outputs, such as predicted structures and embeddings, are written to disk
 and returned as file paths rather than being returned inline.
 """
 
-_PROTO_INSTRUCTIONS = """Run bioinformatics tools on Proto's hosted service.
-
-Proto offers limited access to hosted deployments, available to users who hold an
-API key. At present, API keys to the Proto service are provided only to a small
-set of collaborators.
-
-Begin with `list_tools` to establish what is hosted. Unlike Modal, where the user
-deploys tools themselves, the catalogue available through Proto is fixed: do not
-propose deploying a tool. Where a tool is unavailable, `run_tool` explains why and
-refers to the `modal` backend, which the user would need to configure themselves.
-
-Large outputs, such as predicted structures and embeddings, are written to disk
-and returned as file paths rather than inline.
-"""
-
 _LOCAL_INSTRUCTIONS = """Run bioinformatics tools on this machine.
 
 Tools execute in this process rather than on a remote backend, so there is nothing
@@ -101,7 +86,7 @@ authors' own repository, paper and weights, and the code that ran it. Attribute 
 
 INSTRUCTIONS = {
     device: text + "\n" + _WORKFLOW + "\n" + _KEY_CONVENTION
-    for device, text in (("modal", _MODAL_INSTRUCTIONS), ("proto", _PROTO_INSTRUCTIONS), ("local", _LOCAL_INSTRUCTIONS))
+    for device, text in (("modal", _MODAL_INSTRUCTIONS), ("local", _LOCAL_INSTRUCTIONS))
 }
 
 
@@ -247,7 +232,7 @@ def build_server(device: Device = "modal") -> FastMCP:
             except DeviceUnavailableError as exc:
                 # A bad backend name is the caller's to correct, so it comes back as a result
                 # rather than a protocol error, the same way an unknown tool key does.
-                return {"ok": False, "error": str(exc), "valid_run_on": ["local", "modal", "proto"]}
+                return {"ok": False, "error": str(exc), "valid_run_on": ["local", "modal"]}
 
         loop = asyncio.get_running_loop()
         # A task scheduled from another thread falls outside this request's context, where the

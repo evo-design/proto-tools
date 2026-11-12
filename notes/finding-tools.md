@@ -25,7 +25,7 @@ proto-tools run esm2-embedding --inputs @inputs.json --config '{"model_checkpoin
 proto-tools workspace --device modal
 ```
 
-Mirrored verbs answer for this machine unless given `--device modal` or `--device proto`. `list` and `search` print text unless given `--json`; the others print the MCP payload as JSON and exit 1 when it reports `"ok": false`, including an unknown key, which comes back with `did_you_mean` suggestions.
+Mirrored verbs answer for this machine unless given `--device modal`. `list` and `search` print text unless given `--json`; the others print the MCP payload as JSON and exit 1 when it reports `"ok": false`, including an unknown key, which comes back with `did_you_mean` suggestions.
 
 `python -m proto_tools` is equivalent when the `proto-tools` executable is shadowed.
 
