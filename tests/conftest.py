@@ -858,6 +858,12 @@ def pytest_addoption(parser):
         help="Shuffle test order (pytest-randomly's reordering, which this suite disables by default)",
     )
     parser.addoption(
+        "--no-toolkit-order",
+        action="store_true",
+        default=False,
+        help="Keep collection order instead of running each toolkit's tests together (tests/_warm_workers.py)",
+    )
+    parser.addoption(
         "--all",
         action="store_true",
         default=False,
@@ -978,6 +984,19 @@ def pytest_configure(config):
 
     if hasattr(config.option, "randomly_reorganize"):
         config.option.randomly_reorganize = bool(config.getoption("--random-order"))
+
+    from tests import _warm_workers
+
+    if not config.pluginmanager.has_plugin(_warm_workers.PLUGIN_NAME):
+        config.pluginmanager.register(_warm_workers.WarmWorkersPlugin(config), _warm_workers.PLUGIN_NAME)
+    config.addinivalue_line(
+        "markers", "toolkit(name): the toolkit a test runs, for run ordering when it cannot be inferred"
+    )
+    config.addinivalue_line(
+        "markers",
+        "worker_config(**fields): the reload_on_change values a test runs with, for run ordering "
+        "when they cannot be inferred",
+    )
 
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
     config.addinivalue_line(
@@ -1767,14 +1786,17 @@ def _default_raise_mode(monkeypatch):
 # Persistent tool fixture factory
 # ============================================================================
 def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
-    """Create a module-scoped autouse fixture that wraps tests in persistence.
+    """Create an autouse fixture that gives every test in the calling module a warm worker.
+
+    The worker comes from the session pool in ``tests/_warm_workers.py``. It is started for the
+    module's first test, and kept for as long as consecutive tests use it, which with the suite's
+    toolkit ordering can span several files; it is released as soon as the next test does not.
 
     Parameters
     ----------
     toolkit : str
-        Worker group passed to ``ToolInstance.persist_tool()`` (e.g.
-        ``"pyrosetta"``, ``"esm2"``). Accepts a registered tool_key too
-        (it will be normalized).
+        Worker group passed to ``ToolInstance.get()`` (e.g. ``"pyrosetta"``, ``"esm2"``).
+        Accepts a registered tool_key too (it will be normalized).
     gpu : bool
         When *True* (default), the fixture skips persistence when no
         GPU is available: ``--cpu-only`` flag, or no visible GPU can run
@@ -1785,11 +1807,17 @@ def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
         Skipped in benchmark mode (any of ``--benchmark``, ``--benchmark-report``,
         ``--benchmark-tool``, ``--benchmark-toolkit``). Benchmarks measure
         cold-start vs warm by running their workload twice with their own
-        ``ToolInstance.persist()`` scope; a module-level warm worker would
+        ``ToolInstance.persist()`` scope; a warm pooled worker would
         steal the cold-start measurement.
     """
+    import sys
 
-    @pytest.fixture(scope="module", autouse=True)
+    from tests import _warm_workers
+
+    toolkit = ToolInstance._normalize_toolkit(toolkit)
+    _warm_workers.register_module_toolkit(sys._getframe(1).f_globals["__name__"], toolkit)
+
+    @pytest.fixture(autouse=True)
     def _persistent_tool(request):
         if gpu and (request.config.getoption("--cpu-only") or not _gpu_available()):
             yield
@@ -1802,8 +1830,10 @@ def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
         ):
             yield
             return
-        with ToolInstance.persist_tool(toolkit):
-            yield
+        pool = _warm_workers.pool(request.config)
+        if pool is not None:
+            pool.acquire(toolkit, request.node.nodeid)
+        yield
 
     return _persistent_tool
 

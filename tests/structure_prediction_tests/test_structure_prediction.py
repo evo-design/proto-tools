@@ -64,7 +64,6 @@ from proto_tools.utils.tool_cache import (
     _program_tool_cache,
     get_cache_info,
 )
-from proto_tools.utils.tool_instance import ToolInstance
 from tests.structure_prediction_tests._fasta_helpers import load_all_test_complexes
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -241,39 +240,43 @@ def _generate_test_params() -> list:
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _persistent_tool_instances(request):
-    """Keep tool workers alive across tests within this module.
+# Each test takes a warm worker for its predictor from the session pool (tests/_warm_workers.py),
+# which keeps it across tests, and across files, for as long as consecutive tests use it, and
+# releases it as soon as the next test does not.
+WARM_WORKERS = True
 
-    Structure prediction tests reuse GPU models across test cases.
-    ToolInstance.persist() keeps workers cached across dispatch() calls for the
-    duration of this module and cleans them up on exit.
-    """
+
+def _esmfold2_checkpoint(use_msa: bool) -> str | None:
+    """ESMFold2 ships two checkpoints; only the non-Fast one accepts MSA conditioning."""
+    return "esmfold2" if use_msa else None
+
+
+def worker_config_for(params: dict) -> dict:
+    """The reload_on_change values a parametrized case runs with, for the suite's run ordering."""
+    if params.get("predictor_name") == "esmfold2":
+        checkpoint = _esmfold2_checkpoint(bool(params.get("use_msa")))
+        return {"model_checkpoint": checkpoint or "esmfold2-fast"}
+    return {}
+
+
+@pytest.fixture(autouse=True)
+def _persistent_tool_instances(request):
+    """Give the test a warm worker for the predictor it runs."""
+    from tests import _warm_workers
+
     if request.config.getoption("--cpu-only"):
         yield
         return
-    with ToolInstance.persist():
-        yield
+    toolkit = _warm_workers.toolkit_of(request.node)
+    pool = _warm_workers.pool(request.config)
+    if toolkit is not None and pool is not None:
+        pool.acquire(toolkit, request.node.nodeid)
+    yield
 
 
 @pytest.fixture
 def _release_between_predictors(request):
-    """Release tool workers when switching to a different predictor.
-
-    Works inside the module-scoped ToolInstance.persist() context from the
-    _persistent_tool_instances fixture above. When predictor_name changes between
-    consecutive tests, shuts down the previous predictor's worker so GPU memory
-    is freed before the next model loads.
-
-    Not autouse; only parametrized tests have callspec.params. Applied
-    via @pytest.mark.usefixtures on test_folding only.
-    """
-    prev = getattr(request.module, "_active_predictor", None)
-    predictor_name = request.node.callspec.params["predictor_name"]
-    if prev is not None and prev != predictor_name:
-        ToolInstance.shutdown_instance(prev)
-
-    request.module._active_predictor = predictor_name
+    """Kept for test_folding's usefixtures: the pool now releases a predictor when the next test uses another."""
     yield
 
 
@@ -427,10 +430,9 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
 
     # Create config with MSA settings if supported
     if _supports_msa(config_class):
-        # ESMFold2 ships two checkpoints; only the non-Fast one accepts MSA conditioning.
         config_kwargs: dict = {"use_msa": use_msa, "verbose": True}
-        if predictor_name == "esmfold2" and use_msa:
-            config_kwargs["model_checkpoint"] = "esmfold2"
+        if predictor_name == "esmfold2" and (checkpoint := _esmfold2_checkpoint(use_msa)):
+            config_kwargs["model_checkpoint"] = checkpoint
         config = config_class(**config_kwargs)
 
         if use_msa and msa_search_mode is not None:
