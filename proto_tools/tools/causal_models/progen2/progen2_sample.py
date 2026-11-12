@@ -149,7 +149,7 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
 
     @classmethod
     def minimal(cls, **kwargs: Any) -> "ProGen2SampleConfig":
-        """Sample short sequences from the model's own distribution.
+        """Sample short sequences from the smallest checkpoint, at the model's own distribution.
 
         The shipped ``temperature`` of 0.2 is deliberately conservative, and from a
         short prompt it concentrates the distribution enough to emit long
@@ -157,6 +157,7 @@ class ProGen2SampleConfig(CausalModelSampleConfig):
         prompts come back identical. Sampling at 1.0 keeps the generated sequences
         varied, which is what the stochastic-tool test infrastructure exercises.
         """
+        kwargs.setdefault("model_checkpoint", "progen2-small")
         kwargs.setdefault("temperature", 1.0)
         kwargs.setdefault("max_new_tokens", 32)
         return cast("ProGen2SampleConfig", super().minimal(**kwargs))

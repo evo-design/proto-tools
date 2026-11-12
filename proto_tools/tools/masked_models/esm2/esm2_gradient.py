@@ -1,7 +1,7 @@
 """ESM2 masked pseudo-log-likelihood gradient tool."""
 
 import logging
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import Field, field_validator, model_validator
 from typing_extensions import Self
@@ -154,6 +154,12 @@ class ESM2GradientConfig(RelaxationConfig):
                 "smaller variant, run locally, or deploy it yourself with device='modal'."
             )
         return None
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "ESM2GradientConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "esm2_t6_8M_UR50D")
+        return cast("ESM2GradientConfig", super().minimal(**kwargs))
 
 
 def example_input() -> ESM2GradientInput:

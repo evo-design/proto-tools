@@ -1,7 +1,7 @@
 """IgLM antibody sequence likelihood scoring tool."""
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from pydantic import field_validator, model_validator
 
@@ -86,6 +86,12 @@ class IgLMScoringConfig(CausalModelScoringConfig):
         description="IgLM weights variant; 'IgLM' is 13M parameters, 'IgLM-S' is 1.4M",
         reload_on_change=True,
     )
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "IgLMScoringConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "IgLM-S")
+        return cast("IgLMScoringConfig", super().minimal(**kwargs))
 
 
 # ============================================================================

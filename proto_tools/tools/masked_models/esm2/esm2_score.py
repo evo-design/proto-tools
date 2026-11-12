@@ -4,7 +4,7 @@ ESM2 scoring tool.
 """
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import field_validator
 
@@ -97,6 +97,12 @@ class ESM2ScoringConfig(MaskedModelScoringConfig):
                 "smaller variant, run locally, or deploy it yourself with device='modal'."
             )
         return None
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "ESM2ScoringConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "esm2_t6_8M_UR50D")
+        return cast("ESM2ScoringConfig", super().minimal(**kwargs))
 
 
 # ============================================================================

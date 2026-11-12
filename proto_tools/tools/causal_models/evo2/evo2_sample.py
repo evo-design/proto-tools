@@ -4,7 +4,7 @@ Evo 2 sampling tool.
 """
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -221,6 +221,12 @@ class Evo2SampleConfig(CausalModelSampleConfig):
         if self.local_path:
             return f"local_path points to a local weights directory not available on device='{device}'. Unset it, or run on a local NVIDIA GPU."
         return None
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "Evo2SampleConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "evo2_1b_base")
+        return cast("Evo2SampleConfig", super().minimal(**kwargs))
 
 
 # ============================================================================

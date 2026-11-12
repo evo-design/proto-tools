@@ -13,7 +13,7 @@ import json
 import os
 import tempfile
 from logging import getLogger
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import model_validator
 
@@ -401,6 +401,12 @@ class ProtenixConfig(MSAStructurePredictionConfig):
                 "'cuda'), or deploy it yourself with device='modal'."
             )
         return None
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "ProtenixConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_name", "protenix_tiny_default_v0.5.0")
+        return cast("ProtenixConfig", super().minimal(**kwargs))
 
 
 # ============================================================================
