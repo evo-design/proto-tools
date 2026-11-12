@@ -318,6 +318,25 @@ def derive_chunk_seed(base_seed: int, offset: int, upper_bound: int) -> int:
     return zlib.crc32(f"{base_seed}:{offset}".encode()) % upper_bound
 
 
+def derive_item_seed(base_seed: int | None, index: int, upper_bound: int) -> int | None:
+    """Seed for the item at ``index`` when a stochastic tool runs a batch one item at a time.
+
+    A tool that reseeds for every item from the same ``config.seed`` gives duplicate items
+    identical draws, which breaks what ``stochastic=True`` promises. Deriving each item's seed
+    the way :func:`derive_chunk_seed` derives a chunk's keeps the first item on ``base_seed`` and
+    every result reproducible for a given seed and batch.
+
+    Args:
+        base_seed (int | None): The seed the caller asked for; ``None`` stays unseeded.
+        index (int): The item's position within the batch.
+        upper_bound (int): Exclusive upper bound for the returned seed.
+
+    Returns:
+        int | None: Seed for this item, or ``None`` when the call is unseeded.
+    """
+    return None if base_seed is None else derive_chunk_seed(base_seed, index, upper_bound)
+
+
 @dataclass
 class DeviceCapability:
     """Describes a device (or device group) available for scheduling.
