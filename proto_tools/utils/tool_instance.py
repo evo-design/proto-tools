@@ -65,7 +65,6 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from proto_tools.utils import uv_prune
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
 from proto_tools.utils.device import parse_device_string
 from proto_tools.utils.device_manager import DeviceManager
@@ -2823,6 +2822,9 @@ class ToolInstance:
         Skipped for an env pinned to another uv, which could misjudge the default uv's cache entries.
         Best-effort, like :meth:`_clean_package_archives`: it never fails a build that succeeded.
         """
+        # Imported here: the detached prune runs this module with -m, which a package-level import would shadow
+        from proto_tools.utils import uv_prune
+
         uv = self.env_path / "bin" / "uv"
         if self._get_uv_version() != UV_VERSION or not uv.is_file():
             return
