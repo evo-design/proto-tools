@@ -331,6 +331,7 @@ def test_foldmason_msa_local_with_real_fixtures():
         assert sid in output.newick_tree
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_foldmason_msa_remote_with_real_fixtures():
     """Remote end-to-end: 3 PDBs → live foldmason server → schema-validated MSA.

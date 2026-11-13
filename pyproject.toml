@@ -128,6 +128,7 @@ markers = [
     "uses_cpu: mark test as CPU-only. Optional arg: @pytest.mark.uses_cpu(n) skips unless n CPUs are visible (matches the count ToolPool's _detect_cpus would see)",
     "slow: Slow tests that may take several minutes",
     "integration: Integration tests",
+    "network: Calls a live external service (NCBI, UniProt, RCSB, EBI, ...). Skipped unless --network is passed; NOT enabled by --all or --ext",
     "skip_ci: Skip test in GitHub Actions CI",
     "extensive: Combinatorial tests (e.g., every tool × device transition). Skipped unless --ext (or --extensive) is passed",
     "benchmark: Marks the e2e benchmark test for a tool. Required arg: tool_key, e.g. @pytest.mark.benchmark('esm2-embedding'). Skipped by default; opt in additively via --benchmark (or --benchmark-report / --benchmark-tool / --benchmark-toolkit). NOT enabled by --all or --slow.",

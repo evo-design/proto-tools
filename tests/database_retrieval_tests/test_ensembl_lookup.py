@@ -251,6 +251,7 @@ def test_rejects_non_dict_payload():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_lookup_symbol_brca1_live():
     """BRCA1 lookup_symbol resolves to ENSG00000012048 with the canonical transcript present."""
@@ -267,6 +268,7 @@ def test_lookup_symbol_brca1_live():
     assert mane_select == ["ENST00000357654"]
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_lookup_id_grch37_routes_to_alt_host():
     """assembly='GRCh37' returns coordinates from the GRCh37 mirror (different from GRCh38)."""
@@ -284,6 +286,7 @@ def test_lookup_id_grch37_routes_to_alt_host():
     assert out_grch38.result.start != out_grch37.result.start
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_unknown_id_surfaces_failure():
     """An unknown Ensembl ID propagates the upstream HTTPError as a raised exception."""

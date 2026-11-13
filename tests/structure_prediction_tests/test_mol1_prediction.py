@@ -16,7 +16,10 @@ from proto_tools.tools import Chain, Mol1Config, Mol1Input, run_mol1_prediction
 from proto_tools.tools.structure_prediction import Complex, ComplexMSAs
 from proto_tools.tools.structure_prediction.mol1.helpers import complex_to_mol1_json
 from tests._structure_fixtures import synthetic_cif
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("mol1")
 
 _PEPTIDE = "NLYIQWLKDGGPSSGRPPPS"
 _METRICS = {

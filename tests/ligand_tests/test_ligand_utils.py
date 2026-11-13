@@ -81,6 +81,7 @@ def test_lookup_name_via_pubchem(side_effects, expected):
         assert lookup_name_via_pubchem("CC(=O)Oc1ccccc1C(=O)O") == expected
 
 
+@pytest.mark.network
 @pytest.mark.skip_ci
 @pytest.mark.integration
 def test_get_smiles_valid_name():
@@ -90,6 +91,7 @@ def test_get_smiles_valid_name():
     assert mol is not None
 
 
+@pytest.mark.network
 @pytest.mark.skip_ci
 @pytest.mark.integration
 def test_get_smiles_invalid_name():
@@ -97,6 +99,7 @@ def test_get_smiles_invalid_name():
         lookup_smiles_via_pubchem("ThisIsNotARealCompound1234")
 
 
+@pytest.mark.network
 @pytest.mark.skip_ci
 @pytest.mark.integration
 def test_get_name_invalid_smiles():

@@ -22,9 +22,11 @@ from proto_tools.tools import (
     run_spliceai_predict,
     run_spliceai_score,
 )
-from tests.conftest import benchmark_twice, random_dna_sequences
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("spliceai")
 
 _EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "proto_tools/tools/rna_splicing/spliceai/examples"
 

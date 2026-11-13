@@ -882,6 +882,12 @@ def pytest_addoption(parser):
         help="Skip tests marked with skip_ci (mimics CI environment behavior)",
     )
     parser.addoption(
+        "--network",
+        action="store_true",
+        default=False,
+        help="Run tests that call live external services (marked network). Not enabled by --all or --ext.",
+    )
+    parser.addoption(
         "--integration",
         action="store_true",
         default=False,
@@ -1415,6 +1421,14 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "integration" in item.keywords:
                 item.add_marker(skip_integration)
+
+    # Skip tests that call live external services unless --network is specified. --all does not
+    # enable them: an upstream queue or outage would otherwise decide how long a run takes.
+    if not config.getoption("--network"):
+        skip_network = pytest.mark.skip(reason="needs network access to an external service; pass --network")
+        for item in items:
+            if "network" in item.keywords:
+                item.add_marker(skip_network)
 
     # Skip extensive tests unless --ext (or --extensive) is specified
     if not config.getoption("extensive"):

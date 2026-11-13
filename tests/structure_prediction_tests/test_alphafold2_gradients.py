@@ -42,7 +42,9 @@ from proto_tools.tools.structure_prediction.alphafold2.gradient_helpers import b
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils import PROTEIN_AMINO_ACIDS, ProteinSequenceLogits, one_hot_protein_logits
 from proto_tools.utils.gradient.models import TermGradient
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
+
+_persistent_tool = make_persistent_fixture("alphafold2")
 
 _EXAMPLE_PDB = (
     Path(__file__).resolve().parents[2]

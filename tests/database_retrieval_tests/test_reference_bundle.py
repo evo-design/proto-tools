@@ -208,6 +208,7 @@ def test_remote_devices_are_refused(device: str) -> None:
     assert reason is not None and "local proto-tools MCP server or CLI" in reason
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_reference_bundle_live(tmp_path: Path) -> None:
     output = run_ncbi_reference_bundle(
