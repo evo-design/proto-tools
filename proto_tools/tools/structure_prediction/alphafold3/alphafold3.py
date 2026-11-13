@@ -10,7 +10,7 @@ import json
 import logging
 import os
 import tempfile
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from proto_tools.utils.progress import progress_bar
 
@@ -247,6 +247,23 @@ class AlphaFold3Config(MSAStructurePredictionConfig):
         if self.output_dir:
             return f"output_dir writes to a local directory the caller cannot reach on device='{device}'. Unset it, or run locally with device='cuda'."
         return None
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "AlphaFold3Config":
+        """One diffusion sample and one recycle (defaults: 5, 10).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            AlphaFold3Config: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("num_recycles", 1)
+        kwargs.setdefault("num_diffusion_samples", 1)
+        return cast("AlphaFold3Config", super().minimal(**kwargs))
 
 
 # ============================================================================

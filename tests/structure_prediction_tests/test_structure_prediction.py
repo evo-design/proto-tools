@@ -246,17 +246,27 @@ def _generate_test_params() -> list:
 WARM_WORKERS = True
 
 
-def _esmfold2_checkpoint(use_msa: bool) -> str | None:
-    """ESMFold2 ships two checkpoints; only the non-Fast one accepts MSA conditioning."""
-    return "esmfold2" if use_msa else None
+def _folding_config(config_class, use_msa: bool | None):
+    """The config test_folding runs a predictor with: ``minimal()``, MSA-compatible when use_msa.
+
+    ``minimal()`` cuts samples, diffusion steps and recycles, and picks a checkpoint that accepts
+    MSAs on the MSA path (ESMFold2's full model, say). Default settings are covered by the
+    default-config smoke test.
+    """
+    if use_msa is None:
+        return config_class.minimal(verbose=True)
+    return config_class.minimal(use_msa=use_msa, verbose=True)
 
 
 def worker_config_for(params: dict) -> dict:
     """The reload_on_change values a parametrized case runs with, for the suite's run ordering."""
-    if params.get("predictor_name") == "esmfold2":
-        checkpoint = _esmfold2_checkpoint(bool(params.get("use_msa")))
-        return {"model_checkpoint": checkpoint or "esmfold2-fast"}
-    return {}
+    predictor = _STRUCTURE_PREDICTORS.get(params.get("predictor_name"))
+    if predictor is None:
+        return {}
+    config_class = predictor[2]
+    use_msa = bool(params.get("use_msa")) if _supports_msa(config_class) else None
+    config = _folding_config(config_class, use_msa)
+    return {field: getattr(config, field) for field in (config_class.reload_fields() or ())}
 
 
 @pytest.fixture(autouse=True)
@@ -430,10 +440,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
 
     # Create config with MSA settings if supported
     if _supports_msa(config_class):
-        config_kwargs: dict = {"use_msa": use_msa, "verbose": True}
-        if predictor_name == "esmfold2" and (checkpoint := _esmfold2_checkpoint(use_msa)):
-            config_kwargs["model_checkpoint"] = checkpoint
-        config = config_class(**config_kwargs)
+        config = _folding_config(config_class, use_msa)
 
         if use_msa and msa_search_mode is not None:
             from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
@@ -442,7 +449,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
 
             config.msa_search_config = Mmseqs2HomologySearchConfig(search_mode=msa_search_mode, verbose=True)
     else:
-        config = config_class(verbose=True)
+        config = _folding_config(config_class, None)
 
     output = run_func(inputs, config)
 
