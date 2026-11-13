@@ -78,6 +78,18 @@ Pin `tensorflow~=2.15.0` to keep Keras 2, because Keras 3 in TF &ge;2.16 cannot 
 
 Tools can override centralized recommendations via env_vars.txt or tool-specific environment variables (e.g., `SPLICE_TRANSFORMER_TORCH_SPEC`, `ALPHAGENOME_JAX_SPEC`, `SPLICEAI_TF_SPEC`).
 
+### Patching Installed Packages
+
+uv hardlinks each installed file from its cache into every env that installs the same package, so envs on the same torch build share one copy of it. A `setup.sh` that patches an installed file must therefore write a new file and swap it in, never rewrite it in place: an in-place write (Python's `open(path, "w")` or `Path.write_text`) edits the shared copy, and the patch appears in every other env holding that file. `sed -i` and `os.replace` both give the env its own copy:
+
+```python
+with open(path + ".proto-patch", "w") as f:
+    f.write(content)
+os.replace(path + ".proto-patch", path)
+```
+
+`tests/style_consistency_tests/test_setup_patches_replace_files.py` enforces this for every `setup.sh` that touches site-packages.
+
 ### Pinned-Version Tools
 
 Some tools have hard version pins for ABI compatibility with pre-built wheels (flash-attn, transformer-engine). These tools explicitly pin torch versions in their setup.sh and should NOT be migrated to use dynamic version selection:
