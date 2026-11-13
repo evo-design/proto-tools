@@ -101,6 +101,24 @@ _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
     }
 )
 
+# Tools whose same-seed outputs differ by GPU kernel numerics more than ``approx_equal``'s default
+# tolerance, but by far less than a seeding bug would. A wider tolerance keeps their check, which an
+# exclusion would drop: a seed that is ignored moves these values by much more than 1%.
+#
+# - esmfold2-inversion-gradient, esmfold2-inversion-binder-gradient: term values drift ~7e-4 relative
+#   (up to 1.1e-3 between persistent dispatches, ~5e-3 absolute) at a fixed seed; the same kernel
+#   drift class as esmfold2-prediction's atom drift below.
+_SEED_TOLERANCES: dict[str, dict[str, float]] = {
+    "esmfold2-inversion-gradient": {"rtol": 1e-2, "atol": 1e-2},
+    "esmfold2-inversion-binder-gradient": {"rtol": 1e-2, "atol": 1e-2},
+}
+
+
+def seed_tolerance(key: str) -> dict[str, float]:
+    """The ``approx_equal`` tolerance a tool's same-seed outputs are held to (empty for the default)."""
+    return _SEED_TOLERANCES.get(key, {})
+
+
 # Tools where ONLY the persistent variant fails. Fresh subprocesses with the
 # same seed are reproducible, but consecutive dispatches inside the same
 # persistent worker drift due to hidden CUDA/JIT state.
@@ -232,7 +250,7 @@ def test_all_tools_seed_reproducibility(spec: ToolSpec, tmp_path):
     assert r2.success, f"Second run of {spec.key} failed: {r2.errors}"
     assert_metrics_in_spec(r2)
 
-    r1.approx_equal(r2)
+    r1.approx_equal(r2, **seed_tolerance(spec.key))
 
 
 @pytest.mark.extensive
@@ -265,4 +283,4 @@ def test_all_tools_seed_reproducibility_persistent(spec: ToolSpec, tmp_path):
         assert r2.success, f"Second run of {spec.key} failed: {r2.errors}"
         assert_metrics_in_spec(r2)
 
-        r1.approx_equal(r2)
+        r1.approx_equal(r2, **seed_tolerance(spec.key))

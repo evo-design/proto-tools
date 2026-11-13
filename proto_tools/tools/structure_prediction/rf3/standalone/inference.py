@@ -229,10 +229,8 @@ def to_device(device: str) -> dict[str, Any]:
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """Report GPU memory usage (called by DeviceManager for monitoring)."""
-    from standalone_helpers import get_pytorch_memory_stats
-
-    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
+    """CLI tool, no persistent GPU state to report."""
+    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
 
 
 if __name__ == "__main__":

@@ -19,8 +19,10 @@ from proto_tools.tools.structure_prediction.esmfold2 import (
 )
 from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import _chain_to_payload
 from tests._structure_fixtures import synthetic_cif
-from tests.conftest import benchmark_twice, random_protein_sequences
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("esmfold2")
 
 # Two short helix peptides forming a heterodimer.
 _HELIX_A = "EELLKKLEELLKKLEELLKK"

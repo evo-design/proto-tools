@@ -174,22 +174,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 # ── Device management protocol ───────────────────────────────────────────────
-def to_device(device: str) -> dict[str, Any]:
-    """Move SpliceAI to a device (called by DeviceManager).
-
-    Keras models can't be relocated in place, so a CPU move drops the loaded
-    models and clears the TF session; the next dispatch reloads on ``device``.
-    """
-    global _models, _models_device, _annotator, _annotator_key
-    if device == "cpu" and (_models is not None or _annotator is not None):
-        _models = _models_device = _annotator = _annotator_key = None
-        import keras
-
-        keras.backend.clear_session()
-        return {"success": True, "device": device, "note": "models unloaded for CPU"}
-    return {"success": True, "device": device}
-
-
 def get_memory_stats() -> dict[str, Any]:
     """Report memory usage (called by DeviceManager). TF stats are not tracked."""
     return {"available": False, "framework": "tensorflow", "reason": "TensorFlow memory stats not tracked"}

@@ -31,6 +31,8 @@ from proto_tools.utils import (
     ToolInstance,
     coerce_to_item_list,
 )
+from proto_tools.utils.base_config import RANDOM_SEED_UPPER_BOUND
+from proto_tools.utils.fanout import derive_item_seed
 from proto_tools.utils.sequence_logits import SequenceLogits
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
@@ -384,7 +386,7 @@ def run_esmfold2_inversion_binder_gradient(
             raise ValueError(f"the epitope quantity needs target_hotspot_ids, absent on candidates {missing}")
 
     results = []
-    for candidate in inputs.inputs:
+    for index, candidate in enumerate(inputs.inputs):
         reply = ToolInstance.dispatch(
             "esmfold2",
             {
@@ -407,7 +409,8 @@ def run_esmfold2_inversion_binder_gradient(
                 "model_checkpoint": config.model_checkpoint,
                 "plm_passes": config.plm_passes,
                 "plm_batch_size": config.plm_batch_size,
-                "seed": config.seed,
+                # One seed per candidate, so duplicates in a batch draw differently (stochastic=True).
+                "seed": derive_item_seed(config.seed, index, RANDOM_SEED_UPPER_BOUND),
                 "device": config.device,
                 "verbose": config.verbose,
             },

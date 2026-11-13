@@ -434,7 +434,7 @@ def _unpack_artifact(artifact_path, download_path="./"):
 
 
 def _model_fn(model_dir):
-    checkpoint = torch.load(os.path.join(model_dir, "torch_checkpoint.pt"), weights_only=False)
+    checkpoint = torch.load(os.path.join(model_dir, "torch_checkpoint.pt"), map_location="cpu", weights_only=False)
     model_name = checkpoint["model_module"]
     model_cls = _MODEL_REGISTRY[model_name]
     model = model_cls(**vars(checkpoint["model_hparams"]))
@@ -445,15 +445,15 @@ def _model_fn(model_dir):
 
 
 def load_model(artifact_path):
-    """Load a Malinois model from a tar.gz artifact (same as boda.common.utils.load_model)."""
-    USE_CUDA = torch.cuda.device_count() >= 1
+    """Load a Malinois model from a tar.gz artifact, on CPU (as boda.common.utils.load_model, minus its ``.cuda()``).
+
+    The caller places it: upstream's ``.cuda()`` would land on GPU 0 of a worker that sees every GPU.
+    """
     if os.path.isdir("./artifacts"):
         shutil.rmtree("./artifacts")
     _unpack_artifact(artifact_path)
     my_model = _model_fn("./artifacts")
     my_model.eval()
-    if USE_CUDA:
-        my_model.cuda()
     return my_model
 
 
@@ -473,9 +473,9 @@ def load_malinois(artifact_path, malinois_dir=None, seq_len=200):
     if malinois_dir is None:
         malinois_dir = os.path.dirname(artifact_path)
 
-    input_len = torch.load(os.path.join(malinois_dir, "artifacts/torch_checkpoint.pt"), weights_only=False)[
-        "model_hparams"
-    ].input_len
+    input_len = torch.load(
+        os.path.join(malinois_dir, "artifacts/torch_checkpoint.pt"), map_location="cpu", weights_only=False
+    )["model_hparams"].input_len
 
     left_pad_len = (input_len - seq_len) // 2
     right_pad_len = (input_len - seq_len) - left_pad_len
@@ -484,10 +484,6 @@ def load_malinois(artifact_path, malinois_dir=None, seq_len=200):
     right_flank = dna2tensor(MPRA_DOWNSTREAM[:right_pad_len]).unsqueeze(0)
 
     flank_builder = FlankBuilder(left_flank=left_flank, right_flank=right_flank)
-
-    if torch.cuda.device_count() >= 1:
-        flank_builder.cuda()
-
     return model, flank_builder
 
 

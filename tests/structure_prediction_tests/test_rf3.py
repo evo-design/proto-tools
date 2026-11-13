@@ -18,8 +18,10 @@ from proto_tools.tools.structure_prediction import (
     run_rf3_prediction,
 )
 from proto_tools.tools.structure_prediction.rf3.helpers import complex_to_rf3_json
-from tests.conftest import benchmark_twice, random_protein_sequences
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("rf3")
 
 # Cro repressor from bacteriophage lambda; short, well-folded.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"

@@ -26,9 +26,11 @@ from proto_tools.tools import (
 from proto_tools.tools.structure_prediction import Complex, ComplexMSAs
 from proto_tools.tools.structure_prediction.opendde.helpers import build_chain_msa_paths, complex_to_opendde_json
 from tests._structure_fixtures import synthetic_cif
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("opendde")
 
 # Cro repressor from bacteriophage lambda — short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"

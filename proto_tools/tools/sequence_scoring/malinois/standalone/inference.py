@@ -170,7 +170,7 @@ class MalinoisModel:
             return
         if self.device == device:
             return
-        previous_device = self.device or "cpu"
+        previous_device = self.device or "cpu"  # a fresh load is on CPU (load_malinois places nothing)
         self.model = move_model_to_device(self.model, previous_device, device)
         self.flank_builder = move_model_to_device(self.flank_builder, previous_device, device)
         self.device = device

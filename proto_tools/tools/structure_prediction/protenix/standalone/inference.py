@@ -194,9 +194,8 @@ class ProtenixModel:
         Args:
             input_json_path: Path to input JSON file (list of job dicts)
             output_dir: Directory to write output to
-            device: Device string (e.g. ``"cuda:0"``); protenix's ``init_env`` binds to
-                ``cuda:0`` of whatever the parent worker made visible via
-                ``CUDA_VISIBLE_DEVICES``.
+            device: Device the model is built on (e.g. ``"cuda:1"``). If it changes between calls,
+                the model is moved to the new device.
             model_name: Protenix model variant to use
             seeds: Comma-separated seed values
             num_diffusion_samples: Number of diffusion samples per seed
@@ -246,6 +245,7 @@ class ProtenixModel:
             # cleanup deletes the corrupt .pt; upstream re-downloads on retry.
             retry_on_checkpoint_corruption(
                 lambda: self.load(
+                    device=device,
                     model_name=model_name,
                     num_pairformer_cycles=num_pairformer_cycles,
                     num_diffusion_steps=num_diffusion_steps,
@@ -396,6 +396,7 @@ class ProtenixModel:
     def load(
         self,
         *,
+        device: str,
         model_name: str,
         num_pairformer_cycles: int,
         num_diffusion_steps: int,
@@ -403,8 +404,22 @@ class ProtenixModel:
         use_msa: bool,
         kernel: str,
     ) -> None:
-        """Build and hold an ``InferenceRunner`` for the given config combo."""
+        """Build and hold an ``InferenceRunner`` for the given config combo on ``device``.
+
+        The worker sees every GPU, and protenix's ``init_env`` binds ``cuda:{DIST_WRAPPER.local_rank}``
+        (``LOCAL_RANK``, 0 outside torchrun) and makes it current; its checkpoint load, ESM features and
+        Triton kernels follow. Pointing ``local_rank`` at the leased GPU builds the runner there. With
+        GPUs present ``init_env`` always picks CUDA, so a CPU target is built on the current GPU and
+        moved by the caller.
+        """
+        from protenix.utils.distributed import DIST_WRAPPER  # type: ignore[import-not-found]
         from runner.batch_inference import get_default_runner
+        from standalone_helpers import _parse_cuda_indices, set_current_cuda_device
+
+        indices = _parse_cuda_indices(device)
+        if indices:
+            DIST_WRAPPER.local_rank = indices[0]
+        set_current_cuda_device(device)
 
         logger.debug(f"Loading Protenix runner: model={model_name}, kernel={kernel}")
 
@@ -518,7 +533,8 @@ def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
-    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
+    device = _model.device if _model is not None and _model.device and _model.device.startswith("cuda:") else "cuda:0"
+    return get_pytorch_memory_stats(device=device.split(",")[0])  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

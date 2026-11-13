@@ -59,6 +59,7 @@ from .device import (
     get_subprocess_device_env,
     move_model_to_device,
     resolve_jax_device,
+    set_current_cuda_device,
 )
 from .memory import get_jax_memory_stats, get_pytorch_memory_stats
 from .msa_usage import count_a3m_rows, report_msa_rows_loaded
@@ -110,6 +111,7 @@ __all__ = [
     "_parse_cuda_indices",
     "get_subprocess_device_env",
     "move_model_to_device",
+    "set_current_cuda_device",
     "resolve_jax_device",
     # memory
     "get_jax_memory_stats",

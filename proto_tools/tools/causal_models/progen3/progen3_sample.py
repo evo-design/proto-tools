@@ -1,7 +1,7 @@
 """ProGen3 sampling tool."""
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelSample,
@@ -109,6 +109,12 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
         title="Min New Tokens",
         description="Minimum newly-generated tokens per prompt before stopping is allowed",
     )
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "ProGen3SampleConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "progen3-112m")
+        return cast("ProGen3SampleConfig", super().minimal(**kwargs))
 
 
 # ============================================================================

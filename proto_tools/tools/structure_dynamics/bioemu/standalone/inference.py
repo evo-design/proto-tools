@@ -420,13 +420,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"bioemu: unknown operation {operation!r}; valid: ['sample', 'introspect_loaded']")
 
 
-def to_device(device: str) -> dict[str, Any]:
-    """Move model to specified device (called by DeviceManager)."""
-    if _model is not None and _model._loaded:
-        _model.to_device(device)
-    return {"success": True, "device": device}
-
-
 def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats

@@ -15,7 +15,13 @@ from typing import Any, cast
 
 import numpy as np
 import torch
-from standalone_helpers import get_logger, log_likelihood_metrics, move_model_to_device, serialize_output
+from standalone_helpers import (
+    get_logger,
+    log_likelihood_metrics,
+    move_model_to_device,
+    serialize_output,
+    set_current_cuda_device,
+)
 from standalone_helpers.vocabulary import AMINO_ACIDS_LIST, gather_indices
 
 logger = get_logger(__name__)
@@ -412,17 +418,6 @@ def _set_legacy_seed(seed: int | None) -> None:
     torch.backends.cudnn.benchmark = False
 
 
-def _pin_active_cuda_device(device: str) -> None:
-    """Pin the process's active CUDA device to ``device``.
-
-    The original LigandMPNN code builds some tensors on the default CUDA device (``cuda:0``)
-    rather than the one threaded through, which fails under multi-GPU dispatch when a worker
-    runs on ``cuda:1``. Setting the active device makes those default-device ops land correctly.
-    """
-    if device.startswith("cuda") and torch.cuda.is_available():
-        torch.cuda.set_device(device)
-
-
 def _is_legacy_package_path(path: Path) -> bool:
     required = ("ligandmpnn.py", "model_utils.py", "data_utils.py", "pdb_utils.py", "sc_utils.py")
     return all((path / filename).is_file() for filename in required)
@@ -683,7 +678,7 @@ class LegacyCompatibleLigandMPNNModel:
         **_: Any,
     ) -> dict[str, Any]:
         """Sample fixed-backbone sequences and packed full-atom structures."""
-        _pin_active_cuda_device(device)
+        set_current_cuda_device(device)  # upstream builds some tensors on the current CUDA device
         self.load(device)
         self.load_packer(device)
         _set_legacy_seed(seed)
@@ -755,7 +750,7 @@ class LegacyCompatibleLigandMPNNModel:
         **_: Any,
     ) -> dict[str, Any]:
         """Score a sequence against a structure with original-compatible semantics."""
-        _pin_active_cuda_device(device)
+        set_current_cuda_device(device)  # upstream builds some tensors on the current CUDA device
         self.load(device)
         _set_legacy_seed(seed)
         args = self._args(

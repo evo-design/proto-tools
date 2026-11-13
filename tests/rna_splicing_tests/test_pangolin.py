@@ -15,8 +15,10 @@ from proto_tools.tools.rna_splicing.pangolin import (
     run_pangolin_score_variants,
 )
 from proto_tools.tools.rna_splicing.pangolin.shared_data_models import PANGOLIN_FLANK
-from tests.conftest import benchmark_twice, random_dna_sequences
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("pangolin")
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
