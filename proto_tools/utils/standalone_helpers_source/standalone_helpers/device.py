@@ -248,15 +248,22 @@ def set_current_cuda_device(device: str) -> None:
         torch.cuda.set_device(indices[0])
 
 
+# The plain-attribute tensors ``_move_unregistered_tensors`` moved off a GPU to the CPU, as
+# (module path, attribute) pairs on the root module, so a later move back to a GPU returns them.
+_OFFLOADED_ATTRS = "_proto_offloaded_tensor_attrs"
+
+
 def _move_unregistered_tensors(module: Any, new_device: str) -> int:
     """Move tensors that a module tree holds as plain attributes, which ``nn.Module.to`` skips.
 
     ``.to()`` moves only registered parameters and buffers. Models also cache tensors as plain
     attributes (rotary ``cos``/``sin`` tables, a time vector, a reference to a parameter whose
-    owning module left the tree), and after a move those still point at the old GPU, so the next
-    forward pass mixes devices. Each such tensor on a CUDA device other than ``new_device`` is
-    moved: a parameter in place (``.data``), so every reference to it follows, and a cached
-    tensor by replacing the attribute.
+    owning module left the tree), and after a move those still point at the old device, so the
+    next forward pass mixes devices. Each such tensor on a CUDA device other than ``new_device``
+    is moved. One this helper moved to the CPU (an offload) is remembered and moved back when the
+    model returns to a GPU; tensors the model keeps on the CPU on purpose are left alone. A
+    parameter moves in place (``.data``), so every reference to it follows, and a cached tensor is
+    replaced.
 
     Args:
         module (Any): The root ``nn.Module``.
@@ -268,21 +275,32 @@ def _move_unregistered_tensors(module: Any, new_device: str) -> int:
     import torch
 
     target = torch.device(new_device.split(",")[0])
+    offloaded = getattr(module, _OFFLOADED_ATTRS, set())
+    still_offloaded = set()
     moved = 0
-    for sub in module.modules():
-        for name, value in vars(sub).items():
+    for sub_name, sub in module.named_modules():
+        for name, value in list(vars(sub).items()):
             if name in ("_parameters", "_buffers") or not isinstance(value, torch.Tensor):
                 continue
-            if value.device.type == "cuda" and value.device != target:
-                if isinstance(value, torch.nn.Parameter):
-                    # A parameter whose owning module left the tree: move it in place so every
-                    # reference (e.g. the module that still uses it) follows.
-                    value.data = value.data.to(target)
-                else:
-                    # A cached tensor. Replace it, since a tensor made under inference_mode
-                    # cannot have its .data reassigned.
-                    setattr(sub, name, value.to(target))
-                moved += 1
+            key = (sub_name, name)
+            on_other_gpu = value.device.type == "cuda" and value.device != target
+            returning = value.device.type == "cpu" and target.type == "cuda" and key in offloaded
+            if not (on_other_gpu or returning):
+                if value.device.type == "cpu" and key in offloaded:
+                    still_offloaded.add(key)
+                continue
+            if isinstance(value, torch.nn.Parameter):
+                # A parameter whose owning module left the tree: move it in place so every
+                # reference (e.g. the module that still uses it) follows.
+                value.data = value.data.to(target)
+            else:
+                # A cached tensor. Replace it, since a tensor made under inference_mode
+                # cannot have its .data reassigned.
+                setattr(sub, name, value.to(target))
+            if target.type == "cpu":
+                still_offloaded.add(key)
+            moved += 1
+    setattr(module, _OFFLOADED_ATTRS, still_offloaded)
     return moved
 
 

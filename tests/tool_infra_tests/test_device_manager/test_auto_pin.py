@@ -225,29 +225,44 @@ class Cached(torch.nn.Module):
         self.norm_weight = self.owner.weight  # a parameter used here after its module leaves
         with torch.inference_mode():
             self.t = torch.arange(8)  # a cached inference tensor, as stripedhyena keeps
+        self.host_table = torch.arange(4)  # kept on the CPU on purpose
+
+def devices(model):
+    return {
+        "lin": str(model.lin.weight.device), "cached": str(model.t.device),
+        "param_ref": str(model.norm_weight.device), "host": str(model.host_table.device),
+    }
 
 model = Cached().to("cuda:1")
 model.t = model.t.to("cuda:1")
 ref = model.norm_weight
 del model.owner  # norm_weight is now an attribute only, which .to() does not move
-model = move_model_to_device(model, "cuda:1", "cuda:0")
-print(json.dumps({
-    "lin": str(model.lin.weight.device), "cached": str(model.t.device), "param_ref": str(model.norm_weight.device),
-    "same_param": ref is model.norm_weight, "current": torch.cuda.current_device(),
-}))
+steps = {}
+for old, new in [("cuda:1", "cuda:0"), ("cuda:0", "cpu"), ("cpu", "cuda:1")]:
+    model = move_model_to_device(model, old, new)
+    steps[new] = devices(model)
+print(json.dumps({**steps, "same_param": ref is model.norm_weight, "current": torch.cuda.current_device()}))
 """
 
 
 @pytest.mark.integration
 @pytest.mark.uses_gpu(2)
 def test_move_model_to_device_takes_cached_tensors_along() -> None:
-    """``.to()`` skips tensors held as plain attributes; the move helper must not leave them behind."""
+    """``.to()`` skips tensors held as plain attributes; the move helper must not leave them behind.
+
+    Covers a move between GPUs and an offload round trip (GPU, CPU, then another GPU): cached
+    tensors follow the model back from the CPU, and a tensor the model keeps on the CPU stays there.
+    """
     import json
 
     from proto_tools.utils import run_in_env
 
     out = json.loads(run_in_env("esm2", code=_MOVE_CHECK, device="cudax2").strip().splitlines()[-1])
-    assert out == {"lin": "cuda:0", "cached": "cuda:0", "param_ref": "cuda:0", "same_param": True, "current": 0}
+
+    def on(device: str) -> dict[str, str]:
+        return {"lin": device, "cached": device, "param_ref": device, "host": "cpu"}
+
+    assert out == {"cuda:0": on("cuda:0"), "cpu": on("cpu"), "cuda:1": on("cuda:1"), "same_param": True, "current": 1}
 
 
 # ── The worker follows each request's device ─────────────────────────────────
