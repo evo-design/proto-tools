@@ -1,6 +1,5 @@
 """Tests for SynBioHub design retrieval."""
 
-import os
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
@@ -395,10 +394,7 @@ def test_sequence_exports_need_a_sequence(tmp_path):
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(
-    not (os.environ.get("SYNBIOHUB_EMAIL") and os.environ.get("SYNBIOHUB_PASSWORD")),
-    reason="SYNBIOHUB_EMAIL and SYNBIOHUB_PASSWORD are not set",
-)
+@pytest.mark.requires_credential("SYNBIOHUB_EMAIL", "SYNBIOHUB_PASSWORD")
 def test_live_gfp_cassette():
     output = run_synbiohub_fetch(synbiohub_fetch.example_input(), SynBioHubFetchConfig())
 
