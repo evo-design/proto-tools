@@ -7,7 +7,7 @@ Run the test suite across every visible GPU at once (see ``tests/_gpu_shards.py`
    every GPU visible.
 2. The parallel phase runs as one pytest per GPU, each seeing only its own GPU and holding whole
    toolkits, so no toolkit is ever loaded by two processes. Each shard gets its own ``--basetemp``,
-   log, JUnit file and warm-worker report.
+   output and proto log, JUnit file and warm-worker report.
 
 Environment builds and weight downloads already take cross-process locks under ``PROTO_HOME``, so
 shards that share a tool env wait for each other rather than collide; sharding by toolkit means
@@ -64,9 +64,17 @@ def pytest_cmd(pytest_args: list[str], out: Path, name: str, extra: list[str]) -
 
 
 def launch(cmd: list[str], out: Path, name: str, env: dict[str, str]) -> subprocess.Popen:
-    """Start one phase or shard, logging to ``<out>/<name>.log``."""
+    """Start one phase or shard, logging to ``<out>/<name>.log``.
+
+    Its proto log goes to ``<out>/logs_<name>/``: the log file is named by start time (or ``-k``),
+    so shards started together would otherwise share, and interleave, one file.
+    """
     log = (out / f"{name}.log").open("w")
-    env = {**env, "PROTO_WARM_WORKERS_REPORT": str(out / f"{name}_pool.json")}
+    env = {
+        **env,
+        "PROTO_WARM_WORKERS_REPORT": str(out / f"{name}_pool.json"),
+        "PROTO_LOG_DIR": str(out / f"logs_{name}"),
+    }
     print(
         f"[{time.strftime('%H:%M:%S')}] start {name}: CUDA_VISIBLE_DEVICES={env.get('CUDA_VISIBLE_DEVICES')}",
         flush=True,
