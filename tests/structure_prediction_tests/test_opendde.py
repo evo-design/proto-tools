@@ -26,9 +26,11 @@ from proto_tools.tools import (
 from proto_tools.tools.structure_prediction import Complex, ComplexMSAs
 from proto_tools.tools.structure_prediction.opendde.helpers import build_chain_msa_paths, complex_to_opendde_json
 from tests._structure_fixtures import synthetic_cif
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("opendde")
 
 # Cro repressor from bacteriophage lambda — short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
@@ -385,12 +387,13 @@ def test_opendde_bundled_checkpoints_are_downloaded_by_setup():
 # ── Config: cloud support gate ───────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("device", ["proto", "modal"])
-def test_opendde_local_checkpoint_is_unavailable_on_any_remote(device):
+def test_opendde_local_checkpoint_is_unavailable_on_any_remote():
     """A local file exists only on this machine, so no remote worker can read it."""
-    assert OpenDDEConfig(use_msa=False).remote_unsupported_reason(device) is None
-    assert OpenDDEConfig(use_msa=False, model_checkpoint="opendde_abag").remote_unsupported_reason(device) is None
-    assert OpenDDEConfig(use_msa=False, model_checkpoint="/local/ckpt.pt").remote_unsupported_reason(device) is not None
+    assert OpenDDEConfig(use_msa=False).remote_unsupported_reason("modal") is None
+    assert OpenDDEConfig(use_msa=False, model_checkpoint="opendde_abag").remote_unsupported_reason("modal") is None
+    assert (
+        OpenDDEConfig(use_msa=False, model_checkpoint="/local/ckpt.pt").remote_unsupported_reason("modal") is not None
+    )
 
 
 # ── Dispatch / metric assembly (mocked worker) ───────────────────────────────

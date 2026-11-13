@@ -18,8 +18,11 @@ from proto_tools.tools.binder_design import (
     run_germinal_design,
 )
 from proto_tools.tools.tool_registry import ToolRegistry
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("germinal")
 
 TEST_PDB = Path(__file__).parent.parent / "dummy_data" / "pdl1.pdb"
 

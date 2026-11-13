@@ -28,7 +28,7 @@ def test_server_registers_the_expected_surface():
     from proto_tools.mcp import build_server
 
     assert {t.name for t in asyncio.run(build_server("modal").list_tools())} == _READ_ONLY_SURFACE | {"deploy_tool"}
-    assert {t.name for t in asyncio.run(build_server("proto").list_tools())} == _READ_ONLY_SURFACE
+    assert {t.name for t in asyncio.run(build_server("local").list_tools())} == _READ_ONLY_SURFACE
 
 
 # The hosted MCP server is the canonical surface. Each shared tool's title, annotations (read-only,
@@ -70,14 +70,6 @@ def test_deploying_is_the_only_state_changing_tool():
 
     assert "deploy_tool" in names
     assert not unexpected, f"the MCP must not expose destructive actions: {unexpected}"
-
-
-def test_proto_exposes_no_deploy_tool():
-    """Proto's catalogue is fixed, so offering to deploy would promise something impossible."""
-    from proto_tools.mcp import build_server
-
-    names = {t.name for t in asyncio.run(build_server("proto").list_tools())}
-    assert "deploy_tool" not in names
 
 
 # ── Unknown tool keys ───────────────────────────────────────────────────────
@@ -522,25 +514,13 @@ def test_mcp_no_args_would_start_the_server(monkeypatch):
 # --- device switch ----------------------------------------------------------
 
 
-def test_default_is_modal_even_with_an_api_key_present(monkeypatch):
-    """Selecting proto off ambient env would make the backend depend on an exported variable."""
+def test_default_is_modal(monkeypatch):
+    """With nothing chosen, the server talks to the caller's own Modal workspace."""
     from proto_tools.mcp.device import resolve_device
 
-    monkeypatch.setenv("PROTO_API_KEY", "exported-for-something-else")
     monkeypatch.delenv("PROTO_MCP_DEVICE", raising=False)
 
     assert resolve_device() == "modal"
-
-
-def test_proto_requires_a_key_and_says_so(monkeypatch):
-    """The failure has to name the variable, or the caller cannot act on it."""
-    import pytest as _pytest
-
-    from proto_tools.mcp.device import DeviceUnavailableError, resolve_device
-
-    monkeypatch.delenv("PROTO_API_KEY", raising=False)
-    with _pytest.raises(DeviceUnavailableError, match="PROTO_API_KEY"):
-        resolve_device("proto")
 
 
 def test_unknown_device_is_rejected(monkeypatch):
@@ -555,33 +535,18 @@ def test_unknown_device_is_rejected(monkeypatch):
 
 
 def test_only_modal_is_deployable():
-    """Proto's catalogue is fixed; telling a caller to deploy to it sends them after nothing."""
+    """Only a Modal workspace takes deployments; this machine builds tools on first use instead."""
     from proto_tools.mcp.device import is_deployable
 
     assert is_deployable("modal") is True
-    assert is_deployable("proto") is False
-
-
-def test_proto_unavailability_offers_no_deploy_command(monkeypatch):
-    """On proto there is no command to relay, so suggesting one would mislead."""
-    from proto_tools.mcp import tools as impl
-
-    monkeypatch.setattr(
-        impl, "_hosted_catalogue", lambda: {"x-tool": {"hosted": False, "unhosted_reason": "licensing"}}
-    )
-    out = impl._unavailable("proto", "x-tool", "boom")
-
-    assert out["needs_human"] is False
-    assert "licensing" in out["error"]
-    assert "deploy" not in out["error"].lower()
-    assert "cannot be deployed to" in out["fix"]
+    assert is_deployable("local") is False
 
 
 def test_modal_unavailability_is_actionable(monkeypatch):
     """On modal the user owns the workspace, so the deploy command is the fix."""
     from proto_tools.mcp import tools as impl
 
-    out = impl._unavailable("modal", "x-tool", "app not deployed: run proto-tools deploy --apps x")
+    out = impl._unavailable("app not deployed: run proto-tools deploy --apps x")
 
     assert out["needs_human"] is True
     assert "proto-tools deploy" in out["error"]
@@ -671,23 +636,23 @@ def test_build_output_is_summarised_not_streamed():
 def test_run_tool_refuses_a_setting_the_device_cannot_honour():
     """The registry checks this before dispatching; run_tool does not go through the registry.
 
-    Without the check, a custom checkpoint on Proto reaches a container and fails there, on a
+    Without the check, a local checkpoint path reaches a Modal container and fails there, on a
     path that is the most agent-facing one this package ships.
     """
     from proto_tools.mcp.tools import run_tool
     from proto_tools.tools import ToolRegistry
 
-    example = ToolRegistry.get_example_input("parade-gradient")
+    example = ToolRegistry.get_example_input("mol1-prediction")
     result = run_tool(
-        "parade-gradient",
+        "mol1-prediction",
         inputs=example.model_dump(mode="json"),
-        config={"checkpoint": "https://example.invalid/x.ckpt"},
-        device="proto",
+        config={"model_checkpoint": "/local/custom.pt"},
+        device="modal",
     )
 
     assert result["ok"] is False
-    assert result["not_supported_on"] == "proto"
-    assert "custom checkpoint" in result["error"]
+    assert result["not_supported_on"] == "modal"
+    assert "Custom model_checkpoint" in result["error"]
 
 
 def test_run_tool_runs_an_in_process_tool_whose_config_refuses_remote_devices(monkeypatch, tmp_path):
@@ -836,4 +801,4 @@ def test_an_unknown_run_on_is_a_result_not_a_protocol_error():
     result = _asyncio.run(call())
     assert result["ok"] is False
     assert "gpu-cluster" in result["error"]
-    assert result["valid_run_on"] == ["local", "modal", "proto"]
+    assert result["valid_run_on"] == ["local", "modal"]

@@ -287,6 +287,7 @@ def test_csv_and_fasta_export(session: _Session, tmp_path: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_pdb_sequence_search_finds_transthyretin_from_a_mutated_fragment():
     """A 30-residue transthyretin fragment with three substitutions still ranks transthyretin first."""

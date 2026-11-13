@@ -15,8 +15,10 @@ from proto_tools.tools import (
     run_enformer_gradient,
 )
 from proto_tools.tools.sequence_scoring.enformer.enformer_prediction import ENFORMER_CONTEXT, ENFORMER_OUTPUT
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("enformer")
 
 CENTER = ENFORMER_CONTEXT // 2
 

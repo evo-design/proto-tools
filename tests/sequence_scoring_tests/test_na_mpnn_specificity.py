@@ -17,8 +17,10 @@ from proto_tools.tools.sequence_scoring.na_mpnn_specificity import (
     NAMPNNSpecificityOutput,
     run_na_mpnn_specificity,
 )
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("na_mpnn_specificity")
 
 # The standalone run.py imports the worker-injected ``standalone_helpers`` package,
 # which only sits on sys.path inside a tool venv. Add its source dir so the pure

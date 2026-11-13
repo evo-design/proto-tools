@@ -182,6 +182,7 @@ def test_ncbi_gene_term_format():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_sequence_fetch_protein_and_structure_by_name():
     """Fetch TP53 protein + structure by gene name and organism."""
@@ -216,6 +217,7 @@ def test_sequence_fetch_protein_and_structure_by_name():
     assert struct.source_url
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_sequence_fetch_export_fasta(tmp_path):
     """Fetch a protein from UniProt by accession and export it to FASTA format."""
@@ -251,6 +253,7 @@ def test_sequence_fetch_export_fasta(tmp_path):
     assert "MEEPQ" in content
 
 
+@pytest.mark.network
 @pytest.mark.skip_ci
 @pytest.mark.integration
 def test_sequence_fetch_dna_genomic_by_name():
@@ -279,6 +282,7 @@ def test_sequence_fetch_dna_genomic_by_name():
     assert seq.length > 500
 
 
+@pytest.mark.network
 @pytest.mark.skip_ci
 @pytest.mark.integration
 def test_sequence_fetch_premrna_minus_strand_no_double_rc():

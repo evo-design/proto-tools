@@ -1087,7 +1087,7 @@ def test_gpus_per_instance_derived_from_device_string():
     - cpu → 0 (no pool partitioning, single direct call)
     - cuda / cuda:N → 1
     - cudaxN / cuda:0,cuda:1 → N
-    - cloud → 1 (cloud dispatch is handled before pool partitioning)
+    - modal → 1 (remote dispatch is handled before pool partitioning)
     """
     assert BaseConfig().gpus_per_instance == 0  # default device='cpu'
     assert BaseConfig(device="cpu").gpus_per_instance == 0
@@ -1096,7 +1096,7 @@ def test_gpus_per_instance_derived_from_device_string():
     assert BaseConfig(device="cudax2").gpus_per_instance == 2
     assert BaseConfig(device="cudax4").gpus_per_instance == 4
     assert BaseConfig(device="cuda:0,cuda:1").gpus_per_instance == 2
-    assert BaseConfig(device="proto").gpus_per_instance == 1
+    assert BaseConfig(device="modal").gpus_per_instance == 1
 
 
 # ── Error propagation tests ─────────────────────────────────────────────────

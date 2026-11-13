@@ -24,6 +24,9 @@ from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
 from proto_tools.tools.sequence_alignment.mmseqs2.remote_search import _parse_pair_a3m
 from proto_tools.utils import ConfigField
 from proto_tools.utils.tool_instance import ToolInstance
+from tests.conftest import make_persistent_fixture
+
+_persistent_tool = make_persistent_fixture("mmseqs2")
 
 logger = logging.getLogger(__name__)
 
@@ -1051,6 +1054,7 @@ def test_parse_pair_a3m_maps_blocks_by_content_not_position(tmp_path: Path) -> N
     assert _parse_pair_a3m(pair_a3m, [UBIQUITIN.lower(), UBIQUITIN.lower()]) == [ubiq, ubiq]
 
 
+@pytest.mark.network
 @pytest.mark.integration
 @pytest.mark.skip_ci
 def test_remote_search_live_homooligomer_broadcasts_paired_msa() -> None:

@@ -550,6 +550,7 @@ def test_local_blastp_no_hits(prot_blast_db):
 _ONLINE_BLAST_TIMEOUT = 900
 
 
+@pytest.mark.network
 @pytest.mark.integration
 @pytest.mark.slow
 @pytest.mark.skip_ci

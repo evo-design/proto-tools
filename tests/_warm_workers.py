@@ -31,6 +31,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import textwrap
 import typing
 from collections import Counter, defaultdict
@@ -87,6 +88,11 @@ def _toolkit_of_value(value: Any) -> str | None:
 
     if isinstance(value, ToolSpec):
         return _toolkit_of_spec(value)
+    if callable(value) and not isinstance(value, type):
+        # A tool function passed as a parameter (``run_fn``, ``sample_fn``).
+        toolkits = {_toolkit_of_spec(spec) for spec in _function_toolkits().get(getattr(value, "__name__", ""), ())}
+        if len(toolkits) == 1:
+            return toolkits.pop()
     if isinstance(value, str):
         spec = _registry().get(value)
         if spec is not None:
@@ -107,6 +113,56 @@ def _source_names_and_literals(func: Any) -> tuple[frozenset[str], frozenset[str
     names |= {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
     literals = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
     return frozenset(names), frozenset(literals)
+
+
+# Calls whose first argument names the toolkit a test runs: ``run_in_env("esm2", ...)``,
+# ``ToolInstance.get("vina")``, ``ToolInstance.persist_tool("evo2")``, ``ToolInstance.dispatch(...)``,
+# and masking's ``build_position_score_fn("esm2", ...)``.
+_TOOLKIT_CALLS = frozenset({"run_in_env", "get", "persist_tool", "dispatch", "build_position_score_fn"})
+
+
+@functools.cache
+def _named_toolkits(func: Any) -> frozenset[str]:
+    """Toolkits a test body names as the literal first argument of a ``_TOOLKIT_CALLS`` call."""
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(func)))
+    except (OSError, TypeError, SyntaxError):
+        return frozenset()
+    found = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        name = node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", None)
+        first = node.args[0]
+        if name in _TOOLKIT_CALLS and isinstance(first, ast.Constant) and isinstance(first.value, str):
+            toolkit = _toolkit_of_value(first.value)
+            if toolkit is not None:
+                found.add(toolkit)
+    return frozenset(found)
+
+
+@functools.cache
+def _module_toolkits(module: Any) -> frozenset[str]:
+    """Toolkits a whole test file refers to: the tool functions it uses and the toolkits it names."""
+    try:
+        tree = ast.parse(inspect.getsource(module))
+    except (OSError, TypeError, SyntaxError):
+        return frozenset()
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    names |= {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    names |= {alias.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for alias in n.names}
+    by_name = _function_toolkits()
+    found = {_toolkit_of_spec(spec) for name in names for spec in by_name.get(name, ())}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        name = node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", None)
+        first = node.args[0]
+        if name in _TOOLKIT_CALLS and isinstance(first, ast.Constant) and isinstance(first.value, str):
+            toolkit = _toolkit_of_value(first.value)
+            if toolkit is not None:
+                found.add(toolkit)
+    return frozenset(found)
 
 
 def _source_specs(item: pytest.Item) -> list[Any]:
@@ -132,8 +188,10 @@ def toolkit_of(item: pytest.Item) -> str | None:
 
     In order: a ``toolkit`` marker; a ``ToolSpec``, tool key or toolkit name among its parameters;
     the toolkit its file keeps warm (when there is exactly one); the toolkit of the tool functions
-    its body calls (when they all belong to one). The last two only for tests that opted into
-    persistence or use a GPU, so CPU unit tests keep their order.
+    its body calls or names (``run_in_env("x", ...)``, ``ToolInstance.get("x")``), when they all
+    belong to one; failing that, the one toolkit its whole file refers to, for a test that runs its
+    tool through a helper or fixture. The last two only for tests that opted into persistence, use a GPU, or are
+    integration tests (which run a tool env), so CPU unit tests keep their order.
     """
     marker = item.get_closest_marker("toolkit")
     if marker is not None and marker.args:
@@ -144,15 +202,28 @@ def toolkit_of(item: pytest.Item) -> str | None:
             toolkit = _toolkit_of_value(value)
             if toolkit is not None:
                 return toolkit
-    if not (warm_eligible(item) or item.get_closest_marker("uses_gpu") is not None):
+    runs_a_tool = any(item.get_closest_marker(name) is not None for name in ("uses_gpu", "integration"))
+    if not (warm_eligible(item) or runs_a_tool):
         return None
+    if callspec is not None:
+        # A case named after its toolkit (``[esm2-single_pass]``), as a parameter list built from
+        # lambdas often is.
+        named = {token for token in re.split(r"[-\[\]]", callspec.id) if token in _toolkit_names()}
+        if len(named) == 1:
+            return named.pop()
     module = getattr(item, "module", None)
     registered = _MODULE_TOOLKITS.get(module.__name__, []) if module is not None else []
     if len(registered) == 1:
         return registered[0]
     toolkits = {_toolkit_of_spec(spec) for spec in _source_specs(item)}
+    func = getattr(item, "function", None)
+    if func is not None:
+        toolkits |= _named_toolkits(func)
     if registered:
         toolkits &= set(registered)
+    if not toolkits and module is not None:
+        # The test runs its tool through a helper or fixture: use the file's, if it has only one.
+        toolkits = set(_module_toolkits(module))
     return toolkits.pop() if len(toolkits) == 1 else None
 
 

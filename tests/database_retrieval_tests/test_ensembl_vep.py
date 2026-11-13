@@ -112,6 +112,7 @@ def test_run_ensembl_vep_rejects_non_list_payload():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_vep_invalid_hgvs_surfaces_failure():
     """Malformed HGVS yields a 400 from the server, surfaced as a raised exception."""

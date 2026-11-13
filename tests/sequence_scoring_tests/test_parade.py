@@ -6,9 +6,11 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.utils.tool_cache import ToolCache, _program_tool_cache
-from tests.conftest import benchmark_twice, random_dna_sequences
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("parade")
 
 
 @pytest.fixture
@@ -83,26 +85,6 @@ def test_parade_checkpoint_download_security_runs_in_env() -> None:
     checks = Path(__file__).resolve().parent / "_parade_env_security_checks.py"
     output = run_in_env("parade", script=str(checks), timeout=1800)
     assert "ALL CHECKS PASSED" in output, output
-
-
-def test_parade_custom_checkpoint_rejected_on_proto() -> None:
-    """Loading a caller's checkpoint executes its code, which Proto's shared service will not do."""
-    from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig
-    from proto_tools.tools.sequence_scoring.parade.parade_gradient import (
-        ParadeGradientConfig,
-    )
-
-    for checkpoint in ("https://example.com/evil.ckpt", "checkpoints/model.ckpt"):
-        reason = ParadeActivityConfig(checkpoint=checkpoint).remote_unsupported_reason("proto")
-        assert reason is not None and "checkpoint" in reason
-
-    assert ParadeActivityConfig().remote_unsupported_reason("proto") is None, "the pinned checkpoint is fine"
-
-    gradient = ParadeGradientConfig(
-        gradient_terms=["c1"],
-        checkpoint="https://example.com/evil.ckpt",
-    )
-    assert "checkpoint" in (gradient.remote_unsupported_reason("proto") or "")
 
 
 def test_parade_custom_checkpoint_allowed_on_your_own_deployment() -> None:
