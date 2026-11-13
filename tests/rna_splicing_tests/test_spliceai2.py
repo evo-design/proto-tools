@@ -169,10 +169,7 @@ def test_predict_input_rejects_invalid_chars(sequence: str) -> None:
     ids=["predict", "score"],
 )
 def test_config_remote_unsupported_reason(config: SpliceAI2PredictConfig | SpliceAI2ScoreConfig) -> None:
-    """SpliceAI2 is refused on device='proto' but allowed on a caller-owned Modal deployment."""
-    reason = config.remote_unsupported_reason("proto")
-    assert reason is not None
-    assert "device='modal'" in reason
+    """SpliceAI2's default configs run on a caller-owned Modal deployment."""
     assert config.remote_unsupported_reason("modal") is None
 
 

@@ -962,17 +962,17 @@ class RFD4CommonConfig(BaseConfig):
         kwargs.setdefault("batch_size", 1)
         return super().minimal(**kwargs)  # type: ignore[return-value]
 
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:  # noqa: ARG002 - registry contract
-        """Reject local model bundles and adapters, which are not present on a hosted worker."""
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
+        """Reject local model bundles and adapters, which are not present on a remote worker."""
         if self.adapter_path:
             return (
                 "adapter_path points at a local PEFT adapter directory that is not available on "
-                "device='proto'. Unset it, or run locally."
+                f"device={device!r}. Unset it, or run locally."
             )
         if "/" in self.model_checkpoint and Path(self.model_checkpoint).expanduser().exists():
             return (
                 f"model_checkpoint {self.model_checkpoint!r} is a local directory that is not available "
-                "on device='proto'. Use a HuggingFace repo id, or run locally."
+                f"on device={device!r}. Use a HuggingFace repo id, or run locally."
             )
         return None
 

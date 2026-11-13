@@ -150,7 +150,7 @@ class BaseConfig(BaseModel):
         gpus_per_instance: Number of GPUs each worker needs. Default is
             derived from the ``device`` field via :func:`parse_device_string`
             (``cpu`` → 0, ``cuda`` / ``cuda:N`` → 1, ``cudaxN`` / multi → N,
-            ``proto`` → 1). Override in tool configs where GPU need is
+            ``modal`` → 1). Override in tool configs where GPU need is
             decoupled from the device string — e.g. a large checkpoint that
             needs 2 GPUs regardless of input device, or a tool with a
             separate ``use_gpu`` flag toggling real GPU work. ``ToolPool``
@@ -332,7 +332,7 @@ class BaseConfig(BaseModel):
     device: str = ConfigField(
         title="Device",
         default="cpu",
-        description="Device to run the tool on (e.g., 'cpu', 'cuda', 'cuda:0', 'proto', 'modal')",
+        description="Device to run the tool on (e.g., 'cpu', 'cuda', 'cuda:0', 'modal')",
         include_in_key=False,
     )
 
@@ -385,7 +385,7 @@ class BaseConfig(BaseModel):
             - ``"cpu"`` → 0 (no GPUs needed)
             - ``"cuda"`` / ``"cuda:N"`` → 1
             - ``"cudaxN"`` / ``"cuda:0,cuda:1"`` → N
-            - ``"proto"`` / ``"modal"`` → 1 (remote dispatch happens before pool partitioning)
+            - ``"modal"`` → 1 (remote dispatch happens before pool partitioning)
 
         Override in subclasses when GPU need is decoupled from the device
         string — e.g. a model whose large checkpoint needs 4 GPUs regardless
@@ -533,13 +533,11 @@ class BaseConfig(BaseModel):
         resource (e.g. a local database or file) that can't be staged to a remote worker.
         The returned message is surfaced to the caller; ``None`` (the default) means compatible.
 
-        Takes the device because remote targets differ in what they can run. A local file
-        is unstageable everywhere and should be refused regardless, but a restriction that
-        reflects what Proto chooses to host says nothing about a deployment the caller
-        owns and pays for — those must branch on ``device``.
+        Takes the device so an override can tell remote targets apart should more than one
+        exist; today the only one is ``"modal"``.
 
         Args:
-            device (RemoteDevice): Remote target, ``"proto"`` or ``"modal"``.
+            device (RemoteDevice): Remote target, ``"modal"``.
 
         Returns:
             str | None: User-facing reason, or ``None`` when the config is compatible.
@@ -555,7 +553,7 @@ class BaseConfig(BaseModel):
         dispatcher rewrites ``device`` to ``"cpu"`` and logs the reason instead of raising.
 
         Args:
-            device (RemoteDevice): Remote target, ``"proto"`` or ``"modal"``.
+            device (RemoteDevice): Remote target, ``"modal"``.
 
         Returns:
             str | None: Reason to log, or ``None`` to dispatch to ``device``.
