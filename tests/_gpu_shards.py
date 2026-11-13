@@ -5,11 +5,11 @@ Split one test session across several GPUs without two processes ever sharing a 
 A GPU run spends most of its time loading one toolkit at a time on one GPU while the others
 sit idle. ``scripts/run_tests_multi_gpu.py`` runs it in two phases instead:
 
-1. **Serial**: tests that need more than one GPU, and the DeviceManager tests (which reset the
-   process's DeviceManager and lease GPUs themselves), run once with every GPU visible.
-2. **Parallel**: everything else runs as N shards, one pytest per GPU, each seeing only its own
-   GPU. A shard holds whole toolkits, so a toolkit's env and weights are only ever loaded by one
-   process, and tests that run no tool stay together in a single shard.
+1. **Parallel**: everything except the serial tests runs as N shards, one pytest per GPU, each
+   seeing only its own GPU. A shard holds whole toolkits, so a toolkit's env and weights are only
+   ever loaded by one process, and tests that run no tool stay together in a single shard.
+2. **Serial**: tests that need more than one GPU, and the DeviceManager tests (which reset the
+   process's DeviceManager and lease GPUs themselves), then run once with every GPU visible.
 
 Shards are balanced longest-first on per-test durations from an earlier run's JUnit XML
 (``python -m tests._gpu_shards weights <junit.xml> <out.json>``), falling back to a rough

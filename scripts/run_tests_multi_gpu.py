@@ -3,11 +3,12 @@ r"""scripts/run_tests_multi_gpu.py.
 
 Run the test suite across every visible GPU at once (see ``tests/_gpu_shards.py``).
 
-1. The serial phase (tests that need several GPUs, and the DeviceManager tests) runs once, with
-   every GPU visible.
-2. The parallel phase runs as one pytest per GPU, each seeing only its own GPU and holding whole
+1. The parallel phase runs as one pytest per GPU, each seeing only its own GPU and holding whole
    toolkits, so no toolkit is ever loaded by two processes. Each shard gets its own ``--basetemp``,
    output and proto log, JUnit file and warm-worker report.
+2. The serial phase (tests that need several GPUs, and the DeviceManager tests) then runs once,
+   with every GPU visible. It runs last because it is mostly the lifecycle test, which loads every
+   toolkit, and by then the shards have left their envs and weights in the file cache.
 
 Environment builds and weight downloads already take cross-process locks under ``PROTO_HOME``, so
 shards that share a tool env wait for each other rather than collide; sharding by toolkit means
@@ -15,7 +16,7 @@ they rarely need to.
 
 Usage::
 
-    python scripts/run_tests_multi_gpu.py --out runs/gpu-2026-11-12 \
+    python scripts/run_tests_multi_gpu.py --out runs/gpu \
         --weights runs/shard_weights.json -- tests --all --ext
 
 Everything after ``--`` is passed to pytest. Exits non-zero if any phase or shard fails. Writes
@@ -97,7 +98,7 @@ def merge_junit(parts: list[Path], target: Path) -> None:
 
 
 def main() -> int:
-    """Run the serial phase, then one shard per GPU, and merge their results."""
+    """Run one shard per GPU, then the serial phase, and merge their results."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, required=True, help="directory for logs, JUnit files and the summary")
     parser.add_argument(
@@ -117,17 +118,6 @@ def main() -> int:
     summary: dict[str, dict] = {}
     started = time.time()
 
-    if not args.skip_serial:
-        t0 = time.time()
-        proc = launch(
-            pytest_cmd(pytest_args, args.out, "serial", ["--gpu-phase", "serial"]),
-            args.out,
-            "serial",
-            {**base_env, "CUDA_VISIBLE_DEVICES": ",".join(gpus)},
-        )
-        summary["serial"] = {"exit": proc.wait(), "seconds": round(time.time() - t0)}
-        print(f"[{time.strftime('%H:%M:%S')}] serial done: {summary['serial']}", flush=True)
-
     shard_extra = ["--gpu-phase", "parallel"]
     if args.weights:
         shard_extra += ["--shard-weights", str(args.weights)]
@@ -140,6 +130,17 @@ def main() -> int:
     for name, proc in procs.items():
         summary[name] = {"exit": proc.wait(), "seconds": round(time.time() - t0), "gpu": gpus[int(name[5:])]}
         print(f"[{time.strftime('%H:%M:%S')}] {name} done: {summary[name]}", flush=True)
+
+    if not args.skip_serial:
+        t0 = time.time()
+        proc = launch(
+            pytest_cmd(pytest_args, args.out, "serial", ["--gpu-phase", "serial"]),
+            args.out,
+            "serial",
+            {**base_env, "CUDA_VISIBLE_DEVICES": ",".join(gpus)},
+        )
+        summary["serial"] = {"exit": proc.wait(), "seconds": round(time.time() - t0)}
+        print(f"[{time.strftime('%H:%M:%S')}] serial done: {summary['serial']}", flush=True)
 
     merge_junit([args.out / f"{name}.xml" for name in summary], args.out / "merged.xml")
     summary["total_seconds"] = round(time.time() - started)  # type: ignore[assignment]
