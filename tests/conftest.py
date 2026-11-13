@@ -858,6 +858,25 @@ def pytest_addoption(parser):
         help="Shuffle test order (pytest-randomly's reordering, which this suite disables by default)",
     )
     parser.addoption(
+        "--gpu-phase",
+        choices=("serial", "parallel"),
+        default=None,
+        help="Run only one phase of a multi-GPU session (tests/_gpu_shards.py): 'serial' is the tests "
+        "that need more than one GPU or lease GPUs themselves, 'parallel' everything else",
+    )
+    parser.addoption(
+        "--shard",
+        default=None,
+        metavar="K/N",
+        help="With --gpu-phase parallel, run only shard K of N; a shard holds whole toolkits",
+    )
+    parser.addoption(
+        "--shard-weights",
+        default=None,
+        metavar="PATH",
+        help="JSON of per-test seconds (python -m tests._gpu_shards weights <junit.xml> <out.json>) to balance shards",
+    )
+    parser.addoption(
         "--no-toolkit-order",
         action="store_true",
         default=False,
