@@ -200,6 +200,7 @@ def test_remote_multimer_archive_parses_foldmulti_rows():
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_remote_multimer_search_finds_complex_neighbors_for_pdl1():
     """End-to-end: a real 2-chain PDB → Foldseek multimer pdb100 → schema-validated hits.

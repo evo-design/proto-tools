@@ -48,8 +48,8 @@ that are not writing Python.
 | `run_tool` | `proto-tools run <tool> --inputs '{...}'` or `--example` | Running one. `--inputs`/`--config` take a JSON object or `@file.json`. |
 | `deploy_tool` | `proto-tools deploy` | Deploying an app to Modal, after the user approves the spend. |
 
-The CLI answers for this machine by default; pass `--device modal` or
-`--device proto` to ask about, or run on, a remote backend. `list` and `search`
+The CLI answers for this machine by default; pass `--device modal`
+to ask about, or run on, your Modal workspace. `list` and `search`
 print text unless given `--json`; the other verbs print JSON and exit 1 when the
 payload reports `"ok": false`.
 

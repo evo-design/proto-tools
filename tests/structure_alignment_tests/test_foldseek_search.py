@@ -386,6 +386,7 @@ def test_prostt5_cache_from_before_records_is_kept(prostt5_downloads):
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_foldseek_search_end_to_end_with_tp53():
     """End-to-end: TP53 from AFDB → Foldseek pdb100 → schema-validated structural hits.

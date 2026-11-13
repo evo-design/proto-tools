@@ -3,7 +3,6 @@
 from typing import Literal
 
 from proto_tools.utils import BaseConfig, ConfigField
-from proto_tools.utils.device import RemoteDevice
 
 SPLICEAI2_HF_REPO = "illumina-ai/SpliceAI2"
 SPLICEAI2_HF_URL = f"https://huggingface.co/{SPLICEAI2_HF_REPO}"
@@ -47,12 +46,3 @@ class SpliceAI2Config(BaseConfig):
         description="Device to run the model on (e.g. 'cuda', 'cuda:0')",
         include_in_key=False,
     )
-
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """SpliceAI2 runs only where the caller owns the deployment: locally or on their own Modal account."""
-        if device == "proto":
-            return (
-                "SpliceAI2 is not hosted on device='proto'. Run locally (device='cuda'), "
-                "or deploy it on your own Modal account and use device='modal'."
-            )
-        return super().remote_unsupported_reason(device)

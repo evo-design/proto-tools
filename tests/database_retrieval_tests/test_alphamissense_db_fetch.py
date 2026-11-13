@@ -70,6 +70,7 @@ def test_fetch_csv_returns_none_on_404():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_alphamissense_fetch_full_p04637_predictions():
     """TP53 (P04637) returns the full saturation grid: 393 residues x 19 alts = 7467 predictions."""
@@ -102,6 +103,7 @@ def test_alphamissense_fetch_full_p04637_predictions():
         assert prediction.classification == "likely_pathogenic"
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_alphamissense_fetch_returns_failure_when_no_data():
     """An accession with no AlphaMissense CSV (404) raises with a clear error."""
@@ -109,6 +111,7 @@ def test_alphamissense_fetch_returns_failure_when_no_data():
         run_alphamissense_db_fetch(AlphaMissenseDBFetchInput(uniprot_id="Q0Q0Q0"), AlphaMissenseDBFetchConfig())
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_workflow_uniprot_then_alphamissense_grid_consistency():
     """End-to-end workflow: gene symbol -> UniProt accession -> AlphaMissense saturation grid.
@@ -159,6 +162,7 @@ def test_workflow_uniprot_then_alphamissense_grid_consistency():
         )
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_alphamissense_fetch_genomic_coords_agree_across_builds():
     """Genomic-coord modes populate chrom/pos/ref/alt and give each protein variant the same score in hg19 and hg38."""

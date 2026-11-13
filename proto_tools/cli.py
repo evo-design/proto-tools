@@ -645,9 +645,9 @@ def _build_parser() -> argparse.ArgumentParser:
     def add_device(p: argparse.ArgumentParser) -> None:
         p.add_argument(
             "--device",
-            choices=("local", "modal", "proto"),
+            choices=("local", "modal"),
             default="local",
-            help="Backend to answer for: this machine (default), your Modal workspace, or Proto.",
+            help="Backend to answer for: this machine (default) or your Modal workspace.",
         )
 
     p_agent = sub.add_parser(

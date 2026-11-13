@@ -10,9 +10,11 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from tests.conftest import benchmark_twice, random_dna_sequences
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("cherimoya")
 
 _HS2_FASTA = Path(__file__).parent.parent / "dummy_data" / "hbb_lcr_hs2_hg38.fna"
 _K562_DNASE = "ENCSR000EOT"
@@ -233,8 +235,8 @@ def test_cherimoya_config_checkpoint_paths_are_local_only(tmp_path: Path) -> Non
     config = CherimoyaScoreConfig(models=[_K562_DNASE, str(checkpoint)])
 
     assert config.models == [_K562_DNASE, str(checkpoint.resolve())]
-    assert "local checkpoint files" in (config.remote_unsupported_reason("proto") or "")
-    assert CherimoyaScoreConfig(models=[_K562_DNASE]).remote_unsupported_reason("proto") is None
+    assert "local checkpoint files" in (config.remote_unsupported_reason("modal") or "")
+    assert CherimoyaScoreConfig(models=[_K562_DNASE]).remote_unsupported_reason("modal") is None
     with pytest.raises(ValidationError, match="does not exist"):
         CherimoyaScoreConfig(models=[str(tmp_path / "missing.torch")])
 
@@ -494,6 +496,7 @@ def test_cherimoya_score_hs2_on_cpu() -> None:
     assert len(result.models[0].checkpoint_sha256[0]) == 64
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_cherimoya_checkpoint_path_matches_its_accession_on_cpu(tmp_path: Path) -> None:
     """A downloaded CATv1 checkpoint passed as a path scores exactly as its accession does."""

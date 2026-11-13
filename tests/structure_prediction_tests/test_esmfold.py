@@ -27,7 +27,9 @@ from proto_tools.tools.structure_prediction import (
 )
 from proto_tools.utils import ClippedLinearGoal, MaximizeGoal, one_hot_protein_logits
 from tests._structure_fixtures import single_chain_pdb
-from tests.conftest import benchmark_twice, random_protein_sequences
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
+
+_persistent_tool = make_persistent_fixture("esmfold")
 
 
 def test_esmfold_predict_retries_on_cuda_oom():
