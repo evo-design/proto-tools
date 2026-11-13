@@ -3,7 +3,7 @@
 import logging
 import random
 from itertools import product
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import Field, field_validator, model_validator
 
@@ -285,6 +285,22 @@ class Evo2ICLConfig(BaseConfig):
             )
             selections.append([i + 1 for i in indices])
         return prompts, selections
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "Evo2ICLConfig":
+        """Two 50-base designs per prompt (defaults: 20 designs of 200 bases).
+
+        Its checkpoint is fixed, so the seed and smoke tests can only cut the generation itself.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            Evo2ICLConfig: Config with cheap-mode generation applied.
+        """
+        kwargs.setdefault("num_sequences", 2)
+        kwargs.setdefault("sequence_length", 50)
+        return cast("Evo2ICLConfig", super().minimal(**kwargs))
 
 
 class Evo2ICLOutput(CausalModelSampleOutput):

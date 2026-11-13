@@ -3,7 +3,7 @@
 import os
 import tempfile
 from logging import getLogger
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from pydantic import model_validator
 
@@ -218,6 +218,23 @@ class Boltz2AffinityConfig(Boltz2Config):
         description="Independent diffusion samples per complex for the affinity pass.",
         reload_on_change=True,
     )
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "Boltz2AffinityConfig":
+        """Boltz2Config.minimal() plus one affinity sample over 20 steps (defaults: 5, 200).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            Boltz2AffinityConfig: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("sampling_steps_affinity", 20)
+        kwargs.setdefault("diffusion_samples_affinity", 1)
+        return cast("Boltz2AffinityConfig", super().minimal(**kwargs))
 
 
 # ============================================================================

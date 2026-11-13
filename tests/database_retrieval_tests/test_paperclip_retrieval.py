@@ -6,7 +6,6 @@ Fake replies reproduce the formats paperclip.gxl.ai returns from its MCP tools.
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
 import pytest
@@ -613,7 +612,7 @@ def test_document_id_cannot_escape_virtual_papers_directory():
 # Live service
 # ---------------------------------------------------------------------------
 
-_LIVE = pytest.mark.skipif(not os.environ.get("PAPERCLIP_API_KEY"), reason="PAPERCLIP_API_KEY is not configured")
+_LIVE = pytest.mark.requires_credential("PAPERCLIP_API_KEY")
 
 
 @pytest.mark.integration

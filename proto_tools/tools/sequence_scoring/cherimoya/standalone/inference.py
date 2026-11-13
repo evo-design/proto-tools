@@ -144,6 +144,10 @@ class CherimoyaWorker:
             tuple: The models in spec order, and ``{"model", "fold", "source", "sha256"}``
                 per spec, where source and SHA-256 are those recorded when it was loaded.
         """
+        from standalone_helpers import set_current_cuda_device
+
+        # Cherimoya's Triton kernels launch on the current device, not the tensors' device.
+        set_current_cuda_device(device)
         self.to_device(device)
         models, applied = [], []
         for spec in specs:

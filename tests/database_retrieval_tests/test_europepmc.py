@@ -303,6 +303,7 @@ def test_fulltext_server_error_raises(monkeypatch: pytest.MonkeyPatch, lookup_fa
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_europepmc_search_finds_published_rfdiffusion_by_doi():
     """A DOI field query resolves the RFdiffusion paper to its PMID and PMCID."""
@@ -314,6 +315,7 @@ def test_europepmc_search_finds_published_rfdiffusion_by_doi():
     assert "diffusion" in (hit.abstract or "").lower()
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_europepmc_search_preprints_only():
     """SRC:PPR restricts hits to preprints."""
@@ -324,6 +326,7 @@ def test_europepmc_search_preprints_only():
     assert hits and all(hit.source == "PPR" for hit in hits)
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_europepmc_fulltext_reads_tables_from_an_open_access_article():
     """An open-access article returns its title, abstract, body sections and tables."""

@@ -21,6 +21,7 @@ import logging
 import os
 import random
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -858,6 +859,31 @@ def pytest_addoption(parser):
         help="Shuffle test order (pytest-randomly's reordering, which this suite disables by default)",
     )
     parser.addoption(
+        "--gpu-phase",
+        choices=("serial", "parallel"),
+        default=None,
+        help="Run only one phase of a multi-GPU session (tests/_gpu_shards.py): 'serial' is the tests "
+        "that need more than one GPU or lease GPUs themselves, 'parallel' everything else",
+    )
+    parser.addoption(
+        "--shard",
+        default=None,
+        metavar="K/N",
+        help="With --gpu-phase parallel, run only shard K of N; a shard holds whole toolkits",
+    )
+    parser.addoption(
+        "--shard-weights",
+        default=None,
+        metavar="PATH",
+        help="JSON of per-test seconds (python -m tests._gpu_shards weights <junit.xml> <out.json>) to balance shards",
+    )
+    parser.addoption(
+        "--no-toolkit-order",
+        action="store_true",
+        default=False,
+        help="Keep collection order instead of running each toolkit's tests together (tests/_warm_workers.py)",
+    )
+    parser.addoption(
         "--all",
         action="store_true",
         default=False,
@@ -874,6 +900,12 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="Skip tests marked with skip_ci (mimics CI environment behavior)",
+    )
+    parser.addoption(
+        "--network",
+        action="store_true",
+        default=False,
+        help="Run tests that call live external services (marked network). Not enabled by --all or --ext.",
     )
     parser.addoption(
         "--integration",
@@ -965,6 +997,19 @@ def pytest_configure(config):
 
     if hasattr(config.option, "randomly_reorganize"):
         config.option.randomly_reorganize = bool(config.getoption("--random-order"))
+
+    from tests import _warm_workers
+
+    if not config.pluginmanager.has_plugin(_warm_workers.PLUGIN_NAME):
+        config.pluginmanager.register(_warm_workers.WarmWorkersPlugin(config), _warm_workers.PLUGIN_NAME)
+    config.addinivalue_line(
+        "markers", "toolkit(name): the toolkit a test runs, for run ordering when it cannot be inferred"
+    )
+    config.addinivalue_line(
+        "markers",
+        "worker_config(**fields): the reload_on_change values a test runs with, for run ordering "
+        "when they cannot be inferred",
+    )
 
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
     config.addinivalue_line(
@@ -1230,8 +1275,46 @@ def _required_gpus(item: pytest.Item) -> int:
     return max((marker.args[0] if marker.args else 1 for marker in item.iter_markers("uses_gpu")), default=0)
 
 
+@functools.cache
+def _declared_credentials() -> frozenset[str]:
+    """Environment variables that a ``ConfigField(credential=...)`` somewhere falls back to."""
+    from proto_tools.tools.tool_registry import ToolRegistry
+
+    declared = set()
+    for spec in ToolRegistry.list_all():
+        model = spec.config_model
+        for name in model.credential_fields() if hasattr(model, "credential_fields") else ():
+            extra = model.model_fields[name].json_schema_extra
+            if isinstance(extra, dict) and extra.get("credential"):
+                declared.add(extra["credential"])
+    return frozenset(declared)
+
+
+def _skip_without_credentials(items) -> None:
+    """Skip ``requires_credential(...)`` tests, at collection, unless every named credential is set.
+
+    The names must be credentials some tool config declares, so a typo fails the run rather than
+    quietly skipping the test forever. A blank value counts as unset, as it does for the config.
+    """
+    for item in items:
+        marker = item.get_closest_marker("requires_credential")
+        if marker is None:
+            continue
+        unknown = [name for name in marker.args if name not in _declared_credentials()]
+        if not marker.args or unknown:
+            raise pytest.UsageError(
+                f"{item.nodeid}: requires_credential({', '.join(map(repr, marker.args))}) must name credentials "
+                f"declared by a ConfigField(credential=...); unknown: {unknown or 'none given'}. "
+                f"Known: {', '.join(sorted(_declared_credentials()))}"
+            )
+        missing = [name for name in marker.args if not os.environ.get(name, "").strip()]
+        if missing:
+            item.add_marker(pytest.mark.skip(reason=f"needs credential {' and '.join(missing)} set in the environment"))
+
+
 def pytest_collection_modifyitems(config, items):
     """Modify test collection based on command line options and auto-mark tests."""
+    _skip_without_credentials(items)
     # --env-report: keep only env-report smoke tests, deselect everything else
     if config.getoption("--env-report"):
         skip_ci_mark = pytest.mark.skip(reason="--env-report: skip_ci honored under GitHub Actions / --skip-ci")
@@ -1379,6 +1462,14 @@ def pytest_collection_modifyitems(config, items):
             if "integration" in item.keywords:
                 item.add_marker(skip_integration)
 
+    # Skip tests that call live external services unless --network is specified. --all does not
+    # enable them: an upstream queue or outage would otherwise decide how long a run takes.
+    if not config.getoption("--network"):
+        skip_network = pytest.mark.skip(reason="needs network access to an external service; pass --network")
+        for item in items:
+            if "network" in item.keywords:
+                item.add_marker(skip_network)
+
     # Skip extensive tests unless --ext (or --extensive) is specified
     if not config.getoption("extensive"):
         skip_extensive = pytest.mark.skip(reason="extensive test (use --ext to run)")
@@ -1464,7 +1555,8 @@ def setup_test_logging(request):
     proto_tools_logger.handlers.clear()
 
     # Create header with pytest command and timestamp
-    pytest_command = " ".join(sys.argv)
+    # Shell-quoted so scripts/list_incomplete_tests.py can replay it (a multi-word -k stays one argument).
+    pytest_command = shlex.join(sys.argv)
     now = datetime.now()
     timestamp = now.strftime("%H:%M:%S")
     datestamp = now.strftime("%m/%d/%Y")
@@ -1745,14 +1837,17 @@ def _default_raise_mode(monkeypatch):
 # Persistent tool fixture factory
 # ============================================================================
 def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
-    """Create a module-scoped autouse fixture that wraps tests in persistence.
+    """Create an autouse fixture that gives every test in the calling module a warm worker.
+
+    The worker comes from the session pool in ``tests/_warm_workers.py``. It is started for the
+    module's first test, and kept for as long as consecutive tests use it, which with the suite's
+    toolkit ordering can span several files; it is released as soon as the next test does not.
 
     Parameters
     ----------
     toolkit : str
-        Worker group passed to ``ToolInstance.persist_tool()`` (e.g.
-        ``"pyrosetta"``, ``"esm2"``). Accepts a registered tool_key too
-        (it will be normalized).
+        Worker group passed to ``ToolInstance.get()`` (e.g. ``"pyrosetta"``, ``"esm2"``).
+        Accepts a registered tool_key too (it will be normalized).
     gpu : bool
         When *True* (default), the fixture skips persistence when no
         GPU is available: ``--cpu-only`` flag, or no visible GPU can run
@@ -1763,11 +1858,17 @@ def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
         Skipped in benchmark mode (any of ``--benchmark``, ``--benchmark-report``,
         ``--benchmark-tool``, ``--benchmark-toolkit``). Benchmarks measure
         cold-start vs warm by running their workload twice with their own
-        ``ToolInstance.persist()`` scope; a module-level warm worker would
+        ``ToolInstance.persist()`` scope; a warm pooled worker would
         steal the cold-start measurement.
     """
+    import sys
 
-    @pytest.fixture(scope="module", autouse=True)
+    from tests import _warm_workers
+
+    toolkit = ToolInstance._normalize_toolkit(toolkit)
+    _warm_workers.register_module_toolkit(sys._getframe(1).f_globals["__name__"], toolkit)
+
+    @pytest.fixture(autouse=True)
     def _persistent_tool(request):
         if gpu and (request.config.getoption("--cpu-only") or not _gpu_available()):
             yield
@@ -1780,8 +1881,10 @@ def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
         ):
             yield
             return
-        with ToolInstance.persist_tool(toolkit):
-            yield
+        pool = _warm_workers.pool(request.config)
+        if pool is not None:
+            pool.acquire(toolkit, request.node.nodeid)
+        yield
 
     return _persistent_tool
 

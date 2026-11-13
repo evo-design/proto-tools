@@ -29,7 +29,9 @@ from proto_tools.tools.structure_prediction import (
     run_esmfold2_inversion_gradient,
 )
 from proto_tools.utils import PROTEIN_AMINO_ACIDS, one_hot_protein_logits
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
+
+_persistent_tool = make_persistent_fixture("esmfold2")
 
 TARGET = "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQ"
 BINDER = "MKTAYIAKQRQISFVKSHFSRQLE"

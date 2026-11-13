@@ -19,7 +19,10 @@ from proto_tools.tools.sequence_scoring.deeppbs_specificity import (
     DeepPBSSpecificityInput,
     run_deeppbs_specificity,
 )
+from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("deeppbs_specificity")
 
 # The standalone run.py imports the worker-injected ``standalone_helpers`` package,
 # which only sits on sys.path inside a tool venv. Add its source dir so the pure

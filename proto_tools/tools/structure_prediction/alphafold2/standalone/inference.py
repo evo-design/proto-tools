@@ -1072,7 +1072,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 sample_models=input_dict.get("sample_models", False),
                 dropout=input_dict["dropout"],
                 use_multimer=input_dict.get("use_multimer", False),
-                seed=input_dict["seed"],
+                seed=item.get("seed", input_dict["seed"]),
                 compute_gradient=input_dict.get("compute_gradient", True),
                 device=input_dict["device"],
                 verbose=input_dict["verbose"],

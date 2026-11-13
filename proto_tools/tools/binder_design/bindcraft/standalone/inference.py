@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_jax_memory_stats, get_logger, get_subprocess_device_env, resolve_weights_dir
+from standalone_helpers import get_logger, get_subprocess_device_env, resolve_weights_dir
 
 logger = get_logger(__name__)
 
@@ -309,9 +309,8 @@ def to_device(device: str) -> dict[str, Any]:
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """Report JAX memory stats for the worker's first visible device."""
-    stats: dict[str, Any] = get_jax_memory_stats(device_index=0)
-    return stats
+    """CLI tool, no persistent GPU state to report."""
+    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
 
 
 # ============================================================================

@@ -25,9 +25,11 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     ComplexMSAs,
 )
 from tests._structure_fixtures import synthetic_cif
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("chai1")
 
 
 def test_msa_to_pqt_appends_deep_unpaired_with_empty_pairing_key(tmp_path):

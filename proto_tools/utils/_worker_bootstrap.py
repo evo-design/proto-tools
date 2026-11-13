@@ -104,6 +104,30 @@ def _load_module(script_path: str) -> Any:
     return module
 
 
+def _follow_request_device(input_dict: dict[str, Any]) -> None:
+    """Make the request's GPU PyTorch's current device, if this worker already uses CUDA through PyTorch.
+
+    A worker that is not pinned sees every GPU. Code that takes no device argument (``.cuda()``,
+    a bare ``"cuda"``, Triton kernel launches, which also key their compiled-kernel cache on it)
+    uses the current device, so it must be the GPU the tool was dispatched to.
+
+    Only once this process has initialized CUDA through torch. Setting the device opens a context
+    on that GPU, and a worker that only shells out (a per-call CLI tool) or uses another framework
+    must not hold one: on an Exclusive_Process GPU it would lock out the subprocess doing the work.
+    A torch worker's first load sets the device itself (``move_model_to_device`` or
+    ``set_current_cuda_device``), so nothing is lost before CUDA is up.
+    """
+    device = input_dict.get("device")
+    if not (isinstance(device, str) and device.startswith("cuda:")):
+        return
+    torch = sys.modules.get("torch")
+    if torch is None or not torch.cuda.is_initialized():
+        return
+    from standalone_helpers import set_current_cuda_device
+
+    set_current_cuda_device(device)
+
+
 def _find_dispatch(module: Any) -> Any | None:
     """Return the module's ``dispatch`` function, or None."""
     return getattr(module, "dispatch", None)
@@ -285,7 +309,10 @@ def main() -> None:
                     raise ValueError(f"Unknown command: {command!r}; valid: {list(_VALID_COMMANDS)}")
             else:
                 # Normal dispatch
+                _follow_request_device(input_dict)
                 result = dispatch(input_dict)
+                # A tool that imports torch during its first call follows from the next one on.
+                _follow_request_device(input_dict)
                 result = _serialize(result)
                 response = {"id": request_id, "result": result}
         except Exception:

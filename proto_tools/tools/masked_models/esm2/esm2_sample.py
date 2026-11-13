@@ -4,7 +4,7 @@ ESM2 sampling tool.
 """
 
 import logging
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import field_validator
 
@@ -164,6 +164,12 @@ class ESM2SampleConfig(MaskedModelSampleConfig):
             "esm2", self.masking_strategy, self.device, sampling_checkpoint=self.model_checkpoint
         )
         return apply_masking_strategy(self, inputs, position_score_fn=position_score_fn)
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "ESM2SampleConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "esm2_t6_8M_UR50D")
+        return cast("ESM2SampleConfig", super().minimal(**kwargs))
 
 
 # ============================================================================

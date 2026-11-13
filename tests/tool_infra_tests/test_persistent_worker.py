@@ -1130,11 +1130,24 @@ def test_ld_library_path_includes_tool_env_lib(monkeypatch, tmp_path: Path):
     assert ld_parts.index(tool_env_lib) < ld_parts.index("/opt/conda/lib")
 
 
-def test_ld_library_path_tool_env_lib_present_under_no_passthrough(monkeypatch, tmp_path: Path):
-    """[no_passthrough] strips host LD libs but keeps the tool env's own /lib."""
+@pytest.fixture
+def fresh_driver_lookup():
+    """Clear the cached libcuda lookup before and after a test that fakes the host's library path.
+
+    ``_find_driver_lib_dir`` is cached for the session. A test that runs it under a fake
+    ``LD_LIBRARY_PATH`` caches "no driver" for every worker started after it, so it must not
+    leave its answer behind: later [no_passthrough] workers (AlphaFold2/3, Evo 2, ProteinMPNN)
+    would start without the CUDA driver.
+    """
     from proto_tools.utils.persistent_worker import _find_driver_lib_dir
 
     _find_driver_lib_dir.cache_clear()
+    yield
+    _find_driver_lib_dir.cache_clear()
+
+
+def test_ld_library_path_tool_env_lib_present_under_no_passthrough(monkeypatch, tmp_path: Path, fresh_driver_lookup):
+    """[no_passthrough] strips host LD libs but keeps the tool env's own /lib."""
     monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64")
     monkeypatch.delenv("CONDA_PREFIX", raising=False)
     tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": ["LD_LIBRARY_PATH"]}
@@ -1156,11 +1169,8 @@ def test_no_passthrough_blocks_whitelisted_var(monkeypatch):
     assert "HTTP_PROXY" not in env
 
 
-def test_no_passthrough_blocks_parent_ld_library_path(monkeypatch, tmp_path: Path):
+def test_no_passthrough_blocks_parent_ld_library_path(monkeypatch, tmp_path: Path, fresh_driver_lookup):
     """[no_passthrough] LD_LIBRARY_PATH must not let parent's value leak into the subprocess."""
-    from proto_tools.utils.persistent_worker import _find_driver_lib_dir
-
-    _find_driver_lib_dir.cache_clear()
     monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64:/opt/nvidia/lib64")
     monkeypatch.delenv("CONDA_PREFIX", raising=False)
     tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": ["LD_LIBRARY_PATH"]}

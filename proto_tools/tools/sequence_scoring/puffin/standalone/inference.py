@@ -110,7 +110,11 @@ class PuffinModel:
         if verbose:
             logger.info(f"Loading Puffin on {device}")
         from puffin import Puffin  # type: ignore[import-not-found]
+        from standalone_helpers import set_current_cuda_device
 
+        # Puffin's predict/interpret call ``self.cuda()`` and ``.cuda()`` on inputs, which use the
+        # current device: make that the leased GPU before anything touches CUDA.
+        set_current_cuda_device(device)
         with _chdir(repo_dir):
             model = Puffin(use_cuda=device.startswith("cuda"))
         model.to(device)
