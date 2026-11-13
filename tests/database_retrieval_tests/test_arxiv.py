@@ -273,6 +273,7 @@ def test_server_error_raises_after_retries(monkeypatch: pytest.MonkeyPatch, cloc
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_arxiv_search_finds_a_known_preprint_by_title():
     """A title phrase query returns the matching arXiv record with its version."""
@@ -284,6 +285,7 @@ def test_arxiv_search_finds_a_known_preprint_by_title():
     assert all(hit.pdf_url.startswith("https://arxiv.org/pdf/") for hit in hits)
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_arxiv_search_category_filter():
     """cat:q-bio.BM keeps every hit in that category."""

@@ -12,8 +12,10 @@ from proto_tools.tools import (
     ParadeStabilityGradientOutput,
     run_parade_stability_gradient,
 )
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("parade")
 
 LENGTH = 50
 GRADIENT_ROW = [0.1, -0.2, 0.3, -0.4]

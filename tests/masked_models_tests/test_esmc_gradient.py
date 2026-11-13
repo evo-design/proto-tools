@@ -14,8 +14,10 @@ from proto_tools.tools import (
 )
 from proto_tools.utils import one_hot_protein_logits
 from proto_tools.utils.standalone_helpers_source.standalone_helpers.vocabulary import AMINO_ACIDS_LIST
-from tests.conftest import benchmark_twice, random_protein_sequences
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("esmc")
 
 VH_SEQ = "EVQLVESGGGLVQPGGSLRLSCAASGFNIKDTYIHWVRQAPGKGLEWVARIYPTNGYTRYADSVKG"
 

@@ -853,6 +853,7 @@ def _check_url(url: str) -> str | None:
         return str(exc)
 
 
+@pytest.mark.network
 @pytest.mark.integration
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_all_links_reachable(readme: Path) -> None:

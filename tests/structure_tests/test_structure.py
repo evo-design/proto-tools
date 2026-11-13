@@ -1889,6 +1889,7 @@ def test_an_unnamed_chain_round_trips_through_staging():
 _RCSB_PDB_URL = "https://files.rcsb.org/download/1TIM.pdb"
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_from_rcsb_fetches_structure():
     """``from_rcsb`` downloads a real PDB and returns a valid Structure."""
@@ -1899,6 +1900,7 @@ def test_from_rcsb_fetches_structure():
     assert "A" in structure.get_chain_ids()
 
 
+@pytest.mark.network
 @pytest.mark.integration
 def test_constructor_auto_fetches_url():
     """A URL passed to the constructor is fetched transparently, like a file path."""

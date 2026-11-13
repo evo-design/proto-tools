@@ -6,9 +6,11 @@ import pytest
 from pydantic import ValidationError
 
 from proto_tools.utils.tool_cache import ToolCache, _program_tool_cache
-from tests.conftest import benchmark_twice, random_dna_sequences
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("parade")
 
 
 @pytest.fixture
