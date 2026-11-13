@@ -8,8 +8,7 @@ Run the test suite across every visible GPU at once (see ``tests/_gpu_shards.py`
    output and proto log, JUnit file and warm-worker report.
 2. The serial phase (tests that need several GPUs, and the DeviceManager tests) then runs once,
    with every GPU visible. It runs last because it is mostly the lifecycle test, which loads every
-   toolkit: after the shards, their envs and weights are already in the node's file cache, so it
-   takes about a third as long as on a cold node.
+   toolkit, and by then the shards have left their envs and weights in the file cache.
 
 Environment builds and weight downloads already take cross-process locks under ``PROTO_HOME``, so
 shards that share a tool env wait for each other rather than collide; sharding by toolkit means
@@ -17,7 +16,7 @@ they rarely need to.
 
 Usage::
 
-    python scripts/run_tests_multi_gpu.py --out runs/gpu-2026-11-12 \
+    python scripts/run_tests_multi_gpu.py --out runs/gpu \
         --weights runs/shard_weights.json -- tests --all --ext
 
 Everything after ``--`` is passed to pytest. Exits non-zero if any phase or shard fails. Writes
