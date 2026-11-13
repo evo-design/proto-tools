@@ -372,6 +372,7 @@ ignore = [
 "proto_tools/utils/system_info.py" = ["PLW0603", "PLW1510", "S603", "S607"]
 "proto_tools/utils/tool_instance.py" = ["S101", "S603", "S607"]
 "proto_tools/utils/foundation_env.py" = ["S603", "S607"]
+"proto_tools/utils/uv_prune.py" = ["S603", "S607"]
 "proto_tools/utils/persistent_worker.py" = ["S101", "S603", "S607"]
 "proto_tools/utils/tool_pool.py" = ["S101"]
 "proto_tools/entities/ligands/ligands.py" = ["S101"]

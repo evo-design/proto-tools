@@ -27,7 +27,6 @@ from proto_tools.utils.weights_layout import (
     COMPILE_CACHE_VARS,
     GENERAL_COMPILE_CACHE_VARS,
     compile_cache_env,
-    migrate_all_once,
     toolkit_cache_env,
     weights_key,
 )
@@ -244,9 +243,8 @@ _BASE_PASSTHROUGH = {
     "PROTO_LOCK_STALL_SECONDS",
     "PROTO_LOCK_TIMEOUT_SECONDS",
     "PROTO_DOWNLOAD_STALL_SECONDS",
-    # uv/pip package caches: let user-set values override our defaults
+    # uv package cache: a user-set value overrides our default
     "UV_CACHE_DIR",
-    "PIP_CACHE_DIR",
     # JAX compilation cache: a user-set value overrides the model-cache default
     "JAX_COMPILATION_CACHE_DIR",
     # Network proxy: tools download model weights and need proxy config
@@ -596,14 +594,13 @@ def _build_subprocess_env(
     env.setdefault("UV_HTTP_TIMEOUT", "300")
     env.setdefault("PIP_DEFAULT_TIMEOUT", "300")
 
-    # Route uv/pip caches under PROTO_HOME so all proto-tools disk usage
-    # is consolidated and cleanable atomically. Respects user overrides
-    # (UV_CACHE_DIR / PIP_CACHE_DIR are copied in from _BASE_PASSTHROUGH
-    # above; setdefault only fills when unset).
+    # uv's cache lives under PROTO_HOME (a UV_CACHE_DIR from _BASE_PASSTHROUGH wins). Envs hardlink
+    # their packages from it, so it is pruned, never deleted. pip copies rather than links, so its
+    # cache would only spare a re-download, and it is off.
     from proto_tools.utils.proto_home import get_proto_home
 
     env.setdefault("UV_CACHE_DIR", str(get_proto_home() / "uv_cache"))
-    env.setdefault("PIP_CACHE_DIR", str(get_proto_home() / "pip_cache"))
+    env.setdefault("PIP_NO_CACHE_DIR", "1")
 
     # Prevent JAX from preallocating GPU memory at import time (harmless for PyTorch)
     env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
@@ -627,7 +624,6 @@ def _build_subprocess_env(
     else:
         # Absolute or relative path → shared directory
         cache_path = Path(cache_mode)
-        migrate_all_once(cache_path)
         if toolkit:
             # Per-toolkit layout: every framework cache lives under {cache}/{weights_key}/
             env.update(toolkit_cache_env(toolkit, cache_path))

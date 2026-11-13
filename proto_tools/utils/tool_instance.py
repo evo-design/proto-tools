@@ -65,6 +65,7 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from proto_tools.utils import uv_prune
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
 from proto_tools.utils.device import parse_device_string
 from proto_tools.utils.device_manager import DeviceManager
@@ -2816,6 +2817,20 @@ class ToolInstance:
         except (subprocess.SubprocessError, OSError) as e:
             logger.debug("Could not clean micromamba package archives: %s", e)
 
+    def _schedule_uv_prune(self, cache_dir: Path) -> None:
+        """Start a background prune of the uv cache this build used (see :mod:`proto_tools.utils.uv_prune`).
+
+        Skipped for an env pinned to another uv, which could misjudge the default uv's cache entries.
+        Best-effort, like :meth:`_clean_package_archives`: it never fails a build that succeeded.
+        """
+        uv = self.env_path / "bin" / "uv"
+        if self._get_uv_version() != UV_VERSION or not uv.is_file():
+            return
+        try:
+            uv_prune.schedule(uv, cache_dir)
+        except OSError as e:
+            logger.debug("Could not start a uv cache prune: %s", e)
+
     def _create_env(self) -> None:
         """Create (or rebuild) the tool's isolated environment.
 
@@ -2937,6 +2952,7 @@ class ToolInstance:
             status_file.write_text(f"SUCCESS\nSetup hash: {self._setup_hash()}\n")
             logger.debug("Environment setup completed for %s", self.toolkit)
             self._clean_package_archives(mamba_bin)
+            self._schedule_uv_prune(Path(env["UV_CACHE_DIR"]))
         else:
             tail = self._stderr_tail(combined_output)
             logger.error(
