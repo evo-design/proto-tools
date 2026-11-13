@@ -275,8 +275,8 @@ def _move_unregistered_tensors(module: Any, new_device: str) -> int:
     import torch
 
     target = torch.device(new_device.split(",")[0])
-    offloaded = getattr(module, _OFFLOADED_ATTRS, set())
-    still_offloaded = set()
+    offloaded: set[tuple[str, str]] = getattr(module, _OFFLOADED_ATTRS, set())
+    still_offloaded: set[tuple[str, str]] = set()
     moved = 0
     for sub_name, sub in module.named_modules():
         for name, value in list(vars(sub).items()):
