@@ -1275,8 +1275,46 @@ def _required_gpus(item: pytest.Item) -> int:
     return max((marker.args[0] if marker.args else 1 for marker in item.iter_markers("uses_gpu")), default=0)
 
 
+@functools.cache
+def _declared_credentials() -> frozenset[str]:
+    """Environment variables that a ``ConfigField(credential=...)`` somewhere falls back to."""
+    from proto_tools.tools.tool_registry import ToolRegistry
+
+    declared = set()
+    for spec in ToolRegistry.list_all():
+        model = spec.config_model
+        for name in model.credential_fields() if hasattr(model, "credential_fields") else ():
+            extra = model.model_fields[name].json_schema_extra
+            if isinstance(extra, dict) and extra.get("credential"):
+                declared.add(extra["credential"])
+    return frozenset(declared)
+
+
+def _skip_without_credentials(items) -> None:
+    """Skip ``requires_credential(...)`` tests, at collection, unless every named credential is set.
+
+    The names must be credentials some tool config declares, so a typo fails the run rather than
+    quietly skipping the test forever. A blank value counts as unset, as it does for the config.
+    """
+    for item in items:
+        marker = item.get_closest_marker("requires_credential")
+        if marker is None:
+            continue
+        unknown = [name for name in marker.args if name not in _declared_credentials()]
+        if not marker.args or unknown:
+            raise pytest.UsageError(
+                f"{item.nodeid}: requires_credential({', '.join(map(repr, marker.args))}) must name credentials "
+                f"declared by a ConfigField(credential=...); unknown: {unknown or 'none given'}. "
+                f"Known: {', '.join(sorted(_declared_credentials()))}"
+            )
+        missing = [name for name in marker.args if not os.environ.get(name, "").strip()]
+        if missing:
+            item.add_marker(pytest.mark.skip(reason=f"needs credential {' and '.join(missing)} set in the environment"))
+
+
 def pytest_collection_modifyitems(config, items):
     """Modify test collection based on command line options and auto-mark tests."""
+    _skip_without_credentials(items)
     # --env-report: keep only env-report smoke tests, deselect everything else
     if config.getoption("--env-report"):
         skip_ci_mark = pytest.mark.skip(reason="--env-report: skip_ci honored under GitHub Actions / --skip-ci")
