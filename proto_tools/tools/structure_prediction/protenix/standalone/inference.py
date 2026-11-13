@@ -194,8 +194,8 @@ class ProtenixModel:
         Args:
             input_json_path: Path to input JSON file (list of job dicts)
             output_dir: Directory to write output to
-            device: Device string (e.g. ``"cuda:1"``); the runner is built on it (see ``load``)
-                and moved when it changes.
+            device: Device the model is built on (e.g. ``"cuda:1"``). If it changes between calls,
+                the model is moved to the new device.
             model_name: Protenix model variant to use
             seeds: Comma-separated seed values
             num_diffusion_samples: Number of diffusion samples per seed
