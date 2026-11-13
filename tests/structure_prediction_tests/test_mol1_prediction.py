@@ -212,11 +212,10 @@ def test_mol1_seeded_batch_preserves_duplicate_items_and_item_indices(captured_d
     assert [capture["payload"]["seed"] for capture in captured_dispatch] == [7, 7]
 
 
-@pytest.mark.parametrize("device", ["proto", "modal"])
-def test_mol1_local_checkpoint_is_rejected_on_remote_workers(device):
+def test_mol1_local_checkpoint_is_rejected_on_remote_workers():
     """Remote workers cannot read an arbitrary checkpoint from the caller's filesystem."""
-    assert Mol1Config().remote_unsupported_reason(device) is None
-    assert Mol1Config(model_checkpoint="/local/custom.pt").remote_unsupported_reason(device)
+    assert Mol1Config().remote_unsupported_reason("modal") is None
+    assert Mol1Config(model_checkpoint="/local/custom.pt").remote_unsupported_reason("modal")
 
 
 @pytest.fixture

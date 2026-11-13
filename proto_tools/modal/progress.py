@@ -309,8 +309,7 @@ def replay_record(record: dict[str, Any], call_id: str | None = None) -> None:
 
     With a bar on screen every record becomes its subtitle, so a long call reads as one line
     that keeps changing rather than a bar with output scrolling past it. Without a bar, records
-    go to the logger as they would on the ``device='proto'`` path, carrying the ``update_status``
-    flag so the same line behaves the same way.
+    go to the logger, carrying the ``update_status`` flag so the same line behaves the same way.
 
     Args:
         record (dict[str, Any]): One streamed record.

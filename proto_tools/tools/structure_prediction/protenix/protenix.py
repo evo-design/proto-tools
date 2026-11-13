@@ -40,7 +40,6 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
-from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
@@ -391,16 +390,6 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         if self.num_diffusion_steps is None:
             self.num_diffusion_steps = steps
         return self
-
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """``protenix-v2`` is ByteDance-gated, so Proto cannot host it; self-hosting is unaffected."""
-        if device == "proto" and self.model_name == _PROTENIX_V2_MODEL:
-            return (
-                "The 'protenix-v2' checkpoint is gated by ByteDance and is not hosted on "
-                "device='proto'. Choose a different model_name, run locally (device='cpu' or "
-                "'cuda'), or deploy it yourself with device='modal'."
-            )
-        return None
 
     @classmethod
     def minimal(cls, **kwargs: Any) -> "ProtenixConfig":

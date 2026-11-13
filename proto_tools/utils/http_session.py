@@ -8,10 +8,6 @@ Under the tool's ambient deadline (:mod:`proto_tools.utils.deadlines`), sessions
 Response headers, and urllib3's drain of an error body it is about to retry, remain bounded only
 per socket read.
 
-``request_with_retry`` below and ``proto_tools.proto._client._request_with_retry`` both retry on
-``requests.exceptions.ConnectionError`` but aren't merged: the client's version also retries HTTP
-status codes and needs the response in hand to read ``Retry-After``, which a generic callable
-can't give it.
 """
 
 import random
