@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -956,9 +955,6 @@ def test_every_annotation_config_option_maps_to_a_key_the_api_accepts(monkeypatc
 # ============================================================================
 # Integration — live API, skipped unless pytest runs with --integration
 # ============================================================================
-
-#: Every test that calls the hosted API: skipped (at collection, before any setup) without a key.
-requires_gi_key = pytest.mark.skipif(not os.environ.get("GI_API_KEY"), reason="GI_API_KEY not set")
 #
 # The `run-integration` label starts Integration Tests, which runs pytest with
 # --integration, so these two cases are selected there. They still skip: that
@@ -969,7 +965,7 @@ requires_gi_key = pytest.mark.skipif(not os.environ.get("GI_API_KEY"), reason="G
 
 @pytest.mark.integration
 @pytest.mark.network
-@requires_gi_key
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_live_promoter_scores_a_sequence() -> None:
     """A promoter call returns per-window scores and provenance."""
     sequence = "ATGCGCGCTATAAAAGGCGCG" * 30
@@ -982,7 +978,7 @@ def test_live_promoter_scores_a_sequence() -> None:
 
 @pytest.mark.integration
 @pytest.mark.network
-@requires_gi_key
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_live_splice_is_strand_dependent() -> None:
     """The reverse complement is scored as a different sequence.
 
@@ -1050,7 +1046,7 @@ def _bench_windows() -> list[dict[str, str]]:
 
 @pytest.mark.benchmark("gi-promoter")
 @pytest.mark.slow
-@requires_gi_key
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_promoter_benchmark() -> None:
     """Benchmark gi-promoter: 3 x 5,000 bp HBB windows."""
     output = run_gi_promoter(GIPromoterInput(sequences=_bench_windows()), GIPromoterConfig())
@@ -1065,7 +1061,7 @@ def test_gi_promoter_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-splice")
 @pytest.mark.slow
-@requires_gi_key
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_splice_benchmark() -> None:
     """Benchmark gi-splice: 3 x 5,000 bp HBB windows, gene-sense strand."""
     output = run_gi_splice(GISpliceInput(sequences=_bench_windows()), GISpliceConfig())
@@ -1080,7 +1076,7 @@ def test_gi_splice_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-enhancer")
 @pytest.mark.slow
-@requires_gi_key
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_enhancer_benchmark() -> None:
     """Benchmark gi-enhancer: 3 x 5,000 bp HBB windows."""
     output = run_gi_enhancer(GIEnhancerInput(sequences=_bench_windows()), GIEnhancerConfig())
@@ -1095,7 +1091,7 @@ def test_gi_enhancer_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-chromatin")
 @pytest.mark.slow
-@requires_gi_key
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_chromatin_benchmark() -> None:
     """Benchmark gi-chromatin: 3 x 5,000 bp HBB windows."""
     output = run_gi_chromatin(GIChromatinInput(sequences=_bench_windows()), GIChromatinConfig())
@@ -1110,7 +1106,7 @@ def test_gi_chromatin_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-annotation")
 @pytest.mark.slow
-@requires_gi_key
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_annotation_benchmark() -> None:
     """Benchmark gi-annotation: the whole 25,000 bp HBB locus."""
     locus = _hbb_locus()
@@ -1129,7 +1125,7 @@ def test_gi_annotation_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-expression")
 @pytest.mark.slow
-@requires_gi_key
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_expression_benchmark() -> None:
     """Benchmark gi-expression: the 25,000 bp HBB locus cut to one window around its midpoint."""
     locus = _hbb_locus()
@@ -1166,7 +1162,7 @@ def test_gi_expression_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-find-genes-and-predict-expression")
 @pytest.mark.slow
-@requires_gi_key
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_find_genes_and_predict_expression_benchmark() -> None:
     """Benchmark the workflow: annotation plus per-gene expression over the 25,000 bp HBB locus."""
     locus = _hbb_locus()

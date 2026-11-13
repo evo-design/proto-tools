@@ -4,7 +4,6 @@ Tests for the InterPro fetch tool — direct UniProt-accession lookup and
 sequence submit-and-poll paths against EBI's iprscan5 endpoint.
 """
 
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -606,6 +605,7 @@ def test_direct_lookup_tp53_matches_uniprot_and_pfam_anchor():
 @pytest.mark.integration
 @pytest.mark.slow
 @pytest.mark.skip_ci
+@pytest.mark.requires_credential("INTERPROSCAN_EMAIL")
 def test_submit_path_real_short_sequence():
     """End-to-end iprscan5 submit path against the first 200 residues of TP53.
 
@@ -616,8 +616,6 @@ def test_submit_path_real_short_sequence():
     Requires a real contact address in ``INTERPROSCAN_EMAIL``: EBI's fair-use policy
     mandates a valid email and blocks submitters that use placeholder addresses.
     """
-    if not os.environ.get("INTERPROSCAN_EMAIL"):
-        pytest.skip("INTERPROSCAN_EMAIL not set")
     # First 200 residues of P04637 — covers the P53 DNA-binding domain (residues 100-288 truncated to 100-200).
     sequence = (
         "MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDPGPDEAPRMPEAAPPVAPAPAAPTPAAPAPAPSWPLSSSVPSQK"
