@@ -200,6 +200,9 @@ def _generate_test_params() -> list:
                     marks = []
                     if predictor_name not in _FAST_PREDICTORS:
                         marks.append(pytest.mark.slow)
+                    if msa_search_mode == "remote":
+                        # The first fold per query searches the live ColabFold MMseqs2 server.
+                        marks.append(pytest.mark.network)
                     if msa_search_mode == "local":
                         marks.append(pytest.mark.extensive)
                         if uniref30_skip:
