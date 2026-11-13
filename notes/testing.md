@@ -75,7 +75,7 @@ python scripts/run_tests_multi_gpu.py --out runs/today --weights shard_weights.j
 
 It runs in two phases (`tests/_gpu_shards.py`):
 
-1. **Serial**: tests that need more than one GPU (`uses_gpu(n)` with `n >= 2`) and `tests/tool_infra_tests/test_device_manager/` run once, with every GPU visible.
-2. **Parallel**: one pytest per GPU, each seeing only its own. A shard holds whole toolkits, so no toolkit's env or weights are loaded by two processes, and tests that run no tool stay together in one shard.
+1. **Parallel**: one pytest per GPU, each seeing only its own. A shard holds whole toolkits, so no toolkit's env or weights are loaded by two processes, and tests that run no tool stay together in one shard.
+2. **Serial**: tests that need more than one GPU (`uses_gpu(n)` with `n >= 2`) and `tests/tool_infra_tests/test_device_manager/` then run once, with every GPU visible. This phase is mostly the lifecycle test, which loads every toolkit, so it runs last, when the shards have left their envs and weights in the file cache.
 
 Shards are balanced longest-first on the weights file. Every test lands in exactly one phase and shard; `--gpu-phase serial|parallel` and `--shard K/N` select them directly. Env builds and weight downloads hold cross-process locks under `PROTO_HOME`, so concurrent shards wait for each other rather than collide. The runner writes each shard's output, JUnit file and warm-worker report, plus `merged.xml` and `summary.json`, to `--out`. Each shard's proto log goes to its own `--out/logs_<shard>/`, so to resume one, pass that log to `scripts/list_incomplete_tests.py`.
