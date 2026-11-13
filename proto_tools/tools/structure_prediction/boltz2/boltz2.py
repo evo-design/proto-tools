@@ -12,7 +12,7 @@ Example:
 import os
 import tempfile
 from logging import getLogger
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.boltz2.helpers import (
@@ -283,6 +283,24 @@ class Boltz2Config(MSAStructurePredictionConfig):
         description="Maximum execution time in seconds.",
         include_in_key=False,
     )
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "Boltz2Config":
+        """One diffusion sample over 20 steps and one recycle (defaults: 1, 200, 3).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            Boltz2Config: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("recycling_steps", 1)
+        kwargs.setdefault("sampling_steps", 20)
+        kwargs.setdefault("diffusion_samples", 1)
+        return cast("Boltz2Config", super().minimal(**kwargs))
 
 
 # ============================================================================

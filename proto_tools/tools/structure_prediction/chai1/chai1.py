@@ -7,7 +7,7 @@ import logging
 import os
 import tempfile
 from dataclasses import replace
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from pydantic import field_validator
 
@@ -259,6 +259,24 @@ class Chai1Config(MSAStructurePredictionConfig):
         description="Maximum execution time in seconds",
         include_in_key=False,
     )
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "Chai1Config":
+        """One diffusion sample over 20 timesteps and one trunk recycle (defaults: 5, 200, 3).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            Chai1Config: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("num_trunk_recycles", 1)
+        kwargs.setdefault("num_diffn_timesteps", 20)
+        kwargs.setdefault("num_diffn_samples", 1)
+        return cast("Chai1Config", super().minimal(**kwargs))
 
 
 # ============================================================================

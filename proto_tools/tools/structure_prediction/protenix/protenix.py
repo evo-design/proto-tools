@@ -393,8 +393,14 @@ class ProtenixConfig(MSAStructurePredictionConfig):
 
     @classmethod
     def minimal(cls, **kwargs: Any) -> "ProtenixConfig":
-        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        """Smallest checkpoint and one diffusion sample, so smoke and device tests run in seconds.
+
+        ``protenix_tiny_default_v0.5.0`` is an MSA model (the ``mini_esm``/``mini_ism`` variants are
+        the MSA-free ones), so ``minimal(use_msa=True)`` keeps it. Its schedule fills in 4 cycles
+        and 5 diffusion steps.
+        """
         kwargs.setdefault("model_name", "protenix_tiny_default_v0.5.0")
+        kwargs.setdefault("num_diffusion_samples", 1)
         return cast("ProtenixConfig", super().minimal(**kwargs))
 
 

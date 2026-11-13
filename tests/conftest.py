@@ -21,6 +21,7 @@ import logging
 import os
 import random
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -1516,7 +1517,8 @@ def setup_test_logging(request):
     proto_tools_logger.handlers.clear()
 
     # Create header with pytest command and timestamp
-    pytest_command = " ".join(sys.argv)
+    # Shell-quoted so scripts/list_incomplete_tests.py can replay it (a multi-word -k stays one argument).
+    pytest_command = shlex.join(sys.argv)
     now = datetime.now()
     timestamp = now.strftime("%H:%M:%S")
     datestamp = now.strftime("%m/%d/%Y")
