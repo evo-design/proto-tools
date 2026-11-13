@@ -413,6 +413,9 @@ class WarmWorkersPlugin:
 
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, config: pytest.Config, items: list[pytest.Item]) -> None:
+        from tests import _gpu_shards
+
+        _gpu_shards.select(config, items)  # --gpu-phase / --shard, before ordering what is left
         if config.getoption("--random-order") or config.getoption("--no-toolkit-order"):
             return
         order_items(items)

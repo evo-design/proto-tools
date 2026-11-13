@@ -62,3 +62,19 @@ default or example instead.
 ## Test order randomization
 
 `pytest-randomly` is installed, but this suite disables its reordering by default. Pass `--random-order` to shuffle test order and catch hidden inter-test dependencies. The seed is printed in the test header. Reproduce a specific order with `--randomly-seed=N`.
+
+## Running on several GPUs at once
+
+A GPU run is mostly one toolkit loading on one GPU while the others sit idle. `scripts/run_tests_multi_gpu.py` uses them all at once:
+
+```bash
+python -m tests._gpu_shards weights last_run.xml shard_weights.json   # per-test seconds, for balancing
+python scripts/run_tests_multi_gpu.py --out runs/today --weights shard_weights.json -- tests --all --ext
+```
+
+It runs in two phases (`tests/_gpu_shards.py`):
+
+1. **Serial**: tests that need more than one GPU (`uses_gpu(n)` with `n >= 2`) and `tests/tool_infra_tests/test_device_manager/` run once, with every GPU visible.
+2. **Parallel**: one pytest per GPU, each seeing only its own. A shard holds whole toolkits, so no toolkit's env or weights are loaded by two processes, and tests that run no tool stay together in one shard.
+
+Shards are balanced longest-first on the weights file. Every test lands in exactly one phase and shard; `--gpu-phase serial|parallel` and `--shard K/N` select them directly. Env builds and weight downloads hold cross-process locks under `PROTO_HOME`, so concurrent shards wait for each other rather than collide. The runner writes each shard's log, JUnit file and warm-worker report, plus `merged.xml` and `summary.json`, to `--out`.
