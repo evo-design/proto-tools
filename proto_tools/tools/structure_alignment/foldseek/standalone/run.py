@@ -51,7 +51,8 @@ def _write_fasta(sequences: list[str], path: Path, ids: list[str]) -> None:
     """Write single-record FASTA texts to one multi-FASTA file, each headed by its structure ID."""
     with path.open("w") as f:
         for sid, text in zip(ids, sequences, strict=True):
-            sequence = "".join(line.strip() for line in text.splitlines() if not line.startswith(">"))
+            lines = [line.strip() for line in text.splitlines()]
+            sequence = "".join(line for line in lines if not line.startswith(">"))
             f.write(f">{sid}\n{sequence}\n")
 
 
