@@ -29,7 +29,7 @@ from pathlib import Path
 logger = logging.getLogger("trace_weight_writes")
 
 # Under PROTO_HOME: env builds and package caches, reported as one total each
-_SUMMARIZED = ("proto_tool_envs", "uv_cache", "pip_cache", ".micromamba")
+_SUMMARIZED = ("proto_tool_envs", "uv_cache", ".micromamba")
 # Never worth walking under $HOME
 _SKIPPED_HOME = (".git", "node_modules", ".claude")
 
