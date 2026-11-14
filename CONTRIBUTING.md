@@ -108,26 +108,28 @@ Tests use flat functions only, no test classes.
 ### Running Tests
 
 ```bash
-pytest                          # run everything the host can handle (GPU tests run iff a GPU is visible; slow + integration + extensive skipped)
+pytest                          # run everything the host can handle (GPU tests run iff a GPU is visible; slow + network + extensive skipped)
 pytest --gpu-only               # filter: only GPU-marked tests
 pytest --cpu-only               # filter: only CPU-only tests
-pytest --integration            # add: include integration tests (external APIs/services)
+pytest --no-envs                # filter: skip tests that build or run a tool env (what CI's unit jobs run)
+pytest --network                # add: include tests that call live external services
 pytest --ext                    # add: include extensive (combinatorial) tests
 pytest --benchmark              # add: include @pytest.mark.benchmark tests (slow gate bypassed)
-pytest --all                    # add: include slow + integration (does NOT include extensive or benchmark)
-pytest --all --cpu-only         # add slow + integration, but skip GPU
+pytest --all                    # add: include slow (does NOT include network, extensive or benchmark)
+pytest --all --cpu-only         # add slow, but skip GPU
 ```
 
 ### Markers
 
 - `@pytest.mark.uses_gpu`: requires GPU (auto-skipped without one)
-- `@pytest.mark.integration`: tests external APIs or dispatches to real environments (skipped by default)
+- `@pytest.mark.uses_env`: builds or runs a tool env on CPU (runs by default; `--no-envs` skips it, along with every GPU test)
+- `@pytest.mark.network`: calls a live external service (skipped unless `--network`)
 - `@pytest.mark.slow`: long-running tests
 - `@pytest.mark.skip_ci`: skip in CI (e.g., tests that exceed CI runner memory limits)
 
 ### CI Integration Tests
 
-Integration tests do not run on every push. To run them on a PR, add the `run-integration` label. Once the label is present, integration tests will re-run automatically on each subsequent push. Remove the label to stop running them.
+CI's unit jobs run with `--no-envs`, so tests that build a tool env, and tests that call live services, do not run on every push. To run them on a PR, add the `run-integration` label: the Integration Tests workflow runs `pytest --network --cpu-only`. Once the label is present, it re-runs automatically on each subsequent push. Remove the label to stop running them. It also runs daily.
 
 See [notes/testing.md](notes/testing.md) for full conventions including naming, assertions, and file structure.
 

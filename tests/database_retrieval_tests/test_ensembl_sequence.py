@@ -102,7 +102,7 @@ def test_wraps_corrupt_json_with_context():
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_protein_sequence_for_brca1_canonical_live():
     """Protein sequence fetch for BRCA1 canonical transcript returns a non-empty seq."""
     out = run_ensembl_sequence(

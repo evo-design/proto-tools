@@ -99,7 +99,7 @@ def test_wraps_corrupt_json_with_context():
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_workflow_xrefs_then_uniprot_fetch():
     """Cross-tool: ensembl xrefs → uniprot-fetch on the resolved accession returns the same gene name."""
     xrefs = run_ensembl_xrefs(EnsemblXrefsInput(ensembl_id="ENSG00000012048"))

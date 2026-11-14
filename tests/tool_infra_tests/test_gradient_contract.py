@@ -457,7 +457,7 @@ def test_gradient_batch_fans_out_across_pool_slots(monkeypatch: pytest.MonkeyPat
 # ── Relaxation controls ──────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_relaxation_formula_runs_in_env() -> None:
     """The relaxed_sequence blend and its gradients are checked inside a built tool env.
 
@@ -476,7 +476,7 @@ def test_relaxation_formula_runs_in_env() -> None:
     assert "ALL CHECKS PASSED" in output, output
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_relaxation_formula_runs_in_jax_env() -> None:
     """The JAX twin of the blend is checked inside proteinmpnn's environment, which has no torch.
 
@@ -494,7 +494,7 @@ def test_relaxation_formula_runs_in_jax_env() -> None:
     assert "ALL CHECKS PASSED" in output, output
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_alphafold2_relaxation_matches_the_contract_in_env() -> None:
     """AlphaFold2 relaxes inside ColabDesign, so its own blend is checked against the contract.
 

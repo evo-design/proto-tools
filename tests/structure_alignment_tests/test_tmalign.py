@@ -24,7 +24,7 @@ _PDB_2_PATH = _DUMMY_DATA / "renin_af3.pdb"
 # Integration tests
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_tmalign_aligns_two_structures():
     """Align two different PDB structures and verify TM-scores."""
     pdb_1 = _PDB_1_PATH.read_text()
@@ -44,7 +44,7 @@ def test_tmalign_aligns_two_structures():
     assert len(result.superposition.translation) == 3
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_tmalign_self_alignment_perfect_score():
     """Aligning a structure to itself gives TM-score = 1.0 and an ~identity superposition."""
     pdb_1 = _PDB_1_PATH.read_text()

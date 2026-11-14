@@ -854,7 +854,7 @@ def _check_url(url: str) -> str | None:
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_all_links_reachable(readme: Path) -> None:
     """All URLs in READMEs must be reachable (not 404 or DNS failure).

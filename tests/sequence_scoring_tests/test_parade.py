@@ -41,7 +41,7 @@ def test_parade_input_normalizes_and_validates() -> None:
         ParadeActivityInput(sequences="ACGTX")
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_parade_n_base_encodes_to_zero() -> None:
     """N encodes to an all-zero column, matching upstream (0.25 assigned into an int one-hot truncates).
 
@@ -69,7 +69,7 @@ print("N_BASE_OK")
     assert "N_BASE_OK" in output, output
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_parade_checkpoint_download_security_runs_in_env() -> None:
     """Checkpoint download/security checks run INSIDE the parade standalone env.
 

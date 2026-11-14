@@ -525,7 +525,7 @@ def test_boltz2_reload_on_change_restarts_worker_only_for_load_fields(caplog):
         assert "restarting worker" not in caplog.text.lower()
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_boltz2_reported_msa_caps_match_boltz():
     """Boltz accepts the pinned num_subsampled_msa, and its featurizer caps rows where we report."""
     from proto_tools.tools.structure_prediction.boltz2.helpers import BOLTZ2_FEATURIZER_MAX_ROWS

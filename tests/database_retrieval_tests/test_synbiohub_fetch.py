@@ -135,7 +135,7 @@ def _mock_session(
 
 @pytest.fixture(autouse=True)
 def _no_ambient_login(request, monkeypatch):
-    if "integration" not in request.keywords:
+    if "requires_credential" not in request.keywords:
         monkeypatch.delenv("SYNBIOHUB_EMAIL", raising=False)
         monkeypatch.delenv("SYNBIOHUB_PASSWORD", raising=False)
 
@@ -393,7 +393,8 @@ def test_sequence_exports_need_a_sequence(tmp_path):
 # Integration tests
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
+@pytest.mark.network
 @pytest.mark.requires_credential("SYNBIOHUB_EMAIL", "SYNBIOHUB_PASSWORD")
 def test_live_gfp_cassette():
     output = run_synbiohub_fetch(synbiohub_fetch.example_input(), SynBioHubFetchConfig())

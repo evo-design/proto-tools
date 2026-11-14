@@ -41,5 +41,5 @@ jobs:
         key: ${{ runner.os }}-micromamba
     - name: Install dependencies
       run: uv pip install --system ".[dev]"
-    # --network: most integration tests also call a live service, and skip without it.
-    - run: pytest --integration --network --cpu-only --random-order
+    # Tests that run a tool env (uses_env) run by default; --network adds those that call a live service.
+    - run: pytest --network --cpu-only --random-order
