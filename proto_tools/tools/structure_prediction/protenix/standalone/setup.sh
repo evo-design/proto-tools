@@ -119,7 +119,7 @@ if [ -f "$COMPILE_PY" ] && [ -n "$GPU_ARCH" ]; then
     sed -i "s|os.environ\[\"TORCH_CUDA_ARCH_LIST\"\] = .*|os.environ[\"TORCH_CUDA_ARCH_LIST\"] = \"$GPU_ARCH\"|" "$COMPILE_PY"
     # Replace hardcoded -gencode flags with the detected arch
     python -c "
-import re
+import os, re
 
 with open('$COMPILE_PY', 'r') as f:
     content = f.read()
@@ -131,8 +131,11 @@ content = re.sub(
     content,
 )
 
-with open('$COMPILE_PY', 'w') as f:
+# Write a new file and swap it in: uv hardlinks installed files across envs, so an in-place write
+# would patch every env sharing this one
+with open('$COMPILE_PY.proto-patch', 'w') as f:
     f.write(content)
+os.replace('$COMPILE_PY.proto-patch', '$COMPILE_PY')
 "
     echo "Patched torch_ext_compile.py for $GPU_SM"
 fi
