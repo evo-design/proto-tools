@@ -25,6 +25,7 @@ from pydantic import (
 from pydantic import Field as PydanticField
 
 from proto_tools.utils.device import RemoteDevice
+from proto_tools.utils.file_inputs import coerce_path_field, coerce_path_values
 from proto_tools.utils.tool_io import (
     BaseToolInput,
     _extra_dict,
@@ -214,6 +215,12 @@ class BaseConfig(BaseModel):
     # A nested config is part of one call, so settings that describe how that call should be
     # carried out belong to the whole tree rather than to whichever config was named directly.
     INHERITED_BY_NESTED_CONFIGS: ClassVar[tuple[str, ...]] = ("verbose",)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_path_objects(cls, data: Any) -> Any:
+        """Accept a ``Path`` wherever a field takes a path as a ``str``."""
+        return coerce_path_values(cls, data)
 
     @model_validator(mode="after")
     def _inherit_fields_into_nested_configs(self) -> "BaseConfig":
@@ -516,7 +523,10 @@ class BaseConfig(BaseModel):
         return inputs
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """Assign a field, refusing writes to a config frozen for the duration of ``preprocess``."""
+        """Assign a field, refusing writes to a config frozen for the duration of ``preprocess``.
+
+        A ``Path`` assigned to a field that takes a path as a ``str`` is stored as a ``str``.
+        """
         if name in type(self).model_fields and id(self) in _preprocess_frozen.get():
             raise TypeError(
                 f"{type(self).__name__}.preprocess assigned to self.{name}. preprocess must not "
@@ -524,7 +534,7 @@ class BaseConfig(BaseModel):
                 f"calls. Return an updated copy alongside the inputs instead:\n"
                 f"    return inputs, self.model_copy(update={{{name!r}: ...}})"
             )
-        super().__setattr__(name, value)
+        super().__setattr__(name, coerce_path_field(type(self), name, value))
 
     def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:  # noqa: ARG002 — overrides use it
         """Reason this config can't run on ``device``, or ``None`` if it can.

@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 from proto_tools.utils.compressed_array import is_compressed_array
 from proto_tools.utils.export_names import sanitize_field
+from proto_tools.utils.file_inputs import coerce_path_field, coerce_path_values
 
 _REMOVED_UI_KWARGS = frozenset({"advanced", "hidden", "depends_on"})
 
@@ -541,6 +542,16 @@ class BaseToolInput(BaseModel):
         use_enum_values=True,  # Serialize enums as values
         validate_default=True,  # Validate default values
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_path_objects(cls, data: Any) -> Any:
+        """Accept a ``Path`` wherever a field takes a path as a ``str``."""
+        return coerce_path_values(cls, data)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Assign a field, accepting a ``Path`` for a field that takes a path as a ``str``."""
+        super().__setattr__(name, coerce_path_field(type(self), name, value))
 
     @classmethod
     def cache_exclude_fields(cls) -> set[str]:
