@@ -24,15 +24,15 @@ if TYPE_CHECKING:
 from proto_tools.entities.ligands.ccd_utils import get_canonical_component, is_valid_ccd_code
 from proto_tools.entities.structures.msa_conditioning import MSAConditioning
 from proto_tools.entities.structures.utils import (
+    _parses_with_atoms,
     _serialize_gemmi,
     convert_cif_str_to_pdb_str,
     detect_structure_format,
-    is_valid_structure,
     load_structure_file,
-    looks_like_structure_path,
     looks_like_url,
     pdb_file_to_atomarray,
 )
+from proto_tools.utils.file_inputs import STRUCTURE_FILES
 from proto_tools.utils.tool_io import Metrics, MetricValue
 
 
@@ -373,12 +373,13 @@ class Structure(BaseModel):
                 data["source"] = structure_value
             structure_value = data["structure"]
 
-        # If structure looks like a path to an existing file, load it transparently.
-        if structure_value is not None and looks_like_structure_path(structure_value):
-            path = Path(structure_value)
-            data["structure"] = load_structure_file(path)
-            if not data.get("source"):
-                data["source"] = str(path)
+        # A path to a structure file is read; any other string is structure content.
+        if isinstance(structure_value, (str, Path)):
+            file_text = STRUCTURE_FILES.read(structure_value)
+            if file_text is not None:
+                data["structure"] = file_text
+                if not data.get("source"):
+                    data["source"] = str(structure_value)
 
         # Auto-detect structure_format when not provided or explicitly None
         if "structure" in data and not data.get("structure_format"):
@@ -401,7 +402,7 @@ class Structure(BaseModel):
                 f"structure_format could not be determined (source={self.source!r}, content_len={len(self.structure)})"
             )
             raise ValueError(msg)
-        if not is_valid_structure(structure_filepath_or_content=self.structure):
+        if not _parses_with_atoms(self.structure, self.structure_format):
             msg = f"Structure content is invalid (source={self.source!r}, format={self.structure_format!r}, content_len={len(self.structure)})"
             raise ValueError(msg)
         return self

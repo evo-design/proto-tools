@@ -13,9 +13,11 @@ from typing import Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities.ligands import Fragment
+from proto_tools.entities.ligands.ligands import read_ligand_file_smiles
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigField, InputField, ToolInstance
+from proto_tools.utils.file_inputs import LIGAND_FILES
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
@@ -159,8 +161,9 @@ class VinaDockingInput(BaseToolInput):
     Attributes:
         receptor (Structure): Receptor coordinates to parameterize as a rigid PDBQT model.
         ligands (list[Fragment]): Small molecules to dock against the receptor, each scored
-            independently. SMILES strings are accepted, and a single ligand is normalized
-            into a one-element list.
+            independently. SMILES strings and paths to ``.smi``/``.sdf`` files (each molecule
+            in a file becomes one ligand) are accepted, and a single ligand is normalized into
+            a one-element list.
         search_box (VinaSearchBox | VinaReferenceLigandBox): Explicit search box or a box
             derived from a reference ligand in the receptor coordinate frame.
     """
@@ -171,7 +174,7 @@ class VinaDockingInput(BaseToolInput):
     )
     ligands: list[Fragment] = InputField(
         title="Ligands",
-        description="Ligand Fragments or SMILES strings to dock into the receptor.",
+        description="Ligand Fragments, SMILES strings, or paths to .smi/.sdf files to dock into the receptor.",
         min_length=1,
     )
     search_box: VinaSearchBox | VinaReferenceLigandBox = InputField(
@@ -182,11 +185,13 @@ class VinaDockingInput(BaseToolInput):
     @field_validator("ligands", mode="before")
     @classmethod
     def _coerce_smiles(cls, value: Any) -> Any:
-        """Accept bare SMILES strings, and a single ligand, as shorthand for ``list[Fragment]``."""
+        """Accept SMILES strings, paths to ``.smi``/``.sdf`` files, and a single ligand as shorthand for ``list[Fragment]``."""
         items = value if isinstance(value, (list, tuple)) else [value]
-        coerced = []
+        coerced: list[Any] = []
         for item in items:
-            if isinstance(item, str):
+            if isinstance(item, (str, Path)) and (path := LIGAND_FILES.resolve(item)) is not None:
+                coerced.extend({"smiles": smiles} for smiles in read_ligand_file_smiles(path))
+            elif isinstance(item, str):
                 coerced.append({"smiles": item})
             elif isinstance(item, dict):
                 coerced.append(item.copy())

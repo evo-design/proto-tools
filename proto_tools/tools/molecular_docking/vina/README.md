@@ -38,7 +38,7 @@ The bundled receptor and reference-ligand fixtures are derived from chain A of R
 
 ### AutoDock Vina Docking (`vina-docking`)
 
-Prepares one rigid receptor and one or more small-molecule ligands, searches either an explicit box or a box derived from a coordinate-bearing reference ligand, and returns the ranked poses retained by Vina for each ligand. Bare SMILES strings are accepted, and a single ligand is normalized into a one-element list; the tool generates a seeded three-dimensional conformer per ligand before docking.
+Prepares one rigid receptor and one or more small-molecule ligands, searches either an explicit box or a box derived from a coordinate-bearing reference ligand, and returns the ranked poses retained by Vina for each ligand. Bare SMILES strings and paths to `.smi` or `.sdf` files (optionally gzipped; each molecule becomes one ligand) are accepted, and a single ligand is normalized into a one-element list; the tool generates a seeded three-dimensional conformer per ligand before docking.
 
 #### Applications
 

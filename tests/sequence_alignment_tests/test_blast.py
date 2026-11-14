@@ -144,7 +144,7 @@ def test_input_fasta_path(tmp_path):
 
 
 def test_input_rejects_invalid_chars():
-    with pytest.raises(ValidationError, match="unexpected characters"):
+    with pytest.raises(ValidationError, match="neither a valid sequence nor a path"):
         BlastSearchInput(query="ATGCGT123!@#")
 
 
@@ -154,7 +154,7 @@ def test_input_rejects_empty():
 
 
 def test_input_rejects_nonexistent_path():
-    with pytest.raises(ValidationError, match="unexpected characters"):
+    with pytest.raises(ValidationError, match="no such file exists"):
         BlastSearchInput(query="/nonexistent/file.fasta")
 
 
