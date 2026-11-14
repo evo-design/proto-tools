@@ -4,7 +4,6 @@ Local-only — no remote analog. The public Foldseek server only does query-vs-D
 search; clustering an arbitrary user set requires the local CLI.
 """
 
-import gzip
 import json
 import logging
 from pathlib import Path
@@ -24,12 +23,29 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.file_inputs import (
+    STRUCTURE_FILES,
+    FileInput,
+    is_fasta_text,
+    is_structure_content,
+    read_text_file,
+)
 
 logger = logging.getLogger(__name__)
 
-# gz variants before plain variants so `.pdb.gz` matches before `.pdb` in `str.endswith`.
-_STRUCTURE_EXTENSIONS: tuple[str, ...] = (".pdb.gz", ".cif.gz", ".mmcif.gz", ".pdb", ".cif", ".mmcif")
-_FASTA_EXTENSIONS: tuple[str, ...] = (".fasta.gz", ".fa.gz", ".faa.gz", ".fasta", ".fa", ".faa")
+# Directory filename suffixes; gz variants come first so `.pdb.gz` matches before `.pdb` in `str.endswith`
+_STRUCTURE_EXTENSIONS: tuple[str, ...] = (
+    tuple(f"{ext}.gz" for ext in STRUCTURE_FILES.extensions) + STRUCTURE_FILES.extensions
+)
+# Protein FASTA only: ProstT5 converts amino-acid sequences to 3Di
+_PROTEIN_FASTA_EXTENSIONS = (".fasta", ".fa", ".faa")
+_FASTA_EXTENSIONS: tuple[str, ...] = tuple(f"{ext}.gz" for ext in _PROTEIN_FASTA_EXTENSIONS) + _PROTEIN_FASTA_EXTENSIONS
+# How a `structures` list item tells a structure or FASTA file from structure or FASTA text
+_ITEM_FILES = FileInput(
+    "structure or FASTA",
+    STRUCTURE_FILES.extensions + _PROTEIN_FASTA_EXTENSIONS,
+    lambda text: is_structure_content(text) or is_fasta_text(text),
+)
 _SUPPORTED_EXTENSIONS: tuple[str, ...] = _STRUCTURE_EXTENSIONS + _FASTA_EXTENSIONS
 
 
@@ -336,24 +352,18 @@ def _read_structures_dir(
             f"(extensions: {extensions}); found {len(matches)}"
         )
 
-    structures, ids = [], []
-    for file_path, stem in matches:
-        if file_path.name.lower().endswith(".gz"):
-            with gzip.open(file_path, "rt", encoding="utf-8") as f:
-                structures.append(f.read())
-        else:
-            structures.append(file_path.read_text(encoding="utf-8"))
-        ids.append(stem)
-    return structures, ids
+    structures = [read_text_file(file_path) for file_path, _ in matches]
+    return structures, [stem for _, stem in matches]
 
 
 def _coerce_structure_items_to_text(data: Any) -> Any:
-    """``mode="before"`` helper: per-item, coerce ``Structure`` / ``Path`` entries in ``structures`` to text.
+    """``mode="before"`` helper: per-item, coerce ``Structure`` objects and file paths in ``structures`` to text.
 
-    Structure objects emit their PDB representation. Paths to FASTA files are read
-    as text (so FASTA's leading-``>`` detection still works downstream); paths to
-    structure files load via :func:`Structure.from_file` and emit PDB. Strings
-    pass through unchanged (format auto-detected per-string at standalone dispatch).
+    Structure objects emit their PDB representation. Items naming a file (see
+    :mod:`proto_tools.utils.file_inputs`) are read: FASTA text verbatim (so the leading-``>``
+    detection still works downstream), structures via ``Structure`` and emitted as PDB.
+    Other strings are content and pass through unchanged (format auto-detected per string
+    at standalone dispatch).
     """
     if not isinstance(data, dict):
         return data
@@ -364,17 +374,8 @@ def _coerce_structure_items_to_text(data: Any) -> Any:
     for item in items:
         if isinstance(item, Structure):
             coerced.append(item.structure_pdb)
-        elif isinstance(item, Path):
-            lower = item.name.lower()
-            if any(lower.endswith(ext) for ext in _FASTA_EXTENSIONS):
-                # Read FASTA (and gz) text verbatim so the leading-`>` check downstream still classifies it.
-                if lower.endswith(".gz"):
-                    with gzip.open(item, "rt") as f:
-                        coerced.append(f.read())
-                else:
-                    coerced.append(item.read_text())
-            else:
-                coerced.append(Structure.from_file(item).structure_pdb)
+        elif isinstance(item, (str, Path)) and (text := _ITEM_FILES.read(item)) is not None:
+            coerced.append(text if _detect_input_format(text) == "fasta" else Structure(structure=text).structure_pdb)
         else:
             coerced.append(item)
     return {**data, "structures": coerced}

@@ -10,6 +10,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from proto_tools.entities.ligands.utils import is_smiles_valid
+from proto_tools.utils.file_inputs import LIGAND_FILES, read_text_file
 
 if TYPE_CHECKING:
     from rdkit import Chem
@@ -570,7 +571,7 @@ def parse_smiles_string(smiles: str) -> list[Fragment]:
 
 
 def parse_fragments_from_smiles_file(filepath: str | Path) -> list[Fragment]:
-    """Load fragments from a ``.smi`` file.
+    """Load fragments from a ``.smi`` file, optionally gzipped.
 
     Args:
         filepath (str | Path): Path to the SMILES file.
@@ -581,20 +582,16 @@ def parse_fragments_from_smiles_file(filepath: str | Path) -> list[Fragment]:
     Raises:
         FileNotFoundError: If the file does not exist.
     """
-    if not Path(filepath).exists():
-        raise FileNotFoundError(f"File not found: {filepath}")
-
     fragments = []
-    with open(filepath) as f:
-        for raw_line in f:
-            line = raw_line.strip()
-            if line:
-                fragments.extend(parse_smiles_string(line))
+    for raw_line in _read_ligand_file(filepath).splitlines():
+        line = raw_line.strip()
+        if line:
+            fragments.extend(parse_smiles_string(line))
     return fragments
 
 
 def parse_mols_from_sdf_file(filepath: str | Path) -> list[Chem.Mol]:
-    """Load Mol objects from an SDF file.
+    """Load Mol objects from an SDF file, optionally gzipped.
 
     Args:
         filepath (str | Path): Path to the SDF file.
@@ -607,16 +604,45 @@ def parse_mols_from_sdf_file(filepath: str | Path) -> list[Chem.Mol]:
     """
     from rdkit import Chem
 
-    if not Path(filepath).exists():
-        raise FileNotFoundError(f"File not found: {filepath}")
-
+    suppl = Chem.SDMolSupplier()
+    suppl.SetData(_read_ligand_file(filepath))
     mols = []
-    suppl = Chem.SDMolSupplier(str(filepath))
     for mol in suppl:
         if mol is None:
             continue  # type: ignore[unreachable]
         mols.append(mol)
     return mols
+
+
+def read_ligand_file_smiles(path: Path) -> list[str]:
+    """Return one SMILES per molecule in a ``.smi`` or ``.sdf`` file, optionally gzipped.
+
+    A ``.smi`` line holds one molecule (a salt such as ``CC(=O)[O-].[Na+]`` stays whole) and an
+    optional name after whitespace; ``#`` lines are comments. Each SDF record is one molecule.
+
+    Args:
+        path (Path): Path to the file.
+
+    Returns:
+        list[str]: One SMILES per molecule, in file order.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+    """
+    from rdkit import Chem
+
+    if path.name.lower().removesuffix(".gz").endswith(".smi"):
+        lines = (line.strip() for line in _read_ligand_file(path).splitlines())
+        return [line.split()[0] for line in lines if line and not line.startswith("#")]
+    return [Chem.MolToSmiles(mol) for mol in parse_mols_from_sdf_file(path)]
+
+
+def _read_ligand_file(filepath: str | Path) -> str:
+    """Return the text of a ligand file, raising ``FileNotFoundError`` when it is missing."""
+    path = Path(filepath).expanduser()
+    if not path.is_file():
+        raise FileNotFoundError(f"File not found: {filepath}")
+    return read_text_file(path)
 
 
 def parse_fragments_from_mols(mols: list[Chem.Mol]) -> list[Fragment]:
@@ -651,21 +677,25 @@ def parse_fragments_from_sdf_file(filepath: str | Path) -> list[Fragment]:
 
 
 def parse_fragments_from_string_or_path(string_or_path: str | Path) -> list[Fragment]:
-    """Parse a SMILES string or file path into Fragment objects.
+    """Parse a SMILES string or a path to a ``.smi``/``.sdf`` file into Fragment objects.
 
     Args:
-        string_or_path (str | Path): SMILES string, or path to a ``.smi``/``.sdf`` file.
+        string_or_path (str | Path): SMILES string, or path to a ``.smi``/``.sdf`` file,
+            optionally gzipped.
 
     Returns:
         list[Fragment]: Parsed fragments.
 
     Raises:
-        ValueError: If the input is neither valid SMILES nor a supported file.
+        FileNotFoundError: If the input is clearly a path but names no file, or names a directory.
+        ValueError: If the input is neither valid SMILES nor a ``.smi``/``.sdf`` file.
     """
-    if str(string_or_path).lower().endswith(".smi"):
-        return parse_fragments_from_smiles_file(string_or_path)
-    if str(string_or_path).lower().endswith(".sdf"):
-        return parse_fragments_from_sdf_file(string_or_path)
+    path = LIGAND_FILES.resolve(string_or_path)
+    if path is not None:
+        name = path.name.lower().removesuffix(".gz")
+        if name.endswith(".smi"):
+            return parse_fragments_from_smiles_file(path)
+        return parse_fragments_from_sdf_file(path)
     if isinstance(string_or_path, str) and is_smiles_valid(string_or_path):
         return parse_smiles_string(string_or_path)
     raise ValueError(f"Invalid input: {string_or_path}")

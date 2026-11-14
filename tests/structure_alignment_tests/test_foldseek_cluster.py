@@ -183,6 +183,15 @@ def test_input_rejects_multi_record_fasta_entry(second_record):
         FoldseekClusterInput(structures=[_TINY_FASTA + second_record, _TINY_FASTA])
 
 
+@pytest.mark.parametrize("as_path", [False, True], ids=["str", "Path"])
+def test_input_rejects_multi_record_fasta_file(tmp_path, as_path):
+    """A FASTA file holding two sequences is rejected like the same text inline."""
+    fasta = tmp_path / "two.fasta"
+    fasta.write_text(_TINY_FASTA + _TINY_FASTA_2)
+    with pytest.raises(ValidationError, match="one sequence"):
+        FoldseekClusterInput(structures=[fasta if as_path else str(fasta), _TINY_FASTA])
+
+
 def test_input_rejects_fasta_dir_with_spaced_stems(tmp_path):
     """Directory stems become FASTA headers, so a stem with a space is rejected in FASTA mode."""
     (tmp_path / "design 1.fasta").write_text(_TINY_FASTA)
