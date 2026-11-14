@@ -208,7 +208,7 @@ def test_remote_devices_are_refused() -> None:
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_reference_bundle_live(tmp_path: Path) -> None:
     output = run_ncbi_reference_bundle(
         NCBIReferenceBundleInput(accession=_ACCESSION, destination_dir=str(tmp_path / "ecoli")),

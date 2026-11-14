@@ -78,7 +78,7 @@ def test_msa_to_pqt_without_unpaired_keeps_paired_only(tmp_path):
     assert df["pairing_key"].tolist() == ["0", "1", "2"]
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_chai1_env_parses_msa_pqt(tmp_path):
     """The chai1 env reads the MSA parquet proto-tools writes (needs a NumPy 1.x-compatible pyarrow)."""
     from proto_tools.entities.msa import MSA
@@ -162,7 +162,7 @@ def test_count_chai1_tokens_glycan_sums_sugar_heavy_atoms():
     assert count_chai1_tokens(chains) == 4 + 12 + 11 + 12  # protein 4 + MAN 12 + FUC 11 + MAN 12
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_chai1_reported_msa_caps_match_chai_lab():
     """chai-lab's per-recycle draw and uniref90 quota are the rows the report claims."""
     from proto_tools.tools.structure_prediction.chai1.chai1 import (

@@ -90,7 +90,7 @@ def test_chain_ids_from_header(header: str, expected: list[str]) -> None:
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pdb_fetch_entry_metadata():
     """Fetch PDB entry metadata for a known structure."""
     inputs = PdbFetchEntryInput(pdb_id="1LBG")
@@ -101,7 +101,7 @@ def test_pdb_fetch_entry_metadata():
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pdb_fetch_fasta():
     """Fetch PDB FASTA chains for a known structure."""
     inputs = PdbFetchFastaInput(pdb_id="1LBG")

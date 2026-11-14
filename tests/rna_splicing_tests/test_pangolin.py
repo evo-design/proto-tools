@@ -183,13 +183,13 @@ def test_pangolin_variant_normalizes_single_variant() -> None:
 # ── Integration tests ──────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pangolin_predict_cpu() -> None:
     """Test Pangolin prediction on CPU."""
     _run_predict_and_check(device="cpu")
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pangolin_score_variants_cpu() -> None:
     """Test Pangolin variant scoring on CPU."""
     _run_score_variants_and_check(device="cpu")
@@ -207,7 +207,7 @@ def test_pangolin_score_variants_gpu() -> None:
     _run_score_variants_and_check(device="cuda")
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pangolin_predict_tissue_subset() -> None:
     """A tissue subset yields one score column per requested tissue, in order."""
     seq = random_dna_sequences(n=1, length=10100, seed=0)[0]
@@ -223,7 +223,7 @@ def test_pangolin_predict_tissue_subset() -> None:
     assert all(len(row) == len(tissues) for row in prediction.scores)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pangolin_score_variants_rejects_large_deletion() -> None:
     """A deletion wider than 2*distance is rejected before dispatch (matches upstream)."""
     seq = random_dna_sequences(n=1, length=10400, seed=9)[0]
@@ -237,7 +237,7 @@ def test_pangolin_score_variants_rejects_large_deletion() -> None:
         )
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pangolin_score_variants_minus_strand() -> None:
     """Scoring on the '-' strand exercises the reverse-complement and score-reversal paths."""
     seq = random_dna_sequences(n=1, length=10200, seed=11)[0]
@@ -253,7 +253,7 @@ def test_pangolin_score_variants_minus_strand() -> None:
     assert len(result.results[0].gain_scores) == 2 * 50 + 1
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pangolin_score_variants_deletion() -> None:
     """A simple deletion is scored end-to-end (exercises the indel alignment in _compute_score)."""
     seq = random_dna_sequences(n=1, length=10300, seed=12)[0]
@@ -269,7 +269,7 @@ def test_pangolin_score_variants_deletion() -> None:
     assert len(result.results[0].gain_scores) == len(ref) + 2 * 50
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pangolin_score_variants_batch() -> None:
     """Multiple variants yield one result each (1:1 batch cardinality)."""
     seq = random_dna_sequences(n=1, length=10200, seed=13)[0]
@@ -293,7 +293,7 @@ def test_pangolin_score_variants_batch() -> None:
 # ── Export ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pangolin_predict_export(tmp_path) -> None:
     """Prediction output exports to json and npy files."""
     seq = random_dna_sequences(n=1, length=10100, seed=0)[0]
@@ -307,7 +307,7 @@ def test_pangolin_predict_export(tmp_path) -> None:
         assert path.exists() and path.stat().st_size > 0
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pangolin_predict_export_ragged_npy(tmp_path) -> None:
     """A ragged batch (sequences of differing length) exports to npy as a 1-D object array."""
     import numpy as np
@@ -327,7 +327,7 @@ def test_pangolin_predict_export_ragged_npy(tmp_path) -> None:
     assert loaded[1].shape == (10200 - 2 * PANGOLIN_FLANK, 4)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pangolin_score_variants_export(tmp_path) -> None:
     """Variant-scoring output exports to both json and csv files."""
     seq = random_dna_sequences(n=1, length=10200, seed=0)[0]

@@ -4,7 +4,7 @@ Tests for the netMHCpan MHC class I binding prediction toolkit.
 
 Allele normalization, peptide/protein validation, the derived propensity and summary
 metrics, and the stdout parser all run without the binary; the execution tests are
-marked ``integration`` and skip cleanly when no netMHCpan install is resolvable.
+marked ``uses_env`` and skip cleanly when no netMHCpan install is resolvable.
 
 netMHCpan's academic license forbids publishing benchmark results to third parties, so
 nothing here commits a table of real scores or a captured output file as an oracle. The
@@ -479,7 +479,7 @@ def _error_text(exc):
     return "\n".join(str(part) for part in parts if part)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_peptides_basic_execution():
     """A peptide run returns one index-aligned prediction per peptide per allele."""
     _require_netmhcpan()
@@ -495,7 +495,7 @@ def test_netmhcpan_peptides_basic_execution():
     assert all(prediction.bindings[0].allele == "HLA-A02:01" for prediction in result.predictions)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_peptides_known_binder_ranks_below_known_non_binder():
     """A canonical A*02:01 epitope clears the strong cutoff; a B7-restricted one does not."""
     _require_netmhcpan()
@@ -511,7 +511,7 @@ def test_netmhcpan_peptides_known_binder_ranks_below_known_non_binder():
     assert binder.rank_el < non_binder.rank_el
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_peptides_binding_affinity_flag_populates_ba_fields():
     """include_binding_affinity passes -BA, which adds the BA columns the default run lacks."""
     _require_netmhcpan()
@@ -531,7 +531,7 @@ def test_netmhcpan_peptides_binding_affinity_flag_populates_ba_fields():
     assert ba_binding.rank_el == el_binding.rank_el
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_peptides_head_flags_populate_their_fields_additively():
     """-pathogen and -neo add their own score/%rank without disturbing the EL prediction."""
     _require_netmhcpan()
@@ -555,7 +555,7 @@ def test_netmhcpan_peptides_head_flags_populate_their_fields_additively():
     assert both.predictions[0].best_rank_neo == heads.rank_neo
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_protein_context_changes_scores_without_changing_shape():
     """-context re-scores every window off its flanks, so scores move but the scan does not."""
     _require_netmhcpan()
@@ -586,7 +586,7 @@ def test_protein_rejects_sequences_too_short_for_any_window():
     assert "11" in message
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_protein_strong_binders_per_100_residues_matches_the_formula():
     """Epitope density is the strong-binder count over residues times alleles, per 100."""
     _require_netmhcpan()
@@ -600,7 +600,7 @@ def test_netmhcpan_protein_strong_binders_per_100_residues_matches_the_formula()
     assert scan.strong_binders_per_100_residues == pytest.approx(expected)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_protein_export_csv_carries_a_sequence_index(tmp_path):
     """The protein CSV export has one row per window-allele pair, keyed by input index."""
     import csv
@@ -619,7 +619,7 @@ def test_netmhcpan_protein_export_csv_carries_a_sequence_index(tmp_path):
     assert {row[0] for row in rows[1:]} == {"0", "1"}
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_affinity_metrics_track_include_binding_affinity():
     """The two BA metrics appear only with -BA, and equal the minima over the bindings."""
     _require_netmhcpan()
@@ -638,7 +638,7 @@ def test_netmhcpan_affinity_metrics_track_include_binding_affinity():
         assert "best_affinity_nm" not in prediction
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_protein_windowing_matches_explicit_peptide_list():
     """Scanning a protein equals scoring the same k-mers passed in explicitly."""
     _require_netmhcpan()
@@ -657,7 +657,7 @@ def test_netmhcpan_protein_windowing_matches_explicit_peptide_list():
     ]
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_protein_window_count_and_one_indexed_positions():
     """A single-length scan yields L-k+1 windows, positioned 1-indexed from the sequence start."""
     _require_netmhcpan()
@@ -677,7 +677,7 @@ def test_netmhcpan_protein_window_count_and_one_indexed_positions():
     assert first.peptide == _PROTEIN[:_WINDOW_LENGTH]
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_peptides_multi_allele_panel_in_configured_order():
     """A panel is scored in one call, one binding per allele per peptide, in configured order."""
     _require_netmhcpan()
@@ -691,7 +691,7 @@ def test_netmhcpan_peptides_multi_allele_panel_in_configured_order():
         assert all(binding.peptide == prediction.peptide for binding in prediction.bindings)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_peptides_duplicate_peptides_are_index_aligned():
     """A repeated peptide gets its own prediction at each position, with identical values."""
     _require_netmhcpan()
@@ -708,7 +708,7 @@ def test_netmhcpan_peptides_duplicate_peptides_are_index_aligned():
     assert repeat.binding_propensity == first.binding_propensity
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.parametrize("allele", ["HLA-Z99:99", "BoLA-100901"])
 def test_netmhcpan_peptides_unknown_allele_error_names_the_allele(allele):
     """An allele this install cannot use is reported by name, not as an opaque failure.
@@ -729,7 +729,7 @@ def test_netmhcpan_peptides_unknown_allele_error_names_the_allele(allele):
     assert "Unknown allele" in message
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_misconfigured_install_error_names_the_config_field(tmp_path):
     """An explicit netmhcpan_dir that holds no install fails naming the field, not the binary."""
     _require_netmhcpan()
@@ -743,7 +743,7 @@ def test_netmhcpan_misconfigured_install_error_names_the_config_field(tmp_path):
     assert "no-such-install" in message
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_peptides_export_csv_and_json(tmp_path):
     """Export writes one CSV row per peptide-allele pair plus a header, and a JSON dump."""
     _require_netmhcpan()
@@ -790,7 +790,7 @@ def _upstream_reference(name: str) -> list[dict[str, str]]:
 _UPSTREAM_BIND_LEVELS = {"<= SB": "strong", "<= WB": "weak", "": "non-binder"}
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_matches_upstream_reference_el_peptides():
     """Peptide EL scores, ranks and binder classes match DTU's shipped test.pep.out."""
     _require_netmhcpan()
@@ -813,7 +813,7 @@ def test_matches_upstream_reference_el_peptides():
         assert binding.binder_class == _UPSTREAM_BIND_LEVELS[row["BindLevel"]]
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_matches_upstream_reference_binding_affinity():
     """BA score, rank and nM affinity match DTU's shipped test.pep_wBA.out."""
     _require_netmhcpan()
@@ -833,7 +833,7 @@ def test_matches_upstream_reference_binding_affinity():
         assert binding.affinity_nm == float(row["Aff(nM)"])
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_matches_upstream_reference_fasta_windowing():
     """Every window of DTU's shipped test.fsa.out is reproduced at the same position."""
     _require_netmhcpan()
@@ -883,7 +883,7 @@ def test_matches_upstream_reference_fasta_windowing():
 
 @pytest.mark.benchmark("netmhcpan-peptides")
 @pytest.mark.slow
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_peptides_benchmark(request: pytest.FixtureRequest):
     """Benchmark a peptide library against a three-allele panel (cold + warm)."""
     _require_netmhcpan()
@@ -903,7 +903,7 @@ def test_netmhcpan_peptides_benchmark(request: pytest.FixtureRequest):
 
 @pytest.mark.benchmark("netmhcpan-protein")
 @pytest.mark.slow
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_netmhcpan_protein_benchmark(request: pytest.FixtureRequest):
     """Benchmark a multi-length epitope scan over a batch of proteins (cold + warm)."""
     _require_netmhcpan()

@@ -224,7 +224,7 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert "reference_backend_path" not in payload
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_ligandmpnn_native_vocabularies_map_to_proto_columns() -> None:
     """Both scoring paths' runtime token orders must gather onto proto's 20 columns.
 

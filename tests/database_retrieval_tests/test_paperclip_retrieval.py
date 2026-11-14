@@ -155,7 +155,7 @@ def fake(monkeypatch) -> _FakeClient:
 @pytest.fixture(autouse=True)
 def _no_ambient_credentials(request, monkeypatch):
     """Keep a developer's own credentials out of the unit tests; the live tests need them."""
-    if request.node.get_closest_marker("integration"):
+    if request.node.get_closest_marker("requires_credential"):
         return
     for name in ("PAPERCLIP_API_KEY", "PAPERCLIP_TOKEN", "PAPERCLIP_BASE_URL"):
         monkeypatch.delenv(name, raising=False)
@@ -615,7 +615,8 @@ def test_document_id_cannot_escape_virtual_papers_directory():
 _LIVE = pytest.mark.requires_credential("PAPERCLIP_API_KEY")
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
+@pytest.mark.network
 @_LIVE
 def test_paperclip_search_and_lookup_live():
     search = run_paperclip_search(
@@ -626,7 +627,8 @@ def test_paperclip_search_and_lookup_live():
     assert [hit.document_id for hit in lookup.hits] == ["PMC11754230"]
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
+@pytest.mark.network
 @_LIVE
 def test_paperclip_grep_and_document_live():
     grep = run_paperclip_grep(PaperclipGrepInput(pattern="ProteinMPNN"), PaperclipGrepConfig(max_matches=3))

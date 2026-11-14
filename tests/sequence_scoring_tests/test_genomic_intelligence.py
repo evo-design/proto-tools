@@ -2,7 +2,7 @@
 
 The parse helpers are exercised against pinned payload literals so a change in
 the service's response shape surfaces here without a network call. Tests that
-reach the live API carry ``@pytest.mark.integration`` and are skipped by default.
+reach the live API carry ``@pytest.mark.network`` and are skipped by default.
 """
 
 from __future__ import annotations
@@ -953,17 +953,17 @@ def test_every_annotation_config_option_maps_to_a_key_the_api_accepts(monkeypatc
 
 
 # ============================================================================
-# Integration — live API, skipped unless pytest runs with --integration
+# Live API, skipped unless pytest runs with --network
 # ============================================================================
 #
 # The `run-integration` label starts Integration Tests, which runs pytest with
-# --integration, so these two cases are selected there. They still skip: that
+# --network, so these two cases are selected there. They still skip: that
 # workflow sets no GI_API_KEY, and a pull request from a fork is not given
 # repository secrets in any case. Running them for real means a local run with
 # a key in the environment.
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.network
 @pytest.mark.requires_credential("GI_API_KEY")
 def test_live_promoter_scores_a_sequence() -> None:
@@ -976,7 +976,7 @@ def test_live_promoter_scores_a_sequence() -> None:
     assert result.meta.request_id
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.network
 @pytest.mark.requires_credential("GI_API_KEY")
 def test_live_splice_is_strand_dependent() -> None:

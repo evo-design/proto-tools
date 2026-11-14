@@ -657,7 +657,7 @@ def test_{tool_key_snake}_input_normalizes_single_item():
 
 # ── Integration ───────────────────────────────────────────────────────────────
 
-@pytest.mark.uses_gpu  # or @pytest.mark.integration for CPU tools
+@pytest.mark.uses_gpu  # or @pytest.mark.uses_env for CPU tools
 def test_{tool_key_snake}_basic_execution():
     """Test basic tool execution with default config."""
     # Create input with realistic data
@@ -677,7 +677,7 @@ CRITICAL RULES:
 - Do NOT write tests like: `test_*_rejects_missing_*`, `test_*_rejects_extra_fields`, `test_*_config_defaults`, `test_*_rejects_invalid_*` (for simple `ge=`/`le=` constraints). These just re-test Pydantic.
 - Import from `proto_tools.tools` (top-level), not from deep paths
 - Use `@pytest.mark.uses_gpu` for any test that runs the actual tool on GPU
-- Use `@pytest.mark.integration` for CPU dispatch tests
+- Use `@pytest.mark.uses_env` for CPU tests that build or run the tool's env
 - Use realistic biological data (real sequences/structures from dummy_data/)
 - If the tool's input takes `msas`, add a worker stub for it to `_STUBS` in
   `tests/structure_prediction_tests/test_msa_contract.py`; `test_every_msa_tool_is_covered`

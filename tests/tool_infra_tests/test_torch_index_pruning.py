@@ -9,7 +9,7 @@ transitive CUDA wheel) has since been pruned therefore stops installing, with no
 repository having changed.
 
 That makes the failure time-triggered rather than change-triggered, so the resolve check is marked
-``integration``: it runs in the daily scheduled job, not as a gate on unrelated pull requests.
+``network``: it runs in the daily scheduled job, not as a gate on unrelated pull requests.
 The parser-coverage check alongside it is offline and change-triggered, so it does gate PRs — a
 newly added tool must not silently drop out of the canary's coverage.
 """
@@ -381,7 +381,7 @@ def _compile(spec: str, index_url: str, strategy: str | None, python_version: st
     return subprocess.run(command, input=spec, capture_output=True, text=True, timeout=600, check=False)
 
 
-@pytest.mark.integration
+@pytest.mark.network
 @pytest.mark.parametrize("case", CASES)
 def test_pinned_torch_still_resolves(case: ResolveCase) -> None:
     """Each distinct torch pin still resolves against the wheel index its tools would be built with."""

@@ -124,7 +124,7 @@ def test_protenix_partial_supplied_bundle_gives_every_chain_an_msa_path(tmp_path
     assert Path(paths[1]).read_text() == f">query\n{binder}\n"
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_protenix_does_not_search_for_a_partial_supplied_bundle(tmp_path):
     """Protenix's own need_msa_search stays False on the JSON we write for a target-only MSA."""
     from proto_tools.entities.msa import MSA
@@ -366,7 +366,7 @@ def test_protenix_benchmark(request):
     assert_metrics_in_spec(result)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_protenix_reported_msa_depth_matches_data_config():
     from proto_tools.tools.structure_prediction.protenix.protenix import PROTENIX_MSA_MAX_ROWS
     from proto_tools.utils import run_in_env

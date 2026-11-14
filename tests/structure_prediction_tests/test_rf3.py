@@ -207,7 +207,7 @@ def test_rf3_prediction_benchmark(request: pytest.FixtureRequest) -> None:
     assert_metrics_in_spec(result)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.slow
 def test_rf3_reported_msa_depth_matches_checkpoint_config():
     """Foundry builds RF3's inference pipeline from the checkpoint's first validation transform."""

@@ -345,7 +345,7 @@ def test_config_rejects_keep_intermediate_without_output_directory():
 # ── Integration (real DeepPBS env; skipped by default) ────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_deeppbs_specificity_runs_on_structure():

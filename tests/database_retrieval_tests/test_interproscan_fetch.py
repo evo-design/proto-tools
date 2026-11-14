@@ -572,7 +572,7 @@ def test_extract_xref_ids_handles_diverse_shapes(raw, expected):
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_direct_lookup_unknown_accession_surfaces_failure():
     """An unknown UniProt accession raises with a descriptive error."""
     with pytest.raises(Exception, match=r"(?i)no entries|not found"):
@@ -580,7 +580,7 @@ def test_direct_lookup_unknown_accession_surfaces_failure():
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_direct_lookup_tp53_matches_uniprot_and_pfam_anchor():
     """TP53 returns its canonical Pfam P53 DBD (PF00870, 100-288) and agrees with uniprot-fetch on length.
 
@@ -602,7 +602,7 @@ def test_direct_lookup_tp53_matches_uniprot_and_pfam_anchor():
     assert all(1 <= d.start <= d.end <= uniprot.length for d in output.domains)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.slow
 @pytest.mark.skip_ci
 @pytest.mark.requires_credential("INTERPROSCAN_EMAIL")

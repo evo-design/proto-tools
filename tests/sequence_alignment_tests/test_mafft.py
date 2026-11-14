@@ -72,7 +72,7 @@ DNA_WITH_GAP_SHORT = "ATGCGATCGTGAAA"  # 14 bp
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mafft_protein_alignment_with_internal_gap():
     """Test alignment producing internal gaps (PAD deletion)."""
     inputs = MafftInput(sequences=[PROTEIN_WITH_GAP_LONG, PROTEIN_WITH_GAP_SHORT])
@@ -96,7 +96,7 @@ def test_mafft_protein_alignment_with_internal_gap():
     assert result.msa.sequence_ids == ["seq_0", "seq_1"]
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mafft_protein_alignment_with_terminal_gaps():
     """Test alignment with terminal extension gaps."""
     inputs = MafftInput(sequences=[PROTEIN_BASE, PROTEIN_WITH_GAP_SHORT, PROTEIN_EXTENDED])
@@ -117,7 +117,7 @@ def test_mafft_protein_alignment_with_terminal_gaps():
     assert result.msa.total_gaps == 9
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mafft_protein_alignment_flanked_short_sequence():
     """Test alignment of short sequence embedded within longer sequence."""
     inputs = MafftInput(sequences=[PROTEIN_FLANKED_LONG, PROTEIN_FLANKED_SHORT])
@@ -135,7 +135,7 @@ def test_mafft_protein_alignment_flanked_short_sequence():
     assert result.msa.total_gaps == 13
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mafft_dna_alignment_with_internal_gap():
     """Test DNA alignment producing gaps (MAFFT lowercases DNA)."""
     inputs = MafftInput(sequences=[DNA_WITH_GAP_LONG, DNA_WITH_GAP_SHORT])
@@ -157,7 +157,7 @@ def test_mafft_dna_alignment_with_internal_gap():
     assert result.msa.aligned_sequences[1].count("-") == 4
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.parametrize("method", ["localpair", "globalpair", "genafpair"])
 def test_mafft_all_alignment_methods_produce_correct_gaps(method):
     """Each non-default alignment method produces the same optimal alignment as `auto` (internal-gap test)."""
@@ -176,7 +176,7 @@ def test_mafft_all_alignment_methods_produce_correct_gaps(method):
     assert result.msa.total_gaps == 3
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mafft_custom_sequence_ids_preserved():
     """Test that custom sequence IDs are preserved in output."""
     inputs = MafftInput(
@@ -194,7 +194,7 @@ def test_mafft_custom_sequence_ids_preserved():
     assert ">beta\n" in fasta
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mafft_sequence_ids_length_mismatch_fails():
     """Test that mismatched ID count raises an error."""
     inputs = MafftInput(
