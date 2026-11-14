@@ -129,7 +129,7 @@ def test_evo1_scoring_export_json(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_evo1_sampler_only_picks_nucleotides():
     """The sampler evo's generation loop calls returns only ACGT, even when other tokens score highest.
 

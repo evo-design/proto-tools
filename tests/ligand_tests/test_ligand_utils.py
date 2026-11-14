@@ -83,7 +83,7 @@ def test_lookup_name_via_pubchem(side_effects, expected):
 
 @pytest.mark.network
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_get_smiles_valid_name():
     smiles = lookup_smiles_via_pubchem("Aspirin")
     assert isinstance(smiles, str)
@@ -93,7 +93,7 @@ def test_get_smiles_valid_name():
 
 @pytest.mark.network
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_get_smiles_invalid_name():
     with pytest.raises(ValueError, match="Could not find SMILES for"):
         lookup_smiles_via_pubchem("ThisIsNotARealCompound1234")
@@ -101,14 +101,14 @@ def test_get_smiles_invalid_name():
 
 @pytest.mark.network
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_get_name_invalid_smiles():
     name = lookup_name_via_pubchem("C1C1C1C1C1")
     assert name == "Unknown"
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_get_name_empty_smiles():
     name = lookup_name_via_pubchem("")
     assert name == "Unknown"

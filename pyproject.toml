@@ -127,7 +127,7 @@ markers = [
     "uses_gpu: mark test as requiring GPU. Optional arg: @pytest.mark.uses_gpu(n) skips unless n GPUs are visible; --multi-gpu selects n >= 2",
     "uses_cpu: mark test as CPU-only. Optional arg: @pytest.mark.uses_cpu(n) skips unless n CPUs are visible (matches the count ToolPool's _detect_cpus would see)",
     "slow: Slow tests that may take several minutes",
-    "integration: Integration tests",
+    "uses_env: Builds or runs a tool env; skipped with --no-envs",
     "requires_credential(*env_vars): Needs these credentials (env vars a ConfigField(credential=...) declares); skipped at collection unless every one is set",
     "network: Calls a live external service (NCBI, UniProt, RCSB, EBI, ...). Skipped unless --network is passed; NOT enabled by --all or --ext",
     "skip_ci: Skip test in GitHub Actions CI",

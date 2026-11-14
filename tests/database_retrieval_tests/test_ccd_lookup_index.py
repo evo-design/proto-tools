@@ -48,7 +48,7 @@ def _redirect_atp(index: dict, code: str) -> None:
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_smiles_lookup_reads_a_current_index(isolated_weights_dir):
     """A saved index with a matching stamp is used as-is rather than rebuilt."""
     weights_dir, index = isolated_weights_dir
@@ -61,7 +61,7 @@ def test_smiles_lookup_reads_a_current_index(isolated_weights_dir):
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_smiles_lookup_rebuilds_a_stale_index(isolated_weights_dir):
     """A stamp from another RDKit version triggers a rebuild, which is saved for later workers."""
     weights_dir, index = isolated_weights_dir

@@ -191,7 +191,7 @@ def toolkit_of(item: pytest.Item) -> str | None:
     its body calls or names (``run_in_env("x", ...)``, ``ToolInstance.get("x")``), when they all
     belong to one; failing that, the one toolkit its whole file refers to, for a test that runs its
     tool through a helper or fixture. The last two only for tests that opted into persistence, use a GPU, or are
-    integration tests (which run a tool env), so CPU unit tests keep their order.
+    marked ``uses_env`` (they run a tool env), so CPU unit tests keep their order.
     """
     marker = item.get_closest_marker("toolkit")
     if marker is not None and marker.args:
@@ -202,7 +202,7 @@ def toolkit_of(item: pytest.Item) -> str | None:
             toolkit = _toolkit_of_value(value)
             if toolkit is not None:
                 return toolkit
-    runs_a_tool = any(item.get_closest_marker(name) is not None for name in ("uses_gpu", "integration"))
+    runs_a_tool = any(item.get_closest_marker(name) is not None for name in ("uses_gpu", "uses_env"))
     if not (warm_eligible(item) or runs_a_tool):
         return None
     if callspec is not None:

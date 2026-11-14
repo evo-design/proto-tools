@@ -1890,7 +1890,7 @@ _RCSB_PDB_URL = "https://files.rcsb.org/download/1TIM.pdb"
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_from_rcsb_fetches_structure():
     """``from_rcsb`` downloads a real PDB and returns a valid Structure."""
     structure = Structure.from_rcsb("1tim")  # case-insensitive
@@ -1901,7 +1901,7 @@ def test_from_rcsb_fetches_structure():
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_constructor_auto_fetches_url():
     """A URL passed to the constructor is fetched transparently, like a file path."""
     structure = Structure(structure=_RCSB_PDB_URL)

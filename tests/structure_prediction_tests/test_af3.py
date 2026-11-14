@@ -422,7 +422,7 @@ def test_alphafold3_benchmark(request):
     assert_metrics_in_spec(result)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_alphafold3_reported_msa_depth_matches_evoformer():
     """The report's 1024-row cap is the installed Evoformer's num_msa."""
     from proto_tools.tools.structure_prediction.alphafold3.alphafold3 import ALPHAFOLD3_NUM_MSA

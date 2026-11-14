@@ -118,7 +118,7 @@ def test_output_export_json_writes_ligands_and_results(tmp_path):
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_ccd_lookup_offline_full_pass():
     """One batch covers the offline CCD-code path: metadata, parent codes, order, and enrichment defaults."""
     result = run_ccd_lookup(CcdLookupInput(identifiers=["ATP", "SEP", "MSE"]), CcdLookupConfig())
@@ -147,7 +147,7 @@ def test_ccd_lookup_offline_full_pass():
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_ccd_lookup_returns_metadata_for_entries_rdkit_cannot_sanitize():
     """C8L (cucurbit[8]uril) overflows RDKit's CIP labeler, yet still returns its CCD metadata.
 
@@ -165,7 +165,7 @@ def test_ccd_lookup_returns_metadata_for_entries_rdkit_cannot_sanitize():
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_ccd_lookup_computes_descriptors_without_sanitization():
     """sanitize=False still yields formula_weight and RDKit physchem descriptors."""
     result = run_ccd_lookup(CcdLookupInput(identifiers=["ATP"]), CcdLookupConfig(sanitize=False))
@@ -178,7 +178,7 @@ def test_ccd_lookup_computes_descriptors_without_sanitization():
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_ccd_lookup_network_enrichment():
     """UniChem maps ATP to canonical external compound IDs; RCSB lists HEM in thousands of PDB entries."""
     result = run_ccd_lookup(

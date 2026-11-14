@@ -201,7 +201,7 @@ def test_remote_multimer_archive_parses_foldmulti_rows():
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_remote_multimer_search_finds_complex_neighbors_for_pdl1():
     """End-to-end: a real 2-chain PDB → Foldseek multimer pdb100 → schema-validated hits.
 
@@ -239,7 +239,7 @@ def test_remote_multimer_search_finds_complex_neighbors_for_pdl1():
     )
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_local_multimer_search_with_directory_db(tmp_path):
     """Local end-to-end: pdl1 2-chain fixture as both query and target (self-match guaranteed)."""
     multimer_pdb = _MULTIMER_FIXTURE.read_text()

@@ -183,7 +183,7 @@ def test_ncbi_gene_term_format():
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_sequence_fetch_protein_and_structure_by_name():
     """Fetch TP53 protein + structure by gene name and organism."""
     inputs = SequenceFetchInput(
@@ -218,7 +218,7 @@ def test_sequence_fetch_protein_and_structure_by_name():
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_sequence_fetch_export_fasta(tmp_path):
     """Fetch a protein from UniProt by accession and export it to FASTA format."""
     inputs = SequenceFetchInput(
@@ -255,7 +255,7 @@ def test_sequence_fetch_export_fasta(tmp_path):
 
 @pytest.mark.network
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_sequence_fetch_dna_genomic_by_name():
     """Fetch lacI genomic DNA from NCBI by gene name."""
     inputs = SequenceFetchInput(
@@ -284,7 +284,7 @@ def test_sequence_fetch_dna_genomic_by_name():
 
 @pytest.mark.network
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_sequence_fetch_premrna_minus_strand_no_double_rc():
     """Regression: pre-mRNA on minus-strand must NOT double reverse-complement.
 

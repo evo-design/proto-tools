@@ -131,7 +131,7 @@ def test_parser_preserves_joint_bulge_type_and_converts_to_1_indexed_coordinates
     assert (hit["start"], hit["end"]) == (1, 23)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_minus_strand_hit_lands_on_the_expected_reference_bases(tmp_path: Path) -> None:
     """Search a reference whose only exact target sits on the minus strand."""
     guide = "GACTGCATTGCATGACTGCA"

@@ -79,7 +79,7 @@ def test_foldseek_rbh_config_requires_local_db():
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_foldseek_rbh_end_to_end_with_directory_target_db(tmp_path):
     """Local end-to-end: RBH the renin fixture against a tmp directory of PDB targets (self-match guaranteed)."""
     target_dir = tmp_path / "targets"

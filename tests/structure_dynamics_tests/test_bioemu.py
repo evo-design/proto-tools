@@ -178,7 +178,7 @@ def test_a_no_hit_search_sends_a_query_only_msa():
     assert mock_cls.dispatch.call_args[0][1]["msa_a3m_contents"] == [f">query\n{seq}\n"]
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_bioemu_reuses_cached_embeddings_only_for_the_same_msa(tmp_path):
     """BioEmu caches embeddings by sequence alone; the standalone keys its cache directory by MSA."""
     from pathlib import Path
