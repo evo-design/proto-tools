@@ -31,6 +31,28 @@ EVO1_MODEL_CHECKPOINTS = Literal[
     "evo-1-8k-transposon",
 ]
 
+# Byte-level token ids of A, C, G, T; Evo1's vocabulary is 512 bytes
+DNA_TOKEN_IDS = [ord(base) for base in "ACGT"]
+
+
+def restrict_sampling_to_dna() -> None:
+    """Make evo's generation loop sample only A, C, G and T.
+
+    ``evo.generation`` calls ``stripedhyena.sample.sample`` once per generated token and
+    has no option to limit the vocabulary, so this replaces that function in
+    ``evo.generation`` with one that masks every other token first.
+    """
+    import evo.generation
+    from stripedhyena.sample import sample
+
+    def sample_dna(logits: torch.Tensor, **kwargs: Any) -> torch.Tensor:
+        # A finite floor, not -inf: `sample` turns -inf logits into 0
+        masked = torch.full_like(logits, torch.finfo(logits.dtype).min)
+        masked[..., DNA_TOKEN_IDS] = logits[..., DNA_TOKEN_IDS]
+        return sample(masked, **kwargs)
+
+    evo.generation.sample = sample_dna
+
 
 class Evo1Model:
     """Evo1 model implementation using the evo-model pip package.
@@ -69,7 +91,8 @@ class Evo1Model:
         """Sample DNA sequences autoregressively from prompts.
 
         Delegates to ``evo.generation.generate()`` which supports batched
-        generation with cached recurrent state.
+        generation with cached recurrent state. Sampling is limited to A, C, G
+        and T.
 
         Args:
             prompts: DNA prompt sequences.
@@ -95,6 +118,8 @@ class Evo1Model:
             self.load(self.device, verbose=verbose)
 
         from evo.generation import generate as evo_generate
+
+        restrict_sampling_to_dna()
 
         all_sequences: list[str] = []
         all_scores: list[float] = []

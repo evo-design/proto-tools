@@ -35,6 +35,8 @@ def test_tmalign_aligns_two_structures():
     validate_output(result)
     assert 0.0 <= result.tm_score_chain_1 <= 1.0
     assert 0.0 <= result.tm_score_chain_2 <= 1.0
+    # The headline score is the one normalized by the reference
+    assert result.metrics.primary_value == result.tm_score_chain_2
     # The superposition transform is parsed from the ``-m`` matrix the binary writes.
     assert result.superposition is not None
     assert len(result.superposition.rotation) == 3

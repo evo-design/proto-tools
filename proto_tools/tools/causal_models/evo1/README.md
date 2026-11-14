@@ -26,7 +26,7 @@ The autoregressive objective yields two capabilities directly. Sampling from the
 
 ### Evo1 Sampling (`evo1-sample`)
 
-Generates DNA sequences by autoregressive sampling. Given one or more prompt sequences, the model extends each prompt nucleotide by nucleotide, drawing each new nucleotide from the model's predicted distribution under the configured `temperature`, `top_k`, and `top_p` settings, until `max_new_tokens` new nucleotides have been produced. Also returns a per-sequence likelihood score (log-likelihood, average log-likelihood, and perplexity) for the generated sequences.
+Generates DNA sequences by autoregressive sampling. Given one or more prompt sequences, the model extends each prompt nucleotide by nucleotide, drawing each new nucleotide from the model's predicted distribution under the configured `temperature`, `top_k`, and `top_p` settings, until `max_new_tokens` new nucleotides have been produced. Sampling is limited to the uppercase bases `A`, `C`, `G` and `T`, so the output is always DNA. Also returns a per-sequence likelihood score (log-likelihood, average log-likelihood, and perplexity) for the generated sequences.
 
 #### Applications
 
@@ -35,7 +35,7 @@ This tool produces candidate DNA sequences for downstream design and screening, 
 #### Usage Tips
 
 - **Match the checkpoint to the task.** `evo-1-8k-base` (the default) is the general prokaryotic and phage DNA model and `evo-1-131k-base` is its genome-scale, long-context counterpart. `evo-1-8k-crispr` and `evo-1-8k-transposon` are task-specific variants of `evo-1-8k-base` for generating CRISPR-Cas systems and IS200/IS605 transposons; use them when generating those systems and a base checkpoint otherwise.
-- **`top_k` defaults to 4, the size of the DNA alphabet.** It exists mainly to keep generation on the four bases rather than other byte tokens, so it is not the diversity parameter; control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
+- **`top_k` defaults to 4, the size of the DNA alphabet.** Sampling is already limited to the four bases, so values of 4 or more do not narrow it further, and `top_k` is not the diversity parameter; control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
 - **Output excludes the prompt by default.** `prepend_prompt=False` returns only the newly generated nucleotides, not the prompt joined to its continuation; set it `True` if you need the full sequence back.
 - **Prompt length plus `max_new_tokens` must fit the checkpoint's context window** (8,192 nucleotides for the 8k checkpoints, 131,072 for `evo-1-131k-base`). The model cannot attend beyond that window, so a long prompt directly reduces how much can be generated.
 - **Generated sequences are candidates.** Validate them with downstream tools (for example ORF detection, structure prediction, or homology search) before drawing biological conclusions.

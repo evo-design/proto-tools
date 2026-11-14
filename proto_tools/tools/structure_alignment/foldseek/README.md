@@ -51,7 +51,7 @@ This tool is appropriate for deduplicating a set of designed structures before d
 #### Usage Tips
 
 - **`structures` accepts either a list or a directory path.** Provide an in-memory list of structure or FASTA text strings (Structure objects and file paths are also accepted per item), or a single path to a directory of supported files, in which case filename stems become the structure identifiers.
-- **A single call must use one input format.** Mixing FASTA inputs with PDB or mmCIF inputs is rejected by input validation. Format is auto-detected per input entry.
+- **A single call must use one input format.** Mixing FASTA inputs with PDB or mmCIF inputs is rejected by input validation. Format is auto-detected per input entry. Each FASTA entry holds one sequence, and cluster members are named by `structure_ids` rather than by the FASTA headers.
 - **`min_seq_id=0.0` is intentional and lets 3Di structural similarity dominate cluster assignment.** Raising it adds a sequence-identity floor to cluster membership. Use a non-zero value only when a sequence-similarity constraint is desired alongside structural similarity.
 - **There is no parameter that requests an exact cluster count.** Foldseek clusters by similarity threshold, not by a target count. To approximate a target number of clusters, sweep the `cov` field and select the run whose cluster count is closest to the target.
 
