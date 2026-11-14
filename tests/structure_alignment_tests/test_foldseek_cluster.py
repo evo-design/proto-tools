@@ -176,10 +176,32 @@ def test_input_rejects_mixed_pdb_and_fasta():
         FoldseekClusterInput(structures=[_TINY_FASTA, _TINY_PDB])
 
 
-def test_input_rejects_multi_record_fasta_entry():
-    """Each entry is one cluster member, so a FASTA entry holding two sequences is rejected."""
+@pytest.mark.parametrize("second_record", [_TINY_FASTA_2, "  " + _TINY_FASTA_2])
+def test_input_rejects_multi_record_fasta_entry(second_record):
+    """Each entry is one cluster member, so a FASTA entry holding two sequences is rejected, indented or not."""
     with pytest.raises(ValidationError, match="one sequence"):
-        FoldseekClusterInput(structures=[_TINY_FASTA + _TINY_FASTA_2, _TINY_FASTA])
+        FoldseekClusterInput(structures=[_TINY_FASTA + second_record, _TINY_FASTA])
+
+
+def test_input_rejects_fasta_dir_with_spaced_stems(tmp_path):
+    """Directory stems become FASTA headers, so a stem with a space is rejected in FASTA mode."""
+    (tmp_path / "design 1.fasta").write_text(_TINY_FASTA)
+    (tmp_path / "design 2.fasta").write_text(_TINY_FASTA_2)
+    with pytest.raises(ValidationError, match="whitespace"):
+        FoldseekClusterInput(structures=str(tmp_path))
+
+
+def test_input_rejects_fasta_entry_without_sequence():
+    """A header-only FASTA entry would be clustered as an empty record, so it is rejected."""
+    with pytest.raises(ValidationError, match="has no sequence"):
+        FoldseekClusterInput(structures=[">design_07\n\n", _TINY_FASTA])
+
+
+@pytest.mark.parametrize("bad_id", ["design 1", "sp|P12345"])
+def test_input_rejects_fasta_ids_foldseek_cannot_name(bad_id):
+    """Foldseek names FASTA records by the header's first word, so IDs with whitespace or '|' are rejected."""
+    with pytest.raises(ValidationError, match="whitespace or '\\|'"):
+        FoldseekClusterInput(structures=[_TINY_FASTA, _TINY_FASTA_2], structure_ids=[bad_id, "other"])
 
 
 # ── FoldseekClusterInput resolution from directory ────────────────────────────

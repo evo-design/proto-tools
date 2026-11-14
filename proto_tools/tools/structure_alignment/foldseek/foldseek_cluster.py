@@ -412,8 +412,15 @@ def _validate_resolved_input(
         raise ValueError("Cannot mix FASTA with PDB/mmCIF inputs in a single call; all inputs must be the same kind.")
     if reject_fasta and fasta_count:
         raise ValueError("FASTA input is not supported here; pass PDB or mmCIF text/files.")
-    if fasta_count and any(sum(line.startswith(">") for line in s.splitlines()) > 1 for s in texts):
-        raise ValueError("Each FASTA input must hold one sequence; pass multiple sequences as separate list items.")
+    if fasta_count:
+        for i, text in enumerate(texts):
+            lines = [line.strip() for line in text.splitlines()]
+            if sum(line.startswith(">") for line in lines) > 1:
+                raise ValueError(
+                    "Each FASTA input must hold one sequence; pass multiple sequences as separate list items."
+                )
+            if not any(line and not line.startswith(">") for line in lines):
+                raise ValueError(f"FASTA input {i} ({lines[0]!r}) has no sequence.")
 
     if structure_ids is None:
         return
@@ -421,6 +428,9 @@ def _validate_resolved_input(
     for sid in structure_ids:
         if not sid or "/" in sid or "\\" in sid or sid in {".", ".."}:
             raise ValueError(f"structure_id {sid!r} is not a safe filename")
+        # Foldseek names FASTA records by the header's first word and parses `|`-delimited headers
+        if fasta_count and any(c.isspace() or c == "|" for c in sid):
+            raise ValueError(f"structure_id {sid!r} contains whitespace or '|', which FASTA headers cannot carry")
         if reject_underscore and "_" in sid:
             raise ValueError(
                 f"structure_id {sid!r} contains '_', which collides with Foldseek's "

@@ -7,6 +7,7 @@ Usage (called by ToolInstance, not directly):
     python inference.py <input.json> <output.json>
 """
 
+import functools
 import json
 import sys
 from typing import Any, Literal
@@ -35,8 +36,17 @@ EVO1_MODEL_CHECKPOINTS = Literal[
 DNA_TOKEN_IDS = [ord(base) for base in "ACGT"]
 
 
+@functools.cache
+def _non_dna_mask(vocab_size: int, device: torch.device) -> torch.Tensor:
+    """Boolean mask over the vocabulary that is True for every token except A, C, G and T."""
+    mask = torch.ones(vocab_size, dtype=torch.bool, device=device)
+    mask[DNA_TOKEN_IDS] = False
+    return mask
+
+
+@functools.cache
 def restrict_sampling_to_dna() -> None:
-    """Make evo's generation loop sample only A, C, G and T.
+    """Make evo's generation loop sample only A, C, G and T; runs once per process.
 
     ``evo.generation`` calls ``stripedhyena.sample.sample`` once per generated token and
     has no option to limit the vocabulary, so this replaces that function in
@@ -46,10 +56,9 @@ def restrict_sampling_to_dna() -> None:
     from stripedhyena.sample import sample
 
     def sample_dna(logits: torch.Tensor, **kwargs: Any) -> torch.Tensor:
-        # A finite floor, not -inf: `sample` turns -inf logits into 0
-        masked = torch.full_like(logits, torch.finfo(logits.dtype).min)
-        masked[..., DNA_TOKEN_IDS] = logits[..., DNA_TOKEN_IDS]
-        return sample(masked, **kwargs)
+        # The lowest finite logit gives every non-DNA token zero probability
+        non_dna = _non_dna_mask(logits.shape[-1], logits.device)
+        return sample(logits.masked_fill(non_dna, torch.finfo(logits.dtype).min), **kwargs)
 
     evo.generation.sample = sample_dna
 
@@ -118,8 +127,6 @@ class Evo1Model:
             self.load(self.device, verbose=verbose)
 
         from evo.generation import generate as evo_generate
-
-        restrict_sampling_to_dna()
 
         all_sequences: list[str] = []
         all_scores: list[float] = []
@@ -274,6 +281,7 @@ class Evo1Model:
 
         self.model = self.model.to(device).eval()
         self.device = device
+        restrict_sampling_to_dna()
         self._loaded = True
 
         if verbose:
