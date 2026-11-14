@@ -46,7 +46,7 @@ class Evo1Sample(CausalModelSample):
     """One generated DNA sequence and its scoring metrics.
 
     Attributes:
-        sequence (str): The generated DNA sequence.
+        sequence (str): The generated DNA sequence; every generated base is A, C, G or T.
         metrics (CausalModelScoringMetrics | None): Scoring metrics for this sequence,
             including log_likelihood, avg_log_likelihood, and perplexity.
     """
