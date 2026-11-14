@@ -47,6 +47,14 @@ def _write_structures(structures: list[str], out_dir: Path, ids: list[str], form
         (out_dir / f"{sid}.{fmt}").write_text(text)
 
 
+def _write_fasta(sequences: list[str], path: Path, ids: list[str]) -> None:
+    """Write single-record FASTA texts to one multi-FASTA file, each headed by its structure ID."""
+    with path.open("w") as f:
+        for sid, text in zip(ids, sequences, strict=True):
+            sequence = "".join(line.strip() for line in text.splitlines() if not line.startswith(">"))
+            f.write(f">{sid}\n{sequence}\n")
+
+
 def _ensure_prostt5_weights(override: str | None) -> str:
     """Return a ProstT5 weights path, provisioning via `foldseek databases ProstT5` if missing.
 
@@ -175,20 +183,20 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        structures_dir = tmp_path / "structures"
-        structures_dir.mkdir()
-        _write_structures(
-            input_data["structures"],
-            structures_dir,
-            input_data["structure_ids"],
-            formats,
-        )
+        # ProstT5 mode reads one FASTA file; structure mode reads a directory of structure files
+        if is_fasta_mode:
+            query = tmp_path / "sequences.fasta"
+            _write_fasta(input_data["structures"], query, input_data["structure_ids"])
+        else:
+            query = tmp_path / "structures"
+            query.mkdir()
+            _write_structures(input_data["structures"], query, input_data["structure_ids"], formats)
 
         prefix = tmp_path / "cluster"
         cmd = [
             foldseek,
             "easy-cluster",
-            str(structures_dir),
+            str(query),
             str(prefix),
             str(tmp_path / "fs_tmp"),
             "--min-seq-id",

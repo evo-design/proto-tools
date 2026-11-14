@@ -176,6 +176,12 @@ def test_input_rejects_mixed_pdb_and_fasta():
         FoldseekClusterInput(structures=[_TINY_FASTA, _TINY_PDB])
 
 
+def test_input_rejects_multi_record_fasta_entry():
+    """Each entry is one cluster member, so a FASTA entry holding two sequences is rejected."""
+    with pytest.raises(ValidationError, match="one sequence"):
+        FoldseekClusterInput(structures=[_TINY_FASTA + _TINY_FASTA_2, _TINY_FASTA])
+
+
 # ── FoldseekClusterInput resolution from directory ────────────────────────────
 
 
@@ -332,6 +338,25 @@ def test_foldseek_cluster_end_to_end_with_directory(tmp_path):
     assert output.success, f"errors: {output.errors}"
     assert output.num_structures == 2
     assert output.num_clusters >= 1
+
+
+@pytest.mark.integration
+def test_foldseek_cluster_end_to_end_with_fasta():
+    """FASTA inputs cluster through ProstT5, and members carry the given structure IDs, not the FASTA headers."""
+    sequence = (
+        "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEKAVQVKVKALPDAQFEVVHSLAKWKRQTLGQHDFSAGEGLYTHMKALRPDEDRL"
+        "SPLHSVYVDQWDWERVMGDGERQFSTLKSTVEAIWAGIKATEAAVSEEFGLAPFLPDQIHFVHSQELLSRYPDLDAKGRERAIAKDLGAVFLVGIGGKLSDGHRHDV"
+        "RAPDYDDW"
+    )
+    inputs = FoldseekClusterInput(
+        structures=[f">header_a\n{sequence}\n", f">header_b\n{sequence[:120]}\n{sequence[120:]}\n"],
+        structure_ids=["full", "wrapped"],
+    )
+
+    output = run_foldseek_cluster(inputs, FoldseekClusterConfig())
+
+    assert output.success, f"errors: {output.errors}"
+    assert sorted(m for c in output.clusters for m in c.member_ids) == ["full", "wrapped"]
 
 
 # ── Benchmark ───────────────────────────────────────────────────────────────────

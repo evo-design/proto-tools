@@ -410,6 +410,8 @@ def _validate_resolved_input(
         raise ValueError("Cannot mix FASTA with PDB/mmCIF inputs in a single call; all inputs must be the same kind.")
     if reject_fasta and fasta_count:
         raise ValueError("FASTA input is not supported here; pass PDB or mmCIF text/files.")
+    if fasta_count and any(sum(line.startswith(">") for line in s.splitlines()) > 1 for s in texts):
+        raise ValueError("Each FASTA input must hold one sequence; pass multiple sequences as separate list items.")
 
     if structure_ids is None:
         return

@@ -85,7 +85,7 @@ class Evo1SampleConfig(CausalModelSampleConfig):
             use an 8,192-token context, ``evo-1-131k-base`` extends to 131,072 tokens, and
             ``-crispr``/``-transposon`` are domain fine-tunes.
         top_k (int): Limit sampling to the top-k most probable tokens at each step.
-            Defaults to ``4`` (one per DNA base).
+            Defaults to ``4`` (one per DNA base); sampling only ever picks A, C, G or T.
         max_new_tokens (int): Maximum number of new tokens to generate per prompt (excludes prompt).
         cached_generation (bool): Use the KV cache for autoregressive generation.
         force_prompt_threshold (int): Number of tokens to prefill in parallel before
