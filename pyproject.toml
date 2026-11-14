@@ -227,6 +227,7 @@ module = [
     "colabfold.*",
     "evo.*",
     "evo2.*",
+    "stripedhyena.*",
     "progen3.*",
     "iglm.*",
     "vortex.*",
