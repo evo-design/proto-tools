@@ -198,13 +198,13 @@ def _run_predict(device: str) -> None:
     assert all(len(pos) == 3 and all(0.0 <= p <= 1.0 for p in pos) for pos in result.predictions[0])
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_spliceai_score_cpu(tmp_path: Path) -> None:
     """SpliceAI variant scoring on CPU."""
     _run_score(tmp_path, "cpu")
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_spliceai_predict_cpu() -> None:
     """SpliceAI raw prediction on CPU."""
     _run_predict("cpu")

@@ -245,7 +245,7 @@ print(json.dumps({**steps, "same_param": ref is model.norm_weight, "current": to
 """
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.uses_gpu(2)
 def test_move_model_to_device_takes_cached_tensors_along() -> None:
     """``.to()`` skips tensors held as plain attributes; the move helper must not leave them behind.
@@ -307,7 +307,7 @@ def test_worker_makes_the_request_device_current(monkeypatch, torch_state, devic
 # ── Auto-pinning on real GPUs ─────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.uses_gpu(2)
 def test_auto_pinned_worker_sees_only_its_gpu() -> None:
     """On an Exclusive_Process host a GPU worker lands on its lease alone, and a move respawns it."""

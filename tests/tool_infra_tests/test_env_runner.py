@@ -16,14 +16,14 @@ def test_requires_exactly_one_of_code_or_script() -> None:
         run_in_env("esm2")
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_nonzero_exit_raises() -> None:
     """A non-zero exit in the tool env surfaces as a RuntimeError with stderr."""
     with pytest.raises(RuntimeError, match="failed"):
         run_in_env("esm2", code="import sys; sys.exit(3)")
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_logs_demux_to_parent_and_stdout_stays_clean(caplog: pytest.LogCaptureFixture) -> None:
     """In-env proto-logging re-emits on the parent logger; stdout stays pure data."""
     code = (
@@ -38,7 +38,7 @@ def test_logs_demux_to_parent_and_stdout_stays_clean(caplog: pytest.LogCaptureFi
     assert any("hello from env" in r.getMessage() for r in caplog.records)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_runs_script_file_in_env(tmp_path: Path) -> None:
     """The script= path runs a file, forwards args as sys.argv[1:], and exports RUN_IN_ENV_DEVICE."""
     script = tmp_path / "prog.py"
@@ -49,14 +49,14 @@ def test_runs_script_file_in_env(tmp_path: Path) -> None:
     assert json.loads(out) == {"argv": ["a", "b"], "device": "cpu"}
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_timeout_raises() -> None:
     """A run that exceeds timeout is killed and surfaces as TimeoutError."""
     with pytest.raises(TimeoutError, match="timed out"):
         run_in_env("esm2", code="import time; time.sleep(30)", timeout=3)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_jax_compilation_cache_reaches_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The tool env's JAX reads the parent-chosen cache directory and writes compiled programs to it."""
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
@@ -83,7 +83,7 @@ _VISIBILITY = (
 )
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_cpu_run_sees_no_gpu() -> None:
     """A cpu run hides every GPU, so JAX initializes on CPU instead of claiming GPUs a worker may hold."""
     code = _VISIBILITY + "import jax\nprint(jax.default_backend())\n"

@@ -138,7 +138,7 @@ def test_fampnn_design_structure_and_metrics():
 
 
 # ============================================================================
-# Integration tests (GPU required, run with --integration or --all)
+# Integration tests (GPU required)
 # ============================================================================
 @pytest.mark.uses_gpu
 def test_fampnn_sample_simple(pdb_structure):

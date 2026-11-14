@@ -274,7 +274,7 @@ def test_server_error_raises_after_retries(monkeypatch: pytest.MonkeyPatch, cloc
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_arxiv_search_finds_a_known_preprint_by_title():
     """A title phrase query returns the matching arXiv record with its version."""
     output = run_arxiv_search(
@@ -286,7 +286,7 @@ def test_arxiv_search_finds_a_known_preprint_by_title():
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_arxiv_search_category_filter():
     """cat:q-bio.BM keeps every hit in that category."""
     output = run_arxiv_search(ArxivSearchInput(queries="cat:q-bio.BM AND abs:binder"), ArxivSearchConfig(max_results=5))

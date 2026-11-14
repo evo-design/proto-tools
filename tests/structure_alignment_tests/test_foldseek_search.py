@@ -387,7 +387,7 @@ def test_prostt5_cache_from_before_records_is_kept(prostt5_downloads):
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_foldseek_search_end_to_end_with_tp53():
     """End-to-end: TP53 from AFDB → Foldseek pdb100 → schema-validated structural hits.
 
@@ -431,7 +431,7 @@ def test_foldseek_search_end_to_end_with_tp53():
     )
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_foldseek_search_local_mode_with_directory_db(tmp_path):
     """Local end-to-end: search the renin fixture against a tmp directory of PDB targets (self-match guaranteed)."""
     fixtures = Path(__file__).parent.parent / "dummy_data"

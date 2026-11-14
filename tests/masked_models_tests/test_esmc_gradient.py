@@ -65,7 +65,7 @@ def test_esmc_gradient_dispatch_contract(monkeypatch):
     assert result.vocab == AMINO_ACIDS_LIST
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_esmc_gradient_token_layout_matches_the_tokenizer() -> None:
     """The worker's hand-built ``[cls] + residues + [eos]`` must equal the tokenizer's output.
 

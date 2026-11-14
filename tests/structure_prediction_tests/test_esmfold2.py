@@ -212,7 +212,7 @@ def test_esmfold2_benchmark(request: pytest.FixtureRequest) -> None:
     assert_metrics_in_spec(result)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_esmfold2_fold_accepts_pinned_msa_max_depth():
     """fold() takes the msa_max_depth the wrapper pins and reports."""
     from proto_tools.utils import run_in_env

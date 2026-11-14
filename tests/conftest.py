@@ -908,10 +908,10 @@ def pytest_addoption(parser):
         help="Run tests that call live external services (marked network). Not enabled by --all or --ext.",
     )
     parser.addoption(
-        "--integration",
+        "--no-envs",
         action="store_true",
         default=False,
-        help="Run integration tests (hit external APIs/services). Skipped by default.",
+        help="Skip tests that build or run a tool env (marked uses_env, which every uses_gpu test is too).",
     )
     parser.addoption(
         "--extensive",
@@ -1012,6 +1012,11 @@ def pytest_configure(config):
     )
 
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
+    config.addinivalue_line(
+        "markers",
+        "uses_env: test builds or runs a tool env; runs by default, skipped with --no-envs. "
+        "Applied automatically to uses_gpu tests",
+    )
     config.addinivalue_line(
         "markers",
         "uses_cpu: mark test as CPU-only. Optional arg: @pytest.mark.uses_cpu(n) skips unless n CPUs are visible",
@@ -1384,10 +1389,13 @@ def pytest_collection_modifyitems(config, items):
 
     # Auto-mark CPU tests — skip if already tagged (uses_gpu or explicit uses_cpu(n))
     # so we don't stack a zero-arg duplicate on top of an explicit count.
+    # A GPU test always runs a tool env, so it is marked uses_env too.
     for item in items:
         markers = list(item.iter_markers())
         if not any(m.name == "uses_gpu" for m in markers) and not any(m.name == "uses_cpu" for m in markers):
             item.add_marker(pytest.mark.uses_cpu)
+        if any(m.name == "uses_gpu" for m in markers) and not any(m.name == "uses_env" for m in markers):
+            item.add_marker(pytest.mark.uses_env)
 
     # Skip tests marked with skip_ci when running in GitHub Actions or --skip-ci is specified
     if os.getenv("GITHUB_ACTIONS") == "true" or config.getoption("--skip-ci"):
@@ -1453,14 +1461,12 @@ def pytest_collection_modifyitems(config, items):
                     continue
                 item.add_marker(skip_slow)
 
-    # Skip integration tests unless --integration or --all is specified
-    if not config.getoption("--integration") and not run_all:
-        skip_integration = pytest.mark.skip(
-            reason="integration test (use --integration to run, or --all for everything)"
-        )
+    # Skip tests that build or run a tool env when --no-envs is specified
+    if config.getoption("--no-envs"):
+        skip_env = pytest.mark.skip(reason="builds or runs a tool env; --no-envs specified")
         for item in items:
-            if "integration" in item.keywords:
-                item.add_marker(skip_integration)
+            if "uses_env" in item.keywords:
+                item.add_marker(skip_env)
 
     # Skip tests that call live external services unless --network is specified. --all does not
     # enable them: an upstream queue or outage would otherwise decide how long a run takes.

@@ -355,7 +355,7 @@ def test_run_foldseek_cluster_with_fasta_inputs():
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_foldseek_cluster_end_to_end_with_directory(tmp_path):
     """Real foldseek binary processes a directory of mixed PDB + CIF fixtures."""
     (tmp_path / "renin-pdb.pdb").write_text((_FIXTURES / "renin_af3.pdb").read_text())
@@ -371,7 +371,7 @@ def test_foldseek_cluster_end_to_end_with_directory(tmp_path):
     assert output.num_clusters >= 1
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_foldseek_cluster_end_to_end_with_fasta():
     """FASTA inputs cluster through ProstT5, and members carry the given structure IDs, not the FASTA headers."""
     sequence = (

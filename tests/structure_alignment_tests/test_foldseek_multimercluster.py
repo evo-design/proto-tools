@@ -145,7 +145,7 @@ def test_run_foldseek_multimercluster_uses_user_supplied_ids():
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_foldseek_multimercluster_end_to_end_with_directory(tmp_path):
     """Real foldseek binary processes a directory of mixed multi-chain PDB + CIF fixtures."""
     (tmp_path / "pdl1.pdb").write_text((_FIXTURES / "pdl1.pdb").read_text())

@@ -148,7 +148,7 @@ def test_rejects_non_list_payload():
 
 
 @pytest.mark.network
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_overlap_brca1_exons_live():
     """Overlap with feature=exon for BRCA1 returns at least 10 records."""
     out = run_ensembl_overlap(

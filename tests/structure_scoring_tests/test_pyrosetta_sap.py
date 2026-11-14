@@ -48,7 +48,7 @@ def test_sap_input_rejects_invalid_chain():
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_run_pyrosetta_sap_on_pdb():
     structure = Structure(structure=TEST_PDB)
     result = run_pyrosetta_sap(PyRosettaSAPInput(inputs=[structure]))
@@ -69,7 +69,7 @@ def test_run_pyrosetta_sap_on_pdb():
     assert isinstance(residue.sap_score, float)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_run_pyrosetta_sap_chain_selection_changes_score():
     """Chain A score should differ from whole-complex score on a multi-chain structure."""
     whole = run_pyrosetta_sap(PyRosettaSAPInput(inputs=[TEST_CIF_MULTICHAIN]))
