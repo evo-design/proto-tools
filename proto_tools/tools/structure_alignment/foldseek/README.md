@@ -50,8 +50,9 @@ This tool is appropriate for deduplicating a set of designed structures before d
 
 #### Usage Tips
 
-- **`structures` accepts either a list or a directory path.** Provide an in-memory list of structure or FASTA text strings (Structure objects and file paths are also accepted per item), or a single path to a directory of supported files, in which case filename stems become the structure identifiers.
-- **A single call must use one input format.** Mixing FASTA inputs with PDB or mmCIF inputs is rejected by input validation. Format is auto-detected per input entry. Each FASTA entry holds one sequence, and cluster members are named by `structure_ids` rather than by the FASTA headers.
+- **`structures` takes at least two items, as a list or a directory path.** A list item can be a `Structure`, raw PDB, mmCIF or FASTA text, or a path to a `.pdb`, `.cif`, `.mmcif`, `.fasta`, `.fa` or `.faa` file (each also accepted gzipped). A directory path reads every file with one of those extensions, skips other files, and uses filename stems as the structure identifiers.
+- **A single call must be all structures or all FASTA.** Format is detected per item: text starting with `>` is FASTA, anything else is parsed as PDB or mmCIF. Mixing the two is rejected by input validation. Structures are clustered directly; FASTA sequences are first converted to 3Di by ProstT5.
+- **Each FASTA item holds exactly one protein sequence.** An item with more than one `>` record is rejected; pass each sequence as its own list item or file. The FASTA header is not used: each cluster member is named by its `structure_ids` entry (`structure_0`, `structure_1`, ... by default, or the filename stem for a directory).
 - **`min_seq_id=0.0` is intentional and lets 3Di structural similarity dominate cluster assignment.** Raising it adds a sequence-identity floor to cluster membership. Use a non-zero value only when a sequence-similarity constraint is desired alongside structural similarity.
 - **There is no parameter that requests an exact cluster count.** Foldseek clusters by similarity threshold, not by a target count. To approximate a target number of clusters, sweep the `cov` field and select the run whose cluster count is closest to the target.
 

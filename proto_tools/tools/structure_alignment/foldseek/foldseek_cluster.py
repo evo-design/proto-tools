@@ -68,7 +68,9 @@ class FoldseekClusterInput(BaseToolInput):
 
     Inputs may be PDB, mmCIF, or FASTA — format is auto-detected per string.
     A single call must use one mode (all FASTA OR all PDB/mmCIF). FASTA inputs
-    go through Foldseek's built-in ProstT5 model to predict 3Di sequences.
+    go through Foldseek's built-in ProstT5 model to predict 3Di sequences. Each
+    FASTA item holds exactly one sequence, and its header is replaced by its
+    structure ID.
 
     Attributes:
         structures (list[Structure | str] | str | Path | None): Items to cluster
