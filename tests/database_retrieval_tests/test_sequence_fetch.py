@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import proto_tools.tools.database_retrieval.sequence_fetch.sequence_fetch as sf_module
+from proto_tools.entities import Structure
 from proto_tools.tools.database_retrieval import (
     SequenceFetchConfig,
     SequenceFetchInput,
@@ -193,6 +194,8 @@ def test_sequence_fetch_structure_by_pdb_id_alone(monkeypatch):
         "_fetch_pdb_entry",
         lambda pdb_id, session: {"title": "Hen egg-white lysozyme", "method": "X-RAY DIFFRACTION", "resolution": 2.0},
     )
+    downloaded = Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "2CSM.pdb")
+    monkeypatch.setattr(Structure, "from_rcsb", lambda pdb_id, file_format: downloaded)
 
     output = run_sequence_fetch(
         SequenceFetchInput(requests=[{"request_id": "hen", "accessions": "2lyz", "sequence_types": ["structure"]}])
@@ -201,6 +204,7 @@ def test_sequence_fetch_structure_by_pdb_id_alone(monkeypatch):
     item = output.results[0]
     assert item.status == "success"
     assert item.fetched_structures[0].pdb_id == "2LYZ"
+    assert item.fetched_structures[0].structure is downloaded
     assert item.target_name is None
 
 
@@ -372,6 +376,7 @@ def test_sequence_fetch_protein_and_structure_by_name():
     struct = item.fetched_structures[0]
     assert struct.pdb_id
     assert struct.source_url
+    assert struct.structure.num_residues > 0
 
 
 @pytest.mark.network

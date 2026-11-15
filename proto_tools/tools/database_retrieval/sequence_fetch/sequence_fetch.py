@@ -15,6 +15,7 @@ import requests
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 # Database tool imports (orchestrator calls these directly)
+from proto_tools.entities import Structure
 from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _BACKOFF_SECONDS,
     _HTTP_RETRIES,
@@ -341,6 +342,7 @@ class FetchedStructure(BaseModel):
     """Structure payload returned by PDB.
 
     Attributes:
+        structure (Structure): The entry's coordinates, ready to pass to a structure tool.
         pdb_id (str): PDB accession.
         source_database (Literal['pdb']): Upstream source database label.
         title (str | None): Structure title.
@@ -349,6 +351,9 @@ class FetchedStructure(BaseModel):
         source_url (str): Canonical URL for this structure.
     """
 
+    structure: Structure = Field(
+        title="Coordinates", description="The entry's coordinates (from its mmCIF), ready to pass to a structure tool"
+    )
     pdb_id: str = Field(title="PDB ID", description="PDB accession")
     source_database: Literal["pdb"] = Field(default="pdb", title="Source Database", description="Source database")
     title: str | None = Field(default=None, title="Title", description="Structure title")
@@ -1410,7 +1415,7 @@ def _fetch_structure(
     session: requests.Session,
     resolved_ids: dict[str, str] | None = None,
 ) -> tuple[FetchedStructure, dict[str, str], list[str]]:
-    """Fetch structure metadata from PDB."""
+    """Fetch a structure's coordinates and metadata from PDB."""
     warnings: list[str] = []
 
     pdb_id = request.pdb_id
@@ -1458,6 +1463,7 @@ def _fetch_structure(
 
     return (
         FetchedStructure(
+            structure=Structure.from_rcsb(pdb_id, file_format="cif"),
             pdb_id=pdb_id,
             title=meta.get("title"),
             method=meta.get("method"),
