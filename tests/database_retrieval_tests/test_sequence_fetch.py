@@ -68,18 +68,27 @@ def test_sequence_fetch_request_needs_a_name_and_organism_or_an_identifier():
     [
         ("P04637", ("uniprot", "P04637")),
         ("p04637-2", ("uniprot", "P04637-2")),
+        ("P04637.2", ("uniprot", "P04637")),
         ("A0A023GPI8", ("uniprot", "A0A023GPI8")),
         ("2lyz", ("pdb", "2LYZ")),
-        ("NM_000546.6", ("nucleotide", "NM_000546.6")),
-        ("NZ_CP012345.1", ("nucleotide", "NZ_CP012345.1")),
+        ("pdb_00001tsr", ("pdb", "1TSR")),
+        ("NC_000017.11", ("genomic", "NC_000017.11")),
+        ("NG_017013.2", ("genomic", "NG_017013.2")),
+        ("NZ_CP012345.1", ("genomic", "NZ_CP012345.1")),
+        ("NZ_AABC02000001.1", ("genomic", "NZ_AABC02000001.1")),
+        ("NM_000546.6", ("transcript", "NM_000546.6")),
+        ("XR_001234567.1", ("transcript", "XR_001234567.1")),
         ("NP_000537.3", ("protein", "NP_000537.3")),
-        ("WP_000123456", ("protein", "WP_000123456")),
+        ("WP_000123456.1", ("protein", "WP_000123456.1")),
         ("AAA12345.1", ("protein", "AAA12345.1")),
+        ("ABC1234567", ("protein", "ABC1234567")),
         ("U49845", ("nucleotide", "U49845")),
         ("AF123456.2", ("nucleotide", "AF123456.2")),
+        ("CP01234567", ("nucleotide", "CP01234567")),
+        ("AAAA02000001", ("nucleotide", "AAAA02000001")),
         ("7157", ("gene", "7157")),
-        ("nucleotide:P12345", ("nucleotide", "P12345")),
         ("Gene: 7157", ("gene", "7157")),
+        ("uniprot:p04637", ("uniprot", "P04637")),
         ("pdb:1234", ("pdb", "1234")),
     ],
 )
@@ -87,14 +96,95 @@ def test_parse_accession_reads_the_kind_from_the_format(accession, expected):
     assert parse_accession(accession) == expected
 
 
-def test_parse_accession_rejects_an_unknown_format():
-    with pytest.raises(ValueError, match="Unrecognised accession 'lysozyme'"):
-        parse_accession("lysozyme")
+@pytest.mark.parametrize(
+    ("accession", "message"),
+    [
+        ("lysozyme", "Unrecognised accession 'lysozyme'"),
+        ("NC_000913.3:1-100", "genomic coordinates go in genomic_coordinates"),
+        ("gene:", "needs one accession, without spaces, after its kind prefix"),
+        ("gene:TP53", "an NCBI Gene ID is a number"),
+    ],
+)
+def test_parse_accession_rejects_what_it_cannot_route(accession, message):
+    with pytest.raises(ValueError, match=re.escape(message)):
+        parse_accession(accession)
 
 
 def test_sequence_fetch_request_takes_at_most_one_accession_of_each_kind():
     with pytest.raises(ValueError, match="at most one uniprot accession per request, got P04637 and P69905"):
         SequenceFetchRequest(accessions=["P04637", "P69905"], sequence_types=["protein"])
+
+
+def test_sequence_fetch_request_rejects_the_removed_id_fields():
+    with pytest.raises(ValueError, match="uniprot_id"):
+        SequenceFetchRequest(uniprot_id="P04637", target_name="TP53", organism="Homo sapiens", sequence_types="protein")
+
+
+@pytest.mark.parametrize(
+    ("accessions", "sequence_type", "expected_fetch"),
+    [
+        (["NP_000537.3"], "protein", ("protein", "NP_000537.3", "fasta")),
+        (["AAA12345"], "protein", ("protein", "AAA12345", "fasta")),
+        (["NM_000546.6"], "rna_transcript", ("nuccore", "NM_000546.6", "fasta")),
+        (["NM_000546.6"], "dna_cds", ("nuccore", "NM_000546.6", "fasta_cds_na")),
+        (["NC_000017.11"], "dna_genomic", ("nuccore", "NC_000017.11", "fasta")),
+        (["U49845"], "dna_genomic", ("nuccore", "U49845", "fasta")),
+        (["U49845"], "rna_transcript", ("nuccore", "U49845", "fasta")),
+        (["NC_000017.11", "NM_000546.6"], "dna_genomic", ("nuccore", "NC_000017.11", "fasta")),
+        (["NC_000017.11", "NM_000546.6"], "rna_transcript", ("nuccore", "NM_000546.6", "fasta")),
+        (["NP_000537.3"], "dna_cds", ("protein", "NP_000537.3", "fasta_cds_na")),
+    ],
+)
+def test_sequence_fetch_routes_each_accession_kind_to_its_ncbi_database(
+    monkeypatch, accessions, sequence_type, expected_fetch
+):
+    fetches = []
+
+    def fake_efetch(db, identifier, rettype, config, session, **kwargs):
+        fetches.append((db, identifier, rettype))
+        return f">{identifier} test record\nATGAAATAA\n", f"https://example.org/{identifier}"
+
+    monkeypatch.setattr(sf_module, "_ncbi_efetch", fake_efetch)
+
+    output = run_sequence_fetch(
+        SequenceFetchInput(requests=[{"accessions": accessions, "sequence_types": sequence_type}])
+    )
+
+    assert output.results[0].errors == []
+    assert fetches[0] == expected_fetch
+
+
+@pytest.mark.parametrize("sequence_type", ["rna_transcript", "dna_cds"])
+def test_sequence_fetch_never_reads_a_genomic_accession_as_a_transcript(sequence_type):
+    output = run_sequence_fetch(
+        SequenceFetchInput(requests=[{"accessions": ["NC_000017.11"], "sequence_types": sequence_type}])
+    )
+
+    assert output.results[0].status == "failed"
+    assert "needs a search by name" in output.results[0].errors[0]
+
+
+def test_sequence_fetch_takes_genomic_dna_for_a_gene_id_from_its_locus(monkeypatch):
+    fetches = []
+    monkeypatch.setattr(
+        sf_module,
+        "_ncbi_esummary",
+        lambda db, identifier, config, session: (
+            {identifier: {"genomicinfo": [{"chraccver": "NC_000017.11", "chrstart": 7687489, "chrstop": 7668401}]}},
+            "https://example.org/esummary",
+        ),
+    )
+
+    def fake_efetch(db, identifier, rettype, config, session, **kwargs):
+        fetches.append((db, identifier, kwargs))
+        return f">{identifier} test record\nATGAAATAA\n", f"https://example.org/{identifier}"
+
+    monkeypatch.setattr(sf_module, "_ncbi_efetch", fake_efetch)
+
+    output = run_sequence_fetch(SequenceFetchInput(requests=[{"accessions": "7157", "sequence_types": "dna_genomic"}]))
+
+    assert output.results[0].resolved_ids["gene_id"] == "7157"
+    assert fetches == [("nuccore", "NC_000017.11", {"seq_start": 7668402, "seq_stop": 7687490, "strand": "-"})]
 
 
 def test_sequence_fetch_structure_by_pdb_id_alone(monkeypatch):
