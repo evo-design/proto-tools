@@ -22,6 +22,12 @@ from standalone_helpers import StatusCounter, get_logger, resolve_weights_dir
 
 logger = get_logger(__name__)
 
+
+def _count(n: int, noun: str) -> str:
+    """Return ``n`` with ``noun`` pluralized for a status message, e.g. ``3 intervals`` or ``1 interval``."""
+    return f"{n} {noun}{'s' if n != 1 else ''}"
+
+
 def _safe_tidy_scores(scores: Any) -> list[Any]:
     """Wrap variant_scorers_lib.tidy_scores to handle upstream empty-result bug."""
     try:
@@ -212,7 +218,7 @@ class AlphaGenomeModel:
         parsed = [_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]) for i in intervals]
         self._ensure_loaded(device)
 
-        logger.update_status("Predicting %d interval(s)", len(parsed))
+        logger.update_status(f"Predicting {_count(len(parsed), 'interval')}")
         predictions = self.model.predict_intervals(
             intervals=parsed,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
@@ -246,7 +252,7 @@ class AlphaGenomeModel:
         ]
         self._ensure_loaded(device)
 
-        logger.update_status("Predicting %d variant effect(s)", len(parsed_variants))
+        logger.update_status(f"Predicting {_count(len(parsed_variants), 'variant effect')}")
         predictions = self.model.predict_variants(
             intervals=parsed_intervals,
             variants=parsed_variants,
@@ -270,7 +276,7 @@ class AlphaGenomeModel:
             _validate_sequence_length(len(seq), operation="predict_sequences")
         self._ensure_loaded(device)
 
-        logger.update_status("Predicting %d sequence(s)", len(sequences))
+        logger.update_status(f"Predicting {_count(len(sequences), 'sequence')}")
         predictions = self.model.predict_sequences(
             sequences=sequences,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
@@ -305,7 +311,7 @@ class AlphaGenomeModel:
             )
         self._ensure_loaded(device)
 
-        logger.update_status("Scoring %d variant(s)", len(parsed_variants))
+        logger.update_status(f"Scoring {_count(len(parsed_variants), 'variant')}")
         scores_per_variant = self.model.score_variants(
             intervals=parsed_intervals,
             variants=parsed_variants,
@@ -330,7 +336,7 @@ class AlphaGenomeModel:
             parsed.append(_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]))
         self._ensure_loaded(device)
 
-        logger.update_status("Scoring %d interval(s)", len(parsed))
+        logger.update_status(f"Scoring {_count(len(parsed), 'interval')}")
         scores_per_interval = self.model.score_intervals(
             intervals=parsed,
             interval_scorers=_resolve_interval_scorers(interval_scorers),
@@ -389,7 +395,7 @@ class AlphaGenomeModel:
     # ============================================================================
     def load(self, device: str = "cuda", verbose: bool = False) -> None:
         """Load AlphaGenome model to device."""
-        logger.update_status(f"Loading AlphaGenome model: {self.model_version} on {device}")
+        logger.update_status("Loading AlphaGenome weights")
 
         from standalone_helpers import resolve_jax_device
 

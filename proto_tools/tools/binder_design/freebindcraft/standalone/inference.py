@@ -323,6 +323,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "--no-pyrosetta",
         ]
 
+        logger.update_status("Designing binders")
+
         verbose = bool(input_dict.get("verbose", False))
         try:
             subprocess.run(

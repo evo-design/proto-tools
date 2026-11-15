@@ -34,6 +34,7 @@ from proto_tools.utils import (
     remaining,
     sleep_within_deadline,
 )
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
 
 logger = logging.getLogger(__name__)
 
@@ -278,7 +279,11 @@ def run_arxiv_search(
     # Retries go through the gate in _get_with_retry, so the adapter returns every response as is.
     session = build_http_session(http_retries=0, backoff_seconds=0.0, user_agent=_USER_AGENT, status_forcelist=[])
     try:
-        results = [_search(query, config, session) for query in inputs.queries]
+        counter = StatusCounter(logger, "Running query %d/%d", total=len(inputs.queries))
+        results = []
+        for index, query in enumerate(inputs.queries, start=1):
+            counter(index)
+            results.append(_search(query, config, session))
     finally:
         session.close()
     return ArxivSearchOutput(results=results, source_url=_QUERY_URL)

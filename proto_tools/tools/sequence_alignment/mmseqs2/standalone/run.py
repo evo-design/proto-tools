@@ -109,6 +109,7 @@ def _resolve_to_mmseqs_db(
     if not Path(user_path).exists():
         raise FileNotFoundError(f"{label}: path {user_path!r} does not exist.")
     if _is_fasta(user_path):
+        logger.update_status("Building MMseqs2 database")
         _run_cmd([mmseqs, "createdb", user_path, temp_db_path], f"mmseqs createdb ({label})")
         return temp_db_path, True
     raise RuntimeError(
@@ -265,6 +266,7 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
             target_fasta = str(tmp_path / "target_genomes.fna")
             _write_fasta(target_sequences, target_fasta, input_data.get("target_ids"), prefix="target")
             target_db_path = str(tmp_path / "target_db")
+            logger.update_status("Building target database")
             _run_cmd([mmseqs, "createdb", target_fasta, target_db_path], "mmseqs createdb (target)")
             target_db_size = len(target_sequences)
         else:
@@ -305,6 +307,7 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
         else:
             effective_threads = max(2, min(requested_threads, target_db_size))
 
+        logger.update_status("Building query database")
         _run_cmd([mmseqs, "createdb", query_fasta, query_db], "mmseqs createdb (query)")
 
         def _search_cmd(n_threads: int) -> list[str]:
@@ -336,6 +339,7 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
                 *(str(arg) for arg in input_data.get("extra_args", [])),
             ]
 
+        logger.update_status("Searching target database")
         _run_search_with_thread_fallback(_search_cmd, effective_threads, mmseqs_tmp, res_dir)
 
         m8_columns = input_data["m8_columns"]
@@ -383,6 +387,7 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
         if sequences is not None:
             input_fasta = str(tmp_path / "input.faa")
             _write_fasta(sequences, input_fasta, input_data.get("sequence_ids"))
+            logger.update_status("Building sequence database")
             _run_cmd([mmseqs, "createdb", input_fasta, temp_db], "mmseqs createdb")
             seqs_db = temp_db
         else:
@@ -393,6 +398,7 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
                 label="mmseqs2-clustering mmseqs_db",
             )
 
+        logger.update_status("Clustering sequences")
         _run_cmd(
             [
                 mmseqs,

@@ -71,6 +71,14 @@ At the phase boundaries someone waiting on the tool would want to see:
 Not on every iteration of a loop (`StatusCounter` throttles for you), and not for a step that takes well under a
 second. A quick lookup or a single fast call needs none: the framework already shows `Running <tool>`.
 
+When the caller already loops over items with `progress_bar` and dispatches one worker call per item (most folding
+and inverse-folding tools), that bar owns the count. A worker status sent on every call would overwrite it, so send
+only what the bar can't show, such as a cold `Loading ... weights`, and then one line to replace it once loading is
+done.
+
+`get_logger` from `standalone_helpers` always returns a logger with `update_status`, even outside a worker (a
+setup script, say), where the status is just an INFO record.
+
 ### House style
 
 - **A present participle and its object, in sentence case, with no trailing period**: `Loading ESMFold weights`,

@@ -312,6 +312,7 @@ class OpenDDEModel:
         if self.runner is None or self._cache_key != key:
             self.close()
             # InferenceRunner.__init__ loads the model and checkpoint once; later calls reuse it.
+            logger.update_status("Loading OpenDDE weights")
             with oom_guard("opendde", hint="Reduce num_samples/num_steps/num_cycles or use a larger GPU."):
                 self.runner = get_default_runner(seeds=[seed], dump_dir=output_dir, **kwargs)
             self._cache_key = key

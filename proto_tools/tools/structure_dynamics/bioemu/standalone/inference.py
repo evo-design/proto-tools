@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from standalone_helpers import count_a3m_rows, get_logger, get_random_int, report_msa_rows_loaded, set_torch_seed
+from standalone_helpers import (
+    StatusCounter,
+    count_a3m_rows,
+    get_logger,
+    get_random_int,
+    report_msa_rows_loaded,
+    set_torch_seed,
+)
 
 logger = get_logger(__name__)
 
@@ -167,12 +174,14 @@ class BioEmuModel:
             cache_embeds_dir = _msa_cache_dir(cache_embeds_dir, msa_a3m)
             _check_msa_source(sequence, msa_a3m, cache_embeds_dir)
             existing_num_samples = count_samples_in_output_dir(output_path)
+            counter = StatusCounter(logger, "Sampling conformation %d/%d", total=num_samples)
             for start_idx in tqdm(
                 range(existing_num_samples, num_samples, adjusted_batch_size),
                 desc="Sampling batches...",
                 disable=not verbose,
             ):
                 n = min(adjusted_batch_size, num_samples - start_idx)
+                counter(start_idx + n)
                 npz_path = output_path / format_npz_samples_filename(start_idx, n)
                 if npz_path.exists():
                     raise ValueError(
@@ -202,6 +211,7 @@ class BioEmuModel:
             positions = torch.tensor(np.concatenate([np.load(f)["pos"] for f in samples_files]))
             node_orientations = torch.tensor(np.concatenate([np.load(f)["node_orientations"] for f in samples_files]))
             log_physicality(positions, node_orientations, sequence)
+            logger.update_status("Writing ensemble trajectory")
             save_pdb_and_xtc(
                 pos_nm=positions,
                 node_orientations=node_orientations,
@@ -245,7 +255,9 @@ class BioEmuModel:
             logger.info(f"Loaded ensemble: {traj.n_frames} frames, {traj.n_residues} residues")
 
         pdb_frames: list[str] = []
+        counter = StatusCounter(logger, "Extracting frame %d/%d", total=traj.n_frames)
         for frame_idx in range(traj.n_frames):
+            counter(frame_idx + 1)
             frame = traj.slice(frame_idx)
             with tempfile.NamedTemporaryFile(mode="w", suffix=".pdb", delete=False) as handle:
                 tmp_path = handle.name
@@ -275,6 +287,7 @@ class BioEmuModel:
         if verbose:
             logger.info(f"Loading BioEmu model: {model_name} on {device}")
 
+        logger.update_status("Loading BioEmu weights")
         ckpt_path, model_config_path = maybe_download_checkpoint(
             model_name=model_name, ckpt_path=None, model_config_path=None
         )

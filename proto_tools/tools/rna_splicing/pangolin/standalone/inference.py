@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger, move_model_to_device, serialize_output
+from standalone_helpers import StatusCounter, get_logger, move_model_to_device, serialize_output
 
 logger = get_logger(__name__)
 
@@ -53,6 +53,7 @@ class PangolinModel:
         from pangolin.model import AR, L, Pangolin, W
 
         logger.debug("Loading Pangolin ensembles for tissues=%s on %s", tissues, device)
+        logger.update_status("Loading Pangolin weights")
 
         models_dir = self._models_dir()
         loaded: dict[str, tuple[list[Any], int]] = {}
@@ -111,7 +112,9 @@ class PangolinModel:
         self._ensure_loaded(device, tissues)
 
         results: list[dict[str, Any]] = []
-        for seq in sequences:
+        counter = StatusCounter(logger, "Predicting sequence %d/%d", total=len(sequences))
+        for index, seq in enumerate(sequences, start=1):
+            counter(index)
             onehot = self._one_hot(seq, "+")
             per_tissue: list[Any] = []
             for tissue in tissues:
@@ -169,7 +172,9 @@ class PangolinModel:
         self._ensure_loaded(device, tissues)
 
         results: list[dict[str, Any]] = []
-        for variant in variants:
+        counter = StatusCounter(logger, "Scoring variant %d/%d", total=len(variants))
+        for index, variant in enumerate(variants, start=1):
+            counter(index)
             vp = variant["variant_position"]
             ref = variant["reference_bases"]
             alt = variant["alternate_bases"]

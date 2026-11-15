@@ -13,6 +13,7 @@ from typing import Any
 
 import numpy as np
 from standalone_helpers import (
+    StatusCounter,
     download_weights,
     file_lock,
     get_logger,
@@ -118,6 +119,7 @@ class CodonFMModel:
             return
         if verbose:
             logger.info("Loading CodonFM checkpoint from %s", checkpoint_path)
+        logger.update_status("Loading CodonFM weights")
         inference = EncodonInference(model_path=checkpoint_path, task_type=TaskTypes.FITNESS_PREDICTION.value)
         inference.configure_model()  # builds on CPU (LightningModule default device)
         inference.eval()
@@ -158,7 +160,9 @@ class CodonFMModel:
 
         self.to_device(device)
         fitness: list[float] = []
+        counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-len(sequences) // batch_size))
         for start in range(0, len(sequences), batch_size):
+            counter(start // batch_size + 1)
             chunk = sequences[start : start + batch_size]
             ctx = self._context_length(chunk)
             items = [process_item(seq, ctx, self.tokenizer) for seq in chunk]
@@ -172,7 +176,9 @@ class CodonFMModel:
 
         self.to_device(device)
         embeddings: list[list[float]] = []
+        counter = StatusCounter(logger, "Embedding batch %d/%d", total=-(-len(sequences) // batch_size))
         for start in range(0, len(sequences), batch_size):
+            counter(start // batch_size + 1)
             chunk = sequences[start : start + batch_size]
             ctx = self._context_length(chunk)
             items = [process_item(seq, ctx, self.tokenizer) for seq in chunk]
@@ -188,7 +194,9 @@ class CodonFMModel:
 
         self.to_device(device)
         results: list[dict[str, float]] = []
+        counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-len(mutations) // batch_size))
         for start in range(0, len(mutations), batch_size):
+            counter(start // batch_size + 1)
             chunk = mutations[start : start + batch_size]
             ctx = self._context_length([m["sequence"] for m in chunk])
             items = [
@@ -445,9 +453,14 @@ class CodonFMModel:
         for i in order:
             grouped.setdefault(plans[i][0], []).append(i)
 
+        total_batches = sum(-(-len(indices) // batch_size) for indices in grouped.values())
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=total_batches)
+        batch_number = 0
         for indices in grouped.values():
             ctx = self._context_length([sequences[indices[0]]])
             for start in range(0, len(indices), batch_size):
+                batch_number += 1
+                counter(batch_number)
                 chunk = indices[start : start + batch_size]
                 items = [process_item(sequences[i], ctx, self.tokenizer) for i in chunk]
                 batch: dict[str, Any] = {}
@@ -594,19 +607,22 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         }
     if operation == "gradient":
         # One chunk of independent candidates: the checkpoint loads once and items are evaluated in turn.
-        results = [
-            _MODEL.compute_gradient(
-                item,
-                temperature=resolve_temperature(input_dict.get("temperature")),
-                soft=float(input_dict.get("soft", 1.0)),
-                hard=float(input_dict.get("hard", 0.0)),
-                backprop=input_dict.get("compute_gradient", True),
-                batch_size=batch_size,
-                device=device,
-                verbose=verbose,
+        counter = StatusCounter(logger, "Computing gradient %d/%d", total=len(input_dict["items"]))
+        results = []
+        for index, item in enumerate(input_dict["items"], start=1):
+            counter(index)
+            results.append(
+                _MODEL.compute_gradient(
+                    item,
+                    temperature=resolve_temperature(input_dict.get("temperature")),
+                    soft=float(input_dict.get("soft", 1.0)),
+                    hard=float(input_dict.get("hard", 0.0)),
+                    backprop=input_dict.get("compute_gradient", True),
+                    batch_size=batch_size,
+                    device=device,
+                    verbose=verbose,
+                )
             )
-            for item in input_dict["items"]
-        ]
         return {
             "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
             "vocab": results[0]["vocab"],

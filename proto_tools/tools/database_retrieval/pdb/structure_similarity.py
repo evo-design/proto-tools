@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Literal
@@ -29,6 +30,9 @@ from proto_tools.utils import (
     raise_for_status_with_body,
     request_with_retry,
 )
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
+
+logger = logging.getLogger(__name__)
 
 _UPLOAD_URL = "https://user-upload.rcsb.org/v1/putMultipart"
 _UPLOAD_DOWNLOAD_BASE = "https://user-upload.rcsb.org/v1/download/"
@@ -393,7 +397,11 @@ def run_pdb_structure_similarity(
         allowed_methods=["POST"],
     )
     try:
-        results = [_search(session, query, config) for query in inputs.queries]
+        counter = StatusCounter(logger, "Searching structure %d/%d", total=len(inputs.queries))
+        results = []
+        for index, query in enumerate(inputs.queries, start=1):
+            counter(index)
+            results.append(_search(session, query, config))
     finally:
         session.close()
     return PdbStructureSimilarityOutput(results=results, source_url=_SEARCH_URL)

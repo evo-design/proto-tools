@@ -345,6 +345,7 @@ class CalibyRunner:
             logger.warning("caliby: checkpoint_utils._LOAD_CKPT_KWARGS is gone; checkpoints may load onto GPU 0 first")
         set_current_cuda_device(device)
         logger.debug("Loading Caliby checkpoint %s on %s", model_checkpoint, device)
+        logger.update_status("Loading Caliby weights")
         self.model = load_model(model_checkpoint, device=device)
         self.device = device
         self._model_checkpoint = model_checkpoint

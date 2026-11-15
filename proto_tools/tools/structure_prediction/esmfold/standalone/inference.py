@@ -97,7 +97,8 @@ class ESMFoldModel:
                 tokenized_inputs["position_ids"] = position_ids
 
                 # Forward pass
-                logger.update_status(f"Folding {len(batch_data)} complex(es), num_recycles={num_recycles}")
+                n_structures = len(batch_data)
+                logger.update_status(f"Folding {n_structures} structure{'s' if n_structures != 1 else ''}")
                 outputs = self.model(**tokenized_inputs, num_recycles=num_recycles)
 
                 # Apply linker masking
@@ -143,6 +144,7 @@ class ESMFoldModel:
 
         if not self._loaded:
             self.load(device, verbose)
+            logger.update_status("Computing gradient")
         elif self.device != device:
             self.to_device(device)
         active_device = self.device
@@ -545,7 +547,7 @@ class ESMFoldModel:
                 "esmfold: transformers not importable; ensure ESMFold dependencies are installed"
             ) from None
 
-        logger.update_status(f"Loading ESMFold model: facebook/esmfold_v1 on {device}")
+        logger.update_status("Loading ESMFold weights")
 
         repo = "facebook/esmfold_v1"
         try:
@@ -554,7 +556,6 @@ class ESMFoldModel:
         except OSError as e:
             raise RuntimeError(f"esmfold: HF weight load from {repo!r} failed: {e}") from e
 
-        logger.update_status(f"Moving ESMFold to {device} (fp16)")
         self.model = self.model.to(device)
         self.model.esm = self.model.esm.half()
         self.model.requires_grad_(False)

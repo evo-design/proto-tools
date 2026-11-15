@@ -16,6 +16,7 @@ from typing import Any, cast
 import numpy as np
 import torch
 from standalone_helpers import (
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -354,6 +355,7 @@ class LigandMPNNModel:
         """
         if verbose:
             logger.info(f"Loading LigandMPNN model_type={model_type} on {device}")
+        logger.update_status("Loading LigandMPNN weights")
 
         # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
         from standalone_helpers import export_weights_dir
@@ -591,6 +593,7 @@ class LegacyCompatibleLigandMPNNModel:
         if self._loaded:
             self.unload()
 
+        logger.update_status("Loading LigandMPNN weights")
         checkpoint = torch.load(self.checkpoint_path, map_location=device, weights_only=False)
         self.atom_context_num = int(checkpoint["atom_context_num"])
         k_neighbors = checkpoint["num_edges"]
@@ -627,6 +630,7 @@ class LegacyCompatibleLigandMPNNModel:
                 self._configured_packer_checkpoint_path,
                 "ligandmpnn_sc_v_32_002_16.pt",
             )
+        logger.update_status("Loading LigandMPNN side-chain packer weights")
         checkpoint_packer = torch.load(self.packer_checkpoint_path, map_location=device, weights_only=False)
         packer_cls = self._modules["sc_utils"].Packer
         self.packer = packer_cls(
@@ -701,7 +705,9 @@ class LegacyCompatibleLigandMPNNModel:
         metrics: list[dict[str, Any]] = []
         pdb_strings: list[str] = []
         with tempfile.TemporaryDirectory(prefix="ligandmpnn_packed_") as tmpdir:
+            counter = StatusCounter(logger, "Designing sequence %d/%d", total=batch_size)
             for index in range(batch_size):
+                counter(index + 1)
                 feature_dict["randn"] = torch.randn([1, feature_dict["mask"].shape[1]], device=device)
                 output_dict = _run_legacy_ligandmpnn(
                     self._modules["ligandmpnn"],

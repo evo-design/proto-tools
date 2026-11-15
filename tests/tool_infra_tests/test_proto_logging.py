@@ -243,3 +243,13 @@ def test_status_counter_reports_the_first_then_throttles_and_always_the_last(mon
     for number in range(1, 7):
         counter(number)
     assert sent == ["Folding structure 1/6", "Folding structure 4/6", "Folding structure 6/6"]
+
+
+def test_get_logger_can_send_a_status_before_the_bridge_is_installed():
+    # A setup script imports standalone_helpers without TOOL_VENV_PATH, so install() never runs.
+    logging.setLoggerClass(logging.Logger)
+
+    logger = get_logger("test_status_before_install")
+
+    assert isinstance(logger, ProtoLogger)
+    assert logging.getLoggerClass() is logging.Logger

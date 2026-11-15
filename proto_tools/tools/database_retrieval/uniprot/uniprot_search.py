@@ -25,6 +25,7 @@ from proto_tools.utils import (
     raise_for_status_with_body,
     request_with_retry,
 )
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
 
 logger = logging.getLogger(__name__)
 
@@ -266,9 +267,12 @@ def run_uniprot_search(
         user_agent=_USER_AGENT,
     )
     try:
-        return UniProtSearchOutput(
-            results=[_search(query, config, session) for query in inputs.queries], source_url=_SEARCH_URL
-        )
+        counter = StatusCounter(logger, "Running query %d/%d", total=len(inputs.queries))
+        results = []
+        for index, query in enumerate(inputs.queries, start=1):
+            counter(index)
+            results.append(_search(query, config, session))
+        return UniProtSearchOutput(results=results, source_url=_SEARCH_URL)
     finally:
         session.close()
 

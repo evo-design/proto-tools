@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 import torch
 from standalone_helpers import (
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -131,7 +132,9 @@ class Evo1Model:
         all_sequences: list[str] = []
         all_scores: list[float] = []
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=-(-len(prompts) // batch_size))
         for i in range(0, len(prompts), batch_size):
+            counter(i // batch_size + 1)
             batch = prompts[i : i + batch_size]
             sequences, scores = evo_generate(
                 prompt_seqs=batch,
@@ -210,8 +213,10 @@ class Evo1Model:
         all_logits = []
         all_metrics = []
 
+        counter = StatusCounter(logger, "Scoring batch %d/%d", total=len(batches))
         with torch.inference_mode():
             for batch_idx, batch_seqs in enumerate(tqdm(batches, desc="Evo1 Sequence Scoring", unit="batch")):
+                counter(batch_idx + 1)
                 if verbose:
                     logger.info(f"Processing batch {batch_idx + 1}/{len(batches)} ({len(batch_seqs)} sequences)")
 
@@ -254,6 +259,7 @@ class Evo1Model:
         """Load Evo1 model and tokenizer."""
         if verbose:
             logger.info(f"Loading Evo1: {self.model_name} on {device}")
+        logger.update_status("Loading Evo1 weights")
 
         # evo's load_checkpoint() calls snapshot_download() with no filter, pulling ~40 GB of
         # redundant formats (safetensors + .bin shards + monolithic .pt) when only safetensors

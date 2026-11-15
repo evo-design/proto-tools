@@ -33,7 +33,7 @@ import json
 import logging
 import sys
 import time
-from typing import Any
+from typing import Any, cast
 
 # Sentinel prefix on every JSON-tagged stderr line. Must match proto_tools/utils/logging_config.py:_TAG_PREFIX.
 _TAG_PREFIX = "\x00LOG\x00"
@@ -190,7 +190,7 @@ def install() -> None:
     worker_logger.setLevel(logging.DEBUG)
 
 
-def get_logger(name: str) -> logging.Logger:
+def get_logger(name: str) -> ProtoLogger:
     """Return a logger under the ``worker.*`` namespace bridged to the parent.
 
     Producer convention used by every standalone script and helper submodule:
@@ -205,7 +205,17 @@ def get_logger(name: str) -> logging.Logger:
             record's ``name`` attribute and visible to the parent.
 
     Returns:
-        logging.Logger: A logger under ``worker.{name}`` whose records are
-            bridged to the parent process via :class:`_BridgeHandler`.
+        ProtoLogger: A logger under ``worker.{name}`` whose records are
+            bridged to the parent process via :class:`_BridgeHandler`. It is a
+            :class:`ProtoLogger` even before :func:`install` runs (e.g. from a
+            setup script), so ``update_status`` always works; without the
+            bridge it is an ordinary INFO record.
     """
-    return logging.getLogger(f"{_WORKER_NAMESPACE}.{name}")
+    full_name = f"{_WORKER_NAMESPACE}.{name}"
+    previous_class = logging.getLoggerClass()
+    logging.setLoggerClass(ProtoLogger)
+    try:
+        logger = logging.getLogger(full_name)
+    finally:
+        logging.setLoggerClass(previous_class)
+    return cast(ProtoLogger, logger)

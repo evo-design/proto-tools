@@ -25,6 +25,7 @@ from proto_tools.utils import (
     raise_for_status_with_body,
     request_with_retry,
 )
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
 
 logger = logging.getLogger(__name__)
 
@@ -247,9 +248,12 @@ def run_biorxiv_details(
         user_agent=_USER_AGENT,
     )
     try:
-        return BiorxivDetailsOutput(
-            preprints=[_details(doi, config.server, session) for doi in inputs.dois], source_url=_API_URL
-        )
+        counter = StatusCounter(logger, "Fetching preprint %d/%d", total=len(inputs.dois))
+        preprints = []
+        for index, doi in enumerate(inputs.dois, start=1):
+            counter(index)
+            preprints.append(_details(doi, config.server, session))
+        return BiorxivDetailsOutput(preprints=preprints, source_url=_API_URL)
     finally:
         session.close()
 

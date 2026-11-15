@@ -124,7 +124,7 @@ class Mol1Model:
             self.runner.dump_dir = output_dir
             self.runner.error_dir = str(Path(output_dir) / "ERR")
             self.runner.init_dumper(need_atom_confidence=configs.need_atom_confidence, sorted_by_ranking_score=True)
-            logger.update_status("Predicting with Mol-1")
+            logger.update_status("Predicting structure")
             logger.info("Mol-1: generating %s samples on %s", input_dict["num_samples"], self.device)
             infer_predict(self.runner, configs)
             return _extract_structure_and_scores(output_dir, include_pae_matrix=input_dict["include_pae_matrix"])

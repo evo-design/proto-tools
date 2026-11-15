@@ -507,7 +507,9 @@ def _remote_search(inputs: FoldseekSearchInput, config: FoldseekSearchConfig) ->
         allowed_methods=["GET", "POST"],
     )
     try:
+        logger.update_status("Submitting search")  # type: ignore[attr-defined]
         ticket_id = _submit(inputs.structure.structure_pdb, list(config.databases), config.mode, session)
+        logger.update_status("Waiting for search results")  # type: ignore[attr-defined]
         poll_until_complete(
             session,
             f"{_FOLDSEEK_BASE}/api/ticket/{ticket_id}",
@@ -515,6 +517,7 @@ def _remote_search(inputs: FoldseekSearchInput, config: FoldseekSearchConfig) ->
             timeout_seconds=config.timeout_seconds,
         )
         result_url = f"{_FOLDSEEK_BASE}/api/result/download/{ticket_id}"
+        logger.update_status("Downloading search results")  # type: ignore[attr-defined]
         archive_response = request_with_retry(
             lambda: session.get(result_url, timeout=_RESULT_DOWNLOAD_TIMEOUT_SECONDS),
             retries=_HTTP_RETRIES,
