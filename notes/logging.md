@@ -41,6 +41,51 @@ The `update_status=True` kwarg is provided by `ProtoLogger`, a `logging.Logger` 
 
 The convention is enforced by `tests/style_consistency_tests/test_standalone_logger_consistency.py`. Any module-level `logger = X(__name__)` in a standalone must use `get_logger`, and `logging.getLogger(__name__)` / `getLogger(__name__)` are forbidden (their loggers fall outside the `worker.*` namespace and would never reach the bridge).
 
+## Status messages
+
+A status message is the one line that says what a tool is doing right now: the spinner's subtitle locally, and the
+live subtitle of a hosted run or a run on your own Modal. One `update_status` call reaches all three. Only the
+latest message is shown, so each one replaces the last.
+
+```python
+logger.update_status("Loading ESMFold weights")                 # in a standalone, or a tool in the caller's process
+counter = StatusCounter(logger, "Folding structure %d/%d", total=len(sequences))
+for index, sequence in enumerate(sequences, start=1):
+    counter(index)                                              # the first, then one every 5 s, and the last
+```
+
+`StatusCounter` is in `standalone_helpers` (`from standalone_helpers import StatusCounter` in a standalone). A tool
+that runs in the caller's process imports it from
+`proto_tools.utils.standalone_helpers_source.standalone_helpers` and passes its own module logger; proto-tools'
+loggers have `update_status` too.
+
+### When to send one
+
+At the phase boundaries someone waiting on the tool would want to see:
+
+- **Loading large weights** (a cold start that otherwise looks hung): `Loading ESMFold weights`.
+- **Each stage of a multi-stage pipeline**: `Searching MSA`, `Folding structure`, `Relaxing structure`.
+- **Progress through a known number of items**, with `StatusCounter`: `Folding structure 3/8`.
+- **A slow step that isn't obvious**: `Downloading UniRef30`, `Minimizing energy`.
+
+Not on every iteration of a loop (`StatusCounter` throttles for you), and not for a step that takes well under a
+second. A quick lookup or a single fast call needs none: the framework already shows `Running <tool>`.
+
+### House style
+
+- **A present participle and its object, in sentence case, with no trailing period**: `Loading ESMFold weights`,
+  `Searching MSA`, `Scoring variant 3/8`.
+- **Counts as `<item> <n>/<total>`**, the item singular: `Folding structure 3/8`, `Sampling sequence 12/64`. A single
+  step over a batch names its size with a real plural: `Scoring 8 sequences`, `Scoring 1 sequence` (never `(s)`).
+- **Name the model as its docs do** (`ESMFold`, `AlphaFold3`, `Boltz-2`). An official checkpoint name is fine
+  (`Loading ESM2 650M weights`); a device is not needed.
+- **Written for someone waiting**, not someone debugging: `Refining backbone`, not `entering refinement loop (iter=0)`.
+- **Nothing from the input or the machine**: no sequences, file names, paths, IDs a user passed in, URLs or hostnames.
+  Status messages cross process and account boundaries and land in log streams.
+
+Before a remote container is up, the dispatching side shows `Starting container`
+(`proto_tools.utils.progress.starting_container_status`); a tool can't, since it isn't running yet.
+
 ## Why the bridge ships in `standalone_helpers/`
 
 Tool subprocesses run in isolated micromamba venvs that don't have `proto_tools` (or `pydantic`, etc.) installed. The bridge implementation lives at `proto_tools/utils/standalone_helpers_source/standalone_helpers/proto_logging.py`, which `_build_subprocess_env()` publishes to the subprocess on `PYTHONPATH`. The bootstrap then triggers `install()` via `import standalone_helpers` (gated on `TOOL_VENV_PATH` in the package `__init__`), so the bridge is in place before the standalone module's body runs.

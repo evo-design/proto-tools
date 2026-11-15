@@ -336,11 +336,11 @@ def test_the_client_hydrates_the_queue_it_asks_to_create(monkeypatch):
 # ============================================================================
 # The wait before a worker reports
 # ============================================================================
-def test_the_backend_names_itself_while_connecting():
-    """A cold start is seconds of silence, and the spinner should say which machine it waits on."""
-    from proto_tools.utils.progress import remote_connecting_status
+def test_the_wait_for_a_container_says_so():
+    """A cold start is seconds of silence; the spinner says what it waits on, in the hosted service's words."""
+    from proto_tools.utils.progress import starting_container_status
 
-    assert remote_connecting_status("modal") == "Connecting to modal container"
+    assert starting_container_status() == "Starting container"
 
 
 def test_the_modal_dispatch_says_so_before_it_dispatches(monkeypatch):
@@ -350,7 +350,7 @@ def test_the_modal_dispatch_says_so_before_it_dispatches(monkeypatch):
     from proto_tools.modal import client
 
     body = inspect.getsource(client._live_progress)
-    said = body.index("remote_connecting_status")
+    said = body.index("starting_container_status")
     opened = body.index("open_progress_queue")
 
     assert said < opened, "the status is set after work that can itself block"

@@ -18,31 +18,9 @@ from alphagenome.models import interval_scorers as interval_scorers_lib
 from alphagenome.models import variant_scorers as variant_scorers_lib
 from alphagenome.protos import dna_model_pb2
 from alphagenome_research.model import dna_model
-from standalone_helpers import get_logger, resolve_weights_dir
+from standalone_helpers import StatusCounter, get_logger, resolve_weights_dir
 
 logger = get_logger(__name__)
-
-# Seconds between per-request phases, which keeps a caller's status at human pace.
-_PHASE_INTERVAL_SECONDS = 5.0
-
-
-class _ThrottledStatus:
-    """Report per-item phases: the first at once, then at most one per interval, and the last."""
-
-    def __init__(self, template: str, total: int, interval: float = _PHASE_INTERVAL_SECONDS) -> None:
-        self._template = template
-        self._total = total
-        self._interval = interval
-        self._last: float | None = None
-
-    def __call__(self, number: int) -> None:
-        """Report item ``number`` (1-based) of the total when the throttle allows."""
-        now = time.monotonic()
-        if number < self._total and self._last is not None and now - self._last < self._interval:
-            return
-        self._last = now
-        logger.update_status(self._template, number, self._total)
-
 
 def _safe_tidy_scores(scores: Any) -> list[Any]:
     """Wrap variant_scorers_lib.tidy_scores to handle upstream empty-result bug."""
@@ -373,7 +351,7 @@ class AlphaGenomeModel:
         scorers = _resolve_variant_scorers(variant_scorers, organism)
 
         all_scores = []
-        report = _ThrottledStatus("ISM scoring request %d of %d", len(requests))
+        report = StatusCounter(logger, "Scoring ISM request %d/%d", len(requests))
         for number, req in enumerate(requests, start=1):
             width = req["interval_end"] - req["interval_start"]
             _validate_min_scorer_width(width, _MIN_VARIANT_SCORER_WIDTH, "score_ism_variants_batch")
