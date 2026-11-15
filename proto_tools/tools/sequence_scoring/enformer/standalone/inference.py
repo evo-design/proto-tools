@@ -229,7 +229,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         _model = EnformerModel()
 
     operation = input_dict["operation"]
-    if operation in ("predict", "compute_gradient") and not _model._loaded:
+    if operation == "predict" and input_dict["sequences"] and not _model._loaded:
         # Load before the progress statuses below, so the loading status doesn't replace them mid-run.
         _model.load(input_dict["device"], verbose=input_dict["verbose"])
     if operation == "predict":
@@ -260,11 +260,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         }
     if operation == "compute_gradient":
         # One chunk of independent candidates: the weights load once and each is evaluated in turn.
-        counter = StatusCounter(logger, "Computing gradient %d/%d", total=len(input_dict["items"]))
-        results = []
-        for number, item in enumerate(input_dict["items"], start=1):
-            counter(number)
-            result = _model.compute_gradient(
+        results = [
+            _model.compute_gradient(
                 sequence=item["sequence"],
                 positions=item["positions"],
                 logits_list=item["logits"],
@@ -277,7 +274,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 device=input_dict["device"],
                 verbose=input_dict["verbose"],
             )
-            results.append(result)
+            for item in input_dict["items"]
+        ]
         return {
             "results": [{key: result[key] for key in ("terms", "metrics")} for result in results],
             "vocab": results[0]["vocab"],

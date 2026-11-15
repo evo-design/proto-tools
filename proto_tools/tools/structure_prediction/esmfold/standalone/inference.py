@@ -65,7 +65,8 @@ class ESMFoldModel:
             List of dicts with keys: pdb, avg_plddt, ptm, avg_pae, pae
         """
         # Lazy load on first call or device change
-        if not self._loaded:
+        loaded_now = not self._loaded
+        if loaded_now:
             self.load(device, verbose)
         elif self.device != device:
             self.to_device(device)
@@ -97,8 +98,9 @@ class ESMFoldModel:
                 tokenized_inputs["position_ids"] = position_ids
 
                 # Forward pass
-                n_structures = len(batch_data)
-                logger.update_status(f"Folding {n_structures} structure{'s' if n_structures != 1 else ''}")
+                if loaded_now:
+                    # The caller's progress bar counts structures; only replace the loading status.
+                    logger.update_status("Folding structures")
                 outputs = self.model(**tokenized_inputs, num_recycles=num_recycles)
 
                 # Apply linker masking

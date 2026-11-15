@@ -619,23 +619,20 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         if _model is None or _model.model_checkpoint != input_dict["model_checkpoint"]:
             _model = ESMCModel(model_checkpoint=input_dict["model_checkpoint"])
         # One chunk of independent candidates: the model loads once and items are evaluated in turn.
-        counter = StatusCounter(logger, "Computing gradient %d/%d", total=len(input_dict["items"]))
-        results = []
-        for index, item in enumerate(input_dict["items"], start=1):
-            counter(index)
-            results.append(
-                _model.compute_gradient(
-                    logits_list=item,
-                    temperature=resolve_temperature(input_dict["temperature"]),
-                    soft=float(input_dict.get("soft", 1.0)),
-                    hard=float(input_dict.get("hard", 0.0)),
-                    seed=input_dict["seed"],
-                    backprop=input_dict.get("compute_gradient", True),
-                    batch_size=input_dict.get("batch_size"),
-                    device=input_dict["device"],
-                    verbose=input_dict["verbose"],
-                )
+        results = [
+            _model.compute_gradient(
+                logits_list=item,
+                temperature=resolve_temperature(input_dict["temperature"]),
+                soft=float(input_dict.get("soft", 1.0)),
+                hard=float(input_dict.get("hard", 0.0)),
+                seed=input_dict["seed"],
+                backprop=input_dict.get("compute_gradient", True),
+                batch_size=input_dict.get("batch_size"),
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
             )
+            for item in input_dict["items"]
+        ]
         return {
             "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
             "vocab": results[0]["vocab"],

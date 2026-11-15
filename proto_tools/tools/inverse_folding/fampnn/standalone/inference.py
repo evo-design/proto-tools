@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import StatusCounter, get_logger, get_random_int, serialize_output, set_torch_seed
+from standalone_helpers import get_logger, get_random_int, serialize_output, set_torch_seed
 
 logger = get_logger(__name__)
 
@@ -429,9 +429,7 @@ class FAMPNNModel:
         batched_positions = total_positions.split(B)
 
         scores_dict = {}
-        counter = StatusCounter(logger, "Scoring batch %d/%d", total=len(batched_positions))
-        for batch_number, positions in enumerate(batched_positions, start=1):
-            counter(batch_number)
+        for positions in batched_positions:
             x, aatype, seq_mask, missing_atom_mask, residue_index, chain_index = [
                 model_inputs[k][: len(positions), ...].clone() for k in model_input_keys
             ]
@@ -562,9 +560,7 @@ class FAMPNNModel:
         batched_mutations = np.array_split(internal_mutations, num_batches)
 
         scores_all = []
-        counter = StatusCounter(logger, "Scoring batch %d/%d", total=len(batched_mutations))
-        for batch_number, mutation_batch in enumerate(batched_mutations, start=1):
-            counter(batch_number)
+        for mutation_batch in batched_mutations:
             x, aatype, seq_mask, missing_atom_mask, residue_index, chain_index = [
                 model_inputs[k][: len(mutation_batch), ...].clone() for k in model_input_keys
             ]

@@ -181,7 +181,7 @@ class BioEmuModel:
                 disable=not verbose,
             ):
                 n = min(adjusted_batch_size, num_samples - start_idx)
-                counter(start_idx + n)
+                counter(start_idx + 1)
                 npz_path = output_path / format_npz_samples_filename(start_idx, n)
                 if npz_path.exists():
                     raise ValueError(

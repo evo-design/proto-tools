@@ -16,7 +16,6 @@ from typing import Any, cast
 import numpy as np
 import torch
 from standalone_helpers import (
-    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -705,9 +704,7 @@ class LegacyCompatibleLigandMPNNModel:
         metrics: list[dict[str, Any]] = []
         pdb_strings: list[str] = []
         with tempfile.TemporaryDirectory(prefix="ligandmpnn_packed_") as tmpdir:
-            counter = StatusCounter(logger, "Designing sequence %d/%d", total=batch_size)
             for index in range(batch_size):
-                counter(index + 1)
                 feature_dict["randn"] = torch.randn([1, feature_dict["mask"].shape[1]], device=device)
                 output_dict = _run_legacy_ligandmpnn(
                     self._modules["ligandmpnn"],

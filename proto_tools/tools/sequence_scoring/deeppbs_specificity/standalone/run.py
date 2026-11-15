@@ -357,7 +357,7 @@ def _run_one_structure(
                 **fallback,
             }
 
-        logger.update_status(f"Predicting specificity {progress}")
+        logger.update_status(f"Predicting specificity for structure {progress}")
         try:
             _run_or_raise(
                 [
