@@ -9,7 +9,6 @@ from typing import Any
 
 import torch
 from standalone_helpers import (
-    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -175,9 +174,7 @@ class ESMIF1Model:
         metrics = []
 
         set_torch_seed(seed)
-        counter = StatusCounter(logger, "Designing sequence %d/%d", total=batch_size)
-        for index in range(1, batch_size + 1):
-            counter(index)
+        for _ in range(batch_size):
             if fixed_positions and target_chain in fixed_positions:
                 sampled_seq = self._sample_with_fixed_positions(
                     all_coords,

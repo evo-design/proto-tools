@@ -98,7 +98,11 @@ class GerminalRunner:
         if ablang_spec is None or not ablang_spec.submodule_search_locations:
             raise RuntimeError("germinal: ablang2 is not installed in the env; re-run standalone/setup.sh")
         ablang_pkg = Path(next(iter(ablang_spec.submodule_search_locations)))
-        logger.update_status("Downloading AbLang weights")
+        if not all(
+            (ablang_cache / f"model-weights-{model}" / marker).exists()
+            for model, (_url, marker) in _ABLANG_ARCHIVES.items()
+        ):
+            logger.update_status("Downloading AbLang weights")
         for model, (url, marker) in _ABLANG_ARCHIVES.items():
             cached = download_archive(url, ablang_cache / f"model-weights-{model}", marker=marker)
             link_to_cache(ablang_pkg / f"model-weights-{model}", cached)

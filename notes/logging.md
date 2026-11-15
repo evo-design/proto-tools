@@ -75,6 +75,8 @@ When the caller already loops over items with `progress_bar` and dispatches one 
 and inverse-folding tools), that bar owns the count. A worker status sent on every call would overwrite it, so send
 only what the bar can't show, such as a cold `Loading ... weights`, and then one line to replace it once loading is
 done.
+The same goes for gradient operations: an optimizer calls them every step and owns the progress, so they send
+nothing beyond a cold load.
 
 `get_logger` from `standalone_helpers` always returns a logger with `update_status`, even outside a worker (a
 setup script, say), where the status is just an INFO record.

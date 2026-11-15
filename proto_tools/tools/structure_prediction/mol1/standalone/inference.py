@@ -80,7 +80,7 @@ class Mol1Model:
             Path(root) / "checkpoint" / "mol-1-base.pt" if checkpoint == "mol-1-base" else Path(checkpoint)
         )
         inference_configs["dump_dir"] = output_dir
-        logger.update_status("Loading Mol-1 checkpoint")
+        logger.update_status("Loading Mol-1 weights")
         self.runner = get_default_runner(
             device=input_dict["device"],
             load_checkpoint_path=str(checkpoint_path),

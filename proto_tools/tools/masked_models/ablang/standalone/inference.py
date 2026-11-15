@@ -843,13 +843,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             groups.setdefault(item["model_choice"], []).append(index)
 
         results: list[dict[str, Any] | None] = [None] * len(items)
-        counter = StatusCounter(logger, "Computing gradient %d/%d", total=len(items))
-        done = 0
         for model_choice, indices in groups.items():
             model = _ensure_model(model_choice)
             for index in indices:
-                done += 1
-                counter(done)
                 item = items[index]
                 results[index] = model.compute_gradient(
                     logits_list=item["logits"],

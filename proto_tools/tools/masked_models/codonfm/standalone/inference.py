@@ -607,22 +607,19 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         }
     if operation == "gradient":
         # One chunk of independent candidates: the checkpoint loads once and items are evaluated in turn.
-        counter = StatusCounter(logger, "Computing gradient %d/%d", total=len(input_dict["items"]))
-        results = []
-        for index, item in enumerate(input_dict["items"], start=1):
-            counter(index)
-            results.append(
-                _MODEL.compute_gradient(
-                    item,
-                    temperature=resolve_temperature(input_dict.get("temperature")),
-                    soft=float(input_dict.get("soft", 1.0)),
-                    hard=float(input_dict.get("hard", 0.0)),
-                    backprop=input_dict.get("compute_gradient", True),
-                    batch_size=batch_size,
-                    device=device,
-                    verbose=verbose,
-                )
+        results = [
+            _MODEL.compute_gradient(
+                item,
+                temperature=resolve_temperature(input_dict.get("temperature")),
+                soft=float(input_dict.get("soft", 1.0)),
+                hard=float(input_dict.get("hard", 0.0)),
+                backprop=input_dict.get("compute_gradient", True),
+                batch_size=batch_size,
+                device=device,
+                verbose=verbose,
             )
+            for item in input_dict["items"]
+        ]
         return {
             "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
             "vocab": results[0]["vocab"],

@@ -201,7 +201,7 @@ def _run_one_structure(
     ]
 
     try:
-        logger.update_status(f"Predicting specificity {progress}")
+        logger.update_status(f"Predicting specificity for structure {progress}")
         # Propagate the assigned device (CUDA_VISIBLE_DEVICES etc.) to the upstream
         # NA-MPNN CLI subprocess via the DeviceManager-aware helper.
         sub_env = {**get_subprocess_device_env(config.get("device", "cuda")), "PYTHONNOUSERSITE": "1"}

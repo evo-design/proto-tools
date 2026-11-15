@@ -211,11 +211,9 @@ def get_logger(name: str) -> ProtoLogger:
             setup script), so ``update_status`` always works; without the
             bridge it is an ordinary INFO record.
     """
-    full_name = f"{_WORKER_NAMESPACE}.{name}"
-    previous_class = logging.getLoggerClass()
-    logging.setLoggerClass(ProtoLogger)
-    try:
-        logger = logging.getLogger(full_name)
-    finally:
-        logging.setLoggerClass(previous_class)
+    logger = logging.getLogger(f"{_WORKER_NAMESPACE}.{name}")
+    if not hasattr(logger, "update_status"):
+        # A plain Logger, made before install() or outside a worker. ProtoLogger adds methods but no
+        # state, so switching this one instance's class is safe and leaves the global logger class alone.
+        logger.__class__ = ProtoLogger
     return cast(ProtoLogger, logger)
