@@ -225,3 +225,21 @@ def test_drop_update_status_filter_is_bar_aware():
     with patch("proto_tools.utils.progress.has_active_progress_bar", return_value=False):
         assert _drop_update_status_records(flagged) is True
         assert _drop_update_status_records(plain) is True
+
+
+def test_status_counter_reports_the_first_then_throttles_and_always_the_last(monkeypatch) -> None:
+    """A fast loop reads at human pace: item 1 at once, then one per interval, and the last item always."""
+    from proto_tools.utils.standalone_helpers_source.standalone_helpers import proto_logging
+
+    sent: list[str] = []
+
+    class _Logger:
+        def update_status(self, template: str, *args: object) -> None:
+            sent.append(template % args)
+
+    clock = iter([0.0, 1.0, 2.0, 6.0, 7.0, 8.0])
+    monkeypatch.setattr(proto_logging.time, "monotonic", lambda: next(clock))
+    counter = proto_logging.StatusCounter(_Logger(), "Folding structure %d/%d", total=6, interval=5.0)
+    for number in range(1, 7):
+        counter(number)
+    assert sent == ["Folding structure 1/6", "Folding structure 4/6", "Folding structure 6/6"]

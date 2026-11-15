@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import time
 from typing import Any
 
 # Sentinel prefix on every JSON-tagged stderr line. Must match proto_tools/utils/logging_config.py:_TAG_PREFIX.
@@ -91,6 +92,50 @@ class ProtoLogger(logging.Logger):
         """
         if self.isEnabledFor(logging.INFO):
             self._log(logging.INFO, msg, args, update_status=True)
+
+
+# Seconds between the per-item statuses a StatusCounter reports, so a fast loop reads at human pace.
+STATUS_INTERVAL_SECONDS = 5.0
+
+
+class StatusCounter:
+    """Report progress through a known number of items as status updates, throttled to human pace.
+
+    The first item is reported at once, then at most one every ``interval`` seconds, and the last item always.
+    A tight loop costs one clock read per item. Works with either logger that has ``update_status``: this
+    module's (in a tool's environment) or proto-tools' own (a tool that runs in the caller's process).
+
+    Example:
+        >>> counter = StatusCounter(logger, "Folding structure %d/%d", total=len(sequences))
+        >>> for index, sequence in enumerate(sequences, start=1):
+        ...     counter(index)
+    """
+
+    def __init__(
+        self, logger: logging.Logger, template: str, total: int, interval: float = STATUS_INTERVAL_SECONDS
+    ) -> None:
+        """Create a counter.
+
+        Args:
+            logger (logging.Logger): A logger with ``update_status`` (``get_logger(...)`` here, or proto-tools').
+            template (str): The status, with ``%d`` for the item number and then the total, e.g.
+                ``"Folding structure %d/%d"``.
+            total (int): How many items there are.
+            interval (float): Minimum seconds between reports, except the last.
+        """
+        self._logger = logger
+        self._template = template
+        self._total = total
+        self._interval = interval
+        self._last: float | None = None
+
+    def __call__(self, number: int) -> None:
+        """Report item ``number`` (1-based) of the total, when the throttle allows."""
+        now = time.monotonic()
+        if number < self._total and self._last is not None and now - self._last < self._interval:
+            return
+        self._last = now
+        self._logger.update_status(self._template, number, self._total)  # type: ignore[attr-defined]
 
 
 class _BridgeHandler(logging.Handler):

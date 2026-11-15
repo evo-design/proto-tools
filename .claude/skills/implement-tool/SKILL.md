@@ -344,9 +344,15 @@ Why: standalones run inside isolated micromamba subprocesses where `proto_tools`
 For status updates that should drive the parent's spinner subtitle (and never clutter console output), use the dedicated method:
 
 ```python
-logger.update_status("Loading checkpoint")  # spinner subtitle update; not shown in console
-logger.info("...")                           # normal log line
+logger.update_status("Loading ESMFold weights")  # spinner subtitle update; not shown in console
+logger.info("...")                                # normal log line
 ```
+
+Send a status at each phase boundary someone waiting on the tool would want to see: loading large weights, each
+pipeline stage, progress through a known number of items (with `StatusCounter`, e.g. `Folding structure 3/8`), and
+slow steps that aren't obvious. Follow the house style in `notes/logging.md` ("Status messages"): a present
+participle in sentence case with no trailing period, counts as `<item> <n>/<total>`, and nothing from the input
+(sequences, file names, paths, IDs) in the text.
 
 **If the tool has file-format conversion helpers** (e.g., writing MSA to Parquet, converting complexes to YAML/FASTA), implement them as plain-type functions in `helpers.py` at the tool directory level. These functions must be self-contained (no `proto_tools` imports) and take only plain types (str, list, dict). The tool layer imports and wraps them with typed signatures. Keeping them dependency-free lets the hosted execution backend reuse the same files, preserving a single source of truth. See esmfold, chai1, boltz2 for examples.
 
