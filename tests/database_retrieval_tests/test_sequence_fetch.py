@@ -18,9 +18,11 @@ from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _parse_fasta_records,
 )
 from proto_tools.tools.database_retrieval.sequence_fetch.sequence_fetch import (
+    SequenceFetchRequest,
     _ncbi_gene_term,
     _ncbi_term,
     _select_best_record,
+    parse_accession,
 )
 
 
@@ -57,8 +59,42 @@ def test_sequence_fetch_rejects_ncrna_as_protein_request():
 
 
 def test_sequence_fetch_request_needs_a_name_and_organism_or_an_identifier():
-    with pytest.raises(ValueError, match="Provide both target_name and organism, or an identifier"):
+    with pytest.raises(ValueError, match="Provide both target_name and organism, or an accession"):
         SequenceFetchInput(requests=[{"target_name": "lacI", "sequence_types": ["protein"]}])
+
+
+@pytest.mark.parametrize(
+    ("accession", "expected"),
+    [
+        ("P04637", ("uniprot", "P04637")),
+        ("p04637-2", ("uniprot", "P04637-2")),
+        ("A0A023GPI8", ("uniprot", "A0A023GPI8")),
+        ("2lyz", ("pdb", "2LYZ")),
+        ("NM_000546.6", ("nucleotide", "NM_000546.6")),
+        ("NZ_CP012345.1", ("nucleotide", "NZ_CP012345.1")),
+        ("NP_000537.3", ("protein", "NP_000537.3")),
+        ("WP_000123456", ("protein", "WP_000123456")),
+        ("AAA12345.1", ("protein", "AAA12345.1")),
+        ("U49845", ("nucleotide", "U49845")),
+        ("AF123456.2", ("nucleotide", "AF123456.2")),
+        ("7157", ("gene", "7157")),
+        ("nucleotide:P12345", ("nucleotide", "P12345")),
+        ("Gene: 7157", ("gene", "7157")),
+        ("pdb:1234", ("pdb", "1234")),
+    ],
+)
+def test_parse_accession_reads_the_kind_from_the_format(accession, expected):
+    assert parse_accession(accession) == expected
+
+
+def test_parse_accession_rejects_an_unknown_format():
+    with pytest.raises(ValueError, match="Unrecognised accession 'lysozyme'"):
+        parse_accession("lysozyme")
+
+
+def test_sequence_fetch_request_takes_at_most_one_accession_of_each_kind():
+    with pytest.raises(ValueError, match="at most one uniprot accession per request, got P04637 and P69905"):
+        SequenceFetchRequest(accessions=["P04637", "P69905"], sequence_types=["protein"])
 
 
 def test_sequence_fetch_structure_by_pdb_id_alone(monkeypatch):
@@ -69,7 +105,7 @@ def test_sequence_fetch_structure_by_pdb_id_alone(monkeypatch):
     )
 
     output = run_sequence_fetch(
-        SequenceFetchInput(requests=[{"request_id": "hen", "pdb_id": "2lyz", "sequence_types": ["structure"]}])
+        SequenceFetchInput(requests=[{"request_id": "hen", "accessions": "2lyz", "sequence_types": ["structure"]}])
     )
 
     item = output.results[0]
@@ -79,13 +115,15 @@ def test_sequence_fetch_structure_by_pdb_id_alone(monkeypatch):
 
 
 def test_sequence_fetch_says_which_types_need_a_name_when_only_an_identifier_is_given():
-    output = run_sequence_fetch(SequenceFetchInput(requests=[{"pdb_id": "2LYZ", "sequence_types": ["dna_genomic"]}]))
+    output = run_sequence_fetch(
+        SequenceFetchInput(requests=[{"accessions": ["2LYZ"], "sequence_types": ["dna_genomic"]}])
+    )
 
     item = output.results[0]
     assert item.status == "failed"
     assert item.errors == [
         "NOT_FOUND[dna_genomic]: this sequence type needs a search by name, so give target_name and organism, "
-        "or an identifier for it"
+        "or an accession for it"
     ]
 
 
@@ -106,7 +144,7 @@ def test_pdb_protein_fetch_filters_dna_chains(monkeypatch):
             {
                 "request_id": "pdb_test",
                 "sequence_types": ["protein"],
-                "pdb_id": "1LBG",
+                "accessions": ["1LBG"],
             }
         ]
     )
@@ -140,7 +178,7 @@ def test_pdb_protein_fetch_fails_when_no_protein_chains(monkeypatch):
             {
                 "request_id": "no_protein",
                 "sequence_types": ["protein"],
-                "pdb_id": "1ABC",
+                "accessions": ["1ABC"],
             }
         ]
     )
@@ -167,7 +205,7 @@ def test_sequence_fetch_raises_when_its_timeout_elapses(monkeypatch):
                 "target_name": "test",
                 "organism": "test org",
                 "sequence_types": ["protein"],
-                "pdb_id": "1ABC",
+                "accessions": ["1ABC"],
             }
         ]
     )
@@ -257,7 +295,7 @@ def test_sequence_fetch_export_fasta(tmp_path):
                 "target_name": "TP53",
                 "organism": "Homo sapiens",
                 "sequence_types": ["protein"],
-                "uniprot_id": "P04637",
+                "accessions": ["P04637"],
             }
         ]
     )
