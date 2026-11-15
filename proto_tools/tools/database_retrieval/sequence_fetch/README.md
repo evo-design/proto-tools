@@ -17,7 +17,7 @@
 
 ## Overview
 
-The `sequence-fetch` tool is a multi-source orchestrator that resolves a batch of heterogeneous sequence and structure requests into a uniform result. Each request names a gene, protein, or RNA target and the molecule types to retrieve (protein, genomic DNA, coding DNA, transcript RNA, inferred pre-mRNA, or PDB structure), optionally pinned by accession overrides. It federates over [NCBI Entrez](https://www.ncbi.nlm.nih.gov/search/), [UniProt](https://www.uniprot.org/), and [RCSB PDB](https://www.rcsb.org/), returning per-request sequences, structure metadata, resolved identifiers, and status.
+The `sequence-fetch` tool is a multi-source orchestrator that resolves a batch of heterogeneous sequence and structure requests into a uniform result. Each request names a gene, protein, or RNA target and its organism, or gives an identifier alone, plus the molecule types to retrieve (protein, genomic DNA, coding DNA, transcript RNA, inferred pre-mRNA, or PDB structure), with accession overrides taking priority. It federates over [NCBI Entrez](https://www.ncbi.nlm.nih.gov/search/), [UniProt](https://www.uniprot.org/), and [RCSB PDB](https://www.rcsb.org/), returning per-request sequences, structure metadata, resolved identifiers, and status.
 
 ## Background
 
@@ -41,7 +41,7 @@ Use this to pull mixed protein, nucleotide, and structure data for many targets 
 
 #### Usage Tips
 
-- **Provide identifiers whenever possible.** Accession overrides such as `uniprot_id`, `genbank_accession`, or `pdb_id` route directly and are far more reliable than a name-and-organism search, which selects a single top-ranked candidate that may be ambiguous.
+- **Provide identifiers whenever possible.** Accession overrides such as `uniprot_id`, `genbank_accession`, or `pdb_id` route directly and are far more reliable than a name-and-organism search, which selects a single top-ranked candidate that may be ambiguous. An identifier alone is enough: `target_name` and `organism` are needed only for a molecule type that has no identifier to route on and falls back to a search by name.
 - **The strand in `genomic_coordinates` changes the returned sequence.** Coordinates are interpreted as 1-indexed, inclusive intervals to match biological residue selection conventions, and an explicit `+` or `-` strand controls whether the forward or reverse-complement sequence is returned. Omitting the strand can yield the wrong-orientation sequence for genes on the minus strand.
 - **A protein hit does not guarantee a structure exists.** Structure retrieval requires a linked PDB entry. A UniProt or NCBI protein match with no PDB cross-reference produces a not-found error for the `structure` type while the protein sequence still returns.
 - **`type_check_mode` defaults to `"error"`, the right setting for production.** It rejects obvious molecule-type mismatches early, such as requesting `protein` for a name that looks like a non-coding RNA (ncRNA) gene or for an `NR_` or `XR_` RefSeq transcript. `"warn"` records the mismatch and continues, and `"off"` skips the check entirely.

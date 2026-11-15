@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import requests
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 # Database tool imports (orchestrator calls these directly)
 from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
@@ -87,8 +87,8 @@ class SequenceFetchRequest(BaseModel):
 
     Attributes:
         request_id (str | None): Optional caller-provided request identifier.
-        target_name (str): Gene, protein, or RNA name to resolve.
-        organism (str): Organism name used for disambiguation.
+        target_name (str | None): Gene, protein, or RNA name to resolve; needed with organism unless an identifier is given.
+        organism (str | None): Organism name used for disambiguation; needed with target_name unless an identifier is given.
         sequence_types (list[Literal['protein', 'dna_genomic', 'dna_cds', 'rna_transcript', 'rna_premrna', 'structure']]): Requested outputs: protein, dna, rna, or structure.
         uniprot_id (str | None): UniProt accession override.
         genbank_accession (str | None): GenBank accession override.
@@ -102,8 +102,18 @@ class SequenceFetchRequest(BaseModel):
     """
 
     request_id: str | None = Field(default=None, title="Request ID", description="Optional request identifier")
-    target_name: str = Field(min_length=1, title="Target Name", description="Gene, RNA, or protein name")
-    organism: str = Field(min_length=1, title="Organism", description="Organism for disambiguation")
+    target_name: str | None = Field(
+        default=None,
+        min_length=1,
+        title="Target Name",
+        description="Gene, RNA, or protein name; needed with organism unless an identifier is given",
+    )
+    organism: str | None = Field(
+        default=None,
+        min_length=1,
+        title="Organism",
+        description="Organism for disambiguation; needed with target_name unless an identifier is given",
+    )
     sequence_types: list[
         Literal[
             "protein",
@@ -152,6 +162,27 @@ class SequenceFetchRequest(BaseModel):
                 normalized.append(item)
                 seen.add(item)
         return normalized
+
+    @model_validator(mode="after")
+    def validate_lookup_params(self) -> "SequenceFetchRequest":
+        """Require target_name and organism, or an identifier that determines the record."""
+        identifiers = (
+            self.uniprot_id,
+            self.genbank_accession,
+            self.refseq_accession,
+            self.pdb_id,
+            self.gene_id,
+            self.protein_id,
+            self.transcript_id,
+            self.genomic_coordinates,
+            self.additional_ids.get("accession"),
+        )
+        if not (self.target_name and self.organism) and not any(identifiers):
+            raise ValueError(
+                "Provide both target_name and organism, or an identifier (uniprot_id, pdb_id, genbank_accession, "
+                "refseq_accession, gene_id, protein_id, transcript_id, genomic_coordinates)"
+            )
+        return self
 
 
 class SequenceFetchInput(BaseToolInput):
@@ -249,8 +280,8 @@ class SequenceFetchResult(BaseModel):
 
     Attributes:
         request_id (str): Request identifier used in this result.
-        target_name (str): Original target name.
-        organism (str): Original organism name.
+        target_name (str | None): Original target name, if given.
+        organism (str | None): Original organism name, if given.
         requested_types (list[str]): Requested output molecule types.
         status (Literal['success', 'warning', 'failed']): One of success, warning, or failed.
         fetched_sequences (list[FetchedSequence]): Retrieved sequence records.
@@ -261,8 +292,8 @@ class SequenceFetchResult(BaseModel):
     """
 
     request_id: str = Field(title="Request ID", description="Request identifier")
-    target_name: str = Field(title="Target Name", description="Original target name")
-    organism: str = Field(title="Organism", description="Original organism name")
+    target_name: str | None = Field(default=None, title="Target Name", description="Original target name, if given")
+    organism: str | None = Field(default=None, title="Organism", description="Original organism name, if given")
     requested_types: list[str] = Field(title="Requested Types", description="Requested molecule types")
     status: Literal["success", "warning", "failed"] = Field(title="Status", description="Result status")
     fetched_sequences: list[FetchedSequence] = Field(
@@ -377,7 +408,7 @@ class SequenceFetchOutput(BaseToolOutput):
                     for record in result.fetched_sequences:
                         acc = record.accession or "unknown"
                         header = (
-                            f">{result.request_id}|{result.target_name}|"
+                            f">{result.request_id}|{result.target_name or ''}|"
                             f"{record.sequence_type}|{record.source_database}|{acc}"
                         )
                         handle.write(f"{header}\n{record.sequence}\n")
@@ -605,7 +636,7 @@ def _process_single_request(
     if (
         "protein" in request.sequence_types
         and "dna_genomic" in request.sequence_types
-        and _organism_likely_has_introns(request.organism)
+        and _organism_likely_has_introns(request.organism or "")
     ):
         warnings.append("Genomic DNA includes introns in many organisms; DNA to protein mapping may be indirect.")
 
@@ -672,7 +703,7 @@ def _validate_request_type_compatibility(
     if "protein" not in request.sequence_types:
         return None
 
-    name = request.target_name.lower()
+    name = (request.target_name or "").lower()
     if any(re.search(pattern, name) for pattern in _NON_CODING_PATTERNS):
         return f"Target '{request.target_name}' appears non-coding but protein was requested"
 
@@ -780,13 +811,15 @@ def _fetch_protein(
         )
 
     # Name-based fallback: UniProt first, then NCBI protein search.
-    entry = _search_uniprot_entry(
-        target_name=request.target_name,
-        organism=request.organism,
-        prefer_pdb_crossref="structure" in request.sequence_types,
-        max_candidates=config.max_candidates_per_source,
-        session=session,
-    )
+    entry = None
+    if request.target_name and request.organism:
+        entry = _search_uniprot_entry(
+            target_name=request.target_name,
+            organism=request.organism,
+            prefer_pdb_crossref="structure" in request.sequence_types,
+            max_candidates=config.max_candidates_per_source,
+            session=session,
+        )
     if entry is not None:
         sequence = entry.get("sequence", {}).get("value")
         accession = entry.get("primaryAccession")
@@ -813,7 +846,7 @@ def _fetch_protein(
         session=session,
     )
     if not search_ids:
-        raise SequenceFetchError(f"No protein found for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No protein found for {_target_label(request)}")
 
     if len(search_ids) > 1:
         warnings.append(f"Multiple NCBI protein candidates found ({len(search_ids)}); using top hit {search_ids[0]}")
@@ -927,7 +960,7 @@ def _fetch_dna_genomic(
             max_results=config.max_candidates_per_source,
         )
     if not ids:
-        raise SequenceFetchError(f"No genomic DNA found for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No genomic DNA found for {_target_label(request)}")
 
     attempted_not_found: list[str] = []
     selected_id: str | None = None
@@ -992,13 +1025,13 @@ def _fetch_dna_genomic_from_gene_locus(
     else:
         gene_ids, _ = _ncbi_esearch(
             db="gene",
-            term=_ncbi_gene_term(request.target_name, request.organism),
+            term=_ncbi_gene_term(*_name_and_organism(request)),
             config=ncfg,
             session=session,
             max_results=config.max_candidates_per_source,
         )
     if not gene_ids:
-        raise SequenceFetchError(f"No gene IDs found for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No gene IDs found for {_target_label(request)}")
 
     selected_gene_id = gene_ids[0]
     if len(gene_ids) > 1:
@@ -1140,7 +1173,7 @@ def _fetch_dna_cds(
         db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
     )
     if not ids:
-        raise SequenceFetchError(f"No CDS found for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No CDS found for {_target_label(request)}")
 
     if len(ids) > 1:
         warnings.append(f"Multiple CDS candidates found ({len(ids)}); using top hit {ids[0]}")
@@ -1218,7 +1251,7 @@ def _fetch_rna_transcript(
         db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
     )
     if not ids:
-        raise SequenceFetchError(f"No transcript found for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No transcript found for {_target_label(request)}")
 
     if len(ids) > 1:
         warnings.append(f"Multiple transcript candidates found ({len(ids)}); using top hit {ids[0]}")
@@ -1300,9 +1333,10 @@ def _fetch_structure(
             warnings.append(f"Using resolved UniProt ID '{uniprot_id}' from protein fetch for structure lookup")
 
     if not pdb_id and not uniprot_id:
+        target_name, organism = _name_and_organism(request)
         entry = _search_uniprot_entry(
-            target_name=request.target_name,
-            organism=request.organism,
+            target_name=target_name,
+            organism=organism,
             prefer_pdb_crossref=True,
             max_candidates=config.max_candidates_per_source,
             session=session,
@@ -1325,7 +1359,7 @@ def _fetch_structure(
             raise SequenceFetchError(f"UniProt ID '{uniprot_id}' has no linked PDB cross-references")
 
     if not pdb_id:
-        raise SequenceFetchError(f"No PDB ID resolved for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No PDB ID resolved for {_target_label(request)}")
 
     pdb_id = pdb_id.upper()
     meta = _fetch_pdb_entry(pdb_id, session)
@@ -1355,9 +1389,27 @@ def _preferred_accession(request: SequenceFetchRequest) -> str | None:
     return request.genbank_accession or request.refseq_accession or request.additional_ids.get("accession")
 
 
+def _name_and_organism(request: SequenceFetchRequest) -> tuple[str, str]:
+    """Return the request's target name and organism for a search by name, or fail if it has none."""
+    if not (request.target_name and request.organism):
+        raise SequenceFetchError(
+            "this sequence type needs a search by name, so give target_name and organism, or an identifier for it"
+        )
+    return request.target_name, request.organism
+
+
+def _target_label(request: SequenceFetchRequest) -> str:
+    """Describe what a by-name or by-gene search looked for, for error messages."""
+    if request.target_name and request.organism:
+        return f"'{request.target_name}' in '{request.organism}'"
+    return f"gene ID '{request.gene_id}'"
+
+
 def _ncbi_term_for_request(request: SequenceFetchRequest) -> str:
     """Compose an Entrez term with optional gene_id preference."""
-    base_term = _ncbi_term(request.target_name, request.organism)
+    if request.gene_id and not (request.target_name and request.organism):
+        return f"{request.gene_id}[Gene ID]"
+    base_term = _ncbi_term(*_name_and_organism(request))
     if request.gene_id:
         return f"({request.gene_id}[Gene ID] OR {base_term})"
     return base_term
@@ -1464,11 +1516,13 @@ def _ncbi_gene_term(target_name: str, organism: str) -> str:
 
 def _select_best_record(
     records: list[NCBIFastaRecord],
-    target_name: str,
+    target_name: str | None,
 ) -> NCBIFastaRecord | None:
-    """Select the FASTA record whose header best matches target_name."""
+    """Select the FASTA record whose header best matches target_name, or the first without one."""
     if not records:
         return None
+    if not target_name:
+        return records[0]
     lowered = target_name.lower()
     for record in records:
         if lowered in record.header.lower():

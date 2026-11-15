@@ -56,6 +56,39 @@ def test_sequence_fetch_rejects_ncrna_as_protein_request():
     assert any("TYPE_MISMATCH" in error for error in output.results[0].errors)
 
 
+def test_sequence_fetch_request_needs_a_name_and_organism_or_an_identifier():
+    with pytest.raises(ValueError, match="Provide both target_name and organism, or an identifier"):
+        SequenceFetchInput(requests=[{"target_name": "lacI", "sequence_types": ["protein"]}])
+
+
+def test_sequence_fetch_structure_by_pdb_id_alone(monkeypatch):
+    monkeypatch.setattr(
+        sf_module,
+        "_fetch_pdb_entry",
+        lambda pdb_id, session: {"title": "Hen egg-white lysozyme", "method": "X-RAY DIFFRACTION", "resolution": 2.0},
+    )
+
+    output = run_sequence_fetch(
+        SequenceFetchInput(requests=[{"request_id": "hen", "pdb_id": "2lyz", "sequence_types": ["structure"]}])
+    )
+
+    item = output.results[0]
+    assert item.status == "success"
+    assert item.fetched_structures[0].pdb_id == "2LYZ"
+    assert item.target_name is None
+
+
+def test_sequence_fetch_says_which_types_need_a_name_when_only_an_identifier_is_given():
+    output = run_sequence_fetch(SequenceFetchInput(requests=[{"pdb_id": "2LYZ", "sequence_types": ["dna_genomic"]}]))
+
+    item = output.results[0]
+    assert item.status == "failed"
+    assert item.errors == [
+        "NOT_FOUND[dna_genomic]: this sequence type needs a search by name, so give target_name and organism, "
+        "or an identifier for it"
+    ]
+
+
 def test_pdb_protein_fetch_filters_dna_chains(monkeypatch):
     """PDB FASTA with DNA chain first must still return protein chain."""
     fake_records = [
@@ -72,8 +105,6 @@ def test_pdb_protein_fetch_filters_dna_chains(monkeypatch):
         requests=[
             {
                 "request_id": "pdb_test",
-                "target_name": "lacI",
-                "organism": "Escherichia coli",
                 "sequence_types": ["protein"],
                 "pdb_id": "1LBG",
             }
@@ -108,8 +139,6 @@ def test_pdb_protein_fetch_fails_when_no_protein_chains(monkeypatch):
         requests=[
             {
                 "request_id": "no_protein",
-                "target_name": "test",
-                "organism": "test org",
                 "sequence_types": ["protein"],
                 "pdb_id": "1ABC",
             }
