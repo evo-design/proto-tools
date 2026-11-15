@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Literal, get_args
 
 import requests
-from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 # Database tool imports (orchestrator calls these directly)
 from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
@@ -77,24 +77,33 @@ _NON_CODING_PATTERNS = (
 )
 
 
-AccessionKind = Literal["uniprot", "pdb", "protein", "nucleotide", "gene"]
+AccessionKind = Literal["uniprot", "pdb", "protein", "genomic", "transcript", "nucleotide", "gene"]
 
-# Checked in order; the first match names the kind. Two formats overlap, and the more common reading wins: bare
-# digits are an NCBI Gene ID (write ``pdb:1234`` for an all-digit PDB ID), and UniProt's [OPQ] + 5 digits beats a
-# one-letter GenBank nucleotide accession (write ``nucleotide:P12345`` for that).
+# Formats from UniProt (help/accession_numbers), the RefSeq release notes (section 3.8, accession prefixes), the
+# INSDC/GenBank accession prefix table and wwPDB (four-character and extended pdb_ IDs). Checked in order; the first
+# match names the kind. Formats are disjoint apart from bare digits, which could be an all-digit PDB ID but are read
+# as an NCBI Gene ID (write ``pdb:1234`` for the PDB entry). GenBank has no O, P or Q one-letter prefixes, so
+# UniProt's [OPQ] + 5 digits never collides with a GenBank accession.
 _ACCESSION_PATTERNS: tuple[tuple[AccessionKind, re.Pattern[str]], ...] = (
     ("gene", re.compile(r"^\d+$")),
-    ("nucleotide", re.compile(r"^(AC|NC|NG|NT|NW|NZ|NM|NR|XM|XR)_[A-Z]*\d+(\.\d+)?$")),
+    ("genomic", re.compile(r"^(AC|NC|NG|NT|NW|NZ)_[A-Z]*\d+(\.\d+)?$")),
+    ("transcript", re.compile(r"^(NM|NR|XM|XR)_\d+(\.\d+)?$")),
     ("protein", re.compile(r"^(AP|NP|YP|XP|WP)_\d+(\.\d+)?$")),
-    ("pdb", re.compile(r"^\d[A-Z0-9]{3}$")),
-    ("uniprot", re.compile(r"^([OPQ]\d[A-Z0-9]{3}\d|[A-NR-Z]\d([A-Z][A-Z0-9]{2}\d){1,2})(-\d+)?$")),
-    ("protein", re.compile(r"^[A-Z]{3}\d{5,7}(\.\d+)?$")),
-    ("nucleotide", re.compile(r"^([A-Z]\d{5}|[A-Z]{2}\d{6,8}|[A-Z]{4,6}\d{8,10})(\.\d+)?$")),
+    ("pdb", re.compile(r"^(\d[A-Z0-9]{3}|PDB_[A-Z0-9]{8})$")),
+    ("uniprot", re.compile(r"^([OPQ]\d[A-Z0-9]{3}\d|[A-NR-Z]\d([A-Z][A-Z0-9]{2}\d){1,2})(-\d+)?(\.\d+)?$")),
+    ("protein", re.compile(r"^[A-Z]{3}(\d{5}|\d{7})(\.\d+)?$")),
+    # GenBank nucleotide (1+5, 2+6, 2+8), WGS/TSA/TLS (4+8 or more, 6+9 or more) and MGA (5+7). These may be
+    # genomic or mRNA, so they route as either.
+    (
+        "nucleotide",
+        re.compile(r"^([A-Z]\d{5}|[A-Z]{2}(\d{6}|\d{8})|[A-Z]{4}\d{8,}|[A-Z]{6}\d{9,}|[A-Z]{5}\d{7})(\.\d+)?$"),
+    ),
 )
 
 _ACCESSION_FORMATS = (
-    "UniProt (P04637), PDB (2LYZ), RefSeq (NM_000546.6, NP_000537.3), GenBank (U49845, AAA12345) "
-    "or an NCBI Gene ID (7157); prefix one with uniprot:, pdb:, protein:, nucleotide: or gene: to name its kind"
+    "UniProt (P04637), PDB (2LYZ, pdb_00002lyz), RefSeq (NC_000017.11, NM_000546.6, NP_000537.3), "
+    "GenBank (U49845, AAA12345) or an NCBI Gene ID (7157); prefix one with uniprot:, pdb:, protein:, genomic:, "
+    "transcript:, nucleotide: or gene: to name its kind"
 )
 
 
@@ -105,20 +114,35 @@ def parse_accession(value: str) -> tuple[AccessionKind, str]:
         value (str): An accession, optionally prefixed with its kind (e.g. ``"gene:7157"``).
 
     Returns:
-        tuple[AccessionKind, str]: The kind and the accession, upper-cased when the kind was detected.
+        tuple[AccessionKind, str]: The kind and the upper-cased accession. A UniProt entry version
+            (``P04637.2``) is dropped, and an extended PDB ID for a four-character entry
+            (``pdb_00001tsr``) is shortened to that entry (``1TSR``).
 
     Raises:
         ValueError: If the accession matches no known format.
     """
     text = value.strip()
     prefix, separator, rest = text.partition(":")
-    if separator and prefix.lower() in get_args(AccessionKind):
-        return prefix.lower(), rest.strip()  # type: ignore[return-value]
-    upper = text.upper()
-    for kind, pattern in _ACCESSION_PATTERNS:
-        if pattern.match(upper):
-            return kind, upper
-    raise ValueError(f"Unrecognised accession {value!r}: expected {_ACCESSION_FORMATS}")
+    kind: AccessionKind
+    if separator and prefix.strip().lower() in get_args(AccessionKind):
+        kind = prefix.strip().lower()  # type: ignore[assignment]
+        accession = rest.strip().upper()
+        if not accession or any(char.isspace() for char in accession):
+            raise ValueError(f"Accession {value!r} needs one accession, without spaces, after its kind prefix")
+        if kind == "gene" and not accession.isdigit():
+            raise ValueError(f"Accession {value!r}: an NCBI Gene ID is a number")
+    else:
+        accession = text.upper()
+        detected = next((k for k, pattern in _ACCESSION_PATTERNS if pattern.match(accession)), None)
+        if detected is None:
+            hint = " (genomic coordinates go in genomic_coordinates)" if re.search(r":\d+-\d+", text) else ""
+            raise ValueError(f"Unrecognised accession {value!r}{hint}: expected {_ACCESSION_FORMATS}")
+        kind = detected
+    if kind == "uniprot":
+        accession = accession.split(".", 1)[0]
+    if kind == "pdb" and re.match(r"^PDB_0000[A-Z0-9]{4}$", accession):
+        accession = accession[-4:]
+    return kind, accession
 
 
 # ============================================================================
@@ -137,6 +161,8 @@ class SequenceFetchRequest(BaseModel):
         accessions (list[str]): Accessions to route on, at most one of each kind; see :func:`parse_accession`.
         genomic_coordinates (str | None): Genomic interval like NC_000913.3:1-100:+.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     request_id: str | None = Field(default=None, title="Request ID", description="Optional request identifier")
     target_name: str | None = Field(
@@ -232,9 +258,14 @@ class SequenceFetchRequest(BaseModel):
         return self._accession("protein")
 
     @property
-    def nucleotide_accession(self) -> str | None:
-        """The NCBI nucleotide (RefSeq or GenBank) accession, if given."""
-        return self._accession("nucleotide")
+    def genomic_accession(self) -> str | None:
+        """The genomic nucleotide accession: a genomic RefSeq one, else a GenBank one, if given."""
+        return self._accession("genomic") or self._accession("nucleotide")
+
+    @property
+    def transcript_accession(self) -> str | None:
+        """The transcript nucleotide accession: an RNA RefSeq one, else a GenBank one, if given."""
+        return self._accession("transcript") or self._accession("nucleotide")
 
     @property
     def gene_id(self) -> str | None:
@@ -693,7 +724,8 @@ def _process_single_request(
     if (
         "protein" in request.sequence_types
         and "dna_genomic" in request.sequence_types
-        and _organism_likely_has_introns(request.organism or "")
+        and request.organism is not None
+        and _organism_likely_has_introns(request.organism)
     ):
         warnings.append("Genomic DNA includes introns in many organisms; DNA to protein mapping may be indirect.")
 
@@ -764,7 +796,7 @@ def _validate_request_type_compatibility(
     if any(re.search(pattern, name) for pattern in _NON_CODING_PATTERNS):
         return f"Target '{request.target_name}' appears non-coding but protein was requested"
 
-    refseq_like = request.nucleotide_accession or ""
+    refseq_like = request.transcript_accession or ""
     if refseq_like.startswith(("NR_", "XR_")):
         return f"RefSeq transcript '{refseq_like}' is non-coding (NR_/XR_ prefix)"
 
@@ -944,7 +976,7 @@ def _fetch_dna_genomic(
     ncfg = _ncbi_config(config)
 
     coords = _parse_coordinates(request.genomic_coordinates)
-    accession_hint = request.nucleotide_accession
+    accession_hint = request.genomic_accession
 
     if coords is not None:
         coord_accession = coords[0] or accession_hint
@@ -978,7 +1010,7 @@ def _fetch_dna_genomic(
             warnings,
         )
 
-    direct_accession = request.nucleotide_accession
+    direct_accession = request.genomic_accession
     if direct_accession:
         result = _ncbi_fetch_first_fasta(
             db="nuccore",
@@ -1003,6 +1035,13 @@ def _fetch_dna_genomic(
             {"genbank_accession": accession},
             warnings,
         )
+
+    # The gene's own locus comes first: a nuccore text search for a gene often ranks the whole chromosome
+    # (e.g. 84 Mb of chromosome 17 for TP53) above the gene.
+    try:
+        return _fetch_dna_genomic_from_gene_locus(request=request, config=config, session=session)
+    except SequenceFetchError as exc:
+        warnings.append(f"Gene-locus lookup failed ({exc}); fell back to a nuccore search")
 
     term = f"({_ncbi_term_for_request(request)}) AND biomol_genomic[PROP]"
     ids, _ = _ncbi_esearch(
@@ -1040,14 +1079,7 @@ def _fetch_dna_genomic(
         attempted_not_found.append(candidate_id)
 
     if selected_id is None:
-        gene_record, gene_ids, gene_warnings = _fetch_dna_genomic_from_gene_locus(
-            request=request,
-            config=config,
-            session=session,
-        )
-        warnings.append("Nuccore genomic candidates lacked FASTA; used gene-locus genomic fallback")
-        warnings.extend(gene_warnings)
-        return gene_record, gene_ids, warnings
+        raise SequenceFetchError(f"No genomic DNA with a FASTA record found for {_target_label(request)}")
 
     if attempted_not_found:
         warnings.append(f"Primary genomic candidate(s) had no FASTA records; used fallback candidate {selected_id}")
@@ -1164,7 +1196,8 @@ def _fetch_dna_cds(
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
-    accession = request.nucleotide_accession
+    # A genomic record holds many CDSs, so it needs a name to pick one; a transcript holds one.
+    accession = request.transcript_accession or (request.genomic_accession if request.target_name else None)
     if accession:
         efetch_result = _ncbi_efetch(
             db="nuccore",
@@ -1277,7 +1310,7 @@ def _fetch_rna_transcript(
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
-    transcript_accession = request.nucleotide_accession
+    transcript_accession = request.transcript_accession
     if transcript_accession:
         result = _ncbi_fetch_first_fasta(
             db="nuccore",
