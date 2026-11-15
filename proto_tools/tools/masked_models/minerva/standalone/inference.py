@@ -19,6 +19,7 @@ class MinervaAdapter(MixedMLMAdapter):  # type: ignore[misc]  # Helper is inject
     }
 
     def _load_checkpoint(self, checkpoint: str) -> tuple[Any, Any]:
+        logger.update_status("Loading Minerva weights")
         import torch
         from minerva import MinervaForMaskedLM
         from transformers import AutoTokenizer

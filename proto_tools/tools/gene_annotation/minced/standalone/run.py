@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger
+from standalone_helpers import StatusCounter, get_logger
 
 logger = get_logger(__name__)
 
@@ -170,7 +170,9 @@ def run_minced(input_data: dict[str, Any]) -> dict[str, Any]:
     config = input_data.get("config", {})
 
     results = []
-    for seq, seq_id in zip(sequences, sequence_ids, strict=False):
+    counter = StatusCounter(logger, "Scanning sequence %d/%d", total=len(sequences))
+    for index, (seq, seq_id) in enumerate(zip(sequences, sequence_ids, strict=False), start=1):
+        counter(index)
         result = _run_single_minced(seq, seq_id, config)
         results.append(result)
 

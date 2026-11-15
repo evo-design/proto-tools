@@ -232,6 +232,7 @@ class RFD4Model:
         if verbose:
             logger.info(f"Loading RFD4-Proteina checkpoint {model_checkpoint} (revision={model_revision})")
 
+        logger.update_status("Loading RFD4-Proteina weights")
         model = Proteina.from_pretrained(model_checkpoint, revision=model_revision, nn_overrides={})
         if adapter_path:
             from rfproteina.utils.lora import load_lora_adapter
@@ -352,6 +353,8 @@ class RFD4Model:
 
         from rfproteina.generate import run_generation
 
+        n_designs = len(spec_keys) * int(cli_kwargs.get("num_replicates", 1))
+        logger.update_status(f"Generating {n_designs} design{'' if n_designs == 1 else 's'}")
         try:
             run_generation(cfg, job_id=0, model=self.model)
         except Exception as exc:

@@ -579,7 +579,9 @@ def _submit_and_poll(
     session: requests.Session,
 ) -> InterProScanFetchOutput:
     """Submit a sequence to iprscan5, poll to FINISHED, and parse the JSON result."""
+    logger.update_status("Submitting InterProScan job")  # type: ignore[attr-defined]
     job_id = _submit_iprscan(sequence, email, config, session)
+    logger.update_status("Waiting for InterProScan results")  # type: ignore[attr-defined]
     poll_until_complete(
         session,
         f"{_IPRSCAN5_BASE}/status/{job_id}",
@@ -590,6 +592,7 @@ def _submit_and_poll(
         status_extractor=extract_text_status,
     )
     result_url = f"{_IPRSCAN5_BASE}/result/{job_id}/json"
+    logger.update_status("Fetching InterProScan results")  # type: ignore[attr-defined]
     response = request_with_retry(
         lambda: session.get(result_url, timeout=_RESULT_TIMEOUT_SECONDS),
         retries=_HTTP_RETRIES,

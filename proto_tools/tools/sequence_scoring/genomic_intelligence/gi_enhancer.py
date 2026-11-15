@@ -26,7 +26,10 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     validate_gi_sequence,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseToolInput, BaseToolOutput, InputField
+from proto_tools.utils import BaseToolInput, BaseToolOutput, InputField, get_logger
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
+
+logger = get_logger(__name__)
 
 ENHANCER_MIN_BP = 50
 """Published ``minLength`` for the enhancer endpoint, in base pairs."""
@@ -241,7 +244,9 @@ def run_gi_enhancer(
     """
     del instance
     results: list[GIEnhancerResult] = []
-    for item in inputs.sequences:
+    counter = StatusCounter(logger, "Predicting enhancer activity for sequence %d/%d", total=len(inputs.sequences))
+    for number, item in enumerate(inputs.sequences, start=1):
+        counter(number)
         sequence = validate_gi_sequence(item.sequence, min_bp=ENHANCER_MIN_BP, task="enhancer")
         data, payload = call_predict(config, "enhancer", sequence, item.name)
         results.append(parse_enhancer_data(data, payload, item.name))

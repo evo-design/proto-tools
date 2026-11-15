@@ -5,7 +5,14 @@ import os
 import sys
 from typing import Any
 
-from standalone_helpers import get_logger, move_model_to_device, oom_guard, resolve_weights_dir, serialize_output
+from standalone_helpers import (
+    StatusCounter,
+    get_logger,
+    move_model_to_device,
+    oom_guard,
+    resolve_weights_dir,
+    serialize_output,
+)
 
 logger = get_logger(__name__)
 
@@ -72,7 +79,7 @@ class SpliceAI2Model:
         from spliceai2.model import SpliceAI2
 
         weights_dir = resolve_weights_dir("spliceai2")
-        logger.update_status("Loading SpliceAI2 checkpoints")
+        logger.update_status("Loading SpliceAI2 weights")
         self.models = [
             SpliceAI2.load_from_checkpoint(os.path.join(weights_dir, name, "model.ckpt"), map_location=device).eval()
             for name in CHECKPOINTS
@@ -148,8 +155,9 @@ class SpliceAI2Model:
         annotator = VariantAnnotator(self.models, VARIANT_CANDIDATE_SITES)
 
         rows: list[dict[str, Any]] = []
-        for i, variant in enumerate(variants):
-            logger.update_status(f"Scoring variant {i + 1}/{len(variants)}")
+        counter = StatusCounter(logger, "Scoring variant %d/%d", total=len(variants))
+        for index, variant in enumerate(variants, start=1):
+            counter(index)
             ref_window, alt_window = self._variant_window(fasta, variant)
             minus = variant["strand"] == "-"
             batch = (
@@ -236,8 +244,9 @@ class SpliceAI2Model:
         """Predict splice sites, junctions, and transcripts for each sequence."""
         self._ensure_loaded(device)
         results = []
-        for i, sequence in enumerate(sequences):
-            logger.update_status(f"Predicting sequence {i + 1}/{len(sequences)}")
+        counter = StatusCounter(logger, "Predicting sequence %d/%d", total=len(sequences))
+        for index, sequence in enumerate(sequences, start=1):
+            counter(index)
             results.append(self._predict_one(sequence, assembly, num_transcripts))
         return results
 

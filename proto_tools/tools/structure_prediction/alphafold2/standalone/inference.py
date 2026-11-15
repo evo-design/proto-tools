@@ -661,6 +661,7 @@ class AlphaFold2Model:
         if verbose:
             logger.info("Creating AlphaFold2 model: protocol=%s multimer=%s msa=%s", protocol, use_multimer, use_msa)
 
+        logger.update_status("Loading AlphaFold2 weights")
         jax = self._jax
         mk_af_model = self._mk_af_model
         assert jax is not None and mk_af_model is not None
@@ -764,7 +765,11 @@ class AlphaFold2Model:
 
         use_multimer = complex_data["num_chains"] > 1
         use_msa = msa_a3m_content is not None or bool(per_chain_msas_a3m and any(per_chain_msas_a3m))
+        loading = ("hallucination", use_multimer, use_msa, "last") not in self._models
         af_model = self._get_model(use_multimer=use_multimer, use_msa=use_msa, verbose=verbose)
+        if loading:
+            # Replace the loading status; the caller's progress bar reports each structure after this.
+            logger.update_status("Folding structure")
 
         self._prep_prediction_inputs(
             af_model,
@@ -964,6 +969,7 @@ class AlphaFold2Model:
         self._ensure_loaded(device, verbose=verbose)
         # MSA mode drops params["seq"], the parameter the relaxed state is injected into.
         key = (protocol, use_multimer, False, recycle_mode)
+        loading = key not in self._models
         af_model = self._get_model(
             protocol=protocol,
             use_multimer=use_multimer,
@@ -971,6 +977,8 @@ class AlphaFold2Model:
             recycle_mode=recycle_mode,
             verbose=verbose,
         )
+        if loading:
+            logger.update_status("Computing gradient")
         # The model is cached across requests, so a previous call's options must be cleared.
         self._restore_model_defaults(key, af_model)
         af_model.prep_inputs(**prep_kwargs)

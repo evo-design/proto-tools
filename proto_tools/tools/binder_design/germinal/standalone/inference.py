@@ -98,6 +98,7 @@ class GerminalRunner:
         if ablang_spec is None or not ablang_spec.submodule_search_locations:
             raise RuntimeError("germinal: ablang2 is not installed in the env; re-run standalone/setup.sh")
         ablang_pkg = Path(next(iter(ablang_spec.submodule_search_locations)))
+        logger.update_status("Downloading AbLang weights")
         for model, (url, marker) in _ABLANG_ARCHIVES.items():
             cached = download_archive(url, ablang_cache / f"model-weights-{model}", marker=marker)
             link_to_cache(ablang_pkg / f"model-weights-{model}", cached)
@@ -155,6 +156,7 @@ class GerminalRunner:
         env = {**os.environ, **get_subprocess_device_env(input_dict.get("device", "cuda"))}
 
         logger.debug("Spawning Germinal subprocess: %s", " ".join(cmd))
+        logger.update_status("Designing antibodies")
         repo_cwd = str(self.germinal_repo)
         verbose = input_dict.get("verbose", False)
         try:
@@ -296,6 +298,7 @@ class GerminalRunner:
         d: dict[str, Any],
     ) -> dict[str, Any]:
         """Walk Germinal's output tree and assemble a JSON-serialisable result dict."""
+        logger.update_status("Collecting designs")
         run_dir = workdir / "runs" / target_name
         designs: list[dict[str, Any]] = []
         seen: set[str] = set()

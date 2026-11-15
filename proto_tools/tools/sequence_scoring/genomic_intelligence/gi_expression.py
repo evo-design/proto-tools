@@ -33,7 +33,10 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     validate_gi_sequence,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField
+from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField, get_logger
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
+
+logger = get_logger(__name__)
 
 EXPRESSION_WINDOW_BP = 9_198
 """The endpoint's floor, and the one length at which ``tss_index`` may be omitted.
@@ -309,7 +312,9 @@ def run_gi_expression(
     """
     del instance
     results: list[ExpressionPrediction] = []
-    for item in inputs.sequences:
+    counter = StatusCounter(logger, "Predicting expression for sequence %d/%d", total=len(inputs.sequences))
+    for number, item in enumerate(inputs.sequences, start=1):
+        counter(number)
         sequence = validate_gi_sequence(item.sequence, min_bp=EXPRESSION_WINDOW_BP, task="expression")
         extra = {"tss_index": item.tss_index} if item.tss_index is not None else None
         data, payload = call_predict(

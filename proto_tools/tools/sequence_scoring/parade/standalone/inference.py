@@ -35,6 +35,8 @@ def _download_checkpoint(url: str, expected_md5: str, filename: str, cache_dir: 
         or not filename.endswith(".ckpt")
     ):
         raise ValueError("parade: checkpoint_filename must be a .ckpt basename without path separators")
+    if not (cache_dir / filename).is_file():
+        logger.update_status("Downloading PARADE weights")
     return Path(download_weights(url, cache_dir / filename, md5=expected_md5 or None))
 
 
@@ -70,6 +72,7 @@ class ParadeModel:
         if self.model is not None and self.checkpoint_key == checkpoint_path:
             self.to_device(device)
             return
+        logger.update_status("Loading PARADE weights")
         if verbose:
             logger.info("Loading PARADE checkpoint from %s", checkpoint_path)
         self.model = parade_scoring.load_legnet(checkpoint_path)
@@ -166,6 +169,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
 
     batch_size = max(1, int(input_dict.get("batch_size", 1)))
+    count = len(input_dict["sequences"])
+    logger.update_status(f"Scoring {count} sequence{'s' if count != 1 else ''}")
     if operation == "activity":
         return {
             "scores": _model.score_activity(

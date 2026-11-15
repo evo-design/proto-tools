@@ -23,7 +23,7 @@ import re
 import sys
 from typing import Any
 
-from standalone_helpers import get_logger, resolve_weights_dir
+from standalone_helpers import StatusCounter, get_logger, resolve_weights_dir
 
 logger = get_logger(__name__)
 
@@ -94,6 +94,7 @@ def _read_bundle(components_path: str) -> Any:
         import gemmi
 
         logger.info("Reading CCD bundle %s ...", components_path)
+        logger.update_status("Reading CCD bundle")
         doc = gemmi.cif.read(components_path)
         _GEMMI_DOCS[components_path] = doc
     return doc
@@ -165,8 +166,10 @@ def _compute_ccd_indices(components_path: str) -> tuple[dict[str, str], dict[str
     inchikey_counts: dict[str, int] = {}
     inchikey_index: dict[str, str] = {}
 
+    counter = StatusCounter(logger, "Indexing CCD entry %d/%d", total=len(doc))
     with _silence_rdkit_logger():
-        for block in doc:
+        for index, block in enumerate(doc, start=1):
+            counter(index)
             ccd_id = block.name
             try:
                 # sanitize=False maximizes coverage; sanitization rejects many organometallic/hypervalent entries.
@@ -710,7 +713,9 @@ def _process_identifiers(
         list[dict[str, Any]]: One record per input identifier in input order.
     """
     records: list[dict[str, Any]] = []
-    for raw_id in identifiers:
+    counter = StatusCounter(logger, "Looking up compound %d/%d", total=len(identifiers))
+    for index, raw_id in enumerate(identifiers, start=1):
+        counter(index)
         identifier = (raw_id or "").strip()
         if not identifier:
             records.append(_empty_record(None, ["Empty identifier"]))

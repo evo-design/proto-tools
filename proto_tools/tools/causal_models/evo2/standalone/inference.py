@@ -66,6 +66,7 @@ class Evo2Model:
         _drop_incomplete_conversions(Path(default_cache_dir()))
         if verbose:
             logger.info("Loading Evo 2 Flash: %s on %s", self.model_checkpoint, device)
+        logger.update_status("Loading Evo 2 weights")
 
         def construct() -> None:
             self.model = Evo2(self.model_checkpoint, local_path=self.local_path)
@@ -161,6 +162,7 @@ class Evo2Model:
             for i in range(len(ids))
         ]
         requests = [TokensPrompt(prompt_token_ids=tokens) for tokens in ids]
+        logger.update_status(f"Sampling {len(requests)} sequence{'s' if len(requests) != 1 else ''}")
         outs = self.model.llm.generate(requests, params, use_tqdm=bool(verbose))
         if len(outs) != len(prompts):
             raise RuntimeError("evo2: vLLM returned an unexpected number of generations")
@@ -203,6 +205,7 @@ class Evo2Model:
         self._ready(device, verbose)
         if not sequences or any(not seq for seq in sequences):
             raise ValueError("evo2: cannot score empty sequences")
+        logger.update_status(f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}")
         means = self.model.score_sequences(sequences, prepend_bos=prepend_bos)
         counts = [len(self.tokenizer.tokenize(s)) + int(prepend_bos) - 1 for s in sequences]
         metrics = [log_likelihood_metrics(float(mean), count) for mean, count in zip(means, counts, strict=True)]

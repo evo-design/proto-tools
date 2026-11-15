@@ -17,6 +17,7 @@ from typing import Any, Literal
 import torch
 from standalone_helpers import (
     AMINO_ACIDS_LIST,
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     serialize_output,
@@ -96,9 +97,11 @@ class ESMCModel:
         all_attention_masks: list[torch.Tensor] = []
         all_logits: list[torch.Tensor] | None = [] if return_logits else None
 
-        for batch_sequences in tqdm(
-            batches, desc="ESM C inference", unit="batch", total=len(batches), disable=not verbose
+        counter = StatusCounter(logger, "Embedding batch %d/%d", total=len(batches))
+        for batch_number, batch_sequences in enumerate(
+            tqdm(batches, desc="ESM C inference", unit="batch", total=len(batches), disable=not verbose), start=1
         ):
+            counter(batch_number)
             # Tokenize the batch with padding so we can run a single forward pass
             batch_inputs = self.tokenizer(
                 batch_sequences,
@@ -305,6 +308,7 @@ class ESMCModel:
 
         if verbose:
             logger.info(f"Loading ESM C model: {self.model_checkpoint} on {device}")
+        logger.update_status("Loading ESM C weights")
 
         try:
             self.model = ESMC.from_pretrained(self.model_checkpoint, device=torch.device(device)).eval()
@@ -417,14 +421,20 @@ class ESMCSAEModel:
         batches = [sequences[i : i + batch_size] for i in range(0, len(sequences), batch_size)]
         features: list[dict[str, dict[str, list[list[float]]]]] = []
 
+        counter = StatusCounter(logger, "Extracting features from batch %d/%d", total=len(batches))
         if self.backbone == "esm":
-            for batch in tqdm(
-                batches, desc="ESM C SAE inference", unit="batch", total=len(batches), disable=not verbose
+            for batch_number, batch in enumerate(
+                tqdm(batches, desc="ESM C SAE inference", unit="batch", total=len(batches), disable=not verbose),
+                start=1,
             ):
+                counter(batch_number)
                 features.extend(self._esm_batch(batch))
             return {"features": features}
 
-        for batch in tqdm(batches, desc="ESM C SAE inference", unit="batch", total=len(batches), disable=not verbose):
+        for batch_number, batch in enumerate(
+            tqdm(batches, desc="ESM C SAE inference", unit="batch", total=len(batches), disable=not verbose), start=1
+        ):
+            counter(batch_number)
             inputs = self.tokenizer(batch, padding=True, truncation=False, return_tensors="pt")
             inputs = {k: v.to(device) for k, v in inputs.items()}
 
@@ -522,7 +532,7 @@ class ESMCSAEModel:
         """Load the backbone and SAE layers onto the device."""
         from esm.models.esmc import EsmcSaeModel
 
-        logger.update_status(f"Loading {self.model_checkpoint}")
+        logger.update_status("Loading ESM C weights")
         if self.backbone == "esm":
             from esm.models.esmc import ESMC
 
@@ -542,7 +552,7 @@ class ESMCSAEModel:
         # Fetch only the requested layers; the all-layer SAE repos hold one file
         # per backbone layer and the 6B collection is tens of gigabytes.
         allow_patterns = ["config.json"] + [f"layer_{layer}.safetensors" for layer in self.layers]
-        logger.update_status(f"Loading SAE layers {list(self.layers)}")
+        logger.update_status("Loading SAE weights")
         device_for_sae = self.model.device if hasattr(self.model, "device") else device
         sae = EsmcSaeModel.from_pretrained(self.sae_repo, allow_patterns=allow_patterns, device=device_for_sae)
         sae.initialize_layers(list(self.layers))
@@ -609,20 +619,23 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         if _model is None or _model.model_checkpoint != input_dict["model_checkpoint"]:
             _model = ESMCModel(model_checkpoint=input_dict["model_checkpoint"])
         # One chunk of independent candidates: the model loads once and items are evaluated in turn.
-        results = [
-            _model.compute_gradient(
-                logits_list=item,
-                temperature=resolve_temperature(input_dict["temperature"]),
-                soft=float(input_dict.get("soft", 1.0)),
-                hard=float(input_dict.get("hard", 0.0)),
-                seed=input_dict["seed"],
-                backprop=input_dict.get("compute_gradient", True),
-                batch_size=input_dict.get("batch_size"),
-                device=input_dict["device"],
-                verbose=input_dict["verbose"],
+        counter = StatusCounter(logger, "Computing gradient %d/%d", total=len(input_dict["items"]))
+        results = []
+        for index, item in enumerate(input_dict["items"], start=1):
+            counter(index)
+            results.append(
+                _model.compute_gradient(
+                    logits_list=item,
+                    temperature=resolve_temperature(input_dict["temperature"]),
+                    soft=float(input_dict.get("soft", 1.0)),
+                    hard=float(input_dict.get("hard", 0.0)),
+                    seed=input_dict["seed"],
+                    backprop=input_dict.get("compute_gradient", True),
+                    batch_size=input_dict.get("batch_size"),
+                    device=input_dict["device"],
+                    verbose=input_dict["verbose"],
+                )
             )
-            for item in input_dict["items"]
-        ]
         return {
             "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
             "vocab": results[0]["vocab"],

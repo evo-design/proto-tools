@@ -27,7 +27,10 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     validate_gi_sequence,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField
+from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField, get_logger
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
+
+logger = get_logger(__name__)
 
 SPLICE_MIN_BP = 100
 """Published ``minLength`` for the splice endpoint, in base pairs."""
@@ -294,7 +297,9 @@ def run_gi_splice(
     """
     del instance
     results: list[GISpliceResult] = []
-    for item in inputs.sequences:
+    counter = StatusCounter(logger, "Predicting splice sites for sequence %d/%d", total=len(inputs.sequences))
+    for number, item in enumerate(inputs.sequences, start=1):
+        counter(number)
         sequence = validate_gi_sequence(item.sequence, min_bp=SPLICE_MIN_BP, task="splice")
         data, payload = call_predict(
             config,

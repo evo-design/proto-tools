@@ -7,6 +7,7 @@ pdb) with molecule-type routing and cross-fetcher ID resolution.
 import csv
 import hashlib
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any, Literal
@@ -52,6 +53,9 @@ from proto_tools.utils import (
     InputField,
     build_http_session,
 )
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
+
+logger = logging.getLogger(__name__)
 
 
 class SequenceFetchError(ValueError):
@@ -559,15 +563,18 @@ def run_sequence_fetch(
     )
 
     try:
-        results = [
-            _process_single_request(
-                request=request,
-                request_index=i,
-                config=config,
-                session=session,
+        counter = StatusCounter(logger, "Fetching target %d/%d", total=len(inputs.requests))
+        results = []
+        for i, request in enumerate(inputs.requests):
+            counter(i + 1)
+            results.append(
+                _process_single_request(
+                    request=request,
+                    request_index=i,
+                    config=config,
+                    session=session,
+                )
             )
-            for i, request in enumerate(inputs.requests)
-        ]
     finally:
         session.close()
 

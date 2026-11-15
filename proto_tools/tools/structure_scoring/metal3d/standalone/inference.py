@@ -18,7 +18,7 @@ from moleculekit.molecule import Molecule  # type: ignore[import-not-found]
 from moleculekit.tools.voxeldescriptors import getVoxelDescriptors  # type: ignore[import-not-found]
 from scipy.spatial import KDTree
 from sklearn.cluster import AgglomerativeClustering  # type: ignore[import-untyped]
-from standalone_helpers import get_logger, get_pytorch_memory_stats
+from standalone_helpers import StatusCounter, get_logger, get_pytorch_memory_stats
 from standalone_helpers.weights import resolve_weights_dir
 
 logger = get_logger(__name__)
@@ -95,6 +95,7 @@ class Metal3DModel:
         checkpoint_path = _resolve_checkpoint_path(model_checkpoint)
         if verbose:
             logger.info("Loading Metal3D checkpoint %s from %s", model_checkpoint, checkpoint_path)
+        logger.update_status("Loading Metal3D weights")
         model = Model(kernel_size=CHECKPOINT_KERNEL_SIZES[model_checkpoint]).to(device).eval()
         checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         state_dict = _extract_state_dict(checkpoint)
@@ -225,6 +226,7 @@ def _predict(
     record_by_id = dict(zip(ids, residue_records, strict=True))
     voxels, prot_centers, _prot_n, _prots, voxelized_ids = _process_structures(str(pdb_path), ids)
 
+    logger.update_status("Predicting metal sites")
     outputs = torch.zeros([voxels.size(0), 1, 32, 32, 32], device="cpu")
     with torch.no_grad():
         for i in range(voxels.size(0)):
@@ -377,7 +379,9 @@ def _process_structures(
     prot.filter("protein and not hydrogen")
     results = []
     voxelized_ids: list[int] = []
-    for atom_id in atom_ids:
+    counter = StatusCounter(logger, "Voxelizing residue %d/%d", total=len(atom_ids))
+    for index, atom_id in enumerate(atom_ids, start=1):
+        counter(index)
         result = _voxelize_single_notcentered((prot.copy(), atom_id))
         if result is not None:
             results.append(result)

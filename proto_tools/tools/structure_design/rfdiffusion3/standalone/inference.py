@@ -144,6 +144,8 @@ class RFdiffusion3Model:
         existing_pythonpath = env.get("PYTHONPATH")
         env["PYTHONPATH"] = str(precision_site) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
 
+        logger.update_status("Generating designs")
+
         # Run the command — inherit streams when verbose for real-time progress;
         # capture when not verbose so we can surface stderr tail on failure.
         try:

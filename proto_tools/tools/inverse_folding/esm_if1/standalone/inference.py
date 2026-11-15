@@ -9,6 +9,7 @@ from typing import Any
 
 import torch
 from standalone_helpers import (
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -174,7 +175,9 @@ class ESMIF1Model:
         metrics = []
 
         set_torch_seed(seed)
-        for _ in range(batch_size):
+        counter = StatusCounter(logger, "Designing sequence %d/%d", total=batch_size)
+        for index in range(1, batch_size + 1):
+            counter(index)
             if fixed_positions and target_chain in fixed_positions:
                 sampled_seq = self._sample_with_fixed_positions(
                     all_coords,
@@ -275,6 +278,9 @@ class ESMIF1Model:
         """Load ESM-IF1 model, optionally with ProteinDPO weights."""
         if verbose:
             logger.info(f"Loading ESM-IF ({weights_variant}) on {device}")
+        logger.update_status(
+            "Loading ProteinDPO weights" if weights_variant == "protein_dpo" else "Loading ESM-IF1 weights"
+        )
 
         import esm
         import esm.pretrained

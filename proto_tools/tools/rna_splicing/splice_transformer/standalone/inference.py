@@ -147,6 +147,7 @@ class SpliceTransformerModel:
     def load(self, device: str = "cuda") -> None:
         """Load SpliceTransformer model to device."""
         logger.debug(f"Loading SpliceTransformer (context_length={self.context_length}) on {device}")
+        logger.update_status("Loading SpliceTransformer weights")
 
         from model import SpTransformer
 

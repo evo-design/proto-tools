@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger
+from standalone_helpers import StatusCounter, get_logger
 
 logger = get_logger(__name__)
 
@@ -142,7 +142,10 @@ def _ensure_index(
             index_dir.mkdir()
             pam_path = staging / "pam.txt"
             pam_path.write_text(f"{pam_spec[0]} {pam_spec[1]}\n")
-            for fasta in sorted(fasta_dir.glob("*.fa")):
+            fastas = sorted(fasta_dir.glob("*.fa"))
+            counter = StatusCounter(logger, "Indexing reference sequence %d/%d", total=len(fastas))
+            for index, fasta in enumerate(fastas, start=1):
+                counter(index)
                 _run(
                     [str(_binary("crispritz-buildTST")), str(fasta), str(pam_path), str(threads), str(max_bulges)],
                     index_dir,
@@ -207,6 +210,7 @@ def _parse_hits(path: Path, pam_length: int, pam_side: str) -> list[dict[str, An
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Build or reuse the reference index and enumerate off-targets."""
     files = _reference_files(input_dict["reference_fasta"])
+    logger.update_status("Hashing reference genome")
     reference_sha256 = _hash_references(files)
     guides = input_dict["guides"]
     pam = input_dict["pam"]
@@ -249,6 +253,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             str(max_bulges),
             str(input_dict["max_total_edits"] if input_dict["max_total_edits"] is not None else -1),
         ]
+        logger.update_status(f"Searching off-targets for {len(guides)} guide{'s' if len(guides) != 1 else ''}")
         _run(command, work)
         hits = _parse_hits(result_prefix.with_suffix(".targets.txt"), pam_length, pam_side)
     return {"hits": hits, "reference_sha256": reference_sha256, "index_reused": index_reused}

@@ -186,8 +186,13 @@ def _scratch_dir(config: dict[str, Any], output_root: str, input_name: str) -> I
         yield tmp_dir
 
 
-def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) -> dict[str, Any]:
-    """Run DeepPBS prediction for one input PDB and return canonical output."""
+def _run_one_structure(
+    pdb_path: str, config: dict[str, Any], output_root: str, progress: str = "1/1"
+) -> dict[str, Any]:
+    """Run DeepPBS prediction for one input PDB and return canonical output.
+
+    ``progress`` is this structure's ``<n>/<total>`` for the status messages.
+    """
     pdb_path = os.path.abspath(pdb_path)
     if not os.path.exists(pdb_path):
         raise FileNotFoundError(f"PDB path does not exist: {pdb_path}")
@@ -315,6 +320,7 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
         ]
         if bool(config.get("no_clean_protein", False)):
             process_cmd.append("--no_cleanp")
+        logger.update_status(f"Preprocessing structure {progress}")
         process_io = _run_or_raise(process_cmd, step_name="preprocessing")
 
         canonical_dir = os.path.join(output_root, "canonical_npz")
@@ -351,6 +357,7 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
                 **fallback,
             }
 
+        logger.update_status(f"Predicting specificity {progress}")
         try:
             _run_or_raise(
                 [
@@ -424,12 +431,20 @@ def run_deeppbs_specificity(input_data: dict[str, Any]) -> dict[str, Any]:
     if output_directory is not None:
         output_root = os.path.abspath(output_directory)
         os.makedirs(output_root, exist_ok=True)
-        return {"results": [_run_one_structure(path, config, output_root) for path in input_data["pdb_paths"]]}
+        return {
+            "results": [
+                _run_one_structure(path, config, output_root, f"{number}/{len(input_data['pdb_paths'])}")
+                for number, path in enumerate(input_data["pdb_paths"], start=1)
+            ]
+        }
 
     if config["keep_intermediate"]:
         raise ValueError("deeppbs_specificity: keep_intermediate needs output_directory to keep the files in")
     with tempfile.TemporaryDirectory(prefix="deeppbs_specificity_") as output_root:
-        results = [_run_one_structure(path, config, output_root) for path in input_data["pdb_paths"]]
+        results = [
+            _run_one_structure(path, config, output_root, f"{number}/{len(input_data['pdb_paths'])}")
+            for number, path in enumerate(input_data["pdb_paths"], start=1)
+        ]
     return {"results": [{**result, "output_npz_path": None} for result in results]}
 
 

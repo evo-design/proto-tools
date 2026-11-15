@@ -7,6 +7,7 @@ from typing import Any, Literal
 import torch
 from standalone_helpers import (
     AMINO_ACIDS_LIST,
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -100,7 +101,11 @@ class ESM2Model:
         all_attention_masks = []
 
         # For each batch
-        for batch_sequences in tqdm(batches, desc="ESM2 inference", unit="batch", total=len(batches)):
+        counter = StatusCounter(logger, "Embedding batch %d/%d", total=len(batches))
+        for batch_number, batch_sequences in enumerate(
+            tqdm(batches, desc="ESM2 inference", unit="batch", total=len(batches)), start=1
+        ):
+            counter(batch_number)
             # Tokenize the batch
             batch_inputs = self.tokenizer(
                 batch_sequences,
@@ -252,12 +257,14 @@ class ESM2Model:
         all_sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=len(batch_ranges))
         for start, end in tqdm(
             batch_ranges,
             desc="ESM2 sampling",
             unit="batch",
             disable=not verbose,
         ):
+            counter(start // batch_size + 1)
             batch_tok_seqs = tokenizer_sequences[start:end]
             batch_masks = mask_positions[start:end]
             batch_originals = sequences[start:end]
@@ -348,7 +355,9 @@ class ESM2Model:
         sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=-(-len(sequences) // batch_size))
         for start in range(0, len(sequences), batch_size):
+            counter(start // batch_size + 1)
             batch_sequences = sequences[start : start + batch_size]
             batch_inputs = self.tokenizer(
                 [s.replace("_", mask_token) for s in batch_sequences],
@@ -508,12 +517,14 @@ class ESM2Model:
         all_true_log_probs = torch.zeros(total_variants, device=self.device)
 
         # Run forward passes batched across the pooled variants
+        counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-total_variants // batch_size))
         for batch_start in tqdm(
             range(0, total_variants, batch_size),
             desc="ESM2 scoring",
             unit="batch",
             disable=not verbose,
         ):
+            counter(batch_start // batch_size + 1)
             # Slice this forward-pass batch out of the pool
             batch_end = min(batch_start + batch_size, total_variants)
             batch_ids = pooled_ids[batch_start:batch_end]
@@ -721,6 +732,7 @@ class ESM2Model:
         """Load ESM2 model and tokenizer to device."""
         if verbose:
             logger.info(f"Loading ESM2 model: {self.model_checkpoint} on {device}")
+        logger.update_status("Loading ESM2 weights")
 
         # Load model and tokenizer. Most checkpoints use the flash-attn-enabled mirror
         # (https://huggingface.co/fredzzp/esm2_t33_650M_UR50D); checkpoints without a mirror
@@ -827,20 +839,23 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
     if operation == "compute_gradient":
         # One chunk of independent candidates: the model loads once and items are evaluated in turn.
-        results = [
-            _model.compute_gradient(
-                logits_list=item,
-                temperature=resolve_temperature(input_dict["temperature"]),
-                soft=float(input_dict.get("soft", 1.0)),
-                hard=float(input_dict.get("hard", 0.0)),
-                seed=input_dict["seed"],
-                backprop=input_dict.get("compute_gradient", True),
-                batch_size=input_dict.get("batch_size"),
-                device=input_dict["device"],
-                verbose=input_dict["verbose"],
+        counter = StatusCounter(logger, "Computing gradient %d/%d", total=len(input_dict["items"]))
+        results = []
+        for index, item in enumerate(input_dict["items"], start=1):
+            counter(index)
+            results.append(
+                _model.compute_gradient(
+                    logits_list=item,
+                    temperature=resolve_temperature(input_dict["temperature"]),
+                    soft=float(input_dict.get("soft", 1.0)),
+                    hard=float(input_dict.get("hard", 0.0)),
+                    seed=input_dict["seed"],
+                    backprop=input_dict.get("compute_gradient", True),
+                    batch_size=input_dict.get("batch_size"),
+                    device=input_dict["device"],
+                    verbose=input_dict["verbose"],
+                )
             )
-            for item in input_dict["items"]
-        ]
         return {
             "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
             "vocab": results[0]["vocab"],

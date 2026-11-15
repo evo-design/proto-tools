@@ -386,6 +386,8 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
     # are subprocess-bound, not CPU-bound in Python)
     all_results = [None] * len(batches)
     batch_errors = []
+    plural = "s" if len(sequences) != 1 else ""
+    logger.update_status(f"Searching {len(sequences)} sequence{plural} for tracrRNAs")
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         future_to_idx = {}

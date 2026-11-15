@@ -90,6 +90,8 @@ def run_easy_msa(input_data: dict[str, Any]) -> dict[str, Any]:
             tree_path = tmp_path / "guide.nw"
             tree_path.write_text(guide_tree)
             cmd += ["--guide-tree", str(tree_path)]
+        count = len(pdb_paths)
+        logger.update_status("Aligning %d %s", count, "structure" if count == 1 else "structures")
         _run_cmd(cmd, "easy-msa")
 
         # foldmason skips writing prefix.nw when --guide-tree is supplied;

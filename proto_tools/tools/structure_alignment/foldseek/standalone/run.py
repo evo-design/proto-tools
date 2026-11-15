@@ -79,6 +79,7 @@ def _ensure_prostt5_weights(override: str | None) -> str:
     cache_dir = Path(base) / "prostt5"
 
     def download(staging: Path) -> None:
+        logger.update_status("Downloading ProstT5 weights")
         with tempfile.TemporaryDirectory() as tmp:
             _run_cmd([_find_binary(), "databases", "ProstT5", str(staging / "weights"), tmp], "databases ProstT5")
 
@@ -131,6 +132,7 @@ def run_easy_search(input_data: dict[str, Any]) -> dict[str, Any]:
         query_pdb.write_text(input_data["structure_text"])
         m8_out = tmp_path / "result.m8"
 
+        logger.update_status("Searching database")
         _run_cmd(
             [
                 foldseek,
@@ -221,6 +223,8 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
             cmd += ["--prostt5-model", _ensure_prostt5_weights(input_data.get("prostt5_weights_dir"))]
         cmd += _gpu_args(input_data["use_gpu"])
 
+        count = len(input_data["structures"])
+        logger.update_status("Clustering %d %s", count, "structure" if count == 1 else "structures")
         _run_cmd(cmd, "easy-cluster")
         tsv_path = prefix.with_name(prefix.name + "_cluster.tsv")
         return {"clusters_tsv": tsv_path.read_text() if tsv_path.exists() else ""}
@@ -246,6 +250,7 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
         query_pdb.write_text(input_data["structure_text"])
         m8_out = tmp_path / "result.m8"
 
+        logger.update_status("Searching database")
         _run_cmd(
             [
                 foldseek,
@@ -305,6 +310,8 @@ def run_easy_multimercluster(input_data: dict[str, Any]) -> dict[str, Any]:
         )
 
         prefix = tmp_path / "multimercluster"
+        count = len(input_data["structures"])
+        logger.update_status("Clustering %d %s", count, "complex" if count == 1 else "complexes")
         _run_cmd(
             [
                 foldseek,
@@ -358,6 +365,7 @@ def run_easy_rbh(input_data: dict[str, Any]) -> dict[str, Any]:
         query_pdb.write_text(input_data["structure_text"])
         m8_out = tmp_path / "result.m8"
 
+        logger.update_status("Finding reciprocal best hits")
         _run_cmd(
             [
                 foldseek,
