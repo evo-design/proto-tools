@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 _PDB_ENTRY_BASE = "https://data.rcsb.org/rest/v1/core/entry"
 _PDB_FASTA_BASE = "https://www.rcsb.org/fasta/entry"
+_PDB_FILES_BASE = "https://files.rcsb.org/download"
 _REQUEST_TIMEOUT_SECONDS = 15
 _HTTP_RETRIES = 3
 _BACKOFF_SECONDS = 1.0
@@ -127,6 +128,12 @@ def _fetch_pdb_entry(pdb_id: str, session: requests.Session) -> dict[str, Any] |
     resolution = float(combined[0]) if isinstance(combined, list) and combined else None
 
     return {"title": title, "method": method, "resolution": resolution}
+
+
+def _fetch_pdb_mmcif(pdb_id: str, session: requests.Session) -> str | None:
+    """Fetch an entry's mmCIF text, or None on 404. Every entry has one; large entries have no .pdb file."""
+    response = _request_pdb(session, f"{_PDB_FILES_BASE}/{pdb_id}.cif", "pdb-mmcif")
+    return None if response is None else response.text
 
 
 def _fetch_pdb_fasta(pdb_id: str, session: requests.Session) -> list[tuple[str, str]] | None:
