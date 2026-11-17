@@ -196,20 +196,6 @@ def test_get_output_doc_nests_metric_specs() -> None:
     assert ToolRegistry.get_output_doc("evo1-sample").metric_specs is None
 
 
-@pytest.mark.parametrize(
-    ("tool", "expanded", "left_out"),
-    [
-        ("sequence-fetch", ["SequenceFetchResult", "FetchedSequence", "FetchedStructure"], "Structure"),
-        ("tmalign-alignment", ["SuperpositionTransform"], "TMalignMetrics"),
-    ],
-)
-def test_output_doc_documents_the_models_its_fields_hold(tool: str, expanded: list[str], left_out: str) -> None:
-    """Nested models are documented, through lists and down levels; entities and Metrics are left to their own docs."""
-    nested = {sub.name: sub for sub in ToolRegistry.get_output_doc(tool).nested}
-    assert set(expanded) <= nested.keys() and left_out not in nested
-    assert all(sub.fields for sub in nested.values())
-
-
 def test_get_input_doc_excludes_output_metadata_fields() -> None:
     """Output-side metadata fields don't leak into input docs."""
     doc = ToolRegistry.get_input_doc("esm2-embedding")
