@@ -31,6 +31,7 @@ from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
 from proto_tools.tools.database_retrieval.pdb.shared_data_models import (
     _fetch_pdb_entry,
     _fetch_pdb_fasta,
+    _fetch_pdb_mmcif,
     _is_protein_sequence,
 )
 from proto_tools.tools.database_retrieval.uniprot.uniprot_fetch import (
@@ -342,7 +343,9 @@ class FetchedStructure(BaseModel):
     """Structure payload returned by PDB.
 
     Attributes:
-        structure (Structure): The entry's coordinates, ready to pass to a structure tool.
+        structure (Structure | None): The entry's coordinates (from its mmCIF), ready to pass to a structure
+            tool; None when ``include_structure`` is off, or when the download failed (the request's ``errors``
+            then say why).
         pdb_id (str): PDB accession.
         source_database (Literal['pdb']): Upstream source database label.
         title (str | None): Structure title.
@@ -351,8 +354,10 @@ class FetchedStructure(BaseModel):
         source_url (str): Canonical URL for this structure.
     """
 
-    structure: Structure = Field(
-        title="Coordinates", description="The entry's coordinates (from its mmCIF), ready to pass to a structure tool"
+    structure: Structure | None = Field(
+        default=None,
+        title="Coordinates",
+        description="The entry's coordinates (mmCIF) for structure tools; None if not requested or not downloaded",
     )
     pdb_id: str = Field(title="PDB ID", description="PDB accession")
     source_database: Literal["pdb"] = Field(default="pdb", title="Source Database", description="Source database")
@@ -528,6 +533,9 @@ class SequenceFetchConfig(BaseConfig):
         ncbi_email (str | None): Optional contact email. Defaults to the
             ``NCBI_EMAIL`` environment variable; an explicit value passed to
             the config overrides the env var.
+        include_structure (bool): If True (default), structure requests also
+            download each entry's coordinates (mmCIF) as a ``Structure``;
+            disable for metadata-only lookups.
     """
 
     max_candidates_per_source: int = ConfigField(
@@ -536,6 +544,11 @@ class SequenceFetchConfig(BaseConfig):
         ge=1,
         le=25,
         description="Maximum database candidates to evaluate per name-based search",
+    )
+    include_structure: bool = ConfigField(
+        title="Include Structure",
+        default=True,
+        description="Download each structure's coordinates (mmCIF); disable for metadata-only lookups",
     )
     type_check_mode: Literal["off", "warn", "error"] = ConfigField(
         title="Type Check Mode",
@@ -745,8 +758,11 @@ def _process_single_request(
     for sequence_type in request.sequence_types:
         try:
             if sequence_type == "structure":
-                fetched_struct, fetched_ids, local_warnings = _fetch_structure(request, config, session, resolved_ids)
+                fetched_struct, fetched_ids, local_warnings, local_errors = _fetch_structure(
+                    request, config, session, resolved_ids
+                )
                 structures.append(fetched_struct)
+                errors.extend(local_errors)
             else:
                 fetcher = sequence_fetchers[sequence_type]
                 fetched_seq, fetched_ids, local_warnings = fetcher(request, config, session)
@@ -1414,9 +1430,14 @@ def _fetch_structure(
     config: SequenceFetchConfig,
     session: requests.Session,
     resolved_ids: dict[str, str] | None = None,
-) -> tuple[FetchedStructure, dict[str, str], list[str]]:
-    """Fetch a structure's coordinates and metadata from PDB."""
+) -> tuple[FetchedStructure, dict[str, str], list[str], list[str]]:
+    """Fetch a structure's metadata and coordinates from PDB, and the warnings and errors along the way.
+
+    An entry that can't be found raises; coordinates that can't be downloaded leave ``structure`` None and an
+    error, so the metadata is still returned.
+    """
     warnings: list[str] = []
+    errors: list[str] = []
 
     pdb_id = request.pdb_id
     uniprot_id = request.uniprot_id
@@ -1461,9 +1482,23 @@ def _fetch_structure(
     if meta is None:
         raise SequenceFetchError(f"PDB ID '{pdb_id}' not found")
 
+    # The coordinates, through the session so they get its retries and the call's deadline
+    structure = None
+    if config.include_structure:
+        try:
+            mmcif = _fetch_pdb_mmcif(pdb_id, session)
+            if mmcif is None:
+                errors.append(f"NOT_FOUND[structure_coordinates]: PDB ID '{pdb_id}' has no mmCIF file")
+            else:
+                structure = Structure(structure=mmcif, structure_format="cif", source=pdb_id)
+        except requests.exceptions.RequestException as exc:
+            errors.append(f"HTTP_ERROR[structure_coordinates]: {pdb_id}: {exc}")
+        except ValueError as exc:  # an mmCIF that doesn't parse
+            errors.append(f"INVALID[structure_coordinates]: {pdb_id}: {exc}")
+
     return (
         FetchedStructure(
-            structure=Structure.from_rcsb(pdb_id, file_format="cif"),
+            structure=structure,
             pdb_id=pdb_id,
             title=meta.get("title"),
             method=meta.get("method"),
@@ -1472,6 +1507,7 @@ def _fetch_structure(
         ),
         {"pdb_id": pdb_id, **({"uniprot_id": uniprot_id} if uniprot_id else {})},
         warnings,
+        errors,
     )
 
 

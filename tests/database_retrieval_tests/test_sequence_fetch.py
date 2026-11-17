@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 import proto_tools.tools.database_retrieval.sequence_fetch.sequence_fetch as sf_module
-from proto_tools.entities import Structure
 from proto_tools.tools.database_retrieval import (
     SequenceFetchConfig,
     SequenceFetchInput,
@@ -188,23 +187,49 @@ def test_sequence_fetch_takes_genomic_dna_for_a_gene_id_from_its_locus(monkeypat
     assert fetches == [("nuccore", "NC_000017.11", {"seq_start": 7668402, "seq_stop": 7687490, "strand": "-"})]
 
 
-def test_sequence_fetch_structure_by_pdb_id_alone(monkeypatch):
+@pytest.mark.parametrize(
+    ("download", "include_structure", "status", "error"),
+    [
+        ("ok", True, "success", None),
+        ("missing", True, "warning", "NOT_FOUND[structure_coordinates]"),
+        ("fails", True, "warning", "HTTP_ERROR[structure_coordinates]"),
+        ("ok", False, "success", None),  # metadata only: nothing downloaded
+    ],
+)
+def test_sequence_fetch_structure_by_pdb_id_alone(
+    monkeypatch: pytest.MonkeyPatch, download: str, include_structure: bool, status: str, error: str | None
+) -> None:
+    """A structure request returns the entry's coordinates; if they can't be downloaded, its metadata and why."""
+    import requests
+
     monkeypatch.setattr(
         sf_module,
         "_fetch_pdb_entry",
         lambda pdb_id, session: {"title": "Hen egg-white lysozyme", "method": "X-RAY DIFFRACTION", "resolution": 2.0},
     )
-    downloaded = Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "2CSM.pdb")
-    monkeypatch.setattr(Structure, "from_rcsb", lambda pdb_id, file_format: downloaded)
+    mmcif = (Path(__file__).parent.parent / "dummy_data" / "2CSM.cif").read_text()
+    downloads: list[str] = []
+
+    def fetch_mmcif(pdb_id: str, session: object) -> str | None:
+        downloads.append(pdb_id)
+        if download == "fails":  # after the session's retries
+            raise requests.exceptions.ConnectionError("files.rcsb.org unreachable")
+        return mmcif if download == "ok" else None
+
+    monkeypatch.setattr(sf_module, "_fetch_pdb_mmcif", fetch_mmcif)
 
     output = run_sequence_fetch(
-        SequenceFetchInput(requests=[{"request_id": "hen", "accessions": "2lyz", "sequence_types": ["structure"]}])
+        SequenceFetchInput(requests=[{"request_id": "hen", "accessions": "2lyz", "sequence_types": ["structure"]}]),
+        SequenceFetchConfig(include_structure=include_structure),
     )
 
     item = output.results[0]
-    assert item.status == "success"
-    assert item.fetched_structures[0].pdb_id == "2LYZ"
-    assert item.fetched_structures[0].structure is downloaded
+    fetched = item.fetched_structures[0]
+    assert item.status == status
+    assert fetched.pdb_id == "2LYZ" and fetched.title == "Hen egg-white lysozyme"  # the metadata, always
+    assert (fetched.structure is not None) is (download == "ok" and include_structure)
+    assert downloads == (["2LYZ"] if include_structure else [])
+    assert [e.split(":")[0] for e in item.errors] == ([error] if error else [])
     assert item.target_name is None
 
 
