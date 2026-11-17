@@ -10,10 +10,10 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 import requests
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 # Database tool imports (orchestrator calls these directly)
 from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
@@ -81,6 +81,74 @@ _NON_CODING_PATTERNS = (
 )
 
 
+AccessionKind = Literal["uniprot", "pdb", "protein", "genomic", "transcript", "nucleotide", "gene"]
+
+# Formats from UniProt (help/accession_numbers), the RefSeq release notes (section 3.8, accession prefixes), the
+# INSDC/GenBank accession prefix table and wwPDB (four-character and extended pdb_ IDs). Checked in order; the first
+# match names the kind. Formats are disjoint apart from bare digits, which could be an all-digit PDB ID but are read
+# as an NCBI Gene ID (write ``pdb:1234`` for the PDB entry). GenBank has no O, P or Q one-letter prefixes, so
+# UniProt's [OPQ] + 5 digits never collides with a GenBank accession.
+_ACCESSION_PATTERNS: tuple[tuple[AccessionKind, re.Pattern[str]], ...] = (
+    ("gene", re.compile(r"^\d+$")),
+    ("genomic", re.compile(r"^(AC|NC|NG|NT|NW|NZ)_[A-Z]*\d+(\.\d+)?$")),
+    ("transcript", re.compile(r"^(NM|NR|XM|XR)_\d+(\.\d+)?$")),
+    ("protein", re.compile(r"^(AP|NP|YP|XP|WP)_\d+(\.\d+)?$")),
+    ("pdb", re.compile(r"^(\d[A-Z0-9]{3}|PDB_[A-Z0-9]{8})$")),
+    ("uniprot", re.compile(r"^([OPQ]\d[A-Z0-9]{3}\d|[A-NR-Z]\d([A-Z][A-Z0-9]{2}\d){1,2})(-\d+)?(\.\d+)?$")),
+    ("protein", re.compile(r"^[A-Z]{3}(\d{5}|\d{7})(\.\d+)?$")),
+    # GenBank nucleotide (1+5, 2+6, 2+8), WGS/TSA/TLS (4+8 or more, 6+9 or more) and MGA (5+7). These may be
+    # genomic or mRNA, so they route as either.
+    (
+        "nucleotide",
+        re.compile(r"^([A-Z]\d{5}|[A-Z]{2}(\d{6}|\d{8})|[A-Z]{4}\d{8,}|[A-Z]{6}\d{9,}|[A-Z]{5}\d{7})(\.\d+)?$"),
+    ),
+)
+
+_ACCESSION_FORMATS = (
+    "UniProt (P04637), PDB (2LYZ, pdb_00002lyz), RefSeq (NC_000017.11, NM_000546.6, NP_000537.3), "
+    "GenBank (U49845, AAA12345) or an NCBI Gene ID (7157); prefix one with uniprot:, pdb:, protein:, genomic:, "
+    "transcript:, nucleotide: or gene: to name its kind"
+)
+
+
+def parse_accession(value: str) -> tuple[AccessionKind, str]:
+    """Work out which database an accession belongs to from its format.
+
+    Args:
+        value (str): An accession, optionally prefixed with its kind (e.g. ``"gene:7157"``).
+
+    Returns:
+        tuple[AccessionKind, str]: The kind and the upper-cased accession. A UniProt entry version
+            (``P04637.2``) is dropped, and an extended PDB ID for a four-character entry
+            (``pdb_00001tsr``) is shortened to that entry (``1TSR``).
+
+    Raises:
+        ValueError: If the accession matches no known format.
+    """
+    text = value.strip()
+    prefix, separator, rest = text.partition(":")
+    kind: AccessionKind
+    if separator and prefix.strip().lower() in get_args(AccessionKind):
+        kind = prefix.strip().lower()  # type: ignore[assignment]
+        accession = rest.strip().upper()
+        if not accession or any(char.isspace() for char in accession):
+            raise ValueError(f"Accession {value!r} needs one accession, without spaces, after its kind prefix")
+        if kind == "gene" and not accession.isdigit():
+            raise ValueError(f"Accession {value!r}: an NCBI Gene ID is a number")
+    else:
+        accession = text.upper()
+        detected = next((k for k, pattern in _ACCESSION_PATTERNS if pattern.match(accession)), None)
+        if detected is None:
+            hint = " (genomic coordinates go in genomic_coordinates)" if re.search(r":\d+-\d+", text) else ""
+            raise ValueError(f"Unrecognised accession {value!r}{hint}: expected {_ACCESSION_FORMATS}")
+        kind = detected
+    if kind == "uniprot":
+        accession = accession.split(".", 1)[0]
+    if kind == "pdb" and re.match(r"^PDB_0000[A-Z0-9]{4}$", accession):
+        accession = accession[-4:]
+    return kind, accession
+
+
 # ============================================================================
 # Data Models
 # ============================================================================
@@ -91,23 +159,28 @@ class SequenceFetchRequest(BaseModel):
 
     Attributes:
         request_id (str | None): Optional caller-provided request identifier.
-        target_name (str): Gene, protein, or RNA name to resolve.
-        organism (str): Organism name used for disambiguation.
+        target_name (str | None): Gene, protein, or RNA name to resolve; needed with organism unless an identifier is given.
+        organism (str | None): Organism name used for disambiguation; needed with target_name unless an identifier is given.
         sequence_types (list[Literal['protein', 'dna_genomic', 'dna_cds', 'rna_transcript', 'rna_premrna', 'structure']]): Requested outputs: protein, dna, rna, or structure.
-        uniprot_id (str | None): UniProt accession override.
-        genbank_accession (str | None): GenBank accession override.
-        refseq_accession (str | None): RefSeq accession override.
-        pdb_id (str | None): PDB accession override.
-        gene_id (str | None): NCBI Gene ID override.
-        protein_id (str | None): NCBI protein accession override.
-        transcript_id (str | None): Transcript accession override.
+        accessions (list[str]): Accessions to route on, at most one of each kind; see :func:`parse_accession`.
         genomic_coordinates (str | None): Genomic interval like NC_000913.3:1-100:+.
-        additional_ids (dict[str, str]): Extra IDs used for custom routing.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     request_id: str | None = Field(default=None, title="Request ID", description="Optional request identifier")
-    target_name: str = Field(min_length=1, title="Target Name", description="Gene, RNA, or protein name")
-    organism: str = Field(min_length=1, title="Organism", description="Organism for disambiguation")
+    target_name: str | None = Field(
+        default=None,
+        min_length=1,
+        title="Target Name",
+        description="Gene, RNA, or protein name; needed with organism unless an identifier is given",
+    )
+    organism: str | None = Field(
+        default=None,
+        min_length=1,
+        title="Organism",
+        description="Organism for disambiguation; needed with target_name unless an identifier is given",
+    )
     sequence_types: list[
         Literal[
             "protein",
@@ -118,26 +191,15 @@ class SequenceFetchRequest(BaseModel):
             "structure",
         ]
     ] = Field(title="Sequence Types", description="Requested output molecule types")
-    uniprot_id: str | None = Field(default=None, title="UniProt ID", description="UniProt accession override")
-    genbank_accession: str | None = Field(
-        default=None, title="GenBank Accession", description="GenBank accession override"
+    accessions: list[str] = Field(
+        default_factory=list,
+        title="Accessions",
+        description="UniProt, PDB, RefSeq or GenBank accessions or NCBI Gene IDs; each one's kind is detected",
     )
-    refseq_accession: str | None = Field(
-        default=None, title="RefSeq Accession", description="RefSeq accession override"
-    )
-    pdb_id: str | None = Field(default=None, title="PDB ID", description="PDB accession override")
-    gene_id: str | None = Field(default=None, title="Gene ID", description="NCBI Gene ID override")
-    protein_id: str | None = Field(default=None, title="Protein ID", description="NCBI protein accession override")
-    transcript_id: str | None = Field(default=None, title="Transcript ID", description="Transcript accession override")
     genomic_coordinates: str | None = Field(
         default=None,
         title="Genomic Coordinates",
         description="Genomic coordinates as accession:start-end:strand",
-    )
-    additional_ids: dict[str, str] = Field(
-        default_factory=dict,
-        title="Additional IDs",
-        description="Extra IDs for custom routing (the 'accession' key is consulted as a generic fallback)",
     )
 
     @field_validator("sequence_types", mode="before")
@@ -156,6 +218,63 @@ class SequenceFetchRequest(BaseModel):
                 normalized.append(item)
                 seen.add(item)
         return normalized
+
+    @field_validator("accessions", mode="before")
+    @classmethod
+    def normalize_accessions(cls, value: Any) -> Any:
+        """Accept a single accession or a list."""
+        return [value] if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def validate_lookup_params(self) -> "SequenceFetchRequest":
+        """Require target_name and organism or an accession, and at most one accession of each kind."""
+        by_kind: dict[str, str] = {}
+        for accession in self.accessions:
+            kind, parsed = parse_accession(accession)
+            if kind in by_kind and by_kind[kind] != parsed:
+                raise ValueError(f"Give at most one {kind} accession per request, got {by_kind[kind]} and {parsed}")
+            by_kind[kind] = parsed
+        if not (self.target_name and self.organism) and not by_kind and not self.genomic_coordinates:
+            raise ValueError("Provide both target_name and organism, or an accession or genomic_coordinates")
+        return self
+
+    def _accession(self, kind: AccessionKind) -> str | None:
+        """Return this request's accession of one kind, if it has one."""
+        for accession in self.accessions:
+            accession_kind, parsed = parse_accession(accession)
+            if accession_kind == kind:
+                return parsed
+        return None
+
+    @property
+    def uniprot_id(self) -> str | None:
+        """The UniProt accession, if given."""
+        return self._accession("uniprot")
+
+    @property
+    def pdb_id(self) -> str | None:
+        """The PDB ID, if given."""
+        return self._accession("pdb")
+
+    @property
+    def protein_accession(self) -> str | None:
+        """The NCBI protein (RefSeq or GenBank) accession, if given."""
+        return self._accession("protein")
+
+    @property
+    def genomic_accession(self) -> str | None:
+        """The genomic nucleotide accession: a genomic RefSeq one, else a GenBank one, if given."""
+        return self._accession("genomic") or self._accession("nucleotide")
+
+    @property
+    def transcript_accession(self) -> str | None:
+        """The transcript nucleotide accession: an RNA RefSeq one, else a GenBank one, if given."""
+        return self._accession("transcript") or self._accession("nucleotide")
+
+    @property
+    def gene_id(self) -> str | None:
+        """The NCBI Gene ID, if given."""
+        return self._accession("gene")
 
 
 class SequenceFetchInput(BaseToolInput):
@@ -253,8 +372,8 @@ class SequenceFetchResult(BaseModel):
 
     Attributes:
         request_id (str): Request identifier used in this result.
-        target_name (str): Original target name.
-        organism (str): Original organism name.
+        target_name (str | None): Original target name, if given.
+        organism (str | None): Original organism name, if given.
         requested_types (list[str]): Requested output molecule types.
         status (Literal['success', 'warning', 'failed']): One of success, warning, or failed.
         fetched_sequences (list[FetchedSequence]): Retrieved sequence records.
@@ -265,8 +384,8 @@ class SequenceFetchResult(BaseModel):
     """
 
     request_id: str = Field(title="Request ID", description="Request identifier")
-    target_name: str = Field(title="Target Name", description="Original target name")
-    organism: str = Field(title="Organism", description="Original organism name")
+    target_name: str | None = Field(default=None, title="Target Name", description="Original target name, if given")
+    organism: str | None = Field(default=None, title="Organism", description="Original organism name, if given")
     requested_types: list[str] = Field(title="Requested Types", description="Requested molecule types")
     status: Literal["success", "warning", "failed"] = Field(title="Status", description="Result status")
     fetched_sequences: list[FetchedSequence] = Field(
@@ -381,7 +500,7 @@ class SequenceFetchOutput(BaseToolOutput):
                     for record in result.fetched_sequences:
                         acc = record.accession or "unknown"
                         header = (
-                            f">{result.request_id}|{result.target_name}|"
+                            f">{result.request_id}|{result.target_name or ''}|"
                             f"{record.sequence_type}|{record.source_database}|{acc}"
                         )
                         handle.write(f"{header}\n{record.sequence}\n")
@@ -521,14 +640,14 @@ def run_sequence_fetch(
     This tool resolves IDs and names across NCBI Entrez, UniProt, and PDB for
     sequence and structure retrieval.
 
-    Routing priority (per request):
-        Protein: ``uniprot_id`` → ``protein_id`` / preferred accession
-            (``genbank_accession`` → ``refseq_accession`` →
-            ``additional_ids['accession']``) → ``pdb_id`` → name search.
-        Genomic: ``genomic_coordinates`` → preferred accession →
+    Each request's ``accessions`` are sorted by kind from their format (see
+    :func:`parse_accession`). Routing priority (per request):
+        Protein: UniProt → NCBI protein → PDB → name search.
+        Genomic: ``genomic_coordinates`` → NCBI nucleotide →
             name search → gene-locus fallback.
-        ``additional_ids`` is consulted last; the key ``"accession"`` is
-        used as a generic fallback when no typed override is set.
+        Coding DNA: NCBI nucleotide → NCBI protein → name search.
+        Transcript: NCBI nucleotide → name search.
+        Structure: PDB → UniProt cross-reference → name search.
 
     Args:
         inputs (SequenceFetchInput): One or more sequence retrieval requests.
@@ -612,6 +731,7 @@ def _process_single_request(
     if (
         "protein" in request.sequence_types
         and "dna_genomic" in request.sequence_types
+        and request.organism is not None
         and _organism_likely_has_introns(request.organism)
     ):
         warnings.append("Genomic DNA includes introns in many organisms; DNA to protein mapping may be indirect.")
@@ -679,11 +799,11 @@ def _validate_request_type_compatibility(
     if "protein" not in request.sequence_types:
         return None
 
-    name = request.target_name.lower()
+    name = (request.target_name or "").lower()
     if any(re.search(pattern, name) for pattern in _NON_CODING_PATTERNS):
         return f"Target '{request.target_name}' appears non-coding but protein was requested"
 
-    refseq_like = (request.refseq_accession or request.transcript_id or "").upper()
+    refseq_like = request.transcript_accession or ""
     if refseq_like.startswith(("NR_", "XR_")):
         return f"RefSeq transcript '{refseq_like}' is non-coding (NR_/XR_ prefix)"
 
@@ -732,7 +852,7 @@ def _fetch_protein(
             warnings,
         )
 
-    protein_accession = request.protein_id or _preferred_accession(request)
+    protein_accession = request.protein_accession
     if protein_accession:
         result = _ncbi_fetch_first_fasta(
             db="protein",
@@ -787,13 +907,15 @@ def _fetch_protein(
         )
 
     # Name-based fallback: UniProt first, then NCBI protein search.
-    entry = _search_uniprot_entry(
-        target_name=request.target_name,
-        organism=request.organism,
-        prefer_pdb_crossref="structure" in request.sequence_types,
-        max_candidates=config.max_candidates_per_source,
-        session=session,
-    )
+    entry = None
+    if request.target_name and request.organism:
+        entry = _search_uniprot_entry(
+            target_name=request.target_name,
+            organism=request.organism,
+            prefer_pdb_crossref="structure" in request.sequence_types,
+            max_candidates=config.max_candidates_per_source,
+            session=session,
+        )
     if entry is not None:
         sequence = entry.get("sequence", {}).get("value")
         accession = entry.get("primaryAccession")
@@ -820,7 +942,7 @@ def _fetch_protein(
         session=session,
     )
     if not search_ids:
-        raise SequenceFetchError(f"No protein found for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No protein found for {_target_label(request)}")
 
     if len(search_ids) > 1:
         warnings.append(f"Multiple NCBI protein candidates found ({len(search_ids)}); using top hit {search_ids[0]}")
@@ -861,7 +983,7 @@ def _fetch_dna_genomic(
     ncfg = _ncbi_config(config)
 
     coords = _parse_coordinates(request.genomic_coordinates)
-    accession_hint = request.genbank_accession or request.refseq_accession
+    accession_hint = request.genomic_accession
 
     if coords is not None:
         coord_accession = coords[0] or accession_hint
@@ -895,7 +1017,7 @@ def _fetch_dna_genomic(
             warnings,
         )
 
-    direct_accession = _preferred_accession(request)
+    direct_accession = request.genomic_accession
     if direct_accession:
         result = _ncbi_fetch_first_fasta(
             db="nuccore",
@@ -921,6 +1043,13 @@ def _fetch_dna_genomic(
             warnings,
         )
 
+    # The gene's own locus comes first: a nuccore text search for a gene often ranks the whole chromosome
+    # (e.g. 84 Mb of chromosome 17 for TP53) above the gene.
+    try:
+        return _fetch_dna_genomic_from_gene_locus(request=request, config=config, session=session)
+    except SequenceFetchError as exc:
+        warnings.append(f"Gene-locus lookup failed ({exc}); fell back to a nuccore search")
+
     term = f"({_ncbi_term_for_request(request)}) AND biomol_genomic[PROP]"
     ids, _ = _ncbi_esearch(
         db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
@@ -934,7 +1063,7 @@ def _fetch_dna_genomic(
             max_results=config.max_candidates_per_source,
         )
     if not ids:
-        raise SequenceFetchError(f"No genomic DNA found for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No genomic DNA found for {_target_label(request)}")
 
     attempted_not_found: list[str] = []
     selected_id: str | None = None
@@ -957,14 +1086,7 @@ def _fetch_dna_genomic(
         attempted_not_found.append(candidate_id)
 
     if selected_id is None:
-        gene_record, gene_ids, gene_warnings = _fetch_dna_genomic_from_gene_locus(
-            request=request,
-            config=config,
-            session=session,
-        )
-        warnings.append("Nuccore genomic candidates lacked FASTA; used gene-locus genomic fallback")
-        warnings.extend(gene_warnings)
-        return gene_record, gene_ids, warnings
+        raise SequenceFetchError(f"No genomic DNA with a FASTA record found for {_target_label(request)}")
 
     if attempted_not_found:
         warnings.append(f"Primary genomic candidate(s) had no FASTA records; used fallback candidate {selected_id}")
@@ -999,13 +1121,13 @@ def _fetch_dna_genomic_from_gene_locus(
     else:
         gene_ids, _ = _ncbi_esearch(
             db="gene",
-            term=_ncbi_gene_term(request.target_name, request.organism),
+            term=_ncbi_gene_term(*_name_and_organism(request)),
             config=ncfg,
             session=session,
             max_results=config.max_candidates_per_source,
         )
     if not gene_ids:
-        raise SequenceFetchError(f"No gene IDs found for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No gene IDs found for {_target_label(request)}")
 
     selected_gene_id = gene_ids[0]
     if len(gene_ids) > 1:
@@ -1081,7 +1203,8 @@ def _fetch_dna_cds(
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
-    accession = _preferred_accession(request)
+    # A genomic record holds many CDSs, so it needs a name to pick one; a transcript holds one.
+    accession = request.transcript_accession or (request.genomic_accession if request.target_name else None)
     if accession:
         efetch_result = _ncbi_efetch(
             db="nuccore",
@@ -1113,10 +1236,10 @@ def _fetch_dna_cds(
         )
 
     # Fallback via protein accession
-    if request.protein_id:
+    if request.protein_accession:
         efetch_result = _ncbi_efetch(
             db="protein",
-            identifier=request.protein_id,
+            identifier=request.protein_accession,
             config=ncfg,
             session=session,
             rettype="fasta_cds_na",
@@ -1126,7 +1249,7 @@ def _fetch_dna_cds(
             records = _parse_fasta_records(text)
             selected = _select_best_record(records, request.target_name)
             if selected is not None:
-                cds_acc = selected.accession or request.protein_id
+                cds_acc = selected.accession or request.protein_accession
                 warnings.append("CDS inferred from protein record using NCBI fasta_cds_na")
                 return (
                     _sequence_record(
@@ -1147,7 +1270,7 @@ def _fetch_dna_cds(
         db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
     )
     if not ids:
-        raise SequenceFetchError(f"No CDS found for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No CDS found for {_target_label(request)}")
 
     if len(ids) > 1:
         warnings.append(f"Multiple CDS candidates found ({len(ids)}); using top hit {ids[0]}")
@@ -1194,7 +1317,7 @@ def _fetch_rna_transcript(
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
-    transcript_accession = request.transcript_id or request.refseq_accession
+    transcript_accession = request.transcript_accession
     if transcript_accession:
         result = _ncbi_fetch_first_fasta(
             db="nuccore",
@@ -1225,7 +1348,7 @@ def _fetch_rna_transcript(
         db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
     )
     if not ids:
-        raise SequenceFetchError(f"No transcript found for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No transcript found for {_target_label(request)}")
 
     if len(ids) > 1:
         warnings.append(f"Multiple transcript candidates found ({len(ids)}); using top hit {ids[0]}")
@@ -1307,9 +1430,10 @@ def _fetch_structure(
             warnings.append(f"Using resolved UniProt ID '{uniprot_id}' from protein fetch for structure lookup")
 
     if not pdb_id and not uniprot_id:
+        target_name, organism = _name_and_organism(request)
         entry = _search_uniprot_entry(
-            target_name=request.target_name,
-            organism=request.organism,
+            target_name=target_name,
+            organism=organism,
             prefer_pdb_crossref=True,
             max_candidates=config.max_candidates_per_source,
             session=session,
@@ -1332,7 +1456,7 @@ def _fetch_structure(
             raise SequenceFetchError(f"UniProt ID '{uniprot_id}' has no linked PDB cross-references")
 
     if not pdb_id:
-        raise SequenceFetchError(f"No PDB ID resolved for '{request.target_name}' in '{request.organism}'")
+        raise SequenceFetchError(f"No PDB ID resolved for {_target_label(request)}")
 
     pdb_id = pdb_id.upper()
     meta = _fetch_pdb_entry(pdb_id, session)
@@ -1357,14 +1481,27 @@ def _fetch_structure(
 # ============================================================================
 
 
-def _preferred_accession(request: SequenceFetchRequest) -> str | None:
-    """Return the best available accession override."""
-    return request.genbank_accession or request.refseq_accession or request.additional_ids.get("accession")
+def _name_and_organism(request: SequenceFetchRequest) -> tuple[str, str]:
+    """Return the request's target name and organism for a search by name, or fail if it has none."""
+    if not (request.target_name and request.organism):
+        raise SequenceFetchError(
+            "this sequence type needs a search by name, so give target_name and organism, or an accession for it"
+        )
+    return request.target_name, request.organism
+
+
+def _target_label(request: SequenceFetchRequest) -> str:
+    """Describe what a by-name or by-gene search looked for, for error messages."""
+    if request.target_name and request.organism:
+        return f"'{request.target_name}' in '{request.organism}'"
+    return f"gene ID '{request.gene_id}'"
 
 
 def _ncbi_term_for_request(request: SequenceFetchRequest) -> str:
     """Compose an Entrez term with optional gene_id preference."""
-    base_term = _ncbi_term(request.target_name, request.organism)
+    if request.gene_id and not (request.target_name and request.organism):
+        return f"{request.gene_id}[Gene ID]"
+    base_term = _ncbi_term(*_name_and_organism(request))
     if request.gene_id:
         return f"({request.gene_id}[Gene ID] OR {base_term})"
     return base_term
@@ -1471,11 +1608,13 @@ def _ncbi_gene_term(target_name: str, organism: str) -> str:
 
 def _select_best_record(
     records: list[NCBIFastaRecord],
-    target_name: str,
+    target_name: str | None,
 ) -> NCBIFastaRecord | None:
-    """Select the FASTA record whose header best matches target_name."""
+    """Select the FASTA record whose header best matches target_name, or the first without one."""
     if not records:
         return None
+    if not target_name:
+        return records[0]
     lowered = target_name.lower()
     for record in records:
         if lowered in record.header.lower():
