@@ -50,10 +50,13 @@ latest message is shown, so each one replaces the last.
 ```python
 logger.update_status("Loading ESMFold weights")                 # in a standalone, or a tool in the caller's process
 logger.update_status("Scoring 8 sequences", level=logging.DEBUG)
-counter = StatusCounter(logger, "Folding structure %d/%d", total=len(sequences))
-for index, sequence in enumerate(sequences, start=1):
-    counter(index)                                              # the first, then one every 5 s, and the last
+for sequence in StatusCounter(logger, "Folding structure %d/%d", sequences):
+    fold(sequence)                                              # reports the first, then one every 5 s, and the last
 ```
+
+`StatusCounter` wraps an iterable like tqdm (`total` defaults to its length). When a loop isn't one item per step,
+such as batches, call it with each item's number instead: `counter = StatusCounter(logger, "Scoring batch %d/%d",
+total=num_batches)`, then `counter(batch_number)`.
 
 A status is itself a log record, so it needs no `logger.info` beside it saying the same thing; detail the status
 can't carry (a checkpoint, a device, a path) isn't worth a second line either. The status line always updates,

@@ -144,9 +144,7 @@ def _predict(state: PuffinModel, input_dict: dict[str, Any]) -> dict[str, Any]:
     model = state.load(device, verbose=verbose)
 
     predictions: list[list[list[float]]] = []
-    counter = StatusCounter(logger, "Predicting sequence %d/%d", total=len(sequences))
-    for number, sequence in enumerate(sequences, start=1):
-        counter(number)
+    for sequence in StatusCounter(logger, "Predicting sequence %d/%d", sequences):
         df = model.predict(sequence)
         # Stack the 10 prediction rows in TRACK_NAMES order, then transpose to (L-650, 10).
         stacked = np.vstack([np.asarray(df.loc[row].to_numpy(), dtype=float) for row in PREDICT_ROW_NAMES])
@@ -177,9 +175,7 @@ def _interpret(state: PuffinModel, input_dict: dict[str, Any]) -> dict[str, Any]
     model = state.load(device, verbose=verbose)
 
     results: list[dict[str, Any]] = []
-    counter = StatusCounter(logger, "Interpreting sequence %d/%d", total=len(sequences))
-    for number, sequence in enumerate(sequences, start=1):
-        counter(number)
+    for sequence in StatusCounter(logger, "Interpreting sequence %d/%d", sequences):
         df = model.interpret(sequence, targeti=target_signal, reverse_strand=reverse_strand)
 
         motif_activations: dict[str, list[float]] = {}

@@ -248,11 +248,10 @@ def run_biorxiv_details(
         user_agent=_USER_AGENT,
     )
     try:
-        counter = StatusCounter(logger, "Fetching preprint %d/%d", total=len(inputs.dois))
-        preprints = []
-        for index, doi in enumerate(inputs.dois, start=1):
-            counter(index)
-            preprints.append(_details(doi, config.server, session))
+        preprints = [
+            _details(doi, config.server, session)
+            for doi in StatusCounter(logger, "Fetching preprint %d/%d", inputs.dois)
+        ]
         return BiorxivDetailsOutput(preprints=preprints, source_url=_API_URL)
     finally:
         session.close()

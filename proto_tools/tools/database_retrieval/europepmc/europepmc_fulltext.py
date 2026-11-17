@@ -257,11 +257,10 @@ def run_europepmc_fulltext(
     )
     try:
         open_access = _open_access_status(inputs.pmcids, session)
-        counter = StatusCounter(logger, "Fetching article %d/%d", total=len(inputs.pmcids))
-        documents = []
-        for index, pmcid in enumerate(inputs.pmcids, start=1):
-            counter(index)
-            documents.append(_document(pmcid, open_access.get(pmcid), session))
+        documents = [
+            _document(pmcid, open_access.get(pmcid), session)
+            for pmcid in StatusCounter(logger, "Fetching article %d/%d", inputs.pmcids)
+        ]
         return EuropePMCFullTextOutput(documents=documents, source_url=_REST_URL)
     finally:
         session.close()

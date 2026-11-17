@@ -376,9 +376,7 @@ def _process_structures(
     prot.filter("protein and not hydrogen")
     results = []
     voxelized_ids: list[int] = []
-    counter = StatusCounter(logger, "Voxelizing residue %d/%d", total=len(atom_ids))
-    for index, atom_id in enumerate(atom_ids, start=1):
-        counter(index)
+    for atom_id in StatusCounter(logger, "Voxelizing residue %d/%d", atom_ids):
         result = _voxelize_single_notcentered((prot.copy(), atom_id))
         if result is not None:
             results.append(result)

@@ -290,9 +290,7 @@ def run_gi_promoter(
     """
     del instance
     results: list[GIPromoterResult] = []
-    counter = StatusCounter(logger, "Predicting promoter activity for sequence %d/%d", total=len(inputs.sequences))
-    for number, item in enumerate(inputs.sequences, start=1):
-        counter(number)
+    for item in StatusCounter(logger, "Predicting promoter activity for sequence %d/%d", inputs.sequences):
         sequence = validate_gi_sequence(item.sequence, min_bp=PROMOTER_MIN_BP, task="promoter")
         data, payload = call_predict(
             config,

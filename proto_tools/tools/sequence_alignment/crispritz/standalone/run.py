@@ -144,9 +144,7 @@ def _ensure_index(
             pam_path = staging / "pam.txt"
             pam_path.write_text(f"{pam_spec[0]} {pam_spec[1]}\n")
             fastas = sorted(fasta_dir.glob("*.fa"))
-            counter = StatusCounter(logger, "Indexing reference sequence %d/%d", total=len(fastas))
-            for index, fasta in enumerate(fastas, start=1):
-                counter(index)
+            for fasta in StatusCounter(logger, "Indexing reference sequence %d/%d", fastas):
                 _run(
                     [str(_binary("crispritz-buildTST")), str(fasta), str(pam_path), str(threads), str(max_bulges)],
                     index_dir,

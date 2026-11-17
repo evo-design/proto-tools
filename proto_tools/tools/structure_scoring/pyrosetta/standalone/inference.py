@@ -535,9 +535,7 @@ class PyRosettaScorer:
             relax_sfxn.set_weight(ScoreType.coordinate_constraint, 1.0)
 
         results = []
-        counter = StatusCounter(logger, "Relaxing structure %d/%d", total=len(pdb_contents))
-        for index, pdb_content in enumerate(pdb_contents, start=1):
-            counter(index)
+        for pdb_content in StatusCounter(logger, "Relaxing structure %d/%d", pdb_contents):
             pose = self._pdb_content_to_pose(pdb_content)
             start_pose = pose.clone() if (align_to_start or copy_b_factors_from_start) else None
             dropped_residues = self._find_dropped_residues(pose)

@@ -165,10 +165,8 @@ def _compute_ccd_indices(components_path: str) -> tuple[dict[str, str], dict[str
     inchikey_counts: dict[str, int] = {}
     inchikey_index: dict[str, str] = {}
 
-    counter = StatusCounter(logger, "Indexing CCD entry %d/%d", total=len(doc))
     with _silence_rdkit_logger():
-        for index, block in enumerate(doc, start=1):
-            counter(index)
+        for block in StatusCounter(logger, "Indexing CCD entry %d/%d", doc):
             ccd_id = block.name
             try:
                 # sanitize=False maximizes coverage; sanitization rejects many organometallic/hypervalent entries.
@@ -712,9 +710,7 @@ def _process_identifiers(
         list[dict[str, Any]]: One record per input identifier in input order.
     """
     records: list[dict[str, Any]] = []
-    counter = StatusCounter(logger, "Looking up compound %d/%d", total=len(identifiers))
-    for index, raw_id in enumerate(identifiers, start=1):
-        counter(index)
+    for raw_id in StatusCounter(logger, "Looking up compound %d/%d", identifiers):
         identifier = (raw_id or "").strip()
         if not identifier:
             records.append(_empty_record(None, ["Empty identifier"]))

@@ -312,9 +312,7 @@ def run_gi_expression(
     """
     del instance
     results: list[ExpressionPrediction] = []
-    counter = StatusCounter(logger, "Predicting expression for sequence %d/%d", total=len(inputs.sequences))
-    for number, item in enumerate(inputs.sequences, start=1):
-        counter(number)
+    for item in StatusCounter(logger, "Predicting expression for sequence %d/%d", inputs.sequences):
         sequence = validate_gi_sequence(item.sequence, min_bp=EXPRESSION_WINDOW_BP, task="expression")
         extra = {"tss_index": item.tss_index} if item.tss_index is not None else None
         data, payload = call_predict(
