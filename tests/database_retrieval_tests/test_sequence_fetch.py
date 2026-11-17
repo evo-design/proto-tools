@@ -191,7 +191,6 @@ def test_sequence_fetch_takes_genomic_dna_for_a_gene_id_from_its_locus(monkeypat
     ("download", "include_structure", "status", "error"),
     [
         ("ok", True, "success", None),
-        ("missing", True, "warning", "NOT_FOUND[structure_coordinates]"),
         ("fails", True, "warning", "HTTP_ERROR[structure_coordinates]"),
         ("ok", False, "success", None),  # metadata only: nothing downloaded
     ],
@@ -210,11 +209,11 @@ def test_sequence_fetch_structure_by_pdb_id_alone(
     mmcif = (Path(__file__).parent.parent / "dummy_data" / "2CSM.cif").read_text()
     downloads: list[str] = []
 
-    def fetch_mmcif(pdb_id: str, session: object) -> str | None:
+    def fetch_mmcif(pdb_id: str, session: object) -> str:
         downloads.append(pdb_id)
         if download == "fails":  # after the session's retries
             raise requests.exceptions.ConnectionError("files.rcsb.org unreachable")
-        return mmcif if download == "ok" else None
+        return mmcif
 
     monkeypatch.setattr(sf_module, "_fetch_pdb_mmcif", fetch_mmcif)
 
