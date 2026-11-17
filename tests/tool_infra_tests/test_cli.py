@@ -292,6 +292,8 @@ def test_model_doc_verbs(verb: str) -> None:
     code, out, _ = _run(verb, "esm2-embedding")
     assert code == 0
     assert "ESM2Embeddings" in out
+    if verb == "output":  # the results' own fields, not just the list type holding them
+        assert "SequenceEmbedding:" in out and "mean_embedding" in out
 
 
 # ── doctor ─────────────────────────────────────────────────────────────────
