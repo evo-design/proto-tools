@@ -170,9 +170,9 @@ def run_minced(input_data: dict[str, Any]) -> dict[str, Any]:
     config = input_data.get("config", {})
 
     results = []
-    counter = StatusCounter(logger, "Scanning sequence %d/%d", total=len(sequences))
-    for index, (seq, seq_id) in enumerate(zip(sequences, sequence_ids, strict=False), start=1):
-        counter(index)
+    for seq, seq_id in StatusCounter(
+        logger, "Scanning sequence %d/%d", zip(sequences, sequence_ids, strict=False), total=len(sequences)
+    ):
         result = _run_single_minced(seq, seq_id, config)
         results.append(result)
 

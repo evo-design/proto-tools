@@ -134,9 +134,7 @@ def score(input_dict: dict[str, Any]) -> dict[str, Any]:
     mask = input_dict["mask"]
 
     results: list[list[dict[str, Any]]] = []
-    counter = StatusCounter(logger, "Scoring variant %d/%d", total=len(input_dict["variants"]))
-    for index, variant in enumerate(input_dict["variants"], start=1):
-        counter(index)
+    for variant in StatusCounter(logger, "Scoring variant %d/%d", input_dict["variants"]):
         record = SimpleNamespace(
             chrom=variant["chromosome"],
             pos=variant["position"],
@@ -154,9 +152,7 @@ def predict(input_dict: dict[str, Any]) -> dict[str, Any]:
     models = _ensure_models(input_dict["device"])
 
     predictions: list[list[list[float]]] = []
-    counter = StatusCounter(logger, "Predicting sequence %d/%d", total=len(input_dict["sequences"]))
-    for index, seq in enumerate(input_dict["sequences"], start=1):
-        counter(index)
+    for seq in StatusCounter(logger, "Predicting sequence %d/%d", input_dict["sequences"]):
         encoded = _one_hot_encode("N" * _CONTEXT_PAD + seq + "N" * _CONTEXT_PAD)[None, :]
         averaged = np.mean([model.predict(encoded, verbose=0) for model in models], axis=0)
         predictions.append(averaged[0].tolist())

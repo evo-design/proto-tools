@@ -436,7 +436,7 @@ class ProtoLogger(logging.Logger):
 
         Args:
             msg (object): Message, %-formatted with ``args``.
-            *args (Any): Arguments for ``msg``.
+            args (Any): Arguments for ``msg``.
             level (int): Level the record is logged at.
         """
         # Not gated on isEnabledFor: a DEBUG status still has to reach the status line.

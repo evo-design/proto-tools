@@ -97,11 +97,12 @@ class ESMCModel:
         all_attention_masks: list[torch.Tensor] = []
         all_logits: list[torch.Tensor] | None = [] if return_logits else None
 
-        counter = StatusCounter(logger, "Embedding batch %d/%d", total=len(batches))
-        for batch_number, batch_sequences in enumerate(
-            tqdm(batches, desc="ESM C inference", unit="batch", total=len(batches), disable=not verbose), start=1
+        for batch_sequences in StatusCounter(
+            logger,
+            "Embedding batch %d/%d",
+            tqdm(batches, desc="ESM C inference", unit="batch", total=len(batches), disable=not verbose),
+            total=len(batches),
         ):
-            counter(batch_number)
             # Tokenize the batch with padding so we can run a single forward pass
             batch_inputs = self.tokenizer(
                 batch_sequences,

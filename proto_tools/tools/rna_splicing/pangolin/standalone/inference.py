@@ -111,9 +111,7 @@ class PangolinModel:
         self._ensure_loaded(device, tissues)
 
         results: list[dict[str, Any]] = []
-        counter = StatusCounter(logger, "Predicting sequence %d/%d", total=len(sequences))
-        for index, seq in enumerate(sequences, start=1):
-            counter(index)
+        for seq in StatusCounter(logger, "Predicting sequence %d/%d", sequences):
             onehot = self._one_hot(seq, "+")
             per_tissue: list[Any] = []
             for tissue in tissues:
@@ -171,9 +169,7 @@ class PangolinModel:
         self._ensure_loaded(device, tissues)
 
         results: list[dict[str, Any]] = []
-        counter = StatusCounter(logger, "Scoring variant %d/%d", total=len(variants))
-        for index, variant in enumerate(variants, start=1):
-            counter(index)
+        for variant in StatusCounter(logger, "Scoring variant %d/%d", variants):
             vp = variant["variant_position"]
             ref = variant["reference_bases"]
             alt = variant["alternate_bases"]

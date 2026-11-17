@@ -96,9 +96,7 @@ def run_fimo_scan(input_data: dict[str, Any]) -> dict[str, Any]:
     fimo = FIMO(both_strands=both_strands, threshold=input_data["threshold"])
 
     results: list[list[dict[str, Any]]] = [[] for _ in sequences]
-    counter = StatusCounter(logger, "Scanning motif %d/%d", total=len(motifs))
-    for index, motif in enumerate(motifs, start=1):
-        counter(index)
+    for motif in StatusCounter(logger, "Scanning motif %d/%d", motifs):
         accession = _decode(motif.accession)
         name = _decode(motif.name)
         motif_id = accession or name

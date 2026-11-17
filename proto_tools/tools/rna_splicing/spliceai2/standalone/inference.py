@@ -155,9 +155,7 @@ class SpliceAI2Model:
         annotator = VariantAnnotator(self.models, VARIANT_CANDIDATE_SITES)
 
         rows: list[dict[str, Any]] = []
-        counter = StatusCounter(logger, "Scoring variant %d/%d", total=len(variants))
-        for index, variant in enumerate(variants, start=1):
-            counter(index)
+        for variant in StatusCounter(logger, "Scoring variant %d/%d", variants):
             ref_window, alt_window = self._variant_window(fasta, variant)
             minus = variant["strand"] == "-"
             batch = (
@@ -243,12 +241,10 @@ class SpliceAI2Model:
     ) -> list[dict[str, Any]]:
         """Predict splice sites, junctions, and transcripts for each sequence."""
         self._ensure_loaded(device)
-        results = []
-        counter = StatusCounter(logger, "Predicting sequence %d/%d", total=len(sequences))
-        for index, sequence in enumerate(sequences, start=1):
-            counter(index)
-            results.append(self._predict_one(sequence, assembly, num_transcripts))
-        return results
+        return [
+            self._predict_one(sequence, assembly, num_transcripts)
+            for sequence in StatusCounter(logger, "Predicting sequence %d/%d", sequences)
+        ]
 
 
 def _exon_intervals(mask: Any) -> list[tuple[int, int]]:

@@ -487,11 +487,10 @@ def run_pdb_sequence_search(
         allowed_methods=["POST"],
     )
     try:
-        counter = StatusCounter(logger, "Searching sequence %d/%d", total=len(inputs.queries))
-        results = []
-        for index, query in enumerate(inputs.queries, start=1):
-            counter(index)
-            results.append(_search(session, query, config))
+        results = [
+            _search(session, query, config)
+            for query in StatusCounter(logger, "Searching sequence %d/%d", inputs.queries)
+        ]
     finally:
         session.close()
     return PdbSequenceSearchOutput(results=results, source_url=_SEARCH_URL)

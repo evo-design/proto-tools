@@ -297,9 +297,7 @@ def run_gi_splice(
     """
     del instance
     results: list[GISpliceResult] = []
-    counter = StatusCounter(logger, "Predicting splice sites for sequence %d/%d", total=len(inputs.sequences))
-    for number, item in enumerate(inputs.sequences, start=1):
-        counter(number)
+    for item in StatusCounter(logger, "Predicting splice sites for sequence %d/%d", inputs.sequences):
         sequence = validate_gi_sequence(item.sequence, min_bp=SPLICE_MIN_BP, task="splice")
         data, payload = call_predict(
             config,

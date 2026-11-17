@@ -53,9 +53,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     circular = bool(config["circular"])
 
     results = []
-    counter = StatusCounter(logger, "Scanning sequence %d/%d", total=len(sequences))
-    for index, (seq, seq_id) in enumerate(zip(sequences, sequence_ids, strict=True), start=1):
-        counter(index)
+    for seq, seq_id in StatusCounter(
+        logger, "Scanning sequence %d/%d", zip(sequences, sequence_ids, strict=True), total=len(sequences)
+    ):
         # verbosity=0 pinned: any non-zero level prints progress to stdout, which
         # corrupts the subprocess JSON contract.
         predictions = promoter_calculator(seq, threads=threads, verbosity=0, circular=circular)

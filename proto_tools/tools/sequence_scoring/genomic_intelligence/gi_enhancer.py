@@ -244,9 +244,7 @@ def run_gi_enhancer(
     """
     del instance
     results: list[GIEnhancerResult] = []
-    counter = StatusCounter(logger, "Predicting enhancer activity for sequence %d/%d", total=len(inputs.sequences))
-    for number, item in enumerate(inputs.sequences, start=1):
-        counter(number)
+    for item in StatusCounter(logger, "Predicting enhancer activity for sequence %d/%d", inputs.sequences):
         sequence = validate_gi_sequence(item.sequence, min_bp=ENHANCER_MIN_BP, task="enhancer")
         data, payload = call_predict(config, "enhancer", sequence, item.name)
         results.append(parse_enhancer_data(data, payload, item.name))

@@ -93,11 +93,12 @@ class ESM3Model:
         all_attention_masks = []
 
         # For each batch
-        counter = StatusCounter(logger, "Embedding batch %d/%d", total=len(batches))
-        for batch_number, batch_sequences in enumerate(
-            tqdm(batches, desc="ESM3 inference", unit="batch", total=len(batches)), start=1
+        for batch_sequences in StatusCounter(
+            logger,
+            "Embedding batch %d/%d",
+            tqdm(batches, desc="ESM3 inference", unit="batch", total=len(batches)),
+            total=len(batches),
         ):
-            counter(batch_number)
             # Tokenize the batch
             batch_inputs = self.tokenizer(
                 batch_sequences,

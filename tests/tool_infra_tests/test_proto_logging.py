@@ -274,3 +274,21 @@ def test_a_debug_status_is_still_emitted_from_a_logger_at_info():
     assert [(r.levelno, r.getMessage(), getattr(r, "update_status", False)) for r in records] == [
         (logging.DEBUG, "Scoring batch 1/4", True)
     ]
+
+
+def test_status_counter_wraps_an_iterable_like_tqdm(monkeypatch) -> None:
+    """Iterating the counter hands out every item and reports each one, throttled the same way."""
+    from proto_tools.utils.standalone_helpers_source.standalone_helpers import proto_logging
+
+    sent: list[str] = []
+
+    class _Logger:
+        def update_status(self, template: str, *args: object, level: int) -> None:
+            sent.append(template % args)
+
+    clock = iter([0.0, 1.0, 6.0])
+    monkeypatch.setattr(proto_logging.time, "monotonic", lambda: next(clock))
+    items = list(proto_logging.StatusCounter(_Logger(), "Fetching article %d/%d", ["a", "b", "c"]))
+
+    assert items == ["a", "b", "c"]
+    assert sent == ["Fetching article 1/3", "Fetching article 3/3"]

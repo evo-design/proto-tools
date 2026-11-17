@@ -33,7 +33,8 @@ import json
 import logging
 import sys
 import time
-from typing import Any, cast
+from collections.abc import Iterable, Iterator
+from typing import Any, Generic, TypeVar, cast, overload
 
 # Sentinel prefix on every JSON-tagged stderr line. Must match proto_tools/utils/logging_config.py:_TAG_PREFIX.
 _TAG_PREFIX = "\x00LOG\x00"
@@ -93,7 +94,7 @@ class ProtoLogger(logging.Logger):
 
         Args:
             msg (object): Message, %-formatted with ``args``.
-            *args (Any): Arguments for ``msg``.
+            args (Any): Arguments for ``msg``.
             level (int): Level the record is logged at.
         """
         # Not gated on isEnabledFor: a DEBUG status still has to reach the status line.
@@ -104,24 +105,58 @@ class ProtoLogger(logging.Logger):
 STATUS_INTERVAL_SECONDS = 5.0
 
 
-class StatusCounter:
+_Item = TypeVar("_Item")
+
+
+class StatusCounter(Generic[_Item]):
     """Report progress through a known number of items as status updates, throttled to human pace.
 
     The first item is reported at once, then at most one every ``interval`` seconds, and the last item always.
     A tight loop costs one clock read per item. Works with either logger that has ``update_status``: this
     module's (in a tool's environment) or proto-tools' own (a tool that runs in the caller's process).
 
+    Wrap an iterable, like tqdm, or call the counter with each item's number when the loop isn't one item
+    per step (e.g. batches).
+
     Example:
-        >>> counter = StatusCounter(logger, "Folding structure %d/%d", total=len(sequences))
-        >>> for index, sequence in enumerate(sequences, start=1):
-        ...     counter(index)
+        >>> for sequence in StatusCounter(logger, "Folding structure %d/%d", sequences):
+        ...     fold(sequence)
+        >>> counter = StatusCounter(logger, "Scoring batch %d/%d", total=num_batches)
+        >>> for start in range(0, len(sequences), batch_size):
+        ...     counter(start // batch_size + 1)
     """
+
+    @overload
+    def __init__(
+        self: StatusCounter[Any],
+        logger: logging.Logger,
+        template: str,
+        iterable: None = None,
+        *,
+        total: int,
+        interval: float = ...,
+        level: int = ...,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        logger: logging.Logger,
+        template: str,
+        iterable: Iterable[_Item],
+        *,
+        total: int | None = None,
+        interval: float = ...,
+        level: int = ...,
+    ) -> None: ...
 
     def __init__(
         self,
         logger: logging.Logger,
         template: str,
-        total: int,
+        iterable: Iterable[_Item] | None = None,
+        *,
+        total: int | None = None,
         interval: float = STATUS_INTERVAL_SECONDS,
         level: int = logging.DEBUG,
     ) -> None:
@@ -131,13 +166,20 @@ class StatusCounter:
             logger (logging.Logger): A logger with ``update_status`` (``get_logger(...)`` here, or proto-tools').
             template (str): The status, with ``%d`` for the item number and then the total, e.g.
                 ``"Folding structure %d/%d"``.
-            total (int): How many items there are.
+            iterable (Iterable[_Item] | None): Items to wrap; iterating the counter yields them and
+                reports each one. None when the counter is called with item numbers instead.
+            total (int | None): How many items there are; defaults to ``len(iterable)``.
             interval (float): Minimum seconds between reports, except the last.
             level (int): Level each report is logged at. DEBUG by default: a count is routine
                 progress, and the status line shows it whatever the level.
         """
+        if total is None:
+            if iterable is None:
+                raise TypeError("StatusCounter needs an iterable or a total")
+            total = len(iterable)  # type: ignore[arg-type]
         self._logger = logger
         self._template = template
+        self._iterable = iterable
         self._total = total
         self._interval = interval
         self._level = level
@@ -150,6 +192,14 @@ class StatusCounter:
             return
         self._last = now
         self._logger.update_status(self._template, number, self._total, level=self._level)  # type: ignore[attr-defined]
+
+    def __iter__(self) -> Iterator[_Item]:
+        """Yield the wrapped items, reporting each one before it is handed out."""
+        if self._iterable is None:
+            raise TypeError("StatusCounter was given no iterable to wrap; call it with item numbers instead")
+        for number, item in enumerate(self._iterable, start=1):
+            self(number)
+            yield item
 
 
 class _BridgeHandler(logging.Handler):

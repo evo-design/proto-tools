@@ -358,7 +358,7 @@ class AlphaGenomeModel:
         scorers = _resolve_variant_scorers(variant_scorers, organism)
 
         all_scores = []
-        report = StatusCounter(logger, "Scoring ISM request %d/%d", len(requests))
+        report = StatusCounter(logger, "Scoring ISM request %d/%d", total=len(requests))
         for number, req in enumerate(requests, start=1):
             width = req["interval_end"] - req["interval_start"]
             _validate_min_scorer_width(width, _MIN_VARIANT_SCORER_WIDTH, "score_ism_variants_batch")

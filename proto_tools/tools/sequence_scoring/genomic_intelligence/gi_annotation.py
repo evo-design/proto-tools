@@ -290,9 +290,7 @@ def run_gi_annotation(
     """
     del instance
     results: list[GIAnnotationResult] = []
-    counter = StatusCounter(logger, "Annotating sequence %d/%d", total=len(inputs.sequences))
-    for number, item in enumerate(inputs.sequences, start=1):
-        counter(number)
+    for item in StatusCounter(logger, "Annotating sequence %d/%d", inputs.sequences):
         sequence = validate_gi_sequence(item.sequence, min_bp=ANNOTATION_MIN_BP, task="annotation")
         data, payload = call_predict(
             config,

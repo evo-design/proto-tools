@@ -71,10 +71,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     dssp_binary = _find_dssp_binary()
     pairs = list(zip(input_dict["pdb_contents"], input_dict["chain_ids"], strict=True))
-    counter = StatusCounter(logger, "Assigning secondary structure %d/%d", total=len(pairs))
     results = []
-    for index, (pdb_content, chain_id) in enumerate(pairs, start=1):
-        counter(index)
+    for pdb_content, chain_id in StatusCounter(logger, "Assigning secondary structure %d/%d", pairs):
         results.append(_secondary_structure_percentages(pdb_content, chain_id, dssp_binary))
     return {"results": results}
 

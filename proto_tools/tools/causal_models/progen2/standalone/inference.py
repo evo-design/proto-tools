@@ -249,12 +249,13 @@ class ProGen2Model:
         all_logits: list[Any | None] = []
         batches = [prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)]
 
-        counter = StatusCounter(logger, "Sampling batch %d/%d", total=len(batches))
         with torch.no_grad():
-            for batch_index, batch_prompts in enumerate(
-                tqdm(batches, desc="ProGen2 Sequence Generation", unit="batch", disable=not verbose), start=1
+            for batch_prompts in StatusCounter(
+                logger,
+                "Sampling batch %d/%d",
+                tqdm(batches, desc="ProGen2 Sequence Generation", unit="batch", disable=not verbose),
+                total=len(batches),
             ):
-                counter(batch_index)
                 # Left-pad for generation
                 input_ids, attention_mask, _ = self._prepare_batch(batch_prompts, pad_left=True)
 

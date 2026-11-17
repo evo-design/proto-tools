@@ -414,11 +414,9 @@ def run_encode_search(
         user_agent=_USER_AGENT,
     )
     try:
-        counter = StatusCounter(logger, "Running query %d/%d", total=len(inputs.queries))
-        results = []
-        for index, query in enumerate(inputs.queries, start=1):
-            counter(index)
-            results.append(_search(query, config, session))
+        results = [
+            _search(query, config, session) for query in StatusCounter(logger, "Running query %d/%d", inputs.queries)
+        ]
         return EncodeSearchOutput(results=results, source_url=_SEARCH_URL)
     finally:
         session.close()
