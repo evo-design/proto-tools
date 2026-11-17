@@ -11,23 +11,65 @@ complex, with the target occupying the leading positions and the binder the trai
 returns a per-example tensor shaped ``(batch,)`` that is differentiable with respect to them.
 """
 
+from collections.abc import Callable
+
 import torch
 from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 
-#: Distogram discretization: ``DISTOGRAM_BINS`` bins evenly dividing ``[_FIRST_EDGE, _LAST_EDGE]``
-#: angstroms, matching the convention ``compute_distogram_conditioning`` encodes upstream
-#: (``prepare_input.py``: ``min_dist=2.0``, ``max_dist=22.0``, ``num_bins=64``).
-DISTOGRAM_BINS = 64
-_FIRST_EDGE = 2.0
-_LAST_EDGE = 22.0
 #: Binning clamps out-of-range distances into the end bins, so each is open-ended in practice and
-#: is given a finite stand-in edge to take a midpoint. Putting the top bin's midpoint beyond
-#: ``_LAST_EDGE`` is what keeps a contact cutoff at the range edge from selecting it, which would
-#: otherwise turn a contact objective into the plain entropy of the distogram.
+#: is given a finite stand-in edge to take a midpoint. Putting the top bin's midpoint beyond the
+#: grid's last edge is what keeps a contact cutoff at the range edge from selecting it, which
+#: would otherwise turn a contact objective into the plain entropy of the distogram.
 _BELOW_FIRST = 1.0
-_BEYOND_LAST = _LAST_EDGE + 5.0
+_OPEN_END_MARGIN = 5.0
+
+
+def _production_edges(first: float, last: float, n_bins: int, device: torch.device | None) -> torch.Tensor:
+    """Bin edges for the ESMFold2 / ESMFold2-Fast head.
+
+    ``prepare_input.py`` bins with ``linspace(min_dist, max_dist, num_bins + 1)`` and clamps
+    out-of-range distances into the end bins, so the outer two edges are open-ended.
+    """
+    edges = torch.linspace(first, last, n_bins + 1, device=device)
+    edges[0] = _BELOW_FIRST
+    edges[-1] = last + _OPEN_END_MARGIN
+    return edges
+
+
+def _experimental_edges(first: float, last: float, n_bins: int, device: torch.device | None) -> torch.Tensor:
+    """Bin edges for the ESMFold2-Experimental heads.
+
+    ``experimental.py`` bins with ``linspace(min_dist, max_dist, distogram_bins - 1)``: those are
+    the whole interior grid, and the two open-ended outer bins sit beyond them. Match a new head
+    to the convention its own checkpoint uses rather than reusing this one.
+    """
+    interior = torch.linspace(first, last, n_bins - 1, device=device)
+    outer = torch.tensor([_BELOW_FIRST], device=device, dtype=interior.dtype)
+    beyond = torch.tensor([last + _OPEN_END_MARGIN], device=device, dtype=interior.dtype)
+    return torch.cat((outer, interior, beyond))
+
+
+#: Builds the bin edges for one head: ``(first, last, n_bins, device) -> edges``.
+EdgeBuilder = Callable[[float, float, int, "torch.device | None"], torch.Tensor]
+
+#: Distogram discretizations, keyed by the bin count the head returns. Each family is written
+#: out: they differ in range and in edge convention, so one cannot be derived from the other.
+#:
+#: Score a contact term only on a head whose range reaches well past its cutoff. Where it does
+#: not, the cutoff masks almost nothing, and the term decays into the entropy of the whole
+#: distogram instead of telling "in contact" from "confidently far apart". Add a head here only
+#: with its true range; guessing one is worse than refusing to score it.
+DISTOGRAM_GRIDS: dict[int, tuple[float, float, EdgeBuilder]] = {
+    64: (2.0, 22.0, _production_edges),
+    128: (2.0, 52.0, _experimental_edges),
+}
+#: The production head, for callers scoring ESMFold2 / ESMFold2-Fast.
+DISTOGRAM_BINS = 64
+#: Interface contact distance. Keep this fixed by the objective; never tie it to the head's
+#: range, or it selects every bin and stops meaning "in contact".
+_INTERFACE_CUTOFF = 22.0
 
 #: Radius-of-gyration reference for a packed globular protein: ``_RG_COEFFICIENT * n ** _RG_EXPONENT``.
 _RG_COEFFICIENT = 2.38
@@ -39,14 +81,14 @@ _RG_DISTANCE_CLAMP = 27.0
 def bin_midpoints(n_bins: int, device: torch.device | None = None) -> torch.Tensor:
     """Distance in angstroms represented by each distogram bin.
 
-    The head divides ``[_FIRST_EDGE, _LAST_EDGE]`` into ``DISTOGRAM_BINS`` equal bins and clamps
-    anything outside into the end ones, so the two end bins are open-ended and take a stand-in
-    outer edge. Every bin is then summarized by the midpoint of its span.
+    The head divides its range into equal bins and clamps anything outside into the end ones, so
+    the two end bins are open-ended and take a stand-in outer edge. Every bin is then summarized
+    by the midpoint of its span.
 
-    ``n_bins`` is the width of the distogram actually returned, checked against the discretization
-    these objectives encode. A checkpoint with a different distogram would otherwise be scored
-    against the wrong distances, which is silent rather than loud: the quantities stay finite and
-    differentiable while meaning something else entirely.
+    ``n_bins`` is the width of the distogram actually returned, and selects the discretization
+    from :data:`DISTOGRAM_GRIDS`. A head this module does not know is rejected rather than scored
+    on a guessed grid: reading the wrong distances is silent rather than loud, since the
+    quantities stay finite and differentiable while meaning something else entirely.
 
     Args:
         n_bins (int): Bin count of the distogram being scored.
@@ -56,17 +98,18 @@ def bin_midpoints(n_bins: int, device: torch.device | None = None) -> torch.Tens
         torch.Tensor: Shape ``(n_bins,)`` of bin midpoint distances in angstroms.
 
     Raises:
-        ValueError: If ``n_bins`` is not the discretization these objectives are written for.
+        ValueError: If no known checkpoint family returns a distogram of this width.
     """
-    if n_bins != DISTOGRAM_BINS:
-        raise ValueError(
-            f"esmfold2: distogram has {n_bins} bins, but these objectives are written for "
-            f"{DISTOGRAM_BINS} over [{_FIRST_EDGE}, {_LAST_EDGE}] angstroms. Scoring it would "
-            "silently read the wrong distances."
+    if n_bins not in DISTOGRAM_GRIDS:
+        known = ", ".join(
+            f"{bins} over [{first}, {last}]" for bins, (first, last, _) in sorted(DISTOGRAM_GRIDS.items())
         )
-    edges = torch.linspace(_FIRST_EDGE, _LAST_EDGE, n_bins + 1, device=device)
-    edges[0] = _BELOW_FIRST
-    edges[-1] = _BEYOND_LAST
+        raise ValueError(
+            f"esmfold2: distogram has {n_bins} bins, but these objectives are written for {known} "
+            "angstroms. Scoring it would silently read the wrong distances."
+        )
+    first, last, build_edges = DISTOGRAM_GRIDS[n_bins]
+    edges = build_edges(first, last, n_bins, device)
     return (edges[:-1] + edges[1:]) / 2
 
 
@@ -86,9 +129,12 @@ def contact_entropy(distogram_logits: torch.Tensor, midpoints: torch.Tensor, cut
     Returns:
         torch.Tensor: Per-pair scores, shape ``(batch, length, length)``.
     """
+    # Entropy over 128 bins needs more mantissa than a bfloat16 head carries, so score at no less
+    # than float32. Promote rather than cast: a caller working in float64 keeps its precision.
+    logits = distogram_logits.to(torch.promote_types(distogram_logits.dtype, torch.float32))
     in_contact = midpoints < cutoff
-    contact_probabilities = torch.softmax(distogram_logits.masked_fill(~in_contact, -torch.inf), dim=-1)
-    log_probabilities = torch.log_softmax(distogram_logits, dim=-1)
+    contact_probabilities = torch.softmax(logits.masked_fill(~in_contact, -torch.inf), dim=-1)
+    log_probabilities = torch.log_softmax(logits, dim=-1)
     return -(contact_probabilities * log_probabilities).sum(-1)
 
 
@@ -314,6 +360,45 @@ def epitope_loss(
 
 #: Fraction of scored positions masked in each pseudo-perplexity pass.
 MASK_FRACTION = 0.15
+
+
+def distogram_iptm_proxy(
+    distogram_logits: torch.Tensor,
+    target_span: tuple[int, int],
+    binder_span: tuple[int, int],
+    midpoints: torch.Tensor,
+    cutoff: float = _INTERFACE_CUTOFF,
+) -> torch.Tensor:
+    """Interface confidence read off the distogram alone, in ``[0, 1]`` (higher is more confident).
+
+    For every binder-target pair the distance distribution is
+    restricted to the bins nearer than ``cutoff`` and renormalized; its Shannon entropy says how
+    sharply the model places that pair in contact. The ``binder_length`` sharpest pairs are
+    averaged and mapped to ``1 - mean_entropy / ln(n)``, where ``n`` is the number of bins under
+    the cutoff (the largest entropy a pair can have), clipped to ``[0, 1]``. Read it only on a
+    head whose range extends well past the cutoff, for the reason given on
+    :data:`DISTOGRAM_GRIDS`. Scored, never differentiated.
+
+    Args:
+        distogram_logits (torch.Tensor): Shape ``(batch, length, length, bins)``.
+        target_span (tuple[int, int]): ``[start, stop)`` rows of the target chain.
+        binder_span (tuple[int, int]): ``[start, stop)`` rows of the binder chain.
+        midpoints (torch.Tensor): Bin midpoint distances, shape ``(bins,)``.
+        cutoff (float): Distance in angstroms bounding the bins read.
+
+    Returns:
+        torch.Tensor: Per-example scores, shape ``(batch,)``.
+    """
+    in_contact = midpoints < cutoff
+    rows = distogram_logits[:, binder_span[0] : binder_span[1], target_span[0] : target_span[1], :]
+    probabilities = torch.softmax(rows.float(), dim=-1)[..., in_contact]
+    probabilities = probabilities / (probabilities.sum(-1, keepdim=True) + 1e-8)
+    entropy = -(probabilities * torch.log(probabilities + 1e-10)).sum(-1)
+    flat = entropy.reshape(entropy.shape[0], -1)
+    count = min(binder_span[1] - binder_span[0], flat.shape[1])
+    sharpest = torch.sort(flat, dim=-1).values[:, :count].mean(-1)
+    maximum = torch.log(torch.tensor(float(int(in_contact.sum())), device=flat.device))
+    return (1.0 - sharpest / maximum).clamp(0.0, 1.0)
 
 
 def straight_through(relaxed: torch.Tensor) -> torch.Tensor:

@@ -136,12 +136,28 @@ class ESMFold2EpitopeTerm(ESMFold2InversionTerm):
     )
 
 
+#: Checkpoints the inversion tools can fold with. Prefer an experimental head for contact and
+#: interface terms: its distogram reaches 52 angstroms rather than 22, so a contact cutoff still
+#: masks most of the range.
+ESMFold2Checkpoint = Literal[
+    "esmfold2",
+    "esmfold2-fast",
+    "esmfold2-experimental",
+    "esmfold2-experimental-fast",
+    "esmfold2-experimental-cutoff2025",
+    "esmfold2-experimental-fast-cutoff2025",
+]
+
+
 class ESMFold2InversionConfigBase(GradientConfig):
     """Settings shared by both ESMFold2 inversion gradient tools.
 
     Attributes:
-        model_checkpoint (Literal["esmfold2", "esmfold2-fast"]): Which ESMFold2 variant to
-            fold with. Shared with the prediction tool, so one loaded checkpoint serves both.
+        model_checkpoint (ESMFold2Checkpoint): Which ESMFold2 variant to fold with. The production
+            heads are shared with the prediction tool, so one loaded checkpoint serves both; the
+            experimental ones are reachable only from here.
+        lm_dropout (float): Pair-representation dropout held on during inference; experimental
+            checkpoints only.
         plm_passes (int): Independent mask draws averaged by the pseudo-perplexity term.
         plm_batch_size (int): Masked sequences per language-model forward pass.
         compute_gradient (bool): Run the backward passes; ``False`` returns values only.
@@ -151,10 +167,18 @@ class ESMFold2InversionConfigBase(GradientConfig):
         device (str): Inherited device to run the model on.
     """
 
-    model_checkpoint: Literal["esmfold2", "esmfold2-fast"] = ConfigField(
+    model_checkpoint: ESMFold2Checkpoint = ConfigField(
         title="Model Checkpoint",
         default="esmfold2-fast",
-        description="'esmfold2' is the larger MSA-capable variant; 'esmfold2-fast' is single-sequence and faster.",
+        description="ESMFold2 variant; 'experimental' heads reach 52 angstroms, suiting contact objectives.",
+        reload_on_change=True,
+    )
+    lm_dropout: float = ConfigField(
+        title="Pair Representation Dropout",
+        default=0.0,
+        ge=0.0,
+        lt=1.0,
+        description="Inference-time dropout on the pair representation; experimental checkpoints only.",
         reload_on_change=True,
     )
     plm_passes: int = ConfigField(
