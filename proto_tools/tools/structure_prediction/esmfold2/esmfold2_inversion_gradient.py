@@ -339,7 +339,8 @@ class ESMFold2InversionGradientConfig(ESMFold2InversionConfigBase):
     Attributes:
         gradient_terms (list[ESMFold2ChainTermType]): Per-chain quantities to differentiate,
             given as catalog names or as instances naming a ``chain_id``.
-        model_checkpoint (Literal["esmfold2", "esmfold2-fast"]): Inherited ESMFold2 variant.
+        model_checkpoint (ESMFold2Checkpoint): Inherited ESMFold2 variant.
+        lm_dropout (float): Inherited pair-representation dropout; experimental checkpoints only.
         plm_passes (int): Inherited mask draws for the pseudo-perplexity term.
         plm_batch_size (int): Inherited masked sequences per language-model pass.
         compute_gradient (bool): Inherited; ``False`` returns values only.
@@ -483,6 +484,7 @@ def run_esmfold2_inversion_gradient(
                 "hard": config.hard,
                 "compute_gradient": config.compute_gradient,
                 "model_checkpoint": config.model_checkpoint,
+                "lm_dropout": config.lm_dropout,
                 "plm_passes": config.plm_passes,
                 "plm_batch_size": config.plm_batch_size,
                 "seed": config.seed,

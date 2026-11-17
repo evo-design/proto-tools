@@ -195,7 +195,7 @@ def test_binder_tool_rejects_a_chain_selection_that_is_not_the_binder() -> None:
 def test_bin_midpoints_span_the_distogram() -> None:
     """The outer bins are open-ended, so their midpoints sit beyond the interior boundaries."""
     torch = pytest.importorskip("torch")
-    midpoints = _objective().bin_midpoints()
+    midpoints = _objective().bin_midpoints(128)
     assert midpoints.shape == (128,)
     assert midpoints[0] < 2.0 < midpoints[1]
     assert torch.all(midpoints.diff() > 0), "midpoints must increase with distance"
@@ -213,7 +213,7 @@ def test_intra_contact_ignores_contacts_across_a_chain_boundary() -> None:
     """A residue must not satisfy its own chain's objective by touching a neighbouring chain."""
     torch = pytest.importorskip("torch")
     objective = _objective()
-    midpoints = objective.bin_midpoints().double()
+    midpoints = objective.bin_midpoints(128).double()
     torch.manual_seed(0)
     logits = torch.randn(1, 44, 44, 128, dtype=torch.float64)
     span = (20, 44)
@@ -232,7 +232,7 @@ def test_globularity_reads_only_its_own_chain() -> None:
     """Compactness of one chain cannot be improved by rearranging another."""
     torch = pytest.importorskip("torch")
     objective = _objective()
-    midpoints = objective.bin_midpoints().double()
+    midpoints = objective.bin_midpoints(128).double()
     torch.manual_seed(1)
     logits = torch.randn(1, 44, 44, 128, dtype=torch.float64)
     span = (20, 44)
@@ -247,7 +247,7 @@ def test_globularity_differs_between_chains_of_the_same_complex() -> None:
     """Each chain gets its own radius of gyration, not the complex's."""
     torch = pytest.importorskip("torch")
     objective = _objective()
-    midpoints = objective.bin_midpoints().double()
+    midpoints = objective.bin_midpoints(128).double()
     torch.manual_seed(2)
     logits = torch.randn(1, 44, 44, 128, dtype=torch.float64)
     first = objective.globularity_loss(logits, (0, 20), midpoints).item()
@@ -268,7 +268,7 @@ def test_chain_objective_gradient_matches_a_finite_difference(quantity: str) -> 
     span = (16, 40)
     torch.manual_seed(0)
     logits = torch.randn(1, 40, 40, 128, dtype=torch.float64, requires_grad=True)
-    midpoints = objective.bin_midpoints().double()
+    midpoints = objective.bin_midpoints(128).double()
 
     getattr(objective, quantity)(logits, span, midpoints).sum().backward()
     index = (0, 20, 27, 11)
@@ -292,7 +292,7 @@ def test_a_descent_step_lowers_each_chain_objective() -> None:
     for quantity in ("intra_contact_loss", "globularity_loss"):
         torch.manual_seed(1)
         logits = torch.randn(1, 40, 40, 128, dtype=torch.float64, requires_grad=True)
-        midpoints = objective.bin_midpoints().double()
+        midpoints = objective.bin_midpoints(128).double()
         before = getattr(objective, quantity)(logits, span, midpoints)
         before.sum().backward()
         after = getattr(objective, quantity)(logits.detach() - 0.1 * logits.grad, span, midpoints)
@@ -303,7 +303,7 @@ def test_inter_contact_stays_asymmetric() -> None:
     """Swapping the two spans must change the value; it scores the target, not the binder."""
     torch = pytest.importorskip("torch")
     objective = _objective()
-    midpoints = objective.bin_midpoints().double()
+    midpoints = objective.bin_midpoints(128).double()
     torch.manual_seed(3)
     logits = torch.randn(1, 44, 44, 128, dtype=torch.float64)
     forward = objective.inter_contact_loss(logits, (0, 20), (20, 44), midpoints).item()
@@ -320,7 +320,7 @@ def test_intra_contact_is_inert_when_no_pair_clears_the_separation_floor() -> No
     objective = _objective()
     torch.manual_seed(4)
     logits = torch.randn(1, 20, 20, 128, dtype=torch.float64)
-    midpoints = objective.bin_midpoints().double()
+    midpoints = objective.bin_midpoints(128).double()
     assert objective.intra_contact_loss(logits, (12, 20), midpoints).item() == 0.0
     assert objective.intra_contact_loss(logits, (0, 20), midpoints).item() != 0.0
 
@@ -748,3 +748,113 @@ def test_each_designable_chain_is_differentiated_independently() -> None:
     composed = output.results[0].compose()
     assert composed.objective_loss == pytest.approx(3.0)
     assert len(composed.gradient) == rows
+
+
+def test_distogram_iptm_proxy_spans_zero_to_one_and_reads_only_the_interface_block() -> None:
+    """Certain of one close bin scores 1 and a uniform distribution 0, both from binder rows only."""
+    torch = pytest.importorskip("torch")
+    objective = _objective()
+    bins = objective.DISTOGRAM_BINS
+    midpoints = objective.bin_midpoints(bins).double()
+    target, binder = (0, 12), (12, 20)
+    sharp = torch.full((1, 20, 20, bins), -50.0, dtype=torch.float64)
+    sharp[..., 5] = 50.0
+    flat = torch.zeros((1, 20, 20, bins), dtype=torch.float64)
+    assert objective.distogram_iptm_proxy(sharp, target, binder, midpoints).item() == pytest.approx(1.0, abs=1e-6)
+    assert objective.distogram_iptm_proxy(flat, target, binder, midpoints).item() == pytest.approx(0.0, abs=1e-6)
+
+    torch.manual_seed(5)
+    logits = torch.randn(1, 20, 20, bins, dtype=torch.float64)
+    base = objective.distogram_iptm_proxy(logits, target, binder, midpoints).item()
+    edited = logits.clone()
+    edited[:, :12, :12, :] = 0.0  # target-target
+    edited[:, 12:, 12:, :] = 0.0  # binder-binder
+    edited[:, :12, 12:, :] = 0.0  # target rows against binder columns, the other direction
+    assert objective.distogram_iptm_proxy(edited, target, binder, midpoints).item() == pytest.approx(base)
+
+
+def test_binder_tool_reports_the_distogram_iptm_proxy_when_the_worker_returns_it() -> None:
+    """The proxy travels from the worker's metrics into the result's metrics."""
+    with patch(_BINDER_DISPATCH) as dispatch:
+        dispatch.return_value = {
+            "terms": [
+                {"id": "inter_contact", "chain_id": "binder", "value": 2.5, "gradient": None},
+            ],
+            "chain_rows": {"binder": [0, len(BINDER)]},
+            "metrics": {"distogram_iptm_proxy": 0.42},
+        }
+        output = run_esmfold2_inversion_binder_gradient(
+            ESMFold2BinderGradientInput(inputs=_binder(), temperature=1.0),
+            ESMFold2BinderGradientConfig(gradient_terms=["inter_contact"], compute_gradient=False),
+        )
+    assert output.results[0].metrics["distogram_iptm_proxy"] == pytest.approx(0.42)
+
+
+def _inference() -> Any:
+    """Load the worker inference module, stubbing the helpers it expects from the tool env."""
+    pytest.importorskip("torch")
+    sys.modules.setdefault(
+        "standalone_helpers",
+        types.SimpleNamespace(
+            get_logger=logging.getLogger,
+            get_random_int=lambda *a, **k: 0,
+            is_cuda_oom=lambda *a, **k: False,
+            release_cuda_memory=lambda *a, **k: None,
+            report_msa_rows_loaded=lambda *a, **k: None,
+            serialize_output=lambda value: value,
+            set_torch_seed=lambda *a, **k: None,
+        ),
+    )
+    sys.modules.setdefault("objective", _objective())
+    path = _OBJECTIVE_PATH.parent / "inference.py"
+    spec = importlib.util.spec_from_file_location("esmfold2_inference", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_each_checkpoint_family_gets_its_own_distance_grid() -> None:
+    """Range, edge convention and what a contact cutoff leaves unmasked, per head."""
+    objective = _objective()
+    production, experimental = objective.bin_midpoints(64), objective.bin_midpoints(128)
+    # Production: linspace(2, 22, 65) with both ends opened out. Experimental: 127 interior
+    # boundaries over [2, 52], plus the two open-ended outer bins.
+    assert (float(production[0]), float(production[-1])) == pytest.approx((1.65625, 24.34375))
+    assert (float(experimental[0]), float(experimental[-1])) == pytest.approx((1.5, 54.5))
+    # The 22 A cutoff leaves the production head nothing to discriminate with; the 14 A one is
+    # closer, but still masks far less than on the experimental head.
+    assert (int((production < 22.0).sum()), int((experimental < 22.0).sum())) == (63, 51)
+    assert (int((production < 14.0).sum()), int((experimental < 14.0).sum())) == (38, 31)
+    with pytest.raises(ValueError, match="silently read the wrong distances"):
+        objective.bin_midpoints(100)
+    # A bfloat16 head is still scored at float32: bfloat16 carries 7 mantissa bits, so storing
+    # the grid in it would quantize the angstrom values the cutoffs compare against.
+    torch = pytest.importorskip("torch")
+    assert production.dtype == torch.float32
+    distogram = torch.zeros(1, 8, 8, 128, dtype=torch.bfloat16)
+    assert objective.intra_contact_loss(distogram, (4, 8), experimental).dtype == torch.float32
+
+
+def test_the_production_grid_is_unchanged_by_the_grid_table() -> None:
+    """Existing inversion users must get exactly the distances they got before."""
+    torch = pytest.importorskip("torch")
+    objective = _objective()
+    edges = torch.linspace(2.0, 22.0, 65)
+    edges[0], edges[-1] = 1.0, 27.0
+    assert torch.equal(((edges[:-1] + edges[1:]) / 2).double(), objective.bin_midpoints(64).double())
+
+
+def test_lm_dropout_applies_only_to_the_experimental_checkpoints() -> None:
+    """Dropout is an experimental-head setting, and is baked in at load."""
+    inference = _inference()
+    assert len(inference.EXPERIMENTAL_CHECKPOINTS) == 4
+    assert all(
+        inference._CHECKPOINT_REPOS[k].startswith("biohub/ESMFold2-Experimental")
+        for k in inference.EXPERIMENTAL_CHECKPOINTS
+    )
+    with pytest.raises(ValueError, match="lm_dropout is only configurable"):
+        inference.ESMFold2Model(model_checkpoint="esmfold2-fast", lm_dropout=0.5)
+    # A different dropout must not reuse the cached model, since it cannot be changed after load.
+    first = inference._wrapper("esmfold2-experimental-fast", 0.0)
+    assert inference._wrapper("esmfold2-experimental-fast", 0.5) is not first

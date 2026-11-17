@@ -179,6 +179,8 @@ class ESMFold2BinderGradientMetrics(Metrics):
     Metrics documented in ``metric_spec``:
         binder_length (int): Residues in the designed binder chain.
         target_length (int): Residues in the fixed target chain.
+        distogram_iptm_proxy (float): Interface confidence read off the distogram, in ``[0, 1]``;
+            present whenever the complex was folded.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
@@ -197,6 +199,15 @@ class ESMFold2BinderGradientMetrics(Metrics):
             "max": None,
             "description": "Residues in the fixed target chain.",
             "better_values_are": "context-dependent",
+        },
+        "distogram_iptm_proxy": {
+            "availability": "when a structure term is requested",
+            "type": "float",
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Interface confidence from the binder-target distogram (1 - mean entropy of the sharpest "
+            "pairs under 22 A, over its maximum); absent when only plm_nll was requested.",
+            "better_values_are": "higher",
         },
     }
 
@@ -252,7 +263,8 @@ class ESMFold2BinderGradientConfig(ESMFold2InversionConfigBase):
         gradient_terms (list[ESMFold2BinderTermType]): Quantities to differentiate, given as
             catalog names or as instances. The three single-chain quantities apply to the binder.
         epitope_contact_distance (float): Distance in angstroms defining a hotspot contact.
-        model_checkpoint (Literal["esmfold2", "esmfold2-fast"]): Inherited ESMFold2 variant.
+        model_checkpoint (ESMFold2Checkpoint): Inherited ESMFold2 variant.
+        lm_dropout (float): Inherited pair-representation dropout; experimental checkpoints only.
         plm_passes (int): Inherited mask draws for the pseudo-perplexity term.
         plm_batch_size (int): Inherited masked sequences per language-model pass.
         compute_gradient (bool): Inherited; ``False`` returns values only.
@@ -405,6 +417,7 @@ def run_esmfold2_inversion_binder_gradient(
                 "hard": config.hard,
                 "compute_gradient": config.compute_gradient,
                 "model_checkpoint": config.model_checkpoint,
+                "lm_dropout": config.lm_dropout,
                 "plm_passes": config.plm_passes,
                 "plm_batch_size": config.plm_batch_size,
                 "seed": config.seed,
@@ -432,6 +445,11 @@ def run_esmfold2_inversion_binder_gradient(
                 metrics={
                     "binder_length": len(candidate.logits.root),
                     "target_length": len(candidate.target_sequence),
+                    **(
+                        {"distogram_iptm_proxy": reply["metrics"]["distogram_iptm_proxy"]}
+                        if "distogram_iptm_proxy" in (reply.get("metrics") or {})
+                        else {}
+                    ),
                 },
             )
         )

@@ -31,6 +31,7 @@ from proto_tools.tools.structure_prediction.esmfold2.esmfold2_inversion_gradient
     run_esmfold2_inversion_gradient,
 )
 from proto_tools.tools.structure_prediction.esmfold2.inversion_terms import (
+    ESMFold2Checkpoint,
     ESMFold2EpitopeTerm,
     ESMFold2GlobularityTerm,
     ESMFold2InterContactTerm,
@@ -52,6 +53,7 @@ __all__ = [
     "ESMFold2ChainTermGradient",
     "ESMFold2ComplexCandidate",
     "ESMFold2Config",
+    "ESMFold2Checkpoint",
     "ESMFold2EpitopeTerm",
     "ESMFold2GlobularityTerm",
     "ESMFold2Input",
