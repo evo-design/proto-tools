@@ -306,8 +306,6 @@ class ESMCModel:
         """Load ESM C model and tokenizer to device."""
         from esm.models.esmc import ESMC
 
-        if verbose:
-            logger.info(f"Loading ESM C model: {self.model_checkpoint} on {device}")
         logger.update_status("Loading ESM C weights")
 
         try:

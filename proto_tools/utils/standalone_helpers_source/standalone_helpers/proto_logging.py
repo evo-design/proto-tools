@@ -80,18 +80,24 @@ class ProtoLogger(logging.Logger):
             stacklevel=stacklevel,
         )
 
-    def update_status(self, msg: object, *args: Any) -> None:
-        """Emit a status record that updates the spinner subtitle and is captured by file handlers but never shown on console.
+    def update_status(self, msg: object, *args: Any, level: int = logging.INFO) -> None:
+        """Update the status line (the spinner subtitle, or a hosted run's subtitle) and log it at ``level``.
 
-        Use this for phase-transition messages inside long-running tools
-        ("Loading weights", "Moving to GPU", "Folding 1 complex"). The console
-        StreamHandler installs a Filter that drops these records, so they never
-        clutter terminal output regardless of verbose level. File handlers
-        (configured via ``setup_logging(log_to_file=True)``) still capture
-        them as a complete audit trail.
+        Use this for phase messages inside long-running tools ("Loading ESMFold weights",
+        "Folding structure 3/8"); it is itself a log record, so don't pair it with an ``info`` that
+        says the same thing. The status always updates, whatever this logger's level: ``level``
+        only decides where the record is logged. File handlers keep it at that level, and a
+        console handler shows it only when no progress bar is up to display it and its level
+        admits it. Pass ``logging.DEBUG`` for routine steps, keeping the default ``INFO`` for
+        phases worth a line in the log (loading weights, downloads, remote jobs).
+
+        Args:
+            msg (object): Message, %-formatted with ``args``.
+            *args (Any): Arguments for ``msg``.
+            level (int): Level the record is logged at.
         """
-        if self.isEnabledFor(logging.INFO):
-            self._log(logging.INFO, msg, args, update_status=True)
+        # Not gated on isEnabledFor: a DEBUG status still has to reach the status line.
+        self._log(level, msg, args, update_status=True)
 
 
 # Seconds between the per-item statuses a StatusCounter reports, so a fast loop reads at human pace.
@@ -112,7 +118,12 @@ class StatusCounter:
     """
 
     def __init__(
-        self, logger: logging.Logger, template: str, total: int, interval: float = STATUS_INTERVAL_SECONDS
+        self,
+        logger: logging.Logger,
+        template: str,
+        total: int,
+        interval: float = STATUS_INTERVAL_SECONDS,
+        level: int = logging.DEBUG,
     ) -> None:
         """Create a counter.
 
@@ -122,11 +133,14 @@ class StatusCounter:
                 ``"Folding structure %d/%d"``.
             total (int): How many items there are.
             interval (float): Minimum seconds between reports, except the last.
+            level (int): Level each report is logged at. DEBUG by default: a count is routine
+                progress, and the status line shows it whatever the level.
         """
         self._logger = logger
         self._template = template
         self._total = total
         self._interval = interval
+        self._level = level
         self._last: float | None = None
 
     def __call__(self, number: int) -> None:
@@ -135,7 +149,7 @@ class StatusCounter:
         if number < self._total and self._last is not None and now - self._last < self._interval:
             return
         self._last = now
-        self._logger.update_status(self._template, number, self._total)  # type: ignore[attr-defined]
+        self._logger.update_status(self._template, number, self._total, level=self._level)  # type: ignore[attr-defined]
 
 
 class _BridgeHandler(logging.Handler):

@@ -67,8 +67,6 @@ class IgLMModel:
 
     def load(self, device: str, verbose: bool = False) -> None:
         """Load IgLM weights and tokenizer from the installed package to device."""
-        if verbose:
-            logger.info(f"Loading IgLM model: {self.model_checkpoint} on {device}")
         logger.update_status("Loading IgLM weights")
 
         import transformers

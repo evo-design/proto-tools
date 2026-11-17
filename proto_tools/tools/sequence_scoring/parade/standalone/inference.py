@@ -1,6 +1,7 @@
 """PARADE standalone inference implementation for venv execution."""
 
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -170,7 +171,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     batch_size = max(1, int(input_dict.get("batch_size", 1)))
     count = len(input_dict["sequences"])
-    logger.update_status(f"Scoring {count} sequence{'s' if count != 1 else ''}")
+    logger.update_status(f"Scoring {count} sequence{'s' if count != 1 else ''}", level=logging.DEBUG)
     if operation == "activity":
         return {
             "scores": _model.score_activity(

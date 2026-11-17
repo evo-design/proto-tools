@@ -109,7 +109,7 @@ class CodonFMModel:
         self.device: str | None = None
         self.checkpoint_key: str | None = None
 
-    def load(self, *, checkpoint_path: str, device: str, verbose: bool = False) -> None:
+    def load(self, *, checkpoint_path: str, device: str) -> None:
         """Load an Encodon checkpoint (once per checkpoint) and move it to the device."""
         from src.inference.encodon import EncodonInference
         from src.inference.task_types import TaskTypes
@@ -117,8 +117,6 @@ class CodonFMModel:
         if self.inference is not None and self.checkpoint_key == checkpoint_path:
             self.to_device(device)
             return
-        if verbose:
-            logger.info("Loading CodonFM checkpoint from %s", checkpoint_path)
         logger.update_status("Loading CodonFM weights")
         inference = EncodonInference(model_path=checkpoint_path, task_type=TaskTypes.FITNESS_PREDICTION.value)
         inference.configure_model()  # builds on CPU (LightningModule default device)
@@ -579,7 +577,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     _validate_request(input_dict, operation)
     set_torch_seed(input_dict.get("seed"))
 
-    _MODEL.load(checkpoint_path=_resolve_checkpoint(input_dict), device=device, verbose=verbose)
+    _MODEL.load(checkpoint_path=_resolve_checkpoint(input_dict), device=device)
 
     if operation == "fitness":
         return {

@@ -642,8 +642,6 @@ class FAMPNNModel:
                 f"set PROTO_FAMPNN_WEIGHTS_DIR or run setup.sh"
             )
 
-        if verbose:
-            logger.info(f"Loading FAMPNN model ({model_variant}) from {checkpoint_path}")
         logger.update_status("Loading FAMPNN weights")
 
         torch_device = torch.device(device)

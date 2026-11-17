@@ -352,8 +352,6 @@ class LigandMPNNModel:
             model_type: LigandMPNN variant (currently only 'ligand_mpnn'
                 is wired through the tool layer).
         """
-        if verbose:
-            logger.info(f"Loading LigandMPNN model_type={model_type} on {device}")
         logger.update_status("Loading LigandMPNN weights")
 
         # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights

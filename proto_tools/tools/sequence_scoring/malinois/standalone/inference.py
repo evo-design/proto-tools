@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -193,7 +194,9 @@ class MalinoisModel:
             raise ValueError("malinois: model is not loaded")
         self.to_device(device)
 
-        logger.update_status(f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}")
+        logger.update_status(
+            f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+        )
         seq_tensor = torch.stack([malinois_scoring.dna2tensor(sequence) for sequence in sequences], dim=0)
         dataset = torch.utils.data.TensorDataset(seq_tensor)
         loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size)

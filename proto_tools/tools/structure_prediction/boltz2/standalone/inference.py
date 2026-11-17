@@ -60,7 +60,6 @@ def _install_checkpoint_cache() -> None:
         key = str(checkpoint)
         model = _checkpoint_cache.get(key)
         if model is None:
-            logger.debug("boltz2: checkpoint cache miss, loading %s", checkpoint)
             # boltz loads the structure checkpoint before folding and the affinity one before scoring.
             is_affinity = "aff" in Path(checkpoint).stem
             logger.update_status(f"Loading Boltz-2 {'affinity' if is_affinity else 'structure'} weights")

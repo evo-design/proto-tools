@@ -257,8 +257,6 @@ class Evo1Model:
 
     def load(self, device: str = "cuda", verbose: bool = False) -> Any:
         """Load Evo1 model and tokenizer."""
-        if verbose:
-            logger.info(f"Loading Evo1: {self.model_name} on {device}")
         logger.update_status("Loading Evo1 weights")
 
         # evo's load_checkpoint() calls snapshot_download() with no filter, pulling ~40 GB of

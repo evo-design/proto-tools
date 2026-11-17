@@ -1,6 +1,7 @@
 """Borzoi standalone inference implementation for venv execution."""
 
 import json
+import logging
 import sys
 from typing import Any, cast
 
@@ -338,7 +339,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         predictions = []
         chunks = [sequences[start : start + batch_size] for start in range(0, len(sequences), batch_size)]
         if len(chunks) == 1:
-            logger.update_status(f"Predicting {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}")
+            logger.update_status(
+                f"Predicting {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+            )
         counter = StatusCounter(logger, "Predicting batch %d/%d", total=len(chunks))
         for number, chunk in enumerate(chunks, start=1):
             if len(chunks) > 1:

@@ -52,7 +52,6 @@ class PangolinModel:
         import torch
         from pangolin.model import AR, L, Pangolin, W
 
-        logger.debug("Loading Pangolin ensembles for tissues=%s on %s", tissues, device)
         logger.update_status("Loading Pangolin weights")
 
         models_dir = self._models_dir()

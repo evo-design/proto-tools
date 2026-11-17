@@ -82,6 +82,21 @@ def test_a_bad_format_string_costs_one_line_not_the_batch():
     assert [record["m"] for record in handler.drain()] == ["expects %d args", "fine"]
 
 
+def test_a_status_below_the_capture_level_still_reaches_the_caller():
+    """A DEBUG status is still the caller's status line; only plain DEBUG records stay behind."""
+    handler = QueueProgressHandler(level=logging.INFO)
+    logger = logging.getLogger("proto_tools.t.capture_level")
+    logger.addHandler(handler)
+    try:
+        # Through the logger, so the handler's own level check applies as it does in a container.
+        logger.handle(_record("Scoring batch %d/%d", (1, 4), level=logging.DEBUG, update_status=True))
+        logger.handle(_record("debug detail", level=logging.DEBUG))
+    finally:
+        logger.removeHandler(handler)
+
+    assert [(record["m"], record["l"]) for record in handler.drain()] == [("Scoring batch 1/4", logging.DEBUG)]
+
+
 def test_the_buffer_drops_the_oldest_rather_than_blocking():
     """Backpressure on a full buffer would push the queue's latency onto the tool."""
     handler = QueueProgressHandler(maxlen=3)

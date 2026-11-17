@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv as _csv
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -160,7 +161,7 @@ class GerminalRunner:
         env = {**os.environ, **get_subprocess_device_env(input_dict.get("device", "cuda"))}
 
         logger.debug("Spawning Germinal subprocess: %s", " ".join(cmd))
-        logger.update_status("Designing antibodies")
+        logger.update_status("Designing antibodies", level=logging.DEBUG)
         repo_cwd = str(self.germinal_repo)
         verbose = input_dict.get("verbose", False)
         try:

@@ -234,7 +234,8 @@ def test_status_counter_reports_the_first_then_throttles_and_always_the_last(mon
     sent: list[str] = []
 
     class _Logger:
-        def update_status(self, template: str, *args: object) -> None:
+        def update_status(self, template: str, *args: object, level: int) -> None:
+            assert level == logging.DEBUG, "a count is routine progress, logged at DEBUG by default"
             sent.append(template % args)
 
     clock = iter([0.0, 1.0, 2.0, 6.0, 7.0, 8.0])
@@ -253,3 +254,23 @@ def test_get_logger_can_send_a_status_before_the_bridge_is_installed():
 
     assert isinstance(logger, ProtoLogger)
     assert logging.getLoggerClass() is logging.Logger
+
+
+def test_a_debug_status_is_still_emitted_from_a_logger_at_info():
+    """The status line needs the record whatever the logger's level; its level is how it is logged."""
+    records: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    # The standalone class itself: in this process get_logger would hand back proto-tools' own ProtoLogger.
+    logger = ProtoLogger("worker.test_debug_status", level=logging.INFO)
+    logger.addHandler(_Capture())
+
+    logger.update_status("Scoring batch %d/%d", 1, 4, level=logging.DEBUG)
+    logger.debug("debug detail")
+
+    assert [(r.levelno, r.getMessage(), getattr(r, "update_status", False)) for r in records] == [
+        (logging.DEBUG, "Scoring batch 1/4", True)
+    ]

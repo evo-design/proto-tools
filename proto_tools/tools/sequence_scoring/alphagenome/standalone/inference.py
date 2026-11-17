@@ -2,6 +2,7 @@
 
 import dataclasses
 import json
+import logging
 import os
 import shutil
 import sys
@@ -218,7 +219,7 @@ class AlphaGenomeModel:
         parsed = [_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]) for i in intervals]
         self._ensure_loaded(device)
 
-        logger.update_status(f"Predicting {_count(len(parsed), 'interval')}")
+        logger.update_status(f"Predicting {_count(len(parsed), 'interval')}", level=logging.DEBUG)
         predictions = self.model.predict_intervals(
             intervals=parsed,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
@@ -252,7 +253,7 @@ class AlphaGenomeModel:
         ]
         self._ensure_loaded(device)
 
-        logger.update_status(f"Predicting {_count(len(parsed_variants), 'variant effect')}")
+        logger.update_status(f"Predicting {_count(len(parsed_variants), 'variant effect')}", level=logging.DEBUG)
         predictions = self.model.predict_variants(
             intervals=parsed_intervals,
             variants=parsed_variants,
@@ -276,7 +277,7 @@ class AlphaGenomeModel:
             _validate_sequence_length(len(seq), operation="predict_sequences")
         self._ensure_loaded(device)
 
-        logger.update_status(f"Predicting {_count(len(sequences), 'sequence')}")
+        logger.update_status(f"Predicting {_count(len(sequences), 'sequence')}", level=logging.DEBUG)
         predictions = self.model.predict_sequences(
             sequences=sequences,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
@@ -311,7 +312,7 @@ class AlphaGenomeModel:
             )
         self._ensure_loaded(device)
 
-        logger.update_status(f"Scoring {_count(len(parsed_variants), 'variant')}")
+        logger.update_status(f"Scoring {_count(len(parsed_variants), 'variant')}", level=logging.DEBUG)
         scores_per_variant = self.model.score_variants(
             intervals=parsed_intervals,
             variants=parsed_variants,
@@ -336,7 +337,7 @@ class AlphaGenomeModel:
             parsed.append(_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]))
         self._ensure_loaded(device)
 
-        logger.update_status(f"Scoring {_count(len(parsed), 'interval')}")
+        logger.update_status(f"Scoring {_count(len(parsed), 'interval')}", level=logging.DEBUG)
         scores_per_interval = self.model.score_intervals(
             intervals=parsed,
             interval_scorers=_resolve_interval_scorers(interval_scorers),

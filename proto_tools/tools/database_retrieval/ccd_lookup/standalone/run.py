@@ -93,7 +93,6 @@ def _read_bundle(components_path: str) -> Any:
     if doc is None:
         import gemmi
 
-        logger.info("Reading CCD bundle %s ...", components_path)
         logger.update_status("Reading CCD bundle")
         doc = gemmi.cif.read(components_path)
         _GEMMI_DOCS[components_path] = doc

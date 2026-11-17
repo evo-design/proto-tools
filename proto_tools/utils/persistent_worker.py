@@ -169,8 +169,11 @@ def _reemit_tagged_line(
     level_attr = getattr(logging, level_name, None)
     level = level_attr if isinstance(level_attr, int) else logging.INFO
     msg: str = payload.get("msg", "")
-    update_status = bool(payload.get("update_status", False))
-    target.log(level, "%s", msg, extra={"update_status": update_status})
+    if payload.get("update_status", False) and hasattr(target, "update_status"):
+        # A status reaches the spinner at any level; its level only decides which handlers log it.
+        target.update_status("%s", msg, level=level)
+    else:
+        target.log(level, "%s", msg, extra={"update_status": bool(payload.get("update_status", False))})
 
 
 def _drain_subprocess_stderr(

@@ -4,6 +4,7 @@ import csv
 import fcntl
 import hashlib
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -253,7 +254,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             str(max_bulges),
             str(input_dict["max_total_edits"] if input_dict["max_total_edits"] is not None else -1),
         ]
-        logger.update_status(f"Searching off-targets for {len(guides)} guide{'s' if len(guides) != 1 else ''}")
+        logger.update_status(
+            f"Searching off-targets for {len(guides)} guide{'s' if len(guides) != 1 else ''}", level=logging.DEBUG
+        )
         _run(command, work)
         hits = _parse_hits(result_prefix.with_suffix(".targets.txt"), pam_length, pam_side)
     return {"hits": hits, "reference_sha256": reference_sha256, "index_reused": index_reused}
