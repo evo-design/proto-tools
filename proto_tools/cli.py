@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from proto_tools.mcp import tools as impl
 from proto_tools.mcp.device import DeviceUnavailableError, resolve_device
 from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
+from proto_tools.utils.tool_docs import FieldDoc
 from proto_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
@@ -272,6 +273,17 @@ def _cmd_sections(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_fields(fields: list[FieldDoc]) -> None:
+    """Print a model's field rows: name, type, default, then its docs indented below."""
+    for f in fields:
+        marker = "required" if f.required else f"default={f.default!r}"
+        print(f"  {f.name:24s}  {f.type_str:30s}  ({marker})")
+        # Prefer the full docstring text; fall back to the terse field description.
+        body = f.doc or f.description
+        if body:
+            print(f"  {'':24s}  {body.replace(chr(10), chr(10) + ' ' * 28)}")
+
+
 def _cmd_model_doc(args: argparse.Namespace, kind: str) -> int:
     """Shared handler for ``input`` / ``config`` / ``output`` verbs."""
     getter = {
@@ -288,13 +300,11 @@ def _cmd_model_doc(args: argparse.Namespace, kind: str) -> int:
     if doc.docstring:
         print(doc.docstring)
         print()
-    for f in doc.fields:
-        marker = "required" if f.required else f"default={f.default!r}"
-        print(f"  {f.name:24s}  {f.type_str:30s}  ({marker})")
-        # Prefer the full docstring text; fall back to the terse field description.
-        body = f.doc or f.description
-        if body:
-            print(f"  {'':24s}  {body.replace(chr(10), chr(10) + ' ' * 28)}")
+    _print_fields(doc.fields)
+    # The models those fields hold, where a tool's results usually live
+    for sub in doc.nested:
+        print(f"\n{sub.name}:")
+        _print_fields(sub.fields)
 
     if doc.metric_specs:
         scope = f" (per {doc.metrics_per_item_field} item)" if doc.metrics_per_item_field else ""

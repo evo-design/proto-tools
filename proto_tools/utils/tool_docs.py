@@ -185,6 +185,15 @@ class ModelDoc(BaseModel):
             "None means the tool is not iterable, so the metrics describe the single output."
         ),
     )
+    nested: list[ModelDoc] = Field(
+        default_factory=list,
+        description=(
+            "Docs of the models the fields hold, inside ``list``/``dict``/unions too, found recursively in field "
+            "order: where a tool's results actually live (e.g. ``SequenceEmbedding.mean_embedding``). Shared "
+            "entities (``Structure``, ``Ligand``…) and Metrics classes are left out; they are documented on "
+            "their own and in ``metric_specs``."
+        ),
+    )
 
 
 # =============================================================================
@@ -702,26 +711,6 @@ def get_model_doc(
     Returns:
         ModelDoc: Normalized view of the model's documentation.
     """
-    from proto_tools.utils.tool_io import OUTPUT_METADATA_FIELDS
-
-    exclude = OUTPUT_METADATA_FIELDS
-    field_docs = field_docs_from_docstrings(model_class)
-
-    fields: list[FieldDoc] = []
-    for name, info in model_class.model_fields.items():
-        if name in exclude:
-            continue
-        fields.append(
-            FieldDoc(
-                name=name,
-                type_str=_format_type(info.annotation),
-                default=_format_default(info),
-                description=info.description,
-                doc=field_docs.get(name),
-                required=info.is_required(),
-            )
-        )
-
     metric_specs: list[MetricSpecDoc] | None = None
     primary_metric: str | None = None
     metrics_per_item_field: str | None = None
@@ -729,14 +718,59 @@ def get_model_doc(
         metric_specs, primary_metric = _build_metric_specs(metrics_class)
         metrics_per_item_field = iterable_output_field
 
-    return ModelDoc(
-        name=model_class.__name__,
-        docstring=_clean_docstring(model_class),
-        fields=fields,
-        metric_specs=metric_specs,
-        primary_metric=primary_metric,
-        metrics_per_item_field=metrics_per_item_field,
+    return _fields_doc(model_class).model_copy(
+        update={
+            "metric_specs": metric_specs,
+            "primary_metric": primary_metric,
+            "metrics_per_item_field": metrics_per_item_field,
+            "nested": [_fields_doc(sub) for sub in _nested_models(model_class)],
+        }
     )
+
+
+def _fields_doc(model_class: type[BaseModel]) -> ModelDoc:
+    """A model's name, docstring and field rows, leaving out output metadata such as ``tool_id``."""
+    from proto_tools.utils.tool_io import OUTPUT_METADATA_FIELDS
+
+    field_docs = field_docs_from_docstrings(model_class)
+    fields = [
+        FieldDoc(
+            name=name,
+            type_str=_format_type(info.annotation),
+            default=_format_default(info),
+            description=info.description,
+            doc=field_docs.get(name),
+            required=info.is_required(),
+        )
+        for name, info in model_class.model_fields.items()
+        if name not in OUTPUT_METADATA_FIELDS
+    ]
+    return ModelDoc(name=model_class.__name__, docstring=_clean_docstring(model_class), fields=fields)
+
+
+def _is_entity(cls: type) -> bool:
+    """True for shared entity models (Structure, Ligands, …), which are documented on their own."""
+    return "proto_tools.entities" in getattr(cls, "__module__", "")
+
+
+def _is_metrics(cls: type) -> bool:
+    """True for Metrics subclasses, which are documented by their ``metric_spec``."""
+    return hasattr(cls, "metric_spec")
+
+
+def _nested_models(model_class: type[BaseModel]) -> list[type[BaseModel]]:
+    """The models a model's fields hold, found depth-first in field order, without entities or Metrics."""
+    found: list[type[BaseModel]] = []
+
+    def walk(cls: type[BaseModel]) -> None:
+        for info in cls.model_fields.values():
+            for sub in _models_in_annotation(info.annotation):
+                if sub is not model_class and sub not in found and not _is_entity(sub) and not _is_metrics(sub):
+                    found.append(sub)
+                    walk(sub)
+
+    walk(model_class)
+    return found
 
 
 def field_docs_from_docstrings(model_class: type[BaseModel]) -> dict[str, str]:
