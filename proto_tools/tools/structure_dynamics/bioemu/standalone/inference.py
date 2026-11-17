@@ -284,8 +284,6 @@ class BioEmuModel:
         from bioemu.model_utils import load_model, load_sdes, maybe_download_checkpoint
 
         self.verbose = verbose
-        if verbose:
-            logger.info(f"Loading BioEmu model: {model_name} on {device}")
 
         logger.update_status("Loading BioEmu weights")
         ckpt_path, model_config_path = maybe_download_checkpoint(

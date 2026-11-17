@@ -15,6 +15,7 @@ persistent-worker ``dispatch`` import (see ``utils/_worker_bootstrap.py``).
 """
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -339,7 +340,7 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
                 *(str(arg) for arg in input_data.get("extra_args", [])),
             ]
 
-        logger.update_status("Searching target database")
+        logger.update_status("Searching target database", level=logging.DEBUG)
         _run_search_with_thread_fallback(_search_cmd, effective_threads, mmseqs_tmp, res_dir)
 
         m8_columns = input_data["m8_columns"]
@@ -398,7 +399,7 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
                 label="mmseqs2-clustering mmseqs_db",
             )
 
-        logger.update_status("Clustering sequences")
+        logger.update_status("Clustering sequences", level=logging.DEBUG)
         _run_cmd(
             [
                 mmseqs,

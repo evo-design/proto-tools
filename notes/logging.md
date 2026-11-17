@@ -49,10 +49,24 @@ latest message is shown, so each one replaces the last.
 
 ```python
 logger.update_status("Loading ESMFold weights")                 # in a standalone, or a tool in the caller's process
+logger.update_status("Scoring 8 sequences", level=logging.DEBUG)
 counter = StatusCounter(logger, "Folding structure %d/%d", total=len(sequences))
 for index, sequence in enumerate(sequences, start=1):
     counter(index)                                              # the first, then one every 5 s, and the last
 ```
+
+A status is itself a log record, so it needs no `logger.info` beside it saying the same thing; detail the status
+can't carry (a checkpoint, a device, a path) isn't worth a second line either. The status line always updates,
+whatever the logger's level; `level` only decides how the record is logged:
+
+- **`INFO` (the default)** for phases worth a line in the log: loading weights, downloads, database builds, and
+  submitting, waiting on and fetching a remote job.
+- **`logging.DEBUG`** for the tool's routine work, which runs on every call and often in a loop: scoring,
+  predicting, sampling, folding, designing, aligning, searching. `StatusCounter` logs at DEBUG by default.
+
+While a progress bar is up, a status never prints to the console: it replaces the bar's subtitle in place, so a
+long run leaves one changing line. With no bar up, it prints as an ordinary record if the console's level admits it.
+File handlers keep every status at its level.
 
 `StatusCounter` is in `standalone_helpers` (`from standalone_helpers import StatusCounter` in a standalone). A tool
 that runs in the caller's process imports it from
@@ -79,7 +93,7 @@ The same goes for gradient operations: an optimizer calls them every step and ow
 nothing beyond a cold load.
 
 `get_logger` from `standalone_helpers` always returns a logger with `update_status`, even outside a worker (a
-setup script, say), where the status is just an INFO record.
+setup script, say), where the status is just a log record.
 
 ### House style
 

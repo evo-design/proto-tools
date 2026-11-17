@@ -730,8 +730,6 @@ class ESM2Model:
     # ============================================================================
     def load(self, device: str, verbose: bool = False) -> None:
         """Load ESM2 model and tokenizer to device."""
-        if verbose:
-            logger.info(f"Loading ESM2 model: {self.model_checkpoint} on {device}")
         logger.update_status("Loading ESM2 weights")
 
         # Load model and tokenizer. Most checkpoints use the flash-attn-enabled mirror

@@ -1,6 +1,7 @@
 """ProGen3 standalone inference."""
 
 import json
+import logging
 import re
 import sys
 from collections import defaultdict
@@ -49,8 +50,6 @@ class ProGen3Model:
         progen3 places its tensors on ``dist.get_device()``, which is ``torch.cuda.current_device()``,
         so the leased GPU is made current before loading and the model goes to that same device.
         """
-        if verbose:
-            logger.info(f"Loading ProGen3 model: {self.model_checkpoint} on {device}")
         logger.update_status("Loading ProGen3 weights")
 
         from standalone_helpers import set_current_cuda_device
@@ -313,7 +312,9 @@ class ProGen3Model:
         )
         scorer = _PerPositionScorer(self.model, max_batch_tokens=max_batch_tokens)
 
-        logger.update_status(f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}")
+        logger.update_status(
+            f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+        )
 
         result = scorer.score_batch_with_positions(sequences, return_logits=return_logits)
 

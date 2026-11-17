@@ -639,7 +639,6 @@ class AlphaFold2Model:
         use_multimer: bool,
         use_msa: bool,
         recycle_mode: str = "last",
-        verbose: bool = False,
     ) -> Any:
         """Return a cached ColabDesign model, creating one if needed."""
         key = (protocol, use_multimer, use_msa, recycle_mode)
@@ -657,9 +656,6 @@ class AlphaFold2Model:
             model_kwargs["optimize_seq"] = False
             model_kwargs["num_msa"] = 512
             model_kwargs["num_extra_msa"] = 1024
-
-        if verbose:
-            logger.info("Creating AlphaFold2 model: protocol=%s multimer=%s msa=%s", protocol, use_multimer, use_msa)
 
         logger.update_status("Loading AlphaFold2 weights")
         jax = self._jax
@@ -766,10 +762,10 @@ class AlphaFold2Model:
         use_multimer = complex_data["num_chains"] > 1
         use_msa = msa_a3m_content is not None or bool(per_chain_msas_a3m and any(per_chain_msas_a3m))
         loading = ("hallucination", use_multimer, use_msa, "last") not in self._models
-        af_model = self._get_model(use_multimer=use_multimer, use_msa=use_msa, verbose=verbose)
+        af_model = self._get_model(use_multimer=use_multimer, use_msa=use_msa)
         if loading:
             # Replace the loading status; the caller's progress bar reports each structure after this.
-            logger.update_status("Folding structure")
+            logger.update_status("Folding structure", level=logging.DEBUG)
 
         self._prep_prediction_inputs(
             af_model,
@@ -975,10 +971,9 @@ class AlphaFold2Model:
             use_multimer=use_multimer,
             use_msa=False,
             recycle_mode=recycle_mode,
-            verbose=verbose,
         )
         if loading:
-            logger.update_status("Computing gradient")
+            logger.update_status("Computing gradient", level=logging.DEBUG)
         # The model is cached across requests, so a previous call's options must be cleared.
         self._restore_model_defaults(key, af_model)
         af_model.prep_inputs(**prep_kwargs)

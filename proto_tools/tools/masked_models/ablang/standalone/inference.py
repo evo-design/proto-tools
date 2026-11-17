@@ -109,8 +109,6 @@ class AbLangModel:
         # Validate + auto-recover from corruption. No-op on the warm path.
         _validate_ablang_weights(self.model_choice)
 
-        if verbose:
-            logger.info(f"Loading AbLang model: {self.model_choice} on {device}")
         logger.update_status("Loading AbLang weights")
 
         import ablang2

@@ -13,6 +13,7 @@ Usage (called by ToolInstance, not directly):
 
 import csv
 import json
+import logging
 import math
 import os
 import subprocess
@@ -387,7 +388,7 @@ def run_crispr_tracr_rna(input_data: dict[str, Any]) -> dict[str, Any]:
     all_results = [None] * len(batches)
     batch_errors = []
     plural = "s" if len(sequences) != 1 else ""
-    logger.update_status(f"Searching {len(sequences)} sequence{plural} for tracrRNAs")
+    logger.update_status(f"Searching {len(sequences)} sequence{plural} for tracrRNAs", level=logging.DEBUG)
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         future_to_idx = {}

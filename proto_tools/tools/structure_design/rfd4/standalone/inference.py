@@ -13,6 +13,7 @@ References:
 
 import csv
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -202,7 +203,6 @@ class RFD4Model:
         model_revision: str | None,
         adapter_path: str | None,
         device: str,
-        verbose: bool = False,
     ) -> None:
         """Load the RFD4-Proteina checkpoint and hold it for subsequent calls.
 
@@ -216,7 +216,6 @@ class RFD4Model:
             model_revision (str | None): Pinned HuggingFace revision, or None for the default.
             adapter_path (str | None): Local PEFT/LoRA adapter directory, or None.
             device (str): Device to hold the model on (e.g. ``"cuda"``, ``"cpu"``).
-            verbose (bool): Log the checkpoint being loaded.
 
         Raises:
             ImportError: If the rfd4-proteina package is not importable.
@@ -228,9 +227,6 @@ class RFD4Model:
             from rfproteina.proteina import Proteina
         except ImportError as exc:
             raise ImportError("rfd4: the rfd4-proteina package is not importable; re-run setup.sh") from exc
-
-        if verbose:
-            logger.info(f"Loading RFD4-Proteina checkpoint {model_checkpoint} (revision={model_revision})")
 
         logger.update_status("Loading RFD4-Proteina weights")
         model = Proteina.from_pretrained(model_checkpoint, revision=model_revision, nn_overrides={})
@@ -309,7 +305,6 @@ class RFD4Model:
         spec_keys: list[str],
         device: str = "cuda",
         seed: int | None = None,
-        verbose: bool = False,
         **cli_kwargs: Any,
     ) -> dict[str, Any]:
         """Run RFD4-Proteina generation and harvest the designs it wrote.
@@ -320,7 +315,6 @@ class RFD4Model:
             spec_keys (list[str]): Spec ids that were dispatched, in input order.
             device (str): Device string (e.g. ``"cuda"``, ``"cuda:1"``, ``"cpu"``).
             seed (int | None): Base seed; ``None`` lets upstream draw its own.
-            verbose (bool): Log the composed overrides and the checkpoint being loaded.
             **cli_kwargs (Any): Hydra overrides forwarded verbatim as ``key=value``.
 
         Returns:
@@ -344,7 +338,6 @@ class RFD4Model:
                 model_revision=None if revision in (None, "null") else str(revision),
                 adapter_path=cli_kwargs.get("adapter_path"),
                 device=device,
-                verbose=verbose,
             )
 
         from standalone_helpers import is_cuda_oom, raise_oom
@@ -354,7 +347,7 @@ class RFD4Model:
         from rfproteina.generate import run_generation
 
         n_designs = len(spec_keys) * int(cli_kwargs.get("num_replicates", 1))
-        logger.update_status(f"Generating {n_designs} design{'' if n_designs == 1 else 's'}")
+        logger.update_status(f"Generating {n_designs} design{'' if n_designs == 1 else 's'}", level=logging.DEBUG)
         try:
             run_generation(cfg, job_id=0, model=self.model)
         except Exception as exc:
@@ -480,6 +473,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     operation = kwargs.pop("operation")
     if operation not in _VALID_OPERATIONS:
         raise ValueError(f"rfd4: unknown operation {operation!r}; valid: {list(_VALID_OPERATIONS)}")
+    # Not a Hydra override: everything left in kwargs is forwarded to upstream verbatim.
+    kwargs.pop("verbose", None)
 
     return _model(
         spec_path=kwargs.pop("spec_path"),
@@ -487,7 +482,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         spec_keys=kwargs.pop("spec_keys"),
         device=kwargs.pop("device"),
         seed=kwargs.pop("seed"),
-        verbose=kwargs.pop("verbose"),
         **kwargs,
     )
 

@@ -100,7 +100,7 @@ class ESMFoldModel:
                 # Forward pass
                 if loaded_now:
                     # The caller's progress bar counts structures; only replace the loading status.
-                    logger.update_status("Folding structures")
+                    logger.update_status("Folding structures", level=logging.DEBUG)
                 outputs = self.model(**tokenized_inputs, num_recycles=num_recycles)
 
                 # Apply linker masking
@@ -146,7 +146,7 @@ class ESMFoldModel:
 
         if not self._loaded:
             self.load(device, verbose)
-            logger.update_status("Computing gradient")
+            logger.update_status("Computing gradient", level=logging.DEBUG)
         elif self.device != device:
             self.to_device(device)
         active_device = self.device

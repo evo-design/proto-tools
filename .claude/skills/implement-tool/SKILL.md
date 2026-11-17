@@ -341,10 +341,11 @@ Why: standalones run inside isolated micromamba subprocesses where `proto_tools`
 
 `__init__.py` is the only exemption (no log calls there). The consistency test enforces this on every other `.py` file in the standalone tree.
 
-For status updates that should drive the parent's spinner subtitle (and never clutter console output), use the dedicated method:
+For status updates that drive the status line (the spinner subtitle, replaced in place, so they don't print while a bar is up), use the dedicated method:
 
 ```python
-logger.update_status("Loading ESMFold weights")  # spinner subtitle update; not shown in console
+logger.update_status("Loading ESMFold weights")  # status line update, also logged at INFO; no logger.info twin
+logger.update_status("Folding 8 structures", level=logging.DEBUG)  # routine work: logged at DEBUG
 logger.info("...")                                # normal log line
 ```
 

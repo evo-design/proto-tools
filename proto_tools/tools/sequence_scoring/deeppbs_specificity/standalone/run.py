@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -320,7 +321,7 @@ def _run_one_structure(
         ]
         if bool(config.get("no_clean_protein", False)):
             process_cmd.append("--no_cleanp")
-        logger.update_status(f"Preprocessing structure {progress}")
+        logger.update_status(f"Preprocessing structure {progress}", level=logging.DEBUG)
         process_io = _run_or_raise(process_cmd, step_name="preprocessing")
 
         canonical_dir = os.path.join(output_root, "canonical_npz")
@@ -357,7 +358,7 @@ def _run_one_structure(
                 **fallback,
             }
 
-        logger.update_status(f"Predicting specificity for structure {progress}")
+        logger.update_status(f"Predicting specificity for structure {progress}", level=logging.DEBUG)
         try:
             _run_or_raise(
                 [

@@ -1,6 +1,7 @@
 """netMHCpan MHC class I binding prediction runner."""
 
 import difflib
+import logging
 import os
 import platform
 import re
@@ -275,7 +276,7 @@ def _invoke(argv: list[str], workdir: str, install_base: str) -> str:
     """
     env = dict(os.environ)
     env.update({"TMPDIR": workdir, "TMP": workdir, "TEMP": workdir, "NETMHCpan": install_base})
-    logger.update_status("Running netMHCpan")
+    logger.update_status("Running netMHCpan", level=logging.DEBUG)
     completed = subprocess.run(
         argv,
         cwd=workdir,

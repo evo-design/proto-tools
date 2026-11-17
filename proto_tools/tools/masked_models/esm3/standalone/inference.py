@@ -558,8 +558,6 @@ class ESM3Model:
         from esm.models.esm3 import ESM3
         from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
 
-        if verbose:
-            logger.info(f"Loading ESM3 model: {self.model_checkpoint} on {device}")
         logger.update_status("Loading ESM3 weights")
 
         # Load model and tokenizer

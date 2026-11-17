@@ -273,8 +273,6 @@ class ESMIF1Model:
         verbose: bool = False,
     ) -> None:
         """Load ESM-IF1 model, optionally with ProteinDPO weights."""
-        if verbose:
-            logger.info(f"Loading ESM-IF ({weights_variant}) on {device}")
         logger.update_status(
             "Loading ProteinDPO weights" if weights_variant == "protein_dpo" else "Loading ESM-IF1 weights"
         )

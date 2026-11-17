@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 import os
 import sys
 from collections import OrderedDict
@@ -215,7 +216,9 @@ class CherimoyaWorker:
         batch_size, rc = int(input_dict["batch_size"]), bool(input_dict["reverse_complement_average"])
 
         rows: list[list[dict[str, Any]]] = [[] for _ in sequences]
-        logger.update_status(f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}")
+        logger.update_status(
+            f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+        )
         with torch.no_grad():
             for start in range(0, len(sequences), batch_size):
                 X = _one_hot(sequences[start : start + batch_size], device)
@@ -251,7 +254,10 @@ class CherimoyaWorker:
         as_counts = input_dict["values"] == "expected_counts"
 
         rows: list[list[dict[str, Any]]] = [[] for _ in sequences]
-        logger.update_status(f"Predicting profiles for {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}")
+        logger.update_status(
+            f"Predicting profiles for {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}",
+            level=logging.DEBUG,
+        )
         with torch.no_grad():
             for start in range(0, len(sequences), batch_size):
                 X = _one_hot(sequences[start : start + batch_size], device)
