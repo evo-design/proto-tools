@@ -3,6 +3,7 @@
 Tests for PersistentWorker and _worker_bootstrap.
 """
 
+import collections
 import json
 import logging
 import os
@@ -18,11 +19,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from proto_tools.utils import download_progress
+from proto_tools.utils.logging_config import _TAG_PREFIX
 from proto_tools.utils.persistent_worker import (
     PersistentWorker,
     _build_subprocess_env,
     _handle_raw_stderr_line,
     _parse_env_vars_file,
+    _reemit_tagged_line,
 )
 
 _STANDALONE_HELPERS_SOURCE = (
@@ -1799,3 +1802,28 @@ def test_worker_is_replaced_after_a_poisoned_cuda_context(tmp_path: Path):
         assert worker.alive
     finally:
         worker.stop()
+
+
+def test_a_debug_status_from_a_worker_reaches_the_spinner_while_proto_tools_logs_at_info():
+    """The status line always updates; a status's level only decides which handlers log it."""
+    seen: list[tuple[int, str, bool]] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            seen.append((record.levelno, record.getMessage(), getattr(record, "update_status", False)))
+
+    proto_tools_logger = logging.getLogger("proto_tools")
+    prior_level = proto_tools_logger.level
+    capture = _Capture()
+    proto_tools_logger.addHandler(capture)
+    proto_tools_logger.setLevel(logging.INFO)
+    try:
+        parent = logging.getLogger("proto_tools.worker.test_status_level")
+        for msg, update_status in (("Scoring batch 1/4", True), ("debug detail", False)):
+            payload = {"level": "DEBUG", "name": "worker.inference", "msg": msg, "update_status": update_status}
+            _reemit_tagged_line(parent, _TAG_PREFIX + json.dumps(payload), collections.deque())
+    finally:
+        proto_tools_logger.removeHandler(capture)
+        proto_tools_logger.setLevel(prior_level)
+
+    assert seen == [(logging.DEBUG, "Scoring batch 1/4", True)]

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from standalone_helpers import (
+    StatusCounter,
     download_archive,
     get_logger,
     link_to_cache,
@@ -108,8 +109,7 @@ class AbLangModel:
         # Validate + auto-recover from corruption. No-op on the warm path.
         _validate_ablang_weights(self.model_choice)
 
-        if verbose:
-            logger.info(f"Loading AbLang model: {self.model_choice} on {device}")
+        logger.update_status("Loading AbLang weights")
 
         import ablang2
         from ablang2.models.ablang2.vocab import ablang_vocab
@@ -302,7 +302,9 @@ class AbLangModel:
         all_attention_masks: list[list[int]] = []
         all_logits: list[Any] | None = [] if return_logits else None
 
+        counter = StatusCounter(logger, "Embedding batch %d/%d", total=-(-len(sequences) // batch_size))
         for i in range(0, len(sequences), batch_size):
+            counter(i // batch_size + 1)
             batch = sequences[i : i + batch_size]
             formatted = self._format_sequences(batch)
 
@@ -376,7 +378,9 @@ class AbLangModel:
         all_metrics: list[dict[str, float]] = []
         all_logits: list[Any] | None = [] if return_logits else None
 
+        counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-len(sequences) // batch_size))
         for i in range(0, len(sequences), batch_size):
+            counter(i // batch_size + 1)
             batch = sequences[i : i + batch_size]
             formatted = self._format_sequences(batch)
 
@@ -469,7 +473,9 @@ class AbLangModel:
         restored_sequences: list[str] = []
         all_logits: list[Any] | None = [] if return_logits else None
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=-(-len(sequences) // batch_size))
         for i in range(0, len(sequences), batch_size):
+            counter(i // batch_size + 1)
             batch = sequences[i : i + batch_size]
             formatted = self._format_sequences(batch)
 

@@ -17,9 +17,9 @@ from proto_tools.modal.progress import open_progress_queue, stream_modal_progres
 from proto_tools.utils.logging_config import verbose_level_from_env
 from proto_tools.utils.progress import (
     has_active_progress_bar,
-    remote_connecting_status,
     remote_progress,
     set_substatus,
+    starting_container_status,
 )
 
 if TYPE_CHECKING:
@@ -388,12 +388,12 @@ def _live_progress(
 
     # Said before anything is dispatched, because the container reports nothing until it has
     # started, and on a cold start that is several seconds of a motionless spinner.
-    set_substatus(remote_connecting_status("modal"))
+    set_substatus(starting_container_status())
     # A consumer replacing the local replay never sees that substatus, and the cold start is the
     # longest silence there is, so hand it the same phase as a record of its own.
     if on_record is not None:
         with contextlib.suppress(Exception):
-            on_record({"m": remote_connecting_status("modal"), "l": logging.INFO})
+            on_record({"m": starting_container_status(), "l": logging.INFO})
 
     # A caller that needs to recognise its own records supplies the partition; anyone else gets
     # a fresh one and never has to know it exists.

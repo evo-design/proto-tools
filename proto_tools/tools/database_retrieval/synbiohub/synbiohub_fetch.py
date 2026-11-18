@@ -1,6 +1,7 @@
 """Fetch a design from a SynBioHub registry as SBOL and parse it into a typed model."""
 
 import json
+import logging
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -23,6 +24,8 @@ from proto_tools.utils import (
     build_http_session,
     request_with_retry,
 )
+
+logger = logging.getLogger(__name__)
 
 SynBioHubMolecule = Literal["dna", "rna", "protein", "other"]
 SynBioHubTopology = Literal["linear", "circular"]
@@ -340,6 +343,7 @@ def run_synbiohub_fetch(
         # The non-recursive document is cheap for the registry to build, so check the type before the recursive one
         nonrecursive = _download(f"{download_uri}/sbolnr", headers=headers, session=session)
         design_uri = _design_uri(nonrecursive, download_uri)
+        logger.update_status("Downloading SBOL document")  # type: ignore[attr-defined]
         sbol = _download(source_url, headers=headers, session=session)
     finally:
         # SynBioHub keeps every token in memory until logout, so release this one

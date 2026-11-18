@@ -400,12 +400,14 @@ def run_ncbi_reference_bundle(
     ):
         try:
             _check_available(session, accession, params, headers, config.max_download_bytes)
+            logger.update_status("Downloading NCBI reference bundle")  # type: ignore[attr-defined]
             _download(session, source_url, params, headers, config.max_download_bytes, download)
         finally:
             session.close()
         download.seek(0)
         staging = Path(staging_name) / "bundle"
         staging.mkdir()
+        logger.update_status("Extracting NCBI reference bundle")  # type: ignore[attr-defined]
         with zipfile.ZipFile(download) as archive:
             _extract(archive, staging)
         (staging / _REQUEST_RECORD).write_text(json.dumps({"annotation_types": config.annotation_types}))

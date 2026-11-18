@@ -65,6 +65,7 @@ def search_xml(parameters: dict[str, Any], *, timeout: int | None, client_identi
             allowed_methods=["GET", "POST"],
         ) as session,
     ):
+        logger.update_status("Submitting search to NCBI BLAST")  # type: ignore[attr-defined]
         # Defaults match Biopython's qblast so existing searches return the same hits.
         rid = _submit(
             session,
@@ -77,6 +78,7 @@ def search_xml(parameters: dict[str, Any], *, timeout: int | None, client_identi
                 "tool": "proto-tools",
             },
         )
+        logger.update_status("Waiting for NCBI BLAST results")  # type: ignore[attr-defined]
         sleep_within_deadline(_POLL_INTERVAL_SECONDS, "waiting for NCBI BLAST to run the search")
         query = urlencode({"CMD": "Get", "RID": rid, "FORMAT_TYPE": "XML", "ALIGNMENTS": 500, "DESCRIPTIONS": 500})
         xml: str = poll_until_complete(

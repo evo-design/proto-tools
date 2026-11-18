@@ -7,6 +7,7 @@ References:
 
 import gzip
 import json
+import logging
 import os
 import re
 import shutil
@@ -143,6 +144,8 @@ class RFdiffusion3Model:
         precision_site = Path(__file__).with_name("rfd3_precision_site")
         existing_pythonpath = env.get("PYTHONPATH")
         env["PYTHONPATH"] = str(precision_site) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
+
+        logger.update_status("Generating designs", level=logging.DEBUG)
 
         # Run the command — inherit streams when verbose for real-time progress;
         # capture when not verbose so we can surface stderr tail on failure.

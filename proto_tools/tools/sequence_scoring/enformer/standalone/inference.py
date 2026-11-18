@@ -1,11 +1,12 @@
 """Enformer standalone inference implementation for venv execution."""
 
 import json
+import logging
 import sys
 from typing import Any, cast
 
 import torch
-from standalone_helpers import get_logger, serialize_output, set_torch_seed
+from standalone_helpers import StatusCounter, get_logger, serialize_output, set_torch_seed
 from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 
 logger = get_logger(__name__)
@@ -30,6 +31,7 @@ class EnformerModel:
         """Load Enformer model to device."""
         from enformer_pytorch import from_pretrained
 
+        logger.update_status("Loading Enformer weights")
         if verbose:
             logger.info(f"Loading Enformer model on {device}")
 
@@ -228,12 +230,22 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         _model = EnformerModel()
 
     operation = input_dict["operation"]
+    if operation == "predict" and input_dict["sequences"] and not _model._loaded:
+        # Load before the progress statuses below, so the loading status doesn't replace them mid-run.
+        _model.load(input_dict["device"], verbose=input_dict["verbose"])
     if operation == "predict":
         sequences = input_dict["sequences"]
         batch_size = max(1, int(input_dict.get("batch_size", len(sequences))))
         predictions = []
-        for start in range(0, len(sequences), batch_size):
-            chunk = sequences[start : start + batch_size]
+        chunks = [sequences[start : start + batch_size] for start in range(0, len(sequences), batch_size)]
+        if len(chunks) == 1:
+            logger.update_status(
+                f"Predicting {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+            )
+        counter = StatusCounter(logger, "Predicting batch %d/%d", total=len(chunks))
+        for number, chunk in enumerate(chunks, start=1):
+            if len(chunks) > 1:
+                counter(number)
             predictions.append(
                 _model._predict_sequences(
                     sequences=chunk,

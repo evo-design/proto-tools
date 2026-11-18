@@ -26,6 +26,7 @@ from proto_tools.utils import (
     raise_for_status_with_body,
     request_with_retry,
 )
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
 
 logger = logging.getLogger(__name__)
 
@@ -256,10 +257,11 @@ def run_europepmc_fulltext(
     )
     try:
         open_access = _open_access_status(inputs.pmcids, session)
-        return EuropePMCFullTextOutput(
-            documents=[_document(pmcid, open_access.get(pmcid), session) for pmcid in inputs.pmcids],
-            source_url=_REST_URL,
-        )
+        documents = [
+            _document(pmcid, open_access.get(pmcid), session)
+            for pmcid in StatusCounter(logger, "Fetching article %d/%d", inputs.pmcids)
+        ]
+        return EuropePMCFullTextOutput(documents=documents, source_url=_REST_URL)
     finally:
         session.close()
 

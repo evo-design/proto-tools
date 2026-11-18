@@ -134,6 +134,7 @@ class ESMFold2Model:
         # under it, so it must be the GPU the model is on from the first call.
         set_current_cuda_device(device)
         repo = _CHECKPOINT_REPOS[self.model_checkpoint]
+        logger.update_status(f"Loading {repo.split('/')[-1]} weights")
         if verbose:
             logger.info(f"Loading ESMFold2 model: {repo} on {device}")
 
@@ -229,7 +230,11 @@ class ESMFold2Model:
         seed: int | None,
     ) -> dict[str, Any]:
         """Fold one complex and return CIF + metrics."""
+        loading = not self._loaded
         self.ensure_loaded(device, verbose, seed)
+        if loading:
+            # Replace the loading status; the caller's progress bar reports each complex after this.
+            logger.update_status("Folding structure", level=logging.DEBUG)
 
         # Deterministic seed forwarded to the upstream sampler.
         effective_seed = seed if seed is not None else get_random_int()
@@ -355,10 +360,11 @@ def _load_language_model(device: str, seed: int) -> Any:
     from esm.models.esmfold2.layers import _seed_context as seed_context
 
     if _language_model is None:
-        logger.info("Loading ESM C for the pseudo-perplexity term")
+        logger.update_status("Loading ESM C weights")
         with seed_context(seed):
             _language_model = EsmcForMaskedLM.from_pretrained("biohub/esmc-300m").to(device)
         _language_model_device = device
+        logger.update_status("Computing gradient", level=logging.DEBUG)
     else:
         _move_language_model(device)
     return _language_model
@@ -585,7 +591,11 @@ def complex_gradient(data: dict[str, Any]) -> dict[str, Any]:
     """
     vocabulary = _folding_vocabulary()
     prepared = _Complex(data, vocabulary)
-    folder = _wrapper(data["model_checkpoint"]).ensure_loaded(data["device"], seed=data["seed"])
+    wrapper = _wrapper(data["model_checkpoint"])
+    loading = not wrapper._loaded
+    folder = wrapper.ensure_loaded(data["device"], seed=data["seed"])
+    if loading:
+        logger.update_status("Computing gradient", level=logging.DEBUG)
     distogram = _fold(folder, prepared, data)
     midpoints = objective.bin_midpoints(distogram.shape[-1], distogram.device).to(distogram.dtype)
 

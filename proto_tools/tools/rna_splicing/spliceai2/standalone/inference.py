@@ -5,7 +5,14 @@ import os
 import sys
 from typing import Any
 
-from standalone_helpers import get_logger, move_model_to_device, oom_guard, resolve_weights_dir, serialize_output
+from standalone_helpers import (
+    StatusCounter,
+    get_logger,
+    move_model_to_device,
+    oom_guard,
+    resolve_weights_dir,
+    serialize_output,
+)
 
 logger = get_logger(__name__)
 
@@ -72,7 +79,7 @@ class SpliceAI2Model:
         from spliceai2.model import SpliceAI2
 
         weights_dir = resolve_weights_dir("spliceai2")
-        logger.update_status("Loading SpliceAI2 checkpoints")
+        logger.update_status("Loading SpliceAI2 weights")
         self.models = [
             SpliceAI2.load_from_checkpoint(os.path.join(weights_dir, name, "model.ckpt"), map_location=device).eval()
             for name in CHECKPOINTS
@@ -148,8 +155,7 @@ class SpliceAI2Model:
         annotator = VariantAnnotator(self.models, VARIANT_CANDIDATE_SITES)
 
         rows: list[dict[str, Any]] = []
-        for i, variant in enumerate(variants):
-            logger.update_status(f"Scoring variant {i + 1}/{len(variants)}")
+        for variant in StatusCounter(logger, "Scoring variant %d/%d", variants):
             ref_window, alt_window = self._variant_window(fasta, variant)
             minus = variant["strand"] == "-"
             batch = (
@@ -235,11 +241,10 @@ class SpliceAI2Model:
     ) -> list[dict[str, Any]]:
         """Predict splice sites, junctions, and transcripts for each sequence."""
         self._ensure_loaded(device)
-        results = []
-        for i, sequence in enumerate(sequences):
-            logger.update_status(f"Predicting sequence {i + 1}/{len(sequences)}")
-            results.append(self._predict_one(sequence, assembly, num_transcripts))
-        return results
+        return [
+            self._predict_one(sequence, assembly, num_transcripts)
+            for sequence in StatusCounter(logger, "Predicting sequence %d/%d", sequences)
+        ]
 
 
 def _exon_intervals(mask: Any) -> list[tuple[int, int]]:
