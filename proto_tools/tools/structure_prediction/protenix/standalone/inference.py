@@ -1,6 +1,7 @@
 """Protenix inference implementation."""
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -88,7 +89,7 @@ def _validate_single_checkpoint(checkpoint_path: Path) -> None:
             logger.debug(f"Invalid validation marker, will re-validate: {e}")
 
     if needs_validation:
-        logger.info(f"Validating checkpoint: {checkpoint_path.name}")
+        logger.update_status("Validating Protenix checkpoint")
         if not validate_checkpoint(checkpoint_path):
             logger.warning(f"Removing corrupted checkpoint: {checkpoint_path}")
             checkpoint_path.unlink()
@@ -291,6 +292,10 @@ class ProtenixModel:
             configs["dump_dir"] = output_dir
             from standalone_helpers import oom_guard
 
+            with open(input_json_path) as f:
+                num_jobs = len(json.load(f))
+            logger.update_status(f"Predicting {num_jobs} structure{'s' if num_jobs != 1 else ''}", level=logging.DEBUG)
+
             with oom_guard("protenix", hint="Lower num_diffusion_samples or use a larger GPU."):
                 infer_predict(self.runner, configs)
         finally:
@@ -421,7 +426,7 @@ class ProtenixModel:
             DIST_WRAPPER.local_rank = indices[0]
         set_current_cuda_device(device)
 
-        logger.debug(f"Loading Protenix runner: model={model_name}, kernel={kernel}")
+        logger.update_status("Loading Protenix weights")
 
         if self.runner is not None:
             self.unload()

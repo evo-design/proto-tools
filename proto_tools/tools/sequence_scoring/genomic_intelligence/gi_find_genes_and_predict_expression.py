@@ -32,6 +32,7 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField, get_logger
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
 
 logger = get_logger(__name__)
 
@@ -319,7 +320,7 @@ def run_gi_find_genes_and_predict_expression(
     del instance
     options = _workflow_options(config)
     results: list[GIFindGenesResult] = []
-    for item in inputs.sequences:
+    for item in StatusCounter(logger, "Finding genes and predicting expression for sequence %d/%d", inputs.sequences):
         sequence = validate_gi_sequence(item.sequence, min_bp=WORKFLOW_MIN_BP, task="find-genes-and-predict-expression")
         call_config = config
         if len(sequence) > WORKFLOW_SYNC_LIMIT_BP and not config.respond_async:

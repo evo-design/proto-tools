@@ -32,7 +32,10 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     validate_gi_sequence,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField
+from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField, get_logger
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
+
+logger = get_logger(__name__)
 
 ANNOTATION_MIN_BP = 1_000
 """Published ``minLength`` for the annotation endpoint, in base pairs."""
@@ -287,7 +290,7 @@ def run_gi_annotation(
     """
     del instance
     results: list[GIAnnotationResult] = []
-    for item in inputs.sequences:
+    for item in StatusCounter(logger, "Annotating sequence %d/%d", inputs.sequences):
         sequence = validate_gi_sequence(item.sequence, min_bp=ANNOTATION_MIN_BP, task="annotation")
         data, payload = call_predict(
             config,

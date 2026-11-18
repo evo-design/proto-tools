@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
-from standalone_helpers import get_logger, serialize_output
+from standalone_helpers import StatusCounter, get_logger, serialize_output
 
 logger = get_logger(__name__)
 
@@ -83,7 +83,7 @@ def _ensure_models(device: str) -> list[Any]:
     from keras.models import load_model
 
     models_dir = _spliceai_models_dir()
-    logger.update_status("Loading SpliceAI ensemble (5 models)")
+    logger.update_status("Loading SpliceAI weights")
     _models = [load_model(os.path.join(models_dir, f"spliceai{i}.h5")) for i in range(1, 6)]
     _models_device = device
     logger.debug("spliceai: loaded 5 models on %s", device)
@@ -100,7 +100,7 @@ def _ensure_annotator(reference_fasta: str, annotation: str, device: str) -> Any
     _configure_tf_once()
     from spliceai.utils import Annotator
 
-    logger.update_status("Building SpliceAI annotator")
+    logger.update_status("Loading SpliceAI weights and annotation")
     _annotator = Annotator(reference_fasta, annotation)
     _annotator_key = key
     logger.debug("spliceai: built annotator for %s / %s on %s", reference_fasta, annotation, device)
@@ -134,7 +134,7 @@ def score(input_dict: dict[str, Any]) -> dict[str, Any]:
     mask = input_dict["mask"]
 
     results: list[list[dict[str, Any]]] = []
-    for variant in input_dict["variants"]:
+    for variant in StatusCounter(logger, "Scoring variant %d/%d", input_dict["variants"]):
         record = SimpleNamespace(
             chrom=variant["chromosome"],
             pos=variant["position"],
@@ -152,7 +152,7 @@ def predict(input_dict: dict[str, Any]) -> dict[str, Any]:
     models = _ensure_models(input_dict["device"])
 
     predictions: list[list[list[float]]] = []
-    for seq in input_dict["sequences"]:
+    for seq in StatusCounter(logger, "Predicting sequence %d/%d", input_dict["sequences"]):
         encoded = _one_hot_encode("N" * _CONTEXT_PAD + seq + "N" * _CONTEXT_PAD)[None, :]
         averaged = np.mean([model.predict(encoded, verbose=0) for model in models], axis=0)
         predictions.append(averaged[0].tolist())

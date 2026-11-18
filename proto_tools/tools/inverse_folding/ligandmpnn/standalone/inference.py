@@ -352,8 +352,7 @@ class LigandMPNNModel:
             model_type: LigandMPNN variant (currently only 'ligand_mpnn'
                 is wired through the tool layer).
         """
-        if verbose:
-            logger.info(f"Loading LigandMPNN model_type={model_type} on {device}")
+        logger.update_status("Loading LigandMPNN weights")
 
         # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
         from standalone_helpers import export_weights_dir
@@ -591,6 +590,7 @@ class LegacyCompatibleLigandMPNNModel:
         if self._loaded:
             self.unload()
 
+        logger.update_status("Loading LigandMPNN weights")
         checkpoint = torch.load(self.checkpoint_path, map_location=device, weights_only=False)
         self.atom_context_num = int(checkpoint["atom_context_num"])
         k_neighbors = checkpoint["num_edges"]
@@ -627,6 +627,7 @@ class LegacyCompatibleLigandMPNNModel:
                 self._configured_packer_checkpoint_path,
                 "ligandmpnn_sc_v_32_002_16.pt",
             )
+        logger.update_status("Loading LigandMPNN side-chain packer weights")
         checkpoint_packer = torch.load(self.packer_checkpoint_path, map_location=device, weights_only=False)
         packer_cls = self._modules["sc_utils"].Packer
         self.packer = packer_cls(

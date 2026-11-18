@@ -27,7 +27,7 @@ older proto-tools left in a tool's ``standalone/`` dir.
 import os
 
 # Bridge install must happen before any submodule's module-level get_logger call so their loggers are ProtoLogger instances.
-from .proto_logging import get_logger, install
+from .proto_logging import StatusCounter, get_logger, install
 
 # Gated on TOOL_VENV_PATH so parent-side imports of this package don't attach the bridge to the parent's logger tree.
 if os.environ.get("TOOL_VENV_PATH"):
@@ -96,6 +96,7 @@ from .weights import (
 __all__ = [
     # logging
     "get_logger",
+    "StatusCounter",
     # compression
     "_COMPRESS_MIN_SIZE",
     "_COMPRESSED_ARRAY_SENTINEL",

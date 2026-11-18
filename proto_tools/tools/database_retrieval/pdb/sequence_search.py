@@ -30,6 +30,7 @@ from proto_tools.utils import (
     raise_for_status_with_body,
     request_with_retry,
 )
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
 
 logger = logging.getLogger(__name__)
 
@@ -486,7 +487,10 @@ def run_pdb_sequence_search(
         allowed_methods=["POST"],
     )
     try:
-        results = [_search(session, query, config) for query in inputs.queries]
+        results = [
+            _search(session, query, config)
+            for query in StatusCounter(logger, "Searching sequence %d/%d", inputs.queries)
+        ]
     finally:
         session.close()
     return PdbSequenceSearchOutput(results=results, source_url=_SEARCH_URL)

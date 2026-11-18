@@ -1,13 +1,14 @@
 """ProGen3 standalone inference."""
 
 import json
+import logging
 import re
 import sys
 from collections import defaultdict
 from copy import deepcopy
 from typing import Any
 
-from standalone_helpers import get_logger, log_likelihood_metrics, serialize_output, set_torch_seed
+from standalone_helpers import StatusCounter, get_logger, log_likelihood_metrics, serialize_output, set_torch_seed
 
 logger = get_logger(__name__)
 
@@ -49,8 +50,7 @@ class ProGen3Model:
         progen3 places its tensors on ``dist.get_device()``, which is ``torch.cuda.current_device()``,
         so the leased GPU is made current before loading and the model goes to that same device.
         """
-        if verbose:
-            logger.info(f"Loading ProGen3 model: {self.model_checkpoint} on {device}")
+        logger.update_status("Loading ProGen3 weights")
 
         from standalone_helpers import set_current_cuda_device
 
@@ -141,7 +141,9 @@ class ProGen3Model:
         prompt_infos = [self._prepare_generation_prompt(generator, idx, prompt) for idx, prompt in enumerate(prompts)]
         outputs: dict[int, dict[str, str]] = {}
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=-(-len(prompt_infos) // batch_size))
         for chunk_start in range(0, len(prompt_infos), batch_size):
+            counter(chunk_start // batch_size + 1)
             chunk = prompt_infos[chunk_start : chunk_start + batch_size]
             grouped: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
             for info in chunk:
@@ -309,6 +311,10 @@ class ProGen3Model:
             65536,
         )
         scorer = _PerPositionScorer(self.model, max_batch_tokens=max_batch_tokens)
+
+        logger.update_status(
+            f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+        )
 
         result = scorer.score_batch_with_positions(sequences, return_logits=return_logits)
 

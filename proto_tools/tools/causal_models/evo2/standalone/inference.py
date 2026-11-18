@@ -1,6 +1,7 @@
 """Evo 2 inference through evo2_flash and vLLM."""
 
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -52,7 +53,7 @@ class Evo2Model:
         self.device: str | None = None
         self._loaded = False
 
-    def load(self, device: str, verbose: bool = False) -> None:
+    def load(self, device: str) -> None:
         """Load the engine on one GPU; keep checkpoint conversion in the model cache."""
         if device == "cpu":
             raise ValueError("Evo 2 Flash inference requires an NVIDIA GPU")
@@ -64,8 +65,7 @@ class Evo2Model:
         from evo2_flash.api import default_cache_dir
 
         _drop_incomplete_conversions(Path(default_cache_dir()))
-        if verbose:
-            logger.info("Loading Evo 2 Flash: %s on %s", self.model_checkpoint, device)
+        logger.update_status("Loading Evo 2 weights")
 
         def construct() -> None:
             self.model = Evo2(self.model_checkpoint, local_path=self.local_path)
@@ -84,12 +84,12 @@ class Evo2Model:
         self.device = device
         self._loaded = True
 
-    def _ready(self, device: str, verbose: bool) -> None:
+    def _ready(self, device: str) -> None:
         """Load the engine before inference on its assigned GPU."""
         if device == "cpu":
             raise ValueError("Evo 2 Flash inference requires an NVIDIA GPU")
         if not self._loaded:
-            self.load(device, verbose)
+            self.load(device)
         elif self.device != device:
             raise ValueError("Evo 2 Flash engines are GPU-bound; use a new worker to change devices")
 
@@ -119,7 +119,7 @@ class Evo2Model:
         vLLM schedules ragged requests and chunked prefill automatically. Cache
         handles retain exact token prefixes; vLLM owns and may evict their GPU state.
         """
-        self._ready(device, verbose)
+        self._ready(device)
         from vllm import SamplingParams
         from vllm.inputs import TokensPrompt
 
@@ -161,6 +161,9 @@ class Evo2Model:
             for i in range(len(ids))
         ]
         requests = [TokensPrompt(prompt_token_ids=tokens) for tokens in ids]
+        logger.update_status(
+            f"Sampling {len(requests)} sequence{'s' if len(requests) != 1 else ''}", level=logging.DEBUG
+        )
         outs = self.model.llm.generate(requests, params, use_tqdm=bool(verbose))
         if len(outs) != len(prompts):
             raise RuntimeError("evo2: vLLM returned an unexpected number of generations")
@@ -193,16 +196,18 @@ class Evo2Model:
         self,
         sequences: list[str],
         device: str = "cuda",
-        verbose: bool = False,
         batch_size: int = 1,  # noqa: ARG002 — vLLM manages batching and prefix state
         return_logits: bool = False,
         prepend_bos: bool = False,
         seed: int | None = None,  # noqa: ARG002 — deterministic scoring keeps the shared call signature
     ) -> dict[str, Any]:
         """Score unpadded sequences with prompt logprobs; capture logits only on request."""
-        self._ready(device, verbose)
+        self._ready(device)
         if not sequences or any(not seq for seq in sequences):
             raise ValueError("evo2: cannot score empty sequences")
+        logger.update_status(
+            f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+        )
         means = self.model.score_sequences(sequences, prepend_bos=prepend_bos)
         counts = [len(self.tokenizer.tokenize(s)) + int(prepend_bos) - 1 for s in sequences]
         metrics = [log_likelihood_metrics(float(mean), count) for mean, count in zip(means, counts, strict=True)]
@@ -309,7 +314,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         if result["kv_caches"] is not None:
             result["kv_caches"] = [_store_cache_handle(c) for c in result["kv_caches"]]
         return result
-    keys = ("sequences", "device", "verbose", "batch_size", "return_logits", "prepend_bos", "seed")
+    keys = ("sequences", "device", "batch_size", "return_logits", "prepend_bos", "seed")
     return _model.score(**{k: input_dict[k] for k in keys if k in input_dict})
 
 

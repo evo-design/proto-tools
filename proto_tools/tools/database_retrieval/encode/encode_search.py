@@ -30,6 +30,7 @@ from proto_tools.utils import (
     build_http_session,
     request_with_retry,
 )
+from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
 
 logger = logging.getLogger(__name__)
 
@@ -413,9 +414,10 @@ def run_encode_search(
         user_agent=_USER_AGENT,
     )
     try:
-        return EncodeSearchOutput(
-            results=[_search(query, config, session) for query in inputs.queries], source_url=_SEARCH_URL
-        )
+        results = [
+            _search(query, config, session) for query in StatusCounter(logger, "Running query %d/%d", inputs.queries)
+        ]
+        return EncodeSearchOutput(results=results, source_url=_SEARCH_URL)
     finally:
         session.close()
 

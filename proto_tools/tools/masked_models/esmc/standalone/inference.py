@@ -17,6 +17,7 @@ from typing import Any, Literal
 import torch
 from standalone_helpers import (
     AMINO_ACIDS_LIST,
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     serialize_output,
@@ -96,8 +97,11 @@ class ESMCModel:
         all_attention_masks: list[torch.Tensor] = []
         all_logits: list[torch.Tensor] | None = [] if return_logits else None
 
-        for batch_sequences in tqdm(
-            batches, desc="ESM C inference", unit="batch", total=len(batches), disable=not verbose
+        for batch_sequences in StatusCounter(
+            logger,
+            "Embedding batch %d/%d",
+            tqdm(batches, desc="ESM C inference", unit="batch", total=len(batches), disable=not verbose),
+            total=len(batches),
         ):
             # Tokenize the batch with padding so we can run a single forward pass
             batch_inputs = self.tokenizer(
@@ -303,8 +307,7 @@ class ESMCModel:
         """Load ESM C model and tokenizer to device."""
         from esm.models.esmc import ESMC
 
-        if verbose:
-            logger.info(f"Loading ESM C model: {self.model_checkpoint} on {device}")
+        logger.update_status("Loading ESM C weights")
 
         try:
             self.model = ESMC.from_pretrained(self.model_checkpoint, device=torch.device(device)).eval()
@@ -417,14 +420,20 @@ class ESMCSAEModel:
         batches = [sequences[i : i + batch_size] for i in range(0, len(sequences), batch_size)]
         features: list[dict[str, dict[str, list[list[float]]]]] = []
 
+        counter = StatusCounter(logger, "Extracting features from batch %d/%d", total=len(batches))
         if self.backbone == "esm":
-            for batch in tqdm(
-                batches, desc="ESM C SAE inference", unit="batch", total=len(batches), disable=not verbose
+            for batch_number, batch in enumerate(
+                tqdm(batches, desc="ESM C SAE inference", unit="batch", total=len(batches), disable=not verbose),
+                start=1,
             ):
+                counter(batch_number)
                 features.extend(self._esm_batch(batch))
             return {"features": features}
 
-        for batch in tqdm(batches, desc="ESM C SAE inference", unit="batch", total=len(batches), disable=not verbose):
+        for batch_number, batch in enumerate(
+            tqdm(batches, desc="ESM C SAE inference", unit="batch", total=len(batches), disable=not verbose), start=1
+        ):
+            counter(batch_number)
             inputs = self.tokenizer(batch, padding=True, truncation=False, return_tensors="pt")
             inputs = {k: v.to(device) for k, v in inputs.items()}
 
@@ -522,7 +531,7 @@ class ESMCSAEModel:
         """Load the backbone and SAE layers onto the device."""
         from esm.models.esmc import EsmcSaeModel
 
-        logger.update_status(f"Loading {self.model_checkpoint}")
+        logger.update_status("Loading ESM C weights")
         if self.backbone == "esm":
             from esm.models.esmc import ESMC
 
@@ -542,7 +551,7 @@ class ESMCSAEModel:
         # Fetch only the requested layers; the all-layer SAE repos hold one file
         # per backbone layer and the 6B collection is tens of gigabytes.
         allow_patterns = ["config.json"] + [f"layer_{layer}.safetensors" for layer in self.layers]
-        logger.update_status(f"Loading SAE layers {list(self.layers)}")
+        logger.update_status("Loading SAE weights")
         device_for_sae = self.model.device if hasattr(self.model, "device") else device
         sae = EsmcSaeModel.from_pretrained(self.sae_repo, allow_patterns=allow_patterns, device=device_for_sae)
         sae.initialize_layers(list(self.layers))
