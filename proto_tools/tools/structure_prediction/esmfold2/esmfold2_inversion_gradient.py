@@ -33,6 +33,7 @@ from proto_tools.utils.base_config import RANDOM_SEED_UPPER_BOUND
 from proto_tools.utils.fanout import derive_item_seed
 from proto_tools.utils.sequence_logits import SequenceLogits
 from proto_tools.utils.tool_io import Metrics, MetricSpec
+from proto_tools.utils.weights_layout import toolkit_hf_hub_cache
 
 logger = logging.getLogger(__name__)
 
@@ -341,7 +342,8 @@ class ESMFold2InversionGradientConfig(ESMFold2InversionConfigBase):
     Attributes:
         gradient_terms (list[ESMFold2ChainTermType]): Per-chain quantities to differentiate,
             given as catalog names or as instances naming a ``chain_id``.
-        model_checkpoint (Literal["esmfold2", "esmfold2-fast"]): Inherited ESMFold2 variant.
+        model_checkpoint (ESMFold2Checkpoint): Inherited ESMFold2 variant.
+        lm_dropout (float): Inherited pair-representation dropout; experimental checkpoints only.
         plm_passes (int): Inherited mask draws for the pseudo-perplexity term.
         plm_batch_size (int): Inherited masked sequences per language-model pass.
         compute_gradient (bool): Inherited; ``False`` returns values only.
@@ -485,6 +487,9 @@ def run_esmfold2_inversion_gradient(
                 "hard": config.hard,
                 "compute_gradient": config.compute_gradient,
                 "model_checkpoint": config.model_checkpoint,
+                "lm_dropout": config.lm_dropout,
+                # The experimental heads load ESM C 6B; read the esmc toolkit's copy, not a second one.
+                "esmc_cache_dir": toolkit_hf_hub_cache("esmc"),
                 "plm_passes": config.plm_passes,
                 "plm_batch_size": config.plm_batch_size,
                 # One seed per complex, so duplicates in a batch draw differently (stochastic=True).

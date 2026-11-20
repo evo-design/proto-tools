@@ -137,6 +137,12 @@ binder-design recipe published by the Chan Zuckerberg Biohub, at
 The "Algorithm N" labels in `standalone/objective.py` refer to that reference. The
 recipe is written against `biohub/ESMFold2-Experimental-Fast`; the objectives here are
 recalibrated for the production checkpoints' distogram.
+
+The `ESMFold2-Experimental*` checkpoints load from
+[provenance mirrors](https://huggingface.co/bviggiano/ESMFold2-Experimental) of Biohub's
+[`biohub/ESMFold2-Experimental*`](https://huggingface.co/biohub/ESMFold2-Experimental) repos:
+the same MIT-licensed weights, byte for byte, each pinned to a recorded upstream commit, kept
+so the inversion configs keep working if Biohub withdraws the experimental release.
 <!-- docs:ignore end -->
 
 ## References

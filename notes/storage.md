@@ -164,7 +164,7 @@ if weights_dir:
     ...
 ```
 
-HF-based tools need no code changes. `persistent_worker.py` points `HF_HOME`, `TORCH_HOME`, and `JAX_COMPILATION_CACHE_DIR` at the toolkit's folder automatically. A toolkit that should share another toolkit's Hugging Face and torch caches names that folder in `standalone/weights_key.txt`.
+HF-based tools need no code changes. `persistent_worker.py` points `HF_HOME`, `TORCH_HOME`, and `JAX_COMPILATION_CACHE_DIR` at the toolkit's folder automatically. A toolkit that should share another toolkit's Hugging Face and torch caches names that folder in `standalone/weights_key.txt`. A toolkit that loads only one of another toolkit's models passes `toolkit_hf_hub_cache("<owner>")` (from `proto_tools.utils.weights_layout`) to its worker and downloads that model with `cache_dir=` set to it, so one copy serves both: the ESMFold2 experimental heads read `biohub/ESMC-6B` from the esmc toolkit's cache this way. Don't symlink repo folders between hubs; `huggingface_hub`'s Xet store breaks on them.
 
 Use the shared helpers rather than writing download or path code in a tool:
 
