@@ -25,14 +25,17 @@ in two separate questions:
   which reads nothing. At ``_WARM_FRACTION`` or more of the libraries' bytes resident, the
   warm-up stops there. Below it, a re-read fetches only what is missing, because the resident
   pages come from memory, so an env that was half evicted costs half a warm-up.
-* Is this filesystem slow to fault? :func:`_fault_throughput` times sequential page faults on
-  the largest library for at most ``_PROBE_SECONDS``, over its longest stretch of pages that are
-  not cached, and only a throughput below ``_SLOW_FAULT_BYTES_PER_SECOND`` triggers a read.
-  Timing uncached pages matters: a probe that re-timed a window an earlier probe had faulted in
-  would measure the page cache and call a cold environment fast.
+* Is this filesystem slow to fault? :func:`_fault_throughput` times sequential page faults for
+  at most ``_PROBE_SECONDS``, and only a throughput below ``_SLOW_FAULT_BYTES_PER_SECOND``
+  triggers a read. It probes the library with the most uncached pages, not the largest, which
+  another env sharing it by hardlink may have cached, and times that library's longest stretch
+  of uncached pages: a probe that re-timed a window an earlier probe had faulted in would
+  measure the page cache and call a cold environment fast.
 * The libraries to read are listed once per build and kept in the environment, so a process
   that does not need to warm pays for one small file read and the probe.
-* Reading is bounded by a wall-clock budget and a concurrency cap.
+* Reading is bounded by a wall-clock budget and a concurrency cap. The caller warms under the
+  env's build lock, so processes starting together on a node warm it once: the rest find it
+  cached.
 * Every failure is swallowed. A warm-up that cannot run leaves behavior exactly as it was.
 """
 
@@ -83,9 +86,11 @@ _WARM_ENV_VAR = "PROTO_WARM_ENV"
 def _forced() -> bool | None:
     """Whether ``PROTO_WARM_ENV`` forces warming on or off; ``None`` to decide by measuring."""
     raw = os.environ.get(_WARM_ENV_VAR, "").strip().lower()
-    if not raw:
-        return None
-    return raw not in {"0", "false", "no", "off"}
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return None
 
 
 def _scan_libraries(env_path: Path, deadline: float) -> list[Path] | None:
@@ -116,15 +121,16 @@ def _scan_libraries(env_path: Path, deadline: float) -> list[Path] | None:
 def _large_shared_libraries(env_path: Path, fingerprint: str, deadline: float) -> list[Path]:
     """The env's libraries worth pre-reading, largest first, from the env's list when current.
 
-    The list is written on first use and reused while ``fingerprint`` matches, so the walk is
-    paid once per build rather than once per process. An env that cannot be written to, such
-    as a team's read-only one, is walked every time instead.
+    The list is written on first use and reused while ``fingerprint`` matches and every library
+    on it still exists, so the walk is paid once per build rather than once per process. An env
+    that cannot be written to, such as a team's read-only one, is walked every time instead.
     """
     listing = env_path / _LIBRARY_LIST
     try:
         header, *rows = listing.read_text().splitlines()
-        if header == fingerprint:
-            return [env_path / row for row in rows]
+        listed = [env_path / row for row in rows]
+        if header == fingerprint and all(path.is_file() for path in listed):
+            return listed
     except (OSError, ValueError):
         pass
     libraries = _scan_libraries(env_path, deadline)
@@ -144,9 +150,7 @@ def _page_residency(path: Path) -> bytes | None:
     """One byte per page of ``path``, odd where the page is in the page cache.
 
     Asks the kernel with ``mincore``, which reads nothing from the file. ``None`` where that is
-    unavailable: outside Linux and macOS, or when ``ctypes`` cannot reach libc. On Linux a
-    process that neither owns the file nor may write it is told only about pages it has mapped
-    itself, so another user's env reads as uncached and is judged by the fault probe alone.
+    unavailable: outside Linux and macOS, or when ``ctypes`` cannot reach libc.
     """
     size = path.stat().st_size
     if size == 0:
@@ -170,19 +174,26 @@ def _page_residency(path: Path) -> bytes | None:
         os.close(descriptor)
 
 
-def _resident_fraction(libraries: list[Path]) -> float:
-    """The share of the libraries' bytes in the page cache; ``0.0`` where it cannot be known."""
-    resident = total = 0
+def _residency(libraries: list[Path]) -> dict[Path, bytes] | None:
+    """Each library's page residency (see :func:`_page_residency`); ``None`` if any is unknowable."""
+    residency = {}
     for path in libraries:
         try:
             pages = _page_residency(path)
         except (OSError, AttributeError):
             pages = None
         if pages is None:
-            return 0.0
-        resident += sum(page & 1 for page in pages)
-        total += len(pages)
-    return resident / total if total else 0.0
+            return None
+        residency[path] = pages
+    return residency
+
+
+def _resident_fraction(residency: dict[Path, bytes] | None) -> float:
+    """The share of the libraries' pages in the page cache; ``0.0`` where it cannot be known."""
+    if not residency:
+        return 0.0
+    resident = sum(page & 1 for pages in residency.values() for page in pages)
+    return resident / sum(len(pages) for pages in residency.values())
 
 
 def _probe_window(pages: bytes) -> tuple[int, int] | None:
@@ -199,15 +210,14 @@ def _probe_window(pages: bytes) -> tuple[int, int] | None:
     return best
 
 
-def _fault_throughput(path: Path) -> float:
+def _fault_throughput(path: Path, pages: bytes | None) -> float:
     """Bytes per second that sequential page faults on ``path`` deliver, over uncached pages.
 
-    Starts at the longest run of pages not in the page cache, or at the file's middle where
-    residency is unknown, and stops after ``_PROBE_BYTES``, the run's end, or
+    Starts at the longest run of ``pages`` not in the page cache, or at the file's middle where
+    residency is unknown (``None``), and stops after ``_PROBE_BYTES``, the run's end, or
     ``_PROBE_SECONDS``, so a slow filesystem is recognised within that time rather than measured
     to completion.
     """
-    pages = _page_residency(path)
     window = _probe_window(pages) if pages is not None else None
     if pages is not None and window is None:
         return float("inf")  # every page is cached, so faults cost nothing
@@ -252,8 +262,9 @@ def warm_environment(
     """Pre-read ``env_path``'s large shared libraries into the page cache. Bytes read.
 
     Does nothing, and returns ``0``, when the libraries are already mostly in the page cache or
-    page faults on the largest library's uncached pages are fast. ``PROTO_WARM_ENV`` skips both
-    measurements in either direction.
+    page faults are fast, as probed on the library with the most uncached pages: envs hardlink
+    shared libraries, so the largest may have been cached by another env while the rest are
+    cold. ``PROTO_WARM_ENV`` set to ``1`` or ``0`` skips both measurements in either direction.
 
     Never raises. A warm-up that fails for any reason leaves the environment exactly as it was,
     and the caller is no worse off than before this function existed.
@@ -277,11 +288,17 @@ def warm_environment(
         if not libraries:
             return 0
         if not forced:
-            resident = _resident_fraction(libraries)
+            residency = _residency(libraries)
+            resident = _resident_fraction(residency)
             if resident >= _WARM_FRACTION:
                 logger.debug("env warm-up: %.0f%% of %s is already cached, skipping", resident * 100, env_path)
                 return 0
-            throughput = _fault_throughput(libraries[0])
+            if residency is None:
+                probed, pages = libraries[0], None
+            else:
+                probed = max(libraries, key=lambda path: sum(not page & 1 for page in residency[path]))
+                pages = residency[probed]
+            throughput = _fault_throughput(probed, pages)
             if throughput >= _SLOW_FAULT_BYTES_PER_SECOND:
                 logger.debug("env warm-up: page faults in %s run at %.0f MB/s, skipping", env_path, throughput / 2**20)
                 return 0

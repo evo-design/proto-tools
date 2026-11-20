@@ -883,7 +883,9 @@ class ToolInstance:
                     if self.toolkit not in self._build_failures:
                         self._build_failures[self.toolkit] = str(exc)
                     raise
-        self._warm_shared_libraries()
+            # Under the build lock, so a rebuild can't replace the env mid-read and processes starting together warm
+            # it once: the rest find it cached.
+            self._warm_shared_libraries()
         self._env_ready = True
 
     def _warm_shared_libraries(self) -> None:
