@@ -69,6 +69,7 @@ from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
 from proto_tools.utils.device import parse_device_string
 from proto_tools.utils.device_manager import DeviceManager
 from proto_tools.utils.download_progress import ProgressDeadline
+from proto_tools.utils.env_warmup import warm_environment
 from proto_tools.utils.logging_config import verbose_level_from_env
 from proto_tools.utils.persistent_worker import (
     PersistentWorker,
@@ -882,7 +883,31 @@ class ToolInstance:
                     if self.toolkit not in self._build_failures:
                         self._build_failures[self.toolkit] = str(exc)
                     raise
+            # Under the build lock, so a rebuild can't replace the env mid-read and processes starting together warm
+            # it once: the rest find it cached.
+            self._warm_shared_libraries()
         self._env_ready = True
+
+    def _warm_shared_libraries(self) -> None:
+        """Pre-read this env's large shared libraries, where that is worth doing.
+
+        ``import torch`` mmaps gigabytes of CUDA libraries, and on a parallel filesystem each
+        page fault is a network round-trip, so the first run on a node can spend far longer
+        waiting on them than computing. Reading the files sequentially first fills the same
+        page cache at a thousand times the rate.
+
+        Skipped unless page faults on the env's largest library are measured to be slow, which
+        a local disk, a fast network filesystem, and an already-cached library all avoid.
+        Best-effort throughout: see :mod:`proto_tools.utils.env_warmup`.
+
+        Including the fingerprint lookup, which reads the setup files: a speed-up must not add
+        a way for :meth:`_ensure_env` to fail, so anything unexpected here just skips the
+        warm-up rather than propagating.
+        """
+        try:
+            warm_environment(self.env_path, self._setup_hash())
+        except Exception as error:
+            logger.debug("Skipping the %s env warm-up: %s", self.toolkit, error)
 
     @contextmanager
     def _env_build_process_lock(self) -> Generator[None, None, None]:
