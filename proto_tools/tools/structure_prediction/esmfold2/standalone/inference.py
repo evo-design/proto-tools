@@ -25,14 +25,15 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 
 # HF repos for the exposed checkpoints. Name an experimental head from the inversion configs
 # only: it loads through a different model class, and the folding tool's confidence outputs are
-# untested on it.
+# untested on it. The experimental heads load from byte-identical mirrors of Biohub's repos
+# (biohub/ESMFold2-Experimental*), which are published for reproducibility and may be withdrawn.
 _CHECKPOINT_REPOS = {
     "esmfold2": "biohub/ESMFold2",
     "esmfold2-fast": "biohub/ESMFold2-Fast",
-    "esmfold2-experimental": "biohub/ESMFold2-Experimental",
-    "esmfold2-experimental-fast": "biohub/ESMFold2-Experimental-Fast",
-    "esmfold2-experimental-cutoff2025": "biohub/ESMFold2-Experimental-Cutoff2025",
-    "esmfold2-experimental-fast-cutoff2025": "biohub/ESMFold2-Experimental-Fast-Cutoff2025",
+    "esmfold2-experimental": "bviggiano/ESMFold2-Experimental",
+    "esmfold2-experimental-fast": "bviggiano/ESMFold2-Experimental-Fast",
+    "esmfold2-experimental-cutoff2025": "bviggiano/ESMFold2-Experimental-Cutoff2025",
+    "esmfold2-experimental-fast-cutoff2025": "bviggiano/ESMFold2-Experimental-Fast-Cutoff2025",
 }
 #: Checkpoints that load through ``EsmFold2ExperimentalModel`` rather than ``EsmFold2Model``.
 EXPERIMENTAL_CHECKPOINTS = frozenset(k for k in _CHECKPOINT_REPOS if "experimental" in k)

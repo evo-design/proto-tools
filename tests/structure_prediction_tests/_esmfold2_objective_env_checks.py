@@ -220,7 +220,7 @@ def check_lm_dropout_applies_only_to_the_experimental_checkpoints() -> None:
     """Dropout is an experimental-head setting, and is baked in at load."""
     assert len(inference.EXPERIMENTAL_CHECKPOINTS) == 4
     assert all(
-        inference._CHECKPOINT_REPOS[k].startswith("biohub/ESMFold2-Experimental")
+        inference._CHECKPOINT_REPOS[k].startswith("bviggiano/ESMFold2-Experimental")
         for k in inference.EXPERIMENTAL_CHECKPOINTS
     )
     try:
