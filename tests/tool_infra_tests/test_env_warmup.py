@@ -33,8 +33,9 @@ def _env_with_libraries(tmp_path: Path, **sizes: int) -> Path:
 
 @pytest.fixture
 def faults(monkeypatch):
-    """Set the page-fault throughput the probe reports, and record which files it probed."""
+    """Report the env as uncached, set the fault throughput the probe reports, record what it probed."""
     probed: list[Path] = []
+    monkeypatch.setattr(env_warmup, "_resident_fraction", lambda libraries: 0.0)
 
     def _set(throughput: float) -> list[Path]:
         monkeypatch.setattr(env_warmup, "_fault_throughput", lambda path: probed.append(path) or throughput)
@@ -52,7 +53,7 @@ def test_only_slow_page_faults_are_worth_a_pre_read(tmp_path, faults, throughput
 
 
 def test_a_cached_library_is_not_read_again(tmp_path, monkeypatch):
-    """Just written, so in the page cache: the real probe sees fast faults and reads nothing."""
+    """Just written, so in the page cache: the real residency check sees it and reads nothing."""
     monkeypatch.delenv("PROTO_WARM_ENV", raising=False)
     assert warm_environment(_env_with_libraries(tmp_path, libbig=_BIG), "hash") == 0
 
@@ -119,3 +120,20 @@ def test_a_warm_up_that_cannot_run_is_survivable(tmp_path, monkeypatch, broken):
         env = _env_with_libraries(tmp_path, libbig=_BIG)
         monkeypatch.setattr(env_warmup, "_fault_throughput", lambda path: (_ for _ in ()).throw(OSError("boom")))
     assert warm_environment(env, "hash") == 0
+
+
+def test_the_probe_times_pages_that_are_not_cached():
+    """A probe that re-timed a window an earlier probe had cached would call a cold env warm."""
+    cold_mid = bytes([1] * 500 + [0] * 100 + [1] * 50 + [0] * 300 + [1] * 50)
+    start, end = env_warmup._probe_window(cold_mid)
+    assert (start, end) == (650, 950), "the longest uncached run, not the cached middle"
+    assert env_warmup._probe_window(bytes([1] * 1000)) is None
+
+
+@pytest.mark.parametrize(("resident", "probes"), [(0.95, 0), (0.5, 1)])
+def test_a_mostly_cached_env_is_not_probed(tmp_path, monkeypatch, faults, resident, probes):
+    """Residency, not fault speed, answers "already warm": probing it would cache the sample."""
+    probed = faults(_SLOW)
+    monkeypatch.setattr(env_warmup, "_resident_fraction", lambda libraries: resident)
+    warm_environment(_env_with_libraries(tmp_path, libbig=_BIG), "hash")
+    assert len(probed) == probes
