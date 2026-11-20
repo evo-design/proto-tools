@@ -111,7 +111,7 @@ def example_input() -> Any:
     input_class=PdbFetchEntryInput,
     config_class=PdbFetchEntryConfig,
     output_class=PdbFetchEntryOutput,
-    description="Fetch structure metadata (title, method, resolution) from RCSB PDB",
+    description="Fetch structure metadata (title, method, resolution) from RCSB PDB; for coordinates use sequence-fetch",
     uses_gpu=False,
     example_input=example_input,
     cacheable=True,

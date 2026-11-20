@@ -13,7 +13,7 @@ import json
 import os
 import tempfile
 from logging import getLogger
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
 from proto_tools.tools.structure_prediction.opendde.helpers import (
@@ -246,6 +246,24 @@ class OpenDDEConfig(MSAStructurePredictionConfig):
                 "device='cuda' or device='cpu'."
             )
         return None
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "OpenDDEConfig":
+        """One sample over 20 diffusion steps and one recycle (defaults: 1, 200, 10).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            OpenDDEConfig: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("num_samples", 1)
+        kwargs.setdefault("num_steps", 20)
+        kwargs.setdefault("num_cycles", 1)
+        return cast("OpenDDEConfig", super().minimal(**kwargs))
 
 
 # ============================================================================

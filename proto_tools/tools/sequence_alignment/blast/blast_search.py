@@ -9,7 +9,7 @@ import warnings
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -21,6 +21,7 @@ from proto_tools.utils import (
     ToolInstance,
 )
 from proto_tools.utils.device import RemoteDevice
+from proto_tools.utils.file_inputs import FASTA_FILES, FileInput
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,8 @@ BLAST_TASKS = Literal[
 # Simple heuristic for raw sequence detection: only contains valid
 # nucleotide/protein characters plus common whitespace.
 _SEQUENCE_CHARS = re.compile(r"^[A-Za-z*\-\s]+$")
+# A query is a FASTA file unless it is a valid sequence
+_QUERY_FILES = FileInput("query sequence", FASTA_FILES.extensions, lambda text: bool(_SEQUENCE_CHARS.match(text)))
 _STANDARD_HIT_FIELDS = (
     "qseqid",
     "sseqid",
@@ -143,18 +146,18 @@ class BlastSearchInput(BaseToolInput):
     """Input for BLAST search.
 
     The ``query`` field accepts either a raw sequence string or a path to a
-    FASTA file. Validation distinguishes between the two: if the value points
-    to an existing file it is treated as a FASTA path; otherwise it is treated
-    as a raw sequence string.
+    FASTA file. A ``Path`` is always a file. A string of sequence characters is
+    a sequence, even if a file by that name exists; any other string is read as
+    a FASTA path, and fails validation if no such file exists.
 
     Attributes:
-        query (str): A raw nucleotide/protein sequence (e.g. ``"ATGCGTAAA"``)
-            or a path to a FASTA file.
+        query (str | Path): A raw nucleotide/protein sequence (e.g. ``"ATGCGTAAA"``)
+            or a path to a FASTA file; a valid sequence is never read as a path.
         query_type (Literal['sequence', 'fasta_path']): Automatically set to ``"sequence"`` or ``"fasta_path"``
             during validation. Read-only; do not set manually.
     """
 
-    query: str = InputField(
+    query: str | Path = InputField(
         title="Query",
         description=("Query sequence string or path to a FASTA file containing query sequence(s)"),
     )
@@ -164,30 +167,25 @@ class BlastSearchInput(BaseToolInput):
         description=("Auto-inferred query type: 'sequence' for raw string, 'fasta_path' for a file path."),
     )
 
+    @field_validator("query")
+    @classmethod
+    def _resolve_query(cls, query: str | Path) -> str:
+        """Return a FASTA file query as its absolute path, or check a sequence query's characters."""
+        path = _QUERY_FILES.resolve(query)
+        if path is not None:
+            return str(path.resolve())
+        cleaned = str(query).strip()
+        if not cleaned:
+            raise ValueError("Query sequence cannot be empty")
+        if not _SEQUENCE_CHARS.match(cleaned):
+            raise ValueError(f"Query is neither a valid sequence nor a path to a FASTA file: {query!r}")
+        return str(query)
+
     @model_validator(mode="after")
     def infer_query_type(self) -> "BlastSearchInput":
-        """Classify query as a raw sequence or a FASTA file path."""
-        path = Path(self.query)
-        try:
-            is_fasta_path = path.exists() and path.is_file()
-        except OSError:
-            # A query longer than the filesystem's NAME_MAX (e.g. a long DNA
-            # sequence) makes stat() raise ENAMETOOLONG; it is a sequence, not a path.
-            is_fasta_path = False
-        if is_fasta_path:
-            object.__setattr__(self, "query_type", "fasta_path")
-        else:
-            # Not a file; treat as raw sequence. Validate characters.
-            cleaned = self.query.strip()
-            if not cleaned:
-                raise ValueError("Query sequence cannot be empty")
-            if not _SEQUENCE_CHARS.match(cleaned):
-                raise ValueError(
-                    f"Query does not look like a valid sequence (contains "
-                    f"unexpected characters) and is not an existing file path: "
-                    f"{self.query!r}"
-                )
-            object.__setattr__(self, "query_type", "sequence")
+        """Set ``query_type``: a resolved FASTA path is absolute, so it never matches the sequence characters."""
+        query_type = "sequence" if _SEQUENCE_CHARS.match(str(self.query).strip()) else "fasta_path"
+        object.__setattr__(self, "query_type", query_type)
         return self
 
 
@@ -636,7 +634,7 @@ def _online_search(inputs: BlastSearchInput, config: BlastSearchConfig) -> Blast
         query_seq = "".join(f">{record.id}\n{record.seq}\n" for record in sequences)
         query_length = sum(len(record.seq) for record in sequences)
     else:
-        query_seq = inputs.query
+        query_seq = str(inputs.query)
         query_length = len(query_seq)
 
     # Build qblast keyword arguments from typed config fields.
@@ -717,7 +715,7 @@ def _local_search(
         tmp.close()
         query_path = tmp.name
     else:
-        query_path = inputs.query
+        query_path = str(inputs.query)
 
     # Typed config fields that map 1:1 to BLAST+ CLI flags (same name).
     _CLI_PARAMS = (

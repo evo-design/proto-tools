@@ -17,7 +17,7 @@ Layout under PROTO_HOME::
     │   └── databases/            provisioned MMseqs2 databases
     ├── proto_tool_envs/          micromamba-managed tool venvs
     ├── uv_cache/                 uv package download cache (UV_CACHE_DIR)
-    ├── pip_cache/                pip HTTP cache (PIP_CACHE_DIR)
+    ├── uv_cache.prune/           uv cache prune stamp, lock, and log
     └── .micromamba/              micromamba binary + package cache
 """
 

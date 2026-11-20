@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
-SUPPORTED_MSA_FILE_EXTENSIONS = [".a3m", ".fasta", ".fa"]
+from proto_tools.utils.file_inputs import MSA_FILES
 
 
 class MSA(BaseModel):
@@ -35,7 +35,10 @@ class MSA(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _auto_generate_ids(cls, data: Any) -> Any:
-        """Accept a raw FASTA string and auto-generate sequence_ids when not provided."""
+        """Accept a path to an MSA file or raw FASTA text, and auto-generate sequence_ids when not provided."""
+        if isinstance(data, (str, Path)) and (path := MSA_FILES.resolve(data)) is not None:
+            msa = cls.from_file(path)
+            return {"aligned_sequences": msa.aligned_sequences, "sequence_ids": msa.sequence_ids}
         if isinstance(data, str):
             ids, seqs = _parse_fasta_records(data, drop_a3m_insertions=False)
             return {"aligned_sequences": seqs, "sequence_ids": ids}
@@ -73,26 +76,24 @@ class MSA(BaseModel):
 
     @classmethod
     def from_file(cls, path: str | Path) -> "MSA":
-        """Load an MSA from a FASTA or A3M file.
+        """Load an MSA from a FASTA or A3M file, optionally gzipped.
 
         Args:
-            path (str | Path): Path to a ``.fasta`` or ``.a3m`` file.
+            path (str | Path): Path to a ``.a3m``, ``.fasta`` or ``.fa`` file, optionally ``.gz``.
 
         Returns:
             MSA: The loaded alignment.
 
         Raises:
-            FileNotFoundError: If the file does not exist.
-            ValueError: If the file format is not supported.
+            FileNotFoundError: If the file does not exist or is a directory.
         """
-        path = Path(path)
-        if path.suffix == ".a3m":
-            ids, seqs = _parse_a3m_file(path)
+        resolved = MSA_FILES.check_file(Path(path))
+        text = MSA_FILES.read_file(resolved)
+        # A3M insertions are dropped; any other file is read as aligned FASTA
+        if resolved.name.lower().removesuffix(".gz").endswith(".a3m"):
+            ids, seqs = _parse_fasta_records(text, drop_a3m_insertions=True)
             return cls(aligned_sequences=seqs, sequence_ids=ids)
-        if path.suffix in (".fasta", ".fa"):
-            return cls.from_fasta_string(path.read_text())
-        msg = f"Unsupported MSA file format: {path.suffix}. Supported: {SUPPORTED_MSA_FILE_EXTENSIONS}"
-        raise ValueError(msg)
+        return cls.from_fasta_string(text)
 
     @classmethod
     def from_fasta_string(cls, text: str) -> "MSA":
@@ -393,11 +394,6 @@ def _parse_fasta_records(text: str, *, drop_a3m_insertions: bool) -> tuple[list[
         seqs.append("".join(current_seq))
 
     return ids, seqs
-
-
-def _parse_a3m_file(path: Path) -> tuple[list[str], list[str]]:
-    """Parse an A3M file into ``(sequence_ids, rectangular aligned_sequences)`` (insertions dropped)."""
-    return _parse_fasta_records(Path(path).read_text(), drop_a3m_insertions=True)
 
 
 def convert_a3m_to_fasta(

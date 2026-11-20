@@ -18,6 +18,7 @@ from functools import partial
 from typing import Any, Literal
 
 from standalone_helpers import (
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -66,9 +67,7 @@ class IgLMModel:
 
     def load(self, device: str, verbose: bool = False) -> None:
         """Load IgLM weights and tokenizer from the installed package to device."""
-        if verbose:
-            logger.info(f"Loading IgLM model: {self.model_checkpoint} on {device}")
-        logger.update_status(f"Loading IgLM {self.model_checkpoint}")
+        logger.update_status("Loading IgLM weights")
 
         import transformers
         from iglm.model.IgLM import CHECKPOINT_DICT, VOCAB_FILE
@@ -308,14 +307,15 @@ class IgLMModel:
             raise ValueError("iglm: cannot sample from empty prompt list")
 
         self._ensure_ready(device, verbose, seed)
-        logger.update_status(f"Generating {num_sequences_per_input} sequence(s) for {len(prompts)} prompt(s)")
 
         items = zip(prompts, chain_tokens, species_tokens, strict=True)
         all_sequences: list[list[str]] = []
 
+        counter = StatusCounter(logger, "Sampling from prompt %d/%d", total=len(prompts))
         for item_index, (prompt, chain_token, species_token) in enumerate(
             tqdm(list(items), desc="IgLM Sequence Generation", unit="prompt", disable=not verbose)
         ):
+            counter(item_index + 1)
             # Upstream conditions on [chain, species] then the prompt's residues, one token each.
             start_tokens = [chain_token, species_token, *prompt]
             all_sequences.append(
@@ -380,15 +380,17 @@ class IgLMModel:
             raise ValueError("iglm: cannot infill an empty sequence list")
 
         self._ensure_ready(device, verbose, seed)
-        logger.update_status(f"Infilling {num_sequences_per_input} span(s) for {len(sequences)} sequence(s)")
 
         items = zip(sequences, infill_ranges, chain_tokens, species_tokens, strict=True)
         all_sequences: list[list[str]] = []
         all_residues: list[list[str]] = []
 
+        counter = StatusCounter(logger, "Infilling sequence %d/%d", total=len(sequences))
+
         for item_index, (sequence, infill_range, chain_token, species_token) in enumerate(
             tqdm(list(items), desc="IgLM Span Re-design", unit="sequence", disable=not verbose)
         ):
+            counter(item_index + 1)
             start, end = infill_range
             prefix, suffix = sequence[:start], sequence[end:]
             start_tokens = [chain_token, species_token, *mask_span(list(sequence), start, end)]
@@ -452,7 +454,6 @@ class IgLMModel:
             raise ValueError("iglm: cannot score an empty sequence list")
 
         self._ensure_ready(device, verbose, seed)
-        logger.update_status(f"Scoring {len(sequences)} sequence(s)")
 
         items = list(zip(sequences, infill_ranges, chain_tokens, species_tokens, strict=True))
         encoded = [self._encode_for_scoring(item, index) for index, item in enumerate(items)]
@@ -461,10 +462,12 @@ class IgLMModel:
         all_metrics: list[dict[str, float]] = []
         all_logits: list[Any] = []
 
+        counter = StatusCounter(logger, "Scoring batch %d/%d", total=len(batches))
         with torch.inference_mode():
             for batch_index, batch in enumerate(
                 tqdm(batches, desc="IgLM Sequence Scoring", unit="batch", total=len(batches))
             ):
+                counter(batch_index + 1)
                 if verbose:
                     logger.info(f"Processing batch {batch_index + 1}/{len(batches)} ({len(batch)} sequences)")
 

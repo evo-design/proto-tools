@@ -15,7 +15,13 @@ from typing import Any, cast
 
 import numpy as np
 import torch
-from standalone_helpers import get_logger, log_likelihood_metrics, move_model_to_device, serialize_output
+from standalone_helpers import (
+    get_logger,
+    log_likelihood_metrics,
+    move_model_to_device,
+    serialize_output,
+    set_current_cuda_device,
+)
 from standalone_helpers.vocabulary import AMINO_ACIDS_LIST, gather_indices
 
 logger = get_logger(__name__)
@@ -346,8 +352,7 @@ class LigandMPNNModel:
             model_type: LigandMPNN variant (currently only 'ligand_mpnn'
                 is wired through the tool layer).
         """
-        if verbose:
-            logger.info(f"Loading LigandMPNN model_type={model_type} on {device}")
+        logger.update_status("Loading LigandMPNN weights")
 
         # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
         from standalone_helpers import export_weights_dir
@@ -410,17 +415,6 @@ def _set_legacy_seed(seed: int | None) -> None:
     torch.backends.cudnn.enabled = False
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-
-def _pin_active_cuda_device(device: str) -> None:
-    """Pin the process's active CUDA device to ``device``.
-
-    The original LigandMPNN code builds some tensors on the default CUDA device (``cuda:0``)
-    rather than the one threaded through, which fails under multi-GPU dispatch when a worker
-    runs on ``cuda:1``. Setting the active device makes those default-device ops land correctly.
-    """
-    if device.startswith("cuda") and torch.cuda.is_available():
-        torch.cuda.set_device(device)
 
 
 def _is_legacy_package_path(path: Path) -> bool:
@@ -596,6 +590,7 @@ class LegacyCompatibleLigandMPNNModel:
         if self._loaded:
             self.unload()
 
+        logger.update_status("Loading LigandMPNN weights")
         checkpoint = torch.load(self.checkpoint_path, map_location=device, weights_only=False)
         self.atom_context_num = int(checkpoint["atom_context_num"])
         k_neighbors = checkpoint["num_edges"]
@@ -632,6 +627,7 @@ class LegacyCompatibleLigandMPNNModel:
                 self._configured_packer_checkpoint_path,
                 "ligandmpnn_sc_v_32_002_16.pt",
             )
+        logger.update_status("Loading LigandMPNN side-chain packer weights")
         checkpoint_packer = torch.load(self.packer_checkpoint_path, map_location=device, weights_only=False)
         packer_cls = self._modules["sc_utils"].Packer
         self.packer = packer_cls(
@@ -683,7 +679,7 @@ class LegacyCompatibleLigandMPNNModel:
         **_: Any,
     ) -> dict[str, Any]:
         """Sample fixed-backbone sequences and packed full-atom structures."""
-        _pin_active_cuda_device(device)
+        set_current_cuda_device(device)  # upstream builds some tensors on the current CUDA device
         self.load(device)
         self.load_packer(device)
         _set_legacy_seed(seed)
@@ -755,7 +751,7 @@ class LegacyCompatibleLigandMPNNModel:
         **_: Any,
     ) -> dict[str, Any]:
         """Score a sequence against a structure with original-compatible semantics."""
-        _pin_active_cuda_device(device)
+        set_current_cuda_device(device)  # upstream builds some tensors on the current CUDA device
         self.load(device)
         _set_legacy_seed(seed)
         args = self._args(

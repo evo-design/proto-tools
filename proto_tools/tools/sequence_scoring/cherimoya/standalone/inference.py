@@ -2,12 +2,13 @@
 
 import hashlib
 import json
+import logging
 import os
 import sys
 from collections import OrderedDict
 from typing import Any
 
-from standalone_helpers import get_logger, serialize_output
+from standalone_helpers import StatusCounter, get_logger, serialize_output
 from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 
 logger = get_logger(__name__)
@@ -118,7 +119,6 @@ class CherimoyaWorker:
         else:
             from huggingface_hub import hf_hub_download
 
-            logger.update_status(f"Fetching {spec['filename']}")
             path = hf_hub_download(spec["repo_id"], spec["filename"], revision=spec["revision"])
             source = f"{spec['repo_id']}@{spec['revision']}:{spec['filename']}"
         if verbose:
@@ -144,13 +144,22 @@ class CherimoyaWorker:
             tuple: The models in spec order, and ``{"model", "fold", "source", "sha256"}``
                 per spec, where source and SHA-256 are those recorded when it was loaded.
         """
+        from standalone_helpers import set_current_cuda_device
+
+        # Cherimoya's Triton kernels launch on the current device, not the tensors' device.
+        set_current_cuda_device(device)
         self.to_device(device)
         models, applied = [], []
+        missing = len({self._key(spec) for spec in specs} - self._checkpoints.keys())
+        counter = StatusCounter(logger, "Loading Cherimoya checkpoint %d/%d", total=missing)
+        loaded_count = 0
         for spec in specs:
             key = self._key(spec)
             if key in self._checkpoints:
                 self._checkpoints.move_to_end(key)
             else:
+                loaded_count += 1
+                counter(loaded_count)
                 self._checkpoints[key] = self._load(spec, device, verbose)
                 while len(self._checkpoints) > MAX_CACHED_CHECKPOINTS:
                     self._checkpoints.popitem(last=False)
@@ -207,6 +216,9 @@ class CherimoyaWorker:
         batch_size, rc = int(input_dict["batch_size"]), bool(input_dict["reverse_complement_average"])
 
         rows: list[list[dict[str, Any]]] = [[] for _ in sequences]
+        logger.update_status(
+            f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+        )
         with torch.no_grad():
             for start in range(0, len(sequences), batch_size):
                 X = _one_hot(sequences[start : start + batch_size], device)
@@ -242,6 +254,10 @@ class CherimoyaWorker:
         as_counts = input_dict["values"] == "expected_counts"
 
         rows: list[list[dict[str, Any]]] = [[] for _ in sequences]
+        logger.update_status(
+            f"Predicting profiles for {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}",
+            level=logging.DEBUG,
+        )
         with torch.no_grad():
             for start in range(0, len(sequences), batch_size):
                 X = _one_hot(sequences[start : start + batch_size], device)

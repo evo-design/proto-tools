@@ -53,7 +53,7 @@ def test_viennarna_input_rejects_invalid_nucleotides():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_viennarna_basic_folding():
     """Basic RNA folding: a classic hairpin should produce a stem-loop structure."""
     inputs = ViennaRNAInput(sequences=[_HAIRPIN])
@@ -73,7 +73,7 @@ def test_viennarna_basic_folding():
     assert "(" in result.structure and ")" in result.structure
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_viennarna_multiple_sequences():
     """Batch folding: poly-A should be unstructured; hairpins should be structured."""
     sequences = [_HAIRPIN, _POLY_A, _HAIRPIN_2]
@@ -93,7 +93,7 @@ def test_viennarna_multiple_sequences():
     assert "(" in output.results[2].structure
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_viennarna_dna_to_rna_conversion():
     """T in input sequences must be converted to U before folding."""
     inputs_dna = ViennaRNAInput(sequences=[_HAIRPIN_DNA])
@@ -111,7 +111,7 @@ def test_viennarna_dna_to_rna_conversion():
     assert output_dna.results[0].mfe == pytest.approx(output_rna.results[0].mfe)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_viennarna_mixed_empty_and_valid_sequences():
     """Empty sequences interleaved with valid ones must each produce the correct result."""
     inputs = ViennaRNAInput(sequences=[_HAIRPIN, "", _POLY_A])
@@ -133,7 +133,7 @@ def test_viennarna_mixed_empty_and_valid_sequences():
     assert output.results[2].mfe is not None
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_viennarna_dangles_and_circ_reach_engine():
     """dangles=0 produces a less-negative MFE than dangles=2 (proves plumbing); circ=True runs."""
     inputs = ViennaRNAInput(sequences=[_HAIRPIN])

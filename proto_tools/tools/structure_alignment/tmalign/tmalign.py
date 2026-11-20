@@ -78,8 +78,15 @@ class TMalignMetrics(Metrics):
             Chain 1 (query). Always present. Range 0-1.
         tm_score_chain_2 (float): TM-score normalized by the length of
             Chain 2 (reference). Always present. Range 0-1.
+        primary_metric (str | None): ``"tm_score_chain_2"``, the conventional TM-score,
+            which keeps scores against one reference comparable.
     """
 
+    primary_metric: str | None = Field(
+        default="tm_score_chain_2",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
         "tm_score_chain_1": {
             "availability": "always",

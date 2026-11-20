@@ -127,7 +127,9 @@ markers = [
     "uses_gpu: mark test as requiring GPU. Optional arg: @pytest.mark.uses_gpu(n) skips unless n GPUs are visible; --multi-gpu selects n >= 2",
     "uses_cpu: mark test as CPU-only. Optional arg: @pytest.mark.uses_cpu(n) skips unless n CPUs are visible (matches the count ToolPool's _detect_cpus would see)",
     "slow: Slow tests that may take several minutes",
-    "integration: Integration tests",
+    "uses_env: Builds or runs a tool env; skipped with --no-envs",
+    "requires_credential(*env_vars): Needs these credentials (env vars a ConfigField(credential=...) declares); skipped at collection unless every one is set",
+    "network: Calls a live external service (NCBI, UniProt, RCSB, EBI, ...). Skipped unless --network is passed; NOT enabled by --all or --ext",
     "skip_ci: Skip test in GitHub Actions CI",
     "extensive: Combinatorial tests (e.g., every tool × device transition). Skipped unless --ext (or --extensive) is passed",
     "benchmark: Marks the e2e benchmark test for a tool. Required arg: tool_key, e.g. @pytest.mark.benchmark('esm2-embedding'). Skipped by default; opt in additively via --benchmark (or --benchmark-report / --benchmark-tool / --benchmark-toolkit). NOT enabled by --all or --slow.",
@@ -225,6 +227,7 @@ module = [
     "colabfold.*",
     "evo.*",
     "evo2.*",
+    "stripedhyena.*",
     "progen3.*",
     "iglm.*",
     "vortex.*",
@@ -370,6 +373,7 @@ ignore = [
 "proto_tools/utils/system_info.py" = ["PLW0603", "PLW1510", "S603", "S607"]
 "proto_tools/utils/tool_instance.py" = ["S101", "S603", "S607"]
 "proto_tools/utils/foundation_env.py" = ["S603", "S607"]
+"proto_tools/utils/uv_prune.py" = ["S603", "S607"]
 "proto_tools/utils/persistent_worker.py" = ["S101", "S603", "S607"]
 "proto_tools/utils/tool_pool.py" = ["S101"]
 "proto_tools/entities/ligands/ligands.py" = ["S101"]

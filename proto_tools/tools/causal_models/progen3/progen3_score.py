@@ -1,7 +1,7 @@
 """ProGen3 scoring tool."""
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringConfig,
@@ -70,6 +70,12 @@ class ProGen3ScoringConfig(CausalModelScoringConfig):
         description="Override the default download with a local weights directory",
         reload_on_change=True,
     )
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "ProGen3ScoringConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "progen3-112m")
+        return cast("ProGen3ScoringConfig", super().minimal(**kwargs))
 
 
 # ============================================================================

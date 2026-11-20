@@ -235,6 +235,7 @@ model_checkpoint: str = ConfigField(
 - `remote_unsupported_reason` rejects only a **non-bundled** value (a local path isn't on a hosted worker); bundled names are remote-OK because they're provisioned.
 - Keep the bundled-name map in sync with `setup.sh`'s download list, and add a test asserting `setup.sh` fetches every bundled checkpoint.
 - Reference implementation: `tools/structure_prediction/opendde` (`_BUNDLED_MODELS` in the tool, `_BUNDLED_CHECKPOINTS` in `standalone/inference.py`).
+- **Several checkpoint sizes → override `minimal()` to pick the smallest.** The seed, device, GPU lifecycle and Modal smoke tests all build configs with `Config.minimal()`. A toolkit offering several sizes (ESM2 8M–15B, ProGen3 112M–3B) must `kwargs.setdefault("model_checkpoint", "<smallest>")` there, so those tests load in seconds; see `progen3_score.py`. On the MSA path, pick the smallest checkpoint that accepts MSAs (`ESMFold2Config.minimal`). The default checkpoint stays covered: `tests/tool_infra_tests/test_default_config_smoke.py` runs it for toolkits no other test runs at defaults, and fails until you record how yours is covered.
 
 ## Code Style Conventions
 
@@ -340,12 +341,19 @@ Why: standalones run inside isolated micromamba subprocesses where `proto_tools`
 
 `__init__.py` is the only exemption (no log calls there). The consistency test enforces this on every other `.py` file in the standalone tree.
 
-For status updates that should drive the parent's spinner subtitle (and never clutter console output), use the dedicated method:
+For status updates that drive the status line (the spinner subtitle, replaced in place, so they don't print while a bar is up), use the dedicated method:
 
 ```python
-logger.update_status("Loading checkpoint")  # spinner subtitle update; not shown in console
-logger.info("...")                           # normal log line
+logger.update_status("Loading ESMFold weights")  # status line update, also logged at INFO; no logger.info twin
+logger.update_status("Folding 8 structures", level=logging.DEBUG)  # routine work: logged at DEBUG
+logger.info("...")                                # normal log line
 ```
+
+Send a status at each phase boundary someone waiting on the tool would want to see: loading large weights, each
+pipeline stage, progress through a known number of items (with `StatusCounter`, e.g. `Folding structure 3/8`), and
+slow steps that aren't obvious. Follow the house style in `notes/logging.md` ("Status messages"): a present
+participle in sentence case with no trailing period, counts as `<item> <n>/<total>`, and nothing from the input
+(sequences, file names, paths, IDs) in the text.
 
 **If the tool has file-format conversion helpers** (e.g., writing MSA to Parquet, converting complexes to YAML/FASTA), implement them as plain-type functions in `helpers.py` at the tool directory level. These functions must be self-contained (no `proto_tools` imports) and take only plain types (str, list, dict). The tool layer imports and wraps them with typed signatures. Keeping them dependency-free lets the hosted execution backend reuse the same files, preserving a single source of truth. See esmfold, chai1, boltz2 for examples.
 
@@ -503,13 +511,13 @@ HF_TOKEN
 
 **10C: Run all tests for the new tool**
 
-Run all tests (functional + infra) filtered to the new tool:
+Run all tests (functional + infra) for the new tool's toolkit:
 
 ```bash
-pytest --all --ext -k "{tool_key}" -v
+pytest -k "{toolkit}" --all --ext --network -v
 ```
 
-This runs the tool's functional tests AND the parametrized infra tests (`example_input`, device consistency, registry integration). A detailed log file is generated in `logs/` (project root).
+Filter on the **toolkit** name, not one tool key, so every key in the toolkit and the infra tests parametrized over them run: `example_input`, device consistency, registry integration, the GPU lifecycle test, and the seed tests. `--all --ext` turns on slow, integration and extensive tests. `--network` also runs the tests marked `network`, which call live external services; the suite skips them by default. Tests marked `requires_credential(...)` still skip unless their credentials are set. A detailed log file is generated in `logs/` (project root).
 
 ---
 
@@ -656,7 +664,7 @@ def test_{tool_key_snake}_input_normalizes_single_item():
 
 # ── Integration ───────────────────────────────────────────────────────────────
 
-@pytest.mark.uses_gpu  # or @pytest.mark.integration for CPU tools
+@pytest.mark.uses_gpu  # or @pytest.mark.uses_env for CPU tools
 def test_{tool_key_snake}_basic_execution():
     """Test basic tool execution with default config."""
     # Create input with realistic data
@@ -676,7 +684,7 @@ CRITICAL RULES:
 - Do NOT write tests like: `test_*_rejects_missing_*`, `test_*_rejects_extra_fields`, `test_*_config_defaults`, `test_*_rejects_invalid_*` (for simple `ge=`/`le=` constraints). These just re-test Pydantic.
 - Import from `proto_tools.tools` (top-level), not from deep paths
 - Use `@pytest.mark.uses_gpu` for any test that runs the actual tool on GPU
-- Use `@pytest.mark.integration` for CPU dispatch tests
+- Use `@pytest.mark.uses_env` for CPU tests that build or run the tool's env
 - Use realistic biological data (real sequences/structures from dummy_data/)
 - If the tool's input takes `msas`, add a worker stub for it to `_STUBS` in
   `tests/structure_prediction_tests/test_msa_contract.py`; `test_every_msa_tool_is_covered`
@@ -1015,7 +1023,7 @@ Review the **actual diff**, not just the files in isolation, against the quality
 
 6. **Run the full sweep for the new toolkit, as the last step, after the PR exists:**
    ```bash
-   pytest --all --ext -k "{toolkit}"
+   pytest -k "{toolkit}" --all --ext --network
    ```
    This is the final gate on every tool implementation. It runs the toolkit's own
    tests plus every parametrized infra and style test that touches it, on real

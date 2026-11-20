@@ -29,38 +29,25 @@ PROTO_HOME/                   (default: ~/.proto/)
 ├── proto_tool_envs/          micromamba-managed tool venvs
 ├── compile_cache/            driver-level caches shared by every tool (CUDA_CACHE_PATH, ...)
 ├── uv_cache/                 uv package download cache (UV_CACHE_DIR)
-├── pip_cache/                pip HTTP cache (PIP_CACHE_DIR)
+├── uv_cache.prune/           when the uv cache was last pruned, and the prune log
 └── .micromamba/              micromamba binary + package cache
 ```
 
 Each toolkit's folder holds every model file it downloads, whichever framework fetches it, so deleting `proto_model_cache/{toolkit}/` frees exactly that toolkit's weights. Subfolders appear only when the toolkit writes to them. A few toolkits read another toolkit's folder instead of keeping a copy: bindcraft, freebindcraft, and germinal use `alphafold2/`'s AF2 parameters, and germinal uses `chai1/`'s Chai-1 weights and `ablang/`'s AbLang weights.
 
-### Moving from the old layout
-
-Older versions kept one shared `huggingface/`, `torch/`, and `jax_cache/` at the top of `proto_model_cache/`, and put other weights directly in `{toolkit}/`. The first tool you run moves every toolkit's files into the new folders, so nothing is downloaded again. It moves files rather than copying them and removes the old folders it empties; anything not in the old place is skipped. If a file already exists in both places, or cannot be moved (for example a read-only shared cache), it stays where it is and a warning is logged. To migrate up front, or to see what would move:
-
-```bash
-python scripts/migrate_proto_home.py --dry-run
-python scripts/migrate_proto_home.py
-```
-
-Anything left in the old top-level `huggingface/` afterwards belongs to no current toolkit and can be deleted.
-
 ## uv / pip package caches
 
-Tool env builds use `uv pip install` (and occasionally `pip install`) to fetch Python wheels. By default, proto-tools routes both caches under `PROTO_HOME` so all disk usage is consolidated and cleanable atomically.
+Tool env builds use `uv pip install` (and occasionally `pip install`) to fetch Python wheels.
 
-- `UV_CACHE_DIR` defaults to `PROTO_HOME/uv_cache/` (extracted archives + HTTP cache for `uv`)
-- `PIP_CACHE_DIR` defaults to `PROTO_HOME/pip_cache/` (HTTP + wheel cache for `pip`)
+- **uv:** `UV_CACHE_DIR` defaults to `PROTO_HOME/uv_cache/`. `persistent_worker._build_subprocess_env()` sets it with `setdefault`, so a value in your shell wins:
 
-Both are injected by `persistent_worker._build_subprocess_env()` via `setdefault`, so any value set in your shell overrides the default. To share the cache across projects, set them explicitly:
+  ```bash
+  export UV_CACHE_DIR=~/.cache/uv   # share the cache across projects
+  ```
 
-```bash
-export UV_CACHE_DIR=~/.cache/uv
-export PIP_CACHE_DIR=~/.cache/pip
-```
-
-The cache and tool envs share a filesystem by default, which lets `uv` hard-link from the cache into envs (saves bulk, because the extracted archive is not duplicated). Wiping `PROTO_HOME/proto_tool_envs/` preserves the cache, so the next rebuild is fast.
+  The cache and tool envs share a filesystem by default, so `uv` hardlinks each package from the cache into every env that uses it: one copy of torch serves every env on the same build. Wiping `PROTO_HOME/proto_tool_envs/` keeps the cache, so the next rebuild is fast. Never delete the cache itself, or later builds download and store their own copies.
+- **Pruning:** after a successful build, proto-tools starts `uv cache prune` in a detached, idle-priority process (`proto_tools/utils/uv_prune.py`), so the build doesn't wait. The prune removes only entries uv no longer references, so envs keep every file. It runs at most once a day and one at a time, and only for envs built with the default uv. A uv install that starts while it runs waits for it. Its stamp, lock, and log are in `{UV_CACHE_DIR}.prune/`, beside the cache, because `uv cache prune` deletes anything in the cache it doesn't recognize.
+- **pip:** pip copies files rather than linking them, so a cache would only spare a re-download. Builds set `PIP_NO_CACHE_DIR=1`, and the few `pip install` steps download fresh.
 
 ## JAX compilation cache
 
@@ -178,8 +165,6 @@ if weights_dir:
 ```
 
 HF-based tools need no code changes. `persistent_worker.py` points `HF_HOME`, `TORCH_HOME`, and `JAX_COMPILATION_CACHE_DIR` at the toolkit's folder automatically. A toolkit that should share another toolkit's Hugging Face and torch caches names that folder in `standalone/weights_key.txt`.
-
-When a toolkit's downloads change, add what it previously wrote to `MIGRATIONS` in `proto_tools/utils/weights_layout.py` (an `HFRepo`, `HFRepoPattern`, `HFHomePath`, `TorchHubFile`, `WeightsDir`, or `CachePath`) so existing caches move instead of downloading again.
 
 Use the shared helpers rather than writing download or path code in a tool:
 

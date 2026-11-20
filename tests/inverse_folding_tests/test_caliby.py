@@ -416,7 +416,7 @@ def test_symmetric_chains_rejects_chains_missing_different_residues(tmp_path):
 
 
 # ============================================================================
-# Integration tests (GPU required, run with --integration or --all)
+# Integration tests (GPU required)
 # ============================================================================
 @pytest.mark.uses_gpu
 def test_caliby_score_batch_size_does_not_change_the_ensemble_energy(pdb_structure):

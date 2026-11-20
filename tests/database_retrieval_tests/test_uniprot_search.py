@@ -185,7 +185,8 @@ def test_csv_fasta_and_json_export(monkeypatch: pytest.MonkeyPatch, tmp_path: An
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_uniprot_search_resolves_a_description():
     """A free-text description returns Taq polymerase among the top reviewed hits."""
     output = run_uniprot_search(
@@ -196,7 +197,8 @@ def test_uniprot_search_resolves_a_description():
     assert all(hit.reviewed for hit in hits)
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_uniprot_search_taxon_filter_includes_descendants():
     """taxon_id=40674 (Mammalia) keeps only mammalian p53 entries."""
     output = run_uniprot_search(

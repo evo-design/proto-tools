@@ -13,7 +13,7 @@ from typing import Any
 
 from pymemesuite.common import MotifFile, Sequence
 from pymemesuite.fimo import FIMO
-from standalone_helpers import get_logger
+from standalone_helpers import StatusCounter, get_logger
 
 logger = get_logger(__name__)
 
@@ -96,7 +96,7 @@ def run_fimo_scan(input_data: dict[str, Any]) -> dict[str, Any]:
     fimo = FIMO(both_strands=both_strands, threshold=input_data["threshold"])
 
     results: list[list[dict[str, Any]]] = [[] for _ in sequences]
-    for motif in motifs:
+    for motif in StatusCounter(logger, "Scanning motif %d/%d", motifs):
         accession = _decode(motif.accession)
         name = _decode(motif.name)
         motif_id = accession or name

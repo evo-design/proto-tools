@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Literal, TypeGuard
 
 import numpy as np
 
+from proto_tools.utils.file_inputs import STRUCTURE_FILES, read_text_file
+
 if TYPE_CHECKING:
     import gemmi
     from biotite.structure import AtomArray
@@ -30,48 +32,9 @@ _PDB_MAX_RESIDUES_PER_CHAIN = 9_999
 # Non-crystallographic symmetry operators are rare and genuinely unrepresentable.
 _CIF_ONLY_METADATA_MARKERS = ("_struct_ncs_oper",)
 
-# Upper bound for treating a string as a possible filesystem path. Structure content
-# strings are routinely 5-50 KB; any string longer than this is definitely content,
-# not a path, and we skip the filesystem probe to avoid pointless work.
-_MAX_PATH_STRING_LEN = 4096
-
 # ===============================
 # I/O
 # ===============================
-SUPPORTED_EXTENSIONS = ("pdb", "cif", "mmcif")
-
-
-def looks_like_structure_path(value: object) -> bool:
-    """Return True if ``value`` is a filesystem path to an existing structure file.
-
-    Used by ``Structure._handle_construction`` so that ``Structure(structure="foo.pdb")``
-    transparently loads from disk (restoring the old plain-class ergonomics) while
-    content strings pass straight through.
-
-    Args:
-        value (object): Value to probe — a ``Path`` or a string that may be either a
-            filesystem path or raw PDB/CIF content.
-
-    Returns:
-        bool: True if ``value`` points to an existing file with a supported extension.
-    """
-    if isinstance(value, Path):
-        try:
-            return value.is_file()
-        except OSError:
-            return False
-    if isinstance(value, str):
-        # Content strings are multi-line and/or long; only probe the filesystem for
-        # short single-line strings whose suffix matches a structure extension.
-        if "\n" in value or len(value) > _MAX_PATH_STRING_LEN:
-            return False
-        if not value.lower().endswith(SUPPORTED_EXTENSIONS):
-            return False
-        try:
-            return Path(value).is_file()
-        except OSError:
-            return False
-    return False
 
 
 def looks_like_url(value: object) -> TypeGuard[str]:
@@ -91,33 +54,27 @@ def looks_like_url(value: object) -> TypeGuard[str]:
 
 
 def load_structure_file(filepath: Path | str) -> str:
-    """Loads the contents of a structure file (PDB or CIF) and returns it as a string.
+    """Load the text of a structure file (PDB or mmCIF, optionally gzipped).
 
     Args:
-        filepath (Path | str): Path to the structure file (PDB or CIF).
+        filepath (Path | str): Path to a ``.pdb``, ``.cif`` or ``.mmcif`` file, optionally ``.gz``.
 
     Returns:
-        str: String of content from the structure file.
+        str: The file's content.
 
     Raises:
-        FileNotFoundError: If the file does not exist
-        ValueError: If the file extension is not .pdb, .cif, or .mmcif
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the file extension is not a structure extension.
     """
-    filepath = Path(filepath)
-
-    if not filepath.exists():
-        raise FileNotFoundError(f"File not found: {filepath}")
-
-    # Normalize extension check
-    suffix_lower = filepath.suffix.lower()
-    if not suffix_lower.endswith(SUPPORTED_EXTENSIONS):
+    if not STRUCTURE_FILES.has_extension(filepath):
         raise ValueError(
-            f"Invalid structure file extension: {filepath.suffix}. "
-            f"Must one of the following extensions: {', '.join(SUPPORTED_EXTENSIONS)}"
+            f"Invalid structure file extension: {Path(filepath).name!r}. "
+            f"Must end in one of {', '.join(STRUCTURE_FILES.extensions)}, optionally followed by .gz"
         )
-
-    # Read the structure file
-    return filepath.read_text(encoding="utf-8")
+    path = Path(filepath)
+    if not path.is_file():
+        raise FileNotFoundError(f"File not found: {path}")
+    return read_text_file(path)
 
 
 def detect_structure_format(structure_content: str) -> str:
@@ -185,22 +142,24 @@ def is_valid_structure(structure_filepath_or_content: str | Path) -> bool:
     Returns:
         bool: True if the structure content string/file has valid PDB or CIF format, False otherwise
     """
+    try:
+        file_text = STRUCTURE_FILES.read(structure_filepath_or_content)
+        input_str = file_text if file_text is not None else str(structure_filepath_or_content)
+        return _parses_with_atoms(input_str, detect_structure_format(input_str))
+    except Exception:
+        return False
+
+
+def _parses_with_atoms(input_str: str, struct_format: str) -> bool:
+    """Whether PDB or mmCIF content in ``struct_format`` parses into a structure with at least one atom."""
     import gemmi
 
     try:
-        # Determine if input is a file path or content string
-        input_str = str(structure_filepath_or_content)
-
-        if input_str.lower().endswith(SUPPORTED_EXTENSIONS):
-            # It's a file path - read directly
-            structure = gemmi.read_structure(input_str)
-        else:
-            struct_format = detect_structure_format(input_str)
-            if struct_format == "cif":
-                doc = gemmi.cif.read_string(input_str)
-                structure = gemmi.make_structure_from_block(doc[0])
-            elif struct_format == "pdb":
-                structure = gemmi.read_pdb_string(input_str)
+        if struct_format == "cif":
+            doc = gemmi.cif.read_string(input_str)
+            structure = gemmi.make_structure_from_block(doc[0])
+        elif struct_format == "pdb":
+            structure = gemmi.read_pdb_string(input_str)
 
     except Exception:
         # If parsing fails for any reason, return False

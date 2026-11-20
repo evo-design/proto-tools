@@ -75,8 +75,11 @@ if os.path.exists(util_path):
         'coords, confidence, _, _, padding_mask = batch_converter(batch)\n    encoder_out = model.encoder.forward(coords, padding_mask, confidence,',
         'coords, confidence, _, _, padding_mask = batch_converter(batch)\n    device = next(model.parameters()).device\n    coords = coords.to(device)\n    confidence = confidence.to(device)\n    padding_mask = padding_mask.to(device)\n    encoder_out = model.encoder.forward(coords, padding_mask, confidence,'
     )
-    with open(util_path, 'w') as f:
+    # Write a new file and swap it in: uv hardlinks installed files across envs, so an in-place write
+    # would patch every env sharing this one
+    with open(util_path + '.proto-patch', 'w') as f:
         f.write(content)
+    os.replace(util_path + '.proto-patch', util_path)
 
 # --- Patch gvp_transformer.py: GPU device handling ---
 gvp_path = '$ESM_GVP'
@@ -98,8 +101,11 @@ if os.path.exists(gvp_path):
         'sampled_tokens = torch.full((1, 1+L), mask_idx, dtype=int)',
         'sampled_tokens = torch.full((1, 1+L), mask_idx, dtype=int, device=device)',
     )
-    with open(gvp_path, 'w') as f:
+    # Write a new file and swap it in: uv hardlinks installed files across envs, so an in-place write
+    # would patch every env sharing this one
+    with open(gvp_path + '.proto-patch', 'w') as f:
         f.write(content)
+    os.replace(gvp_path + '.proto-patch', gvp_path)
 "
 echo "Applied ESM compatibility patches."
 

@@ -589,7 +589,7 @@ def test_rfdiffusion3_precision_site_runs_alignment_under_bf16_autocast():
     assert output.strip().splitlines()[-1] == "ok", output
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_rfdiffusion3_two_timestep_boundary_executes():
@@ -604,7 +604,7 @@ def test_rfdiffusion3_two_timestep_boundary_executes():
     assert len(output[0][0].complex.chains[0].sequence) == 40
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_rfdiffusion3_motif_realignment_executes():

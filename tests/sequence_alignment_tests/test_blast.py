@@ -144,7 +144,7 @@ def test_input_fasta_path(tmp_path):
 
 
 def test_input_rejects_invalid_chars():
-    with pytest.raises(ValidationError, match="unexpected characters"):
+    with pytest.raises(ValidationError, match="neither a valid sequence nor a path"):
         BlastSearchInput(query="ATGCGT123!@#")
 
 
@@ -154,7 +154,7 @@ def test_input_rejects_empty():
 
 
 def test_input_rejects_nonexistent_path():
-    with pytest.raises(ValidationError, match="unexpected characters"):
+    with pytest.raises(ValidationError, match="no such file exists"):
         BlastSearchInput(query="/nonexistent/file.fasta")
 
 
@@ -449,7 +449,7 @@ def test_golden_online_xml_parses_alignment_detail():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_local_blastn_exact_match(nucl_blast_db):
     """Exact subsequence from the database → 100% identity hit."""
     query = "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTTATGCGTAAACCCGGGTTTTTTAAACCC"
@@ -469,7 +469,7 @@ def test_local_blastn_exact_match(nucl_blast_db):
     assert result.metadata["program"] == "blastn"
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_local_blastn_no_hits(nucl_blast_db):
     """Unrelated sequence with strict evalue → 0 hits."""
     result = run_blast_search(
@@ -485,7 +485,7 @@ def test_local_blastn_no_hits(nucl_blast_db):
     assert result.num_hits == 0
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_local_blastn_fasta_file_query(nucl_blast_db, tmp_path):
     """Query from a FASTA file instead of raw sequence."""
     fasta = tmp_path / "query.fasta"
@@ -502,7 +502,7 @@ def test_local_blastn_fasta_file_query(nucl_blast_db, tmp_path):
     assert result.num_hits >= 1
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_local_blastn_reports_alignment_traceback(nucl_blast_db):
     """Local hits carry the aligned query/subject and BTOP traceback."""
     query = "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTTATGCGTAAACCCGGGTTTTTTAAACCC"
@@ -516,7 +516,7 @@ def test_local_blastn_reports_alignment_traceback(nucl_blast_db):
     assert hit.btop is not None
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_local_blastp_exact_match(prot_blast_db):
     """Exact protein subsequence → 100% identity hit."""
     query = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"
@@ -532,7 +532,7 @@ def test_local_blastp_exact_match(prot_blast_db):
     assert result.hits[0].pident == pytest.approx(100.0)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_local_blastp_no_hits(prot_blast_db):
     """Unrelated protein sequence with strict evalue → 0 hits."""
     result = run_blast_search(
@@ -550,7 +550,8 @@ def test_local_blastp_no_hits(prot_blast_db):
 _ONLINE_BLAST_TIMEOUT = 900
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 @pytest.mark.slow
 @pytest.mark.skip_ci
 def test_online_blastp():
@@ -582,7 +583,7 @@ def test_online_blastp():
     assert result.hits[0].pident > 80.0
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_full_pipeline_create_db_search_export(tmp_path):
     """Full pipeline: create database → search → export results."""
     # Create database

@@ -174,7 +174,7 @@ def test_codonfm_worker_padding_and_early_validation(monkeypatch) -> None:
     assert loaded is False
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_codonfm_worker_gradient_is_padded_finite_and_does_not_touch_parameter_grads() -> None:
     """The relaxed worker path uses /8 padding and returns only input gradients.
 
@@ -540,7 +540,7 @@ def test_codonfm_score_real_gpu() -> None:
         assert row.llr == pytest.approx(row.ref_log_likelihood - row.alt_log_likelihood, rel=1e-5)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_codonfm_gradient_token_layout_matches_the_scoring_path() -> None:
     """The gradient's ``[CLS] + codons + [SEP]`` row must match Encodon's own tokenized input.
 
@@ -562,7 +562,7 @@ def test_codonfm_gradient_token_layout_matches_the_scoring_path() -> None:
     assert "CODONFM_TOKEN_LAYOUT_OK" in output, output
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_codonfm_tokenizer_covers_the_canonical_codon_order() -> None:
     """The real tokenizer must map every canonical codon by name, with no weights involved.
 

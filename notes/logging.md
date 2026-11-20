@@ -41,6 +41,78 @@ The `update_status=True` kwarg is provided by `ProtoLogger`, a `logging.Logger` 
 
 The convention is enforced by `tests/style_consistency_tests/test_standalone_logger_consistency.py`. Any module-level `logger = X(__name__)` in a standalone must use `get_logger`, and `logging.getLogger(__name__)` / `getLogger(__name__)` are forbidden (their loggers fall outside the `worker.*` namespace and would never reach the bridge).
 
+## Status messages
+
+A status message is the one line that says what a tool is doing right now: the spinner's subtitle locally, and the
+live subtitle of a hosted run or a run on your own Modal. One `update_status` call reaches all three. Only the
+latest message is shown, so each one replaces the last.
+
+```python
+logger.update_status("Loading ESMFold weights")                 # in a standalone, or a tool in the caller's process
+logger.update_status("Scoring 8 sequences", level=logging.DEBUG)
+for sequence in StatusCounter(logger, "Folding structure %d/%d", sequences):
+    fold(sequence)                                              # reports the first, then one every 5 s, and the last
+```
+
+`StatusCounter` wraps an iterable like tqdm (`total` defaults to its length). When a loop isn't one item per step,
+such as batches, call it with each item's number instead: `counter = StatusCounter(logger, "Scoring batch %d/%d",
+total=num_batches)`, then `counter(batch_number)`.
+
+A status is itself a log record, so it needs no `logger.info` beside it saying the same thing; detail the status
+can't carry (a checkpoint, a device, a path) isn't worth a second line either. The status line always updates,
+whatever the logger's level; `level` only decides how the record is logged:
+
+- **`INFO` (the default)** for phases worth a line in the log: loading weights, downloads, database builds, and
+  submitting, waiting on and fetching a remote job.
+- **`logging.DEBUG`** for the tool's routine work, which runs on every call and often in a loop: scoring,
+  predicting, sampling, folding, designing, aligning, searching. `StatusCounter` logs at DEBUG by default.
+
+While a progress bar is up, a status never prints to the console: it replaces the bar's subtitle in place, so a
+long run leaves one changing line. With no bar up, it prints as an ordinary record if the console's level admits it.
+File handlers keep every status at its level.
+
+`StatusCounter` is in `standalone_helpers` (`from standalone_helpers import StatusCounter` in a standalone). A tool
+that runs in the caller's process imports it from
+`proto_tools.utils.standalone_helpers_source.standalone_helpers` and passes its own module logger; proto-tools'
+loggers have `update_status` too.
+
+### When to send one
+
+At the phase boundaries someone waiting on the tool would want to see:
+
+- **Loading large weights** (a cold start that otherwise looks hung): `Loading ESMFold weights`.
+- **Each stage of a multi-stage pipeline**: `Searching MSA`, `Folding structure`, `Relaxing structure`.
+- **Progress through a known number of items**, with `StatusCounter`: `Folding structure 3/8`.
+- **A slow step that isn't obvious**: `Downloading UniRef30`, `Minimizing energy`.
+
+Not on every iteration of a loop (`StatusCounter` throttles for you), and not for a step that takes well under a
+second. A quick lookup or a single fast call needs none: the framework already shows `Running <tool>`.
+
+When the caller already loops over items with `progress_bar` and dispatches one worker call per item (most folding
+and inverse-folding tools), that bar owns the count. A worker status sent on every call would overwrite it, so send
+only what the bar can't show, such as a cold `Loading ... weights`, and then one line to replace it once loading is
+done.
+The same goes for gradient operations: an optimizer calls them every step and owns the progress, so they send
+nothing beyond a cold load.
+
+`get_logger` from `standalone_helpers` always returns a logger with `update_status`, even outside a worker (a
+setup script, say), where the status is just a log record.
+
+### House style
+
+- **A present participle and its object, in sentence case, with no trailing period**: `Loading ESMFold weights`,
+  `Searching MSA`, `Scoring variant 3/8`.
+- **Counts as `<item> <n>/<total>`**, the item singular: `Folding structure 3/8`, `Sampling sequence 12/64`. A single
+  step over a batch names its size with a real plural: `Scoring 8 sequences`, `Scoring 1 sequence` (never `(s)`).
+- **Name the model as its docs do** (`ESMFold`, `AlphaFold3`, `Boltz-2`). An official checkpoint name is fine
+  (`Loading ESM2 650M weights`); a device is not needed.
+- **Written for someone waiting**, not someone debugging: `Refining backbone`, not `entering refinement loop (iter=0)`.
+- **Nothing from the input or the machine**: no sequences, file names, paths, IDs a user passed in, URLs or hostnames.
+  Status messages cross process and account boundaries and land in log streams.
+
+Before a remote container is up, the dispatching side shows `Starting container`
+(`proto_tools.utils.progress.starting_container_status`); a tool can't, since it isn't running yet.
+
 ## Why the bridge ships in `standalone_helpers/`
 
 Tool subprocesses run in isolated micromamba venvs that don't have `proto_tools` (or `pydantic`, etc.) installed. The bridge implementation lives at `proto_tools/utils/standalone_helpers_source/standalone_helpers/proto_logging.py`, which `_build_subprocess_env()` publishes to the subprocess on `PYTHONPATH`. The bootstrap then triggers `install()` via `import standalone_helpers` (gated on `TOOL_VENV_PATH` in the package `__init__`), so the bridge is in place before the standalone module's body runs.

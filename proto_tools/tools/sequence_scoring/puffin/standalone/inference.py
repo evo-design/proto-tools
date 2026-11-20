@@ -12,6 +12,7 @@ import sys
 from typing import Any
 
 from standalone_helpers import (
+    StatusCounter,
     get_logger,
     get_pytorch_memory_stats,
     move_model_to_device,
@@ -107,10 +108,15 @@ class PuffinModel:
         if self.model is not None and self.device == device:
             return self.model
         repo_dir = self._ensure_repo()
+        logger.update_status("Loading Puffin weights")
         if verbose:
             logger.info(f"Loading Puffin on {device}")
         from puffin import Puffin  # type: ignore[import-not-found]
+        from standalone_helpers import set_current_cuda_device
 
+        # Puffin's predict/interpret call ``self.cuda()`` and ``.cuda()`` on inputs, which use the
+        # current device: make that the leased GPU before anything touches CUDA.
+        set_current_cuda_device(device)
         with _chdir(repo_dir):
             model = Puffin(use_cuda=device.startswith("cuda"))
         model.to(device)
@@ -138,7 +144,7 @@ def _predict(state: PuffinModel, input_dict: dict[str, Any]) -> dict[str, Any]:
     model = state.load(device, verbose=verbose)
 
     predictions: list[list[list[float]]] = []
-    for sequence in sequences:
+    for sequence in StatusCounter(logger, "Predicting sequence %d/%d", sequences):
         df = model.predict(sequence)
         # Stack the 10 prediction rows in TRACK_NAMES order, then transpose to (L-650, 10).
         stacked = np.vstack([np.asarray(df.loc[row].to_numpy(), dtype=float) for row in PREDICT_ROW_NAMES])
@@ -169,7 +175,7 @@ def _interpret(state: PuffinModel, input_dict: dict[str, Any]) -> dict[str, Any]
     model = state.load(device, verbose=verbose)
 
     results: list[dict[str, Any]] = []
-    for sequence in sequences:
+    for sequence in StatusCounter(logger, "Interpreting sequence %d/%d", sequences):
         df = model.interpret(sequence, targeti=target_signal, reverse_strand=reverse_strand)
 
         motif_activations: dict[str, list[float]] = {}

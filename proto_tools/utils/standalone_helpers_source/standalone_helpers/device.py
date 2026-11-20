@@ -222,6 +222,88 @@ def resolve_jax_device(device: str) -> Any:
 # ============================================================================
 
 
+def set_current_cuda_device(device: str) -> None:
+    """Make the first GPU ``device`` names PyTorch's current CUDA device.
+
+    A worker that is not pinned sees every GPU, and code that does not take a device argument
+    (``.cuda()``, a bare ``"cuda"``, ``torch.cuda.current_device()``, Triton kernel launches,
+    ``empty_cache()``) uses the current device, which starts as GPU 0. Call this with the leased
+    device before anything touches CUDA, so that code lands on the lease. A literal ``"cuda:0"``
+    is not affected, nor is anything that already passes an explicit device.
+
+    No-op for ``"cpu"``, a bare ``"cuda"`` (no index), a malformed string, or when torch or CUDA
+    is unavailable. For a multi-GPU lease (``"cuda:2,3"``) the first GPU becomes current.
+
+    Args:
+        device (str): Device string, e.g. ``"cuda:1"``.
+    """
+    indices = _parse_cuda_indices(device)
+    if not indices:
+        return
+    try:
+        import torch
+    except ImportError:
+        return
+    if torch.cuda.is_available():
+        torch.cuda.set_device(indices[0])
+
+
+# The plain-attribute tensors ``_move_unregistered_tensors`` moved off a GPU to the CPU, as
+# (module path, attribute) pairs on the root module, so a later move back to a GPU returns them.
+_OFFLOADED_ATTRS = "_proto_offloaded_tensor_attrs"
+
+
+def _move_unregistered_tensors(module: Any, new_device: str) -> int:
+    """Move tensors that a module tree holds as plain attributes, which ``nn.Module.to`` skips.
+
+    ``.to()`` moves only registered parameters and buffers. Models also cache tensors as plain
+    attributes (rotary ``cos``/``sin`` tables, a time vector, a reference to a parameter whose
+    owning module left the tree), and after a move those still point at the old device, so the
+    next forward pass mixes devices. Each such tensor on a CUDA device other than ``new_device``
+    is moved. One this helper moved to the CPU (an offload) is remembered and moved back when the
+    model returns to a GPU; tensors the model keeps on the CPU on purpose are left alone. A
+    parameter moves in place (``.data``), so every reference to it follows, and a cached tensor is
+    replaced.
+
+    Args:
+        module (Any): The root ``nn.Module``.
+        new_device (str): Target device string.
+
+    Returns:
+        int: How many tensors were moved.
+    """
+    import torch
+
+    target = torch.device(new_device.split(",")[0])
+    offloaded: set[tuple[str, str]] = getattr(module, _OFFLOADED_ATTRS, set())
+    still_offloaded: set[tuple[str, str]] = set()
+    moved = 0
+    for sub_name, sub in module.named_modules():
+        for name, value in list(vars(sub).items()):
+            if name in ("_parameters", "_buffers") or not isinstance(value, torch.Tensor):
+                continue
+            key = (sub_name, name)
+            on_other_gpu = value.device.type == "cuda" and value.device != target
+            returning = value.device.type == "cpu" and target.type == "cuda" and key in offloaded
+            if not (on_other_gpu or returning):
+                if value.device.type == "cpu" and key in offloaded:
+                    still_offloaded.add(key)
+                continue
+            if isinstance(value, torch.nn.Parameter):
+                # A parameter whose owning module left the tree: move it in place so every
+                # reference (e.g. the module that still uses it) follows.
+                value.data = value.data.to(target)
+            else:
+                # A cached tensor. Replace it, since a tensor made under inference_mode
+                # cannot have its .data reassigned.
+                setattr(sub, name, value.to(target))
+            if target.type == "cpu":
+                still_offloaded.add(key)
+            moved += 1
+    setattr(module, _OFFLOADED_ATTRS, still_offloaded)
+    return moved
+
+
 def move_model_to_device(
     model_or_params: Any,
     old_device: str,
@@ -239,6 +321,8 @@ def move_model_to_device(
     For PyTorch models (nn.Module or objects with .to()):
         - Calls model.to(new_device)
         - Calls torch.cuda.empty_cache() when moving off CUDA
+        - Makes ``new_device`` the current CUDA device (``set_current_cuda_device``), so later
+          ``.cuda()``, bare ``"cuda"`` and Triton launches follow the model
 
     For non-ML models (CLI tools, etc.):
         - Returns as-is (no device movement needed)
@@ -289,6 +373,7 @@ def move_model_to_device(
                     torch.cuda.empty_cache()
             except ImportError:
                 pass
+        set_current_cuda_device(new_device)
         return model_or_params
 
     # Try PyTorch first (most common case for GPU tools)
@@ -298,10 +383,13 @@ def move_model_to_device(
         # Check if model has PyTorch's .to() method
         if hasattr(model_or_params, "to") and callable(model_or_params.to):
             model_or_params = model_or_params.to(new_device)
+            if isinstance(model_or_params, torch.nn.Module):
+                _move_unregistered_tensors(model_or_params, new_device)
 
-            # Free GPU memory when moving off CUDA device
+            # Free GPU memory when moving off CUDA device (while the old GPU is still current)
             if old_device != "cpu" and old_device.startswith("cuda") and torch.cuda.is_available():
                 torch.cuda.empty_cache()
+            set_current_cuda_device(new_device)
 
             return model_or_params
     except ImportError:

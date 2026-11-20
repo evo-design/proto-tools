@@ -28,6 +28,8 @@ def _prepare_output_values(value: Any) -> Any:
 _checkpoint_cache_installed = False
 # Resident Boltz2 models keyed by checkpoint path; lives at module scope so to_device() can relocate them.
 _checkpoint_cache: dict[str, Any] = {}
+# The GPU index the last prediction ran on, for get_memory_stats.
+_gpu_index = 0
 
 
 def _install_checkpoint_cache() -> None:
@@ -58,7 +60,9 @@ def _install_checkpoint_cache() -> None:
         key = str(checkpoint)
         model = _checkpoint_cache.get(key)
         if model is None:
-            logger.debug("boltz2: checkpoint cache miss, loading %s", checkpoint)
+            # boltz loads the structure checkpoint before folding and the affinity one before scoring.
+            is_affinity = "aff" in Path(checkpoint).stem
+            logger.update_status(f"Loading Boltz-2 {'affinity' if is_affinity else 'structure'} weights")
             try:
                 model = original_load(checkpoint, **kwargs)
             except Exception as exc:
@@ -67,6 +71,8 @@ def _install_checkpoint_cache() -> None:
                     Path(checkpoint).unlink(missing_ok=True)
                 raise
             _checkpoint_cache[key] = model
+            # Replace the loading status; the caller's progress bar reports each complex after this.
+            logger.update_status("Predicting affinity" if is_affinity else "Folding structure")
         else:
             logger.debug("boltz2: reusing resident checkpoint %s", checkpoint)
         return model
@@ -264,7 +270,7 @@ class Boltz2Model:
         self,
         input_yaml_path: str,
         output_dir: str,
-        device: str,  # noqa: ARG002 -- worker already runs on its assigned GPU
+        device: str,
         recycling_steps: int,
         sampling_steps: int,
         diffusion_samples: int,
@@ -296,13 +302,24 @@ class Boltz2Model:
         _ensure_boltz_data(self.cache_dir)
 
         import torch
+        from standalone_helpers import _parse_cuda_indices, set_current_cuda_device
 
-        num_devices = 1 if torch.cuda.is_available() else 0
+        global _gpu_index
+        # This worker sees every GPU, and Lightning reads ``devices=1`` as GPU 0. Hand it the leased
+        # GPU's index instead (a one-element list runs on that GPU alone); CPU calls run on CPU.
+        indices = _parse_cuda_indices(device) if torch.cuda.is_available() else None
+        if indices is None and device.startswith("cuda") and torch.cuda.is_available():
+            indices = [torch.cuda.current_device()]  # bare "cuda"
+        set_current_cuda_device(device)
+        accelerator, devices = ("gpu", indices[:1]) if indices else ("cpu", 1)
+        if indices:
+            _gpu_index = indices[0]
         kwargs: dict[str, Any] = {
             "data": input_yaml_path,
             "out_dir": output_dir,
             "cache": str(self.cache_dir),
-            "devices": num_devices,
+            "accelerator": accelerator,
+            "devices": devices,
             "recycling_steps": recycling_steps,
             "sampling_steps": sampling_steps,
             "diffusion_samples": diffusion_samples,
@@ -462,7 +479,7 @@ def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
-    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
+    return get_pytorch_memory_stats(device=_gpu_index)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

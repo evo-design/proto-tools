@@ -10,9 +10,11 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from tests.conftest import benchmark_twice, random_dna_sequences
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("cherimoya")
 
 _HS2_FASTA = Path(__file__).parent.parent / "dummy_data" / "hbb_lcr_hs2_hg38.fna"
 _K562_DNASE = "ENCSR000EOT"
@@ -471,7 +473,7 @@ def test_cherimoya_gradient_validates_window_geometry() -> None:
 # Integration tests
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_cherimoya_score_hs2_on_cpu() -> None:
     """On CPU, the K562 DNase model scores HS2 as the direct model call does, above shuffled copies."""
     from proto_tools.tools.sequence_scoring.cherimoya import (
@@ -494,7 +496,8 @@ def test_cherimoya_score_hs2_on_cpu() -> None:
     assert len(result.models[0].checkpoint_sha256[0]) == 64
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_cherimoya_checkpoint_path_matches_its_accession_on_cpu(tmp_path: Path) -> None:
     """A downloaded CATv1 checkpoint passed as a path scores exactly as its accession does."""
     import requests
@@ -525,7 +528,7 @@ def test_cherimoya_checkpoint_path_matches_its_accession_on_cpu(tmp_path: Path) 
     assert result.models[1].checkpoint_sha256 == result.models[0].checkpoint_sha256
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_cherimoya_score_hs2_with_batv1_on_cpu() -> None:
     """On CPU, a BATv1 ChIP-seq model scores HS2 with an all-zero control as the direct call does."""
     from proto_tools.tools.sequence_scoring.cherimoya import (

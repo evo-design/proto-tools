@@ -42,7 +42,9 @@ from proto_tools.tools.structure_prediction.alphafold2.gradient_helpers import b
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils import PROTEIN_AMINO_ACIDS, ProteinSequenceLogits, one_hot_protein_logits
 from proto_tools.utils.gradient.models import TermGradient
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
+
+_persistent_tool = make_persistent_fixture("alphafold2")
 
 _EXAMPLE_PDB = (
     Path(__file__).resolve().parents[2]
@@ -371,13 +373,15 @@ def test_fixbb_rejects_logits_that_do_not_cover_the_reference_chain(target: Stru
     chain_length = len(target.get_chain_sequence("B"))
     candidate = AlphaFold2FixBBGradientCandidate(logits=[[0.0] * 20] * 5, reference_pdb=target, reference_chain="B")
     assert chain_length != 5
-    # The worker owns this check, so the failure arrives as the subprocess error.
-    with pytest.raises(subprocess.CalledProcessError) as raised:
+    # The worker owns this check, so the failure arrives as the worker's error: a CalledProcessError
+    # from a one-shot subprocess, or a RuntimeError from the file's persistent worker on GPU.
+    with pytest.raises((subprocess.CalledProcessError, RuntimeError)) as raised:
         run_alphafold2_fixbb_gradient(
             AlphaFold2FixBBGradientInput(inputs=[candidate]),
             AlphaFold2FixBBGradientConfig(gradient_terms=["rmsd"]),
         )
-    assert f"supplies 5 residues but the fixbb protocol designs {chain_length}" in raised.value.stderr
+    detail = raised.value.stderr if isinstance(raised.value, subprocess.CalledProcessError) else str(raised.value)
+    assert f"supplies 5 residues but the fixbb protocol designs {chain_length}" in detail
 
 
 # -- Benchmarks ---------------------------------------------------------------

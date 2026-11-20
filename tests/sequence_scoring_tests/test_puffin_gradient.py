@@ -18,8 +18,10 @@ from proto_tools.tools.sequence_scoring.puffin.puffin_prediction import (
     PUFFIN_PADDING,
     TRACK_NAMES,
 )
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("puffin")
 
 LENGTH = PUFFIN_MIN_INPUT_LENGTH + 99
 OUTPUT_LENGTH = LENGTH - 2 * PUFFIN_PADDING

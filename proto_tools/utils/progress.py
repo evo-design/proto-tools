@@ -625,13 +625,13 @@ def remote_progress(device: str) -> Generator[None, None, None]:
     ``ToolPool`` or inside a tool that opened its own.
 
     Args:
-        device (str): The remote device, used for the opening status and the fallback badge.
+        device (str): The remote device, used for the fallback badge.
     """
     if has_active_progress_bar():
         yield
         return
     style, prefix = remote_spinner_style(device)
-    with progress_bar(desc=remote_connecting_status(device), prefix=prefix, spinner_style=style, show_bar=False):
+    with progress_bar(desc=starting_container_status(), prefix=prefix, spinner_style=style, show_bar=False):
         yield
         # Only on the way out of a clean run. The bar's last frame is what stays on screen, so
         # leaving it mid-phase reads as though the call stopped there. An exception skips this
@@ -643,20 +643,17 @@ def remote_progress(device: str) -> Generator[None, None, None]:
         update_active_substatus(f"{COMPLETE_MARK} Complete")
 
 
-def remote_connecting_status(device: str) -> str:
+def starting_container_status() -> str:
     """Spinner text for the wait between dispatching a call and the worker's first report.
 
-    A remote worker reports nothing while its container is scheduled and started, which on a cold
-    start is several seconds of an otherwise motionless spinner. Naming the backend says which
-    machine is being waited on.
-
-    Args:
-        device (str): The remote device, ``"modal"``.
+    A remote worker reports nothing while its container is scheduled and started, which on a cold start is
+    several seconds of an otherwise motionless spinner. The hosted service uses the same wording for the same
+    moment.
 
     Returns:
         str: The status line.
     """
-    return f"Connecting to {device} container"
+    return "Starting container"
 
 
 def set_substatus(message: str, style: str | None = None) -> None:

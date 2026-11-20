@@ -7,6 +7,7 @@ References:
 
 import gzip
 import json
+import logging
 import os
 import re
 import shutil
@@ -143,6 +144,8 @@ class RFdiffusion3Model:
         precision_site = Path(__file__).with_name("rfd3_precision_site")
         existing_pythonpath = env.get("PYTHONPATH")
         env["PYTHONPATH"] = str(precision_site) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
+
+        logger.update_status("Generating designs", level=logging.DEBUG)
 
         # Run the command — inherit streams when verbose for real-time progress;
         # capture when not verbose so we can surface stderr tail on failure.
@@ -288,10 +291,8 @@ def to_device(device: str) -> dict[str, Any]:
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """Report GPU memory usage (called by DeviceManager for monitoring)."""
-    from standalone_helpers import get_pytorch_memory_stats
-
-    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
+    """CLI tool, no persistent GPU state to report."""
+    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
 
 
 if __name__ == "__main__":

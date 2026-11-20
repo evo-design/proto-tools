@@ -8,6 +8,7 @@ Usage (called by ToolInstance, not directly):
 """
 
 import json
+import logging
 import sys
 from functools import partial
 from multiprocessing.pool import ThreadPool
@@ -118,8 +119,12 @@ def run_prodigal(input_data: dict[str, Any]) -> dict[str, Any]:
     if not meta_mode:
         # Concatenate all sequences for training
         training_seq = "".join(sequences)
+        logger.update_status("Training Prodigal gene model")
         gene_finder.train(training_seq.encode("utf-8"), translation_table=translation_table)
 
+    logger.update_status(
+        f"Predicting genes in {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+    )
     # Process in parallel if multiple sequences and threads > 1
     if num_threads > 1 and len(sequences) > 1:
         with ThreadPool(num_threads) as pool:

@@ -165,7 +165,8 @@ def test_rate_limit_and_server_errors_raise(monkeypatch: pytest.MonkeyPatch, sta
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_biorxiv_details_reports_versions_and_published_doi():
     """The RFdiffusion preprint has two versions and links to its Nature paper."""
     (preprint,) = run_biorxiv_details(BiorxivDetailsInput(dois=_DOI)).preprints
@@ -175,7 +176,8 @@ def test_biorxiv_details_reports_versions_and_published_doi():
     assert "Watson, J. L." in preprint.authors
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_biorxiv_details_auto_finds_medrxiv_and_reports_wrong_server():
     """Auto finds a medRxiv DOI; an explicit wrong server gives an item error."""
     (preprint,) = run_biorxiv_details(BiorxivDetailsInput(dois=_MEDRXIV_DOI)).preprints
