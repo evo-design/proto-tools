@@ -1,6 +1,6 @@
 """Tests for the pDockQ2 interface quality scoring tool.
 
-End-to-end tests marked ``@pytest.mark.integration`` run the real algorithm
+End-to-end tests marked ``@pytest.mark.uses_env`` run the real algorithm
 against real PDB + PAE fixtures (no mocks). Unmarked tests cover the custom
 input validators and the ported sigmoid constants.
 """
@@ -103,7 +103,7 @@ def _hand_computed_structure(tmp_path: Path) -> Structure:
     return Structure.from_file(tmp_path / "hand.pdb", b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_run_pdockq2_matches_hand_computation(tmp_path):
     """End-to-end algorithm pin against a by-hand interface at the 10 A default cutoff."""
     structure = _hand_computed_structure(tmp_path)
@@ -127,7 +127,7 @@ def test_run_pdockq2_matches_hand_computation(tmp_path):
     assert_metrics_in_spec(out)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_bundled_barnase_barstar_scores_as_published():
     """The bundled example scores the barnase-barstar complex it was captured at.
 
@@ -147,7 +147,7 @@ def test_bundled_barnase_barstar_scores_as_published():
     assert_metrics_in_spec(out)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_export_json_round_trip(tmp_path):
     out = run_pdockq2(example_input(), PDockQ2Config())
     out.export(name="pdockq2_result", export_path=str(tmp_path), file_format="json")
@@ -179,7 +179,7 @@ def _three_chain_structure(tmp_path: Path) -> Structure:
     return Structure.from_file(tmp_path / "three_chain.pdb", b_factor_type=BFactorType.PLDDT, metrics={"pae": pae})
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.parametrize(
     "target_chains,scoring_chains",
     [(["B"], ["B"]), (["B", "C"], ["B", "C"]), ("B,C", ["B", "C"])],
@@ -198,7 +198,7 @@ def test_target_chains_aggregation(tmp_path, target_chains, scoring_chains):
     assert by_chain["C"].neighbor_chains == "A"
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_interface_plddt_is_contact_pair_weighted(tmp_path):
     """Heterogeneous pLDDT: Zhu 2023 weights IF_plddt per contact pair, not per residue.
 
@@ -223,7 +223,7 @@ def test_interface_plddt_is_contact_pair_weighted(tmp_path):
     assert by_chain["B"].if_plddt == pytest.approx(70.0)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_disjoint_chains_score_zero_with_warning(tmp_path, caplog):
     """No cross-chain contacts → pdockq2 = 0.0 with a warning logged."""
     pdb_path = tmp_path / "disjoint.pdb"

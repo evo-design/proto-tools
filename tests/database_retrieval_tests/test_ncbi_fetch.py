@@ -86,8 +86,9 @@ def test_accession_from_header_empty():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.network
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_ncbi_efetch_fasta():
     """Fetch protein FASTA from NCBI by accession."""
     inputs = NCBIEfetchInput(
@@ -100,7 +101,8 @@ def test_ncbi_efetch_fasta():
     assert output.fasta_records[0].sequence.startswith("M")
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_ncbi_esummary_gene():
     """Retrieve gene summary from NCBI by gene ID."""
     inputs = NCBIEsummaryInput(
@@ -112,7 +114,8 @@ def test_ncbi_esummary_gene():
     assert output.source_url is not None
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_ncbi_esearch_retstart_paginates():
     """`retstart` shifts the result window so a paginated second page returns different IDs."""
     page1 = run_ncbi_esearch(

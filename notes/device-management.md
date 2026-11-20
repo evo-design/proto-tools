@@ -169,13 +169,45 @@ independent examples and in tests).
   Without it, the tool falls back to RESTART.
 - Mark a tool `gpu_only=True` when it cannot run on CPU. LRU eviction then
   restarts it instead of offloading, and direct `device="cpu"` is rejected.
-- Mark a tool `pin_visible_devices=True` for JAX tools, whose runtime
-  initializes a context on every visible GPU. The worker is then spawned with
-  `CUDA_VISIBLE_DEVICES` restricted to its assigned physical GPU(s) — which it
-  addresses as local `cuda:0..N-1` — and it **respawns** on a device change
-  instead of moving in-process (a fixed `CUDA_VISIBLE_DEVICES` cannot see other
-  GPUs). Such tools do not implement `to_device()`. The user-facing `device=`
-  selection is unchanged; the logical→physical mapping is internal.
+- Land on the leased GPU. An unpinned worker sees every GPU, and anything that
+  picks "the GPU" itself lands on GPU 0. Route a PyTorch tool through the
+  leased `device` string:
+  - pass it explicitly (`.to(device)`, `map_location`, Lightning `devices=[index]`);
+  - call `set_current_cuda_device(device)` from `standalone_helpers` before
+    anything touches CUDA, so `.cuda()`, a bare `"cuda"`,
+    `torch.cuda.current_device()`, Triton launches and `empty_cache()` follow it;
+  - `move_model_to_device` does this on every move.
+
+  A literal `"cuda:0"` in upstream code is not covered; patch that call in the
+  worker, as Caliby's checkpoint `map_location` and Protenix's
+  `DIST_WRAPPER.local_rank` are.
+- Mark a tool `pin_visible_devices=True` when it cannot be routed. JAX and
+  TensorFlow initialize every visible GPU, and TensorFlow cannot change its
+  visible devices after start-up. The worker is then spawned with
+  `CUDA_VISIBLE_DEVICES` restricted to its assigned physical GPU(s), which it
+  addresses as local `cuda:0..N-1`, and it **respawns** on a device change
+  instead of moving in-process. Such tools do not implement `to_device()`. The
+  user-facing `device=` selection is unchanged; the logical→physical mapping is
+  internal.
+- On an **Exclusive_Process** host, every GPU tool's worker is pinned
+  (`DeviceManager.pins_gpu_workers`), whatever its registration says. A CUDA
+  context lives until its process exits, so a worker that moved between GPUs
+  in-process would keep holding the old GPU, which then refuses every other
+  process. This applies to one-shot calls and ToolPool partitions as well as
+  persistent workers. Tests turn it off with the private
+  `DeviceManager.get_instance()._auto_pin_exclusive = False` to exercise routing
+  on such a node.
+- `tests/tool_infra_tests/test_device_manager/test_gpu_lifecycle.py`
+  (`--all --ext`, 2 GPUs for the move) runs every GPU toolkit through one worker:
+  - it leases `cuda:1` and fails if any process opens a context on another GPU;
+  - it moves the tool to `cuda:0` and checks the next run follows;
+  - a mock tool evicts it, and it must run on a GPU again.
+
+  Auto-pinning on real GPUs is covered by the spec-pinned toolkits there and by
+  `test_auto_pin.py`.
+
+  Run it when changing a GPU tool's device handling or bumping its env, since
+  CI has no GPUs.
 - Set `device_count` on the `@tool` registration so allocation requests are
   validated (under-allocation errors, over-allocation warns).
 

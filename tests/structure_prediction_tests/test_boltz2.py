@@ -28,9 +28,11 @@ from proto_tools.tools.structure_prediction.boltz2.boltz2 import run_boltz2_on_c
 from proto_tools.tools.structure_prediction.boltz2.boltz2_affinity import run_boltz2_affinity_on_complex
 from proto_tools.tools.structure_prediction.boltz2.helpers import build_chain_msa_paths, complex_to_yaml
 from tests._structure_fixtures import synthetic_cif
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("boltz2")
 
 # Cro repressor from bacteriophage lambda. Short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
@@ -523,7 +525,7 @@ def test_boltz2_reload_on_change_restarts_worker_only_for_load_fields(caplog):
         assert "restarting worker" not in caplog.text.lower()
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_boltz2_reported_msa_caps_match_boltz():
     """Boltz accepts the pinned num_subsampled_msa, and its featurizer caps rows where we report."""
     from proto_tools.tools.structure_prediction.boltz2.helpers import BOLTZ2_FEATURIZER_MAX_ROWS

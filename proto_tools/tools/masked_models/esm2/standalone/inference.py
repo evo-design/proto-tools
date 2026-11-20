@@ -7,6 +7,7 @@ from typing import Any, Literal
 import torch
 from standalone_helpers import (
     AMINO_ACIDS_LIST,
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -100,7 +101,12 @@ class ESM2Model:
         all_attention_masks = []
 
         # For each batch
-        for batch_sequences in tqdm(batches, desc="ESM2 inference", unit="batch", total=len(batches)):
+        for batch_sequences in StatusCounter(
+            logger,
+            "Embedding batch %d/%d",
+            tqdm(batches, desc="ESM2 inference", unit="batch", total=len(batches)),
+            total=len(batches),
+        ):
             # Tokenize the batch
             batch_inputs = self.tokenizer(
                 batch_sequences,
@@ -252,12 +258,14 @@ class ESM2Model:
         all_sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=len(batch_ranges))
         for start, end in tqdm(
             batch_ranges,
             desc="ESM2 sampling",
             unit="batch",
             disable=not verbose,
         ):
+            counter(start // batch_size + 1)
             batch_tok_seqs = tokenizer_sequences[start:end]
             batch_masks = mask_positions[start:end]
             batch_originals = sequences[start:end]
@@ -348,7 +356,9 @@ class ESM2Model:
         sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=-(-len(sequences) // batch_size))
         for start in range(0, len(sequences), batch_size):
+            counter(start // batch_size + 1)
             batch_sequences = sequences[start : start + batch_size]
             batch_inputs = self.tokenizer(
                 [s.replace("_", mask_token) for s in batch_sequences],
@@ -508,12 +518,14 @@ class ESM2Model:
         all_true_log_probs = torch.zeros(total_variants, device=self.device)
 
         # Run forward passes batched across the pooled variants
+        counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-total_variants // batch_size))
         for batch_start in tqdm(
             range(0, total_variants, batch_size),
             desc="ESM2 scoring",
             unit="batch",
             disable=not verbose,
         ):
+            counter(batch_start // batch_size + 1)
             # Slice this forward-pass batch out of the pool
             batch_end = min(batch_start + batch_size, total_variants)
             batch_ids = pooled_ids[batch_start:batch_end]
@@ -719,8 +731,7 @@ class ESM2Model:
     # ============================================================================
     def load(self, device: str, verbose: bool = False) -> None:
         """Load ESM2 model and tokenizer to device."""
-        if verbose:
-            logger.info(f"Loading ESM2 model: {self.model_checkpoint} on {device}")
+        logger.update_status("Loading ESM2 weights")
 
         # Load model and tokenizer. Most checkpoints use the flash-attn-enabled mirror
         # (https://huggingface.co/fredzzp/esm2_t33_650M_UR50D); checkpoints without a mirror

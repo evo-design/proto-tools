@@ -443,7 +443,8 @@ def test_csv_and_json_export(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_encode_search_finds_default_idr_peaks():
     """MAFK HepG2 TF ChIP-seq has one default GRCh38 IDR thresholded peak file, from ENCSR000EEB."""
     output = run_encode_search(
@@ -465,7 +466,8 @@ def test_encode_search_finds_default_idr_peaks():
     assert all(hit.download_url and hit.download_url.endswith(".bed.gz") for hit in hits)
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_encode_search_experiments_by_free_text():
     """Free-text experiment search for MAFK HepG2 returns ENCSR000EEB."""
     output = run_encode_search(

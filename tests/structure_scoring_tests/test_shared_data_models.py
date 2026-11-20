@@ -101,7 +101,7 @@ def test_scoring_input_rejects_too_many_chains():
         ScoringStructureInput(structure=cif)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.parametrize(
     ("input_cls", "config_cls", "runner"),
     [

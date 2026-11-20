@@ -363,6 +363,7 @@ def example_input() -> Any:
     output_class=SpliceAIScoreOutput,
     description="Score variants for splice-altering effects (delta scores/positions) with SpliceAI",
     uses_gpu=True,
+    pin_visible_devices=True,
     example_input=example_input,
     example_config=example_reference_config,
     iterable_input_fields=["variants"],

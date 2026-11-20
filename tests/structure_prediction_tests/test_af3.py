@@ -27,9 +27,11 @@ from proto_tools.utils.standalone_helpers_source.standalone_helpers.containers i
     ResolvedExecutable,
 )
 from tests._structure_fixtures import synthetic_cif
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("alphafold3")
 
 
 def _load_af3_standalone_module(monkeypatch):
@@ -420,7 +422,7 @@ def test_alphafold3_benchmark(request):
     assert_metrics_in_spec(result)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_alphafold3_reported_msa_depth_matches_evoformer():
     """The report's 1024-row cap is the installed Evoformer's num_msa."""
     from proto_tools.tools.structure_prediction.alphafold3.alphafold3 import ALPHAFOLD3_NUM_MSA

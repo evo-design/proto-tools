@@ -74,10 +74,16 @@ def test_input_dir_skips_fasta_files(tmp_path):
     assert sorted(inputs.structure_ids or []) == ["alpha", "beta"]
 
 
-def test_input_rejects_fasta_text():
-    """Direct FASTA text is rejected at validation, not at runtime in the wrapper."""
+@pytest.mark.parametrize("from_file", [False, True], ids=["text", "file"])
+def test_input_rejects_fasta(tmp_path, from_file):
+    """FASTA text, or a FASTA file path, is rejected at validation, not at runtime in the wrapper."""
+    items = [">s1\nMKTL\n", ">s2\nMQTL\n"]
+    if from_file:
+        for i, text in enumerate(items):
+            (tmp_path / f"s{i}.fasta").write_text(text)
+        items = [str(tmp_path / "s0.fasta"), str(tmp_path / "s1.fasta")]
     with pytest.raises(ValidationError, match="FASTA input is not supported"):
-        FoldseekMultimerClusterInput(structures=[">s1\nMKTL\n", ">s2\nMQTL\n"])
+        FoldseekMultimerClusterInput(structures=items)
 
 
 def test_input_resolves_dir_decompresses_gz_files(tmp_path):
@@ -139,7 +145,7 @@ def test_run_foldseek_multimercluster_uses_user_supplied_ids():
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_foldseek_multimercluster_end_to_end_with_directory(tmp_path):
     """Real foldseek binary processes a directory of mixed multi-chain PDB + CIF fixtures."""
     (tmp_path / "pdl1.pdb").write_text((_FIXTURES / "pdl1.pdb").read_text())

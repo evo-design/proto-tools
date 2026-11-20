@@ -1202,6 +1202,8 @@ def test_gpu_fanout_results_in_original_order():
 
     DeviceManager.reset_instance()
     ToolInstance.clear_all()
+    # Pinned workers would both report local cuda:0; this checks which GPU each partition ran on.
+    DeviceManager.get_instance()._auto_pin_exclusive = False
 
     try:
         data_items = [

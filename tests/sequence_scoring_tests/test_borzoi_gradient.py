@@ -15,8 +15,10 @@ from proto_tools.tools import (
     run_borzoi_gradient,
 )
 from proto_tools.tools.sequence_scoring.borzoi.borzoi_prediction import BORZOI_CONTEXT, BORZOI_OUTPUT
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("borzoi")
 
 CENTER = BORZOI_CONTEXT // 2
 

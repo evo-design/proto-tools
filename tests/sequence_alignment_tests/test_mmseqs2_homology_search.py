@@ -24,6 +24,9 @@ from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
 from proto_tools.tools.sequence_alignment.mmseqs2.remote_search import _parse_pair_a3m
 from proto_tools.utils import ConfigField
 from proto_tools.utils.tool_instance import ToolInstance
+from tests.conftest import make_persistent_fixture
+
+_persistent_tool = make_persistent_fixture("mmseqs2")
 
 logger = logging.getLogger(__name__)
 
@@ -410,7 +413,7 @@ def _low_memory_skip_reason(*dataset_names: str) -> str | None:
 _E2E_SEARCH_TIMEOUT_S = 900
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 @pytest.mark.parametrize("dataset_name", _provisioned_datasets() or ["__none_provisioned__"])
@@ -471,7 +474,7 @@ def _local_metagenomic_dbs_ready() -> bool:
 
 
 @pytest.mark.extensive
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 @pytest.mark.skip_ci
@@ -690,7 +693,7 @@ def test_assemble_paired_result_broadcasts_deduped_homomultimer(tmp_path: Path) 
     assert len({m.num_sequences for m in result.paired_msas}) == 1
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.uses_cpu
 @pytest.mark.slow
 @pytest.mark.skip_ci
@@ -721,7 +724,7 @@ def test_real_paired_homooligomer_against_mini_db() -> None:
     assert all(m is not None for m in grp.msas)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.uses_cpu
 @pytest.mark.slow
 @pytest.mark.skip_ci
@@ -1051,7 +1054,8 @@ def test_parse_pair_a3m_maps_blocks_by_content_not_position(tmp_path: Path) -> N
     assert _parse_pair_a3m(pair_a3m, [UBIQUITIN.lower(), UBIQUITIN.lower()]) == [ubiq, ubiq]
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 @pytest.mark.skip_ci
 def test_remote_search_live_homooligomer_broadcasts_paired_msa() -> None:
     """Live remote paired query with a repeated chain: the deduped block is broadcast to both copies."""

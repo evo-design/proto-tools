@@ -639,7 +639,6 @@ class AlphaFold2Model:
         use_multimer: bool,
         use_msa: bool,
         recycle_mode: str = "last",
-        verbose: bool = False,
     ) -> Any:
         """Return a cached ColabDesign model, creating one if needed."""
         key = (protocol, use_multimer, use_msa, recycle_mode)
@@ -658,9 +657,7 @@ class AlphaFold2Model:
             model_kwargs["num_msa"] = 512
             model_kwargs["num_extra_msa"] = 1024
 
-        if verbose:
-            logger.info("Creating AlphaFold2 model: protocol=%s multimer=%s msa=%s", protocol, use_multimer, use_msa)
-
+        logger.update_status("Loading AlphaFold2 weights")
         jax = self._jax
         mk_af_model = self._mk_af_model
         assert jax is not None and mk_af_model is not None
@@ -764,7 +761,11 @@ class AlphaFold2Model:
 
         use_multimer = complex_data["num_chains"] > 1
         use_msa = msa_a3m_content is not None or bool(per_chain_msas_a3m and any(per_chain_msas_a3m))
-        af_model = self._get_model(use_multimer=use_multimer, use_msa=use_msa, verbose=verbose)
+        loading = ("hallucination", use_multimer, use_msa, "last") not in self._models
+        af_model = self._get_model(use_multimer=use_multimer, use_msa=use_msa)
+        if loading:
+            # Replace the loading status; the caller's progress bar reports each structure after this.
+            logger.update_status("Folding structure", level=logging.DEBUG)
 
         self._prep_prediction_inputs(
             af_model,
@@ -964,13 +965,15 @@ class AlphaFold2Model:
         self._ensure_loaded(device, verbose=verbose)
         # MSA mode drops params["seq"], the parameter the relaxed state is injected into.
         key = (protocol, use_multimer, False, recycle_mode)
+        loading = key not in self._models
         af_model = self._get_model(
             protocol=protocol,
             use_multimer=use_multimer,
             use_msa=False,
             recycle_mode=recycle_mode,
-            verbose=verbose,
         )
+        if loading:
+            logger.update_status("Computing gradient", level=logging.DEBUG)
         # The model is cached across requests, so a previous call's options must be cleared.
         self._restore_model_defaults(key, af_model)
         af_model.prep_inputs(**prep_kwargs)
@@ -1072,7 +1075,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 sample_models=input_dict.get("sample_models", False),
                 dropout=input_dict["dropout"],
                 use_multimer=input_dict.get("use_multimer", False),
-                seed=input_dict["seed"],
+                seed=item.get("seed", input_dict["seed"]),
                 compute_gradient=input_dict.get("compute_gradient", True),
                 device=input_dict["device"],
                 verbose=input_dict["verbose"],

@@ -8,6 +8,7 @@ from typing import Any, Literal
 import torch
 from standalone_helpers import (
     AMINO_ACIDS_LIST,
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     serialize_output,
@@ -92,7 +93,12 @@ class ESM3Model:
         all_attention_masks = []
 
         # For each batch
-        for batch_sequences in tqdm(batches, desc="ESM3 inference", unit="batch", total=len(batches)):
+        for batch_sequences in StatusCounter(
+            logger,
+            "Embedding batch %d/%d",
+            tqdm(batches, desc="ESM3 inference", unit="batch", total=len(batches)),
+            total=len(batches),
+        ):
             # Tokenize the batch
             batch_inputs = self.tokenizer(
                 batch_sequences,
@@ -254,12 +260,14 @@ class ESM3Model:
         all_sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=len(batch_ranges))
         for start, end in tqdm(
             batch_ranges,
             desc="ESM3 sampling",
             unit="batch",
             disable=not verbose,
         ):
+            counter(start // batch_size + 1)
             batch_tok_seqs = tokenizer_sequences[start:end]
             batch_masks = mask_positions[start:end]
             batch_originals = sequences[start:end]
@@ -345,7 +353,9 @@ class ESM3Model:
         sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=-(-len(sequences) // batch_size))
         for start in range(0, len(sequences), batch_size):
+            counter(start // batch_size + 1)
             batch_sequences = sequences[start : start + batch_size]
             proteins = [ESMProtein(sequence=s.replace("_", mask_token)) for s in batch_sequences]
             configs = [
@@ -485,12 +495,14 @@ class ESM3Model:
         all_true_log_probs = torch.zeros(total_variants, device=self.device)
 
         # Run forward passes batched across the pooled variants
+        counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-total_variants // batch_size))
         for batch_start in tqdm(
             range(0, total_variants, batch_size),
             desc="ESM3 scoring",
             unit="batch",
             disable=not verbose,
         ):
+            counter(batch_start // batch_size + 1)
             # Slice this forward-pass batch out of the pool
             batch_end = min(batch_start + batch_size, total_variants)
             batch_ids = pooled_ids[batch_start:batch_end]
@@ -547,8 +559,7 @@ class ESM3Model:
         from esm.models.esm3 import ESM3
         from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
 
-        if verbose:
-            logger.info(f"Loading ESM3 model: {self.model_checkpoint} on {device}")
+        logger.update_status("Loading ESM3 weights")
 
         # Load model and tokenizer
         try:

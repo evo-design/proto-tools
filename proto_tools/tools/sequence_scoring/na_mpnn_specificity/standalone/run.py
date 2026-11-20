@@ -1,6 +1,7 @@
 """NA-MPNN specificity standalone runner for ToolInstance venv execution."""
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -145,8 +146,13 @@ def _canonicalize_npz(raw_npz_path: str, canonical_npz_path: str) -> dict[str, A
     }
 
 
-def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) -> dict[str, Any]:
-    """Run NA-MPNN specificity for one structure and return canonical output."""
+def _run_one_structure(
+    pdb_path: str, config: dict[str, Any], output_root: str, progress: str = "1/1"
+) -> dict[str, Any]:
+    """Run NA-MPNN specificity for one structure and return canonical output.
+
+    ``progress`` is this structure's ``<n>/<total>`` for the status message.
+    """
     pdb_path = os.path.abspath(pdb_path)
     if not os.path.exists(pdb_path):
         raise FileNotFoundError(f"PDB path does not exist: {pdb_path}")
@@ -196,7 +202,7 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
     ]
 
     try:
-        logger.update_status(f"Running NA-MPNN on {input_name}")
+        logger.update_status(f"Predicting specificity for structure {progress}", level=logging.DEBUG)
         # Propagate the assigned device (CUDA_VISIBLE_DEVICES etc.) to the upstream
         # NA-MPNN CLI subprocess via the DeviceManager-aware helper.
         sub_env = {**get_subprocess_device_env(config.get("device", "cuda")), "PYTHONNOUSERSITE": "1"}
@@ -267,12 +273,20 @@ def run_na_mpnn_specificity(input_data: dict[str, Any]) -> dict[str, Any]:
     if output_directory is not None:
         output_root = os.path.abspath(output_directory)
         os.makedirs(output_root, exist_ok=True)
-        return {"results": [_run_one_structure(path, config, output_root) for path in input_data["pdb_paths"]]}
+        return {
+            "results": [
+                _run_one_structure(path, config, output_root, f"{number}/{len(input_data['pdb_paths'])}")
+                for number, path in enumerate(input_data["pdb_paths"], start=1)
+            ]
+        }
 
     if config["keep_intermediate"]:
         raise ValueError("na_mpnn_specificity: keep_intermediate needs output_directory to keep the files in")
     with tempfile.TemporaryDirectory(prefix="na_mpnn_specificity_") as output_root:
-        results = [_run_one_structure(path, config, output_root) for path in input_data["pdb_paths"]]
+        results = [
+            _run_one_structure(path, config, output_root, f"{number}/{len(input_data['pdb_paths'])}")
+            for number, path in enumerate(input_data["pdb_paths"], start=1)
+        ]
     return {"results": [{**result, "output_npz_path": None} for result in results]}
 
 
@@ -291,10 +305,8 @@ def to_device(device: str) -> dict[str, Any]:
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """Report GPU memory usage (called by DeviceManager for monitoring)."""
-    from standalone_helpers import get_pytorch_memory_stats
-
-    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
+    """CLI tool, no persistent GPU state to report."""
+    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
 
 
 if __name__ == "__main__":

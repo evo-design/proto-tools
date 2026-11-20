@@ -349,8 +349,7 @@ class ProteinMPNNModel:
         self.verbose = verbose
         model_name, weights = _MODEL_CONFIG.get(model_choice, ("v_48_020", "original"))
 
-        if self.verbose:
-            logger.info(f"Loading {model_choice} (model_name={model_name}, weights={weights}) on {device}")
+        logger.update_status("Loading AbMPNN weights" if model_choice == "abmpnn" else "Loading ProteinMPNN weights")
 
         # Lazy import ProteinMPNN from ColabDesign
         from colabdesign.mpnn import mk_mpnn_model

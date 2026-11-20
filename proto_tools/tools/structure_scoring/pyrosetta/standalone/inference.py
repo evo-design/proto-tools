@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger
+from standalone_helpers import StatusCounter, get_logger
 
 logger = get_logger(__name__)
 
@@ -92,6 +92,7 @@ class PyRosettaScorer:
         if dalphaball.is_file():
             extra_opts += f" -holes:dalphaball {dalphaball}"
             self._has_dalphaball = True
+        logger.update_status("Initializing PyRosetta")
         pyrosetta.init(extra_options=extra_opts)
         self._beta_nov16 = bool(beta_nov16)
         self._initialized = True
@@ -534,7 +535,7 @@ class PyRosettaScorer:
             relax_sfxn.set_weight(ScoreType.coordinate_constraint, 1.0)
 
         results = []
-        for pdb_content in pdb_contents:
+        for pdb_content in StatusCounter(logger, "Relaxing structure %d/%d", pdb_contents):
             pose = self._pdb_content_to_pose(pdb_content)
             start_pose = pose.clone() if (align_to_start or copy_b_factors_from_start) else None
             dropped_residues = self._find_dropped_residues(pose)
@@ -773,7 +774,9 @@ class PyRosettaScorer:
             pyrosetta.rosetta.numeric.random.rg().set_seed(seed)
 
         results = []
+        counter = StatusCounter(logger, "Analyzing interface %d/%d", total=len(pdb_contents))
         for i, pdb_content in enumerate(pdb_contents):
+            counter(i + 1)
             pose = self._pdb_content_to_pose(pdb_content)
             dropped_residues = self._find_dropped_residues(pose)
             binder_chain = binder_chains[i]

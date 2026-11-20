@@ -26,9 +26,11 @@ from proto_tools.tools import (
 from proto_tools.tools.structure_prediction import Complex, ComplexMSAs
 from proto_tools.tools.structure_prediction.opendde.helpers import build_chain_msa_paths, complex_to_opendde_json
 from tests._structure_fixtures import synthetic_cif
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("opendde")
 
 # Cro repressor from bacteriophage lambda — short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
@@ -176,7 +178,7 @@ def test_opendde_partial_supplied_bundle_gives_every_chain_an_msa_path(tmp_path)
     assert Path(unpaired_paths["B"]).read_text() == f">query\n{binder}\n"
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_opendde_does_not_search_for_a_partial_supplied_bundle(tmp_path):
     """OpenDDE's own need_msa_search stays False on the JSON we write for a target-only MSA."""
     from proto_tools.utils import run_in_env
@@ -642,7 +644,7 @@ def test_opendde_benchmark(request):
     assert_metrics_in_spec(result)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_opendde_reported_msa_depth_matches_data_config():
     from proto_tools.tools.structure_prediction.opendde.opendde import OPENDDE_MSA_DEPTH
     from proto_tools.utils import run_in_env

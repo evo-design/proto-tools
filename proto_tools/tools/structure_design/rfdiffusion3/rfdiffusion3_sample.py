@@ -36,39 +36,15 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.file_inputs import STRUCTURE_FILES
 
 logger = logging.getLogger(__name__)
 
-_STRUCTURE_PATH_SUFFIXES = (".pdb", ".cif", ".pdb.gz", ".cif.gz")
-
-
-def _looks_like_structure_path(value: str) -> bool:
-    stripped = value.strip()
-    if not stripped or "\n" in stripped or "\r" in stripped:
-        return False
-    lower = stripped.lower()
-    return any(lower.endswith(suffix) for suffix in _STRUCTURE_PATH_SUFFIXES) or "/" in stripped or "\\" in stripped
-
 
 def _resolve_input_structure_path(value: str) -> str:
-    path = Path(value).expanduser()
-    try:
-        exists = path.exists()
-    except OSError as exc:
-        if not _looks_like_structure_path(value):
-            return value
-        raise FileNotFoundError(
-            f"RFdiffusion3 input_structure path could not be inspected: {value!r} (resolved from cwd {Path.cwd()})"
-        ) from exc
-    if exists:
-        if not path.is_file():
-            raise ValueError(f"RFdiffusion3 input_structure is not a file: {value!r}")
-        return str(path.resolve())
-    if _looks_like_structure_path(value):
-        raise FileNotFoundError(
-            f"RFdiffusion3 input_structure path does not exist: {value!r} (resolved from cwd {Path.cwd()})"
-        )
-    return value
+    """Return a ``raw_json`` ``"input"`` that names a structure file as an absolute path; leave content as is."""
+    path = STRUCTURE_FILES.resolve(value)
+    return value if path is None else str(path.resolve())
 
 
 # ============================================================================

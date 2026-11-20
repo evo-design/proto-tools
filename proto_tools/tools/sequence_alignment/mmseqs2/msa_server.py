@@ -196,10 +196,12 @@ def run_remote_msa_search(
     destination = Path(f"{prefix}_{mode}")
     agent = user_agent_for(client_identity)
 
+    logger.update_status("Submitting MSA search")  # type: ignore[attr-defined]
     status = _submit(sequences, mode, use_pairing, agent)
     started = time.monotonic()
     ticket_id: str | None = status.get("id")
 
+    logger.update_status("Waiting for MSA search results")  # type: ignore[attr-defined]
     while (state := str(status.get("status", "ERROR"))) in _TRANSIENT_STATUSES:
         if timeout is not None and time.monotonic() - started > timeout:
             raise RuntimeError(f"MSA server did not finish within {timeout:.0f}s (last status {state})")
@@ -218,6 +220,7 @@ def run_remote_msa_search(
     if ticket_id is None:
         raise RuntimeError(f"MSA server reported COMPLETE for a {mode} search without issuing a ticket")
 
+    logger.update_status("Downloading MSAs")  # type: ignore[attr-defined]
     _download(ticket_id, destination, agent)
     logger.debug("Remote MSA search finished: %d sequence(s), mode %s", len(sequences), mode)
     return destination

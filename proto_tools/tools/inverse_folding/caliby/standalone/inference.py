@@ -332,9 +332,19 @@ class CalibyRunner:
         """
         _configure_caliby_env(model_checkpoint)
 
-        from caliby import load_model
+        from caliby import checkpoint_utils, load_model
+        from standalone_helpers import set_current_cuda_device
 
-        logger.debug("Loading Caliby checkpoint %s on %s", model_checkpoint, device)
+        # The bundled checkpoints hold cuda:0 tensors, and caliby loads them with no map_location, so
+        # Lightning restores them onto GPU 0 before load_model moves the model to ``device``. Load to
+        # CPU instead; load_model then places it.
+        load_kwargs = getattr(checkpoint_utils, "_LOAD_CKPT_KWARGS", None)
+        if isinstance(load_kwargs, dict):
+            load_kwargs["map_location"] = "cpu"
+        else:
+            logger.warning("caliby: checkpoint_utils._LOAD_CKPT_KWARGS is gone; checkpoints may load onto GPU 0 first")
+        set_current_cuda_device(device)
+        logger.update_status("Loading Caliby weights")
         self.model = load_model(model_checkpoint, device=device)
         self.device = device
         self._model_checkpoint = model_checkpoint

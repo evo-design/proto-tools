@@ -1,6 +1,7 @@
 """Persistent Mol-1 inference in an isolated tool environment."""
 
 import json
+import logging
 import math
 import os
 import sys
@@ -80,7 +81,7 @@ class Mol1Model:
             Path(root) / "checkpoint" / "mol-1-base.pt" if checkpoint == "mol-1-base" else Path(checkpoint)
         )
         inference_configs["dump_dir"] = output_dir
-        logger.update_status("Loading Mol-1 checkpoint")
+        logger.update_status("Loading Mol-1 weights")
         self.runner = get_default_runner(
             device=input_dict["device"],
             load_checkpoint_path=str(checkpoint_path),
@@ -124,7 +125,7 @@ class Mol1Model:
             self.runner.dump_dir = output_dir
             self.runner.error_dir = str(Path(output_dir) / "ERR")
             self.runner.init_dumper(need_atom_confidence=configs.need_atom_confidence, sorted_by_ranking_score=True)
-            logger.update_status("Predicting with Mol-1")
+            logger.update_status("Predicting structure", level=logging.DEBUG)
             logger.info("Mol-1: generating %s samples on %s", input_dict["num_samples"], self.device)
             infer_predict(self.runner, configs)
             return _extract_structure_and_scores(output_dir, include_pae_matrix=input_dict["include_pae_matrix"])
@@ -137,11 +138,7 @@ class Mol1Model:
         self.runner.model = move_model_to_device(self.runner.model, self.device or "cpu", str(target))
         self.runner.device = target
         self.runner.use_cuda = target.type == "cuda"
-        self.runner.configs.device = str(target)
-        if target.type == "cuda":
-            import torch
-
-            torch.cuda.set_device(target)
+        self.runner.configs.device = str(target)  # move_model_to_device also made target current
         self.device = str(target)
 
 

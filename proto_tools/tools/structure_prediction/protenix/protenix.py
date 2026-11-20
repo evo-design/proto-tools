@@ -13,7 +13,7 @@ import json
 import os
 import tempfile
 from logging import getLogger
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import model_validator
 
@@ -390,6 +390,18 @@ class ProtenixConfig(MSAStructurePredictionConfig):
         if self.num_diffusion_steps is None:
             self.num_diffusion_steps = steps
         return self
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "ProtenixConfig":
+        """Smallest checkpoint and one diffusion sample, so smoke and device tests run in seconds.
+
+        ``protenix_tiny_default_v0.5.0`` is an MSA model (the ``mini_esm``/``mini_ism`` variants are
+        the MSA-free ones), so ``minimal(use_msa=True)`` keeps it. Its schedule fills in 4 cycles
+        and 5 diffusion steps.
+        """
+        kwargs.setdefault("model_name", "protenix_tiny_default_v0.5.0")
+        kwargs.setdefault("num_diffusion_samples", 1)
+        return cast("ProtenixConfig", super().minimal(**kwargs))
 
 
 # ============================================================================

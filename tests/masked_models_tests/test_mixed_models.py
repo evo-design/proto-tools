@@ -382,7 +382,7 @@ def test_mixed_gradient_export_preserves_values(tmp_path):
 # ── Numerical runtime checks with a tiny differentiable model ────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mixed_runtime_checks_run_in_env():
     """Scoring, gradient, batching, sampling and request-validation checks run inside the glm2 env.
 

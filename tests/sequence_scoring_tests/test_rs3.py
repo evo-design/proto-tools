@@ -48,7 +48,7 @@ def test_rejects_missing_score(monkeypatch) -> None:
 # Integration tests
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_rs3_scores_a_known_active_guide_above_a_poly_a_guide() -> None:
     """The real model ranks a screening-validated context above a poly-A one, per tracrRNA."""
     active = "GACGAAAGCGACAACGCGTTCATCCGGGCA"

@@ -498,7 +498,8 @@ def _fetch_text(url: str) -> str | None:
     return text
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 @pytest.mark.parametrize("toolkit_dir", _ALL_TOOLKITS, ids=_ALL_IDS)
 def test_toolkit_license_yaml_spdx_matches_url(toolkit_dir: Path) -> None:
     """Stated SPDX must fingerprint-match the license text fetched from its URL."""

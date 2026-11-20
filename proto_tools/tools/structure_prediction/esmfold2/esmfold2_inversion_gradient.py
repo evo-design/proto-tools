@@ -29,6 +29,8 @@ from proto_tools.utils import (
     ToolInstance,
     coerce_to_item_list,
 )
+from proto_tools.utils.base_config import RANDOM_SEED_UPPER_BOUND
+from proto_tools.utils.fanout import derive_item_seed
 from proto_tools.utils.sequence_logits import SequenceLogits
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
@@ -462,7 +464,7 @@ def run_esmfold2_inversion_gradient(
         ESMFold2InversionGradientOutput: One result per complex, in input order.
     """
     results = []
-    for candidate in inputs.inputs:
+    for index, candidate in enumerate(inputs.inputs):
         chains = [
             {
                 "chain_id": chain.chain_id,
@@ -487,7 +489,8 @@ def run_esmfold2_inversion_gradient(
                 "lm_dropout": config.lm_dropout,
                 "plm_passes": config.plm_passes,
                 "plm_batch_size": config.plm_batch_size,
-                "seed": config.seed,
+                # One seed per complex, so duplicates in a batch draw differently (stochastic=True).
+                "seed": derive_item_seed(config.seed, index, RANDOM_SEED_UPPER_BOUND),
                 "device": config.device,
                 "verbose": config.verbose,
             },

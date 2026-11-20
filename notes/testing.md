@@ -29,9 +29,11 @@ All tests use **flat functions** (no test classes). Follow these patterns when w
 
 Canonical reference is `pyproject.toml [tool.pytest.ini_options].markers`. Tool-author cheat sheet:
 
-- **`@pytest.mark.integration`**: Tests calling `ToolInstance.dispatch()` for CPU tools. Skipped by default. Run with `--integration`
-- **`@pytest.mark.uses_gpu`**: Tests calling `ToolInstance.dispatch()` for GPU tools. Auto-skipped when no GPU. Implies environment requirement. Do **not** also add `@pytest.mark.integration`. Optional arg `@pytest.mark.uses_gpu(n)` requires `n` visible GPUs. Mark every test that needs more than one GPU with its count: `--multi-gpu` runs exactly the tests with `n >= 2`, slow ones included, since `-m` cannot select on the count
+- **`@pytest.mark.uses_env`**: Tests that build or run a tool env on CPU (`ToolInstance.dispatch()`, `run_in_env`). Run by default; `--no-envs` skips them, as CI's unit jobs do. Every `uses_gpu` test is marked `uses_env` automatically. A test that also calls a live service gets `network` too
+- **`@pytest.mark.uses_gpu`**: Tests calling `ToolInstance.dispatch()` for GPU tools. Auto-skipped when no GPU. Implies environment requirement, and is marked `uses_env` automatically; do not add it by hand. Optional arg `@pytest.mark.uses_gpu(n)` requires `n` visible GPUs. Mark every test that needs more than one GPU with its count: `--multi-gpu` runs exactly the tests with `n >= 2`, slow ones included, since `-m` cannot select on the count
 - **`@pytest.mark.uses_cpu`**: CPU-only test. Optional arg `@pytest.mark.uses_cpu(n)` requires `n` CPUs (matches what `ToolPool._detect_cpus` would see)
+- **`@pytest.mark.requires_credential("ENV_VAR", ...)`**: The test needs these credentials, by the environment variable a `ConfigField(credential=...)` falls back to (`GI_API_KEY`, `NCBI_API_KEY`, `SYNBIOHUB_PASSWORD`, ...). It is skipped at collection unless every one is set, and a blank value counts as unset. Each name must be a credential some tool config declares, so a typo fails the run instead of skipping the test forever. Use it rather than an in-body `os.environ` check. A credential being declared does not make a tool need it (NCBI's key only raises rate limits), so mark only the tests that cannot run without it.
+- **`@pytest.mark.network`**: Tests that call a live external service (NCBI, UniProt, RCSB, EBI, Ensembl, remote Foldseek, ...) rather than a mocked transport. Skipped unless `--network` is passed; not enabled by `--all` or `--ext`, so an upstream queue or outage never decides how long a run takes. Mark the test (or the module with `pytestmark`) whenever it would fail with the network blocked
 - **`@pytest.mark.slow`**: Tests that may take several minutes. Skipped by default. Run with `--slow` or `--all`
 - **`@pytest.mark.extensive`**: Combinatorial tests (e.g. every tool × device transition). Skipped unless `--ext` (or `--extensive`) is passed
 - **`@pytest.mark.benchmark('<tool-key>')`**: E2E benchmark for one tool. Required arg. Skipped by default. Opt in via `--benchmark` (or `--benchmark-report` / `--benchmark-tool` / `--benchmark-toolkit`). Not enabled by `--all` or `--slow`
@@ -61,3 +63,19 @@ default or example instead.
 ## Test order randomization
 
 `pytest-randomly` is installed, but this suite disables its reordering by default. Pass `--random-order` to shuffle test order and catch hidden inter-test dependencies. The seed is printed in the test header. Reproduce a specific order with `--randomly-seed=N`.
+
+## Running on several GPUs at once
+
+A GPU run is mostly one toolkit loading on one GPU while the others sit idle. `scripts/run_tests_multi_gpu.py` uses them all at once:
+
+```bash
+python -m tests._gpu_shards weights last_run.xml shard_weights.json   # per-test seconds, for balancing
+python scripts/run_tests_multi_gpu.py --out runs/today --weights shard_weights.json -- tests --all --ext
+```
+
+It runs in two phases (`tests/_gpu_shards.py`):
+
+1. **Parallel**: one pytest per GPU, each seeing only its own. A shard holds whole toolkits, so no toolkit's env or weights are loaded by two processes, and tests that run no tool stay together in one shard.
+2. **Serial**: tests that need more than one GPU (`uses_gpu(n)` with `n >= 2`) and `tests/tool_infra_tests/test_device_manager/` then run once, with every GPU visible. This phase is mostly the lifecycle test, which loads every toolkit, so it runs last, when the shards have left their envs and weights in the file cache.
+
+Shards are balanced longest-first on the weights file. Every test lands in exactly one phase and shard; `--gpu-phase serial|parallel` and `--shard K/N` select them directly. Env builds and weight downloads hold cross-process locks under `PROTO_HOME`, so concurrent shards wait for each other rather than collide. The runner writes each shard's output, JUnit file and warm-worker report, plus `merged.xml` and `summary.json`, to `--out`. Each shard's proto log goes to its own `--out/logs_<shard>/`, so to resume one, pass that log to `scripts/list_incomplete_tests.py`.

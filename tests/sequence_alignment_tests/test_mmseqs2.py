@@ -548,7 +548,7 @@ def test_search_proteins_registered_dataset_missing_gives_setup_hint(monkeypatch
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mmseqs_search_proteins_execution(tmp_path):
     """End-to-end protein search with default ``threads=0`` (auto-detect).
 
@@ -575,7 +575,7 @@ def test_mmseqs_search_proteins_execution(tmp_path):
     assert result[1].num_hits >= 1
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mmseqs_search_proteins_no_hits(tmp_path):
     db_file = tmp_path / "database.faa"
     db_file.write_text(">db1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n")
@@ -590,7 +590,7 @@ def test_mmseqs_search_proteins_no_hits(tmp_path):
     assert result[0].num_hits == 0
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mmseqs_clustering_execution():
     sequences = [
         "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT",
@@ -613,7 +613,7 @@ def test_mmseqs_clustering_execution():
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mmseqs_search_genomes_execution():
     query_seqs = [
         "ATGGTGCTGTCTCCTGCCGACAAGACCAACGTCAAGGCCGCCTGGGGTAAGGTCATGGTGCTGTCTCCTGCCGACAAGACCAACGTCAAGGCCGCCTGGGGTAAGGTC",
@@ -634,7 +634,7 @@ def test_mmseqs_search_genomes_execution():
     assert len(result) == 2
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_search_proteins_inline_target_sequences_execution():
     """End-to-end: target_sequences (inline) routed via easy-search yields hits."""
     inputs = Mmseqs2SearchProteinsInput(query_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"])
@@ -646,7 +646,7 @@ def test_search_proteins_inline_target_sequences_execution():
     assert result.success and result[0].num_hits >= 1
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_clustering_mmseqs_db_fasta_path_execution(tmp_path):
     """End-to-end: mmseqs_db pointing at a FASTA file → sniff routes to createdb → cluster."""
     fasta = tmp_path / "input.faa"
@@ -663,7 +663,7 @@ def test_clustering_mmseqs_db_fasta_path_execution(tmp_path):
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_search_genomes_target_db_fasta_path_execution(tmp_path):
     """End-to-end: target_db pointing at a FASTA file → sniff routes to createdb → search."""
     target = tmp_path / "target.fna"

@@ -20,8 +20,10 @@ from proto_tools.tools.rna_splicing.splice_transformer.splice_transformer import
     TARGET_LENGTH,
 )
 from proto_tools.tools.rna_splicing.splice_transformer.splice_transformer_gradient import SPLICE_CHANNEL_INDEX
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
+
+_persistent_tool = make_persistent_fixture("splice_transformer")
 
 
 def _flank(length: int = CONTEXT_LENGTH) -> str:

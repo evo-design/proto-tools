@@ -35,6 +35,8 @@ from proto_tools.utils import (
     ToolInstance,
     resolve_terms,
 )
+from proto_tools.utils.base_config import RANDOM_SEED_UPPER_BOUND
+from proto_tools.utils.fanout import derive_item_seed
 from proto_tools.utils.sequence import normalize_excluded_amino_acids
 from proto_tools.utils.tool_io import Directionality
 
@@ -645,7 +647,11 @@ def dispatch_design_gradient(
         {
             "operation": "compute_design_gradient",
             "protocol": protocol,
-            "items": items,
+            # One seed per candidate, so duplicates in a batch draw differently (stochastic=True).
+            "items": [
+                {**item, "seed": derive_item_seed(config.seed, index, RANDOM_SEED_UPPER_BOUND)}
+                for index, item in enumerate(items)
+            ],
             "gradient_terms": requested,
             "term_options": [term.model_dump(exclude={"id"}) for term in config.gradient_terms],
             "temperature": temperature,

@@ -3,6 +3,7 @@
 Tests for PersistentWorker and _worker_bootstrap.
 """
 
+import collections
 import json
 import logging
 import os
@@ -18,11 +19,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from proto_tools.utils import download_progress
+from proto_tools.utils.logging_config import _TAG_PREFIX
 from proto_tools.utils.persistent_worker import (
     PersistentWorker,
     _build_subprocess_env,
     _handle_raw_stderr_line,
     _parse_env_vars_file,
+    _reemit_tagged_line,
 )
 
 _STANDALONE_HELPERS_SOURCE = (
@@ -904,28 +907,19 @@ def test_missing_whitelist_vars_not_added(monkeypatch):
     assert "HTTPS_PROXY" not in env
 
 
-def test_uv_pip_cache_defaults_under_proto_home(monkeypatch, tmp_path: Path):
-    """UV_CACHE_DIR and PIP_CACHE_DIR default to PROTO_HOME/{uv,pip}_cache."""
+@pytest.mark.parametrize("user_uv_cache", [None, "/custom/uv"])
+def test_uv_cache_under_proto_home_and_no_pip_cache(monkeypatch, tmp_path: Path, user_uv_cache: str | None):
+    """The uv cache sits under PROTO_HOME unless the user set UV_CACHE_DIR; pip, which copies, keeps no cache."""
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
-    monkeypatch.delenv("UV_CACHE_DIR", raising=False)
-    monkeypatch.delenv("PIP_CACHE_DIR", raising=False)
+    if user_uv_cache:
+        monkeypatch.setenv("UV_CACHE_DIR", user_uv_cache)
+    else:
+        monkeypatch.delenv("UV_CACHE_DIR", raising=False)
 
     env = _build_subprocess_env(device="cpu")
 
-    assert env["UV_CACHE_DIR"] == str(tmp_path / "uv_cache")
-    assert env["PIP_CACHE_DIR"] == str(tmp_path / "pip_cache")
-
-
-def test_uv_pip_cache_user_override_preserved(monkeypatch, tmp_path: Path):
-    """User-set UV_CACHE_DIR / PIP_CACHE_DIR win over the PROTO_HOME default."""
-    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
-    monkeypatch.setenv("UV_CACHE_DIR", "/custom/uv")
-    monkeypatch.setenv("PIP_CACHE_DIR", "/custom/pip")
-
-    env = _build_subprocess_env(device="cpu")
-
-    assert env["UV_CACHE_DIR"] == "/custom/uv"
-    assert env["PIP_CACHE_DIR"] == "/custom/pip"
+    assert env["UV_CACHE_DIR"] == (user_uv_cache or str(tmp_path / "uv_cache"))
+    assert env["PIP_NO_CACHE_DIR"] == "1"
 
 
 @pytest.mark.parametrize(
@@ -1130,11 +1124,24 @@ def test_ld_library_path_includes_tool_env_lib(monkeypatch, tmp_path: Path):
     assert ld_parts.index(tool_env_lib) < ld_parts.index("/opt/conda/lib")
 
 
-def test_ld_library_path_tool_env_lib_present_under_no_passthrough(monkeypatch, tmp_path: Path):
-    """[no_passthrough] strips host LD libs but keeps the tool env's own /lib."""
+@pytest.fixture
+def fresh_driver_lookup():
+    """Clear the cached libcuda lookup before and after a test that fakes the host's library path.
+
+    ``_find_driver_lib_dir`` is cached for the session. A test that runs it under a fake
+    ``LD_LIBRARY_PATH`` caches "no driver" for every worker started after it, so it must not
+    leave its answer behind: later [no_passthrough] workers (AlphaFold2/3, Evo 2, ProteinMPNN)
+    would start without the CUDA driver.
+    """
     from proto_tools.utils.persistent_worker import _find_driver_lib_dir
 
     _find_driver_lib_dir.cache_clear()
+    yield
+    _find_driver_lib_dir.cache_clear()
+
+
+def test_ld_library_path_tool_env_lib_present_under_no_passthrough(monkeypatch, tmp_path: Path, fresh_driver_lookup):
+    """[no_passthrough] strips host LD libs but keeps the tool env's own /lib."""
     monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64")
     monkeypatch.delenv("CONDA_PREFIX", raising=False)
     tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": ["LD_LIBRARY_PATH"]}
@@ -1156,11 +1163,8 @@ def test_no_passthrough_blocks_whitelisted_var(monkeypatch):
     assert "HTTP_PROXY" not in env
 
 
-def test_no_passthrough_blocks_parent_ld_library_path(monkeypatch, tmp_path: Path):
+def test_no_passthrough_blocks_parent_ld_library_path(monkeypatch, tmp_path: Path, fresh_driver_lookup):
     """[no_passthrough] LD_LIBRARY_PATH must not let parent's value leak into the subprocess."""
-    from proto_tools.utils.persistent_worker import _find_driver_lib_dir
-
-    _find_driver_lib_dir.cache_clear()
     monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64:/opt/nvidia/lib64")
     monkeypatch.delenv("CONDA_PREFIX", raising=False)
     tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": ["LD_LIBRARY_PATH"]}
@@ -1798,3 +1802,28 @@ def test_worker_is_replaced_after_a_poisoned_cuda_context(tmp_path: Path):
         assert worker.alive
     finally:
         worker.stop()
+
+
+def test_a_debug_status_from_a_worker_reaches_the_spinner_while_proto_tools_logs_at_info():
+    """The status line always updates; a status's level only decides which handlers log it."""
+    seen: list[tuple[int, str, bool]] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            seen.append((record.levelno, record.getMessage(), getattr(record, "update_status", False)))
+
+    proto_tools_logger = logging.getLogger("proto_tools")
+    prior_level = proto_tools_logger.level
+    capture = _Capture()
+    proto_tools_logger.addHandler(capture)
+    proto_tools_logger.setLevel(logging.INFO)
+    try:
+        parent = logging.getLogger("proto_tools.worker.test_status_level")
+        for msg, update_status in (("Scoring batch 1/4", True), ("debug detail", False)):
+            payload = {"level": "DEBUG", "name": "worker.inference", "msg": msg, "update_status": update_status}
+            _reemit_tagged_line(parent, _TAG_PREFIX + json.dumps(payload), collections.deque())
+    finally:
+        proto_tools_logger.removeHandler(capture)
+        proto_tools_logger.setLevel(prior_level)
+
+    assert seen == [(logging.DEBUG, "Scoring batch 1/4", True)]

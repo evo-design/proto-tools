@@ -18,8 +18,10 @@ from proto_tools.tools.structure_prediction import (
     run_rf3_prediction,
 )
 from proto_tools.tools.structure_prediction.rf3.helpers import complex_to_rf3_json
-from tests.conftest import benchmark_twice, random_protein_sequences
+from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("rf3")
 
 # Cro repressor from bacteriophage lambda; short, well-folded.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
@@ -205,7 +207,7 @@ def test_rf3_prediction_benchmark(request: pytest.FixtureRequest) -> None:
     assert_metrics_in_spec(result)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.slow
 def test_rf3_reported_msa_depth_matches_checkpoint_config():
     """Foundry builds RF3's inference pipeline from the checkpoint's first validation transform."""

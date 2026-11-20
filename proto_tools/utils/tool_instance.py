@@ -120,7 +120,7 @@ _persist_mode: contextvars.ContextVar[bool] = contextvars.ContextVar("_persist_m
 # Set by the ``@tool()`` wrapper around each dispatch so ``ToolInstance`` can
 # read per-tool flags (e.g. ``gpu_only``) without plumbing the ``ToolSpec``
 # through every call site. Contents: {"key": str, "gpu_only": bool,
-# "pin_visible_devices": bool}.
+# "pin_visible_devices": bool, "uses_gpu": bool}.
 _current_tool_invocation: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
     "_current_tool_invocation", default=None
 )
@@ -137,6 +137,20 @@ def _device_change_needed(current: str, requested: str) -> bool:
     if req.devices is None:  # auto request (cuda / cudaxN) satisfied by any same-kind, same-count allocation
         return not (cur.kind == req.kind and cur.count == req.count)
     return (cur.kind, cur.devices) != (req.kind, req.devices)
+
+
+def _dispatch_pins_worker() -> bool:
+    """Whether the current tool call's worker must see only its leased GPU(s).
+
+    True when the tool declares ``pin_visible_devices``, or when it is a GPU tool on a host whose
+    GPUs are in Exclusive_Process mode (``DeviceManager.pins_gpu_workers``). Read from the
+    ``@tool`` wrapper's invocation, so direct ``ToolInstance.run`` calls with no invocation keep
+    their own setting.
+    """
+    invocation = _current_tool_invocation.get() or {}
+    if invocation.get("pin_visible_devices"):
+        return True
+    return bool(invocation.get("uses_gpu")) and DeviceManager.get_instance().pins_gpu_workers
 
 
 def _local_visible_device(device: str) -> str:
@@ -518,6 +532,7 @@ class ToolInstance:
         inst = cls(toolkit)
         effective_script = Path(script_path) if script_path else inst.script_path
         device = input_dict.get("device")
+        pinned = _dispatch_pins_worker()
 
         if device and device.startswith("cuda"):
             dm = DeviceManager.get_instance()
@@ -529,6 +544,7 @@ class ToolInstance:
                     script_path=effective_script,
                     verbose=verbose,
                     timeout=timeout,
+                    pin_visible_devices=pinned,
                 )
         else:
             return inst._run_oneshot(
@@ -536,6 +552,7 @@ class ToolInstance:
                 script_path=effective_script,
                 verbose=verbose,
                 timeout=timeout,
+                pin_visible_devices=pinned,
             )
 
     @classmethod
@@ -764,8 +781,10 @@ class ToolInstance:
         # Latches True if any dispatch sets gpu_only; eviction then uses the
         # worker-kill path. See notes/tool-environments.md.
         self._gpu_only: bool = False
-        # Latches True if any dispatch sets pin_visible_devices (CVD-pinned worker, respawns on device change).
+        # Latches True if any dispatch pins the worker (CVD-pinned worker, respawns on device change).
         self._pin_visible_devices: bool = False
+        # The visibility the live worker was spawned with, compared on each dispatch.
+        self._worker_pinned: bool = False
 
     def _ensure_env(self) -> None:
         """Build the tool's environment if it doesn't exist or is broken.
@@ -1199,8 +1218,18 @@ class ToolInstance:
         _invocation = _current_tool_invocation.get() or {}
         if _invocation.get("gpu_only"):
             self._gpu_only = True
-        if _invocation.get("pin_visible_devices"):
+        if _dispatch_pins_worker():
             self._pin_visible_devices = True
+
+        # A live worker spawned with the other visibility would read local cuda:0 as the wrong GPU (or
+        # see GPUs it must not); respawn it with the visibility this dispatch needs.
+        if (
+            self._worker is not None
+            and getattr(self, "_worker_pinned", self._pin_visible_devices) != self._pin_visible_devices
+        ):
+            set_substatus("Restarting worker")
+            self._worker.stop()
+            self._worker = None
 
         # Pinned workers have a fixed CUDA_VISIBLE_DEVICES and cannot move in-process; respawn on a device change.
         if self._worker is not None and self._pin_visible_devices:
@@ -1304,6 +1333,7 @@ class ToolInstance:
                 env_overrides=self._env_overrides,
                 pin_visible_devices=self._pin_visible_devices,
             )
+            self._worker_pinned = self._pin_visible_devices
         else:
             # Live worker that needs no physical-device change (pinned ones that do were respawned above).
             device_manager = DeviceManager.get_instance()
@@ -1340,6 +1370,7 @@ class ToolInstance:
         script_path: Path | None = None,
         verbose: int = 0,
         timeout: int | None = None,
+        pin_visible_devices: bool = False,
     ) -> dict[str, Any]:
         """Run in an ephemeral subprocess (no persistent worker).
 
@@ -1364,10 +1395,14 @@ class ToolInstance:
             verbose (int): Verbosity level on the 0-3 scale; see :class:`BaseConfig`.
                 ``PROTO_WORKER_VERBOSE`` env var acts as a global ceiling override.
             timeout (int | None): Maximum seconds to wait.
+            pin_visible_devices (bool): Spawn the subprocess seeing only ``device``'s physical GPU(s),
+                which it addresses as local ``cuda:0..N-1`` (as a pinned persistent worker does).
         """
         self._ensure_env()
         sp = script_path or self.script_path
         device = input_dict.get("device", self.device)
+        if pin_visible_devices:
+            input_dict = {**input_dict, "device": _local_visible_device(device)}
         # Effective level = max(per-call config, env-var ceiling).
         effective_verbose = max(int(verbose), verbose_level_from_env())
         inherit_stdout = effective_verbose >= 3
@@ -1385,6 +1420,7 @@ class ToolInstance:
                 tool_env_path=self.env_path,
                 tool_env_vars=self._tool_env_vars,
                 toolkit=self.toolkit,
+                pin_visible_devices=pin_visible_devices,
             )
             env["TOOL_VENV_PATH"] = str(self.env_path)
             python_exe = str(self.env_path / "bin" / "python")
@@ -2780,6 +2816,23 @@ class ToolInstance:
         except (subprocess.SubprocessError, OSError) as e:
             logger.debug("Could not clean micromamba package archives: %s", e)
 
+    def _schedule_uv_prune(self, cache_dir: Path) -> None:
+        """Start a background prune of the uv cache this build used (see :mod:`proto_tools.utils.uv_prune`).
+
+        Skipped for an env pinned to another uv, which could misjudge the default uv's cache entries.
+        Best-effort, like :meth:`_clean_package_archives`: it never fails a build that succeeded.
+        """
+        # Imported here: the detached prune runs this module with -m, which a package-level import would shadow
+        from proto_tools.utils import uv_prune
+
+        uv = self.env_path / "bin" / "uv"
+        if self._get_uv_version() != UV_VERSION or not uv.is_file():
+            return
+        try:
+            uv_prune.schedule(uv, cache_dir)
+        except OSError as e:
+            logger.debug("Could not start a uv cache prune: %s", e)
+
     def _create_env(self) -> None:
         """Create (or rebuild) the tool's isolated environment.
 
@@ -2901,6 +2954,7 @@ class ToolInstance:
             status_file.write_text(f"SUCCESS\nSetup hash: {self._setup_hash()}\n")
             logger.debug("Environment setup completed for %s", self.toolkit)
             self._clean_package_archives(mamba_bin)
+            self._schedule_uv_prune(Path(env["UV_CACHE_DIR"]))
         else:
             tail = self._stderr_tail(combined_output)
             logger.error(

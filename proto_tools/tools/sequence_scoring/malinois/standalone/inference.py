@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -41,7 +42,10 @@ def _filename_from_url(url: str) -> str:
 def _download_artifact(url: str, expected_md5: str | None, cache_dir: Path) -> Path:
     if not url:
         raise FileNotFoundError("malinois: artifact_path is unavailable and artifact_url is empty")
-    return Path(download_weights(url, cache_dir / _filename_from_url(url), md5=expected_md5 or None))
+    target = cache_dir / _filename_from_url(url)
+    if not target.is_file():
+        logger.update_status("Downloading Malinois weights")
+    return Path(download_weights(url, target, md5=expected_md5 or None))
 
 
 def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:
@@ -59,6 +63,7 @@ def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:
 
             shutil.rmtree(tmp_dir)
         tmp_dir.mkdir(parents=True, exist_ok=True)
+        logger.update_status("Extracting Malinois weights")
         logger.info("Extracting Malinois artifact %s to %s", artifact_path, extracted_dir)
         try:
             import shutil
@@ -144,6 +149,7 @@ class MalinoisModel:
         if not checkpoint.is_file():
             raise FileNotFoundError(f"malinois: metadata checkpoint does not exist: {checkpoint}")
 
+        logger.update_status("Loading Malinois weights")
         if verbose:
             logger.info("Loading Malinois model from %s", artifact_path)
 
@@ -170,7 +176,7 @@ class MalinoisModel:
             return
         if self.device == device:
             return
-        previous_device = self.device or "cpu"
+        previous_device = self.device or "cpu"  # a fresh load is on CPU (load_malinois places nothing)
         self.model = move_model_to_device(self.model, previous_device, device)
         self.flank_builder = move_model_to_device(self.flank_builder, previous_device, device)
         self.device = device
@@ -188,6 +194,9 @@ class MalinoisModel:
             raise ValueError("malinois: model is not loaded")
         self.to_device(device)
 
+        logger.update_status(
+            f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+        )
         seq_tensor = torch.stack([malinois_scoring.dna2tensor(sequence) for sequence in sequences], dim=0)
         dataset = torch.utils.data.TensorDataset(seq_tensor)
         loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size)

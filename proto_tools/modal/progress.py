@@ -60,15 +60,20 @@ class QueueProgressHandler(logging.Handler):
     """
 
     def __init__(self, chunk_id: int | None = None, *, maxlen: int = BUFFER_LIMIT, level: int = logging.INFO) -> None:
-        """Buffer up to ``maxlen`` records at ``level`` and above, tagged with ``chunk_id``."""
-        super().__init__(level=level)
+        """Buffer up to ``maxlen`` records at ``level`` and above, plus status records at any level, tagged with ``chunk_id``."""
+        # The level check is in emit, not on the handler, so a DEBUG status still reaches the caller's status line.
+        super().__init__(level=logging.NOTSET)
+        self._min_level = level
         self._buffer: deque[tuple[int, Any, Any, bool]] = deque(maxlen=maxlen)
         self._chunk_id = chunk_id
 
     def emit(self, record: logging.LogRecord) -> None:
         """Append the unformatted record to the buffer, swallowing any failure."""
+        update_status = getattr(record, "update_status", False)
+        if record.levelno < self._min_level and not update_status:
+            return
         try:  # noqa: SIM105 - contextlib.suppress builds an object per call; this is the tool's hot path
-            self._buffer.append((record.levelno, record.msg, record.args, getattr(record, "update_status", False)))
+            self._buffer.append((record.levelno, record.msg, record.args, update_status))
         except Exception:  # noqa: S110 - logging must never break the tool
             pass
 

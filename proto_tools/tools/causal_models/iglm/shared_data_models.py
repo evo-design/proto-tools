@@ -3,7 +3,7 @@
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -206,6 +206,12 @@ class IgLMGenerationConfig(BaseConfig):
         description="Device to run the model on",
         include_in_key=False,
     )
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "IgLMGenerationConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "IgLM-S")
+        return cast("IgLMGenerationConfig", super().minimal(**kwargs))
 
 
 # ============================================================================

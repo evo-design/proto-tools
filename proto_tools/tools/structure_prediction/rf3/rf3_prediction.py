@@ -6,7 +6,7 @@ All-atom structure prediction with RoseTTAFold3 (RF3).
 import os
 import tempfile
 from logging import getLogger
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from pydantic import model_validator
 
@@ -268,6 +268,24 @@ class RF3Config(MSAStructurePredictionConfig):
                 "aggregates and an avg_pae scalar, never a per-token LxL matrix."
             )
         return self
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "RF3Config":
+        """One diffusion sample over 20 steps and one recycle (defaults: 5, 50, 10).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            RF3Config: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("n_recycles", 1)
+        kwargs.setdefault("diffusion_batch_size", 1)
+        kwargs.setdefault("num_steps", 20)
+        return cast("RF3Config", super().minimal(**kwargs))
 
 
 # ============================================================================

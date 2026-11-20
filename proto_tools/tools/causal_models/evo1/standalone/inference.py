@@ -7,12 +7,14 @@ Usage (called by ToolInstance, not directly):
     python inference.py <input.json> <output.json>
 """
 
+import functools
 import json
 import sys
 from typing import Any, Literal
 
 import torch
 from standalone_helpers import (
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -30,6 +32,36 @@ EVO1_MODEL_CHECKPOINTS = Literal[
     "evo-1-8k-crispr",
     "evo-1-8k-transposon",
 ]
+
+# Byte-level token ids of A, C, G, T; Evo1's vocabulary is 512 bytes
+DNA_TOKEN_IDS = [ord(base) for base in "ACGT"]
+
+
+@functools.cache
+def _non_dna_mask(vocab_size: int, device: torch.device) -> torch.Tensor:
+    """Boolean mask over the vocabulary that is True for every token except A, C, G and T."""
+    mask = torch.ones(vocab_size, dtype=torch.bool, device=device)
+    mask[DNA_TOKEN_IDS] = False
+    return mask
+
+
+@functools.cache
+def restrict_sampling_to_dna() -> None:
+    """Make evo's generation loop sample only A, C, G and T; runs once per process.
+
+    ``evo.generation`` calls ``stripedhyena.sample.sample`` once per generated token and
+    has no option to limit the vocabulary, so this replaces that function in
+    ``evo.generation`` with one that masks every other token first.
+    """
+    import evo.generation
+    from stripedhyena.sample import sample
+
+    def sample_dna(logits: torch.Tensor, **kwargs: Any) -> torch.Tensor:
+        # The lowest finite logit gives every non-DNA token zero probability
+        non_dna = _non_dna_mask(logits.shape[-1], logits.device)
+        return sample(logits.masked_fill(non_dna, torch.finfo(logits.dtype).min), **kwargs)
+
+    evo.generation.sample = sample_dna
 
 
 class Evo1Model:
@@ -69,7 +101,8 @@ class Evo1Model:
         """Sample DNA sequences autoregressively from prompts.
 
         Delegates to ``evo.generation.generate()`` which supports batched
-        generation with cached recurrent state.
+        generation with cached recurrent state. Sampling is limited to A, C, G
+        and T.
 
         Args:
             prompts: DNA prompt sequences.
@@ -99,7 +132,9 @@ class Evo1Model:
         all_sequences: list[str] = []
         all_scores: list[float] = []
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=-(-len(prompts) // batch_size))
         for i in range(0, len(prompts), batch_size):
+            counter(i // batch_size + 1)
             batch = prompts[i : i + batch_size]
             sequences, scores = evo_generate(
                 prompt_seqs=batch,
@@ -178,8 +213,10 @@ class Evo1Model:
         all_logits = []
         all_metrics = []
 
+        counter = StatusCounter(logger, "Scoring batch %d/%d", total=len(batches))
         with torch.inference_mode():
             for batch_idx, batch_seqs in enumerate(tqdm(batches, desc="Evo1 Sequence Scoring", unit="batch")):
+                counter(batch_idx + 1)
                 if verbose:
                     logger.info(f"Processing batch {batch_idx + 1}/{len(batches)} ({len(batch_seqs)} sequences)")
 
@@ -220,8 +257,7 @@ class Evo1Model:
 
     def load(self, device: str = "cuda", verbose: bool = False) -> Any:
         """Load Evo1 model and tokenizer."""
-        if verbose:
-            logger.info(f"Loading Evo1: {self.model_name} on {device}")
+        logger.update_status("Loading Evo1 weights")
 
         # evo's load_checkpoint() calls snapshot_download() with no filter, pulling ~40 GB of
         # redundant formats (safetensors + .bin shards + monolithic .pt) when only safetensors
@@ -249,6 +285,7 @@ class Evo1Model:
 
         self.model = self.model.to(device).eval()
         self.device = device
+        restrict_sampling_to_dna()
         self._loaded = True
 
         if verbose:

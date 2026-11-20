@@ -78,6 +78,18 @@ Pin `tensorflow~=2.15.0` to keep Keras 2, because Keras 3 in TF &ge;2.16 cannot 
 
 Tools can override centralized recommendations via env_vars.txt or tool-specific environment variables (e.g., `SPLICE_TRANSFORMER_TORCH_SPEC`, `ALPHAGENOME_JAX_SPEC`, `SPLICEAI_TF_SPEC`).
 
+### Patching Installed Packages
+
+uv hardlinks each installed file from its cache into every env that installs the same package, so envs on the same torch build share one copy of it. A `setup.sh` that patches an installed file must therefore write a new file and swap it in, never rewrite it in place: an in-place write (Python's `open(path, "w")` or `Path.write_text`) edits the shared copy, and the patch appears in every other env holding that file. `sed -i` and `os.replace` both give the env its own copy:
+
+```python
+with open(path + ".proto-patch", "w") as f:
+    f.write(content)
+os.replace(path + ".proto-patch", path)
+```
+
+`tests/style_consistency_tests/test_setup_patches_replace_files.py` enforces this for every `setup.sh` that touches site-packages.
+
 ### Pinned-Version Tools
 
 Some tools have hard version pins for ABI compatibility with pre-built wheels (flash-attn, transformer-engine). These tools explicitly pin torch versions in their setup.sh and should NOT be migrated to use dynamic version selection:
@@ -401,7 +413,7 @@ needs its own install directory to be writable at runtime.
 
 **Consistency enforcement:** The parametrized test `tests/tool_infra_tests/test_device_manager/test_tool_device_consistency.py::test_standalone_protocol_compliance` verifies that any tool making subprocess calls imports `get_subprocess_device_env()` and passes its result as `env=`.
 
-## Device movement: `to_device()` (PyTorch) vs. `pin_visible_devices` (JAX)
+## Device movement: `to_device()` (routed tools) vs. `pin_visible_devices` (pinned tools)
 
 Evo 2 Flash uses a GPU-bound vLLM engine: `gpu_only=True` and `pin_visible_devices=True` make DeviceManager restart its worker on eviction or a GPU change. It deliberately omits the `to_device()` hook.
 
@@ -414,11 +426,11 @@ def to_device(device: str) -> dict:
         return {"success": True, "device": device}
     return {"success": True, "device": device, "note": "model not loaded yet"}
 ```
-The wrapper's `.to_device()` uses `move_model_to_device()` from `standalone_helpers`, which calls `model.to()` and frees CUDA memory via `torch.cuda.empty_cache()` when moving off GPU.
+The wrapper's `.to_device()` uses `move_model_to_device()` from `standalone_helpers`. It calls `model.to()`, frees CUDA memory via `torch.cuda.empty_cache()` when moving off GPU, and makes the new GPU current (`set_current_cuda_device`), so later `.cuda()` calls and Triton kernels follow the model. A movable tool's worker sees every GPU, so it must also *load* on the leased device: see the routing rules in `notes/device-management.md`. On an Exclusive_Process host these tools are pinned too, and respawn instead of moving.
 
 **JAX tools** (AlphaFold2, ProteinMPNN, AlphaGenome, …) do **not** implement `to_device()`. A JAX runtime initializes a context on *every* visible GPU, so these tools set `pin_visible_devices=True` on the `@tool` registration. The worker is then spawned with `CUDA_VISIBLE_DEVICES` restricted to its assigned physical GPU(s), which it addresses as local `cuda:0..N-1`, and the model is placed on its sole visible GPU at load — there is nothing to move. Because `CUDA_VISIBLE_DEVICES` is fixed for a process, a JAX worker cannot reach another GPU in-process, so DeviceManager **respawns** it on a device change (and kills it on eviction). The user-facing `device=` selection is unchanged; the logical→physical mapping is internal. See `notes/device-management.md`.
 
-Pinning is not JAX-specific — it is the pattern for any runtime that picks its own device. `rfd4-design` and `rfd4-inverse-folding` hold a PyTorch model in memory but still pin, because upstream builds its Lightning trainer with `devices=N` and claims local `cuda:0..N-1`; a logical index cannot be imposed on it from inside the process. Their `to_device()` is therefore a documented no-op. The trade is deliberate: pinning costs CPU offload (eviction kills the worker) but is what makes `device="cuda:1"` land on the right GPU instead of silently running on `cuda:0`.
+Pinning is not JAX-specific — it is the pattern for any runtime that picks its own device and cannot be routed (SpliceAI's TensorFlow, BioEmu's in-process JAX ColabFold). `rfd4-design` and `rfd4-inverse-folding` hold a PyTorch model in memory but still pin, because upstream builds its Lightning trainer with `devices=N` and claims local `cuda:0..N-1`; a logical index cannot be imposed on it from inside the process. Their `to_device()` is therefore a documented no-op. The trade is deliberate: pinning costs CPU offload (eviction kills the worker) but is what makes `device="cuda:1"` land on the right GPU instead of silently running on `cuda:0`.
 
 `AlphaGenome` additionally sets `gpu_only=True`: its black-box model cannot be CPU-offloaded usefully (CPU compilation takes 10+ minutes), so eviction kills the worker and the next dispatch reloads on GPU.
 
