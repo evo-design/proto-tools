@@ -9,6 +9,7 @@ What is tested is what decides whether it runs and what it reads, and that it ne
 
 from __future__ import annotations
 
+import mmap
 import os
 from pathlib import Path
 
@@ -38,7 +39,7 @@ def faults(monkeypatch):
     monkeypatch.setattr(env_warmup, "_resident_fraction", lambda libraries: 0.0)
 
     def _set(throughput: float) -> list[Path]:
-        monkeypatch.setattr(env_warmup, "_fault_throughput", lambda path: probed.append(path) or throughput)
+        monkeypatch.setattr(env_warmup, "_fault_throughput", lambda path, pages: probed.append(path) or throughput)
         return probed
 
     monkeypatch.delenv("PROTO_WARM_ENV", raising=False)
@@ -52,19 +53,36 @@ def test_only_slow_page_faults_are_worth_a_pre_read(tmp_path, faults, throughput
     assert warm_environment(_env_with_libraries(tmp_path, libbig=_BIG), "hash") == expected
 
 
-def test_a_cached_library_is_not_read_again(tmp_path, monkeypatch):
-    """Just written, so in the page cache: the real residency check sees it and reads nothing."""
-    monkeypatch.delenv("PROTO_WARM_ENV", raising=False)
-    assert warm_environment(_env_with_libraries(tmp_path, libbig=_BIG), "hash") == 0
+def test_residency_is_read_page_by_page(tmp_path):
+    """The kernel reports residency page by page, which the residency checks and the probe window rely on."""
+    library = _env_with_libraries(tmp_path, libbig=_BIG + 1) / "lib/python3.12/site-packages/torch/lib/libbig.so"
+    pages = env_warmup._page_residency(library)
+    if pages is None:
+        pytest.skip("mincore is unavailable here")
+    assert len(pages) == _BIG // mmap.PAGESIZE + 1
 
 
-@pytest.mark.parametrize(("value", "throughput", "expected"), [("0", _SLOW, 0), ("1", _FAST, _BIG)])
-def test_the_env_var_overrides_the_measurement(tmp_path, monkeypatch, faults, value, throughput, expected):
-    """PROTO_WARM_ENV=0 never reads and =1 always reads, without probing either way."""
+def test_the_library_with_the_most_uncached_pages_is_probed(tmp_path, monkeypatch, faults):
+    """Envs hardlink shared libraries, so the largest may be cached by another env while the rest are cold."""
+    probed = faults(_FAST)
+    env = _env_with_libraries(tmp_path, libbig=_BIG * 2, libmid=_BIG)
+    cached = {"libbig.so"}
+    monkeypatch.setattr(
+        env_warmup, "_page_residency", lambda path: bytes([path.name in cached]) * (path.stat().st_size // 4096)
+    )
+    warm_environment(env, "hash")
+    assert [path.name for path in probed] == ["libmid.so"]
+
+
+@pytest.mark.parametrize(
+    ("value", "throughput", "expected", "probes"), [("0", _SLOW, 0, 0), ("1", _FAST, _BIG, 0), ("auto", _FAST, 0, 1)]
+)
+def test_the_env_var_overrides_the_measurement(tmp_path, monkeypatch, faults, value, throughput, expected, probes):
+    """PROTO_WARM_ENV=0 never reads and =1 always reads, without probing; anything else measures."""
     probed = faults(throughput)
     monkeypatch.setenv("PROTO_WARM_ENV", value)
     assert warm_environment(_env_with_libraries(tmp_path, libbig=_BIG), "hash") == expected
-    assert probed == []
+    assert len(probed) == probes
 
 
 def test_large_libraries_are_chosen_once_each_largest_first(tmp_path):
@@ -89,6 +107,10 @@ def test_the_library_list_is_reused_until_the_env_is_rebuilt(tmp_path, monkeypat
     assert walks == []
     assert _large_shared_libraries(env, "build-two", deadline=float("inf")) == []
     assert walks == [env]
+
+    first[0].unlink()  # e.g. a uv pip install into the env: a listed library that is gone means the list is stale
+    _large_shared_libraries(env, "build-one", deadline=float("inf"))
+    assert walks == [env, env]
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root writes through read-only permissions")
@@ -118,7 +140,7 @@ def test_a_warm_up_that_cannot_run_is_survivable(tmp_path, monkeypatch, broken):
     env = tmp_path / "absent"
     if broken == "probe raises":
         env = _env_with_libraries(tmp_path, libbig=_BIG)
-        monkeypatch.setattr(env_warmup, "_fault_throughput", lambda path: (_ for _ in ()).throw(OSError("boom")))
+        monkeypatch.setattr(env_warmup, "_fault_throughput", lambda path, pages: (_ for _ in ()).throw(OSError("boom")))
     assert warm_environment(env, "hash") == 0
 
 
