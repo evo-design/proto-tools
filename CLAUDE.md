@@ -29,6 +29,27 @@ pip install -e ".[dev]"      # first-time setup only
 Do not manually create or activate tool-specific environments; proto-tools
 builds and manages standalone tool environments automatically.
 
+At the start of a session, and after switching branch or worktree, confirm the
+environment imports the checkout you are editing:
+
+```bash
+python -c "import proto_tools; print(proto_tools.__file__)"
+```
+
+`pip install -e` records an absolute path, so an environment built for one
+worktree keeps importing that worktree from every other one, and several
+worktrees sharing one environment all import whichever was installed last. The
+symptoms do not point at the cause: expect an `ImportError` for a symbol
+plainly present in the file you are reading, or a `pydantic` error about a
+model you never touched, both of which mean two trees are on one path.
+
+Fix it by installing this worktree, not by prepending `PYTHONPATH` -- a path
+prefix leaves the editable `.pth` entries active and both trees importable,
+turning a clear failure into a stranger one.
+
+Repos that vendor proto-tools as a submodule, such as proto-train, add a second
+way for this to drift, since the pin moves between their branches.
+
 Never treat a triggered environment rebuild as a cost or a risk when weighing a
 change. Editing `setup.sh`, `requirements.txt` or anything else in the env
 fingerprint rebuilds that tool's environment, and that is intended. Do not
