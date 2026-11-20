@@ -6,14 +6,14 @@ Pre-read a tool environment's shared libraries when page faults on its filesyste
 bytes arrive as page faults. Where those faults are slow, a 4 GB environment takes minutes to
 import. Measured as sequential mmap page faults over a cold stretch of ``libtorch_cuda.so``:
 
-=======================================  ==================
-storage                                  fault throughput
-=======================================  ==================
-Lustre (Sherlock, Oak and ``$SCRATCH``)  0.3 - 2.9 MB/s
-WekaFS (Chimera)                         170 - 620 MB/s
-local ext4                               ~2,200 MB/s
-already in the page cache                ~15,000 MB/s
-=======================================  ==================
+=========================  ==================
+storage                    fault throughput
+=========================  ==================
+Lustre                     0.3 - 2.9 MB/s
+WekaFS                     170 - 620 MB/s
+local ext4                 ~2,200 MB/s
+already in the page cache  ~15,000 MB/s
+=========================  ==================
 
 On Lustre a plain sequential read of the same files runs at ~1.3 GB/s, and it fills the same
 page cache the faults would. Pre-reading 5.4 GB took 5 seconds and moved a worker that had
