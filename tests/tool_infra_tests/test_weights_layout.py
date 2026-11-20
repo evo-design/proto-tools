@@ -10,7 +10,7 @@ from proto_tools.utils import weights_layout
 from proto_tools.utils.persistent_worker import _build_subprocess_env
 from proto_tools.utils.standalone_helpers_source.standalone_helpers import resolve_weights_dir
 from proto_tools.utils.tool_instance import ToolInstance
-from proto_tools.utils.weights_layout import weights_key
+from proto_tools.utils.weights_layout import toolkit_hf_hub_cache, weights_key
 
 _HELPERS_SH = Path(weights_layout.__file__).parent / "standalone_helpers_source" / "standalone_helpers.sh"
 
@@ -48,7 +48,7 @@ def test_weights_key_empty_file_raises(key_file):
 
 
 def test_toolkit_caches_live_in_its_folder(monkeypatch, tmp_path: Path, key_file):
-    """HF, torch, and JAX caches all resolve under {cache}/{weights_key}/."""
+    """HF, torch, and JAX caches all resolve under {cache}/{weights_key}/, where borrowers find them too."""
     key_file("shared")
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path))
     monkeypatch.delenv("JAX_COMPILATION_CACHE_DIR", raising=False)
@@ -60,6 +60,7 @@ def test_toolkit_caches_live_in_its_folder(monkeypatch, tmp_path: Path, key_file
     assert env["HF_HOME"] == str(folder / "huggingface")
     assert env["TORCH_HOME"] == str(folder / "torch")
     assert env["JAX_COMPILATION_CACHE_DIR"] == str(folder / "jax_cache")
+    assert toolkit_hf_hub_cache("mocktool") == str(folder / "huggingface" / "hub")
 
 
 @pytest.mark.parametrize("mode", ["IN_ENV", "NONE"])
@@ -72,6 +73,7 @@ def test_in_env_and_none_modes_ignore_layout(monkeypatch, tmp_path: Path, mode):
 
     expected_hf = str(tmp_path / "venv" / "cache" / "huggingface") if mode == "IN_ENV" else None
     assert env.get("HF_HOME") == expected_hf
+    assert toolkit_hf_hub_cache("mocktool") is None
 
 
 def test_user_jax_cache_beats_toolkit_layout(monkeypatch, tmp_path: Path):
