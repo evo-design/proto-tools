@@ -122,7 +122,7 @@ def _build_upstream_input(
 class ESMFold2Model:
     """ESMFold2 all-atom structure prediction model wrapper."""
 
-    def __init__(self, model_checkpoint: str, lm_dropout: float = 0.0) -> None:
+    def __init__(self, model_checkpoint: str, lm_dropout: float = 0.0, esmc_cache_dir: str | None = None) -> None:
         """Initialize the model wrapper; defers weight load until first call."""
         if model_checkpoint not in _CHECKPOINT_REPOS:
             raise ValueError(
@@ -135,6 +135,7 @@ class ESMFold2Model:
             )
         self._loaded = False
         self.lm_dropout = lm_dropout
+        self.esmc_cache_dir = esmc_cache_dir
         self.model_checkpoint = model_checkpoint
         self.device: str | None = None
         self.model: Any = None
@@ -156,10 +157,14 @@ class ESMFold2Model:
         try:
             if self.model_checkpoint in EXPERIMENTAL_CHECKPOINTS:
                 from esm.models.esmfold2.experimental import EsmFold2ExperimentalModel
+                from esm.models.hub import resolve_model_dir
 
-                # These carry their own ESM C encoder and a pair-representation dropout that
-                # can be held on during inference; the default of 0.0 keeps a fold deterministic.
-                model = EsmFold2ExperimentalModel.from_pretrained(repo, load_esmc=True)
+                # These load their ESM C encoder from a separate repo, kept in the esmc toolkit's
+                # cache so the 6B backbone is stored once. They also carry a pair-representation
+                # dropout that can be held on during inference; 0.0 keeps a fold deterministic.
+                model = EsmFold2ExperimentalModel.from_pretrained(repo, load_esmc=False)
+                if model.esmc is None:
+                    model.load_esmc(resolve_model_dir(model.config.esmc_id, cache_dir=self.esmc_cache_dir))
                 model.configure_lm_dropout(self.lm_dropout, force_lm_dropout_during_inference=bool(self.lm_dropout))
                 self.model = model.to(device=device).eval().requires_grad_(False)
             else:
@@ -631,7 +636,7 @@ def complex_gradient(data: dict[str, Any]) -> dict[str, Any]:
     needs_fold = any(entry["id"] != "plm_nll" for entry in requested)
     distogram = midpoints = None
     if needs_fold:
-        wrapper = _wrapper(data["model_checkpoint"], data.get("lm_dropout", 0.0))
+        wrapper = _wrapper(data["model_checkpoint"], data.get("lm_dropout", 0.0), data.get("esmc_cache_dir"))
         loading = not wrapper._loaded
         folder = wrapper.ensure_loaded(data["device"], seed=data["seed"])
         if loading:
@@ -689,11 +694,11 @@ _language_model: Any = None
 _language_model_device: str | None = None
 
 
-def _wrapper(model_checkpoint: str, lm_dropout: float = 0.0) -> ESMFold2Model:
+def _wrapper(model_checkpoint: str, lm_dropout: float = 0.0, esmc_cache_dir: str | None = None) -> ESMFold2Model:
     """Return the cached wrapper for this checkpoint and dropout, replacing it if either changed."""
     global _model
     if _model is None or (_model.model_checkpoint, _model.lm_dropout) != (model_checkpoint, lm_dropout):
-        _model = ESMFold2Model(model_checkpoint=model_checkpoint, lm_dropout=lm_dropout)
+        _model = ESMFold2Model(model_checkpoint=model_checkpoint, lm_dropout=lm_dropout, esmc_cache_dir=esmc_cache_dir)
     return _model
 
 

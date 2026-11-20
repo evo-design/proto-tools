@@ -35,6 +35,7 @@ from proto_tools.utils.base_config import RANDOM_SEED_UPPER_BOUND
 from proto_tools.utils.fanout import derive_item_seed
 from proto_tools.utils.sequence_logits import SequenceLogits
 from proto_tools.utils.tool_io import Metrics, MetricSpec
+from proto_tools.utils.weights_layout import toolkit_hf_hub_cache
 
 logger = logging.getLogger(__name__)
 
@@ -420,6 +421,8 @@ def run_esmfold2_inversion_binder_gradient(
                 "compute_gradient": config.compute_gradient,
                 "model_checkpoint": config.model_checkpoint,
                 "lm_dropout": config.lm_dropout,
+                # The experimental heads load ESM C 6B; read the esmc toolkit's copy, not a second one.
+                "esmc_cache_dir": toolkit_hf_hub_cache("esmc"),
                 "plm_passes": config.plm_passes,
                 "plm_batch_size": config.plm_batch_size,
                 # One seed per candidate, so duplicates in a batch draw differently (stochastic=True).
