@@ -18,12 +18,18 @@ already in the page cache                ~15,000 MB/s
 On Lustre a plain sequential read of the same files runs at ~1.3 GB/s, and it fills the same
 page cache the faults would. Pre-reading 5.4 GB took 5 seconds and moved a worker that had
 been stalled for 27 minutes straight into compute. On WekaFS the same pre-read costs 6-8
-seconds to save about one, so the decision is made by measuring rather than by filesystem type:
+seconds to save about one, so the decision is made by measuring rather than by filesystem type,
+in two separate questions:
 
-* :func:`_fault_throughput` times page faults on the environment's largest library for at most
-  ``_PROBE_SECONDS``, and only a throughput below ``_SLOW_FAULT_BYTES_PER_SECOND`` triggers a
-  read. A library already in the page cache faults fast, so a node that has warmed the
-  environment, and not since evicted it, reads nothing.
+* Is the environment already warm? :func:`_resident_fraction` asks the kernel with ``mincore``,
+  which reads nothing. At ``_WARM_FRACTION`` or more of the libraries' bytes resident, the
+  warm-up stops there. Below it, a re-read fetches only what is missing, because the resident
+  pages come from memory, so an env that was half evicted costs half a warm-up.
+* Is this filesystem slow to fault? :func:`_fault_throughput` times sequential page faults on
+  the largest library for at most ``_PROBE_SECONDS``, over its longest stretch of pages that are
+  not cached, and only a throughput below ``_SLOW_FAULT_BYTES_PER_SECOND`` triggers a read.
+  Timing uncached pages matters: a probe that re-timed a window an earlier probe had faulted in
+  would measure the page cache and call a cold environment fast.
 * The libraries to read are listed once per build and kept in the environment, so a process
   that does not need to warm pays for one small file read and the probe.
 * Reading is bounded by a wall-clock budget and a concurrency cap.
@@ -32,6 +38,7 @@ seconds to save about one, so the decision is made by measuring rather than by f
 
 from __future__ import annotations
 
+import ctypes
 import logging
 import mmap
 import os
@@ -48,6 +55,9 @@ _MIN_INTERESTING_BYTES = 16 * 2**20
 #: Warm when page faults run slower than this. Lustre measures at most 2.9 MB/s and WekaFS at
 #: least 170 MB/s, so this sits a factor of five or more from both.
 _SLOW_FAULT_BYTES_PER_SECOND = 32 * 2**20
+
+#: Treat the env as warm when at least this share of its libraries' bytes is resident.
+_WARM_FRACTION = 0.9
 
 #: How long the fault probe may take, and how much it may fault in.
 _PROBE_SECONDS = 0.1
@@ -130,15 +140,83 @@ def _large_shared_libraries(env_path: Path, fingerprint: str, deadline: float) -
     return libraries
 
 
-def _fault_throughput(path: Path) -> float:
-    """Bytes per second that sequential page faults on ``path`` deliver, probed from its middle.
+def _page_residency(path: Path) -> bytes | None:
+    """One byte per page of ``path``, odd where the page is in the page cache.
 
-    Faults up to ``_PROBE_BYTES`` one page at a time and stops after ``_PROBE_SECONDS``, so a
-    slow filesystem is recognised within that time rather than measured to completion.
+    Asks the kernel with ``mincore``, which reads nothing from the file. ``None`` where that is
+    unavailable: outside Linux and macOS, or when ``ctypes`` cannot reach libc. On Linux a
+    process that neither owns the file nor may write it is told only about pages it has mapped
+    itself, so another user's env reads as uncached and is judged by the fault probe alone.
     """
+    size = path.stat().st_size
+    if size == 0:
+        return None
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.mmap.restype = ctypes.c_void_p
+    libc.mmap.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_long]
+    libc.munmap.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+    libc.mincore.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_ubyte)]
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        address = libc.mmap(None, size, mmap.PROT_READ, mmap.MAP_SHARED, descriptor, 0)
+        if address is None or address == ctypes.c_void_p(-1).value:
+            return None
+        try:
+            pages = (ctypes.c_ubyte * ((size + mmap.PAGESIZE - 1) // mmap.PAGESIZE))()
+            return bytes(pages) if libc.mincore(address, size, pages) == 0 else None
+        finally:
+            libc.munmap(address, size)
+    finally:
+        os.close(descriptor)
+
+
+def _resident_fraction(libraries: list[Path]) -> float:
+    """The share of the libraries' bytes in the page cache; ``0.0`` where it cannot be known."""
+    resident = total = 0
+    for path in libraries:
+        try:
+            pages = _page_residency(path)
+        except (OSError, AttributeError):
+            pages = None
+        if pages is None:
+            return 0.0
+        resident += sum(page & 1 for page in pages)
+        total += len(pages)
+    return resident / total if total else 0.0
+
+
+def _probe_window(pages: bytes) -> tuple[int, int] | None:
+    """The longest run of uncached pages as ``(first, past the last)``; ``None`` if all are cached."""
+    best: tuple[int, int] | None = None
+    start = None
+    for index, page in enumerate([*pages, 1]):
+        if not page & 1:
+            start = index if start is None else start
+        elif start is not None:
+            if best is None or index - start > best[1] - best[0]:
+                best = (start, index)
+            start = None
+    return best
+
+
+def _fault_throughput(path: Path) -> float:
+    """Bytes per second that sequential page faults on ``path`` deliver, over uncached pages.
+
+    Starts at the longest run of pages not in the page cache, or at the file's middle where
+    residency is unknown, and stops after ``_PROBE_BYTES``, the run's end, or
+    ``_PROBE_SECONDS``, so a slow filesystem is recognised within that time rather than measured
+    to completion.
+    """
+    pages = _page_residency(path)
+    window = _probe_window(pages) if pages is not None else None
+    if pages is not None and window is None:
+        return float("inf")  # every page is cached, so faults cost nothing
     with path.open("rb") as handle, mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
-        start = len(mapped) // 2 // mmap.PAGESIZE * mmap.PAGESIZE
-        end = min(len(mapped), start + _PROBE_BYTES)
+        if window is None:
+            start, end = len(mapped) // 2 // mmap.PAGESIZE * mmap.PAGESIZE, len(mapped)
+        else:
+            start, end = window[0] * mmap.PAGESIZE, min(len(mapped), window[1] * mmap.PAGESIZE)
+        end = min(end, start + _PROBE_BYTES)
         offset = start
         began = time.perf_counter()
         while offset < end:
@@ -173,9 +251,9 @@ def warm_environment(
 ) -> int:
     """Pre-read ``env_path``'s large shared libraries into the page cache. Bytes read.
 
-    Does nothing, and returns ``0``, unless page faults on the largest library are slow, which
-    means both that the filesystem faults slowly and that the library is not already cached.
-    ``PROTO_WARM_ENV`` skips that measurement in either direction.
+    Does nothing, and returns ``0``, when the libraries are already mostly in the page cache or
+    page faults on the largest library's uncached pages are fast. ``PROTO_WARM_ENV`` skips both
+    measurements in either direction.
 
     Never raises. A warm-up that fails for any reason leaves the environment exactly as it was,
     and the caller is no worse off than before this function existed.
@@ -199,6 +277,10 @@ def warm_environment(
         if not libraries:
             return 0
         if not forced:
+            resident = _resident_fraction(libraries)
+            if resident >= _WARM_FRACTION:
+                logger.debug("env warm-up: %.0f%% of %s is already cached, skipping", resident * 100, env_path)
+                return 0
             throughput = _fault_throughput(libraries[0])
             if throughput >= _SLOW_FAULT_BYTES_PER_SECOND:
                 logger.debug("env warm-up: page faults in %s run at %.0f MB/s, skipping", env_path, throughput / 2**20)
