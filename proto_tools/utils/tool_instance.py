@@ -894,8 +894,9 @@ class ToolInstance:
         waiting on them than computing. Reading the files sequentially first fills the same
         page cache at a thousand times the rate.
 
-        Skipped unless the env is on a network filesystem and this node has not already warmed
-        it. Best-effort throughout: see :mod:`proto_tools.utils.env_warmup`.
+        Skipped unless page faults on the env's largest library are measured to be slow, which
+        a local disk, a fast network filesystem, and an already-cached library all avoid.
+        Best-effort throughout: see :mod:`proto_tools.utils.env_warmup`.
 
         Including the fingerprint lookup, which reads the setup files: a speed-up must not add
         a way for :meth:`_ensure_env` to fail, so anything unexpected here just skips the
