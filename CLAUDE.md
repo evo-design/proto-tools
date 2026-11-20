@@ -46,6 +46,30 @@ normalization, error cases, and defaults that are *derived* from other fields.
 Pinning a value is only worth it when it must agree with something external, such as
 an upstream snapshot.
 
+A test that exercises standalone implementation code directly — anything importing
+`torch`, `jax`, or another tool-env dependency into the pytest process — must run
+inside the toolkit's environment via `run_in_env`. Never write it against a copy of
+that package installed alongside proto-tools, and never reach for
+`pytest.importorskip("torch")` to paper over its absence.
+
+The orchestrator has no ML dependencies by design; models live in isolated tool
+environments. So `importorskip` on a toolkit's own dependency does not make the test
+fail when that dependency is missing — it makes it *skip*, silently and green, both
+in CI (which runs `pytest --cpu-only --no-envs`) and in an ordinary local run. Tests
+written that way can stop running for months with nobody noticing.
+
+Put the assertions in a `_{thing}_env_check.py` beside the test, run it with
+`run_in_env`, and assert on a sentinel in its stdout:
+
+```python
+check = Path(__file__).resolve().parent / "_esmc_token_layout_env_check.py"
+output = run_in_env("esmc", script=str(check), timeout=1800)
+assert "ESMC_TOKEN_LAYOUT_OK" in output, output
+```
+
+Mark such tests `uses_env` (or `uses_gpu`, which implies it). Reserve `importorskip`
+for genuinely optional extras, never for a dependency the toolkit owns.
+
 Before pushing any PR, run the full `tests/style_consistency_tests/` suite (fast,
 CPU-only, no env). These run in CI and enforce consistency checks (docstring style,
 config/schema field metadata including the <100-char description limit,
