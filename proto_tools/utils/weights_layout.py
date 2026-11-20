@@ -17,6 +17,7 @@ toolkit's folder, so toolkits that load the same checkpoints share one copy.
 ``IN_ENV`` and ``NONE`` modes keep caches in the tool's venv or the caller's environment instead.
 """
 
+import os
 from pathlib import Path
 
 # JIT and compile caches that libraries keep in ~ or /tmp by default. Every entry is a cache:
@@ -100,3 +101,24 @@ def toolkit_cache_env(toolkit: str, cache_root: Path) -> dict[str, str]:
         "HF_HOME": str(folder / "huggingface"),
         "TORCH_HOME": str(folder / "torch"),
     }
+
+
+def toolkit_hf_hub_cache(toolkit: str) -> str | None:
+    """Return ``toolkit``'s Hugging Face hub cache, for a worker that loads one of its checkpoints.
+
+    A toolkit that needs another toolkit's model passes this to its worker, which downloads into
+    and reads from that folder, so both share one copy.
+
+    Args:
+        toolkit (str): The toolkit whose model is borrowed.
+
+    Returns:
+        str | None: ``{PROTO_MODEL_CACHE}/{key}/huggingface/hub``, or None in ``IN_ENV`` and
+            ``NONE`` modes, where caches are not kept per toolkit and the worker's own cache applies.
+    """
+    from proto_tools.utils.proto_home import get_proto_home
+
+    cache_mode = os.environ.get("PROTO_MODEL_CACHE") or str(get_proto_home() / "proto_model_cache")
+    if cache_mode in ("IN_ENV", "NONE"):
+        return None
+    return str(Path(toolkit_cache_env(toolkit, Path(cache_mode))["HF_HOME"]) / "hub")

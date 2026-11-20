@@ -23,11 +23,20 @@ logger = get_logger(__name__)
 logging.getLogger("esm").setLevel(logging.ERROR)
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
-# HF repos for the two exposed checkpoints
+# HF repos for the exposed checkpoints. Name an experimental head from the inversion configs
+# only: it loads through a different model class, and the folding tool's confidence outputs are
+# untested on it. The experimental heads load from byte-identical mirrors of Biohub's repos
+# (biohub/ESMFold2-Experimental*), which are published for reproducibility and may be withdrawn.
 _CHECKPOINT_REPOS = {
     "esmfold2": "biohub/ESMFold2",
     "esmfold2-fast": "biohub/ESMFold2-Fast",
+    "esmfold2-experimental": "bviggiano/ESMFold2-Experimental",
+    "esmfold2-experimental-fast": "bviggiano/ESMFold2-Experimental-Fast",
+    "esmfold2-experimental-cutoff2025": "bviggiano/ESMFold2-Experimental-Cutoff2025",
+    "esmfold2-experimental-fast-cutoff2025": "bviggiano/ESMFold2-Experimental-Fast-Cutoff2025",
 }
+#: Checkpoints that load through ``EsmFold2ExperimentalModel`` rather than ``EsmFold2Model``.
+EXPERIMENTAL_CHECKPOINTS = frozenset(k for k in _CHECKPOINT_REPOS if "experimental" in k)
 
 
 def _build_upstream_input(
@@ -113,13 +122,20 @@ def _build_upstream_input(
 class ESMFold2Model:
     """ESMFold2 all-atom structure prediction model wrapper."""
 
-    def __init__(self, model_checkpoint: str) -> None:
+    def __init__(self, model_checkpoint: str, lm_dropout: float = 0.0, esmc_cache_dir: str | None = None) -> None:
         """Initialize the model wrapper; defers weight load until first call."""
         if model_checkpoint not in _CHECKPOINT_REPOS:
             raise ValueError(
                 f"esmfold2: unknown model_checkpoint {model_checkpoint!r}; valid: {sorted(_CHECKPOINT_REPOS)}"
             )
+        if lm_dropout and model_checkpoint not in EXPERIMENTAL_CHECKPOINTS:
+            raise ValueError(
+                f"esmfold2: lm_dropout is only configurable on {sorted(EXPERIMENTAL_CHECKPOINTS)}; "
+                f"{model_checkpoint!r} has no dropout to configure"
+            )
         self._loaded = False
+        self.lm_dropout = lm_dropout
+        self.esmc_cache_dir = esmc_cache_dir
         self.model_checkpoint = model_checkpoint
         self.device: str | None = None
         self.model: Any = None
@@ -139,12 +155,29 @@ class ESMFold2Model:
             logger.info(f"Loading ESMFold2 model: {repo} on {device}")
 
         try:
-            self.model = EsmFold2Model.from_pretrained(repo, device=device).eval()
+            if self.model_checkpoint in EXPERIMENTAL_CHECKPOINTS:
+                from esm.models.esmfold2.experimental import EsmFold2ExperimentalModel
+                from esm.models.hub import resolve_model_dir
+
+                # These load their ESM C encoder from a separate repo, kept in the esmc toolkit's
+                # cache so the 6B backbone is stored once. They also carry a pair-representation
+                # dropout that can be held on during inference; 0.0 keeps a fold deterministic.
+                model = EsmFold2ExperimentalModel.from_pretrained(repo, load_esmc=False)
+                if model.esmc is None:
+                    model.load_esmc(resolve_model_dir(model.config.esmc_id, cache_dir=self.esmc_cache_dir))
+                model.configure_lm_dropout(self.lm_dropout, force_lm_dropout_during_inference=bool(self.lm_dropout))
+                self.model = model.to(device=device).eval().requires_grad_(False)
+            else:
+                self.model = EsmFold2Model.from_pretrained(repo, device=device).eval()
         except OSError as e:
             raise RuntimeError(f"esmfold2: HF weight load from {repo!r} failed: {e}") from e
 
-        self.builder = ESMFold2InputBuilder()
-        self._log_loaded_msa_rows(self.builder)
+        # The folding path's input builder is only exercised on the production heads; the
+        # experimental ones are reached solely through the inversion tools, which featurize
+        # with `prepare_esmfold2_input` directly.
+        self.builder = None if self.model_checkpoint in EXPERIMENTAL_CHECKPOINTS else ESMFold2InputBuilder()
+        if self.builder is not None:
+            self._log_loaded_msa_rows(self.builder)
         self.device = device
         self._loaded = True
 
@@ -514,8 +547,8 @@ def _epitope_mask(data: dict[str, Any], prepared: _Complex) -> torch.Tensor:
 def _quantity(
     name: str,
     chain_id: str,
-    distogram: torch.Tensor,
-    midpoints: torch.Tensor,
+    distogram: torch.Tensor | None,
+    midpoints: torch.Tensor | None,
     prepared: _Complex,
     data: dict[str, Any],
 ) -> torch.Tensor:
@@ -524,8 +557,9 @@ def _quantity(
     Args:
         name (str): Quantity id.
         chain_id (str): Chain the quantity is evaluated over.
-        distogram (torch.Tensor): Distogram logits for the folded complex.
-        midpoints (torch.Tensor): Bin midpoint distances.
+        distogram (torch.Tensor | None): Distogram logits for the folded complex; ``None`` when
+            only the pseudo-perplexity was asked for, which does not fold.
+        midpoints (torch.Tensor | None): Bin midpoint distances, ``None`` alongside the distogram.
         prepared (_Complex): The assembled complex, for its spans and relaxed state.
         data (dict[str, Any]): Worker payload.
 
@@ -537,12 +571,13 @@ def _quantity(
             target chain.
     """
     span = prepared.spans[chain_id]
+    if name == "plm_nll":
+        return _pseudo_perplexity(prepared.relaxed[chain_id], data).squeeze(0)
+    assert distogram is not None and midpoints is not None
     if name == "intra_contact":
         return objective.intra_contact_loss(distogram, span, midpoints).squeeze(0)
     if name == "globularity":
         return objective.globularity_loss(distogram, span, midpoints).squeeze(0)
-    if name == "plm_nll":
-        return _pseudo_perplexity(prepared.relaxed[chain_id], data).squeeze(0)
     if name in ("inter_contact", "epitope"):
         target_id = data.get("target_chain_id")
         if target_id is None:
@@ -563,7 +598,8 @@ def _pseudo_perplexity(relaxed: torch.Tensor, data: dict[str, Any]) -> torch.Ten
     masked_lm = _load_language_model(device, seed)
     tokenizer = EsmcTokenizer()
     scored = torch.ones(relaxed.shape[0], relaxed.shape[1], dtype=torch.bool, device=relaxed.device)
-    generator = torch.Generator(device=relaxed.device).manual_seed(seed)
+    # An unseeded call still needs a generator for the mask draws; seed 0 keeps it reproducible.
+    generator = torch.Generator(device=relaxed.device).manual_seed(0 if seed is None else int(seed))
     return objective.pseudo_perplexity_nll(
         masked_lm,
         relaxed,
@@ -591,15 +627,35 @@ def complex_gradient(data: dict[str, Any]) -> dict[str, Any]:
     """
     vocabulary = _folding_vocabulary()
     prepared = _Complex(data, vocabulary)
-    wrapper = _wrapper(data["model_checkpoint"])
-    loading = not wrapper._loaded
-    folder = wrapper.ensure_loaded(data["device"], seed=data["seed"])
-    if loading:
-        logger.update_status("Computing gradient", level=logging.DEBUG)
-    distogram = _fold(folder, prepared, data)
-    midpoints = objective.bin_midpoints(distogram.shape[-1], distogram.device).to(distogram.dtype)
-
     requested = list(data["gradient_terms"])
+    metrics: dict[str, Any] = {
+        "complex_length": prepared.length,
+        "designable_length": sum(prepared.relaxed[name].shape[1] for name in prepared.designable),
+    }
+    # The pseudo-perplexity reads only the sequence, so a request for it alone skips the fold.
+    needs_fold = any(entry["id"] != "plm_nll" for entry in requested)
+    distogram = midpoints = None
+    if needs_fold:
+        wrapper = _wrapper(data["model_checkpoint"], data.get("lm_dropout", 0.0), data.get("esmc_cache_dir"))
+        loading = not wrapper._loaded
+        folder = wrapper.ensure_loaded(data["device"], seed=data["seed"])
+        if loading:
+            # Replace the weight-loading status once the model is up.
+            logger.update_status("Computing gradient", level=logging.DEBUG)
+        distogram = _fold(folder, prepared, data)
+        # Leave the grid at float32: casting it down to a bfloat16 head would quantize the
+        # angstrom values the cutoffs compare against.
+        midpoints = objective.bin_midpoints(distogram.shape[-1], distogram.device)
+        target_id = data.get("target_chain_id")
+        if target_id is not None:  # a binder against a target: report the distogram interface confidence too
+            binder_id = next(name for name in prepared.designable if name != target_id)
+            with torch.no_grad():
+                metrics["distogram_iptm_proxy"] = float(
+                    objective.distogram_iptm_proxy(
+                        distogram.detach(), prepared.spans[target_id], prepared.spans[binder_id], midpoints
+                    )[0]
+                )
+
     values = [
         (entry, _quantity(entry["id"], entry["chain_id"], distogram, midpoints, prepared, data)) for entry in requested
     ]
@@ -623,14 +679,7 @@ def complex_gradient(data: dict[str, Any]) -> dict[str, Any]:
             {"id": entry["id"], "chain_id": entry["chain_id"], "value": float(value.detach()), "gradient": gradient}
         )
 
-    return {
-        "terms": terms,
-        "chain_rows": prepared.chain_rows(),
-        "metrics": {
-            "complex_length": prepared.length,
-            "designable_length": sum(prepared.relaxed[name].shape[1] for name in prepared.designable),
-        },
-    }
+    return {"terms": terms, "chain_rows": prepared.chain_rows(), "metrics": metrics}
 
 
 # ============================================================================
@@ -645,11 +694,11 @@ _language_model: Any = None
 _language_model_device: str | None = None
 
 
-def _wrapper(model_checkpoint: str) -> ESMFold2Model:
-    """Return the cached wrapper for model_checkpoint, replacing it if the caller switched."""
+def _wrapper(model_checkpoint: str, lm_dropout: float = 0.0, esmc_cache_dir: str | None = None) -> ESMFold2Model:
+    """Return the cached wrapper for this checkpoint and dropout, replacing it if either changed."""
     global _model
-    if _model is None or _model.model_checkpoint != model_checkpoint:
-        _model = ESMFold2Model(model_checkpoint=model_checkpoint)
+    if _model is None or (_model.model_checkpoint, _model.lm_dropout) != (model_checkpoint, lm_dropout):
+        _model = ESMFold2Model(model_checkpoint=model_checkpoint, lm_dropout=lm_dropout, esmc_cache_dir=esmc_cache_dir)
     return _model
 
 
