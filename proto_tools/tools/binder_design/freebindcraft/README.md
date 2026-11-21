@@ -5,7 +5,7 @@
 ![FreeBindCraft](https://proto-bio.github.io/proto-assets/images/tool/freebindcraft/hero.png)
 
 > [!NOTE]
-> **License:** FreeBindCraft uses MIT for code and CC-BY-4.0 for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/cytokineking/FreeBindCraft/blob/master/LICENSE) and [model weights license](https://github.com/google-deepmind/alphafold#model-parameters-license) for full terms.
+> **License:** FreeBindCraft uses MIT for code and CC-BY-4.0 for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/cytokineking/FreeBindCraft/blob/d12747dbc907435622559b81891ad73e0a45c2e4/LICENSE) and [model weights license](https://github.com/google-deepmind/alphafold#model-parameters-license) for full terms. These terms cover the FreeBindCraft commit proto-tools pins; upstream FreeBindCraft moved to the Elastic License 2.0 on 2026-11-19.
 
 ## Overview
 

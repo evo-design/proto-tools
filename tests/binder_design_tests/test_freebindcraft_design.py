@@ -4,11 +4,13 @@ import importlib.util
 import json
 import logging
 import os
+import re
 import sys
 import types
 from pathlib import Path
 
 import pytest
+import yaml
 
 from proto_tools.tools import (
     FreeBindCraftConfig,
@@ -283,3 +285,21 @@ def test_freebindcraft_one_off_sample_full_pipeline() -> None:
         # PyRosetta-free run must never report Rosetta-only placeholder metrics as real.
         assert _PLACEHOLDER_METRICS.isdisjoint(dict(design.metrics.items()))
     assert_metrics_in_spec(result)
+
+
+def test_license_record_follows_the_pinned_commit():
+    """license.yaml describes the FreeBindCraft commit setup.sh installs, not upstream's latest.
+
+    Upstream moved from MIT to the Elastic License 2.0 (which forbids hosting it as a service) on
+    2026-11-19. Pinning another commit fails here until license.yaml is checked against that commit.
+    """
+    toolkit = Path(__file__).parents[2] / "proto_tools" / "tools" / "binder_design" / "freebindcraft"
+    pinned = re.search(
+        r'BINDCRAFT_COMMIT="\$\{BINDCRAFT_COMMIT:-([0-9a-f]{40})\}"', (toolkit / "standalone" / "setup.sh").read_text()
+    )
+    assert pinned, "setup.sh no longer pins BINDCRAFT_COMMIT to a full commit hash"
+    code_url = yaml.safe_load((toolkit / "license.yaml").read_text())["code"]["url"]
+    assert f"/blob/{pinned[1]}/LICENSE" in code_url, (
+        f"setup.sh pins FreeBindCraft {pinned[1][:8]} but license.yaml's code.url is {code_url}; "
+        "check that commit's LICENSE and update license.yaml"
+    )
