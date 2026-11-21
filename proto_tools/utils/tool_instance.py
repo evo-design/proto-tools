@@ -2970,12 +2970,15 @@ class ToolInstance:
         # Cap GPU-coupled packages at the versions we have tested. The env keeps its own copy, which
         # records the caps it was built under and gives uv and pip a path without spaces.
         caps_hint = ""
+        caps_copy = None
         caps_source = resolve_caps_file()
         if caps_source is not None:
             caps_copy = self.env_path / "dependency_caps.txt"
             shutil.copyfile(caps_source, caps_copy)
-            env.update(constraint_env(caps_copy.absolute(), env))
+            caps_copy = caps_copy.absolute()
             caps_hint = dependency_caps_hint(caps_source)
+        # The user's own UV_CONSTRAINT/PIP_CONSTRAINT aren't in env's allowlist, so they come from os.environ
+        env.update(constraint_env(caps_copy, os.environ))
 
         returncode, combined_output = _run_setup_script(
             self.setup_script,

@@ -175,6 +175,8 @@ def test_constraint_env_keeps_a_users_own_constraints():
         "UV_CONSTRAINT": "/env/dependency_caps.txt /home/me/uv.txt",
         "PIP_CONSTRAINT": "/env/dependency_caps.txt",
     }
+    assert constraint_env(None, {"PIP_CONSTRAINT": "/home/me/pip.txt"}) == {"PIP_CONSTRAINT": "/home/me/pip.txt"}
+    assert constraint_env(None, {}) == {}
 
 
 def _make_env_dir(inst: ToolInstance, cmd: list[str]) -> subprocess.CompletedProcess:
@@ -238,6 +240,22 @@ def test_env_builds_without_caps_when_turned_off(monkeypatch: pytest.MonkeyPatch
     assert not (inst.env_path / "dependency_caps.txt").exists()
     assert "UV_CONSTRAINT" not in env
     assert "PIP_CONSTRAINT" not in env
+
+
+@pytest.mark.parametrize("caps", ["on", "0"])
+def test_a_users_own_constraints_reach_setup_sh(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caps: str):
+    """The subprocess env copies only allowlisted variables; the user's constraints still reach setup.sh."""
+    if caps == "on":
+        monkeypatch.delenv(CAPS_ENV_VAR, raising=False)
+    else:
+        monkeypatch.setenv(CAPS_ENV_VAR, caps)
+    monkeypatch.setenv("UV_CONSTRAINT", "/home/me/uv.txt")
+    monkeypatch.setenv("PIP_CONSTRAINT", "/home/me/pip.txt")
+    inst, env = _build_env(tmp_path)
+
+    ours = f"{(inst.env_path / 'dependency_caps.txt').absolute()} " if caps == "on" else ""
+    assert env["UV_CONSTRAINT"] == f"{ours}/home/me/uv.txt"
+    assert env["PIP_CONSTRAINT"] == f"{ours}/home/me/pip.txt"
 
 
 def test_a_failed_build_names_the_caps_and_the_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
