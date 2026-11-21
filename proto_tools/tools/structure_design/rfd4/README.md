@@ -15,7 +15,7 @@ Unlike workflows that generate a backbone and then design its sequence, RFD4-Pro
 
 ## Background
 
-RFD4-Proteina ([Corley et al., 2026](https://rfd4-proteina.org/assets/paper/RFD4-Proteina.pdf)) uses a flow-based generative framework to model biomolecular sequences and three-dimensional structures. Its central contribution is a shared representation of molecular geometry and chemical identity, allowing sequence and structure to be generated together rather than treated as separate prediction problems.
+RFD4-Proteina ([Corley et al., 2026](https://www.biorxiv.org/content/10.64898/2026.11.12.766037)) uses a flow-based generative framework to model biomolecular sequences and three-dimensional structures. Its central contribution is a shared representation of molecular geometry and chemical identity, allowing sequence and structure to be generated together rather than treated as separate prediction problems.
 
 The model uses a partially latent representation. Polymer backbones are represented by explicit anchor coordinates, such as the Cα atoms of proteins, while additional residue-level features encode chemical identity and local conformation. An associated autoencoder converts these latent features into amino acid sequences and all-atom structures. Atomized components, including small-molecule ligands, retain information about their constituent atoms and chemical connectivity.
 
