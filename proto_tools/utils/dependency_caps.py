@@ -15,6 +15,7 @@ Caps are set and raised by hand only, in a reviewed PR with test evidence; see
 """
 
 import os
+from collections.abc import Mapping
 from pathlib import Path
 
 CAPS_FILE = Path(__file__).with_name("dependency_caps.txt")
@@ -46,19 +47,22 @@ def resolve_caps_file() -> Path | None:
     return path
 
 
-def constraint_env(caps_file: Path, env: dict[str, str]) -> dict[str, str]:
-    """Return ``UV_CONSTRAINT`` and ``PIP_CONSTRAINT`` with ``caps_file`` added to what ``env`` already sets.
+def constraint_env(caps_file: Path | None, parent_env: Mapping[str, str]) -> dict[str, str]:
+    """Return ``UV_CONSTRAINT`` and ``PIP_CONSTRAINT`` for an env build: the caps plus the caller's own.
 
-    Both variables take a space-separated list, so a user's own constraints still apply.
+    A tool's subprocess env copies only allowlisted variables, so a user's own constraints are read
+    from the caller's environment and passed through here. Both variables take a space-separated
+    list, so the caps and the user's constraints apply together.
 
     Args:
-        caps_file (Path): The constraints file to add.
-        env (dict[str, str]): The environment the install will run in.
+        caps_file (Path | None): The caps to apply, or ``None`` when they are turned off.
+        parent_env (Mapping[str, str]): The caller's environment, normally ``os.environ``.
 
     Returns:
-        dict[str, str]: The two variables, ready to merge into ``env``.
+        dict[str, str]: The variables that end up non-empty, ready to merge into the build's env.
     """
-    return {var: f"{caps_file} {env.get(var, '')}".strip() for var in CONSTRAINT_ENV_VARS}
+    constraints = {var: f"{caps_file or ''} {parent_env.get(var, '')}".strip() for var in CONSTRAINT_ENV_VARS}
+    return {var: value for var, value in constraints.items() if value}
 
 
 def caps_hint(caps_file: Path) -> str:
