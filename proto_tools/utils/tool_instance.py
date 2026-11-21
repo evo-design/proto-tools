@@ -66,6 +66,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
+from proto_tools.utils.dependency_caps import caps_hint as dependency_caps_hint
+from proto_tools.utils.dependency_caps import constraint_env, resolve_caps_file
 from proto_tools.utils.device import parse_device_string
 from proto_tools.utils.device_manager import DeviceManager
 from proto_tools.utils.download_progress import ProgressDeadline
@@ -2965,6 +2967,15 @@ class ToolInstance:
         record = self.env_path / RECORD_NAME
         record.unlink(missing_ok=True)
         env[RECORD_ENV_VAR] = str(record.absolute())
+        # Cap GPU-coupled packages at the versions we have tested. The env keeps its own copy, which
+        # records the caps it was built under and gives uv and pip a path without spaces.
+        caps_hint = ""
+        caps_source = resolve_caps_file()
+        if caps_source is not None:
+            caps_copy = self.env_path / "dependency_caps.txt"
+            shutil.copyfile(caps_source, caps_copy)
+            env.update(constraint_env(caps_copy.absolute(), env))
+            caps_hint = dependency_caps_hint(caps_source)
 
         returncode, combined_output = _run_setup_script(
             self.setup_script,
@@ -3010,7 +3021,7 @@ class ToolInstance:
 
             raise RuntimeError(
                 f"{self.toolkit}: setup.sh failed (exit {returncode}): {tail or '<no stderr>'}"
-                f"{self._git_cache_hint(combined_output)}{self._fix_env_hint()}"
+                f"{self._git_cache_hint(combined_output)}{caps_hint}{self._fix_env_hint()}"
             )
 
 

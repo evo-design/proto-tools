@@ -1,0 +1,36 @@
+# Caps on GPU-, driver- and compiler-coupled packages at the newest versions we have tested.
+#
+# Every env build passes this file to `uv pip` and `pip` as a constraints file (UV_CONSTRAINT /
+# PIP_CONSTRAINT), so it also caps indirect dependencies. See proto_tools/utils/dependency_caps.py
+# and notes/tool-environments.md.
+#
+# Rules:
+# - Caps are set and raised by hand only, in a PR with GPU test evidence and a second reviewer.
+#   Nothing generates or raises them automatically.
+# - Each cap is the next minor version above the newest tested one (3.8.x -> <3.9). JAX numbers
+#   every release as a patch, so its caps sit just above the tested release (0.12.0.1 -> <0.12.1).
+# - Each line ends with `# tested <version> | <date> | <hardware> | <evidence>`, or, for a CUDA 13
+#   build we have no hardware to test, `# follows <cu12 package>` with the same bound.
+# - Cap only packages tied to the GPU, driver or compiler that release often.
+
+torch<2.15                            # tested 2.14.1 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+triton<3.9                            # tested 3.8.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+vllm<0.27                             # tested 0.26.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+flash-attn<2.9                        # tested 2.8.3 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+
+jax<0.12.1                            # tested 0.12.0.1 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+jaxlib<0.12.1                         # tested 0.12.0.1 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+jax-cuda12-plugin<0.12.1              # tested 0.12.0.1 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+jax-cuda12-pjrt<0.12.1                # tested 0.12.0.1 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+jax-cuda13-plugin<0.12.1              # follows jax-cuda12-plugin
+jax-cuda13-pjrt<0.12.1                # follows jax-cuda12-pjrt
+
+cuequivariance<0.14                   # tested 0.13.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+cuequivariance-torch<0.14             # tested 0.13.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+cuequivariance-ops-cu12<0.14          # tested 0.13.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+cuequivariance-ops-torch-cu12<0.14    # tested 0.13.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+cuequivariance-ops-cu13<0.14          # follows cuequivariance-ops-cu12
+cuequivariance-ops-torch-cu13<0.14    # follows cuequivariance-ops-torch-cu12
+
+nvidia-cudnn-cu12<9.29                # tested 9.28.1.4 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
+nvidia-cudnn-cu13<9.29                # follows nvidia-cudnn-cu12

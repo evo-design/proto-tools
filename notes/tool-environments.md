@@ -102,6 +102,34 @@ resolving with no change here; uv's default `first-index` strategy will not fall
 Affected pins pass `--index-strategy unsafe-best-match` on the install line.
 `tests/tool_infra_tests/test_torch_index_pruning.py` dry-runs every pin against each variant daily.
 
+### Dependency Caps
+
+Envs are solved fresh on every build, so a new upstream release can reach an env untested. In
+#423, Boltz-2 picked up triton 3.9.0, whose kernels CUDA 12 drivers refuse. To prevent that,
+`proto_tools/utils/dependency_caps.txt` caps packages tied to the GPU, driver or compiler (torch,
+triton, jax, vllm, flash-attn, cuequivariance, cuDNN) just above the newest version we have tested.
+Every env build passes the file to `uv pip` and `pip` as a constraints file (`UV_CONSTRAINT` and
+`PIP_CONSTRAINT`), so the caps also apply to indirect dependencies, both locally and on Modal.
+A cap only removes untested newer releases: older versions still resolve, so the resolver keeps
+choosing what fits each machine. Each env keeps a copy of the caps it was built under, at
+`<env>/dependency_caps.txt`. `$MAMBA_BIN install` lines are not constrained, so capped packages
+must come from uv or pip.
+
+Caps are set and raised **by hand only**. Raising one is its own PR:
+
+1. Change the cap and its `# tested <version> | <date> | <hardware> | <evidence>` comment.
+2. Rebuild every env that installs the package from scratch, and run their GPU tests.
+3. Link the results in the PR. A second person checks them before it merges.
+
+Changing a cap does not rebuild existing envs. `tests/tool_infra_tests/test_dependency_caps.py`
+checks the file but never changes it: every cap needs its evidence, may only name a GPU-coupled
+package, must sit above every pin and minimum a tool declares, and must have a matching line for
+its CUDA 13 build.
+
+To build past the caps, for example on hardware that needs a newer torch, set
+`PROTO_DEPENDENCY_CAPS=0`, or set it to the path of your own constraints file. Constraints you set
+yourself in `UV_CONSTRAINT` or `PIP_CONSTRAINT` still apply alongside the caps.
+
 ### Compatibility Matrices
 
 Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibility):
