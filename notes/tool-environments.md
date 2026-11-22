@@ -102,6 +102,18 @@ resolving with no change here; uv's default `first-index` strategy will not fall
 Affected pins pass `--index-strategy unsafe-best-match` on the install line.
 `tests/tool_infra_tests/test_torch_index_pruning.py` dry-runs every pin against each variant daily.
 
+### Dependency Caps
+
+`proto_tools/utils/dependency_caps.txt` caps releases known to break, only on the machines they break. Each line gives the cap, the machines it applies to (`all`, or `driver<N` for NVIDIA drivers below `N`) and a link to the break:
+
+```
+triton<3.9    # driver<580: 3.9 builds sm_90+ kernels that CUDA 12 drivers reject (https://...)
+```
+
+Each env build writes the caps that apply to its machine into `<env>/dependency_caps.txt` and installs under them through `UV_CONSTRAINT` and `PIP_CONSTRAINT`, so they also cap indirect dependencies. Machines no cap applies to install the newest release. Caps are read when an env is built; changing them, or using the env on another machine, doesn't rebuild it. `$MAMBA_BIN install` lines are not constrained.
+
+A break in a single tool is capped in that tool's `setup.sh` instead, as Mol-1 does with `triton<3.9`. Add such constraints to `UV_CONSTRAINT`: a `--constraint` flag replaces it, which drops the caps.
+
 ### Compatibility Matrices
 
 Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibility):
