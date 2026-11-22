@@ -114,8 +114,6 @@ Each env build writes the caps that apply to its machine into `<env>/dependency_
 
 A break in a single tool is capped in that tool's `setup.sh` instead, as Mol-1 does with `triton<3.9`. Add such constraints to `UV_CONSTRAINT`: a `--constraint` flag replaces it, which drops the caps.
 
-Your own `UV_CONSTRAINT` and `PIP_CONSTRAINT` still apply alongside the caps.
-
 ### Compatibility Matrices
 
 Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibility):
