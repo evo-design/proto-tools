@@ -66,7 +66,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
-from proto_tools.utils.dependency_caps import caps_hint as dependency_caps_hint
 from proto_tools.utils.dependency_caps import constraint_env, write_env_caps
 from proto_tools.utils.device import parse_device_string
 from proto_tools.utils.device_manager import DeviceManager
@@ -2969,9 +2968,7 @@ class ToolInstance:
         env[RECORD_ENV_VAR] = str(record.absolute())
         # Cap the releases known to break this machine. The user's own UV_CONSTRAINT/PIP_CONSTRAINT
         # aren't in env's allowlist, so they come from os.environ
-        env_caps = write_env_caps(self.env_path, env)
-        caps_hint = dependency_caps_hint(env_caps) if env_caps else ""
-        env.update(constraint_env(env_caps, os.environ))
+        env.update(constraint_env(write_env_caps(self.env_path, env), os.environ))
 
         returncode, combined_output = _run_setup_script(
             self.setup_script,
@@ -3017,7 +3014,7 @@ class ToolInstance:
 
             raise RuntimeError(
                 f"{self.toolkit}: setup.sh failed (exit {returncode}): {tail or '<no stderr>'}"
-                f"{self._git_cache_hint(combined_output)}{caps_hint}{self._fix_env_hint()}"
+                f"{self._git_cache_hint(combined_output)}{self._fix_env_hint()}"
             )
 
 

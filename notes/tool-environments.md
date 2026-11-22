@@ -112,7 +112,7 @@ torch<2.15    # driver<580: 2.15 ships only CUDA 13 builds, which need driver 58
 
 Each env build writes the caps that apply to its machine into `<env>/dependency_caps.txt` and installs under them through `UV_CONSTRAINT` and `PIP_CONSTRAINT`, so they also cap indirect dependencies. Other machines get the newest release. `$MAMBA_BIN install` lines are not constrained. A break in a single tool is capped in that tool's `setup.sh` instead, as Mol-1 does with `triton<3.9`.
 
-Set `PROTO_DEPENDENCY_CAPS=0` to build without the caps, or set it to the path of your own constraints file to use that instead. Your own `UV_CONSTRAINT` and `PIP_CONSTRAINT` still apply alongside the caps.
+Your own `UV_CONSTRAINT` and `PIP_CONSTRAINT` still apply alongside the caps.
 
 ### Compatibility Matrices
 

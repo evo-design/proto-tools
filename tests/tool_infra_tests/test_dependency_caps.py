@@ -12,14 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from proto_tools.utils import compute_deps
-from proto_tools.utils.dependency_caps import (
-    CAPS_ENV_VAR,
-    CAPS_FILE,
-    cap_applies,
-    constraint_env,
-    parse_caps,
-    resolve_caps_file,
-)
+from proto_tools.utils.dependency_caps import CAPS_FILE, cap_applies, constraint_env, parse_caps
 from proto_tools.utils.tool_instance import ToolInstance
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -136,24 +129,6 @@ def test_no_cap_excludes_a_pinned_or_minimum_version():
 # ── Applying the caps ─────────────────────────────────────────────────────
 
 
-def test_resolve_caps_file_follows_the_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    """Unset uses the packaged caps, ``0`` turns them off, a path replaces them, a missing path fails loudly."""
-    monkeypatch.delenv(CAPS_ENV_VAR, raising=False)
-    assert resolve_caps_file() == CAPS_FILE
-
-    monkeypatch.setenv(CAPS_ENV_VAR, "0")
-    assert resolve_caps_file() is None
-
-    own = tmp_path / "my_caps.txt"
-    own.write_text("torch<2.20\n")
-    monkeypatch.setenv(CAPS_ENV_VAR, str(own))
-    assert resolve_caps_file() == own
-
-    monkeypatch.setenv(CAPS_ENV_VAR, str(tmp_path / "missing.txt"))
-    with pytest.raises(FileNotFoundError, match=CAPS_ENV_VAR):
-        resolve_caps_file()
-
-
 def test_constraint_env_keeps_a_users_own_constraints():
     """The caps join constraints the user already set rather than replacing them."""
     env = constraint_env(Path("/env/dependency_caps.txt"), {"UV_CONSTRAINT": "/home/me/uv.txt"})
@@ -209,8 +184,8 @@ def _build_env(tmp_path: Path, driver: int | None, returncode: int = 0) -> tuple
 
 @pytest.fixture
 def no_constraints(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The packaged caps, and no constraints of the user's own."""
-    for var in (CAPS_ENV_VAR, "UV_CONSTRAINT", "PIP_CONSTRAINT"):
+    """No constraints of the user's own."""
+    for var in ("UV_CONSTRAINT", "PIP_CONSTRAINT"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -245,52 +220,12 @@ def test_machines_no_cap_covers_install_the_newest_releases(tmp_path: Path, driv
         assert "PIP_CONSTRAINT" not in env
 
 
-def test_a_users_caps_file_is_used_as_is(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    """``PROTO_DEPENDENCY_CAPS=<path>`` replaces the packaged caps without any filtering."""
-    own = tmp_path / "my_caps.txt"
-    own.write_text("torch<2.13\n")
-    monkeypatch.setenv(CAPS_ENV_VAR, str(own))
-    monkeypatch.delenv("UV_CONSTRAINT", raising=False)
-    monkeypatch.delenv("PIP_CONSTRAINT", raising=False)
-    inst, env = _build_env(tmp_path, driver=590)
-
-    env_caps = inst.env_path / "dependency_caps.txt"
-    assert env_caps.read_text() == "torch<2.13\n"
-    assert env["UV_CONSTRAINT"] == str(env_caps.absolute())
-
-
-def test_env_builds_without_caps_when_turned_off(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    """``PROTO_DEPENDENCY_CAPS=0`` builds with no constraints of ours."""
-    monkeypatch.setenv(CAPS_ENV_VAR, "0")
-    monkeypatch.delenv("UV_CONSTRAINT", raising=False)
-    monkeypatch.delenv("PIP_CONSTRAINT", raising=False)
-    inst, env = _build_env(tmp_path, driver=550)
-
-    assert not (inst.env_path / "dependency_caps.txt").exists()
-    assert "UV_CONSTRAINT" not in env
-    assert "PIP_CONSTRAINT" not in env
-
-
-@pytest.mark.parametrize("caps", ["on", "0"])
-def test_a_users_own_constraints_reach_setup_sh(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caps: str):
+def test_a_users_own_constraints_reach_setup_sh(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """The subprocess env copies only allowlisted variables; the user's constraints still reach setup.sh."""
-    if caps == "on":
-        monkeypatch.delenv(CAPS_ENV_VAR, raising=False)
-    else:
-        monkeypatch.setenv(CAPS_ENV_VAR, caps)
     monkeypatch.setenv("UV_CONSTRAINT", "/home/me/uv.txt")
     monkeypatch.setenv("PIP_CONSTRAINT", "/home/me/pip.txt")
     inst, env = _build_env(tmp_path, driver=550)
 
-    ours = f"{(inst.env_path / 'dependency_caps.txt').absolute()} " if caps == "on" else ""
-    assert env["UV_CONSTRAINT"] == f"{ours}/home/me/uv.txt"
-    assert env["PIP_CONSTRAINT"] == f"{ours}/home/me/pip.txt"
-
-
-@pytest.mark.usefixtures("no_constraints")
-def test_a_failed_build_names_the_caps_and_the_override(tmp_path: Path):
-    """When a capped build fails, the error says caps were on and how to build without them."""
-    with pytest.raises(RuntimeError) as excinfo:
-        _build_env(tmp_path, driver=550, returncode=1)
-    assert "dependency caps" in str(excinfo.value)
-    assert f"{CAPS_ENV_VAR}=0" in str(excinfo.value)
+    ours = (inst.env_path / "dependency_caps.txt").absolute()
+    assert env["UV_CONSTRAINT"] == f"{ours} /home/me/uv.txt"
+    assert env["PIP_CONSTRAINT"] == f"{ours} /home/me/pip.txt"
