@@ -9,8 +9,7 @@ machine into the env and hands that file to ``uv pip`` and ``pip`` as a constrai
 indirect dependencies too. A release nobody has seen break stays uncapped, so every machine gets
 the newest version that works on it.
 
-Caps are added, raised and removed by hand only, in a reviewed PR that cites the break; see
-``notes/tool-environments.md``. ``PROTO_DEPENDENCY_CAPS`` overrides them:
+See ``notes/tool-environments.md``. ``PROTO_DEPENDENCY_CAPS`` overrides the caps:
 
 - unset: use the packaged ``dependency_caps.txt``
 - ``0``: build without caps
