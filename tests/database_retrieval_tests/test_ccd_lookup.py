@@ -28,9 +28,15 @@ def test_input_normalizes_single_string_to_list():
     assert CcdLookupInput(identifiers="ATP").identifiers == ["ATP"]
 
 
+# A real molecule the CCD has no entry for, so its fragment carries no code
+_NO_CCD_SMILES = "CC(C)(C)c1ccc(cc1)C(=O)NCC#N"
+
+
 def _unresolvable_fragment() -> Fragment:
-    """A fragment that carries no CCD code, via the tool's own placeholder path."""
-    return _build_fragment({"smiles": None, "ccd_code": None, "name": None}, "NOTACCDORSMILES")
+    """A fragment that carries no CCD code."""
+    fragment = Fragment(smiles=_NO_CCD_SMILES)
+    assert fragment.ccd_code is None
+    return fragment
 
 
 def test_output_computed_counts_split_resolved_and_unresolved():
@@ -131,15 +137,12 @@ def test_build_fragment_keeps_a_resolved_code_when_the_record_smiles_is_unusable
 
 
 def test_build_fragment_never_reads_a_matched_code_as_smiles():
-    """A matched entry whose structure can't be built gets the placeholder, not its code parsed as SMILES."""
+    """A matched entry whose structure can't be built gets no fragment, not its code parsed as SMILES."""
     # FCO is an iron complex; read as a SMILES it would be fluoromethanol
     with pytest.raises(ValueError):
         Fragment(ccd_code="FCO")  # precondition: proto-tools' CCD table has no parseable SMILES for FCO
     record = {"ccd_code": "FCO", "smiles": "unparseable", "name": "IRON COMPLEX", "formula": "C3 Fe N2 O"}
-    fragment = _build_fragment(record, "FCO")
-
-    assert fragment.smiles == "[He]"
-    assert fragment.ccd_code is None
+    assert _build_fragment(record, "FCO") is None
 
 
 def test_build_fragment_reads_an_unmatched_identifier_as_smiles():
@@ -158,23 +161,52 @@ def test_build_fragment_keeps_a_smiles_input_matched_to_an_unbuildable_entry():
     assert fragment.ccd_code is None
 
 
-def test_build_fragment_gives_a_blank_identifier_the_placeholder():
+def test_build_fragment_gives_a_blank_identifier_no_fragment():
     """A blank identifier isn't read as an empty SMILES, which would be a zero-atom fragment."""
     for blank in ("", "  "):
-        assert _build_fragment({"ccd_code": None, "smiles": None, "name": None}, blank).smiles == "[He]"
+        assert _build_fragment({"ccd_code": None, "smiles": None, "name": None}, blank) is None
 
 
-def test_build_fragment_placeholder_keeps_ccd_code_none_through_json_roundtrip():
-    """Unparseable input falls back to a placeholder whose ccd_code stays None after re-validation."""
-    record = {"smiles": None, "ccd_code": None, "name": None}
-    frag = _build_fragment(record, original_identifier="NOTACCDORSMILES")
-    assert frag.ccd_code is None
-    roundtripped = type(frag).model_validate_json(frag.model_dump_json())
-    assert roundtripped.ccd_code is None
+def test_build_fragment_returns_none_rather_than_a_stand_in_molecule():
+    """With nothing to build, there is no fragment, so no stand-in can be modeled in the ligand's place."""
+    assert _build_fragment({"smiles": None, "ccd_code": None, "name": None}, "NOTACCDORSMILES") is None
 
 
-def test_output_export_json_writes_ligands_and_results(tmp_path):
-    """JSON export round-trips both fragments and result records."""
+def test_a_result_without_a_structure_round_trips_through_json():
+    """A result whose fragment is None survives export and re-validation."""
+    result = CcdLookupResult(fragment=None, status="not_found", errors=["No structure could be built for 'X'"])
+    assert CcdLookupResult.model_validate_json(result.model_dump_json()) == result
+
+
+def _output(*results: CcdLookupResult) -> CcdLookupOutput:
+    return CcdLookupOutput(tool_id="ccd-lookup", execution_time=0.0, success=True, results=list(results))
+
+
+def test_ligands_refuses_a_batch_with_a_missing_structure():
+    """A complex built from ligands must not silently lack one, so ligands raises and names the missing input."""
+    output = _output(
+        CcdLookupResult(fragment=Fragment(ccd_code="ATP"), status="resolved"),
+        CcdLookupResult(fragment=None, formula="C3 Fe N2 O", status="no_ccd_code", errors=["no SMILES for 'FCO'"]),
+    )
+    with pytest.raises(ValueError, match=r"1 of 2 identifiers \(results\[1\]: no SMILES for 'FCO'\)"):
+        _ = output.ligands
+    assert [r.fragment.ccd_code for r in output.results if r.fragment is not None] == ["ATP"]
+
+
+def test_ligands_keeps_input_order_when_every_input_has_a_structure():
+    """With a structure for every input, ligands is every fragment, in input order."""
+    output = _output(
+        CcdLookupResult(fragment=Fragment(ccd_code="ATP"), status="resolved"),
+        CcdLookupResult(fragment=_unresolvable_fragment(), status="not_found"),
+    )
+    assert [f.smiles for f in output.ligands.fragments] == [
+        Fragment(ccd_code="ATP").smiles,
+        _unresolvable_fragment().smiles,
+    ]
+
+
+def test_output_export_json_writes_the_results(tmp_path):
+    """JSON export carries each result with its fragment."""
     output = CcdLookupOutput(
         tool_id="ccd-lookup",
         execution_time=0.0,
@@ -193,7 +225,7 @@ def test_output_export_json_writes_ligands_and_results(tmp_path):
     assert payload["results"][0]["fragment"]["ccd_code"] == "ATP"
     assert payload["results"][0]["formula"] == "C10 H16 N5 O13 P3"
     assert payload["results"][0]["status"] == "resolved"
-    assert payload["ligands"]["fragments"][0]["ccd_code"] == "ATP"
+    assert "ligands" not in payload  # ligands can raise, so the export carries the fragments in results
 
 
 # ── Integration tests (require pdbeccdutils env + components.cif) ───────────
@@ -277,12 +309,12 @@ def test_ccd_lookup_computes_descriptors_without_sanitization():
 @pytest.mark.skip_ci
 @pytest.mark.uses_env
 def test_ccd_lookup_keeps_a_code_rdkit_cannot_parse_off_a_different_molecule():
-    """FCO's SMILES doesn't parse, and its code read as a SMILES is fluoromethanol, so it gets the placeholder."""
+    """FCO's SMILES doesn't parse, and its code read as a SMILES is fluoromethanol, so it gets no fragment."""
     result = run_ccd_lookup(CcdLookupInput(identifiers=["FCO"]), CcdLookupConfig()).results[0]
 
     assert result.status == "no_ccd_code"
     assert result.formula is not None and "Fe" in result.formula
-    assert result.fragment.smiles == "[He]"
+    assert result.fragment is None
 
 
 @pytest.mark.skip_ci
