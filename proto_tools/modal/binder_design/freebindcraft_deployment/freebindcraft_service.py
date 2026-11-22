@@ -44,7 +44,7 @@ image = (
     image.env(
         {
             **env_for(),
-            # uv falls back to PyPI when the cu128 index lacks torch==2.6.*.
+            # uv falls back to PyPI when the hardware-matched CUDA index lacks torch==2.6.*.
             "UV_INDEX_STRATEGY": "unsafe-best-match",
         }
     )
