@@ -1,6 +1,6 @@
 github: https://github.com/RosettaCommons/RFD4-Proteina
 website: https://rfd4-proteina.org/
-preprint: https://rfd4-proteina.org/assets/paper/RFD4-Proteina.pdf
+preprint: https://www.biorxiv.org/content/10.64898/2026.11.12.766037
 huggingface:
   - https://huggingface.co/nvidia/RFD4-Proteina
   - https://huggingface.co/datasets/nvidia/RFD4-Proteina

@@ -55,6 +55,7 @@ _ALLOWED_SPDX = frozenset(
         "AGPL-3.0",
         "ISC",
         "Unlicense",
+        "Elastic-2.0",
     }
 )
 
@@ -451,6 +452,7 @@ _SPDX_FINGERPRINTS: dict[str, list[tuple[str, ...]]] = {
     ],
     "ISC": [("isc license",)],
     "Unlicense": [("this is free and unencumbered software released into the public domain",)],
+    "Elastic-2.0": [("elastic license 2.0",), ("elastic-2.0",)],
 }
 
 _GITHUB_BLOB_RE = re.compile(r"^/([^/]+)/([^/]+)/blob/(.+)$")

@@ -38,7 +38,9 @@ echo "Checking out pinned alphagenome_research commit ${ALPHAGENOME_COMMIT}..."
 git -C "$REPO_DIR" fetch origin "$ALPHAGENOME_COMMIT"
 git -C "$REPO_DIR" checkout "$ALPHAGENOME_COMMIT"
 echo "Installing alphagenome_research from local clone..."
-uv pip install "$REPO_DIR"
+# alphagenome_research declares a bare ``alphagenome``. alphagenome 2.0.0 (2026-11-11) removed
+# ``alphagenome.models.interval_scorers``, which inference.py imports, so keep the 0.x client.
+uv pip install "$REPO_DIR" "alphagenome<2"
 
 # alphagenome_research leaves JAX unconstrained and may upgrade jax/jaxlib to
 # versions incompatible with the selected CUDA plugin. Re-apply the selected
