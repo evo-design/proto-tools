@@ -287,18 +287,19 @@ def catalogue(
 
 # The vocabulary an agent reaches for rarely matches a tool's own wording:
 # nobody searching for a structure comparison types "alignment". Substring
-# matching cannot bridge that, so map the common cases explicitly.
-_SYNONYMS = {
-    "compare": "align",
-    "comparison": "align",
-    "superimpose": "align",
-    "fold": "structure",
-    "folding": "structure",
-    "predict": "prediction",
-    "design": "design",
-    "embed": "embedding",
-    "mutate": "mutagenesis",
-    "similarity": "align",
+# matching cannot bridge that, so map the common cases explicitly. A word can map to several
+# forms when catalogues word the same idea differently ("mutagenesis", "mutation").
+_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "compare": ("align",),
+    "comparison": ("align",),
+    "superimpose": ("align",),
+    "fold": ("structure",),
+    "folding": ("structure",),
+    "predict": ("prediction",),
+    "design": ("design",),
+    "embed": ("embedding",),
+    "mutate": ("mutagenesis", "mutation"),
+    "similarity": ("align",),
 }
 
 _STOPWORDS = frozenset(
@@ -398,9 +399,9 @@ def _tool_score(forms: list[set[str]], key: set[str], category: set[str], summar
 def search_terms(query: str) -> list[set[str]]:
     """Turn a natural-language query into the term forms ``search_score`` matches.
 
-    Stopwords and single letters are dropped and each word is stemmed. A word with a synonym
-    keeps both forms: rewriting "fold" to "structure" alone would discard the literal token that
-    matches esmfold and foldseek in a key.
+    Stopwords and single letters are dropped and each word is stemmed. A word with synonyms
+    keeps its literal form next to them: rewriting "fold" to "structure" alone would discard the
+    literal token that matches esmfold and foldseek in a key.
 
     Args:
         query (str): Natural-language query, e.g. ``"compare two protein structures"``.
@@ -412,7 +413,7 @@ def search_terms(query: str) -> list[set[str]]:
         >>> search_terms("fold a protein")  # [{'fold', 'structure'}, {'protein'}]
     """
     terms = [_stem(t) for t in re.split(r"[^a-z0-9]+", query.lower()) if t not in _STOPWORDS and len(t) > 1]
-    return [{t, _stem(_SYNONYMS.get(t, t))} for t in terms]
+    return [{t, *(_stem(s) for s in _SYNONYMS.get(t, ()))} for t in terms]
 
 
 def search_score(terms: list[set[str]], key: str, category: str = "", summary: str = "") -> int:
