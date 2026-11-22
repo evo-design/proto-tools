@@ -53,6 +53,7 @@ This is the differentiable form of SpliceTransformer prediction, intended as an 
 - **Only the target region is relaxed.** A candidate bundles the two fixed 4,000 bp flanking contexts with a `(1000, 4)` relaxed target matrix, so the returned gradient covers the target positions alone while both contexts still reach the model — the flanks shape the prediction but are not design variables.
 - **Channels are named, not indexed.** `NEITHER`/`ACCEPTOR`/`DONOR` are the three splice classes (softmaxed across each other), and the fifteen tissue names select sigmoid-activated channels. The names resolve to the same indices the prediction tool reports.
 - **Position spans are 1-indexed, inclusive, and relative to the target region.** Leaving `position_start`/`position_end` unset covers the whole region, and the term that comes back names the span actually averaged rather than the `None` that was asked for; a narrow span around a candidate splice site is usually what you want.
+- **Gradients run through the whole model.** Upstream freezes the conv encoders with `torch.no_grad()` for training; that is removed here, so the gradient includes the encoders' sequence sensitivity rather than only the shallow path beside them. Predicted probabilities are unchanged.
 - **Several channels share one forward pass.** Each requested quantity gets its own backward over that shared graph, so asking for K channels costs one forward and K backwards rather than K of each.
 
 ## Toolkit Notes
