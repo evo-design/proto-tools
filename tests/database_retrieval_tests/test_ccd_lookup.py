@@ -88,19 +88,24 @@ def test_status_must_match_whether_the_fragment_carries_a_code(fragment, status:
         CcdLookupResult(fragment=fragment(), status=status)
 
 
+_ENTRY = {"formula": "C2 H6 O", "release_status": "REL"}
+
+
 @pytest.mark.parametrize(
-    ("fragment", "matched", "status", "reason"),
+    ("fragment", "record", "status", "reason"),
     [
-        (lambda: Fragment(ccd_code="ATP"), "ATP", "resolved", None),
-        (_unresolvable_fragment, None, "not_found", None),
-        (_unresolvable_fragment, "ZZZZZ", "no_ccd_code", "not in proto-tools' CCD table"),
-        (_unresolvable_fragment, "ATP", "no_ccd_code", "no SMILES RDKit can parse"),
+        (lambda: Fragment(ccd_code="ATP"), {"ccd_code": "ATP", **_ENTRY}, "resolved", None),
+        (_unresolvable_fragment, {"ccd_code": None}, "not_found", None),
+        # The standalone sets ccd_code for any code-shaped identifier, so a missing entry is still not_found
+        (_unresolvable_fragment, {"ccd_code": "ZZZZZ"}, "not_found", None),
+        (_unresolvable_fragment, {"ccd_code": "ZZZZZ", **_ENTRY}, "no_ccd_code", "not in proto-tools' CCD table"),
+        (_unresolvable_fragment, {"ccd_code": "ATP", **_ENTRY}, "no_ccd_code", "no SMILES RDKit can parse"),
     ],
 )
-def test_status_classifies_each_outcome_and_explains_a_missing_code(fragment, matched, status: str, reason):
-    """A matched code the fragment lacks gets an error naming why; other outcomes add none."""
+def test_status_classifies_each_outcome_and_explains_a_missing_code(fragment, record, status: str, reason):
+    """A matched entry the fragment lacks gets an error naming why; other outcomes add none."""
     errors: list[str] = []
-    assert _status(fragment(), matched, errors) == status
+    assert _status(fragment(), record, errors) == status
     if reason is None:
         assert errors == []
     else:
