@@ -2,7 +2,7 @@
 
 ``dependency_caps.txt`` holds one upper bound per line, with the machines it applies to and the
 documented break behind it, as in
-``torch<2.15  # driver<580: 2.15 ships only CUDA 13 builds, which need driver 580+ (https://...)``.
+``triton<3.9  # driver<580: 3.9 builds sm_90+ kernels that CUDA 12 drivers reject (https://...)``.
 The condition is ``all``, or ``driver<N`` for machines whose NVIDIA driver major version is below
 ``N``. No pip or uv marker can test the driver, so each env build writes the caps that apply to its
 machine into the env and hands that file to ``uv pip`` and ``pip`` as a constraints file, which caps

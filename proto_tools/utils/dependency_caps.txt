@@ -5,6 +5,4 @@
 #   Everywhere else, the newest release installs.
 # - A break specific to one tool belongs in that tool's setup.sh, not here.
 
-torch<2.15    # driver<580: 2.15 ships only CUDA 13 builds, which need driver 580+; CUDA 12 builds ended with 2.14 (https://github.com/pytorch/pytorch/releases/tag/v2.15.0)
 triton<3.9    # driver<580: 3.9 compiles sm_90+ kernels with a CUDA 13 ptxas, which CUDA 12 drivers reject as "device kernel image is invalid" (https://github.com/triton-lang/triton/releases/tag/v3.9.0)
-vllm<0.33     # driver<580: 0.33 dropped its CUDA 12 builds (https://github.com/vllm-project/vllm/pull/62575)

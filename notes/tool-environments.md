@@ -107,7 +107,7 @@ Affected pins pass `--index-strategy unsafe-best-match` on the install line.
 `proto_tools/utils/dependency_caps.txt` caps releases known to break, only on the machines they break. Each line gives the cap, the machines it applies to (`all`, or `driver<N` for NVIDIA drivers below `N`) and a link to the break:
 
 ```
-torch<2.15    # driver<580: 2.15 ships only CUDA 13 builds, which need driver 580+ (https://...)
+triton<3.9    # driver<580: 3.9 builds sm_90+ kernels that CUDA 12 drivers reject (https://...)
 ```
 
 Each env build writes the caps that apply to its machine into `<env>/dependency_caps.txt` and installs under them through `UV_CONSTRAINT` and `PIP_CONSTRAINT`, so they also cap indirect dependencies. Machines no cap applies to install the newest release. Caps are read when an env is built; changing them, or using the env on another machine, doesn't rebuild it. `$MAMBA_BIN install` lines are not constrained.
