@@ -9,22 +9,15 @@ machine into the env and hands that file to ``uv pip`` and ``pip`` as a constrai
 indirect dependencies too. A release nobody has seen break stays uncapped, so every machine gets
 the newest version that works on it.
 
-See ``notes/tool-environments.md``. ``PROTO_DEPENDENCY_CAPS`` overrides the caps:
-
-- unset: use the packaged ``dependency_caps.txt``
-- ``0``: build without caps
-- a path: use that constraints file instead, as is
+See ``notes/tool-environments.md``.
 """
 
-import os
 import re
-import shutil
 from collections.abc import Mapping
 from pathlib import Path
 from typing import NamedTuple
 
 CAPS_FILE = Path(__file__).with_name("dependency_caps.txt")
-CAPS_ENV_VAR = "PROTO_DEPENDENCY_CAPS"
 CONSTRAINT_ENV_VARS = ("UV_CONSTRAINT", "PIP_CONSTRAINT")
 ENV_CAPS_NAME = "dependency_caps.txt"
 
@@ -80,36 +73,11 @@ def cap_applies(condition: str, driver_major: int | None) -> bool:
     return driver_major is not None and driver_major < int(condition.removeprefix("driver<"))
 
 
-def resolve_caps_file() -> Path | None:
-    """Return the caps file env builds should use, or ``None`` when caps are turned off.
-
-    Returns:
-        Path | None: The packaged caps, the file ``PROTO_DEPENDENCY_CAPS`` names, or ``None``
-            when it is ``0``.
-
-    Raises:
-        FileNotFoundError: If ``PROTO_DEPENDENCY_CAPS`` names a file that does not exist.
-    """
-    value = os.environ.get(CAPS_ENV_VAR, "").strip()
-    if value == "0":
-        return None
-    if not value:
-        return CAPS_FILE
-    path = Path(value).expanduser()
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"{CAPS_ENV_VAR}={value!r} is not a file. Set it to a constraints file, "
-            f"or to 0 to build without dependency caps."
-        )
-    return path
-
-
 def write_env_caps(env_path: Path, build_env: Mapping[str, str]) -> Path | None:
     """Write the caps that apply to this machine into the env, for its setup.sh to install under.
 
-    The packaged caps are filtered by the driver ``compute_deps`` detected; a user's own file from
-    ``PROTO_DEPENDENCY_CAPS`` is copied as is. The env keeps the file, which records the caps it was
-    built under and gives uv and pip a path without spaces.
+    The caps are filtered by the driver ``compute_deps`` detected. The env keeps the file, which
+    records the caps it was built under and gives uv and pip a path without spaces.
 
     Args:
         env_path (Path): The env being built.
@@ -118,17 +86,11 @@ def write_env_caps(env_path: Path, build_env: Mapping[str, str]) -> Path | None:
     Returns:
         Path | None: The file to constrain installs with, or ``None`` when no caps apply.
     """
-    source = resolve_caps_file()
-    if source is None:
-        return None
-    env_caps = (env_path / ENV_CAPS_NAME).absolute()
-    if source != CAPS_FILE:
-        shutil.copyfile(source, env_caps)
-        return env_caps
     driver = build_env.get("DETECTED_DRIVER_VERSION")
     driver_major = int(driver) if driver and driver.isdigit() else None
     applied = [cap.requirement for cap in parse_caps(CAPS_FILE.read_text()) if cap_applies(cap.condition, driver_major)]
     machine = f"NVIDIA driver {driver_major}" if driver_major is not None else "no NVIDIA driver"
+    env_caps = (env_path / ENV_CAPS_NAME).absolute()
     env_caps.write_text(
         f"# Caps from {CAPS_FILE.name} that apply with {machine}\n" + "".join(f"{r}\n" for r in applied)
     )
@@ -151,19 +113,3 @@ def constraint_env(caps_file: Path | None, parent_env: Mapping[str, str]) -> dic
     """
     constraints = {var: f"{caps_file or ''} {parent_env.get(var, '')}".strip() for var in CONSTRAINT_ENV_VARS}
     return {var: value for var, value in constraints.items() if value}
-
-
-def caps_hint(caps_file: Path) -> str:
-    """Guidance appended to env-build failures when the build ran with dependency caps.
-
-    Args:
-        caps_file (Path): The constraints file the build used.
-
-    Returns:
-        str: A note naming the caps and how to build without them.
-    """
-    return (
-        f"\n\nThis env was built with dependency caps ({caps_file}). If the failure is a version "
-        f"conflict involving a capped package, retry with {CAPS_ENV_VAR}=0, or point {CAPS_ENV_VAR} "
-        "at your own constraints file, and please tell us which version worked."
-    )
