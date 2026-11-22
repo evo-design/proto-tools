@@ -119,7 +119,7 @@ A break in a single tool is capped in that tool's `setup.sh` instead, as Mol-1 d
 Based on official sources (PyTorch RELEASE.md, JAX docs, NVIDIA CUDA compatibility):
 
 **PyTorch** (driver → torch version):
-- Driver 570+: torch 2.8+ (CUDA 12.9 builds, which include Blackwell kernels)
+- Driver 570+: torch 2.8+ (CUDA 12.8 native support)
 - Driver 550-569: torch 2.5+ (CUDA 12.4 native support)
 - Driver 535-549: torch 2.4+ (CUDA 12.2, cu126 via forward compat)
 - Driver 525-534: torch 2.4+ (CUDA 12.0-12.1, cu126 via forward compat)

@@ -37,13 +37,13 @@ logger = logging.getLogger(__name__)
 # and NVIDIA driver-CUDA mapping (https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/)
 #
 # NVIDIA Driver → CUDA Native Support:
-#   Driver 570+: CUDA 12.8, and CUDA 12.9 via forward compat
+#   Driver 570+: CUDA 12.8
 #   Driver 550-569: CUDA 12.4 (cu126 via forward compat; cu124 lacks torch 2.7+)
 #   Driver 535-549: CUDA 12.2
 #   Driver 525-534: CUDA 12.0-12.1
 #
 # PyTorch CUDA Support (stable):
-#   PyTorch 2.8-2.13: CUDA 12.9 (driver 570+; the newest CUDA 12 build with Blackwell kernels)
+#   PyTorch 2.8+: CUDA 12.8 (driver 570+)
 #   PyTorch 2.5+: CUDA 12.6 (driver 550+, cu126 via forward compat)
 #   PyTorch 2.4+: CUDA 12.6 (driver 525+, cu126 via CUDA forward compat, all CUDA 12.x drivers)
 
@@ -55,7 +55,7 @@ logger = logging.getLogger(__name__)
 #   Driver → CUDA mapping: https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/
 #   Available wheel indices: https://download.pytorch.org/whl/
 _TORCH_COMPATIBILITY = {
-    570: ("2.8", "3", "cu129"),  # Driver 570+: torch 2.8+, CUDA 12.9 builds (cu128 stops at 2.11; cu126 lacks Blackwell)
+    570: ("2.8", "3", "cu128"),  # Driver 570+ (CUDA 12.8): torch 2.8+
     550: ("2.5", "3", "cu126"),  # Driver 550-569 (CUDA 12.4+): torch 2.5+ (cu126 via CUDA forward compat)
     535: ("2.4", "3", "cu126"),  # Driver 535-549 (CUDA 12.2): cu126 works via CUDA forward compat
     525: ("2.4", "3", "cu126"),  # Driver 525-534 (CUDA 12.0-12.1): cu126 works via CUDA forward compat
