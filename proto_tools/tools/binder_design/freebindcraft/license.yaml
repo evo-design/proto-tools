@@ -7,5 +7,5 @@ weights:
 commercial_use: 'yes'
 redistribution: false
 attribution_required: true
-notes: 'FreeBindCraft is under the Elastic License 2.0 from c1fcd0e5 (2026-11-19), the commit setup.sh pins; earlier commits and upstream BindCraft are MIT. The Elastic License forbids providing the software to third parties as a hosted or managed service, but does not restrict its outputs. ColabDesign is Beer-Ware, which permits commercial use if the notice is kept. The AlphaFold2 weights are CC-BY-4.0 and need attribution; the ProteinMPNN weights bundled with ColabDesign are MIT. No PyRosetta is used.'
+notes: 'FreeBindCraft is Elastic License 2.0, which forbids providing it to third parties as a hosted or managed service but does not restrict its outputs. ColabDesign is Beer-Ware, which permits commercial use if the notice is kept. The AlphaFold2 weights are CC-BY-4.0 and need attribution; the ProteinMPNN weights bundled with ColabDesign are MIT. No PyRosetta is used.'
 last_updated: '2026-11-21'
