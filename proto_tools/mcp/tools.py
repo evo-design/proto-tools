@@ -395,6 +395,49 @@ def _tool_score(forms: list[set[str]], key: set[str], category: set[str], summar
     return min(100, round(100 * total / (_KEY_WORD * len(forms))))
 
 
+def search_terms(query: str) -> list[set[str]]:
+    """Turn a natural-language query into the term forms ``search_score`` matches.
+
+    Stopwords and single letters are dropped and each word is stemmed. A word with a synonym
+    keeps both forms: rewriting "fold" to "structure" alone would discard the literal token that
+    matches esmfold and foldseek in a key.
+
+    Args:
+        query (str): Natural-language query, e.g. ``"compare two protein structures"``.
+
+    Returns:
+        list[set[str]]: One set of alternative forms per kept word; empty when nothing is left.
+
+    Examples:
+        >>> search_terms("fold a protein")  # [{'fold', 'structure'}, {'protein'}]
+    """
+    terms = [_stem(t) for t in re.split(r"[^a-z0-9]+", query.lower()) if t not in _STOPWORDS and len(t) > 1]
+    return [{t, _stem(_SYNONYMS.get(t, t))} for t in terms]
+
+
+def search_score(terms: list[set[str]], key: str, category: str = "", summary: str = "") -> int:
+    """Score one entry against ``search_terms`` output, as a relevance out of 100.
+
+    The ranking ``search_tools`` uses, exposed so other catalogues (e.g. proto-language's
+    component search) rank a query the same way.
+
+    Args:
+        terms (list[set[str]]): Term forms from ``search_terms``.
+        key (str): The entry's key; a match here weighs most.
+        category (str): The entry's category; naming the whole category earns a bonus.
+        summary (str): Free text describing the entry; a match here weighs least.
+
+    Returns:
+        int: Relevance from 0 (no term matched) to 100.
+
+    Examples:
+        >>> search_score(search_terms("esmfold"), "esmfold-prediction", "structure_prediction")  # 100
+    """
+    if not terms:
+        return 0
+    return _tool_score(terms, _tokens(key), _tokens(category), _tokens(summary))
+
+
 def _no_match_hint() -> str:
     """Say what to do next, so an empty result does not read as "no such capability"."""
     from proto_tools.tools import ToolRegistry
@@ -425,21 +468,13 @@ def search_tools(
 
     Take the key to run from each entry's ``tool_key``. A display name is not a key.
     """
-    terms = [_stem(t) for t in re.split(r"[^a-z0-9]+", query.lower()) if t not in _STOPWORDS and len(t) > 1]
-    # Both the term and its expansion are scored: rewriting "fold" to "structure" otherwise
-    # discards the literal token that matches esmfold and foldseek in a key.
-    forms = [{t, _stem(_SYNONYMS.get(t, t))} for t in terms]
+    forms = search_terms(query)
     if not forms:
         return {"tools": [], "n_total": 0, "hint": _no_match_hint()}
 
     scored = []
     for entry in list_tools(deployed_only=deployed_only, device=device, environment=environment, client=client):
-        score = _tool_score(
-            forms,
-            _tokens(entry["tool_key"]),
-            _tokens(entry.get("category") or ""),
-            _tokens(entry.get("summary") or ""),
-        )
+        score = search_score(forms, entry["tool_key"], entry.get("category") or "", entry.get("summary") or "")
         if score:
             scored.append((score, entry))
 
