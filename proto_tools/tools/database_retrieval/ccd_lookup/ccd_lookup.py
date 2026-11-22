@@ -40,6 +40,15 @@ def _silence_rdkit_logger() -> Iterator[None]:
 # Per-identifier result record (CCD-specific metadata that doesn't fit
 # on Fragment). Pairs 1:1 with the corresponding Fragment in `ligands`.
 # ============================================================================
+# Fields that only a matched CCD entry can fill in; a record carrying any of them matched an entry.
+_CCD_METADATA_FIELDS = ("formula", "formula_weight", "inchi", "inchikey", "release_status", "parent_ccd_code")
+
+
+def _matched_ccd_entry(record: dict[str, Any]) -> bool:
+    """Return whether a standalone record came from a CCD entry, rather than a failed lookup."""
+    return any(record.get(name) is not None for name in _CCD_METADATA_FIELDS)
+
+
 class CcdLookupResult(BaseModel):
     """One resolved ligand and its CCD-specific metadata.
 
@@ -125,11 +134,7 @@ class CcdLookupResult(BaseModel):
                 "only a resolved result carries a CCD code"
             )
         if self.status == "not_found":
-            leaked = [
-                name
-                for name in ("formula", "formula_weight", "inchi", "inchikey", "release_status", "parent_ccd_code")
-                if getattr(self, name) is not None
-            ]
+            leaked = [name for name in _CCD_METADATA_FIELDS if getattr(self, name) is not None]
             if leaked:
                 raise ValueError(f"status is 'not_found' but CCD metadata {leaked} is set")
         return self
@@ -258,13 +263,16 @@ def example_input() -> CcdLookupInput:
 
 
 def _status(
-    fragment: Fragment, matched_code: str | None, errors: list[str]
+    fragment: Fragment, record: dict[str, Any], errors: list[str]
 ) -> Literal["resolved", "no_ccd_code", "not_found"]:
     """Classify a lookup, adding to ``errors`` why a matched entry's code is missing from the fragment.
 
+    The standalone sets ``ccd_code`` for any identifier shaped like a code, found or not, so a match
+    is read from the CCD metadata only an entry can fill in.
+
     Args:
         fragment (Fragment): The fragment built for the identifier.
-        matched_code (str | None): The CCD code the lookup matched, if any.
+        record (dict[str, Any]): The standalone record for the identifier.
         errors (list[str]): The result's errors, appended to in place.
 
     Returns:
@@ -272,12 +280,13 @@ def _status(
     """
     if fragment.ccd_code is not None:
         return "resolved"
-    if not matched_code:
+    if not _matched_ccd_entry(record):
         return "not_found"
-    if not is_valid_ccd_code(matched_code):
-        errors.append(f"CCD entry {matched_code!r} is not in proto-tools' CCD table, so the fragment can't carry it")
+    code = record.get("ccd_code")
+    if not code or not is_valid_ccd_code(code):
+        errors.append(f"CCD entry {code!r} is not in proto-tools' CCD table, so the fragment can't carry it")
     else:
-        errors.append(f"CCD entry {matched_code!r} has no SMILES RDKit can parse, so the fragment can't carry it")
+        errors.append(f"CCD entry {code!r} has no SMILES RDKit can parse, so the fragment can't carry it")
     return "no_ccd_code"
 
 
@@ -375,7 +384,7 @@ def run_ccd_lookup(
         for original, record in zip(inputs.identifiers, output_data["records"], strict=True):
             fragment = _build_fragment(record, original)
             errors = list(record.get("errors") or [])
-            status = _status(fragment, record.get("ccd_code"), errors)
+            status = _status(fragment, record, errors)
             results.append(
                 CcdLookupResult(
                     fragment=fragment,
