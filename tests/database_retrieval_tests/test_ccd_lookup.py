@@ -28,9 +28,15 @@ def test_input_normalizes_single_string_to_list():
     assert CcdLookupInput(identifiers="ATP").identifiers == ["ATP"]
 
 
+# A real molecule the CCD has no entry for, so its fragment carries no code
+_NO_CCD_SMILES = "CC(C)(C)c1ccc(cc1)C(=O)NCC#N"
+
+
 def _unresolvable_fragment() -> Fragment:
-    """A fragment that carries no CCD code, via the tool's own placeholder path."""
-    return _build_fragment({"smiles": None, "ccd_code": None, "name": None}, "NOTACCDORSMILES")
+    """A fragment that carries no CCD code."""
+    fragment = Fragment(smiles=_NO_CCD_SMILES)
+    assert fragment.ccd_code is None
+    return fragment
 
 
 def test_output_computed_counts_split_resolved_and_unresolved():
@@ -130,17 +136,46 @@ def test_build_fragment_keeps_a_resolved_code_when_the_record_smiles_is_unusable
     assert fragment.ccd_code == "ATP"
 
 
-def test_build_fragment_placeholder_keeps_ccd_code_none_through_json_roundtrip():
-    """Unparseable input falls back to a placeholder whose ccd_code stays None after re-validation."""
-    record = {"smiles": None, "ccd_code": None, "name": None}
-    frag = _build_fragment(record, original_identifier="NOTACCDORSMILES")
-    assert frag.ccd_code is None
-    roundtripped = type(frag).model_validate_json(frag.model_dump_json())
-    assert roundtripped.ccd_code is None
+def test_build_fragment_returns_none_rather_than_a_stand_in_molecule():
+    """With nothing to build, there is no fragment, so no stand-in can be modeled in the ligand's place."""
+    assert _build_fragment({"smiles": None, "ccd_code": None, "name": None}, "NOTACCDORSMILES") is None
 
 
-def test_output_export_json_writes_ligands_and_results(tmp_path):
-    """JSON export round-trips both fragments and result records."""
+def test_a_result_without_a_structure_round_trips_through_json():
+    """A result whose fragment is None survives export and re-validation."""
+    result = CcdLookupResult(fragment=None, status="not_found", errors=["No structure could be built for 'X'"])
+    assert CcdLookupResult.model_validate_json(result.model_dump_json()) == result
+
+
+def _output(*results: CcdLookupResult) -> CcdLookupOutput:
+    return CcdLookupOutput(tool_id="ccd-lookup", execution_time=0.0, success=True, results=list(results))
+
+
+def test_ligands_refuses_a_batch_with_a_missing_structure():
+    """A complex built from ligands must not silently lack one, so ligands raises and names the missing input."""
+    output = _output(
+        CcdLookupResult(fragment=Fragment(ccd_code="ATP"), status="resolved"),
+        CcdLookupResult(fragment=None, formula="C3 Fe N2 O", status="no_ccd_code", errors=["no SMILES for 'FCO'"]),
+    )
+    with pytest.raises(ValueError, match=r"1 of 2 identifiers \(results\[1\]: no SMILES for 'FCO'\)"):
+        _ = output.ligands
+    assert [r.fragment.ccd_code for r in output.results if r.fragment is not None] == ["ATP"]
+
+
+def test_ligands_keeps_input_order_when_every_input_has_a_structure():
+    """With a structure for every input, ligands is every fragment, in input order."""
+    output = _output(
+        CcdLookupResult(fragment=Fragment(ccd_code="ATP"), status="resolved"),
+        CcdLookupResult(fragment=_unresolvable_fragment(), status="not_found"),
+    )
+    assert [f.smiles for f in output.ligands.fragments] == [
+        Fragment(ccd_code="ATP").smiles,
+        _unresolvable_fragment().smiles,
+    ]
+
+
+def test_output_export_json_writes_the_results(tmp_path):
+    """JSON export carries each result with its fragment."""
     output = CcdLookupOutput(
         tool_id="ccd-lookup",
         execution_time=0.0,
@@ -159,7 +194,7 @@ def test_output_export_json_writes_ligands_and_results(tmp_path):
     assert payload["results"][0]["fragment"]["ccd_code"] == "ATP"
     assert payload["results"][0]["formula"] == "C10 H16 N5 O13 P3"
     assert payload["results"][0]["status"] == "resolved"
-    assert payload["ligands"]["fragments"][0]["ccd_code"] == "ATP"
+    assert "ligands" not in payload  # ligands can raise, so the export carries the fragments in results
 
 
 # ── Integration tests (require pdbeccdutils env + components.cif) ───────────
