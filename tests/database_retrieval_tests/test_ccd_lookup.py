@@ -238,6 +238,9 @@ def test_ccd_lookup_reports_each_status_on_real_lookups():
     assert [e.status for e in result.results] == ["resolved", "not_found"]
     assert (result.num_resolved, result.num_unresolved) == (1, 1)
     assert result.results[1].formula is None
+    # A SMILES with no CCD entry is a usable ligand, so the miss is a warning rather than an error
+    assert result.results[1].errors == []
+    assert result.results[1].warnings == ["No CCD match for SMILES"]
 
 
 @pytest.mark.skip_ci

@@ -730,7 +730,8 @@ def _process_identifiers(
                     records.append(_empty_record(None, [f"SMILES resolution failed: {exc}"]))
                     continue
                 if resolved_code is None:
-                    records.append(_empty_record(None, ["No CCD match for SMILES"]))
+                    # A new molecule is still a usable ligand: the lookup found nothing, but nothing failed
+                    records.append(_empty_record(None, [], ["No CCD match for SMILES"]))
                     continue
 
             component, component_warnings = _load_component(resolved_code, components_path, sanitize=sanitize)
