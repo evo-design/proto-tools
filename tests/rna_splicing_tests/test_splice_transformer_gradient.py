@@ -1,6 +1,7 @@
 """Tests for the SpliceTransformer splice-channel gradient tool."""
 
 import math
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -170,6 +171,21 @@ def test_splice_transformer_gradient_dispatch_contract(monkeypatch):
     # Raising one tissue while suppressing another is the point, so no direction is assumed
     with pytest.raises(ValueError, match="needs an explicit goal"):
         result.results[0].compose()
+
+
+@pytest.mark.uses_env
+def test_splice_transformer_gradient_reaches_the_encoders() -> None:
+    """Input gradients must flow through the conv encoders, not only the shallow path beside them.
+
+    Upstream freezes the encoders with ``torch.no_grad()``; left in, it drops them from every
+    gradient while the forward still uses them. ``_splice_transformer_encoder_gradient_env_check.py``
+    backpropagates through a randomly initialized model in the toolkit env.
+    """
+    from proto_tools.utils import run_in_env
+
+    check = Path(__file__).resolve().parent / "_splice_transformer_encoder_gradient_env_check.py"
+    output = run_in_env("splice_transformer", script=str(check), timeout=1800)
+    assert "SPLICE_TRANSFORMER_ENCODER_GRADIENT_OK" in output, output
 
 
 # ── Integration ───────────────────────────────────────────────────────────────
