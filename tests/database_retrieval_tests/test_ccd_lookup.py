@@ -12,7 +12,7 @@ from proto_tools.tools.database_retrieval import (
     CcdLookupResult,
     run_ccd_lookup,
 )
-from proto_tools.tools.database_retrieval.ccd_lookup.ccd_lookup import _build_fragment
+from proto_tools.tools.database_retrieval.ccd_lookup.ccd_lookup import _build_fragment, _status
 from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -34,46 +34,78 @@ def _unresolvable_fragment() -> Fragment:
 
 
 def test_output_computed_counts_split_resolved_and_unresolved():
-    """num_resolved / num_unresolved partition entries by whether the fragment carries a code."""
+    """num_resolved counts resolved results; num_unresolved counts both other statuses."""
     output = CcdLookupOutput(
         tool_id="ccd-lookup",
         execution_time=0.0,
         success=True,
         results=[
-            CcdLookupResult(fragment=Fragment(ccd_code="ATP")),
-            CcdLookupResult(fragment=Fragment(ccd_code="HEM")),
-            CcdLookupResult(fragment=_unresolvable_fragment()),
+            CcdLookupResult(fragment=Fragment(ccd_code="ATP"), status="resolved"),
+            CcdLookupResult(fragment=Fragment(ccd_code="HEM"), status="resolved"),
+            CcdLookupResult(fragment=_unresolvable_fragment(), formula="C2 H6 O", status="no_ccd_code"),
+            CcdLookupResult(fragment=_unresolvable_fragment(), status="not_found"),
         ],
     )
-    assert (output.num_resolved, output.num_unresolved) == (2, 1)
+    assert (output.num_resolved, output.num_unresolved) == (2, 2)
 
 
-def test_result_rejects_unexplained_metadata_without_a_code():
-    """CCD metadata beside a code-less fragment is a leak unless the row declares why."""
-    with pytest.raises(ValueError, match="resolved_without_structure"):
-        CcdLookupResult(fragment=_unresolvable_fragment(), formula="C2 H6 O")
+def test_result_rejects_metadata_when_nothing_matched():
+    """CCD metadata on a not_found result can only have leaked from another record."""
+    with pytest.raises(ValueError, match="not_found"):
+        CcdLookupResult(fragment=_unresolvable_fragment(), formula="C2 H6 O", status="not_found")
 
 
-def test_result_allows_metadata_without_a_code_when_declared():
-    """A resolved entry whose structure could not be rebuilt is a legitimate degraded row."""
-    result = CcdLookupResult(
-        fragment=_unresolvable_fragment(),
-        formula="C2 H6 O",
-        resolved_without_structure=True,
-    )
+def test_result_keeps_metadata_for_a_match_without_a_code():
+    """A matched entry the fragment can't carry keeps its CCD metadata."""
+    result = CcdLookupResult(fragment=_unresolvable_fragment(), formula="C2 H6 O", status="no_ccd_code")
 
     assert result.fragment.ccd_code is None
     assert result.formula == "C2 H6 O"
 
 
 def test_an_unrelated_warning_does_not_excuse_leaked_metadata():
-    """Only the declared flag opens the escape hatch, so incidental warnings cannot widen it."""
-    with pytest.raises(ValueError, match="resolved_without_structure"):
+    """Only the status allows metadata without a code, so incidental warnings cannot widen it."""
+    with pytest.raises(ValueError, match="not_found"):
         CcdLookupResult(
             fragment=_unresolvable_fragment(),
             formula="C2 H6 O",
+            status="not_found",
             warnings=["Physchem properties failed: something unrelated"],
         )
+
+
+@pytest.mark.parametrize(
+    ("fragment", "status"),
+    [
+        (lambda: Fragment(ccd_code="ATP"), "no_ccd_code"),
+        (lambda: Fragment(ccd_code="ATP"), "not_found"),
+        (_unresolvable_fragment, "resolved"),
+    ],
+)
+def test_status_must_match_whether_the_fragment_carries_a_code(fragment, status: str):
+    """Only a resolved result carries a CCD code, and every resolved result does."""
+    with pytest.raises(ValueError, match="only a resolved result carries a CCD code"):
+        CcdLookupResult(fragment=fragment(), status=status)
+
+
+@pytest.mark.parametrize(
+    ("fragment", "matched", "status", "reason"),
+    [
+        (lambda: Fragment(ccd_code="ATP"), "ATP", "resolved", None),
+        (_unresolvable_fragment, None, "not_found", None),
+        (_unresolvable_fragment, "ZZZZZ", "no_ccd_code", "not in proto-tools' CCD table"),
+        (_unresolvable_fragment, "ATP", "no_ccd_code", "no SMILES RDKit can parse"),
+    ],
+)
+def test_status_classifies_each_outcome_and_explains_a_missing_code(fragment, matched, status: str, reason):
+    """A matched code the fragment lacks gets an error naming why; other outcomes add none."""
+    errors: list[str] = []
+    assert _status(fragment(), matched, errors) == status
+    if reason is None:
+        assert errors == []
+    else:
+        assert len(errors) == 1
+        assert reason in errors[0]
 
 
 def test_build_fragment_keeps_a_resolved_code_when_the_record_smiles_is_unusable():
@@ -103,6 +135,7 @@ def test_output_export_json_writes_ligands_and_results(tmp_path):
                 fragment=Fragment(ccd_code="ATP"),
                 formula="C10 H16 N5 O13 P3",
                 formula_weight=507.181,
+                status="resolved",
             )
         ],
     )
@@ -110,6 +143,7 @@ def test_output_export_json_writes_ligands_and_results(tmp_path):
     payload = json.loads((tmp_path / "out.json").read_text())
     assert payload["results"][0]["fragment"]["ccd_code"] == "ATP"
     assert payload["results"][0]["formula"] == "C10 H16 N5 O13 P3"
+    assert payload["results"][0]["status"] == "resolved"
     assert payload["ligands"]["fragments"][0]["ccd_code"] == "ATP"
 
 

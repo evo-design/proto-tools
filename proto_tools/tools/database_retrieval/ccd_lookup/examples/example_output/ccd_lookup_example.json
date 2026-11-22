@@ -41,7 +41,7 @@
       },
       "cross_references": null,
       "pdb_structures": null,
-      "resolved_without_structure": false,
+      "status": "resolved",
       "warnings": [],
       "errors": []
     }
