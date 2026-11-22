@@ -428,6 +428,21 @@ def test_search_ranks_a_tool_named_for_the_query_above_one_that_merely_mentions_
     assert ranked.index("esmfold-prediction") < ranked.index("esm-if1-sample"), "inverse folding is the opposite"
 
 
+def test_public_search_score_ranks_entries_like_search_tools():
+    """Other catalogues rank with search_terms/search_score; they must agree with search_tools."""
+    from proto_tools.mcp import tools as impl
+
+    hits = impl.search_tools("fold a protein", deployed_only=False, limit=3, device="local")["tools"]
+    terms = impl.search_terms("fold a protein")
+
+    for hit in hits:
+        assert (
+            impl.search_score(terms, hit["tool_key"], hit.get("category") or "", hit.get("summary") or "")
+            == hit["score"]
+        )
+    assert impl.search_terms("the of") == [] and impl.search_score([], "esmfold-prediction") == 0
+
+
 def test_a_query_that_matches_nothing_says_what_to_do_instead():
     """An empty list reads as "no such capability exists" rather than "rephrase"."""
     from proto_tools.mcp import tools as impl
