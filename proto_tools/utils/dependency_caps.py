@@ -1,30 +1,88 @@
-"""Caps on GPU-, driver- and compiler-coupled packages at the newest versions we have tested.
+"""Caps on releases known to break our envs, applied only on the machines they break.
 
-``dependency_caps.txt`` holds one upper bound per package, each with a comment recording the
-version tested, when, on what hardware and in which run. Every env build hands the file to
-``uv pip`` and ``pip`` as a constraints file, so a release newer than a cap cannot reach an env,
-even as an indirect dependency, until someone tests it and raises the cap. Everything older still
-resolves, so the resolver keeps choosing what fits each machine.
+``dependency_caps.txt`` holds one upper bound per line, with the machines it applies to and the
+documented break behind it, as in
+``torch<2.15  # driver<580: 2.15 ships only CUDA 13 builds, which need driver 580+ (https://...)``.
+The condition is ``all``, or ``driver<N`` for machines whose NVIDIA driver major version is below
+``N``. No pip or uv marker can test the driver, so each env build writes the caps that apply to its
+machine into the env and hands that file to ``uv pip`` and ``pip`` as a constraints file, which caps
+indirect dependencies too. A release nobody has seen break stays uncapped, so every machine gets
+the newest version that works on it.
 
-Caps are set and raised by hand only, in a reviewed PR with test evidence; see
+Caps are added, raised and removed by hand only, in a reviewed PR that cites the break; see
 ``notes/tool-environments.md``. ``PROTO_DEPENDENCY_CAPS`` overrides them:
 
 - unset: use the packaged ``dependency_caps.txt``
 - ``0``: build without caps
-- a path: use that constraints file instead
+- a path: use that constraints file instead, as is
 """
 
 import os
+import re
+import shutil
 from collections.abc import Mapping
 from pathlib import Path
+from typing import NamedTuple
 
 CAPS_FILE = Path(__file__).with_name("dependency_caps.txt")
 CAPS_ENV_VAR = "PROTO_DEPENDENCY_CAPS"
 CONSTRAINT_ENV_VARS = ("UV_CONSTRAINT", "PIP_CONSTRAINT")
+ENV_CAPS_NAME = "dependency_caps.txt"
+
+_CAP_LINE = re.compile(
+    r"^(?P<requirement>[a-z0-9][a-z0-9-]*<\d+(\.\d+)*)\s+#\s+(?P<condition>all|driver<\d+):\s+(?P<reason>.+)$"
+)
+
+
+class Cap(NamedTuple):
+    """One line of ``dependency_caps.txt``."""
+
+    requirement: str
+    condition: str
+    reason: str
+
+
+def parse_caps(text: str) -> list[Cap]:
+    """Parse the caps file, skipping blank and comment lines.
+
+    Args:
+        text (str): The contents of ``dependency_caps.txt``.
+
+    Returns:
+        list[Cap]: Each cap with its condition and reason.
+
+    Raises:
+        ValueError: If a line is not ``<package><<version>  # <condition>: <reason>``.
+    """
+    caps = []
+    for line in text.splitlines():
+        line = line.strip()  # noqa: PLW2901
+        if not line or line.startswith("#"):
+            continue
+        match = _CAP_LINE.match(line)
+        if not match:
+            raise ValueError(f"dependency caps: {line!r} is not `<package><<version>  # <condition>: <reason>`")
+        caps.append(Cap(match["requirement"], match["condition"], match["reason"]))
+    return caps
+
+
+def cap_applies(condition: str, driver_major: int | None) -> bool:
+    """Return whether a cap's condition holds on a machine.
+
+    Args:
+        condition (str): ``all`` or ``driver<N``.
+        driver_major (int | None): The NVIDIA driver major version, or ``None`` with no NVIDIA GPU.
+
+    Returns:
+        bool: ``True`` when the cap should constrain this machine's builds.
+    """
+    if condition == "all":
+        return True
+    return driver_major is not None and driver_major < int(condition.removeprefix("driver<"))
 
 
 def resolve_caps_file() -> Path | None:
-    """Return the constraints file env builds should use, or ``None`` when caps are turned off.
+    """Return the caps file env builds should use, or ``None`` when caps are turned off.
 
     Returns:
         Path | None: The packaged caps, the file ``PROTO_DEPENDENCY_CAPS`` names, or ``None``
@@ -47,6 +105,37 @@ def resolve_caps_file() -> Path | None:
     return path
 
 
+def write_env_caps(env_path: Path, build_env: Mapping[str, str]) -> Path | None:
+    """Write the caps that apply to this machine into the env, for its setup.sh to install under.
+
+    The packaged caps are filtered by the driver ``compute_deps`` detected; a user's own file from
+    ``PROTO_DEPENDENCY_CAPS`` is copied as is. The env keeps the file, which records the caps it was
+    built under and gives uv and pip a path without spaces.
+
+    Args:
+        env_path (Path): The env being built.
+        build_env (Mapping[str, str]): setup.sh's environment, carrying ``DETECTED_DRIVER_VERSION``.
+
+    Returns:
+        Path | None: The file to constrain installs with, or ``None`` when no caps apply.
+    """
+    source = resolve_caps_file()
+    if source is None:
+        return None
+    env_caps = (env_path / ENV_CAPS_NAME).absolute()
+    if source != CAPS_FILE:
+        shutil.copyfile(source, env_caps)
+        return env_caps
+    driver = build_env.get("DETECTED_DRIVER_VERSION")
+    driver_major = int(driver) if driver and driver.isdigit() else None
+    applied = [cap.requirement for cap in parse_caps(CAPS_FILE.read_text()) if cap_applies(cap.condition, driver_major)]
+    machine = f"NVIDIA driver {driver_major}" if driver_major is not None else "no NVIDIA driver"
+    env_caps.write_text(
+        f"# Caps from {CAPS_FILE.name} that apply with {machine}\n" + "".join(f"{r}\n" for r in applied)
+    )
+    return env_caps if applied else None
+
+
 def constraint_env(caps_file: Path | None, parent_env: Mapping[str, str]) -> dict[str, str]:
     """Return ``UV_CONSTRAINT`` and ``PIP_CONSTRAINT`` for an env build: the caps plus the caller's own.
 
@@ -55,7 +144,7 @@ def constraint_env(caps_file: Path | None, parent_env: Mapping[str, str]) -> dic
     list, so the caps and the user's constraints apply together.
 
     Args:
-        caps_file (Path | None): The caps to apply, or ``None`` when they are turned off.
+        caps_file (Path | None): The caps to apply, or ``None`` when none apply.
         parent_env (Mapping[str, str]): The caller's environment, normally ``os.environ``.
 
     Returns:
@@ -76,7 +165,6 @@ def caps_hint(caps_file: Path) -> str:
     """
     return (
         f"\n\nThis env was built with dependency caps ({caps_file}). If the failure is a version "
-        "conflict involving a capped package (for example this machine needs a newer torch or "
-        f"triton than we have tested), retry with {CAPS_ENV_VAR}=0, or point {CAPS_ENV_VAR} at "
-        "your own constraints file, and please tell us which version worked."
+        f"conflict involving a capped package, retry with {CAPS_ENV_VAR}=0, or point {CAPS_ENV_VAR} "
+        "at your own constraints file, and please tell us which version worked."
     )
