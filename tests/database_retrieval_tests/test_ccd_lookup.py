@@ -164,6 +164,13 @@ def test_build_fragment_gives_a_blank_identifier_the_placeholder():
         assert _build_fragment({"ccd_code": None, "smiles": None, "name": None}, blank).smiles == "[He]"
 
 
+def test_build_fragment_never_reads_the_identifier_as_smiles_when_told_it_is_a_code():
+    """With identifier_type='ccd_code', an unknown code gets the placeholder rather than a SMILES reading."""
+    fragment = _build_fragment({"ccd_code": "CCCCO", "smiles": None, "name": None}, "CCCCO", read_as_smiles=False)
+
+    assert fragment.smiles == "[He]"
+
+
 def test_build_fragment_placeholder_keeps_ccd_code_none_through_json_roundtrip():
     """Unparseable input falls back to a placeholder whose ccd_code stays None after re-validation."""
     record = {"smiles": None, "ccd_code": None, "name": None}
@@ -283,6 +290,43 @@ def test_ccd_lookup_keeps_a_code_rdkit_cannot_parse_off_a_different_molecule():
     assert result.status == "no_ccd_code"
     assert result.formula is not None and "Fe" in result.formula
     assert result.fragment.smiles == "[He]"
+
+
+@pytest.mark.skip_ci
+@pytest.mark.uses_env
+def test_identifier_type_decides_how_an_ambiguous_string_is_read():
+    """CCO is a CCD entry and also ethanol: auto reads the code and warns, smiles reads ethanol."""
+    auto = run_ccd_lookup(CcdLookupInput(identifiers=["CCO"]), CcdLookupConfig()).results[0]
+    as_smiles = run_ccd_lookup(CcdLookupInput(identifiers=["CCO"]), CcdLookupConfig(identifier_type="smiles")).results[
+        0
+    ]
+
+    assert auto.fragment.ccd_code == "CCO"
+    assert any("identifier_type='smiles'" in w for w in auto.warnings)
+    assert as_smiles.fragment.smiles == "CCO"
+    assert as_smiles.fragment.ccd_code != "CCO"
+    assert not any("identifier_type" in w for w in as_smiles.warnings)
+
+
+@pytest.mark.skip_ci
+@pytest.mark.uses_env
+def test_identifier_type_ccd_code_never_falls_back_to_a_smiles_reading():
+    """An unknown code stays not_found under identifier_type='ccd_code', instead of resolving as a SMILES."""
+    as_code = run_ccd_lookup(CcdLookupInput(identifiers=["CCCCO"]), CcdLookupConfig(identifier_type="ccd_code"))
+    result = as_code.results[0]
+
+    assert result.status == "not_found"
+    assert result.fragment.smiles == "[He]"
+
+
+@pytest.mark.skip_ci
+@pytest.mark.uses_env
+def test_identifier_type_auto_does_not_warn_for_an_unambiguous_code():
+    """ATP isn't a valid SMILES, so reading it as a code needs no warning."""
+    result = run_ccd_lookup(CcdLookupInput(identifiers=["ATP"]), CcdLookupConfig()).results[0]
+
+    assert result.status == "resolved"
+    assert not any("identifier_type" in w for w in result.warnings)
 
 
 @pytest.mark.skip_ci

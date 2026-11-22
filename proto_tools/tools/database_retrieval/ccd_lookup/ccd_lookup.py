@@ -185,6 +185,11 @@ class CcdLookupConfig(BaseConfig):
             from the RCSB search API. Requires network. Default: False.
         sanitize (bool): Sanitize the parsed RDKit molecule. Disable only for
             CCD entries with unusual valences. Default: True.
+        identifier_type (Literal["auto", "ccd_code", "smiles"]): How to read each identifier.
+            ``"auto"`` reads a 1- to 5-character alphanumeric string as a CCD code and anything
+            else as a SMILES, warning when a string reads both ways (``"CCO"`` is a CCD entry,
+            not ethanol). ``"ccd_code"`` and ``"smiles"`` read every identifier one way.
+            Default: ``"auto"``.
     """
 
     include_cross_references: bool = ConfigField(
@@ -196,6 +201,11 @@ class CcdLookupConfig(BaseConfig):
         description="Fetch PDB structures containing this ligand (network, opt-in)",
     )
     sanitize: bool = ConfigField(title="Sanitize", default=True, description="Sanitize the parsed RDKit molecule")
+    identifier_type: Literal["auto", "ccd_code", "smiles"] = ConfigField(
+        title="Identifier Type",
+        default="auto",
+        description="Read identifiers as CCD codes, as SMILES, or decide per identifier (auto)",
+    )
 
 
 class CcdLookupOutput(BaseToolOutput):
@@ -305,7 +315,7 @@ def _status(
     return "no_ccd_code"
 
 
-def _build_fragment(record: dict[str, Any], original_identifier: str) -> Fragment:
+def _build_fragment(record: dict[str, Any], original_identifier: str, read_as_smiles: bool = True) -> Fragment:
     """Construct a Fragment from a standalone result record.
 
     Tries (smiles, ccd_code), then the code alone so a resolved entry survives a record
@@ -314,6 +324,15 @@ def _build_fragment(record: dict[str, Any], original_identifier: str) -> Fragmen
     was looked up as the code of an entry that matched: read as a SMILES, a code names a
     different molecule (``FCO``, an iron complex, would be fluoromethanol). Falls back to a
     helium placeholder when nothing parses.
+
+    Args:
+        record (dict[str, Any]): The standalone record for the identifier.
+        original_identifier (str): The identifier as the caller gave it.
+        read_as_smiles (bool): Whether the identifier may be read as a SMILES; False when the
+            caller said every identifier is a CCD code.
+
+    Returns:
+        Fragment: The built fragment, or the placeholder.
     """
     smiles = record.get("smiles")
     ccd_code = record.get("ccd_code")
@@ -322,7 +341,7 @@ def _build_fragment(record: dict[str, Any], original_identifier: str) -> Fragmen
 
     attempts: list[tuple[str | None, str | None]] = [(smiles, ccd_code), (None, ccd_code), (smiles, None)]
     looked_up_as_matched_code = _matched_ccd_entry(record) and identifier.upper() == ccd_code
-    if identifier and not looked_up_as_matched_code:
+    if read_as_smiles and identifier and not looked_up_as_matched_code:
         attempts.append((identifier, None))
     for s, c in attempts:
         if s is None and c is None:
@@ -392,6 +411,7 @@ def run_ccd_lookup(
                 "include_cross_references": config.include_cross_references,
                 "include_pdb_usage": config.include_pdb_usage,
                 "sanitize": config.sanitize,
+                "identifier_type": config.identifier_type,
             },
         },
         instance=instance,
@@ -404,7 +424,7 @@ def run_ccd_lookup(
     # stderr clean for unusual user-supplied SMILES.
     with _silence_rdkit_logger():
         for original, record in zip(inputs.identifiers, output_data["records"], strict=True):
-            fragment = _build_fragment(record, original)
+            fragment = _build_fragment(record, original, read_as_smiles=config.identifier_type != "ccd_code")
             errors = list(record.get("errors") or [])
             warnings = list(record.get("warnings") or [])
             status = _status(fragment, record, errors, warnings)
