@@ -58,9 +58,10 @@ class CcdLookupResult(BaseModel):
     outcomes the identifier had.
 
     Attributes:
-        fragment (Fragment): The ligand built for this identifier, carrying the CCD code
-            when one could be resolved to a usable structure. ``fragment.ccd_code`` is the
-            single source of truth for which CCD entry this is.
+        fragment (Fragment): The ligand built for this identifier. When resolved it carries
+            a CCD code, which can be another entry with the same structure (``warnings``
+            says so). Otherwise it is the structure without a code, or a ``[He]``
+            placeholder when no structure could be built.
         formula (str | None): Chemical formula (e.g. ``"C10 H16 N5 O13 P3"``).
         formula_weight (float | None): Formula weight in Daltons.
         inchi (str | None): InChI string as recorded in the CCD.
@@ -77,10 +78,9 @@ class CcdLookupResult(BaseModel):
         pdb_structures (list[str] | None): PDB IDs of structures containing this
             ligand. Populated only when ``include_pdb_usage=True``; requires network.
         status (Literal["resolved", "no_ccd_code", "not_found"]): ``"resolved"`` when the
-            identifier matched a CCD entry and the fragment carries its code;
-            ``"no_ccd_code"`` when it matched an entry but the fragment cannot carry the code,
-            with the CCD metadata kept and the reason in ``errors``; ``"not_found"`` when it
-            matched no entry.
+            fragment carries a CCD code; ``"no_ccd_code"`` when the identifier matched a CCD
+            entry the fragment can't carry, with the CCD metadata kept and the reason in
+            ``errors``; ``"not_found"`` when it matched no entry.
         warnings (list[str]): Non-fatal warnings emitted while reading the entry.
         errors (list[str]): Errors that prevented full parsing.
     """
@@ -131,12 +131,15 @@ class CcdLookupResult(BaseModel):
         if (self.fragment.ccd_code is not None) != (self.status == "resolved"):
             raise ValueError(
                 f"status is {self.status!r} but fragment.ccd_code is {self.fragment.ccd_code!r}; "
-                "only a resolved result carries a CCD code"
+                "a resolved result carries a CCD code and no other result does"
             )
-        if self.status == "not_found":
-            leaked = [name for name in _CCD_METADATA_FIELDS if getattr(self, name) is not None]
-            if leaked:
-                raise ValueError(f"status is 'not_found' but CCD metadata {leaked} is set")
+        metadata = [name for name in _CCD_METADATA_FIELDS if getattr(self, name) is not None]
+        if self.status == "not_found" and metadata:
+            raise ValueError(f"status is 'not_found' but CCD metadata {metadata} is set")
+        if self.status == "no_ccd_code" and not metadata:
+            raise ValueError(
+                "status is 'no_ccd_code' but no CCD metadata is set; a result without a match is not_found"
+            )
         return self
 
 
@@ -263,9 +266,9 @@ def example_input() -> CcdLookupInput:
 
 
 def _status(
-    fragment: Fragment, record: dict[str, Any], errors: list[str]
+    fragment: Fragment, record: dict[str, Any], errors: list[str], warnings: list[str]
 ) -> Literal["resolved", "no_ccd_code", "not_found"]:
-    """Classify a lookup, adding to ``errors`` why a matched entry's code is missing from the fragment.
+    """Classify a lookup, noting in ``errors`` or ``warnings`` where the fragment and the match disagree.
 
     The standalone sets ``ccd_code`` for any identifier shaped like a code, found or not, so a match
     is read from the CCD metadata only an entry can fill in.
@@ -273,20 +276,32 @@ def _status(
     Args:
         fragment (Fragment): The fragment built for the identifier.
         record (dict[str, Any]): The standalone record for the identifier.
-        errors (list[str]): The result's errors, appended to in place.
+        errors (list[str]): The result's errors, edited in place.
+        warnings (list[str]): The result's warnings, appended to in place.
 
     Returns:
         Literal["resolved", "no_ccd_code", "not_found"]: The result's status.
     """
-    if fragment.ccd_code is not None:
-        return "resolved"
-    if not _matched_ccd_entry(record):
-        return "not_found"
+    matched = _matched_ccd_entry(record)
     code = record.get("ccd_code")
+    if fragment.ccd_code is not None:
+        if not matched:
+            # The fragment resolved from proto-tools' own CCD table; the lookup's failures no longer apply
+            warnings.extend(errors)
+            errors.clear()
+        elif fragment.ccd_code != code:
+            warnings.append(
+                f"CCD entry {code!r} has the same structure as {fragment.ccd_code!r}, which the fragment carries"
+            )
+        return "resolved"
+    if not matched:
+        return "not_found"
     if not code or not is_valid_ccd_code(code):
-        errors.append(f"CCD entry {code!r} is not in proto-tools' CCD table, so the fragment can't carry it")
+        errors.append(f"CCD entry {code!r} is not in proto-tools' CCD table, so the fragment can't carry its code")
     else:
-        errors.append(f"CCD entry {code!r} has no SMILES RDKit can parse, so the fragment can't carry it")
+        errors.append(
+            f"proto-tools' CCD table has no SMILES RDKit can parse for {code!r}, so the fragment can't carry its code"
+        )
     return "no_ccd_code"
 
 
@@ -384,7 +399,8 @@ def run_ccd_lookup(
         for original, record in zip(inputs.identifiers, output_data["records"], strict=True):
             fragment = _build_fragment(record, original)
             errors = list(record.get("errors") or [])
-            status = _status(fragment, record, errors)
+            warnings = list(record.get("warnings") or [])
+            status = _status(fragment, record, errors, warnings)
             results.append(
                 CcdLookupResult(
                     fragment=fragment,
@@ -399,7 +415,7 @@ def run_ccd_lookup(
                     cross_references=record.get("cross_references"),
                     pdb_structures=record.get("pdb_structures"),
                     status=status,
-                    warnings=list(record.get("warnings") or []),
+                    warnings=warnings,
                     errors=errors,
                 )
             )

@@ -63,15 +63,10 @@ def test_result_keeps_metadata_for_a_match_without_a_code():
     assert result.formula == "C2 H6 O"
 
 
-def test_an_unrelated_warning_does_not_excuse_leaked_metadata():
-    """Only the status allows metadata without a code, so incidental warnings cannot widen it."""
-    with pytest.raises(ValueError, match="not_found"):
-        CcdLookupResult(
-            fragment=_unresolvable_fragment(),
-            formula="C2 H6 O",
-            status="not_found",
-            warnings=["Physchem properties failed: something unrelated"],
-        )
+def test_result_needs_metadata_to_be_a_match_without_a_code():
+    """A no_ccd_code result with no CCD metadata has nothing showing it matched, so it is not_found."""
+    with pytest.raises(ValueError, match="no CCD metadata is set"):
+        CcdLookupResult(fragment=_unresolvable_fragment(), status="no_ccd_code")
 
 
 @pytest.mark.parametrize(
@@ -84,7 +79,7 @@ def test_an_unrelated_warning_does_not_excuse_leaked_metadata():
 )
 def test_status_must_match_whether_the_fragment_carries_a_code(fragment, status: str):
     """Only a resolved result carries a CCD code, and every resolved result does."""
-    with pytest.raises(ValueError, match="only a resolved result carries a CCD code"):
+    with pytest.raises(ValueError, match="a resolved result carries a CCD code and no other result does"):
         CcdLookupResult(fragment=fragment(), status=status)
 
 
@@ -92,25 +87,40 @@ _ENTRY = {"formula": "C2 H6 O", "release_status": "REL"}
 
 
 @pytest.mark.parametrize(
-    ("fragment", "record", "status", "reason"),
+    ("fragment", "record", "status", "error"),
     [
         (lambda: Fragment(ccd_code="ATP"), {"ccd_code": "ATP", **_ENTRY}, "resolved", None),
         (_unresolvable_fragment, {"ccd_code": None}, "not_found", None),
         # The standalone sets ccd_code for any code-shaped identifier, so a missing entry is still not_found
         (_unresolvable_fragment, {"ccd_code": "ZZZZZ"}, "not_found", None),
         (_unresolvable_fragment, {"ccd_code": "ZZZZZ", **_ENTRY}, "no_ccd_code", "not in proto-tools' CCD table"),
-        (_unresolvable_fragment, {"ccd_code": "ATP", **_ENTRY}, "no_ccd_code", "no SMILES RDKit can parse"),
+        (_unresolvable_fragment, {"ccd_code": "ATP", **_ENTRY}, "no_ccd_code", "no SMILES RDKit can parse for 'ATP'"),
     ],
 )
-def test_status_classifies_each_outcome_and_explains_a_missing_code(fragment, record, status: str, reason):
+def test_status_classifies_each_outcome_and_explains_a_missing_code(fragment, record, status: str, error):
     """A matched entry the fragment lacks gets an error naming why; other outcomes add none."""
     errors: list[str] = []
-    assert _status(fragment(), record, errors) == status
-    if reason is None:
+    assert _status(fragment(), record, errors, []) == status
+    if error is None:
         assert errors == []
     else:
         assert len(errors) == 1
-        assert reason in errors[0]
+        assert error in errors[0]
+
+
+def test_status_warns_when_the_fragment_carries_another_entry_with_the_same_structure():
+    """Two entries can share a structure, and the fragment then carries the code proto-tools maps it to."""
+    warnings: list[str] = []
+    assert _status(Fragment(ccd_code="HEM"), {"ccd_code": "ATP", **_ENTRY}, [], warnings) == "resolved"
+    assert warnings == ["CCD entry 'ATP' has the same structure as 'HEM', which the fragment carries"]
+
+
+def test_status_moves_the_lookups_failure_to_warnings_when_the_fragment_resolved_anyway():
+    """A code missing from the lookup's CCD but known to proto-tools resolves, so its error becomes a warning."""
+    errors, warnings = ["CCD code 'CCCCO' not found in components.cif"], []
+    assert _status(Fragment(ccd_code="1BO"), {"ccd_code": "CCCCO"}, errors, warnings) == "resolved"
+    assert errors == []
+    assert warnings == ["CCD code 'CCCCO' not found in components.cif"]
 
 
 def test_build_fragment_keeps_a_resolved_code_when_the_record_smiles_is_unusable():
@@ -183,6 +193,17 @@ def test_ccd_lookup_offline_full_pass():
 
     assert all(e.cross_references is None for e in result.results)
     assert all(e.pdb_structures is None for e in result.results)
+    assert [e.status for e in result.results] == ["resolved", "resolved", "resolved"]
+
+
+@pytest.mark.skip_ci
+@pytest.mark.uses_env
+def test_ccd_lookup_reports_each_status_on_real_lookups():
+    """A known code resolves, a SMILES with no CCD entry is not_found, and both count as expected."""
+    result = run_ccd_lookup(CcdLookupInput(identifiers=["ATP", "CC(C)(C)c1ccc(cc1)C(=O)NCC#N"]), CcdLookupConfig())
+    assert [e.status for e in result.results] == ["resolved", "not_found"]
+    assert (result.num_resolved, result.num_unresolved) == (1, 1)
+    assert result.results[1].formula is None
 
 
 @pytest.mark.skip_ci
