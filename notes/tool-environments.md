@@ -104,35 +104,15 @@ Affected pins pass `--index-strategy unsafe-best-match` on the install line.
 
 ### Dependency Caps
 
-Envs are solved fresh on every build, so a new upstream release can break an env without any change
-here. In #423, Boltz-2 picked up triton 3.9.0, whose kernels CUDA 12 drivers refuse.
-`proto_tools/utils/dependency_caps.txt` caps only releases with a known break, and only on the
-machines they break. Each line names the machines it applies to and links the break:
+`proto_tools/utils/dependency_caps.txt` caps releases known to break, only on the machines they break. Each line gives the cap, the machines it applies to (`all`, or `driver<N` for NVIDIA drivers below `N`) and a link to the break:
 
 ```
 torch<2.15    # driver<580: 2.15 ships only CUDA 13 builds, which need driver 580+ (https://...)
 ```
 
-The condition is `all`, or `driver<N` for NVIDIA drivers below `N`. No pip or uv marker can test the
-driver, so each env build writes the caps that apply to its machine into `<env>/dependency_caps.txt`
-and passes that file to `uv pip` and `pip` as a constraints file (`UV_CONSTRAINT` and
-`PIP_CONSTRAINT`). That caps indirect dependencies too, both locally and on Modal. Every other
-machine, such as a CUDA 13 driver or a CPU-only host, gets the newest release. `$MAMBA_BIN install`
-lines are not constrained.
+Each env build writes the caps that apply to its machine into `<env>/dependency_caps.txt` and installs under them through `UV_CONSTRAINT` and `PIP_CONSTRAINT`, so they also cap indirect dependencies. Other machines get the newest release. `$MAMBA_BIN install` lines are not constrained. A break in a single tool is capped in that tool's `setup.sh` instead, as Mol-1 does with `triton<3.9`.
 
-A break in one tool belongs in that tool's `setup.sh`, not here: Mol-1, whose Triton kernels use the
-block pointers triton 3.9 removed, constrains `triton<3.9` on its own torch install.
-
-Caps are added, raised and removed **by hand only**, in a reviewed PR that cites the break. When a
-new release comes out, test it on every machine type we can reach; cap it only if it breaks, and
-only where it breaks. Changing a cap does not rebuild existing envs.
-`tests/tool_infra_tests/test_dependency_caps.py` checks the file but never changes it: every cap
-names a GPU-coupled package, a condition and a link, and sits above every pin and minimum a tool
-declares.
-
-To build past the caps, set `PROTO_DEPENDENCY_CAPS=0`, or set it to the path of your own
-constraints file, which is used as is. Constraints you set yourself in `UV_CONSTRAINT` or
-`PIP_CONSTRAINT` still apply alongside the caps.
+Set `PROTO_DEPENDENCY_CAPS=0` to build without the caps, or set it to the path of your own constraints file to use that instead. Your own `UV_CONSTRAINT` and `PIP_CONSTRAINT` still apply alongside the caps.
 
 ### Compatibility Matrices
 
