@@ -110,7 +110,9 @@ Affected pins pass `--index-strategy unsafe-best-match` on the install line.
 torch<2.15    # driver<580: 2.15 ships only CUDA 13 builds, which need driver 580+ (https://...)
 ```
 
-Each env build writes the caps that apply to its machine into `<env>/dependency_caps.txt` and installs under them through `UV_CONSTRAINT` and `PIP_CONSTRAINT`, so they also cap indirect dependencies. Other machines get the newest release. `$MAMBA_BIN install` lines are not constrained. A break in a single tool is capped in that tool's `setup.sh` instead, as Mol-1 does with `triton<3.9`.
+Each env build writes the caps that apply to its machine into `<env>/dependency_caps.txt` and installs under them through `UV_CONSTRAINT` and `PIP_CONSTRAINT`, so they also cap indirect dependencies. Machines no cap applies to install the newest release. Caps are read when an env is built; changing them, or using the env on another machine, doesn't rebuild it. `$MAMBA_BIN install` lines are not constrained.
+
+A break in a single tool is capped in that tool's `setup.sh` instead, as Mol-1 does with `triton<3.9`. Add such constraints to `UV_CONSTRAINT`: a `--constraint` flag replaces it, which drops the caps.
 
 Your own `UV_CONSTRAINT` and `PIP_CONSTRAINT` still apply alongside the caps.
 

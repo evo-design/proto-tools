@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from proto_tools.utils import compute_deps
-from proto_tools.utils.dependency_caps import CAPS_FILE, cap_applies, constraint_env, parse_caps
+from proto_tools.utils.dependency_caps import CAPS_FILE, cap_applies, constraint_env, parse_caps, write_env_caps
 from proto_tools.utils.tool_instance import ToolInstance
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -126,6 +126,21 @@ def test_no_cap_excludes_a_pinned_or_minimum_version():
     assert not conflicts, "caps exclude versions tools require:\n" + "\n".join(conflicts)
 
 
+def test_no_setup_sh_replaces_the_caps_with_a_constraint_flag():
+    """A ``--constraint``/``-c`` flag makes uv and pip ignore ``UV_CONSTRAINT``/``PIP_CONSTRAINT``, dropping the caps."""
+    install = re.compile(r"\b((uv pip|pip3?|python -m pip) (install|compile|sync)|proto_install_\w+)\b")
+    flag = re.compile(r"(\s--constraint[\s=]|\s-c\s)")
+    offenders = []
+    for path in sorted(PACKAGE_ROOT.rglob("setup.sh")):
+        lines = path.read_text().replace("\\\n", " ").splitlines()
+        offenders += [
+            f"{path.relative_to(REPO_ROOT)}: {line.strip()}"
+            for line in lines
+            if install.search(line) and flag.search(line)
+        ]
+    assert not offenders, "add constraints to UV_CONSTRAINT instead of passing a flag:\n" + "\n".join(offenders)
+
+
 # ── Applying the caps ─────────────────────────────────────────────────────
 
 
@@ -138,6 +153,13 @@ def test_constraint_env_keeps_a_users_own_constraints():
     }
     assert constraint_env(None, {"PIP_CONSTRAINT": "/home/me/pip.txt"}) == {"PIP_CONSTRAINT": "/home/me/pip.txt"}
     assert constraint_env(None, {}) == {}
+
+
+def test_constraint_env_makes_a_users_relative_paths_absolute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """setup.sh runs in its own directory, so a relative path is resolved against the caller's."""
+    monkeypatch.chdir(tmp_path)
+    env = constraint_env(None, {"UV_CONSTRAINT": "mine.txt https://example.org/c.txt"})
+    assert env == {"UV_CONSTRAINT": f"{tmp_path / 'mine.txt'} https://example.org/c.txt"}
 
 
 def _make_env_dir(inst: ToolInstance, cmd: list[str]) -> subprocess.CompletedProcess:
@@ -209,15 +231,29 @@ def test_a_cuda12_driver_builds_under_its_caps(tmp_path: Path):
 @pytest.mark.usefixtures("no_constraints")
 @pytest.mark.parametrize("driver", [590, None])
 def test_machines_no_cap_covers_install_the_newest_releases(tmp_path: Path, driver: int | None):
-    """A CUDA 13 driver or a machine without an NVIDIA GPU gets no driver caps at all."""
+    """A CUDA 13 driver or a machine without an NVIDIA GPU installs under the `all` caps only."""
     inst, env = _build_env(tmp_path, driver=driver)
 
-    assert _requirements(inst.env_path / "dependency_caps.txt") == [
-        c.requirement for c in parse_caps(CAPS_FILE.read_text()) if c.condition == "all"
-    ]
-    if not any(c.condition == "all" for c in parse_caps(CAPS_FILE.read_text())):
+    everywhere = [c.requirement for c in parse_caps(CAPS_FILE.read_text()) if c.condition == "all"]
+    assert _requirements(inst.env_path / "dependency_caps.txt") == everywhere
+    if everywhere:
+        assert env["UV_CONSTRAINT"] == str((inst.env_path / "dependency_caps.txt").absolute())
+    else:
         assert "UV_CONSTRAINT" not in env
         assert "PIP_CONSTRAINT" not in env
+
+
+@pytest.mark.parametrize(
+    ("detected", "gets_driver_caps"),
+    [({"DETECTED_DRIVER_VERSION": "0"}, True), ({"DETECTED_DRIVER_VERSION": "n/a"}, False), ({}, False)],
+)
+def test_an_unreadable_driver_falls_back_safely(tmp_path: Path, detected: dict[str, str], gets_driver_caps: bool):
+    """compute_deps reports an unparseable driver as 0, which gets the driver caps; no driver gets none."""
+    driver_caps = [c.requirement for c in parse_caps(CAPS_FILE.read_text()) if c.condition.startswith("driver<")]
+    assert driver_caps, "no driver cap to check"
+    write_env_caps(tmp_path, {"DETECTED_COMPUTE_PLATFORM": "cuda", **detected})
+    applied = _requirements(tmp_path / "dependency_caps.txt")
+    assert all((cap in applied) is gets_driver_caps for cap in driver_caps)
 
 
 def test_a_users_own_constraints_reach_setup_sh(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
