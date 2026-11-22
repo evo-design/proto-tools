@@ -66,7 +66,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
-from proto_tools.utils.dependency_caps import constraint_env, write_env_caps
+from proto_tools.utils.dependency_caps import write_env_caps
 from proto_tools.utils.device import parse_device_string
 from proto_tools.utils.device_manager import DeviceManager
 from proto_tools.utils.download_progress import ProgressDeadline
@@ -2966,9 +2966,10 @@ class ToolInstance:
         record = self.env_path / RECORD_NAME
         record.unlink(missing_ok=True)
         env[RECORD_ENV_VAR] = str(record.absolute())
-        # Cap the releases known to break this machine. The user's own UV_CONSTRAINT/PIP_CONSTRAINT
-        # aren't in env's allowlist, so they come from os.environ
-        env.update(constraint_env(write_env_caps(self.env_path, env), os.environ))
+        # Install under the caps on releases known to break this machine
+        env_caps = write_env_caps(self.env_path, env)
+        if env_caps is not None:
+            env["UV_CONSTRAINT"] = env["PIP_CONSTRAINT"] = str(env_caps)
 
         returncode, combined_output = _run_setup_script(
             self.setup_script,

@@ -4,15 +4,21 @@ Checks the hand-set caps in ``proto_tools/utils/dependency_caps.txt`` and how en
 These tests only read the caps; they never set or raise one.
 """
 
+import fnmatch
 import re
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # requires-python allows 3.10, where tomllib does not exist
+    import tomli as tomllib  # type: ignore[no-redef]
+
 import pytest
 
 from proto_tools.utils import compute_deps
-from proto_tools.utils.dependency_caps import CAPS_FILE, cap_applies, constraint_env, parse_caps, write_env_caps
+from proto_tools.utils.dependency_caps import CAPS_FILE, cap_applies, parse_caps, write_env_caps
 from proto_tools.utils.tool_instance import ToolInstance
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -144,24 +150,6 @@ def test_no_setup_sh_replaces_the_caps_with_a_constraint_flag():
 # ── Applying the caps ─────────────────────────────────────────────────────
 
 
-def test_constraint_env_keeps_a_users_own_constraints():
-    """The caps join constraints the user already set rather than replacing them."""
-    env = constraint_env(Path("/env/dependency_caps.txt"), {"UV_CONSTRAINT": "/home/me/uv.txt"})
-    assert env == {
-        "UV_CONSTRAINT": "/env/dependency_caps.txt /home/me/uv.txt",
-        "PIP_CONSTRAINT": "/env/dependency_caps.txt",
-    }
-    assert constraint_env(None, {"PIP_CONSTRAINT": "/home/me/pip.txt"}) == {"PIP_CONSTRAINT": "/home/me/pip.txt"}
-    assert constraint_env(None, {}) == {}
-
-
-def test_constraint_env_makes_a_users_relative_paths_absolute(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    """setup.sh runs in its own directory, so a relative path is resolved against the caller's."""
-    monkeypatch.chdir(tmp_path)
-    env = constraint_env(None, {"UV_CONSTRAINT": "mine.txt https://example.org/c.txt"})
-    assert env == {"UV_CONSTRAINT": f"{tmp_path / 'mine.txt'} https://example.org/c.txt"}
-
-
 def _make_env_dir(inst: ToolInstance, cmd: list[str]) -> subprocess.CompletedProcess:
     """Stand in for ``micromamba create`` (and any host probe) by creating the env directory."""
     inst.env_path.mkdir(parents=True, exist_ok=True)
@@ -256,12 +244,21 @@ def test_an_unreadable_driver_falls_back_safely(tmp_path: Path, detected: dict[s
     assert all((cap in applied) is gets_driver_caps for cap in driver_caps)
 
 
-def test_a_users_own_constraints_reach_setup_sh(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    """The subprocess env copies only allowlisted variables; the user's constraints still reach setup.sh."""
-    monkeypatch.setenv("UV_CONSTRAINT", "/home/me/uv.txt")
-    monkeypatch.setenv("PIP_CONSTRAINT", "/home/me/pip.txt")
+def test_a_users_own_constraints_stay_out_of_tool_envs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Constraints set for the caller's own project don't leak into an isolated tool env's build."""
+    monkeypatch.setenv("UV_CONSTRAINT", "/home/me/project-constraints.txt")
+    monkeypatch.setenv("PIP_CONSTRAINT", "/home/me/project-constraints.txt")
     inst, env = _build_env(tmp_path, driver=550)
 
-    ours = (inst.env_path / "dependency_caps.txt").absolute()
-    assert env["UV_CONSTRAINT"] == f"{ours} /home/me/uv.txt"
-    assert env["PIP_CONSTRAINT"] == f"{ours} /home/me/pip.txt"
+    env_caps = str((inst.env_path / "dependency_caps.txt").absolute())
+    assert env["UV_CONSTRAINT"] == env_caps
+    assert env["PIP_CONSTRAINT"] == env_caps
+
+
+def test_the_caps_file_ships_in_the_wheel():
+    """A wheel install reads the caps from the package, so pyproject must ship the file."""
+    with (REPO_ROOT / "pyproject.toml").open("rb") as fh:
+        patterns = tomllib.load(fh)["tool"]["setuptools"]["package-data"]["*"]
+    assert any(fnmatch.fnmatch(CAPS_FILE.name, pattern) for pattern in patterns), (
+        f"{CAPS_FILE.name} is not matched by [tool.setuptools.package-data] in pyproject.toml"
+    )

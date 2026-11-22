@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import NamedTuple
 
 CAPS_FILE = Path(__file__).with_name("dependency_caps.txt")
-CONSTRAINT_ENV_VARS = ("UV_CONSTRAINT", "PIP_CONSTRAINT")
 ENV_CAPS_NAME = "dependency_caps.txt"
 
 _CAP_LINE = re.compile(
@@ -95,30 +94,3 @@ def write_env_caps(env_path: Path, build_env: Mapping[str, str]) -> Path | None:
         f"# Caps from {CAPS_FILE.name} that apply with {machine}\n" + "".join(f"{r}\n" for r in applied)
     )
     return env_caps if applied else None
-
-
-def constraint_env(caps_file: Path | None, parent_env: Mapping[str, str]) -> dict[str, str]:
-    """Return ``UV_CONSTRAINT`` and ``PIP_CONSTRAINT`` for an env build: the caps plus the caller's own.
-
-    A tool's subprocess env copies only allowlisted variables, so a user's own constraints are read
-    from the caller's environment and passed through here. Both variables take a space-separated
-    list, so the caps and the user's constraints apply together. setup.sh runs in its own directory,
-    so the user's relative paths are made absolute against the caller's.
-
-    Args:
-        caps_file (Path | None): The caps to apply, or ``None`` when none apply.
-        parent_env (Mapping[str, str]): The caller's environment, normally ``os.environ``.
-
-    Returns:
-        dict[str, str]: The variables that end up non-empty, ready to merge into the build's env.
-    """
-    constraints = {}
-    for var in CONSTRAINT_ENV_VARS:
-        own = [
-            entry if "://" in entry else str(Path(entry).expanduser().absolute())
-            for entry in parent_env.get(var, "").split()
-        ]
-        value = " ".join(([str(caps_file)] if caps_file else []) + own)
-        if value:
-            constraints[var] = value
-    return constraints
