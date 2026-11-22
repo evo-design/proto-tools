@@ -1,36 +1,11 @@
-# Caps on GPU-, driver- and compiler-coupled packages at the newest versions we have tested.
+# Upper bounds on releases known to break our envs. Format: proto_tools/utils/dependency_caps.py.
 #
-# Every env build passes this file to `uv pip` and `pip` as a constraints file (UV_CONSTRAINT /
-# PIP_CONSTRAINT), so it also caps indirect dependencies. See proto_tools/utils/dependency_caps.py
-# and notes/tool-environments.md.
-#
-# Rules:
-# - Caps are set and raised by hand only, in a PR with GPU test evidence and a second reviewer.
-#   Nothing generates or raises them automatically.
-# - Each cap is the next minor version above the newest tested one (3.8.x -> <3.9). JAX numbers
-#   every release as a patch, so its caps sit just above the tested release (0.12.0.1 -> <0.12.1).
-# - Each line ends with `# tested <version> | <date> | <hardware> | <evidence>`, or, for a CUDA 13
-#   build we have no hardware to test, `# follows <cu12 package>` with the same bound.
-# - Cap only packages tied to the GPU, driver or compiler that release often.
+# - Cap a release only for a break that someone has hit or upstream documents, and cite it.
+# - Scope each cap to the machines it breaks: `all`, or `driver<N` for NVIDIA drivers below N.
+#   Everywhere else, the newest release installs.
+# - A break specific to one tool belongs in that tool's setup.sh, not here.
+# - Caps are added, raised and removed by hand, in a reviewed PR.
 
-torch<2.15                            # tested 2.14.1 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-triton<3.9                            # tested 3.8.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-vllm<0.27                             # tested 0.26.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-flash-attn<2.9                        # tested 2.8.3 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-
-jax<0.12.1                            # tested 0.12.0.1 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-jaxlib<0.12.1                         # tested 0.12.0.1 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-jax-cuda12-plugin<0.12.1              # tested 0.12.0.1 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-jax-cuda12-pjrt<0.12.1                # tested 0.12.0.1 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-jax-cuda13-plugin<0.12.1              # follows jax-cuda12-plugin
-jax-cuda13-pjrt<0.12.1                # follows jax-cuda12-pjrt
-
-cuequivariance<0.14                   # tested 0.13.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-cuequivariance-torch<0.14             # tested 0.13.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-cuequivariance-ops-cu12<0.14          # tested 0.13.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-cuequivariance-ops-torch-cu12<0.14    # tested 0.13.0 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-cuequivariance-ops-cu13<0.14          # follows cuequivariance-ops-cu12
-cuequivariance-ops-torch-cu13<0.14    # follows cuequivariance-ops-torch-cu12
-
-nvidia-cudnn-cu12<9.29                # tested 9.28.1.4 | 2026-11-13 | H100/H200, driver 550 | full --all --ext GPU suite, 0 failed
-nvidia-cudnn-cu13<9.29                # follows nvidia-cudnn-cu12
+torch<2.15    # driver<580: 2.15 ships only CUDA 13 builds, which need driver 580+; CUDA 12 builds ended with 2.14 (https://github.com/pytorch/pytorch/releases/tag/v2.15.0)
+triton<3.9    # driver<580: 3.9 compiles sm_90+ kernels with a CUDA 13 ptxas, which CUDA 12 drivers reject as "device kernel image is invalid" (https://github.com/triton-lang/triton/releases/tag/v3.9.0)
+vllm<0.33     # driver<580: 0.33 dropped its CUDA 12 builds (https://github.com/vllm-project/vllm/pull/62575)

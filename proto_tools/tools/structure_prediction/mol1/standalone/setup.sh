@@ -3,7 +3,11 @@
 set -euo pipefail
 source standalone_helpers.sh
 
-proto_install_pytorch
+# Mol-1's Triton triangle-attention kernels use block pointers, which triton 3.9 removed, so keep
+# torch on a release paired with an older triton (https://github.com/triton-lang/triton/releases/tag/v3.9.0)
+TRITON_CONSTRAINT="${VENV_PATH}/mol1-triton-constraint.txt"
+echo "triton<3.9" > "$TRITON_CONSTRAINT"
+proto_install_pytorch "" --constraint "$TRITON_CONSTRAINT"
 
 # Keep the hardware-matched Torch build when resolving upstream's dependencies.
 TORCH_CONSTRAINT="${VENV_PATH}/mol1-torch-constraint.txt"

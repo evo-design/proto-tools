@@ -12,25 +12,24 @@ from unittest.mock import patch
 import pytest
 
 from proto_tools.utils import compute_deps
-from proto_tools.utils.dependency_caps import CAPS_ENV_VAR, CAPS_FILE, constraint_env, resolve_caps_file
+from proto_tools.utils.dependency_caps import (
+    CAPS_ENV_VAR,
+    CAPS_FILE,
+    cap_applies,
+    constraint_env,
+    parse_caps,
+    resolve_caps_file,
+)
 from proto_tools.utils.tool_instance import ToolInstance
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = REPO_ROOT / "proto_tools"
 
-# Package families a cap may name: those tied to the GPU, driver or compiler. A cap outside these
-# needs a deliberate change here, so plain Python libraries stay uncapped.
+# Package families a global cap may name: those tied to the GPU, driver or compiler. A cap outside
+# these needs a deliberate change here; a break in one tool belongs in that tool's setup.sh.
 CAPPABLE = re.compile(
     r"^(torch|triton|vllm|flash-attn|jax|jaxlib|jax-cuda1\d-(plugin|pjrt)|cuequivariance(-.+)?|nvidia-.+)$"
 )
-# Released in lockstep: jax requires the matching jaxlib and plugins, so their caps must agree.
-JAX_LOCKSTEP = ("jax", "jaxlib", "jax-cuda12-plugin", "jax-cuda12-pjrt", "jax-cuda13-plugin", "jax-cuda13-pjrt")
-
-LINE = re.compile(r"^(?P<name>[a-z0-9][a-z0-9-]*)<(?P<cap>\d+(\.\d+)*)\s+#\s+(?P<note>.+)$")
-TESTED = re.compile(
-    r"^tested (?P<version>\d+(\.\d+)*(\.post\d+)?) \| (?P<date>\d{4}-\d{2}-\d{2}) \| (?P<hardware>[^|]+) \| (?P<evidence>.+)$"
-)
-FOLLOWS = re.compile(r"^follows (?P<name>[a-z0-9-]+)$")
 # A version bound on a package, e.g. ``torch==2.11.0+cu129`` or ``jax[cuda12]>=0.4.20``
 SPEC = re.compile(
     r"(?<![\w.-])(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]*)(\[[^\]]*\])?\s*(?P<op>===|==|~=|>=|>)\s*(?P<version>\d+(\.\d+)*)"
@@ -51,67 +50,54 @@ def _below(version: str, cap: str) -> bool:
     return v + (0,) * (width - len(v)) < c + (0,) * (width - len(c))
 
 
-def _caps() -> dict[str, tuple[str, str]]:
-    """Parse the caps file into ``{package: (cap, note)}``."""
-    caps = {}
-    for raw in CAPS_FILE.read_text().splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        match = LINE.match(line)
-        assert match, f"dependency_caps.txt: {line!r} is not `<package><<version>  # <note>`"
-        assert match["name"] not in caps, f"dependency_caps.txt caps {match['name']} twice"
-        caps[match["name"]] = (match["cap"], match["note"].strip())
-    return caps
-
-
 def _canonical(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def _cuda12_build(name: str) -> str:
-    """Return the CUDA 12 build's name for a CUDA 13 package (``-cu13`` or ``-cuda13``)."""
-    return re.sub(r"(cu|cuda)13", r"\g<1>12", name)
-
-
-def _cuda13_build(name: str) -> str:
-    """Return the CUDA 13 build's name for a CUDA 12 package (``-cu12`` or ``-cuda12``)."""
-    return re.sub(r"(cu|cuda)12", r"\g<1>13", name)
+def _packaged_caps() -> dict[str, str]:
+    """Return ``{package: cap version}`` for the packaged caps."""
+    caps = {}
+    for cap in parse_caps(CAPS_FILE.read_text()):
+        name, version = cap.requirement.split("<")
+        assert name not in caps, f"dependency_caps.txt caps {name} twice"
+        caps[name] = version
+    return caps
 
 
 # ── The caps file ─────────────────────────────────────────────────────────
 
 
-def test_every_cap_is_a_cappable_package_with_its_evidence():
-    """Each line caps a GPU-coupled package and says what was tested, when, where and in which run."""
-    caps = _caps()
+def test_every_cap_is_scoped_and_cites_its_break():
+    """Each line caps a GPU-coupled package, says which machines it applies to, and links the break."""
+    caps = parse_caps(CAPS_FILE.read_text())
     assert caps, "dependency_caps.txt has no caps"
-    for name, (cap, note) in caps.items():
-        assert CAPPABLE.match(name), f"{name} is not a GPU-, driver- or compiler-coupled package; leave it uncapped"
-        tested, follows = TESTED.match(note), FOLLOWS.match(note)
-        assert tested or follows, f"{name}: note {note!r} is neither `tested ...` nor `follows ...`"
-        if tested:
-            assert _below(tested["version"], cap), f"{name}: tested {tested['version']} is not below its cap <{cap}"
+    for cap in caps:
+        name = cap.requirement.split("<")[0]
+        assert CAPPABLE.match(name), f"{name} is not a GPU-, driver- or compiler-coupled package; cap it in its tool"
+        assert re.search(r"https?://", cap.reason), f"{cap.requirement}: cite the break with a link"
 
 
-def test_a_cuda13_build_follows_its_cuda12_counterpart():
-    """A ``follows`` line names a capped cu12 package with the same bound, and each cu12 cap has its cu13 line."""
-    caps = _caps()
-    for name, (cap, note) in caps.items():
-        if follows := FOLLOWS.match(note):
-            target = follows["name"]
-            assert target != name and target == _cuda12_build(name), f"{name} may only follow its CUDA 12 build"
-            assert target in caps, f"{name} follows {target}, which has no cap"
-            assert caps[target][0] == cap, f"{name}<{cap} differs from {target}<{caps[target][0]}"
-        if _cuda13_build(name) != name:
-            assert _cuda13_build(name) in caps, f"{name} is capped but its CUDA 13 build is not"
+def test_a_malformed_cap_line_is_rejected():
+    """A line without a condition, or with an unknown one, fails rather than applying everywhere."""
+    for line in ("torch<2.15", "torch<2.15  # breaks things", "torch<2.15  # cuda<13: reason (https://x)"):
+        with pytest.raises(ValueError, match="dependency caps"):
+            parse_caps(line)
 
 
-def test_jax_packages_share_one_cap():
-    """jax, jaxlib and the CUDA plugins are released together, so differing caps would leave nothing to install."""
-    caps = _caps()
-    bounds = {name: caps[name][0] for name in JAX_LOCKSTEP if name in caps}
-    assert len(set(bounds.values())) <= 1, f"jax packages have different caps: {bounds}"
+@pytest.mark.parametrize(
+    ("condition", "driver", "applies"),
+    [
+        ("all", None, True),
+        ("all", 590, True),
+        ("driver<580", 550, True),
+        ("driver<580", 579, True),
+        ("driver<580", 580, False),
+        ("driver<580", None, False),
+    ],
+)
+def test_caps_apply_only_where_their_condition_holds(condition: str, driver: int | None, applies: bool):
+    """A driver cap binds below its driver; a machine with no NVIDIA driver gets none of them."""
+    assert cap_applies(condition, driver) is applies
 
 
 def _declared_bounds() -> list[tuple[str, str, str, str]]:
@@ -132,17 +118,17 @@ def _declared_bounds() -> list[tuple[str, str, str, str]]:
 
 
 def test_no_cap_excludes_a_pinned_or_minimum_version():
-    """A cap above every pin and minimum a tool declares, so no env becomes impossible to build."""
-    caps = _caps()
+    """Every cap sits above every pin and minimum a tool declares, so no env becomes impossible to build."""
+    caps = _packaged_caps()
     bounds = _declared_bounds()
     found = {(file.split("/")[-3], name, version) for file, name, _op, version in bounds}
     # Known pins, so a scan that silently stops finding bounds fails here
     for known in [("evo2", "torch", "2.11.0"), ("evo2", "vllm", "0.26.0"), ("borzoi", "flash-attn", "2.8.3")]:
         assert known in found, f"the scan no longer finds {known}; is it broken?"
     conflicts = [
-        f"{file}: {name}{op}{version} vs cap <{caps[name][0]}"
+        f"{file}: {name}{op}{version} vs cap <{caps[name]}"
         for file, name, op, version in bounds
-        if name in caps and not _below(version, caps[name][0])
+        if name in caps and not _below(version, caps[name])
     ]
     assert not conflicts, "caps exclude versions tools require:\n" + "\n".join(conflicts)
 
@@ -185,8 +171,8 @@ def _make_env_dir(inst: ToolInstance, cmd: list[str]) -> subprocess.CompletedPro
     return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
 
-def _build_env(tmp_path: Path, returncode: int = 0) -> tuple[ToolInstance, dict[str, str]]:
-    """Run ``_create_env`` with micromamba and setup.sh stubbed, returning the env setup.sh would get."""
+def _build_env(tmp_path: Path, driver: int | None, returncode: int = 0) -> tuple[ToolInstance, dict[str, str]]:
+    """Run ``_create_env`` on a machine with ``driver`` (``None``: no NVIDIA GPU), returning setup.sh's env."""
     inst = ToolInstance.__new__(ToolInstance)
     inst.toolkit = "fake_tool"
     inst.device = "cpu"
@@ -195,6 +181,9 @@ def _build_env(tmp_path: Path, returncode: int = 0) -> tuple[ToolInstance, dict[
     inst.setup_script.write_text("#!/bin/bash\n")
     (tmp_path / "python_version.txt").write_text("default: 3.12\n")
     inst._tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": []}
+    machine = {"DETECTED_COMPUTE_PLATFORM": "cpu" if driver is None else "cuda"}
+    if driver is not None:
+        machine["DETECTED_DRIVER_VERSION"] = str(driver)
     seen: dict[str, str] = {}
 
     def _setup(*args, **kwargs):
@@ -207,6 +196,7 @@ def _build_env(tmp_path: Path, returncode: int = 0) -> tuple[ToolInstance, dict[
         patch.object(inst, "_clean_package_archives"),
         patch.object(inst, "_schedule_uv_prune"),
         patch("proto_tools.utils.tool_instance.write_manifest"),
+        patch("proto_tools.utils.compute_deps.detect_compute_environment", return_value=machine),
         patch(
             "proto_tools.utils.tool_instance.subprocess.run",
             side_effect=lambda *a, **k: _make_env_dir(inst, a[0]),
@@ -217,17 +207,56 @@ def _build_env(tmp_path: Path, returncode: int = 0) -> tuple[ToolInstance, dict[
     return inst, seen
 
 
-def test_env_builds_install_under_the_caps(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    """setup.sh runs with uv and pip constrained by the env's own copy of the caps."""
-    monkeypatch.delenv(CAPS_ENV_VAR, raising=False)
+@pytest.fixture
+def no_constraints(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The packaged caps, and no constraints of the user's own."""
+    for var in (CAPS_ENV_VAR, "UV_CONSTRAINT", "PIP_CONSTRAINT"):
+        monkeypatch.delenv(var, raising=False)
+
+
+def _requirements(path: Path) -> list[str]:
+    return [line for line in path.read_text().splitlines() if line and not line.startswith("#")]
+
+
+@pytest.mark.usefixtures("no_constraints")
+def test_a_cuda12_driver_builds_under_its_caps(tmp_path: Path):
+    """On driver 550, setup.sh installs under the driver<580 caps, which the env keeps a record of."""
+    inst, env = _build_env(tmp_path, driver=550)
+
+    env_caps = inst.env_path / "dependency_caps.txt"
+    expected = [c.requirement for c in parse_caps(CAPS_FILE.read_text()) if cap_applies(c.condition, 550)]
+    assert expected, "no packaged cap applies to driver 550; pick a driver the caps cover"
+    assert _requirements(env_caps) == expected
+    assert env["UV_CONSTRAINT"] == str(env_caps.absolute())
+    assert env["PIP_CONSTRAINT"] == str(env_caps.absolute())
+
+
+@pytest.mark.usefixtures("no_constraints")
+@pytest.mark.parametrize("driver", [590, None])
+def test_machines_no_cap_covers_install_the_newest_releases(tmp_path: Path, driver: int | None):
+    """A CUDA 13 driver or a machine without an NVIDIA GPU gets no driver caps at all."""
+    inst, env = _build_env(tmp_path, driver=driver)
+
+    assert _requirements(inst.env_path / "dependency_caps.txt") == [
+        c.requirement for c in parse_caps(CAPS_FILE.read_text()) if c.condition == "all"
+    ]
+    if not any(c.condition == "all" for c in parse_caps(CAPS_FILE.read_text())):
+        assert "UV_CONSTRAINT" not in env
+        assert "PIP_CONSTRAINT" not in env
+
+
+def test_a_users_caps_file_is_used_as_is(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """``PROTO_DEPENDENCY_CAPS=<path>`` replaces the packaged caps without any filtering."""
+    own = tmp_path / "my_caps.txt"
+    own.write_text("torch<2.13\n")
+    monkeypatch.setenv(CAPS_ENV_VAR, str(own))
     monkeypatch.delenv("UV_CONSTRAINT", raising=False)
     monkeypatch.delenv("PIP_CONSTRAINT", raising=False)
-    inst, env = _build_env(tmp_path)
+    inst, env = _build_env(tmp_path, driver=590)
 
-    copy = inst.env_path / "dependency_caps.txt"
-    assert copy.read_text() == CAPS_FILE.read_text(), "the env records the caps it was built under"
-    assert env["UV_CONSTRAINT"] == str(copy.absolute())
-    assert env["PIP_CONSTRAINT"] == str(copy.absolute())
+    env_caps = inst.env_path / "dependency_caps.txt"
+    assert env_caps.read_text() == "torch<2.13\n"
+    assert env["UV_CONSTRAINT"] == str(env_caps.absolute())
 
 
 def test_env_builds_without_caps_when_turned_off(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
@@ -235,7 +264,7 @@ def test_env_builds_without_caps_when_turned_off(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setenv(CAPS_ENV_VAR, "0")
     monkeypatch.delenv("UV_CONSTRAINT", raising=False)
     monkeypatch.delenv("PIP_CONSTRAINT", raising=False)
-    inst, env = _build_env(tmp_path)
+    inst, env = _build_env(tmp_path, driver=550)
 
     assert not (inst.env_path / "dependency_caps.txt").exists()
     assert "UV_CONSTRAINT" not in env
@@ -251,17 +280,17 @@ def test_a_users_own_constraints_reach_setup_sh(monkeypatch: pytest.MonkeyPatch,
         monkeypatch.setenv(CAPS_ENV_VAR, caps)
     monkeypatch.setenv("UV_CONSTRAINT", "/home/me/uv.txt")
     monkeypatch.setenv("PIP_CONSTRAINT", "/home/me/pip.txt")
-    inst, env = _build_env(tmp_path)
+    inst, env = _build_env(tmp_path, driver=550)
 
     ours = f"{(inst.env_path / 'dependency_caps.txt').absolute()} " if caps == "on" else ""
     assert env["UV_CONSTRAINT"] == f"{ours}/home/me/uv.txt"
     assert env["PIP_CONSTRAINT"] == f"{ours}/home/me/pip.txt"
 
 
-def test_a_failed_build_names_the_caps_and_the_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+@pytest.mark.usefixtures("no_constraints")
+def test_a_failed_build_names_the_caps_and_the_override(tmp_path: Path):
     """When a capped build fails, the error says caps were on and how to build without them."""
-    monkeypatch.delenv(CAPS_ENV_VAR, raising=False)
     with pytest.raises(RuntimeError) as excinfo:
-        _build_env(tmp_path, returncode=1)
+        _build_env(tmp_path, driver=550, returncode=1)
     assert "dependency caps" in str(excinfo.value)
     assert f"{CAPS_ENV_VAR}=0" in str(excinfo.value)
