@@ -1,4 +1,8 @@
-"""Copied from https://github.com/ShenLab-Genomics/SpliceTransformer."""
+"""Copied from https://github.com/ShenLab-Genomics/SpliceTransformer.
+
+One change from upstream: ``SpTransformer.forward`` no longer runs the conv encoders under
+``torch.no_grad()`` (see the comment there), so input gradients include their contribution.
+"""
 
 from typing import Any
 
@@ -333,9 +337,10 @@ class SpTransformer(nn.Module):  # type: ignore[misc]
         target_output_len = x.size(2) - 2 * self.context_len
         target_mid_len = self.max_seq_len
         odd_fix = x.size(2) & 1
-        #
-        with torch.no_grad():
-            feat1 = [self.encoder[i](x, feature=True) for i in [0, 1]]
+        # Upstream wraps the encoders in torch.no_grad() to freeze them while training the head.
+        # That also cut them out of input gradients, so the gradient tool saw only the shallow
+        # conv1 path. Prediction already runs under no_grad in ``_step``, so scores are unchanged.
+        feat1 = [self.encoder[i](x, feature=True) for i in [0, 1]]
         feat1 = torch.concat(feat1, dim=1)
         #
         feat2 = self.conv1(x)
