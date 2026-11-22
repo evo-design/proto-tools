@@ -59,9 +59,9 @@ This is the differentiable form of Puffin prediction, intended as an objective i
 
 #### Usage Tips
 
-- **The whole input is relaxed.** Unlike the fixed-context genomic models, Puffin scores every base of a variable-length input, so a candidate is just an `(L, 4)` matrix and the returned gradient covers all `L` positions.
-- **Inputs need at least 651 bp.** Puffin trims 325 bp from each end, so the scored output span is `L - 650` positions and anything shorter scores nothing.
-- **Position spans are 1-indexed, inclusive, and relative to the output span** — not to the input. Leaving `position_start`/`position_end` unset covers the whole output window, and the term that comes back names the span actually averaged rather than the `None` that was asked for.
+- **Fixed flanks go in `context_left`/`context_right`, never in the relaxed matrix.** The model input is `context_left + candidate + context_right`; the contexts are encoded exactly as `puffin-prediction` encodes a string (`N` as 0.25 per base) and are never relaxed, so any `soft`/`hard` schedule leaves them intact. Only the candidate's `(L, 4)` rows are relaxed and carry gradient. With both contexts empty (the default) the candidate is the whole model input.
+- **The model input needs at least 651 bp.** Puffin trims 325 bp from each end, so the scored output span is `len(context_left) + L + len(context_right) - 650` positions and anything shorter scores nothing. 325 bp of context on each side makes the output window exactly the candidate.
+- **Position spans are 1-indexed, inclusive, and relative to the output window** of the full model input — not to the candidate. Output position `p` is candidate row `p + 325 - len(context_left)`. Leaving `position_start`/`position_end` unset covers the whole output window, and the term that comes back names the span actually averaged rather than the `None` that was asked for.
 - **Tracks are named with a strand suffix.** `FANTOM_CAGE+` and `FANTOM_CAGE-` select the forward and reverse heads, which are distinct model channels; the ten names match `TRACK_NAMES`.
 - **Several tracks share one forward pass.** Each requested quantity gets its own backward over that shared graph, so asking for K tracks costs one forward and K backwards rather than K of each.
 
