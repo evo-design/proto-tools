@@ -294,15 +294,20 @@ def _build_fragment(record: dict[str, Any], original_identifier: str) -> Fragmen
     """Construct a Fragment from a standalone result record.
 
     Tries (smiles, ccd_code), then the code alone so a resolved entry survives a record
-    whose SMILES will not parse, then (smiles only), then (original_identifier as smiles),
-    in order of decreasing fidelity. Falls back to a wildcard-atom placeholder if none
-    parse; the result carries the failure reason in ``errors``.
+    whose SMILES will not parse, then (smiles only), in order of decreasing fidelity. When
+    no CCD entry matched, the identifier itself is tried as a SMILES last. A matched entry
+    never is: its code read as a SMILES (``FCO``, an iron complex, as fluoromethanol) is a
+    different molecule. Falls back to a wildcard-atom placeholder if none parse; the result
+    carries the failure reason in ``errors``.
     """
     smiles = record.get("smiles")
     ccd_code = record.get("ccd_code")
     name = record.get("name")
 
-    for s, c in ((smiles, ccd_code), (None, ccd_code), (smiles, None), (original_identifier, None)):
+    attempts: list[tuple[str | None, str | None]] = [(smiles, ccd_code), (None, ccd_code), (smiles, None)]
+    if not _matched_ccd_entry(record):
+        attempts.append((original_identifier, None))
+    for s, c in attempts:
         if s is None and c is None:
             continue
         try:

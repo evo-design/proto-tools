@@ -120,6 +120,23 @@ def test_build_fragment_keeps_a_resolved_code_when_the_record_smiles_is_unusable
     assert fragment.ccd_code == "ATP"
 
 
+def test_build_fragment_never_reads_a_matched_code_as_smiles():
+    """A matched entry whose structure can't be built gets the placeholder, not its code parsed as SMILES."""
+    # FCO is an iron complex; read as a SMILES it would be fluoromethanol
+    record = {"ccd_code": "FCO", "smiles": "unparseable", "name": "IRON COMPLEX", "formula": "C3 Fe N2 O"}
+    fragment = _build_fragment(record, "FCO")
+
+    assert fragment.smiles == "[He]"
+    assert fragment.ccd_code is None
+
+
+def test_build_fragment_reads_an_unmatched_identifier_as_smiles():
+    """With no CCD entry, a code-shaped identifier may still be the SMILES the caller meant."""
+    fragment = _build_fragment({"ccd_code": "CCCCO", "smiles": None, "name": None}, "CCCCO")
+
+    assert fragment.smiles == "CCCCO"
+
+
 def test_build_fragment_placeholder_keeps_ccd_code_none_through_json_roundtrip():
     """Unparseable input falls back to a placeholder whose ccd_code stays None after re-validation."""
     record = {"smiles": None, "ccd_code": None, "name": None}
@@ -214,6 +231,17 @@ def test_ccd_lookup_computes_descriptors_without_sanitization():
     assert atp.formula_weight == pytest.approx(507.18, abs=1.0)
     assert {"molecular_weight", "logp", "tpsa", "num_h_donors", "num_h_acceptors"} <= set(atp.physchem_properties)
     assert not any("formula_weight" in w for w in atp.warnings)
+
+
+@pytest.mark.skip_ci
+@pytest.mark.uses_env
+def test_ccd_lookup_keeps_a_code_rdkit_cannot_parse_off_a_different_molecule():
+    """FCO's SMILES doesn't parse, and its code read as a SMILES is fluoromethanol, so it gets the placeholder."""
+    result = run_ccd_lookup(CcdLookupInput(identifiers=["FCO"]), CcdLookupConfig()).results[0]
+
+    assert result.status == "no_ccd_code"
+    assert result.formula is not None and "Fe" in result.formula
+    assert result.fragment.smiles == "[He]"
 
 
 @pytest.mark.skip_ci
