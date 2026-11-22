@@ -26,8 +26,8 @@ from proto_tools.utils.system_info import GPUDevice, GPUInfo, get_gpu_info
         (549, "torch>=2.4,<3", "cu126"),
         (550, "torch>=2.5,<3", "cu126"),
         (569, "torch>=2.5,<3", "cu126"),
-        (570, "torch>=2.8,<3", "cu128"),
-        (999, "torch>=2.8,<3", "cu128"),
+        (570, "torch>=2.8,<3", "cu129"),
+        (999, "torch>=2.8,<3", "cu129"),
     ],
 )
 def test_torch_spec_and_index_pick_the_highest_bucket_at_or_below_driver(driver, expected_spec, expected_variant):
