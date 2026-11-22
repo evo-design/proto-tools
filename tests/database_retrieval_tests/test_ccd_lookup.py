@@ -133,6 +133,8 @@ def test_build_fragment_keeps_a_resolved_code_when_the_record_smiles_is_unusable
 def test_build_fragment_never_reads_a_matched_code_as_smiles():
     """A matched entry whose structure can't be built gets the placeholder, not its code parsed as SMILES."""
     # FCO is an iron complex; read as a SMILES it would be fluoromethanol
+    with pytest.raises(ValueError):
+        Fragment(ccd_code="FCO")  # precondition: proto-tools' CCD table has no parseable SMILES for FCO
     record = {"ccd_code": "FCO", "smiles": "unparseable", "name": "IRON COMPLEX", "formula": "C3 Fe N2 O"}
     fragment = _build_fragment(record, "FCO")
 
@@ -145,6 +147,21 @@ def test_build_fragment_reads_an_unmatched_identifier_as_smiles():
     fragment = _build_fragment({"ccd_code": "CCCCO", "smiles": None, "name": None}, "CCCCO")
 
     assert fragment.smiles == "CCCCO"
+
+
+def test_build_fragment_keeps_a_smiles_input_matched_to_an_unbuildable_entry():
+    """A SMILES that matched an entry is the caller's own molecule, so it is kept when the entry can't be built."""
+    record = {"ccd_code": "FCO", "smiles": "unparseable", "name": "MATCHED ENTRY", "formula": "C8 H10 B O3"}
+    fragment = _build_fragment(record, "O[B-]1([OH+])OCCc2ccccc21")
+
+    assert fragment.smiles == Fragment(smiles="O[B-]1([OH+])OCCc2ccccc21").smiles
+    assert fragment.ccd_code is None
+
+
+def test_build_fragment_gives_a_blank_identifier_the_placeholder():
+    """A blank identifier isn't read as an empty SMILES, which would be a zero-atom fragment."""
+    for blank in ("", "  "):
+        assert _build_fragment({"ccd_code": None, "smiles": None, "name": None}, blank).smiles == "[He]"
 
 
 def test_build_fragment_placeholder_keeps_ccd_code_none_through_json_roundtrip():
