@@ -11,6 +11,7 @@ from proto_tools.tools.sequence_scoring.puffin.puffin_prediction import (
     PUFFIN_PADDING,
     TRACK_NAMES,
 )
+from proto_tools.tools.sequence_scoring.shared_data_models import validate_dna_sequence
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     ConfigField,
@@ -53,6 +54,10 @@ class PuffinSignalTerm(DifferentiableTerm):
     and how much it matters relative to other tracks is a weight — both are goals a caller
     applies to the returned value, not properties of the quantity.
 
+    Positions index the scored output window of the full model input,
+    ``context_left + candidate + context_right``: output position ``p`` is model-input base
+    ``p + PUFFIN_PADDING``, which is candidate row ``p + PUFFIN_PADDING - len(context_left)``.
+    With ``PUFFIN_PADDING`` bases of context on each side the window is exactly the candidate.
     An open-ended span is resolved against the candidate's own output window, so the term that
     comes back names the positions actually averaged rather than the ``None`` that was asked for.
 
@@ -112,14 +117,16 @@ class PuffinSignalTerm(DifferentiableTerm):
 class PuffinGradientInput(GradientInput):
     """Input for the Puffin gradient tool: one or many relaxed DNA states.
 
-    Puffin scores every base of its input, so the whole relaxed matrix is differentiated — there
-    is no fixed context window to pin and no separate designed-position list.
+    Each candidate is relaxed and differentiated in full. Fixed DNA around it (the config's
+    ``context_left``/``context_right``) is one-hot encoded and never relaxed; without context
+    the candidate is the whole model input.
 
     Attributes:
         inputs (list[NucleotideSequenceLogits]): One relaxed state per candidate, each ``(L, 4)``
-            in ``A,C,G,T`` order with ``L`` at least ``PUFFIN_MIN_INPUT_LENGTH``. Puffin trims
-            ``PUFFIN_PADDING`` bases from each end, so the scored output span is
-            ``L - 2 * PUFFIN_PADDING`` positions.
+            in ``A,C,G,T`` order. With the config's contexts the model input must reach
+            ``PUFFIN_MIN_INPUT_LENGTH``; Puffin trims ``PUFFIN_PADDING`` bases from each end, so
+            the scored output span is ``len(context_left) + L + len(context_right) -
+            2 * PUFFIN_PADDING`` positions.
         temperature (float | None): Softmax temperature, shared by every candidate. The default
             ``1.0`` reads each state as unnormalized and applies ``softmax(logits / T)``,
             returning logit-space gradients; ``None`` reads them as probabilities and returns
@@ -136,17 +143,6 @@ class PuffinGradientInput(GradientInput):
     def normalize_items(cls, value: Any) -> Any:
         """Accept one relaxed state as well as a list of them."""
         return coerce_to_item_list(value)
-
-    @model_validator(mode="after")
-    def validate_lengths(self) -> Self:
-        """Reject any candidate shorter than one padded output position."""
-        for index, matrix in enumerate(self.inputs):
-            if len(matrix) < PUFFIN_MIN_INPUT_LENGTH:
-                raise ValueError(
-                    f"puffin gradient: inputs[{index}] must be at least {PUFFIN_MIN_INPUT_LENGTH} bp "
-                    f"(2 * {PUFFIN_PADDING} bp padding + 1 bp output); got {len(matrix)}"
-                )
-        return self
 
 
 class PuffinTermGradient(TermGradient):
@@ -204,7 +200,7 @@ class PuffinGradientOutput(GradientOutput):
     Attributes:
         results (list[PuffinGradientResult]): One per input candidate, in input order, each
             holding that candidate's requested track signals and their raw ``(L, 4)`` gradients
-            (``None`` in forward-only mode).
+            over the candidate's own rows, never the fixed context (``None`` in forward-only mode).
         vocab (list[str]): Nucleotide column ordering for the input logits.
     """
 
@@ -217,8 +213,14 @@ class PuffinGradientOutput(GradientOutput):
 class PuffinGradientConfig(GradientConfig):
     """Configuration for the Puffin transcription-initiation gradient tool.
 
+    The model input is ``context_left + candidate + context_right`` and must be at least
+    ``PUFFIN_MIN_INPUT_LENGTH`` bp. Only the candidate is relaxed and differentiated; the
+    contexts are encoded exactly as ``puffin-prediction`` encodes a string, ``N`` as 0.25 per base.
+
     Attributes:
         gradient_terms (list[PuffinSignalTerm]): Track-and-position quantities to differentiate.
+        context_left (str): Fixed DNA placed before every candidate, never relaxed.
+        context_right (str): Fixed DNA placed after every candidate, never relaxed.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
             (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
             and ColabDesign parity. See
@@ -237,6 +239,16 @@ class PuffinGradientConfig(GradientConfig):
         min_length=1,
         description="Track-and-position quantities to differentiate, by name or as instances",
     )
+    context_left: str = ConfigField(
+        title="Left Context",
+        default="",
+        description="Fixed DNA before every candidate, never relaxed; N reads as 0.25 per base.",
+    )
+    context_right: str = ConfigField(
+        title="Right Context",
+        default="",
+        description="Fixed DNA after every candidate, never relaxed; N reads as 0.25 per base.",
+    )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
         default=True,
@@ -248,6 +260,12 @@ class PuffinGradientConfig(GradientConfig):
         description="Device to run the model on",
         include_in_key=False,
     )
+
+    @field_validator("context_left", "context_right")
+    @classmethod
+    def validate_context(cls, value: str) -> str:
+        """Validate and uppercase fixed context DNA."""
+        return validate_dna_sequence(value) if value else value
 
     @field_validator("gradient_terms", mode="before")
     @classmethod
@@ -299,7 +317,28 @@ def run_puffin_gradient(
     config: PuffinGradientConfig,
     instance: Any = None,
 ) -> PuffinGradientOutput:
-    """Report each requested Puffin track signal and its gradient w.r.t. the relaxed logits."""
+    """Report each requested Puffin track signal and its gradient w.r.t. the relaxed logits.
+
+    Args:
+        inputs (PuffinGradientInput): Relaxed logits of each candidate.
+        config (PuffinGradientConfig): Terms, fixed context, and relaxation settings.
+        instance (Any): Optional ToolInstance for subprocess execution.
+
+    Returns:
+        PuffinGradientOutput: Per-candidate track signals, each with its gradient over the
+            candidate's rows.
+
+    Raises:
+        ValueError: If a candidate plus the contexts is shorter than ``PUFFIN_MIN_INPUT_LENGTH``.
+    """
+    flanks = len(config.context_left) + len(config.context_right)
+    for index, matrix in enumerate(inputs.inputs):
+        if flanks + len(matrix) < PUFFIN_MIN_INPUT_LENGTH:
+            raise ValueError(
+                f"puffin gradient: context_left ({len(config.context_left)}) + inputs[{index}] ({len(matrix)}) "
+                f"+ context_right ({len(config.context_right)}) is {flanks + len(matrix)} bp; Puffin needs at "
+                f"least {PUFFIN_MIN_INPUT_LENGTH} (2 * {PUFFIN_PADDING} bp padding + 1 bp output)"
+            )
     logger.debug("Using local worker for Puffin gradient (%d candidate(s))", len(inputs.inputs))
     result = ToolInstance.dispatch(
         "puffin",
@@ -308,6 +347,8 @@ def run_puffin_gradient(
             "items": [matrix.root for matrix in inputs.inputs],
             "gradient_terms": [term.model_dump() for term in config.gradient_terms],
             "track_names": list(TRACK_NAMES),
+            "context_left": config.context_left,
+            "context_right": config.context_right,
             "temperature": inputs.temperature,
             "soft": config.soft,
             "hard": config.hard,
@@ -320,7 +361,7 @@ def run_puffin_gradient(
         config=config,
     )
 
-    # Puffin differentiates the whole relaxed state, so a gradient covers every input row.
+    # Only the candidate is relaxed, so a gradient covers its rows and never the fixed context.
     results = []
     for matrix, item in zip(inputs.inputs, result["results"], strict=True):
         basis = GradientMetadata.from_input(
