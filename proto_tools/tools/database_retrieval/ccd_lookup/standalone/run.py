@@ -138,6 +138,21 @@ def _is_likely_ccd_code(s: str) -> bool:
     return True
 
 
+def _parses_as_smiles(s: str) -> bool:
+    """Return whether RDKit parses `s` as a SMILES.
+
+    Args:
+        s (str): Candidate identifier.
+
+    Returns:
+        bool: True if RDKit builds a molecule with at least one atom from `s`.
+    """
+    from rdkit import Chem
+
+    mol = Chem.MolFromSmiles(s)
+    return mol is not None and mol.GetNumAtoms() > 0
+
+
 # ============================================================================
 # CCD index for SMILES/InChIKey -> code resolution
 # ============================================================================
@@ -675,6 +690,7 @@ def run_ccd_lookup(input_data: dict[str, Any]) -> dict[str, Any]:
     include_xrefs = bool(cfg.get("include_cross_references", False))
     include_pdb_usage = bool(cfg.get("include_pdb_usage", False))
     sanitize = bool(cfg.get("sanitize", True))
+    identifier_type = str(cfg.get("identifier_type", "auto"))
 
     weights_dir = resolve_weights_dir("ccd_lookup")
     components_path = os.path.join(weights_dir, "components.cif")
@@ -686,7 +702,9 @@ def run_ccd_lookup(input_data: dict[str, Any]) -> dict[str, Any]:
     # Silence the C++ logger across the batch — pdbeccdutils re-emits "bond type above 3" /
     # "Invalid InChI prefix" warnings even after scoped silencers; real failures already land on record["errors"].
     with _silence_rdkit_logger():
-        records = _process_identifiers(identifiers, components_path, sanitize, include_xrefs, include_pdb_usage)
+        records = _process_identifiers(
+            identifiers, components_path, sanitize, include_xrefs, include_pdb_usage, identifier_type
+        )
     return {"records": records}
 
 
@@ -696,6 +714,7 @@ def _process_identifiers(
     sanitize: bool,
     include_xrefs: bool,
     include_pdb_usage: bool,
+    identifier_type: str = "auto",
 ) -> list[dict[str, Any]]:
     """Iterate identifiers and build their enrichment records.
 
@@ -705,6 +724,8 @@ def _process_identifiers(
         sanitize (bool): Whether to sanitize parsed RDKit molecules.
         include_xrefs (bool): Fetch UniChem cross-references when True.
         include_pdb_usage (bool): Fetch RCSB PDB usage when True.
+        identifier_type (str): ``"ccd_code"`` or ``"smiles"`` reads every identifier one way;
+            ``"auto"`` decides per identifier with ``_is_likely_ccd_code``.
 
     Returns:
         list[dict[str, Any]]: One record per input identifier in input order.
@@ -717,9 +738,14 @@ def _process_identifiers(
             continue
 
         try:
-            is_ccd = _is_likely_ccd_code(identifier)
+            is_ccd = identifier_type == "ccd_code" or (identifier_type == "auto" and _is_likely_ccd_code(identifier))
             resolved_code: str | None = None
             warnings: list[str] = []
+            if identifier_type == "auto" and is_ccd and _parses_as_smiles(identifier):
+                warnings.append(
+                    f"{identifier!r} was read as a CCD code, but it is also a valid SMILES; "
+                    "set identifier_type='smiles' to read it as one"
+                )
 
             if is_ccd:
                 resolved_code = identifier.upper()
