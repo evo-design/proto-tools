@@ -76,8 +76,8 @@ def cap_applies(condition: str, driver_major: int | None) -> bool:
 def write_env_caps(env_path: Path, build_env: Mapping[str, str]) -> Path | None:
     """Write the caps that apply to this machine into the env, for its setup.sh to install under.
 
-    The caps are filtered by the driver ``compute_deps`` detected. The env keeps the file, which
-    records the caps it was built under and gives uv and pip a path without spaces.
+    The caps are filtered by the driver ``compute_deps`` detected. The env keeps the file as a record
+    of the caps it was built under.
 
     Args:
         env_path (Path): The env being built.
@@ -102,7 +102,8 @@ def constraint_env(caps_file: Path | None, parent_env: Mapping[str, str]) -> dic
 
     A tool's subprocess env copies only allowlisted variables, so a user's own constraints are read
     from the caller's environment and passed through here. Both variables take a space-separated
-    list, so the caps and the user's constraints apply together.
+    list, so the caps and the user's constraints apply together. setup.sh runs in its own directory,
+    so the user's relative paths are made absolute against the caller's.
 
     Args:
         caps_file (Path | None): The caps to apply, or ``None`` when none apply.
@@ -111,5 +112,13 @@ def constraint_env(caps_file: Path | None, parent_env: Mapping[str, str]) -> dic
     Returns:
         dict[str, str]: The variables that end up non-empty, ready to merge into the build's env.
     """
-    constraints = {var: f"{caps_file or ''} {parent_env.get(var, '')}".strip() for var in CONSTRAINT_ENV_VARS}
-    return {var: value for var, value in constraints.items() if value}
+    constraints = {}
+    for var in CONSTRAINT_ENV_VARS:
+        own = [
+            entry if "://" in entry else str(Path(entry).expanduser().absolute())
+            for entry in parent_env.get(var, "").split()
+        ]
+        value = " ".join(([str(caps_file)] if caps_file else []) + own)
+        if value:
+            constraints[var] = value
+    return constraints
