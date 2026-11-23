@@ -112,20 +112,26 @@ echo "Applied ESM compatibility patches."
 # Download model weights
 proto_resolve_weights_dir esm_if1
 
-# Download ESM-IF1 vanilla weights. proto_download moves a finished download into place, so an
-# interrupted run leaves no truncated file that a later setup would take as present.
-proto_download "https://dl.fbaipublicfiles.com/fair-esm/models/esm_if1_gvp4_t16_142M_UR50.pt" \
-    "${WEIGHTS_DIR}/esm_if1_gvp4_t16_142M_UR50.pt"
+# Download ESM-IF1 vanilla weights
+proto_download_verified "https://dl.fbaipublicfiles.com/fair-esm/models/esm_if1_gvp4_t16_142M_UR50.pt" \
+    "${WEIGHTS_DIR}/esm_if1_gvp4_t16_142M_UR50.pt" \
+    "be4ba36edec22a9bfaa4946ff6b2815f1f19d8a3d7e0eada8b796d5a0eae9fd4"
 
-# Download ProteinDPO weights from Zenodo (a zip holding paired_weights.pt)
+# Download ProteinDPO weights (a zip holding paired_weights.pt) from the bviggiano/ProteinDPO
+# mirror of Zenodo record 11218181, falling back to Zenodo, which blocks some networks
 PROTEINDPO_WEIGHTS_FILE="${WEIGHTS_DIR}/paired_weights.pt"
+PROTEINDPO_ZIP="${WEIGHTS_DIR}/paired_weights.pt.zip"
+PROTEINDPO_ZIP_SHA256="7fe6d5b882001c4b04d411c20b2361de97c4d4e8920bb8b4a81c7f88623fa3fc"
 if [ -s "$PROTEINDPO_WEIGHTS_FILE" ] && ! proto_is_truncated_zip "$PROTEINDPO_WEIGHTS_FILE"; then
     echo "ProteinDPO weights already present."
 else
-    echo "Downloading ProteinDPO weights from Zenodo..."
-    proto_download "https://zenodo.org/records/11218181/files/paired_weights.pt.zip" "${WEIGHTS_DIR}/paired_weights.pt.zip"
+    echo "Downloading ProteinDPO weights..."
+    proto_download_verified "https://huggingface.co/bviggiano/ProteinDPO/resolve/main/paired_weights.pt.zip" \
+        "$PROTEINDPO_ZIP" "$PROTEINDPO_ZIP_SHA256" \
+        || proto_download_verified "https://zenodo.org/records/11218181/files/paired_weights.pt.zip" \
+            "$PROTEINDPO_ZIP" "$PROTEINDPO_ZIP_SHA256"
     # Extract beside the target and move it into place, so an interrupted extraction is never trusted
-    python - "${WEIGHTS_DIR}/paired_weights.pt.zip" "$PROTEINDPO_WEIGHTS_FILE" <<'PY'
+    python - "$PROTEINDPO_ZIP" "$PROTEINDPO_WEIGHTS_FILE" <<'PY'
 import os, shutil, sys, tempfile, zipfile
 
 archive, dest = sys.argv[1], sys.argv[2]
@@ -134,7 +140,7 @@ with zipfile.ZipFile(archive) as zf, zf.open(os.path.basename(dest)) as src, os.
     shutil.copyfileobj(src, out)
 os.replace(tmp, dest)
 PY
-    rm -f "${WEIGHTS_DIR}/paired_weights.pt.zip"
+    rm -f "$PROTEINDPO_ZIP"
 fi
 
 echo "ESM-IF setup complete!"
