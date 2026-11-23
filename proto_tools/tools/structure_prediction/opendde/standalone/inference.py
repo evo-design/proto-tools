@@ -33,8 +33,9 @@ def _extract_structure_and_scores(output_dir: str, include_pae_matrix: bool = Fa
     scale, plus ``ptm``/``iptm``/``gpde``/``ranking_score``); The best
     sample is the one with the highest ``ranking_score``.
 
-    When ``include_pae_matrix`` is set, the matching ``*_full_data_sample_<rank>.json``
-    (emitted by ``--need_atom_confidence``) is read for the winning sample and its
+    Runs pass ``--need_atom_confidence`` by default (``atom_confidence``), so the CIF B-factors
+    carry per-atom pLDDT (0-100). When ``include_pae_matrix`` is set, the matching ``*_full_data_sample_<rank>.json``
+    is read for the winning sample and its
     token-pair PAE matrix is returned as ``pae`` (Å) with a derived scalar ``avg_pae``.
 
     Args:
@@ -223,7 +224,7 @@ class OpenDDEModel:
         use_template: bool,
         use_rna_msa: bool,
         device: str,
-        include_pae_matrix: bool = False,
+        need_atom_confidence: bool = True,
     ) -> dict[str, Any]:
         """``get_default_runner`` arguments matching the ``opendde pred`` CLI defaults."""
         return {
@@ -235,8 +236,10 @@ class OpenDDEModel:
             "use_msa": use_msa,
             "use_template": use_template,
             "use_rna_msa": use_rna_msa,
-            # Emit the full-data PAE file only when requested (it is O(n_token^2) to write).
-            "need_atom_confidence": include_pae_matrix,
+            # Full confidence data: OpenDDE writes per-atom pLDDT into the CIF B-factors only with it
+            # (zeros otherwise). On by default (atom_confidence) and independent of include_pae_matrix,
+            # which only reads the PAE matrix back, so toggling it keeps the cached runner and weights.
+            "need_atom_confidence": need_atom_confidence,
             "device": "cpu" if device == "cpu" else "cuda",
         }
 
@@ -256,6 +259,7 @@ class OpenDDEModel:
         device: str,
         verbose: bool = False,
         include_pae_matrix: bool = False,
+        atom_confidence: bool = True,
     ) -> dict[str, Any]:
         """Run OpenDDE prediction and return the best sample's structure + metrics.
 
@@ -274,8 +278,10 @@ class OpenDDEModel:
             seed (int): Random seed.
             device (str): Device string (e.g. ``"cuda"``, ``"cpu"``).
             verbose (bool): Log the prediction parameters at INFO.
-            include_pae_matrix (bool): Write the full-data file and return the per-token
-                PAE matrix (``pae``) plus a derived ``avg_pae`` scalar.
+            include_pae_matrix (bool): Return the per-token PAE matrix (``pae``) plus a derived
+                ``avg_pae`` scalar from the full-data file (forces full confidence data on).
+            atom_confidence (bool): Write full confidence data, so the CIF B-factors carry
+                per-atom pLDDT; off writes zero B-factors unless ``include_pae_matrix`` is set.
 
         Returns:
             dict[str, Any]: ``{"structure_cif_output": <cif str>, "metrics": {...}}``.
@@ -302,7 +308,7 @@ class OpenDDEModel:
             use_template=use_template,
             use_rna_msa=use_rna_msa,
             device=device,
-            include_pae_matrix=include_pae_matrix,
+            need_atom_confidence=atom_confidence or include_pae_matrix,
         )
         key = tuple(sorted(kwargs.items()))
         os.makedirs(output_dir, exist_ok=True)
@@ -394,6 +400,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
             verbose=input_dict["verbose"],
             include_pae_matrix=input_dict.get("include_pae_matrix", False),
+            atom_confidence=input_dict.get("atom_confidence", True),
         )
     raise ValueError(f"opendde: unknown operation {operation!r}; valid: ['predict']")
 
