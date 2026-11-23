@@ -19,7 +19,6 @@ from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.esm_if1._readable import esm_if1_readable_positions
 from proto_tools.tools.inverse_folding.fampnn._readable import fampnn_readable_positions
 from proto_tools.tools.inverse_folding.ligandmpnn._readable import ligandmpnn_readable_positions
-from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import LIGANDMPNN_LEGACY_MODEL_TYPES
 from proto_tools.tools.inverse_folding.proteinmpnn._readable import proteinmpnn_readable_positions
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
@@ -256,7 +255,7 @@ def test_every_migrated_toolkit_declares_a_rule():
 
     for config_class in subclasses:
         config = config_class()
-        if isinstance(config, LigandMPNNSampleConfig) and config.model_type in LIGANDMPNN_LEGACY_MODEL_TYPES:
+        if isinstance(config, LigandMPNNSampleConfig) and config.implementation == "original":
             continue
         readable = config.readable_positions(inp)
         assert readable is not None, f"{config_class.__name__} declares no residue mapping"
@@ -264,8 +263,8 @@ def test_every_migrated_toolkit_declares_a_rule():
 
 
 def test_the_legacy_ligandmpnn_implementation_declares_no_rule():
-    """``model_type='original'`` runs a different parser, so it must not borrow Foundry's rule."""
+    """``implementation='original'`` runs a different parser, so it must not borrow Foundry's rule."""
     from proto_tools.tools.inverse_folding import InverseFoldingStructureInput, LigandMPNNSampleConfig
 
     inp = InverseFoldingStructureInput(structure=get_gfp_structure())
-    assert LigandMPNNSampleConfig(model_type="original").readable_positions(inp) is None
+    assert LigandMPNNSampleConfig(implementation="original").readable_positions(inp) is None

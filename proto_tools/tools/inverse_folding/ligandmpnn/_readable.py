@@ -1,6 +1,6 @@
 """proto_tools/tools/inverse_folding/ligandmpnn/_readable.py.
 
-Which residues LigandMPNN designs, on the Foundry ``model_type="ligand_mpnn"`` path.
+Which residues LigandMPNN designs, on the Foundry ``implementation="foundry"`` path.
 
 Mirrors rc-foundry 0.2.0 and atomworks 2.2.1, the pins in ``standalone/requirements.txt``.
 The model emits one sequence letter per *non-atomized* token of the processed atom array

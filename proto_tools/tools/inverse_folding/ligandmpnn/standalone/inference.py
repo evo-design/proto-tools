@@ -33,6 +33,14 @@ SCORING_CAUSALITY = {
     "autoregressive": "auto_regressive",
 }
 
+# Bundled weights -> their file in the weights dir, downloaded by setup.sh. Either implementation loads
+# either file (same format; they differ in training noise). Keep in sync with LIGANDMPNN_BUNDLED_MODELS.
+_BUNDLED_CHECKPOINTS: dict[str, str] = {
+    "ligandmpnn_v_32_010_25": "ligandmpnn_v_32_010_25.pt",
+    "ligandmpnn_v_32_020_25": "ligandmpnn_v_32_020_25.pt",
+}
+_LEGACY_PACKER_FILENAME = "ligandmpnn_sc_v_32_002_16.pt"
+
 # ============================================================================
 # Original LigandMPNN provisioning (full-atom side-chain packing)
 # ============================================================================
@@ -42,15 +50,11 @@ _LEGACY_CODE_TARBALL_SHA256 = "bde72c9fa29c75b2b36c984c78aa3050ca16fa753f017ef8f
 _LEGACY_CODE_SUBDIR = f"dEVA-{_LEGACY_SOURCE_COMMIT}/models/ligandmpnn"
 # Importable package name expected by ``_load_legacy_modules`` (imports ``ligandmpnn.*``).
 _LEGACY_PACKAGE_DIRNAME = "ligandmpnn"
-# (filename, URL, SHA-256): each download is checked before it is used.
+# (filename, URL, SHA-256): the original implementation's side-chain packer, fetched on first use
+# and checked before it is used.
 _LEGACY_WEIGHT_URLS: tuple[tuple[str, str, str], ...] = (
     (
-        "ligandmpnn_v_32_020_25.pt",
-        "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_020_25.pt",
-        "42caaa5cdb380867d2b31c30de4ab53ea89171279b3a0732ddf94bc4d3cb6981",
-    ),
-    (
-        "ligandmpnn_sc_v_32_002_16.pt",
+        _LEGACY_PACKER_FILENAME,
         "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_sc_v_32_002_16.pt",
         "799a9de6c1c72bb0c7ceb37998391a6fd0e3e21cb42928ee31a28313a3b1b46a",
     ),
@@ -95,14 +99,13 @@ class LigandMPNNModel:
 
     def __init__(
         self,
-        checkpoint_path: str | None = None,
+        checkpoint_path: str,
     ):
-        """Initialize LigandMPNNModel."""
+        """Initialize LigandMPNNModel with the checkpoint file it loads."""
         self._loaded = False
         self._engine: Any = None
         self.device: str | None = None
         self.checkpoint_path = checkpoint_path
-        self._model_type: str | None = None
 
     def sample(
         self,
@@ -115,7 +118,6 @@ class LigandMPNNModel:
         seed: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
-        model_type: str = "ligand_mpnn",
         ligand_mpnn_use_atom_context: bool = True,
         ligand_mpnn_use_side_chain_context: bool = False,
         ligand_mpnn_cutoff_for_score: float = 8.0,
@@ -135,8 +137,6 @@ class LigandMPNNModel:
                 expects an int).
             device: Device to run on ('cuda' or 'cpu').
             verbose: Whether to print status messages.
-            model_type: LigandMPNN variant to load (currently only
-                'ligand_mpnn' is wired through the tool layer).
             ligand_mpnn_use_atom_context: Encode ligand atom context.
             ligand_mpnn_use_side_chain_context: Condition on sidechain atoms of
                 fixed residues.
@@ -154,9 +154,8 @@ class LigandMPNNModel:
         if seed is None:
             raise ValueError("ligandmpnn: sample requires an explicit int seed")
 
-        # Lazy load the model (reload if model_type changed)
-        if not self._loaded or self.device != device or self._model_type != model_type:
-            self.load(device, verbose, model_type=model_type)
+        if not self._loaded or self.device != device:
+            self.load(device, verbose)
 
         fixed_residues = _fixed_residues(fixed_positions)
 
@@ -239,7 +238,6 @@ class LigandMPNNModel:
         seed: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
-        model_type: str = "ligand_mpnn",
         return_logits: bool = False,
         scoring_mode: str = "single_aa",
         ligand_mpnn_use_atom_context: bool = True,
@@ -256,8 +254,8 @@ class LigandMPNNModel:
         if scoring_mode not in SCORING_CAUSALITY:
             raise ValueError(f"ligandmpnn: scoring_mode must be one of {sorted(SCORING_CAUSALITY)}")
 
-        if not self._loaded or self.device != device or self._model_type != model_type:
-            self.load(device, verbose, model_type=model_type)
+        if not self._loaded or self.device != device:
+            self.load(device, verbose)
 
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -353,26 +351,19 @@ class LigandMPNNModel:
             "vocab": AMINO_ACIDS_LIST,
         }
 
-    def load(self, device: str = "cuda", verbose: bool = False, model_type: str = "ligand_mpnn") -> None:
+    def load(self, device: str = "cuda", verbose: bool = False) -> None:
         """Load the LigandMPNN model via Foundry.
 
         Args:
             device: Device to load the model on.
             verbose: Whether to print status messages.
-            model_type: LigandMPNN variant (currently only 'ligand_mpnn'
-                is wired through the tool layer).
         """
         logger.update_status("Loading LigandMPNN weights")
-
-        # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
-        from standalone_helpers import export_weights_dir
-
-        export_weights_dir("FOUNDRY_CHECKPOINT_DIRS", "ligandmpnn", prepend=True)
 
         from mpnn.inference_engines.mpnn import MPNNInferenceEngine
 
         self._engine = MPNNInferenceEngine(
-            model_type=model_type,
+            model_type="ligand_mpnn",
             checkpoint_path=self.checkpoint_path,
             is_legacy_weights=True,
             device=device,
@@ -380,7 +371,6 @@ class LigandMPNNModel:
             write_structures=False,
         )
         self.device = device
-        self._model_type = model_type
         self._loaded = True
 
         if verbose:
@@ -398,15 +388,14 @@ class LigandMPNNModel:
             # LigandMPNN uses Foundry engine which doesn't support standard .to() movement
             # Use helper for consistency (it will handle gracefully), then reload engine
             self._engine = move_model_to_device(self._engine, self.device, device)
-            # Foundry engine requires full reload for device change; preserve model_type
-            self.load(device, verbose=False, model_type=self._model_type or "ligand_mpnn")
+            # Foundry engine requires full reload for device change
+            self.load(device, verbose=False)
 
     def unload(self) -> None:
         """Unload the model to free GPU memory."""
         self._engine = None
         self._loaded = False
         self.device = None
-        self._model_type = None
 
         gc.collect()
         if torch.cuda.is_available():
@@ -576,13 +565,13 @@ class LegacyCompatibleLigandMPNNModel:
     def __init__(
         self,
         package_path: Path,
-        checkpoint_path: str | None = None,
+        checkpoint_path: str,
         packer_checkpoint_path: str | None = None,
         use_side_chain_context: bool = False,
     ) -> None:
         """Initialize original package paths and lazy model state."""
         self.package_path = package_path
-        self.checkpoint_path = _legacy_checkpoint_path(package_path, checkpoint_path, "ligandmpnn_v_32_020_25.pt")
+        self.checkpoint_path = checkpoint_path
         self._configured_packer_checkpoint_path = packer_checkpoint_path
         self.packer_checkpoint_path: str | None = None
         self.use_side_chain_context = use_side_chain_context
@@ -635,7 +624,7 @@ class LegacyCompatibleLigandMPNNModel:
             self.packer_checkpoint_path = _legacy_checkpoint_path(
                 self.package_path,
                 self._configured_packer_checkpoint_path,
-                "ligandmpnn_sc_v_32_002_16.pt",
+                _LEGACY_PACKER_FILENAME,
             )
         logger.update_status("Loading LigandMPNN side-chain packer weights")
         checkpoint_packer = torch.load(self.packer_checkpoint_path, map_location=device, weights_only=False)
@@ -931,7 +920,7 @@ class LegacyCompatibleLigandMPNNModel:
 
 
 def _ensure_legacy_assets() -> Path:
-    """Provision the original LigandMPNN code + weights on first use; return the package path.
+    """Provision the original LigandMPNN code + side-chain packer on first use; return the package path.
 
     Fetches nothing unless the ``original`` model is actually requested. Code and
     weights are cached under ``resolve_weights_dir("ligandmpnn")/legacy/<commit>/``
@@ -963,12 +952,33 @@ def _ensure_legacy_assets() -> Path:
         if not _is_legacy_package_path(package_path):
             raise RuntimeError(f"ligandmpnn: provisioned package at {package_path} is missing required modules")
 
-    # 2. Weights: fetch each checkpoint into model_params if missing.
+    # 2. Packer: fetch it into model_params if missing.
     model_params = package_path / "model_params"
     for filename, url, sha256 in _LEGACY_WEIGHT_URLS:
         dest = model_params / filename
         download_weights(url, dest, sha256=sha256)
     return package_path
+
+
+def _resolve_checkpoint(model_checkpoint: str) -> str:
+    """The checkpoint file a ``model_checkpoint`` names: bundled weights, or the user's own file."""
+    from standalone_helpers import require_weights_dir
+
+    if model_checkpoint in _BUNDLED_CHECKPOINTS:
+        path = Path(require_weights_dir("ligandmpnn")) / _BUNDLED_CHECKPOINTS[model_checkpoint]
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"ligandmpnn: bundled weights {model_checkpoint!r} are missing at {path}; re-run setup.sh to fetch them"
+            )
+        return str(path)
+    path = Path(model_checkpoint).expanduser()
+    if not path.is_file():
+        known = ", ".join(sorted(_BUNDLED_CHECKPOINTS))
+        raise FileNotFoundError(
+            f"ligandmpnn: no checkpoint file at {model_checkpoint!r}; use bundled weights ({known}) "
+            "or pass a path to an existing .pt checkpoint"
+        )
+    return str(path)
 
 
 # ============================================================================
@@ -981,14 +991,15 @@ _model_key: tuple[Any, ...] | None = None
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model, _model_key
-    checkpoint_path = input_dict.get("checkpoint_path")
-    use_legacy = input_dict.get("model_type") == "original"
+    model_checkpoint = input_dict["model_checkpoint"]
+    checkpoint_path = _resolve_checkpoint(model_checkpoint)
+    use_original = input_dict["implementation"] == "original"
     use_side_chain_context = bool(input_dict.get("ligand_mpnn_use_side_chain_context", False))
-    if use_legacy:
-        # Use a checkout colocated with an explicit checkpoint_path if given; otherwise
-        # auto-provision the original code + weights on first use. Applies to both sample
-        # (which packs) and score (which runs the original implementation).
-        package_path = _legacy_package_path(checkpoint_path)
+    if use_original:
+        # Use an original LigandMPNN checkout the user's own checkpoint sits in, if any; otherwise
+        # auto-provision the original code + packer on first use. Applies to both sample (which
+        # packs) and score (which runs the original implementation).
+        package_path = None if model_checkpoint in _BUNDLED_CHECKPOINTS else _legacy_package_path(checkpoint_path)
         if package_path is None:
             package_path = _ensure_legacy_assets()
     else:
@@ -1013,9 +1024,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 use_side_chain_context=use_side_chain_context,
             )
         else:
-            _model = LigandMPNNModel(
-                checkpoint_path=checkpoint_path,
-            )
+            _model = LigandMPNNModel(checkpoint_path=checkpoint_path)
         _model_key = model_key
 
     pdb_path = input_dict["pdb_path"]
@@ -1032,7 +1041,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "seed": input_dict["seed"],
             "device": input_dict["device"],
             "verbose": input_dict["verbose"],
-            "model_type": input_dict["model_type"],
             "ligand_mpnn_use_atom_context": input_dict["ligand_mpnn_use_atom_context"],
             "ligand_mpnn_use_side_chain_context": input_dict["ligand_mpnn_use_side_chain_context"],
             "ligand_mpnn_cutoff_for_score": input_dict["ligand_mpnn_cutoff_for_score"],
@@ -1049,7 +1057,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             seed=input_dict["seed"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],
-            model_type=input_dict["model_type"],
             return_logits=input_dict["return_logits"],
             scoring_mode=input_dict["scoring_mode"],
             ligand_mpnn_use_atom_context=input_dict.get("ligand_mpnn_use_atom_context", True),

@@ -30,7 +30,6 @@ from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
-DEFAULT_CHECKPOINT = Path.home() / ".foundry" / "checkpoints" / "ligandmpnn_v_32_010_25.pt"
 
 
 _persistent_tool = make_persistent_fixture("ligandmpnn")
@@ -205,8 +204,8 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
             batch_size=1,
             seed=7,
             device="cpu",
-            model_type="original",
-            checkpoint_path="ligandmpnn.pt",
+            implementation="original",
+            model_checkpoint="ligandmpnn.pt",
             sc_num_denoising_steps=3,
             sc_num_samples=2,
         ),
@@ -216,12 +215,35 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert captured["toolkit"] == "ligandmpnn"
     payload = captured["payload"]
     assert payload["operation"] == "sample"
-    assert payload["model_type"] == "original"
-    assert payload["checkpoint_path"] == "ligandmpnn.pt"
+    assert payload["implementation"] == "original"
+    assert payload["model_checkpoint"] == "ligandmpnn.pt"
     assert payload["sc_num_denoising_steps"] == 3
     assert payload["sc_num_samples"] == 2
     assert "backend" not in payload
     assert "reference_backend_path" not in payload
+
+
+def test_ligandmpnn_bundled_weights_are_fetched_and_local_paths_stay_local() -> None:
+    """setup.sh fetches every bundled checkpoint, and only bundled weights run on a remote worker."""
+    import ast
+
+    from proto_tools.tools.inverse_folding import ligandmpnn
+
+    standalone = Path(ligandmpnn.__file__).parent / "standalone"
+    bundled = next(
+        ast.literal_eval(node.value)
+        for node in ast.parse((standalone / "inference.py").read_text()).body
+        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", None) == "_BUNDLED_CHECKPOINTS"
+    )
+    assert set(bundled) == ligandmpnn.LIGANDMPNN_BUNDLED_MODELS
+    setup = (standalone / "setup.sh").read_text()
+    for filename in bundled.values():
+        assert f"${{WEIGHTS_DIR}}/{filename}" in setup, f"setup.sh does not download {filename}"
+
+    for config_class in (LigandMPNNSampleConfig, LigandMPNNScoringConfig):
+        for weights in ligandmpnn.LIGANDMPNN_BUNDLED_MODELS:
+            assert config_class(model_checkpoint=weights).remote_unsupported_reason("modal") is None
+        assert "local file" in config_class(model_checkpoint="/data/mine.pt").remote_unsupported_reason("modal")
 
 
 @pytest.mark.uses_env
@@ -291,7 +313,8 @@ def test_ligandmpnn_score_dispatch_contract(monkeypatch):
     assert payload["sequence"] == sequence
     assert payload["fixed_positions"] == {"A": [1]}
     assert payload["return_logits"] is True
-    assert payload["model_type"] == "ligand_mpnn"
+    assert payload["implementation"] == "foundry"
+    assert payload["model_checkpoint"] == "ligandmpnn_v_32_010_25"
     assert payload["scoring_mode"] == "autoregressive"
     assert "backend" not in payload
     assert "reference_backend_path" not in payload
