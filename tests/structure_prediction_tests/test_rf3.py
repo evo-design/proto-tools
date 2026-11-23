@@ -181,6 +181,10 @@ def test_rf3_single_chain_metrics_and_seed_advances_per_complex():
     assert m.chain_pair_pae == []
     assert m.chain_pair_pde == []
     assert isinstance(m.has_clash, bool)
+    # B-factors carry pLDDT on the same 0-1 scale as avg_plddt.
+    per_residue = s.per_residue_plddt
+    assert per_residue is not None
+    assert sum(per_residue) / len(per_residue) == pytest.approx(m.avg_plddt, abs=0.05)
     assert_metrics_in_spec(result)
 
 
