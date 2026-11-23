@@ -16,7 +16,7 @@ import pytest
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.msa import MSA
-from proto_tools.entities.structures import is_valid_structure
+from proto_tools.entities.structures import BFactorType, is_valid_structure
 from proto_tools.tools import (
     Chain,
     OpenDDEConfig,
@@ -246,21 +246,20 @@ def _runner_kwargs(model, **overrides):
         "use_template": False,
         "use_rna_msa": False,
         "device": "cuda",
-        "include_pae_matrix": False,
     }
     kwargs.update(overrides)
     return model._runner_kwargs(**kwargs)
 
 
-def test_opendde_need_atom_confidence_tracks_include_pae_matrix(tmp_path):
-    """need_atom_confidence is set only when the PAE matrix is requested."""
+def test_opendde_requests_atom_confidence_by_default(tmp_path):
+    """need_atom_confidence is on by default: without it OpenDDE writes zero B-factors instead of pLDDT."""
     mod = _load_standalone_inference()
     model = mod.OpenDDEModel()
     model.root_dir = str(tmp_path)
     model._loaded = True
 
-    assert _runner_kwargs(model, include_pae_matrix=False)["need_atom_confidence"] is False
-    assert _runner_kwargs(model, include_pae_matrix=True)["need_atom_confidence"] is True
+    assert _runner_kwargs(model)["need_atom_confidence"] is True
+    assert _runner_kwargs(model, need_atom_confidence=False)["need_atom_confidence"] is False
 
 
 def test_opendde_bundled_abag_routes_via_checkpoint_path(tmp_path):
@@ -484,6 +483,32 @@ def test_opendde_iptm_surfaced_when_present(monkeypatch):
     result = run_opendde(OpenDDEInput(complexes=[_CRO_SEQUENCE]), OpenDDEConfig(use_msa=False))
 
     assert result.structures[0].metrics["iptm"] == pytest.approx(0.62)
+    # Runs emit full confidence data by default, so B-factors carry pLDDT even without the PAE matrix.
+    assert captured["input_data"][0]["atom_confidence"] is True
+    assert result.structures[0].b_factor_type == BFactorType.PLDDT
+
+
+@pytest.mark.parametrize(
+    ("include_pae_matrix", "b_factor_type"), [(False, BFactorType.UNKNOWN), (True, BFactorType.PLDDT)]
+)
+def test_opendde_atom_confidence_opt_out(monkeypatch, include_pae_matrix, b_factor_type):
+    """atom_confidence=False skips per-atom pLDDT (zero B-factors, UNKNOWN) unless the PAE matrix needs it."""
+    captured: dict = {}
+    metrics = {"avg_plddt": 80.0, "ptm": 0.7, "iptm": 0.0, "gpde": 2.0, "ranking_score": 0.5, "has_clash": False}
+    if include_pae_matrix:
+        metrics.update(avg_pae=0.75, pae=[[0.0, 1.5], [1.5, 0.0]])
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.opendde.opendde.ToolInstance.dispatch",
+        _fake_dispatch_factory(captured, metrics=metrics),
+    )
+
+    result = run_opendde(
+        OpenDDEInput(complexes=[_CRO_SEQUENCE]),
+        OpenDDEConfig(use_msa=False, atom_confidence=False, include_pae_matrix=include_pae_matrix),
+    )
+
+    assert captured["input_data"][0]["atom_confidence"] is False
+    assert result.structures[0].b_factor_type == b_factor_type
 
 
 def test_opendde_pae_attached_when_requested(monkeypatch):
@@ -514,6 +539,8 @@ def test_opendde_pae_attached_when_requested(monkeypatch):
     m = result.structures[0].metrics
     assert m["avg_pae"] == pytest.approx(0.75)
     assert m["pae"] == pae
+    # The full-confidence run writes per-atom pLDDT as B-factors.
+    assert result.structures[0].b_factor_type == BFactorType.PLDDT
     assert_metrics_in_spec(result)
 
 
@@ -599,6 +626,21 @@ def test_opendde_no_msa_single_sequence_sets_use_msa_false(monkeypatch):
 
 
 @pytest.mark.uses_gpu
+def test_opendde_default_run_carries_per_residue_plddt():
+    """Without the PAE matrix, B-factors still carry pLDDT matching the summary's avg_plddt."""
+    result = run_opendde(
+        OpenDDEInput(complexes=[_TINY_PEPTIDE]),
+        OpenDDEConfig(use_msa=False, num_samples=1, num_steps=50, num_cycles=3, seed=42),
+    )
+    assert result.success
+    s = result.structures[0]
+    assert "pae" not in s.metrics
+    per_residue = s.per_residue_plddt
+    assert per_residue is not None
+    assert sum(per_residue) / len(per_residue) == pytest.approx(s.metrics["avg_plddt"] / 100.0, abs=0.05)
+
+
+@pytest.mark.uses_gpu
 def test_opendde_pae_matrix_end_to_end():
     """Fold a tiny peptide end-to-end; include_pae_matrix=True yields a square per-token PAE matrix + avg_pae in Å."""
     result = run_opendde(
@@ -615,6 +657,10 @@ def test_opendde_pae_matrix_end_to_end():
     assert isinstance(pae, list) and len(pae) > 0
     assert all(len(row) == len(pae) for row in pae), "PAE matrix must be square (n_token x n_token)"
     assert 0.0 <= m["avg_pae"] <= 32.0
+    # B-factors carry the same pLDDT the summary reports (0-100 there, normalized here).
+    per_residue = result.structures[0].per_residue_plddt
+    assert per_residue is not None
+    assert sum(per_residue) / len(per_residue) == pytest.approx(m["avg_plddt"] / 100.0, abs=0.05)
     assert_metrics_in_spec(result)
 
 
