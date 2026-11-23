@@ -4,8 +4,10 @@ Tests for ToolInstance.
 """
 
 import contextlib
+import errno
 import hashlib
 import logging
+import os
 import signal
 import subprocess
 import sys
@@ -884,6 +886,87 @@ def test_reload_changes_reports_unknown_and_contradicting_fields():
         shared_fields=frozenset({"seed_model"}),
     )
     assert changes == {"lm_dropout": ("<unset>", 0.0), "seed_model": (1, 2)}
+
+
+def test_micromamba_appears_only_once_it_can_be_run(tmp_path: Path, monkeypatch):
+    """A download that dies mid-extraction must leave nothing at the final path.
+
+    ``bin/micromamba`` is the readiness signal for the unlocked fast path in ``_ensure_micromamba``:
+    a process that finds it there runs it. Extracting straight to that path published the binary
+    while it was still being written, and running one an extraction still holds open fails with
+    ``ETXTBSY`` — which is how three test shards against a fresh PROTO_HOME lost a toolkit's whole
+    env to "Text file busy". Driven through ``_ensure_micromamba`` so that extracting to the final
+    directory again would fail here, not just a change to the staging helper.
+    """
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    final = tmp_path / ".micromamba" / "bin" / "micromamba"
+
+    # A SIGKILL between the staging directory and the rename skips the cleanup, so this stands in
+    # for one a dead process left behind: the next bootstrap sweeps it under the lock.
+    stale = tmp_path / ".micromamba" / ".staging.dead"
+    (stale / "bin").mkdir(parents=True)
+    (stale / "bin" / "micromamba").write_bytes(b"half a bina")
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> Any:
+        if cmd and cmd[0] == "curl":
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"archive", stderr=b"")
+        # tar: write a partial binary where it was told to extract, then fail
+        target = Path(cmd[cmd.index("-C") + 1]) / "bin"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "micromamba").write_bytes(b"half a bina")
+        raise subprocess.CalledProcessError(2, cmd, stderr=b"interrupted")
+
+    def fail_urlopen(*_args: Any, **_kwargs: Any) -> Any:
+        raise OSError("no network for the fallback either")
+
+    with (
+        patch("proto_tools.utils.tool_instance.subprocess.run", side_effect=fake_run),
+        patch("urllib.request.urlopen", side_effect=fail_urlopen),
+        pytest.raises(RuntimeError, match="Failed to download/extract micromamba"),
+    ):
+        ToolInstance._ensure_micromamba()
+
+    assert not final.exists(), "a failed extraction published a partial binary at the final path"
+    assert not list((tmp_path / ".micromamba").glob(".staging.*")), "staging was left behind"
+    assert not stale.exists(), "a staging directory from a killed process was never swept"
+
+
+def test_micromamba_is_published_executable(tmp_path: Path):
+    """A finished extraction is renamed into place, executable, leaving no staging behind."""
+    mamba_root = tmp_path / ".micromamba"
+    mamba_root.mkdir()
+    with ToolInstance._staged_micromamba(mamba_root) as staged:
+        (staged / "bin").mkdir(parents=True)
+        (staged / "bin" / "micromamba").write_bytes(b"#!/bin/sh\nexit 0\n")
+
+    published = mamba_root / "bin" / "micromamba"
+    assert published.is_file() and os.access(published, os.X_OK)
+    assert not list(mamba_root.glob(".staging.*"))
+
+
+def test_a_transient_os_error_does_not_poison_the_toolkit(monkeypatch, tmp_path: Path):
+    """A build that fails on a busy machine is retried, not remembered.
+
+    ``_build_failures`` makes every later call in the process fail without retrying. That is right for
+    a build that will fail the same way again, and wrong for ``ETXTBSY``: one such error turned into
+    ten failures when a toolkit's remaining tests all raised "previously failed setup".
+    """
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))  # _ensure_env writes a first-run sentinel
+    inst = _make_fake_instance(toolkit="esm2")
+    inst._env_ready = False  # the fake is built ready; this test needs the build path
+    monkeypatch.setattr(inst, "_purge_legacy_helper_copies", lambda: None)
+    monkeypatch.setattr(ToolInstance, "_build_failures", {}, raising=False)
+
+    for error, remembered in (
+        (OSError(errno.ETXTBSY, "Text file busy"), False),
+        (RuntimeError("setup.sh failed: missing dependency"), True),
+    ):
+        ToolInstance._build_failures.clear()
+        with patch.object(inst, "_create_env", side_effect=error), pytest.raises(type(error)):
+            inst._ensure_env()
+        assert (inst.toolkit in ToolInstance._build_failures) is remembered, (
+            f"{type(error).__name__} should {'be' if remembered else 'not be'} recorded"
+        )
 
 
 def test_leaving_a_reload_field_undeclared_is_opt_in_per_field():

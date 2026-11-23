@@ -47,6 +47,7 @@ import atexit
 import collections
 import contextvars
 import datetime
+import errno
 import hashlib
 import itertools
 import json
@@ -125,6 +126,37 @@ _persist_mode: contextvars.ContextVar[bool] = contextvars.ContextVar("_persist_m
 _current_tool_invocation: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
     "_current_tool_invocation", default=None
 )
+
+
+# Only ETXTBSY: executing a file another process still holds open for writing is transient by
+# construction, since the writer closes it. Wider errnos (EBUSY, EAGAIN) also cover failures that
+# repeat forever, and treating one of those as transient replaces a fast "previously failed setup"
+# with a full rebuild on every call.
+_TRANSIENT_ERRNOS = frozenset({errno.ETXTBSY})
+
+
+def _is_transient_os_error(exc: BaseException) -> bool:
+    """Whether ``exc``, or anything it was raised from, is an OS error worth retrying rather than caching.
+
+    Args:
+        exc (BaseException): The exception a build raised.
+
+    Returns:
+        bool: True when the failure says the machine was busy, not that this toolkit cannot build.
+    """
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, OSError) and current.errno in _TRANSIENT_ERRNOS:
+            return True
+        # ``raise ... from None`` sets __suppress_context__ to say the context is not the cause, so a
+        # transient error that something deliberately disowned must not make its replacement transient.
+        if current.__cause__ is not None:
+            current = current.__cause__
+        else:
+            current = None if current.__suppress_context__ else current.__context__
+    return False
 
 
 def _device_change_needed(current: str, requested: str) -> bool:
@@ -947,7 +979,10 @@ class ToolInstance:
                     self._create_env()
                 except Exception as exc:
                     # Store exception message as fallback if _create_env didn't populate _build_failures
-                    if self.toolkit not in self._build_failures:
+                    # Recording a failure makes every later call in this process fail without retrying, which
+                    # is right for a build that will fail the same way again. A transient OS error says
+                    # nothing about this toolkit, so it is raised without being remembered.
+                    if self.toolkit not in self._build_failures and not _is_transient_os_error(exc):
                         self._build_failures[self.toolkit] = str(exc)
                     raise
             # Under the build lock, so a rebuild can't replace the env mid-read and processes starting together warm
@@ -1731,11 +1766,45 @@ class ToolInstance:
                 tmp_registry.unlink()
 
     @staticmethod
+    @contextmanager
+    def _staged_micromamba(mamba_root: Path) -> Generator[Path, None, None]:
+        """Extract into a staging directory, then put the binary in place in one step.
+
+        ``bin/micromamba`` must never be visible at its final path while it is still being written:
+        another process that finds it there runs it, and executing a file an extraction still holds
+        open fails with ``ETXTBSY`` ("Text file busy"). Only a rename makes the binary appear
+        complete-or-not-at-all, which is what lets the unlocked fast path in ``_ensure_micromamba``
+        trust ``exists()``. The file lock stops concurrent downloads; this is what makes a concurrent
+        *reader* safe.
+
+        Args:
+            mamba_root (Path): ``PROTO_HOME/.micromamba``, which must already exist; staging is a
+                directory inside it, so the rename stays on one filesystem.
+
+        Returns:
+            Generator[Path, None, None]: Yields the directory to extract ``bin/micromamba`` into.
+        """
+        final = mamba_root / "bin" / "micromamba"
+        staging = Path(tempfile.mkdtemp(dir=mamba_root, prefix=".staging."))
+        try:
+            yield staging
+            extracted = staging / "bin" / "micromamba"
+            if not extracted.is_file():
+                raise RuntimeError(f"micromamba extraction produced no binary at {extracted}")
+            extracted.chmod(0o755)
+            final.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(extracted, final)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+
+    @staticmethod
     def _ensure_micromamba() -> Path:
         """Ensure micromamba is installed, download if missing.
 
         Uses a file lock to prevent concurrent downloads when multiple
         processes (e.g. pytest-xdist workers) race to install micromamba.
+        The binary is renamed into place (``_staged_micromamba``), so a
+        process that sees it can always run it.
 
         Returns:
             Path: Path to micromamba binary.
@@ -1743,7 +1812,10 @@ class ToolInstance:
         mamba_root = ToolInstance._get_micromamba_root()
         mamba_bin = mamba_root / "bin" / "micromamba"
 
-        if mamba_bin.exists():
+        # Executable, not merely present: a PROTO_HOME written before the binary was renamed into
+        # place can hold one that was never chmod'd, and trusting its existence would keep handing
+        # out a file nothing can run. Anything unusable is replaced below.
+        if os.access(mamba_bin, os.X_OK):
             ToolInstance._configure_micromamba_root(mamba_root)
             ToolInstance._cleanup_registered_micromamba_envs()
             return mamba_bin
@@ -1757,8 +1829,14 @@ class ToolInstance:
             # Re-check after acquiring lock - another process may have installed it
             ToolInstance._configure_micromamba_root(mamba_root)
             ToolInstance._cleanup_registered_micromamba_envs()
-            if mamba_bin.exists():
+            if os.access(mamba_bin, os.X_OK):
                 return mamba_bin
+
+            # Holding the lock, so any staging directory left here belongs to a process that died
+            # before it could clean up (SIGKILL skips the ``finally``). Nothing reads these, but
+            # each holds a partial ~19 MB binary, so they are swept rather than left to pile up.
+            for stale in mamba_root.glob(".staging.*"):
+                shutil.rmtree(stale, ignore_errors=True)
 
             logger.info("Downloading micromamba to %s...", mamba_root)
 
@@ -1798,16 +1876,19 @@ class ToolInstance:
                         check=True,
                         capture_output=True,
                     )
-                    subprocess.run(
-                        ["tar", "-xvj", "-C", str(mamba_root), "bin/micromamba"],
-                        input=result.stdout,
-                        check=True,
-                        capture_output=True,
-                    )
-                    mamba_bin.chmod(0o755)
+                    with ToolInstance._staged_micromamba(mamba_root) as staged:
+                        subprocess.run(
+                            ["tar", "-xvj", "-C", str(staged), "bin/micromamba"],
+                            input=result.stdout,
+                            check=True,
+                            capture_output=True,
+                        )
                     logger.info("Micromamba installed successfully from %s", url)
                     return mamba_bin
-                except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                # OSError and RuntimeError cover the staging step as well as curl/tar, so a publish that
+                # cannot complete still falls through to the fallback and the other URL instead of
+                # aborting the whole bootstrap.
+                except (subprocess.CalledProcessError, OSError, RuntimeError) as e:
                     logger.info("curl/tar download failed (%s), trying urllib fallback", e)
 
                 # Attempt 2: Python stdlib fallback (no external deps required)
@@ -1818,10 +1899,11 @@ class ToolInstance:
 
                     with _urllib_request.urlopen(url, timeout=120) as resp:  # noqa: S310
                         data = resp.read()
-                    with _tarfile.open(fileobj=io.BytesIO(data), mode="r:bz2") as tar:
-                        member = tar.getmember("bin/micromamba")
-                        tar.extract(member, path=str(mamba_root), filter="data")
-                    mamba_bin.chmod(0o755)
+                    with (
+                        ToolInstance._staged_micromamba(mamba_root) as staged,
+                        _tarfile.open(fileobj=io.BytesIO(data), mode="r:bz2") as tar,
+                    ):
+                        tar.extract(tar.getmember("bin/micromamba"), path=str(staged), filter="data")
                     logger.info("Micromamba installed via urllib fallback from %s", url)
                     return mamba_bin
                 except Exception as e:
