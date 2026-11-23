@@ -133,6 +133,21 @@ def test_failed_staged_build_leaves_the_previous_copy_and_no_staging_behind(tmp_
     assert [p.name for p in tmp_path.iterdir() if ".stage." in p.name] == []
 
 
+@pytest.mark.parametrize("stage", [False, True])
+def test_a_build_that_leaves_no_files_raises_and_records_nothing(tmp_path: Path, stage: bool):
+    """A build that succeeds without producing anything (an empty download) is not handed back as complete."""
+    dest = tmp_path / "weights"
+    if stage:
+        _write(dest, "old.pt")
+
+    with pytest.raises(RuntimeError, match="produced no files"):
+        ensure_complete(dest, lambda directory: directory.mkdir(exist_ok=True), stage=stage)
+
+    assert missing_recorded_files(dest) is None, "no marker: still incomplete"
+    assert list_files(dest) == (["old.pt"] if stage else [])
+    assert [p.name for p in tmp_path.iterdir() if ".stage." in p.name] == []
+
+
 def test_concurrent_callers_build_once(tmp_path: Path):
     dest, builds = tmp_path / "weights", []
     build = _counting_build(builds, "model.pt")

@@ -10,6 +10,7 @@ Usage (called by ToolInstance, not directly):
 
 import json
 import logging
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -57,6 +58,12 @@ def _write_fasta(sequences: list[str], path: Path, ids: list[str]) -> None:
             f.write(f">{sid}\n{sequence}\n")
 
 
+# What `foldseek databases ProstT5` downloads (about 2.4 GB); anything far smaller is a truncated download
+_PROSTT5_MODEL = "prostt5-f16.gguf"
+_PROSTT5_MIN_BYTES = 1 << 30
+_PROSTT5_DOWNLOAD_ATTEMPTS = 2
+
+
 def _ensure_prostt5_weights(override: str | None) -> str:
     """Return a ProstT5 weights path, provisioning via `foldseek databases ProstT5` if missing.
 
@@ -67,7 +74,8 @@ def _ensure_prostt5_weights(override: str | None) -> str:
 
     ``ensure_complete`` records the downloaded files and downloads again when any are gone (a
     scratch purge), into a staging directory swapped into place, under a lock shared by
-    concurrent runs.
+    concurrent runs. A download that leaves the model missing or truncated is retried once, then
+    raises without caching anything.
     """
     if override:
         if not Path(override).exists():
@@ -81,18 +89,33 @@ def _ensure_prostt5_weights(override: str | None) -> str:
 
     def download(staging: Path) -> None:
         logger.update_status("Downloading ProstT5 weights")
-        with tempfile.TemporaryDirectory() as tmp:
-            _run_cmd([_find_binary(), "databases", "ProstT5", str(staging / "weights"), tmp], "databases ProstT5")
+        weights = staging / "weights"
+        for attempt in range(1, _PROSTT5_DOWNLOAD_ATTEMPTS + 1):
+            with tempfile.TemporaryDirectory() as tmp:
+                result = _run_cmd([_find_binary(), "databases", "ProstT5", str(weights), tmp], "databases ProstT5")
+            output = f"{result.stdout}\n{result.stderr}".strip()
+            logger.debug("foldseek databases ProstT5 output:\n%s", output)
+            if _prostt5_weights_present(weights):
+                return
+            logger.warning("foldseek databases ProstT5 exited cleanly without %s (attempt %d)", _PROSTT5_MODEL, attempt)
+            shutil.rmtree(weights, ignore_errors=True)
+        tail = " | ".join(output.splitlines()[-5:]) or "<no output>"
+        raise RuntimeError(f"foldseek: databases ProstT5 did not download {_PROSTT5_MODEL}: {tail}")
 
     # A cache downloaded before caches were recorded is kept when its old marker and weights are there
     ensure_complete(cache_dir, download, stage=True, adopt=_downloaded_before_records)
     return str(cache_dir / "weights")
 
 
+def _prostt5_weights_present(weights: Path) -> bool:
+    """Whether ``weights`` holds the ProstT5 model at full size, not missing or truncated."""
+    model = weights / _PROSTT5_MODEL
+    return model.is_file() and model.stat().st_size >= _PROSTT5_MIN_BYTES
+
+
 def _downloaded_before_records(cache_dir: Path) -> bool:
     """Whether an unrecorded cache is a finished download from before: its old marker and weights exist."""
-    weights = cache_dir / "weights"
-    return (cache_dir / ".proto-ready").exists() and weights.exists() and any(weights.iterdir())
+    return (cache_dir / ".proto-ready").exists() and _prostt5_weights_present(cache_dir / "weights")
 
 
 _M8_FORMAT_PIDENT = (

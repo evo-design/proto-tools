@@ -4,6 +4,7 @@ Tests for the Foldseek server-search wrapper.
 """
 
 import io
+import subprocess
 import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -329,27 +330,44 @@ def test_submit_raises_on_invalid_id(payload, error_pattern):
 # ── ProstT5 weights cache ────────────────────────────────────────────────────
 
 
+def _write_prostt5_model(weights: Path, size: int) -> None:
+    """Write a sparse stand-in for the ProstT5 model of ``size`` bytes."""
+    from proto_tools.tools.structure_alignment.foldseek.standalone import run
+
+    weights.mkdir(parents=True, exist_ok=True)
+    with (weights / run._PROSTT5_MODEL).open("wb") as f:
+        f.truncate(size)
+
+
 @pytest.fixture
 def prostt5_downloads(tmp_path: Path, monkeypatch):
-    """Point foldseek's weights at ``tmp_path`` and stand in for ``foldseek databases ProstT5``."""
+    """Point foldseek's weights at ``tmp_path`` and stand in for ``foldseek databases ProstT5``.
+
+    Each download writes the full model unless the test queues other outcomes in ``outcomes``:
+    ``"empty"`` leaves an empty weights directory, ``"truncated"`` a tiny model.
+    """
     from proto_tools.tools.structure_alignment.foldseek.standalone import run
 
     monkeypatch.setenv("PROTO_FOLDSEEK_WEIGHTS_DIR", str(tmp_path))
     monkeypatch.setattr(run, "_find_binary", lambda: "foldseek")
     downloads: list[str] = []
+    outcomes: list[str] = []
 
-    def fake_run_cmd(cmd: list[str], description: str) -> None:
+    def fake_run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
         weights = Path(cmd[3])
         weights.mkdir(parents=True)
-        (weights / "prostt5-f16.gguf").write_bytes(b"w")
+        outcome = outcomes.pop(0) if outcomes else "full"
+        if outcome != "empty":
+            _write_prostt5_model(weights, run._PROSTT5_MIN_BYTES if outcome == "full" else 1)
         downloads.append(description)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     monkeypatch.setattr(run, "_run_cmd", fake_run_cmd)
-    return run, tmp_path / "prostt5", downloads
+    return run, tmp_path / "prostt5", downloads, outcomes
 
 
 def test_prostt5_weights_download_once(prostt5_downloads):
-    run, _, downloads = prostt5_downloads
+    run, _, downloads, _ = prostt5_downloads
 
     assert run._ensure_prostt5_weights(None) == run._ensure_prostt5_weights(None)
     assert downloads == ["databases ProstT5"]
@@ -358,7 +376,7 @@ def test_prostt5_weights_download_once(prostt5_downloads):
 @pytest.mark.parametrize("purge", ["weights", "weights_from_a_cache_marked_ready_before"])
 def test_prostt5_weights_download_again_when_purged(prostt5_downloads, purge: str):
     """Weights a purge deleted are downloaded again, also under the bare marker older runs wrote."""
-    run, cache, downloads = prostt5_downloads
+    run, cache, downloads, _ = prostt5_downloads
     run._ensure_prostt5_weights(None)
 
     (cache / "weights" / "prostt5-f16.gguf").unlink()
@@ -373,14 +391,28 @@ def test_prostt5_weights_download_again_when_purged(prostt5_downloads, purge: st
 
 def test_prostt5_cache_from_before_records_is_kept(prostt5_downloads):
     """A finished download marked the old way is recorded as it is, not downloaded again."""
-    run, cache, downloads = prostt5_downloads
-    (cache / "weights").mkdir(parents=True)
-    (cache / "weights" / "prostt5-f16.gguf").write_bytes(b"w")
+    run, cache, downloads, _ = prostt5_downloads
+    _write_prostt5_model(cache / "weights", run._PROSTT5_MIN_BYTES)
     (cache / ".proto-ready").touch()
 
     run._ensure_prostt5_weights(None)
 
     assert downloads == []
+
+
+@pytest.mark.parametrize("outcome", ["empty", "truncated"])
+def test_prostt5_download_without_the_model_raises_and_caches_nothing(prostt5_downloads, outcome: str):
+    """A download that exits cleanly without the full model is retried once, then raises with no marker."""
+    run, cache, downloads, outcomes = prostt5_downloads
+    outcomes += [outcome, outcome]
+
+    with pytest.raises(RuntimeError, match=r"did not download prostt5-f16\.gguf"):
+        run._ensure_prostt5_weights(None)
+
+    assert len(downloads) == 2
+    assert not (cache / ".proto_complete").exists()
+    assert run._ensure_prostt5_weights(None) == str(cache / "weights"), "the next call downloads again"
+    assert len(downloads) == 3
 
 
 # ── Integration ───────────────────────────────────────────────────────────────

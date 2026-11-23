@@ -154,7 +154,8 @@ def ensure_complete(
         dest (str | Path): Directory to make complete.
         build (Callable[[Path], object]): Creates and fills the directory it is given: ``dest``,
             which an incomplete copy has been removed from (unless ``reset=False``), or with
-            ``stage`` an empty staging directory. Its return value is ignored.
+            ``stage`` an empty staging directory. Its return value is ignored. A build that leaves no
+            files to record raises, and is neither recorded nor swapped into place.
         marker (str): Marker file name inside ``dest``.
         lock (str | Path | None): Lock file; ``None`` uses ``.<name>.extract.lock`` beside ``dest``, the
             name ``proto_with_lock`` callers use for a directory, so bash and Python builds take turns.
@@ -168,7 +169,8 @@ def ensure_complete(
             never see a half-built ``dest``.
         adopt (Callable[[Path], bool] | None): For a ``dest`` with no record yet (built before it was
             recorded), whether the copy there is complete by an older check; if so its files are
-            recorded instead of building it again, so valid weights are never downloaded twice.
+            recorded instead of building it again, so valid weights are never downloaded twice. A copy
+            with no files to record is built again.
         force (bool): Build even when ``dest`` is complete.
 
     Returns:
@@ -188,15 +190,17 @@ def ensure_complete(
         if not force and missing == []:
             return dest
         if not force and missing is None and adopt is not None and dest.is_dir() and adopt(dest):
-            record_files(dest, None if record is None else record(dest), marker=marker)
-            return dest
+            adopted = _files_to_record(dest, record)
+            if adopted:
+                record_files(dest, adopted, marker=marker)
+                return dest
         if missing:
             logger.warning("%s lost %d file(s) (e.g. %s); building it again", dest, len(missing), missing[0])
         if stage:
             staging = Path(tempfile.mkdtemp(prefix=f".{dest.name}.stage.", dir=dest.parent))
             try:
                 build(staging)
-                record_files(staging, None if record is None else record(staging), marker=marker)
+                record_files(staging, _built_files(staging, record, dest), marker=marker)
                 _remove(dest)
                 os.replace(staging, dest)
             finally:
@@ -209,8 +213,24 @@ def ensure_complete(
             build(dest)
             if not dest.is_dir():
                 raise RuntimeError(f"building {dest} did not create it")
-            record_files(dest, None if record is None else record(dest), marker=marker)
+            record_files(dest, _built_files(dest, record, dest), marker=marker)
     return dest
+
+
+def _files_to_record(directory: Path, record: Callable[[Path], Iterable[str]] | None) -> list[str]:
+    return sorted(set(list_files(directory) if record is None else record(directory)))
+
+
+def _built_files(directory: Path, record: Callable[[Path], Iterable[str]] | None, dest: Path) -> list[str]:
+    """The files to record for ``directory`` (``dest`` or its staging copy); raises when there are none.
+
+    A build that exits cleanly but leaves nothing behind (a download that fetched nothing) must not
+    be handed back as complete.
+    """
+    files = _files_to_record(directory, record)
+    if not files:
+        raise RuntimeError(f"building {dest} produced no files")
+    return files
 
 
 def _remove(path: Path) -> None:

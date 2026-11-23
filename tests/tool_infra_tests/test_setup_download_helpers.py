@@ -159,6 +159,27 @@ def test_download_archive_failure_is_not_marked_complete(tmp_path: Path) -> None
     assert not (dest / ".proto_complete").exists()
 
 
+def test_download_archive_that_extracts_nothing_is_retried_then_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An archive that unpacks to no files counts as a failed attempt, not a complete extraction."""
+    monkeypatch.setenv("_PROTO_DOWNLOAD_RETRIES", "1")
+    monkeypatch.setenv("_PROTO_DOWNLOAD_RETRY_DELAY", "0")
+    archive = tmp_path / "params.tar"
+    member = tarfile.TarInfo("empty_dir")
+    member.type = tarfile.DIRTYPE
+    with tarfile.open(archive, "w") as tar:
+        tar.addfile(member)
+    dest = tmp_path / "params"
+
+    result = _run(f'proto_download_archive "file://{archive}" "{dest}"')
+
+    assert result.returncode != 0
+    assert result.stdout.count("Downloading and extracting") == 2
+    assert "holds no files to record" in result.stderr
+    assert not (dest / ".proto_complete").exists()
+
+
 # ── Concurrent callers sharing a model cache ─────────────────────────────────
 
 
