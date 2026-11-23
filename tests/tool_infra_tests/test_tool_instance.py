@@ -1596,6 +1596,72 @@ def test_returns_true_when_hash_matches(tmp_path: Path, monkeypatch):
         assert inst._is_env_ok() is True
 
 
+def _built_env(tmp_path: Path, monkeypatch, *, platform_line: str = "", torch_build: str = "") -> ToolInstance:
+    """An env that passes every other ``_is_env_ok`` check, recorded with ``platform_line``."""
+    from proto_tools.utils.weights_manifest import write_manifest
+
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "cache"))
+    inst = ToolInstance.__new__(ToolInstance)
+    inst.env_path = tmp_path / "fake_env"
+    (inst.env_path / "bin").mkdir(parents=True)
+    (inst.env_path / "bin" / "python").write_text("")
+    inst.setup_script = tmp_path / "setup.sh"
+    inst.setup_script.write_text("#!/bin/bash\necho hi\n")
+    (inst.env_path / "STATUS.txt").write_text(f"SUCCESS\nSetup hash: {inst._setup_hash()}\n{platform_line}")
+    write_manifest(inst.env_path, "esm2")
+    if torch_build:
+        (inst.env_path / f"lib/python3.12/site-packages/torch-2.5.1{torch_build}.dist-info").mkdir(parents=True)
+    return inst
+
+
+@pytest.mark.parametrize(
+    ("built", "now", "ok"),
+    [
+        ({"platform_line": "Compute platform: cpu\n"}, "cuda", False),
+        ({"platform_line": "Compute platform: cpu\n"}, "cpu", True),
+        ({"platform_line": "Compute platform: cuda\n"}, "cpu", True),
+        ({"platform_line": "Compute platform: cuda\n"}, "cuda", True),
+        # Envs built before the platform was recorded: judged by the torch they hold
+        ({"torch_build": "+cpu"}, "cuda", False),
+        ({"torch_build": "+cpu"}, "cpu", True),
+        ({"torch_build": "+cu126"}, "cuda", True),
+        ({}, "cuda", True),
+    ],
+)
+def test_an_env_built_without_a_gpu_is_rebuilt_once_one_is_visible(tmp_path: Path, monkeypatch, built, now, ok):
+    """A CPU-only build is rebuilt where a GPU is visible; a GPU build is kept everywhere."""
+    inst = _built_env(tmp_path, monkeypatch, **built)
+    monkeypatch.setattr(
+        "proto_tools.utils.compute_deps.detect_compute_environment", lambda: {"DETECTED_COMPUTE_PLATFORM": now}
+    )
+
+    with patch("proto_tools.utils.tool_instance.subprocess.run", return_value=MagicMock(returncode=0)):
+        assert inst._is_env_ok() is ok
+
+
+def test_rebuilding_a_cpu_build_for_the_gpu_says_why_once(tmp_path: Path, monkeypatch, caplog):
+    """The rebuild reports its reason exactly once, though the check runs at several steps."""
+    built = _built_env(tmp_path, monkeypatch, platform_line="Compute platform: cpu\n")
+    inst = _make_fake_instance(_tmp_dir=tmp_path)
+    inst.env_path, inst.setup_script, inst._env_ready = built.env_path, built.setup_script, False
+    monkeypatch.setattr(
+        "proto_tools.utils.compute_deps.detect_compute_environment", lambda: {"DETECTED_COMPUTE_PLATFORM": "cuda"}
+    )
+
+    with (
+        patch("proto_tools.utils.tool_instance.subprocess.run", return_value=MagicMock(returncode=0)),
+        patch.object(ToolInstance, "_ensure_micromamba", side_effect=RuntimeError("stop after the removal")),
+        caplog.at_level(logging.INFO, logger="proto_tools.utils.tool_instance"),
+        pytest.raises(RuntimeError, match="stop after the removal"),
+    ):
+        inst._ensure_env()
+
+    assert [r.getMessage() for r in caplog.records].count(
+        f"Rebuilding {inst.toolkit} for the GPU: it was built where no GPU was visible, so it has CPU-only packages"
+    ) == 1
+    assert not inst.env_path.exists()
+
+
 # ── _run_oneshot() output tests ──────────────────────────────────────────
 
 
