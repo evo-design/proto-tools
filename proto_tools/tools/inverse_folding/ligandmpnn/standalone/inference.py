@@ -1,6 +1,7 @@
 """LigandMPNN inference implementation using Foundry."""
 
 import gc
+import hashlib
 import importlib
 import json
 import os
@@ -50,6 +51,22 @@ _LEGACY_CODE_TARBALL_SHA256 = "bde72c9fa29c75b2b36c984c78aa3050ca16fa753f017ef8f
 _LEGACY_CODE_SUBDIR = f"dEVA-{_LEGACY_SOURCE_COMMIT}/models/ligandmpnn"
 # Importable package name expected by ``_load_legacy_modules`` (imports ``ligandmpnn.*``).
 _LEGACY_PACKAGE_DIRNAME = "ligandmpnn"
+_LEGACY_SOURCE_PATCHES: tuple[tuple[str, str, str], ...] = (
+    # Read each sampled residue's probability along the amino-acid axis. Upstream gathers along the
+    # residue axis, which indexes past the end for structures shorter than 20 residues.
+    (
+        "model_utils.py",
+        "torch.gather(all_probs, 1, S.unsqueeze_(dim=2))",
+        "torch.gather(all_probs, 2, S.unsqueeze_(dim=2))",
+    ),
+    # Pass every argument. Upstream drops ``encoded_residue_dict``, so ``device`` lands in
+    # ``omit_AA_per_residue_multi`` and the mask is always built on CUDA, which breaks device="cpu".
+    (
+        "ligandmpnn.py",
+        "omit_aa(args, encoded_residues, design_params['omit_AA_per_residue'], device)",
+        "omit_aa(args, encoded_residues, encoded_residue_dict, design_params['omit_AA_per_residue'], device=device)",
+    ),
+)
 # (filename, URL, SHA-256): the original implementation's side-chain packer, fetched on first use
 # and checked before it is used.
 _LEGACY_WEIGHT_URLS: tuple[tuple[str, str, str], ...] = (
@@ -940,20 +957,46 @@ class LegacyCompatibleLigandMPNNModel:
             torch.cuda.empty_cache()
 
 
+def _legacy_package_key() -> str:
+    """Cache directory name for the original code: the source commit plus a digest of its patches.
+
+    Changing ``_LEGACY_SOURCE_PATCHES`` changes the key, so a copy provisioned with other patches is
+    never reused and an existing cache is never rewritten.
+    """
+    patches_digest = hashlib.sha256(repr(_LEGACY_SOURCE_PATCHES).encode()).hexdigest()[:8]
+    return f"{_LEGACY_SOURCE_COMMIT[:12]}-{patches_digest}"
+
+
+def _patch_legacy_source(source_dir: Path) -> None:
+    """Apply ``_LEGACY_SOURCE_PATCHES`` to freshly extracted original code.
+
+    Raises:
+        RuntimeError: If a patch's buggy text is missing, i.e. the pinned source is not what the patch expects.
+    """
+    for filename, buggy, fixed in _LEGACY_SOURCE_PATCHES:
+        path = source_dir / filename
+        text = path.read_text()
+        if buggy not in text:
+            raise RuntimeError(f"ligandmpnn: cannot patch {path}; {buggy!r} is not in the pinned source")
+        path.write_text(text.replace(buggy, fixed))
+
+
 def _ensure_legacy_assets() -> Path:
     """Provision the original LigandMPNN code + side-chain packer on first use; return the package path.
 
     Fetches nothing unless the ``original`` model is actually requested. Code and
-    weights are cached under ``resolve_weights_dir("ligandmpnn")/legacy/<commit>/``
-    and reused on subsequent calls. Keying on the source commit means bumping
-    ``_LEGACY_SOURCE_COMMIT`` provisions a fresh checkout instead of reusing a stale one.
+    weights are cached under ``resolve_weights_dir("ligandmpnn")/legacy/<key>/``
+    and reused on subsequent calls. The code is patched with ``_LEGACY_SOURCE_PATCHES`` before it
+    is copied into the cache, and the key (``_legacy_package_key``) covers the source commit and the
+    patches, so changing either provisions a fresh copy instead of reusing a stale one. A user's own
+    checkout found next to their checkpoint is used as is.
     """
     import subprocess
 
     from standalone_helpers import download_weights, get_subprocess_device_env, require_weights_dir
 
     weights_dir = require_weights_dir("ligandmpnn")
-    package_path = Path(weights_dir) / "legacy" / _LEGACY_SOURCE_COMMIT[:12] / _LEGACY_PACKAGE_DIRNAME
+    package_path = Path(weights_dir) / "legacy" / _legacy_package_key() / _LEGACY_PACKAGE_DIRNAME
 
     # 1. Code: fetch the original ligandmpnn package if the modules are missing.
     if not _is_legacy_package_path(package_path):
@@ -964,6 +1007,7 @@ def _ensure_legacy_assets() -> Path:
             tar_cmd = ["tar", "-zxf", str(tarball), "-C", tmpdir, _LEGACY_CODE_SUBDIR]
             subprocess.run(tar_cmd, check=True, env=get_subprocess_device_env("cpu"))
             extracted = Path(tmpdir) / _LEGACY_CODE_SUBDIR
+            _patch_legacy_source(extracted)
             for item in extracted.iterdir():
                 target = package_path / item.name
                 if item.is_dir():
