@@ -232,9 +232,9 @@ model_checkpoint: str = ConfigField(
 )
 ```
 
-- `remote_unsupported_reason` rejects only a **non-bundled** value (a local path isn't on a hosted worker); bundled names are remote-OK because they're provisioned.
+- `remote_unsupported_reason` rejects a **local path** (it isn't on a hosted worker); bundled names are remote-OK because they're provisioned, and so is an https link if the tool accepts one.
 - Keep the bundled-name map in sync with `setup.sh`'s download list, and add a test asserting `setup.sh` fetches every bundled checkpoint.
-- Reference implementation: `tools/structure_prediction/opendde` (`_BUNDLED_MODELS` in the tool, `_BUNDLED_CHECKPOINTS` in `standalone/inference.py`).
+- Reference implementations: `tools/structure_prediction/opendde` (`_BUNDLED_MODELS` in the tool, `_BUNDLED_CHECKPOINTS` in `standalone/inference.py`), and `tools/sequence_scoring/parade` (one bundled name covering a checkpoint per construct type, downloaded and checksummed by `setup.sh`, plus custom https links).
 - **Several checkpoint sizes → override `minimal()` to pick the smallest.** The seed, device, GPU lifecycle and Modal smoke tests all build configs with `Config.minimal()`. A toolkit offering several sizes (ESM2 8M–15B, ProGen3 112M–3B) must `kwargs.setdefault("model_checkpoint", "<smallest>")` there, so those tests load in seconds; see `progen3_score.py`. On the MSA path, pick the smallest checkpoint that accepts MSAs (`ESMFold2Config.minimal`). The default checkpoint stays covered: `tests/tool_infra_tests/test_default_config_smoke.py` runs it for toolkits no other test runs at defaults, and fails until you record how yours is covered.
 
 ## Code Style Conventions

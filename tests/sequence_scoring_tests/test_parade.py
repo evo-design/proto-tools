@@ -69,34 +69,76 @@ print("N_BASE_OK")
     assert "N_BASE_OK" in output, output
 
 
-@pytest.mark.uses_env
-def test_parade_checkpoint_download_security_runs_in_env() -> None:
-    """Checkpoint download/security checks run INSIDE the parade standalone env.
-
-    The logic under test lives in the standalone ``inference`` module (imports
-    ``torch``) and is not importable in the base test env, so pytest would skip it.
-    ``run_in_env`` runs the plain-assert suite ``_parade_env_security_checks.py``
-    inside the built parade env; a non-zero exit surfaces here as ``RuntimeError``.
-    """
+def _load_parade_worker(monkeypatch):
+    """Load the standalone worker with its torch-heavy scoring module stubbed out."""
+    import importlib.util
+    import sys
+    import types
     from pathlib import Path
 
-    from proto_tools.utils import run_in_env
+    root = Path(__file__).parents[2]
+    monkeypatch.setitem(sys.modules, "parade_scoring", types.ModuleType("parade_scoring"))
+    monkeypatch.syspath_prepend(str(root / "proto_tools/utils/standalone_helpers_source"))
+    path = root / "proto_tools/tools/sequence_scoring/parade/standalone/inference.py"
+    spec = importlib.util.spec_from_file_location("_parade_test_worker", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-    checks = Path(__file__).resolve().parent / "_parade_env_security_checks.py"
-    output = run_in_env("parade", script=str(checks), timeout=1800)
-    assert "ALL CHECKS PASSED" in output, output
+
+def test_parade_bundled_checkpoints_are_fetched_by_setup_and_resolved_by_the_worker(monkeypatch, tmp_path) -> None:
+    """Every bundled file is downloaded by setup.sh, and the worker resolves bundled, link and path values."""
+    from pathlib import Path
+    from typing import get_args
+
+    from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
+        PARADE_BUNDLED_MODELS,
+        ParadeConstructType,
+    )
+
+    worker = _load_parade_worker(monkeypatch)
+    assert set(worker._BUNDLED_CHECKPOINTS) == PARADE_BUNDLED_MODELS
+    setup = (Path(worker.__file__).parent / "setup.sh").read_text()
+    for files in worker._BUNDLED_CHECKPOINTS.values():
+        assert set(files) == {*get_args(ParadeConstructType), "stability"}
+        for filename in files.values():
+            assert f"${{WEIGHTS_DIR}}/{filename}" in setup, f"setup.sh does not download {filename}"
+
+    monkeypatch.setattr(worker, "require_weights_dir", lambda name: str(tmp_path))
+    for filename in worker._BUNDLED_CHECKPOINTS["parade"].values():
+        (tmp_path / filename).write_bytes(b"x")
+    stability = worker._resolve_checkpoint({"operation": "stability_gradient", "model_checkpoint": "parade"})
+    assert Path(stability).name == worker._BUNDLED_CHECKPOINTS["parade"]["stability"]
+
+    downloads: list[str] = []
+    monkeypatch.setattr(worker, "download_weights", lambda url, dest: downloads.append(dest.name) or dest)
+    link = {"operation": "activity", "construct_type": "utr5", "model_checkpoint": "https://example.com/mine.ckpt"}
+    worker._resolve_checkpoint(link)
+    assert downloads[0].startswith("parade-utr5-custom-")
+
+    local = tmp_path / "mine.ckpt"
+    local.write_bytes(b"x")
+    assert worker._resolve_checkpoint({"operation": "stability", "model_checkpoint": str(local)}) == str(local)
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        worker._resolve_checkpoint({"operation": "stability", "model_checkpoint": str(tmp_path / "missing.ckpt")})
+    with pytest.raises(ValueError, match="construct_type must be one of"):
+        worker._resolve_checkpoint({"operation": "activity", "construct_type": "utr7", "model_checkpoint": "parade"})
 
 
-def test_parade_custom_checkpoint_allowed_on_your_own_deployment() -> None:
-    """A Modal workspace belongs to the caller, so running their own checkpoint there is their choice."""
+def test_parade_remote_runs_bundled_and_linked_checkpoints_but_not_local_paths() -> None:
+    """A Modal workspace belongs to the caller, so their own linked checkpoint may run there; a local path can't."""
     from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig
+    from proto_tools.tools.sequence_scoring.parade.parade_gradient import ParadeGradientConfig
 
-    config = ParadeActivityConfig(checkpoint="https://example.com/mine.ckpt")
-    assert config.remote_unsupported_reason("modal") is None
+    for config_class in (ParadeActivityConfig, ParadeGradientConfig):
+        assert config_class().remote_unsupported_reason("modal") is None
+        assert config_class(model_checkpoint="https://example.com/mine.ckpt").remote_unsupported_reason("modal") is None
+        assert "local file" in config_class(model_checkpoint="/data/mine.ckpt").remote_unsupported_reason("modal")
 
 
 def test_parade_checkpoint_link_vs_path_and_https_enforcement() -> None:
-    """``checkpoint`` accepts local paths and https links (schemeless allowed); non-https links are rejected."""
+    """``model_checkpoint`` accepts local paths and https links (schemeless allowed); non-https links are rejected."""
     from proto_tools.tools.sequence_scoring.parade import ParadeActivityConfig
     from proto_tools.tools.sequence_scoring.parade.parade_gradient import (
         ParadeGradientConfig,
@@ -104,31 +146,41 @@ def test_parade_checkpoint_link_vs_path_and_https_enforcement() -> None:
 
     # A non-HTTPS link is rejected (the artifact is unpickled).
     with pytest.raises(ValueError, match="https"):
-        ParadeActivityConfig(checkpoint="http://example.com/x.ckpt")
+        ParadeActivityConfig(model_checkpoint="http://example.com/x.ckpt")
     with pytest.raises(ValueError, match="https"):
         ParadeGradientConfig(
             gradient_terms=["c1"],
-            checkpoint="http://example.com/x.ckpt",
+            model_checkpoint="http://example.com/x.ckpt",
         )
     # A schemeless link (host.tld/path) is accepted and normalized to https://.
     assert (
-        ParadeActivityConfig(checkpoint="huggingface.co/org/model.ckpt").checkpoint
+        ParadeActivityConfig(model_checkpoint="huggingface.co/org/model.ckpt").model_checkpoint
         == "https://huggingface.co/org/model.ckpt"
     )
-    assert ParadeActivityConfig(checkpoint="https://example.com/x.ckpt").checkpoint == "https://example.com/x.ckpt"
+    assert (
+        ParadeActivityConfig(model_checkpoint="https://example.com/x.ckpt").model_checkpoint
+        == "https://example.com/x.ckpt"
+    )
+    # The worker tells a link from a path by its ``https://`` prefix, so the scheme is lowercased here
+    assert (
+        ParadeActivityConfig(model_checkpoint="HTTPS://example.com/X.ckpt").model_checkpoint
+        == "https://example.com/X.ckpt"
+    )
     # Local paths pass through unchanged and are NOT treated as links.
     for path in ("/oak/checkpoints/model.ckpt", "model.ckpt", "sub/model.ckpt", "./model.ckpt"):
-        assert ParadeActivityConfig(checkpoint=path).checkpoint == path
-    assert ParadeActivityConfig().checkpoint == ""
+        assert ParadeActivityConfig(model_checkpoint=path).model_checkpoint == path
+    assert ParadeActivityConfig().model_checkpoint == "parade"
+    with pytest.raises(ValueError, match="model_checkpoint must not be empty"):
+        ParadeActivityConfig(model_checkpoint="")  # the old field's empty default no longer means "pinned"
 
     # Malformed HTTPS links (no host) are rejected at validation, not after worker startup.
     for malformed in ("https:relative", "https:///no-host", "https://"):
         with pytest.raises(ValueError, match="host"):
-            ParadeActivityConfig(checkpoint=malformed)
+            ParadeActivityConfig(model_checkpoint=malformed)
     # Malformed ports are rejected at validation (else _redact_url crashes the worker on .port).
     for bad_port in ("https://example.com:abc/x.ckpt", "https://example.com:99999/x.ckpt"):
         with pytest.raises(ValueError, match="valid URL"):
-            ParadeActivityConfig(checkpoint=bad_port)
+            ParadeActivityConfig(model_checkpoint=bad_port)
     for malformed in (
         "https://exa mple.com/x.ckpt",
         "https://example.com/x y.ckpt",
@@ -139,7 +191,7 @@ def test_parade_checkpoint_link_vs_path_and_https_enforcement() -> None:
         "https://example|evil.com/x.ckpt",
     ):
         with pytest.raises(ValueError):
-            ParadeActivityConfig(checkpoint=malformed)
+            ParadeActivityConfig(model_checkpoint=malformed)
 
 
 def test_parade_checkpoint_secret_redacted_from_errors() -> None:
@@ -157,12 +209,12 @@ def test_parade_checkpoint_secret_redacted_from_errors() -> None:
     assert "s3cr3t-token" not in str(excinfo.value)
     # ...and no public Pydantic error representation retains the rejected URL input.
     constructors = (
-        lambda: ParadeActivityConfig(checkpoint=secret_url),
-        lambda: ParadeActivityConfig.model_validate({"checkpoint": secret_url}),
-        lambda: ParadeActivityConfig.model_validate_json(f'{{"checkpoint": "{secret_url}"}}'),
+        lambda: ParadeActivityConfig(model_checkpoint=secret_url),
+        lambda: ParadeActivityConfig.model_validate({"model_checkpoint": secret_url}),
+        lambda: ParadeActivityConfig.model_validate_json(f'{{"model_checkpoint": "{secret_url}"}}'),
         lambda: ParadeGradientConfig(
             gradient_terms=["c1"],
-            checkpoint=secret_url,
+            model_checkpoint=secret_url,
         ),
     )
     for constructor in constructors:
@@ -179,7 +231,7 @@ def test_parade_checkpoint_secret_redacted_from_errors() -> None:
         lambda: ParadeActivityConfig.model_validate_json(f'"{secret_url}"'),
         lambda: TypeAdapter(ParadeActivityConfig).validate_python(secret_url),
         lambda: TypeAdapter(ParadeActivityConfig).validate_json(f'"{secret_url}"'),
-        lambda: TypeAdapter(ParadeActivityConfig).validate_python([{"checkpoint": secret_url}]),
+        lambda: TypeAdapter(ParadeActivityConfig).validate_python([{"model_checkpoint": secret_url}]),
         lambda: TypeAdapter(ParadeActivityConfig).validate_python([secret_url]),
         lambda: TypeAdapter(ParadeActivityConfig).validate_python([{"other": secret_url}]),
     )
@@ -194,7 +246,7 @@ def test_parade_checkpoint_secret_redacted_from_errors() -> None:
         ParadeActivityConfig(construct_type="bogus")  # type: ignore[arg-type]
     assert "bogus" in str(unrelated_exc.value)
 
-    malformed_json = f'{{"checkpoint": "{secret_url}"'
+    malformed_json = f'{{"model_checkpoint": "{secret_url}"'
     with pytest.raises(ValidationError) as json_exc:
         ParadeActivityConfig.model_validate_json(malformed_json)
     rendered = str(json_exc.value) + repr(json_exc.value.errors()) + json_exc.value.json()
@@ -211,9 +263,9 @@ def test_parade_checkpoint_secret_redacted_from_errors() -> None:
 
     activity = ParadeActivityConfig()
     with pytest.raises(ValueError) as assignment_exc:
-        activity.checkpoint = secret_url
+        activity.model_checkpoint = secret_url
     assert "s3cr3t-token" not in str(assignment_exc.value)
-    assert activity.checkpoint == ""
+    assert activity.model_checkpoint == "parade"
 
 
 def test_parade_checkpoint_is_hidden_from_config_repr() -> None:
@@ -226,12 +278,12 @@ def test_parade_checkpoint_is_hidden_from_config_repr() -> None:
 
     signed_url = "https://example.com/x.ckpt?X-Amz-Signature=s3cr3t-token"
     for config in (
-        ParadeActivityConfig(checkpoint=signed_url),
-        ParadeGradientConfig(checkpoint=signed_url),
-        ParadeStabilityConfig(checkpoint=signed_url),
+        ParadeActivityConfig(model_checkpoint=signed_url),
+        ParadeGradientConfig(model_checkpoint=signed_url),
+        ParadeStabilityConfig(model_checkpoint=signed_url),
     ):
         assert "s3cr3t-token" not in repr(config)
-        assert config.model_dump()["checkpoint"] == signed_url
+        assert config.model_dump()["model_checkpoint"] == signed_url
 
 
 def test_parade_activity_config_resolves_panel() -> None:
@@ -368,9 +420,6 @@ def test_parade_activity_run_dispatches_and_maps_scores(monkeypatch) -> None:
     assert payload["operation"] == "activity"
     assert payload["construct_type"] == "utr5"
     assert payload["cell_types"] == ["c1", "c2"]
-    assert payload["checkpoint_url"].endswith("model-utr5-deltas-epoch%3D9-step%3D840.ckpt")
-    assert payload["checkpoint_md5"] == "a48aeffc516e32f4d8780b855bbcd849"
-    assert payload["checkpoint_filename"] == "parade-model-utr5-deltas-epoch9-step840.ckpt"
     assert result.cell_types == ["c1", "c2"]  # derived from results, survives cache reconstruction
     assert dict(result.results[0].scores.items()) == {"c1": 2.4, "c2": 2.5}
     assert result.results[1].scores.c1 == 1.3
@@ -495,8 +544,6 @@ def test_parade_stability_run_dispatches_and_maps_log_ratios(monkeypatch) -> Non
     toolkit, payload = captured[0]
     assert toolkit == "parade"
     assert payload["operation"] == "stability"
-    assert payload["checkpoint_url"].endswith("stability-epoch%3D24-step%3D725.ckpt")
-    assert payload["checkpoint_md5"] == "511c0b4d794f948708ab1e6fa866734b"
     assert result.results[0].log_ratio == -1.64
     assert result.results[1].sequence_length == 50
 
@@ -713,7 +760,6 @@ def test_parade_gradient_run_dispatches_gradient_terms(monkeypatch) -> None:
     assert payload["temperature"] == 0.7
     assert payload["soft"] == 1.0
     assert payload["hard"] == 0.5
-    assert payload["checkpoint_url"].endswith("model-utr5-deltas-epoch%3D9-step%3D840.ckpt")
     assert [term["cell_type"] for term in payload["gradient_terms"]] == ["c2", "c6"]
     assert "direction" not in payload["gradient_terms"][0], "optimization intent does not reach the worker"
 

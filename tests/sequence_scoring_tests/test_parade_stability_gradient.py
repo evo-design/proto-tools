@@ -72,7 +72,6 @@ def test_parade_stability_gradient_dispatch_contract(monkeypatch):
     payload = captured["payload"]
     assert payload["operation"] == "stability_gradient", "a distinct operation from the activity gradient"
     assert payload["temperature"] == 0.7
-    assert "stability" in payload["checkpoint_filename"], "the stability checkpoint, not an activity one"
     assert "construct_type" not in payload, "stability is not conditioned on a UTR construct"
     assert "loss_terms" not in payload, "stability is a single scalar, not per-cell terms"
 

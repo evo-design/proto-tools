@@ -14,9 +14,9 @@ from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     ParadeCellType,
     ParadeConstructType,
     _SafeCheckpointUrlConfigMixin,
+    local_checkpoint_on_remote,
     normalize_checkpoint_override,
     resolve_cell_type,
-    resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -32,6 +32,7 @@ from proto_tools.utils import (
     TermGradient,
     ToolInstance,
 )
+from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import Directionality
 
 
@@ -94,10 +95,10 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, RelaxationConfig):
         construct_type (ParadeConstructType): UTR model to use — ``"utr5"`` or ``"utr3"``.
         gradient_terms (list[ParadeActivityTerm]): Cells whose activity to differentiate. A bare
             cell code or cell-line name is also accepted and normalized into a term.
-        checkpoint (str): Your own checkpoint to use instead of the pinned one, given as a local
-            ``.ckpt`` path or an ``https`` download link (a schemeless ``host.tld/path`` is
-            accepted). Works on ``device="cpu"``, ``device="cuda"``, and ``device="modal"``.
-            Leave empty to use the pinned per-target checkpoint.
+        model_checkpoint (str): ``"parade"``, the bundled checkpoints (the worker picks the one
+            for ``construct_type``), or your own checkpoint as a local ``.ckpt`` path or an
+            ``https`` download link (a schemeless ``host.tld/path`` is accepted). A link also works
+            on ``device="modal"``; a local path runs only locally.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
             (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
             and ColabDesign parity. See
@@ -124,10 +125,10 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, RelaxationConfig):
         title="Gradient Terms",
         description="Cells whose predicted activity to differentiate, by code or cell-line name.",
     )
-    checkpoint: str = ConfigField(
-        title="Checkpoint",
-        default="",
-        description="Your own .ckpt path or https link, used instead of the pinned checkpoint.",
+    model_checkpoint: str = ConfigField(
+        title="Model / Checkpoint",
+        default="parade",
+        description="Bundled model name ('parade') or your own .ckpt path or https link.",
         reload_on_change=True,
         repr=False,
     )
@@ -137,11 +138,15 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, RelaxationConfig):
         description="Run backward pass and return gradient; set False for forward-only scoring.",
     )
 
-    @field_validator("checkpoint")
+    @field_validator("model_checkpoint")
     @classmethod
     def _validate_checkpoint(cls, value: str) -> str:
-        """Validate a checkpoint override: an https link (schemeless allowed) or a local path."""
+        """Validate a bundled name, an https link (schemeless allowed), or a local path."""
         return normalize_checkpoint_override(value)
+
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
+        """A local checkpoint path isn't present on a remote worker."""
+        return local_checkpoint_on_remote(self.model_checkpoint, device)
 
     @field_validator("gradient_terms", mode="before")
     @classmethod
@@ -330,8 +335,6 @@ def run_parade_gradient(
     # without re-running the cross-field and finite-number checks.
     config = ParadeGradientConfig.model_validate(config.model_dump())
     # The objective runs through the same per-construct activity checkpoint as parade-activity.
-    checkpoint_path, url, md5, filename = resolve_checkpoint_source(config.construct_type, config.checkpoint)
-
     result = ToolInstance.dispatch(
         "parade",
         {
@@ -340,10 +343,7 @@ def run_parade_gradient(
             "temperature": inputs.temperature,
             "construct_type": config.construct_type,
             "gradient_terms": [term.model_dump() for term in config.gradient_terms],
-            "checkpoint_path": checkpoint_path,
-            "checkpoint_url": url,
-            "checkpoint_md5": md5,
-            "checkpoint_filename": filename,
+            "model_checkpoint": config.model_checkpoint,
             "soft": config.soft,
             "hard": config.hard,
             "compute_gradient": config.compute_gradient,

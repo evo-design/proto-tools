@@ -86,7 +86,7 @@ This is the differentiable form of `parade-stability`, intended as an objective 
 These apply to every PARADE tool in this toolkit (`parade-activity`, `parade-stability`, `parade-gradient`, `parade-stability-gradient`).
 
 - **Runs on GPU or CPU.** The tools load a small PyTorch LegNet checkpoint; a GPU speeds up large batches but is not required.
-- **Weights are provisioned automatically.** By default, the standalone worker downloads the published checkpoint from the pinned `autosome-ru/parade` commit into the managed model cache and verifies its MD5 checksum.
+- **Weights are provisioned automatically.** `model_checkpoint="parade"` (the default) uses the checkpoints published with the paper, which environment setup downloads from the pinned `autosome-ru/parade` commit into the managed model cache and checks against their SHA-256. Set `model_checkpoint` to your own `.ckpt` path or `https` link to use a different checkpoint.
 - **Predictions are faithful to the reference.** The vendored PARADE model/data modules are the verbatim upstream bodies (with only a provenance/Ruff header added per file), so the published checkpoints load and score exactly as they do upstream.
 
 ## References

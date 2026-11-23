@@ -1,5 +1,6 @@
 """PARADE standalone inference implementation for venv execution."""
 
+import hashlib
 import json
 import logging
 import sys
@@ -20,43 +21,45 @@ from standalone_helpers.relaxation import resolve_temperature
 logger = get_logger(__name__)
 
 
-def _download_checkpoint(url: str, expected_md5: str, filename: str, cache_dir: Path) -> Path:
-    """Download a PARADE checkpoint into the cache, verifying its MD5 checksum.
-
-    ``download_weights`` refuses non-HTTPS URLs and redirects (the checkpoint is unpickled),
-    sends ``HF_TOKEN`` only to Hugging Face, and redacts the URL in logs and errors.
-    """
-    if not url:
-        raise FileNotFoundError("parade: checkpoint_path is unavailable and checkpoint_url is empty")
-    if (
-        not filename
-        or filename != Path(filename).name
-        or "\\" in filename
-        or any(ord(character) < 32 or ord(character) == 127 for character in filename)
-        or not filename.endswith(".ckpt")
-    ):
-        raise ValueError("parade: checkpoint_filename must be a .ckpt basename without path separators")
-    if not (cache_dir / filename).is_file():
-        logger.update_status("Downloading PARADE weights")
-    return Path(download_weights(url, cache_dir / filename, md5=expected_md5 or None))
+# Bundled checkpoint files, which setup.sh downloads (pinned and checksummed) into the weights dir,
+# by what each operation scores. Keys match the host-side ``PARADE_BUNDLED_MODELS``.
+_BUNDLED_CHECKPOINTS: dict[str, dict[str, str]] = {
+    "parade": {
+        "utr5": "parade-model-utr5-deltas-epoch9-step840.ckpt",
+        "utr3": "parade-model-utr3-deltas-epoch9-step1330.ckpt",
+        "stability": "parade-stability-epoch24-step725.ckpt",
+    },
+}
 
 
 def _resolve_checkpoint(input_dict: dict[str, Any]) -> str:
-    """Resolve a local checkpoint path, downloading the pinned artifact if needed."""
-    local = input_dict.get("checkpoint_path") or ""
-    if local:
-        candidate = Path(local).expanduser()
-        if candidate.is_file():
-            return str(candidate)
-        raise FileNotFoundError(f"parade: checkpoint_path does not exist: {local}")
+    """Resolve the checkpoint to load: a bundled one for the operation, an https link, or a local path.
 
-    checkpoint = _download_checkpoint(
-        url=input_dict["checkpoint_url"],
-        expected_md5=input_dict.get("checkpoint_md5", ""),
-        filename=input_dict["checkpoint_filename"],
-        cache_dir=Path(require_weights_dir("parade")),
-    )
-    return str(checkpoint)
+    The host validates ``model_checkpoint`` and normalizes a link to ``https://``, so anything that
+    is neither a bundled name nor a link is a path.
+    """
+    stability = input_dict["operation"] in ("stability", "stability_gradient")
+    target = "stability" if stability else input_dict.get("construct_type")
+    if target not in _BUNDLED_CHECKPOINTS["parade"]:
+        raise ValueError("parade: construct_type must be one of ['utr3', 'utr5']")
+    requested = input_dict["model_checkpoint"]
+    weights_dir = Path(require_weights_dir("parade"))
+    if requested in _BUNDLED_CHECKPOINTS:
+        bundled = weights_dir / _BUNDLED_CHECKPOINTS[requested][target]
+        if not bundled.is_file():
+            raise FileNotFoundError(f"parade: bundled checkpoint missing at {bundled}; re-run setup.sh")
+        return str(bundled)
+    if requested.startswith("https://"):
+        # ``download_weights`` refuses non-HTTPS URLs and redirects (the checkpoint is unpickled),
+        # sends ``HF_TOKEN`` only to Hugging Face, and redacts the URL in logs and errors
+        dest = weights_dir / f"parade-{target}-custom-{hashlib.sha256(requested.encode()).hexdigest()[:12]}.ckpt"
+        if not dest.is_file():
+            logger.update_status("Downloading PARADE weights")
+        return str(download_weights(requested, dest))
+    local = Path(requested).expanduser()
+    if not local.is_file():
+        raise FileNotFoundError(f"parade: checkpoint path does not exist: {requested}")
+    return str(local)
 
 
 class ParadeModel:
