@@ -273,13 +273,21 @@ def test_server_error_raises_after_retries(monkeypatch: pytest.MonkeyPatch, cloc
 # ---------------------------------------------------------------------------
 
 
+def _search_or_skip_when_rate_limited(queries: str, max_results: int) -> Any:
+    """Run a live search, skipping the test when arXiv still rate-limits (429) after the tool's retries."""
+    try:
+        return run_arxiv_search(ArxivSearchInput(queries=queries), ArxivSearchConfig(max_results=max_results))
+    except requests.HTTPError as error:
+        if error.response is not None and error.response.status_code == 429:
+            pytest.skip(f"arXiv rate-limited the search: {error}")
+        raise
+
+
 @pytest.mark.network
 @pytest.mark.uses_env
 def test_arxiv_search_finds_a_known_preprint_by_title():
     """A title phrase query returns the matching arXiv record with its version."""
-    output = run_arxiv_search(
-        ArxivSearchInput(queries='ti:"Why risk matters for protein binder design"'), ArxivSearchConfig(max_results=3)
-    )
+    output = _search_or_skip_when_rate_limited('ti:"Why risk matters for protein binder design"', max_results=3)
     hits = output.results[0].hits
     assert any(hit.arxiv_id.startswith("2504.00146v") for hit in hits)
     assert all(hit.pdf_url.startswith("https://arxiv.org/pdf/") for hit in hits)
@@ -289,6 +297,21 @@ def test_arxiv_search_finds_a_known_preprint_by_title():
 @pytest.mark.uses_env
 def test_arxiv_search_category_filter():
     """cat:q-bio.BM keeps every hit in that category."""
-    output = run_arxiv_search(ArxivSearchInput(queries="cat:q-bio.BM AND abs:binder"), ArxivSearchConfig(max_results=5))
+    output = _search_or_skip_when_rate_limited("cat:q-bio.BM AND abs:binder", max_results=5)
     hits = output.results[0].hits
     assert hits and all("q-bio.BM" in hit.categories for hit in hits)
+
+
+def test_live_searches_skip_only_on_a_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 429 that outlasts the retries skips the live tests; any other HTTP error still fails them."""
+    for status, expected in [(429, pytest.skip.Exception), (503, requests.HTTPError)]:
+        response = requests.Response()
+        response.status_code = status
+        error = requests.HTTPError(f"arXiv search failed: {status}", response=response)
+
+        def _raise(*_args: Any, error: Exception = error, **_kwargs: Any) -> None:
+            raise error
+
+        monkeypatch.setattr(f"{__name__}.run_arxiv_search", _raise)
+        with pytest.raises(expected):
+            _search_or_skip_when_rate_limited("ti:anything", max_results=1)
