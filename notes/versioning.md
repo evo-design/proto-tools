@@ -86,6 +86,16 @@ The `@tool` wrapper stamps `tool_version` on every `BaseToolOutput`: the current
 
 `ToolRegistry.get_version(key)` returns a tool's current version. An out-of-tree toolkit opts in by adding a `versions.yaml`. Without one, `tool_version` is `None` and nothing is hashed.
 
+To learn which tools a block of code actually called, and their versions, wrap it in `ToolRegistry.record_calls()`. The yielded dict maps each tool key called inside the block to the `tool_version` its outputs carry, in first-call order:
+
+```python
+with ToolRegistry.record_calls() as calls:
+    run_pipeline()
+calls  # {"esmfold2-prediction": "<version>", "ipsae-scoring": "<version>"}
+```
+
+It records the call itself, so a cache hit, a call served by a dispatch backend (Modal), a failed call, and a tool called by another tool all count. Blocks nest, and every open block records a call. The record is a `ContextVar`, so concurrent programs on other threads or asyncio tasks keep separate records. Work that runs in a copy of the block's context is recorded, which includes the worker threads `ToolPool` starts. A thread started without one, such as a plain `threading.Thread`, records nothing. proto-language uses it to write the tools a program ran into `run_info.json`.
+
 ## History
 
 The commit that added a version is the one that introduced its hash, which survives squash merges and carries the PR number in its message:
