@@ -186,10 +186,16 @@ class OpenDDEConfig(MSAStructurePredictionConfig):
         msa_search_config (Mmseqs2HomologySearchConfig | None): MMseqs2 search config;
             only used when ``use_msa=True``. Inherited. Default: None.
 
-        include_pae_matrix (bool): Inherited. When True, OpenDDE is run with
-            ``--need_atom_confidence`` and the per-token PAE matrix (``pae``) plus a
-            derived ``avg_pae`` scalar are attached to the metrics. Off by default —
-            the matrix is O(n_token^2) to compute and serialize. Default: False.
+        include_pae_matrix (bool): Inherited. When True, the per-token PAE matrix (``pae``)
+            plus a derived ``avg_pae`` scalar are attached to the metrics; it reads OpenDDE's
+            full confidence data, so it forces ``atom_confidence`` on. Off by default — the
+            matrix is O(n_token^2) to serialize. Default: False.
+
+        atom_confidence (bool): Run OpenDDE with ``--need_atom_confidence`` so the structure's
+            B-factors carry per-atom pLDDT (0-100) and ``per_residue_plddt`` works, like other
+            predictors (about +2% time on a 1,010-token complex). Set False to skip writing the
+            full confidence output; B-factors are then all 0 and tagged ``UNKNOWN`` unless
+            ``include_pae_matrix`` is set. Default: True.
 
         device (str): Device to run on (``"cuda"``, ``"cpu"``). Inherited. Default: ``"cuda"``.
 
@@ -228,6 +234,11 @@ class OpenDDEConfig(MSAStructurePredictionConfig):
         title="Use RNA MSA",
         default=False,
         description="Enable OpenDDE's RNA MSA pipeline (--use_rna_msa).",
+    )
+    atom_confidence: bool = ConfigField(
+        title="Per-Atom Confidence",
+        default=True,
+        description="Write per-atom pLDDT into B-factors (--need_atom_confidence); include_pae_matrix forces it.",
     )
     timeout: int | None = ConfigField(
         title="Timeout",
@@ -417,6 +428,7 @@ def run_opendde_on_complex(
             "device": config.device,
             "verbose": config.verbose,
             "include_pae_matrix": config.include_pae_matrix,
+            "atom_confidence": config.atom_confidence,
         }
 
         output_data = ToolInstance.dispatch("opendde", input_data, instance=instance, config=config)
@@ -432,17 +444,18 @@ def run_opendde_on_complex(
         "ranking_score": float(formatted_metrics["ranking_score"]),
         "has_clash": bool(formatted_metrics["has_clash"]),
     }
-    # PAE is only present when include_pae_matrix requested it (--need_atom_confidence).
+    # PAE is only returned when include_pae_matrix asked for it.
     if "pae" in formatted_metrics:
         metrics_dict["avg_pae"] = float(formatted_metrics["avg_pae"])
         metrics_dict["pae"] = formatted_metrics["pae"]
 
     structure = Structure(
         structure=cif_output,
-        # OpenDDE writes per-atom pLDDT (0-100) as B-factors only when the run emits full
-        # confidence data (--need_atom_confidence, i.e. include_pae_matrix); otherwise every
-        # B-factor is 0, so they carry no pLDDT.
-        b_factor_type=BFactorType.PLDDT if "pae" in formatted_metrics else BFactorType.UNKNOWN,
+        # With full confidence data (atom_confidence, or include_pae_matrix) OpenDDE writes per-atom
+        # pLDDT (0-100) as B-factors; without it every B-factor is 0, so they carry no pLDDT.
+        b_factor_type=(
+            BFactorType.PLDDT if config.atom_confidence or config.include_pae_matrix else BFactorType.UNKNOWN
+        ),
         metrics=OpenDDEMetrics(**metrics_dict),
         source="opendde-prediction",
     )
