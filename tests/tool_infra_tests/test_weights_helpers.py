@@ -77,10 +77,18 @@ def test_download_redownloads_corrupt_file(tmp_path: Path, opener: _FakeOpener):
     assert dest.read_bytes() == _PAYLOAD
 
 
-# Longer than a filesystem timestamp tick, so a stamp written after it is not "racy"
-_PAST_A_CLOCK_TICK = 0.05
 # The real sleep: the ``opener`` fixture stubs ``time.sleep`` out for retry backoff
 _real_sleep = time.sleep
+
+
+def _wait_past_clock_tick(path: Path) -> None:
+    """Wait out ``path``'s timestamp tick, so a stamp written afterwards is not "racy".
+
+    A tick is a few milliseconds on most filesystems but a whole second on those that store
+    timestamps in seconds (Lustre, used for shared model caches).
+    """
+    whole_seconds = path.lstat().st_ctime_ns % 1_000_000_000 == 0
+    _real_sleep(1.05 if whole_seconds else 0.05)
 
 
 def _count_hashing(monkeypatch) -> list[str]:
@@ -104,7 +112,7 @@ def test_verified_file_is_hashed_once_while_unchanged(tmp_path: Path, opener: _F
         assert weights._stamp_path(dest).exists()
     else:
         dest.write_bytes(_PAYLOAD)
-    _real_sleep(_PAST_A_CLOCK_TICK)
+    _wait_past_clock_tick(dest)
     hashed = _count_hashing(monkeypatch)
 
     for _ in range(3):
