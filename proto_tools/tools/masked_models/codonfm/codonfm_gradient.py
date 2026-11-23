@@ -13,7 +13,6 @@ from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     CodonFMCheckpoint,
     CodonSequenceLogits,
     one_hot_codon_logits,
-    resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -187,7 +186,6 @@ def run_codonfm_gradient(
     Returns:
         CodonFMGradientOutput: Gradient (unless forward-only), mean-NLL loss, metrics, and codon vocab.
     """
-    safetensors_url, config_url, filename, subdir = resolve_checkpoint_source(config.model_checkpoint)
     result = ToolInstance.dispatch(
         "codonfm",
         {
@@ -198,10 +196,7 @@ def run_codonfm_gradient(
             "hard": config.hard,
             "compute_gradient": config.compute_gradient,
             "batch_size": config.batch_size,
-            "safetensors_url": safetensors_url,
-            "config_url": config_url,
-            "safetensors_filename": filename,
-            "cache_subdir": subdir,
+            "model_checkpoint": config.model_checkpoint,
             "device": config.device,
             "seed": config.seed,
             "verbose": config.verbose,

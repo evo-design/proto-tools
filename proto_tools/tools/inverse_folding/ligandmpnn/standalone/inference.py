@@ -38,12 +38,22 @@ SCORING_CAUSALITY = {
 # ============================================================================
 _LEGACY_SOURCE_COMMIT = "1e42fc763bd37256227437c14a93c99d1f44241d"
 _LEGACY_CODE_TARBALL_URL = f"https://github.com/gelnesr/dEVA/archive/{_LEGACY_SOURCE_COMMIT}.tar.gz"
+_LEGACY_CODE_TARBALL_SHA256 = "bde72c9fa29c75b2b36c984c78aa3050ca16fa753f017ef8faf208b6499ee18c"
 _LEGACY_CODE_SUBDIR = f"dEVA-{_LEGACY_SOURCE_COMMIT}/models/ligandmpnn"
 # Importable package name expected by ``_load_legacy_modules`` (imports ``ligandmpnn.*``).
 _LEGACY_PACKAGE_DIRNAME = "ligandmpnn"
-_LEGACY_WEIGHT_URLS: tuple[tuple[str, str], ...] = (
-    ("ligandmpnn_v_32_020_25.pt", "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_020_25.pt"),
-    ("ligandmpnn_sc_v_32_002_16.pt", "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_sc_v_32_002_16.pt"),
+# (filename, URL, SHA-256): each download is checked before it is used.
+_LEGACY_WEIGHT_URLS: tuple[tuple[str, str, str], ...] = (
+    (
+        "ligandmpnn_v_32_020_25.pt",
+        "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_020_25.pt",
+        "42caaa5cdb380867d2b31c30de4ab53ea89171279b3a0732ddf94bc4d3cb6981",
+    ),
+    (
+        "ligandmpnn_sc_v_32_002_16.pt",
+        "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_sc_v_32_002_16.pt",
+        "799a9de6c1c72bb0c7ceb37998391a6fd0e3e21cb42928ee31a28313a3b1b46a",
+    ),
 )
 
 
@@ -940,7 +950,7 @@ def _ensure_legacy_assets() -> Path:
         package_path.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="ligandmpnn_code_") as tmpdir:
             tarball = Path(tmpdir) / "source.tar.gz"
-            download_weights(_LEGACY_CODE_TARBALL_URL, tarball)
+            download_weights(_LEGACY_CODE_TARBALL_URL, tarball, sha256=_LEGACY_CODE_TARBALL_SHA256)
             tar_cmd = ["tar", "-zxf", str(tarball), "-C", tmpdir, _LEGACY_CODE_SUBDIR]
             subprocess.run(tar_cmd, check=True, env=get_subprocess_device_env("cpu"))
             extracted = Path(tmpdir) / _LEGACY_CODE_SUBDIR
@@ -955,9 +965,9 @@ def _ensure_legacy_assets() -> Path:
 
     # 2. Weights: fetch each checkpoint into model_params if missing.
     model_params = package_path / "model_params"
-    for filename, url in _LEGACY_WEIGHT_URLS:
+    for filename, url, sha256 in _LEGACY_WEIGHT_URLS:
         dest = model_params / filename
-        download_weights(url, dest)
+        download_weights(url, dest, sha256=sha256)
     return package_path
 
 

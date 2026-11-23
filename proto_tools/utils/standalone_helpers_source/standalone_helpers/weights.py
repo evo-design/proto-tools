@@ -362,6 +362,101 @@ def _verified(path: Path, sha256: str | None, md5: str | None) -> bool:
     return not (md5 and file_digest(path, "md5") != md5)
 
 
+def _stamp_path(path: Path) -> Path:
+    """Where this user's verification of ``path`` is remembered.
+
+    One stamp per user: on a shared cache a stamp is trusted only by the user who wrote it (see
+    ``_read_own_stamp``), so users sharing a file each keep their own rather than replacing each
+    other's.
+    """
+    return path.with_name(f".{path.name}.verified.{os.getuid()}")
+
+
+def _stamp_line(path: Path, sha256: str | None, md5: str | None) -> str:
+    """The line that vouches for ``path`` exactly as it is now, with the digests it matched.
+
+    Device, inode and change time make any replacement or rewrite of the file a mismatch, including
+    a same-size one whose modification time was restored: ``ctime`` cannot be set by hand, and a
+    rename into place gives a new inode.
+    """
+    st = path.lstat()
+    return f"{st.st_dev} {st.st_ino} {st.st_size} {st.st_mtime_ns} {st.st_ctime_ns} {sha256 or '-'} {md5 or '-'}\n"
+
+
+def _read_own_stamp(stamp: Path) -> tuple[str, int] | None:
+    """A stamp's line and modification time, or ``None`` unless this user alone could have written it.
+
+    Opened without following symlinks, and trusted only when it is a regular file owned by this user
+    that neither group nor others can write: anyone who can write a shared cache directory could
+    otherwise stamp a file they swapped in.
+    """
+    try:
+        fd = os.open(stamp, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        return None
+    with os.fdopen(fd) as handle:
+        st = os.fstat(handle.fileno())
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            return None
+        return handle.read(), st.st_mtime_ns
+
+
+def _stamp_vouches(path: Path, line: str) -> bool:
+    """Whether this user's stamp vouches for ``path`` as ``line`` describes it now.
+
+    Filesystems record times on a coarse clock (a few milliseconds per tick), so a rewrite in the
+    same tick as the stamp keeps the change time it recorded. As with git's "racy" index entries, a
+    stamp written in the same tick as the file's last change is not trusted, and the file is hashed
+    again; the stamp written then, a tick later, is.
+    """
+    stamp = _read_own_stamp(_stamp_path(path))
+    if stamp is None:
+        return False
+    recorded, stamped_at = stamp
+    return recorded == line and path.lstat().st_ctime_ns < stamped_at
+
+
+def _remember_verified(path: Path, line: str) -> None:
+    """Record that ``path``, as ``line`` describes it, matched its digests.
+
+    The stamp is written to a fresh temp file and renamed into place, so a symlink planted at the
+    stamp's name is replaced rather than followed, and readers never see a partial stamp.
+    """
+    stamp = _stamp_path(path)
+    with contextlib.suppress(OSError):  # a read-only shared cache just hashes again next time
+        fd, tmp_name = tempfile.mkstemp(prefix=f"{stamp.name}.", suffix=".tmp", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w") as handle:
+                handle.write(line)
+            os.replace(tmp_name, stamp)
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(tmp_name)
+
+
+def _verified_in_place(path: Path, sha256: str | None, md5: str | None) -> bool:
+    """``_verified`` for a file already in place, hashing it only once while it stays unchanged.
+
+    Hashing a multi-GB checkpoint on every load adds seconds to every worker start, so a file that
+    matched is stamped (``.{name}.verified.<uid>`` beside it) and later checks compare the stamp
+    instead.
+    """
+    if not _is_regular_file(path):
+        return False
+    if not (sha256 or md5):
+        return True
+    line = _stamp_line(path, sha256, md5)
+    if _stamp_vouches(path, line):
+        return True
+    if not _verified(path, sha256, md5):
+        return False
+    # Stamp only the file that was hashed: one replaced while it was being hashed is checked again
+    # next time rather than vouched for.
+    if _is_regular_file(path) and _stamp_line(path, sha256, md5) == line:
+        _remember_verified(path, line)
+    return True
+
+
 def download_weights(
     url: str,
     dest: str | Path,
@@ -374,7 +469,8 @@ def download_weights(
     """Download ``url`` to ``dest`` once, safely, for concurrent workers on a shared cache.
 
     A ``dest`` that already exists (and matches the checksum, when one is given) is returned
-    without a request. Otherwise the download holds ``.{name}.download.lock`` beside ``dest``,
+    without a request; a file that matched is hashed only once while it stays unchanged.
+    Otherwise the download holds ``.{name}.download.lock`` beside ``dest``,
     writes an exclusively created temp file, verifies it, and renames it into place, so readers
     never see a partial file. ``HF_TOKEN`` (or ``HUGGING_FACE_HUB_TOKEN``) is sent only to ``https://huggingface.co`` and is
     dropped if a redirect leaves it; non-HTTPS URLs and redirects are refused. This is the
@@ -398,12 +494,12 @@ def download_weights(
     dest = Path(dest)
     if urllib.parse.urlparse(url).scheme != "https":
         raise ValueError(f"refusing non-HTTPS weights URL {redact_url(url)!r}")
-    if _verified(dest, sha256, md5):
+    if _verified_in_place(dest, sha256, md5):
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
     temps = f"{glob.escape(str(dest.parent))}/.{glob.escape(dest.name)}.*.tmp"
     with file_lock(dest.parent / f".{dest.name}.download.lock", progress=temps):
-        if _verified(dest, sha256, md5):
+        if _verified_in_place(dest, sha256, md5):
             return dest
         for attempt in range(1, retries + 1):
             # mkstemp, not a predictable name: on a shared cache another user must not be able
@@ -428,6 +524,9 @@ def download_weights(
                 if not _verified(tmp, sha256, md5):
                     raise RuntimeError(f"checksum mismatch for {redact_url(url)} (expected {sha256 or md5})")
                 os.replace(tmp, dest)
+                if sha256 or md5:
+                    # The rename keeps the inode just hashed; stamp it as it now sits at dest
+                    _remember_verified(dest, _stamp_line(dest, sha256, md5))
                 return dest
             except (urllib.error.URLError, TimeoutError) as err:
                 is_client_error = isinstance(err, urllib.error.HTTPError) and err.code < 500
@@ -486,6 +585,7 @@ def download_archive(
                 shutil.unpack_archive(str(archive), str(staging), format=fmt)
         finally:
             archive.unlink(missing_ok=True)
+            _stamp_path(archive).unlink(missing_ok=True)
         if not (staging / marker).exists():
             raise RuntimeError(f"archive from {redact_url(url)} does not contain {marker}")
 

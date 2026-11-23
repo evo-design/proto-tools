@@ -20,7 +20,6 @@ from proto_tools.tools.masked_models.ablang import (
     run_ablang_score,
 )
 from proto_tools.tools.masked_models.codonfm import (
-    CODONFM_CHECKPOINTS,
     CODONFM_CODON_VOCAB,
     CODONFM_NUM_CODONS,
     CodonFMCheckpoint,
@@ -49,7 +48,6 @@ from proto_tools.tools.masked_models.codonfm import (
     CodonSequenceInput,
     normalize_codon_sequence,
     one_hot_codon_logits,
-    resolve_checkpoint_source,
     run_codonfm_embeddings,
     run_codonfm_fitness,
     run_codonfm_gradient,
@@ -270,7 +268,6 @@ __all__ = [
     "AbLangScoringOutput",
     "run_ablang_score",
     # CodonFM - shared
-    "CODONFM_CHECKPOINTS",
     "CODONFM_CODON_VOCAB",
     "CODONFM_NUM_CODONS",
     "CodonFMCheckpoint",
@@ -278,7 +275,6 @@ __all__ = [
     "CodonSequenceInput",
     "normalize_codon_sequence",
     "one_hot_codon_logits",
-    "resolve_checkpoint_source",
     # CodonFM - Fitness
     "CodonFMFitnessConfig",
     "CodonFMFitnessInput",

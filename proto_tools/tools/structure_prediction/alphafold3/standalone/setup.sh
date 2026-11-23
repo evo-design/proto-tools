@@ -39,6 +39,7 @@ echo "Setting up AlphaFold3 standalone environment..."
 # neither commercial use nor redistribution, hence the terms notice below.
 proto_resolve_weights_dir alphafold3
 AF3_WEIGHTS_URL="https://storage.googleapis.com/alphafold3/af3.bin.zst"
+AF3_WEIGHTS_SHA256="74d0258616917cd122f5eab6d076afe4a8930e96823851e65e4f777dfb1f33ff"
 if compgen -G "$WEIGHTS_DIR/*.bin*" >/dev/null; then
   echo "[af3] Model parameters already present in $WEIGHTS_DIR — skipping download"
 else
@@ -46,10 +47,11 @@ else
   echo "[af3] Subject to DeepMind's AlphaFold 3 Model Parameters Terms of Use"
   echo "[af3] (non-commercial organizations only; redistribution prohibited):"
   echo "[af3]   https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md"
-  # proto_download stages under a dot-prefixed temp name, so an interrupted
-  # transfer cannot leave a truncated af3.bin.zst that the *.bin* checks here
-  # and in inference.py would both read as provisioned.
-  if ! proto_download "$AF3_WEIGHTS_URL" "${WEIGHTS_DIR}/af3.bin.zst"; then
+  # proto_download_verified stages under a dot-prefixed temp name and checks the
+  # SHA-256 before moving it into place, so neither an interrupted transfer nor a
+  # bad download can leave an af3.bin.zst that the *.bin* checks here and in
+  # inference.py would both read as provisioned.
+  if ! proto_download_verified "$AF3_WEIGHTS_URL" "${WEIGHTS_DIR}/af3.bin.zst" "$AF3_WEIGHTS_SHA256"; then
     echo "[af3] ERROR: failed to download AlphaFold3 parameters from $AF3_WEIGHTS_URL" >&2
     echo "[af3] Place af3.bin / af3.bin.zst in $WEIGHTS_DIR yourself, or point" >&2
     echo "[af3] PROTO_ALPHAFOLD3_WEIGHTS_DIR at an existing copy." >&2
