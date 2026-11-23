@@ -334,7 +334,7 @@ class ESMCModel:
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)
+            self.amino_acid_token_ids = move_model_to_device(self.amino_acid_token_ids, self.device, device)
             self.device = device
 
     def unload(self, verbose: bool = False) -> None:
