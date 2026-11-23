@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 if TYPE_CHECKING:
     import pandas as pd
 
-from proto_tools.databases import DatasetRegistry, get_dataset_dir
+from proto_tools.databases import DatasetRegistry, MMseqs2DatabaseEntry, get_dataset_dir
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -536,17 +536,17 @@ def _resolve_registered_mmseqs_db(mmseqs_db: str, *, use_gpu: bool) -> tuple[str
         return mmseqs_db, False
 
     entry = DatasetRegistry.get(mmseqs_db)
+    if not isinstance(entry, MMseqs2DatabaseEntry):
+        raise ValueError(f"mmseqs2-search-proteins: registered dataset {mmseqs_db!r} is not an MMseqs2 database.")
     if entry.molecule_type != "protein":
         raise ValueError(
             f"mmseqs2-search-proteins: registered dataset {mmseqs_db!r} has "
             f"molecule_type={entry.molecule_type!r}; use a protein dataset."
         )
-    if use_gpu and not entry.supports_gpu:
+    if use_gpu and entry.gpu_db is None:
         raise ValueError(f"mmseqs2-search-proteins: registered dataset {mmseqs_db!r} does not support GPU search.")
 
-    cache_dir = get_dataset_dir(mmseqs_db)
-    db_prefix = entry.gpu_padded_marker if use_gpu and entry.gpu_padded_marker else entry.db_prefix
-    stem = cache_dir / db_prefix
+    stem = entry.search_db(get_dataset_dir(mmseqs_db), gpu=use_gpu)
     if not Path(f"{stem}.dbtype").is_file():
         raise FileNotFoundError(
             f"mmseqs2-search-proteins: registered dataset {mmseqs_db!r} is not provisioned: "
