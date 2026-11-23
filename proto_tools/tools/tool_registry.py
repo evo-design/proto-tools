@@ -18,7 +18,8 @@ import re
 import time
 import traceback
 import warnings
-from collections.abc import Callable, MutableMapping
+from collections.abc import Callable, Iterator, MutableMapping
+from contextvars import ContextVar
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -32,6 +33,10 @@ if TYPE_CHECKING:
     from proto_tools.utils.tool_docs import ModelDoc, ReadmeSections, ToolReadmeEntry
 
 logger = logging.getLogger(__name__)
+
+# Open ``ToolRegistry.record_calls`` blocks, outermost first. A ContextVar keeps concurrent callers
+# (threads, asyncio tasks) apart; only work run in a copy of the context (``ToolPool``) inherits it.
+_tool_call_records: ContextVar[tuple[dict[str, str | None], ...]] = ContextVar("_tool_call_records", default=())
 
 # Path to tools directory for citation file discovery
 TOOLS_DIR = Path(__file__).parent
@@ -959,6 +964,33 @@ class ToolRegistry:
         return cls._dispatch_backend is not None
 
     @classmethod
+    @contextlib.contextmanager
+    def record_calls(cls) -> Iterator[dict[str, str | None]]:
+        """Record every registered tool called inside the block, with the version its outputs carry.
+
+        The yielded dict maps each called tool key to its ``tool_version`` (``None`` for a toolkit
+        without ``versions.yaml``), filled as calls start. A call counts whether it runs, is served
+        from cache, is routed to a dispatch backend such as Modal, or fails, and a tool called by
+        another tool counts too. Blocks nest: a call is recorded in every open block. Calls are seen
+        from this context and from work run in a copy of it (``ToolPool``'s worker threads); a thread
+        started without one, such as a plain ``threading.Thread``, records nothing.
+
+        Yields:
+            dict[str, str | None]: Tool key to ``tool_version``, in first-call order.
+
+        Examples:
+            >>> with ToolRegistry.record_calls() as calls:
+            ...     run_random_nucleotide_sample(RandomNucleotideSampleInput(sequences=["ATGC"]))
+            >>> calls  # {"random-nucleotide-sample": "1.0.0"}
+        """
+        calls: dict[str, str | None] = {}
+        token = _tool_call_records.set((*_tool_call_records.get(), calls))
+        try:
+            yield calls
+        finally:
+            _tool_call_records.reset(token)
+
+    @classmethod
     def register(
         cls,
         key: str,
@@ -1136,6 +1168,9 @@ class ToolRegistry:
                 ``ToolInstance.persist()`` context (which authorizes auto-creation
                 under the given name).
                 """
+                for calls in _tool_call_records.get():
+                    if key not in calls:
+                        calls[key] = _tool_version(key)
                 _func_token = set_current_tool_function(func.__name__)
                 try:
                     return _wrapper_body(inputs, config, instance)

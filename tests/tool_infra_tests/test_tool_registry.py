@@ -2449,3 +2449,86 @@ def test_only_tools_without_a_tool_instance_run_under_the_deadline(clean_registr
         assert seen == [None]
     else:
         assert seen[0] is not None and 59 < seen[0] <= 60
+
+
+# ── record_calls ─────────────────────────────────────────────────────────────
+
+
+def _ok_tool(inputs, config, instance=None):
+    return MockToolOutput(result="ok")
+
+
+def test_record_calls_records_each_tool_with_the_version_its_output_carries(clean_registry, monkeypatch):
+    """A call inside the block is recorded once, with the same version stamped on its output."""
+    # Mock tools have no versions.yaml, so give each a distinct version the record must match
+    monkeypatch.setattr("proto_tools.tools.tool_registry._tool_version", lambda key: f"1.0.0+{key}")
+    with clean_registry.record_calls() as calls:
+        first = _register_and_run(clean_registry, "recorded-a", _ok_tool)
+        clean_registry.get("recorded-a").function(MockToolInput(input_data="again"), MockToolConfig(param1="v"))
+        second = _register_and_run(clean_registry, "recorded-b", _ok_tool)
+    assert calls == {"recorded-a": first.tool_version, "recorded-b": second.tool_version}
+    assert first.tool_version != second.tool_version
+    assert list(calls) == ["recorded-a", "recorded-b"], "first-call order"
+
+
+def test_record_calls_ignores_calls_outside_the_block(clean_registry):
+    """Calls before or after the block are not recorded (control for the test above)."""
+    _register_and_run(clean_registry, "before-block", _ok_tool)
+    with clean_registry.record_calls() as calls:
+        pass
+    clean_registry.get("before-block").function(MockToolInput(input_data="after"), MockToolConfig(param1="v"))
+    assert calls == {}
+
+
+def test_record_calls_nests(clean_registry):
+    """An inner block sees only its own calls; the outer block sees every call made while it is open."""
+    with clean_registry.record_calls() as outer:
+        _register_and_run(clean_registry, "outer-only", _ok_tool)
+        with clean_registry.record_calls() as inner:
+            _register_and_run(clean_registry, "both", _ok_tool)
+    assert set(inner) == {"both"}
+    assert set(outer) == {"outer-only", "both"}
+
+
+def test_record_calls_records_a_call_that_raises(clean_registry):
+    """A failed call still ran the tool, so it is recorded."""
+
+    def failing(inputs, config, instance=None):
+        raise ValueError("bad input")
+
+    with clean_registry.record_calls() as calls, pytest.raises(ValueError, match="bad input"):
+        _register_and_run(clean_registry, "raises", failing)
+    assert set(calls) == {"raises"}
+
+
+def test_record_calls_records_a_call_a_dispatch_backend_serves(clean_registry):
+    """A call routed to a dispatch backend (e.g. Modal) never runs locally but is recorded."""
+    clean_registry.configure_dispatch_backend(lambda key, inputs, config: MockToolOutput(result="remote"))
+    try:
+        with clean_registry.record_calls() as calls:
+            result = _register_and_run(clean_registry, "remote-tool", _ok_tool)
+    finally:
+        clean_registry.clear_dispatch_backend()
+    assert result.result == "remote"
+    assert set(calls) == {"remote-tool"}
+
+
+def test_record_calls_sees_threads_run_in_a_copy_of_its_context_only(clean_registry):
+    """ToolPool runs its workers in a copy of the caller's context, so their calls count; a plain thread's don't."""
+    import contextvars
+    import threading
+
+    _register_and_run(clean_registry, "threaded", _ok_tool)
+    call = (clean_registry.get("threaded").function, MockToolInput(input_data="t"), MockToolConfig(param1="v"))
+
+    def run_in_thread(copy_context: bool) -> dict[str, str | None]:
+        with clean_registry.record_calls() as calls:
+            # The copy is taken inside the block, as ToolPool takes it inside the program's run
+            target, args = (contextvars.copy_context().run, call) if copy_context else (call[0], call[1:])
+            thread = threading.Thread(target=target, args=args)
+            thread.start()
+            thread.join()
+        return calls
+
+    assert set(run_in_thread(copy_context=True)) == {"threaded"}
+    assert run_in_thread(copy_context=False) == {}
