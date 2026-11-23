@@ -4,6 +4,7 @@ Tests for RFdiffusion3.
 """
 
 import json
+import logging
 import subprocess
 from importlib import util
 from pathlib import Path
@@ -18,11 +19,31 @@ from proto_tools.tools.structure_design import (
     run_rfdiffusion3,
 )
 from proto_tools.tools.structure_design.rfdiffusion3.rfdiffusion3_sample import _unguided_cfg_specs
-from tests._structure_fixtures import synthetic_cif
+from tests._structure_fixtures import single_chain_pdb, synthetic_cif
 from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 _persistent_tool = make_persistent_fixture("rfdiffusion3")
+# Cropped PD-L1 target shipped as an RFD4 example: 924 atoms, 15 unresolved sidechain atoms written as nan.
+_PDL1_CROPPED_CIF = (
+    Path(__file__).resolve().parents[2]
+    / "proto_tools/tools/structure_design/rfd4/examples/inputs/pdl1_target_5o45_cropped.cif"
+)
+_PDL1_UNRESOLVED = (
+    "A17 ASN CG,OD1,ND2; A45 GLU OE2; A46 LYS CD,NZ; A82 ARG CZ,NH1,NH2; A125 ARG CZ,NH1,NH2; A129 LYS CD,CE,NZ"
+)
+
+
+def _atom_site_rows(cif_text: str) -> list[tuple[str, str, str, str]]:
+    """(chain, residue, atom name, Cartn_x) for every _atom_site row, read with gemmi."""
+    import gemmi
+
+    table = (
+        gemmi.cif.read_string(cif_text)
+        .sole_block()
+        .find("_atom_site.", ["auth_asym_id", "auth_seq_id", "label_atom_id", "Cartn_x"])
+    )
+    return [tuple(row[i] for i in range(4)) for row in table]  # type: ignore[misc]
 
 
 # ── Validation tests ────────────────────────────────────────────────────────
@@ -490,6 +511,123 @@ def test_rfdiffusion3_raw_json_resolves_relative_input_paths(tmp_path, monkeypat
     spec = json.loads(inputs.to_json_spec())
 
     assert spec["spec-0"]["input"] == str(target)
+
+
+# ── Input staging: atoms without coordinates ────────────────────────────────
+
+
+def test_rfdiffusion3_input_structure_drops_atoms_without_coordinates(tmp_path, caplog):
+    """The cropped PD-L1 target is staged without its 15 nan atoms; every resolved row is kept verbatim.
+
+    rfd3 has no inference-time representation for an unresolved input atom, so a nan
+    coordinate reaches the denoiser ("Tensor contains NaNs!"); upstream expects the atom absent.
+    """
+    original = _PDL1_CROPPED_CIF.read_text()
+    inputs = RFdiffusion3Input(
+        design_specs=[
+            RFdiffusion3DesignSpec(
+                input_structure=Structure(structure=original), contig="A17-131,/0,70-80", select_hotspots="A56"
+            )
+        ]
+    )
+
+    with caplog.at_level(logging.WARNING):
+        spec = json.loads(inputs.to_json_spec(input_dir=tmp_path))
+
+    staged = Path(spec["spec-0"]["input"]).read_text()
+    before, after = _atom_site_rows(original), _atom_site_rows(staged)
+    assert len(before) == 924
+    assert after == [row for row in before if row[3] != "nan"]
+    assert len(after) == 909
+    assert (
+        f"removing 15 input atoms without coordinates, which rfd3 cannot condition on (it reads every input atom as fixed context): {_PDL1_UNRESOLVED}"
+        in caplog.text
+    )
+    assert "spec-0" in caplog.text
+
+
+@pytest.mark.parametrize("missing", ["?", ".", "nan"])
+def test_rfdiffusion3_input_structure_drops_cif_atoms_with_null_coordinates(tmp_path, missing):
+    """The mmCIF null markers ``?`` and ``.`` count as no coordinate, like ``nan``."""
+    cif = synthetic_cif(["A"]).replace("1.300 2.500 0.000", f"{missing} {missing} {missing}")
+    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(input_structure=cif, contig="A1-1/0,40")])
+
+    spec = json.loads(inputs.to_json_spec(input_dir=tmp_path))
+
+    assert [row[2] for row in _atom_site_rows(Path(spec["spec-0"]["input"]).read_text())] == ["N", "CA", "C"]
+
+
+def test_rfdiffusion3_input_structure_drops_pdb_atoms_without_coordinates(tmp_path, caplog):
+    """A PDB atom with nan coordinates is removed with its ANISOU record; every other line is kept."""
+    lines = single_chain_pdb(2).splitlines(keepends=True)
+    atom_lines = [i for i, line in enumerate(lines) if line.startswith("ATOM")]
+    unresolved = atom_lines[5]  # residue 2 CA
+    lines[unresolved] = lines[unresolved][:30] + f"{'nan':>8}{'nan':>8}{'nan':>8}" + lines[unresolved][54:]
+    anisou = "ANISOU" + lines[unresolved][6:28] + "  100    100    100      0      0      0       C\n"
+    lines.insert(unresolved + 1, anisou)
+    pdb = "".join(lines)
+    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(input_structure=pdb, contig="A1-2/0,40")])
+
+    with caplog.at_level(logging.WARNING):
+        spec = json.loads(inputs.to_json_spec(input_dir=tmp_path))
+
+    expected = "".join(line for i, line in enumerate(lines) if i not in (unresolved, unresolved + 1))
+    assert Path(spec["spec-0"]["input"]).read_text() == expected
+    assert "removing 1 input atoms without coordinates" in caplog.text
+    assert "A2 GLY CA" in caplog.text
+
+
+def test_rfdiffusion3_input_structure_rejects_structure_with_no_coordinates(tmp_path):
+    """Dropping every atom would leave rfd3 nothing to condition on, so staging refuses."""
+    cif = synthetic_cif(["A"])
+    for coords in ("0.000 0.000 0.000", "1.500 0.000 0.000", "2.000 1.500 0.000", "1.300 2.500 0.000"):
+        cif = cif.replace(coords, "nan nan nan")
+    inputs = RFdiffusion3Input(design_specs=[RFdiffusion3DesignSpec(input_structure=cif, contig="A1-1/0,40")])
+
+    with pytest.raises(ValueError, match="spec-0: no atom in the input structure has coordinates"):
+        inputs.to_json_spec(input_dir=tmp_path)
+
+
+def test_rfdiffusion3_raw_json_stages_file_with_unresolved_atoms_as_a_copy(tmp_path, caplog):
+    """A raw_json input file with nan atoms is staged as a cleaned copy; the caller's file is untouched."""
+    original = _PDL1_CROPPED_CIF.read_text()
+    target = tmp_path / "target.cif"
+    target.write_text(original)
+    staging = tmp_path / "staging"
+    inputs = RFdiffusion3Input(raw_json=json.dumps({"binder": {"input": str(target), "contig": "A17-131,/0,70-80"}}))
+
+    with caplog.at_level(logging.WARNING):
+        spec = json.loads(inputs.to_json_spec(input_dir=staging))
+
+    staged = Path(spec["binder"]["input"])
+    assert staged == staging / "raw-0_input.cif"
+    assert len(_atom_site_rows(staged.read_text())) == 909
+    assert target.read_text() == original
+    assert "binder: removing 15 input atoms" in caplog.text
+
+
+@pytest.mark.uses_env
+def test_rfdiffusion3_staged_input_loads_without_nan_in_rfd3(tmp_path):
+    """rfd3's own inference loader reads the staged PD-L1 target with no NaN coordinates.
+
+    The check also loads the original as a control, which must still carry NaN atoms.
+    """
+    from proto_tools.utils import run_in_env
+
+    inputs = RFdiffusion3Input(
+        design_specs=[
+            RFdiffusion3DesignSpec(
+                input_structure=Structure(structure=_PDL1_CROPPED_CIF.read_text()), contig="A17-131,/0,70-80"
+            )
+        ]
+    )
+    staged = json.loads(inputs.to_json_spec(input_dir=tmp_path))["spec-0"]["input"]
+
+    check = Path(__file__).resolve().parent / "_rfdiffusion3_unresolved_atoms_env_check.py"
+    output = run_in_env("rfdiffusion3", script=str(check), args=[str(_PDL1_CROPPED_CIF), staged], timeout=900)
+
+    assert "CONTROL original keeps 15 NaN-coordinate atoms" in output, output
+    assert "PASS staged input has 909 atoms" in output, output
 
 
 def test_rfdiffusion3_output_chain_ids_canonicalized(monkeypatch):

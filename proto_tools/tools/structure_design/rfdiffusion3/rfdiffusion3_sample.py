@@ -17,16 +17,17 @@ Example:
 
 import json
 import logging
+import math
 import tempfile
 from collections import defaultdict
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities.complex import Complex, chain_label
-from proto_tools.entities.structures import Structure
+from proto_tools.entities.structures import Structure, detect_structure_format
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -41,10 +42,134 @@ from proto_tools.utils.file_inputs import STRUCTURE_FILES
 logger = logging.getLogger(__name__)
 
 
-def _resolve_input_structure_path(value: str) -> str:
-    """Return a ``raw_json`` ``"input"`` that names a structure file as an absolute path; leave content as is."""
+def _pdb_coordinate(line: str, start: int, end: int) -> float:
+    """Parse one fixed-width PDB coordinate, naming the record when it is not a number."""
+    field = line[start:end]
+    try:
+        return float(field)
+    except ValueError as exc:
+        raise ValueError(f"rfdiffusion3: input PDB record has a non-numeric coordinate {field!r}: {line!r}") from exc
+
+
+def _drop_unresolved_pdb_atoms(content: str) -> tuple[str, dict[str, list[str]], int]:
+    """Remove ``ATOM``/``HETATM`` records (and their ``ANISOU``) whose coordinates are not finite.
+
+    Returns the text, the dropped atom names by residue, and the number of atom records kept.
+    """
+    kept: list[str] = []
+    dropped: dict[str, list[str]] = defaultdict(list)
+    n_kept = 0
+    skip_anisou = False
+    for line in content.splitlines(keepends=True):
+        record = line[:6]
+        if record in ("ATOM  ", "HETATM"):
+            skip_anisou = False
+            coords = (_pdb_coordinate(line, 30, 38), _pdb_coordinate(line, 38, 46), _pdb_coordinate(line, 46, 54))
+            if not all(math.isfinite(c) for c in coords):
+                residue = f"{line[21].strip()}{line[22:27].strip()} {line[17:20].strip()}"
+                dropped[residue].append(line[12:16].strip())
+                skip_anisou = True
+                continue
+            n_kept += 1
+        elif record == "ANISOU" and skip_anisou:
+            skip_anisou = False
+            continue
+        kept.append(line)
+    return "".join(kept), dict(dropped), n_kept
+
+
+def _drop_unresolved_cif_atoms(content: str) -> tuple[str, dict[str, list[str]], int]:
+    """Remove ``_atom_site`` rows whose ``Cartn_x/y/z`` are ``nan``, ``?`` or ``.``; keep every other row and column.
+
+    Returns the text, the dropped atom names by residue, and the number of atom rows kept.
+    """
+    import gemmi
+
+    doc = gemmi.cif.read_string(content)
+    dropped: dict[str, list[str]] = defaultdict(list)
+    n_kept = 0
+    for block in doc:
+        table = block.find(
+            "_atom_site.",
+            ["Cartn_x", "Cartn_y", "Cartn_z", "?auth_asym_id", "?auth_seq_id", "?label_comp_id", "?label_atom_id"],
+        )
+        unresolved = [
+            index
+            for index, row in enumerate(table)
+            if not all(math.isfinite(gemmi.cif.as_number(row[i])) for i in range(3))
+        ]
+        for index in unresolved:
+            row = table[index]
+            chain, seq, comp, atom = (gemmi.cif.as_string(row[i]) if row.has(i) else "?" for i in range(3, 7))
+            dropped[f"{chain}{seq} {comp}"].append(atom)
+        # Remove from the end so earlier indices stay valid.
+        for index in reversed(unresolved):
+            table.remove_row(index)
+        n_kept += len(table)
+    if not dropped:
+        return content, {}, n_kept
+    return doc.as_string(), dict(dropped), n_kept
+
+
+def _drop_unresolved_atoms(content: str, structure_format: str, label: str) -> str:
+    """Return ``content`` without atoms that have no coordinates, warning with the atoms dropped.
+
+    rfd3 reads every atom in its input as fixed context and, at inference, has no
+    representation for an unresolved one: its loader keeps an atom written with ``nan``
+    coordinates (``add_missing_atoms=False``), the transforms that place unresolved atoms
+    run only in training, and the NaN reaches the denoiser input, which fails with
+    ``Tensor contains NaNs!``. An atom absent from the file is what rfd3 expects for one
+    without coordinates, so those atoms are removed, as a PDB entry omits atoms it did
+    not resolve. Atom records with coordinates, and every other category, are kept.
+
+    Args:
+        content (str): PDB or CIF text.
+        structure_format (str): ``"pdb"`` or ``"cif"``.
+        label (str): Spec key the structure belongs to, named in the warning.
+
+    Returns:
+        str: ``content`` unchanged when every atom has coordinates, else the text without the
+            unresolved atoms.
+
+    Raises:
+        ValueError: If no atom in the structure has coordinates.
+    """
+    if structure_format == "cif":
+        cleaned, dropped, n_kept = _drop_unresolved_cif_atoms(content)
+    else:
+        cleaned, dropped, n_kept = _drop_unresolved_pdb_atoms(content)
+    if not dropped:
+        return content
+    if n_kept == 0:
+        raise ValueError(f"rfdiffusion3: {label}: no atom in the input structure has coordinates.")
+    count = sum(len(atoms) for atoms in dropped.values())
+    logger.warning(
+        "rfdiffusion3: %s: removing %d input atoms without coordinates, which rfd3 cannot "
+        "condition on (it reads every input atom as fixed context): %s",
+        label,
+        count,
+        "; ".join(f"{residue} {','.join(atoms)}" for residue, atoms in dropped.items()),
+    )
+    return cleaned
+
+
+def _stage_raw_json_input(value: str, label: str, stem: str, staging_dir: Callable[[], Path]) -> str:
+    """Return a ``raw_json`` ``"input"`` that names a structure file as an absolute path; leave content as is.
+
+    A file with atoms that have no coordinates is staged as ``{stem}_input.{ext}`` without
+    them (see ``_drop_unresolved_atoms``); the caller's file is never modified.
+    """
     path = STRUCTURE_FILES.resolve(value)
-    return value if path is None else str(path.resolve())
+    if path is None:
+        return value
+    content = path.read_text()
+    structure_format = detect_structure_format(content)
+    cleaned = _drop_unresolved_atoms(content, structure_format, label)
+    if cleaned is content:
+        return str(path.resolve())
+    staged = staging_dir() / f"{stem}_input.{structure_format}"
+    staged.write_text(cleaned)
+    return str(staged)
 
 
 # ============================================================================
@@ -65,6 +190,7 @@ class RFdiffusion3DesignSpec(BaseModel):
     Attributes:
         input_structure (Structure | None): Input structure (``Structure`` or PDB/CIF file path)
             for motif/binder design; written to a file before rfd3 (reads a path). Omit for de novo.
+            Atoms without coordinates are left out of that file, with a warning naming them.
 
         contig (str | None): Contig string specifying the design topology.
             Format: comma-separated segments with chain breaks as ``/0``. Examples:
@@ -465,7 +591,8 @@ class RFdiffusion3Input(BaseToolInput):
 
         raw_json (str | None): Raw JSON string for advanced users who need
             full RFdiffusion3 flexibility. If provided, ``design_specs`` will be ignored
-            and this JSON will be passed directly to RFdiffusion3.
+            and this JSON will be passed directly to RFdiffusion3. An ``"input"`` file with
+            atoms that have no coordinates is staged as a copy without them.
 
     Examples:
         >>> # Simple unconditional design
@@ -505,26 +632,31 @@ class RFdiffusion3Input(BaseToolInput):
 
     def to_json_spec(self, input_dir: Path | None = None) -> str:
         """Convert input to RFdiffusion3 JSON spec, materializing any ``input_structure`` to a file path."""
+        dest: Path | None = None  # created only when a structure must be materialized
+
+        def staging_dir() -> Path:
+            nonlocal dest
+            if dest is None:
+                dest = Path(input_dir) if input_dir is not None else Path(tempfile.mkdtemp(prefix="rfd3_input_"))
+                dest.mkdir(parents=True, exist_ok=True)
+            return dest
+
         if self.raw_json:
-            spec = json.loads(self.raw_json)
-            for item in spec.values() if isinstance(spec, dict) else []:
+            raw_spec = json.loads(self.raw_json)
+            for i, (key, item) in enumerate(raw_spec.items() if isinstance(raw_spec, dict) else []):
                 if isinstance(item, dict) and isinstance(item.get("input"), str):
-                    item["input"] = _resolve_input_structure_path(item["input"])
-            return json.dumps(spec, indent=2)
+                    item["input"] = _stage_raw_json_input(item["input"], str(key), f"raw-{i}", staging_dir)
+            return json.dumps(raw_spec, indent=2)
 
         spec_dict: dict[str, Any] = {}
-        dest: Path | None = None  # created only when a structure must be materialized
         for i, spec in enumerate(self.design_specs):
             spec_key = f"spec-{i}"
             spec_dict[spec_key] = spec.to_dict()
             if spec.input_structure is not None:
-                if dest is None:
-                    dest = Path(input_dir) if input_dir is not None else Path(tempfile.mkdtemp(prefix="rfd3_input_"))
-                    dest.mkdir(parents=True, exist_ok=True)
                 # rfd3 needs a path: write the structure to a file, set "input" to it.
                 ext = spec.input_structure.structure_format or "pdb"
-                structure_path = dest / f"{spec_key}_input.{ext}"
-                structure_path.write_text(spec.input_structure.structure)
+                structure_path = staging_dir() / f"{spec_key}_input.{ext}"
+                structure_path.write_text(_drop_unresolved_atoms(spec.input_structure.structure, ext, spec_key))
                 spec_dict[spec_key]["input"] = str(structure_path)
 
         return json.dumps(spec_dict, indent=2)
