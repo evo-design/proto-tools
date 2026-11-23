@@ -6,8 +6,10 @@ and the masked pseudo-log-likelihood gradient.
 
 import importlib.util
 import math
+import re
 import sys
 from pathlib import Path
+from typing import get_args
 
 import numpy as np
 import pytest
@@ -27,14 +29,13 @@ from proto_tools.tools.masked_models.codonfm import (
     CodonFMScoreConfig,
     CodonFMScoreInput,
     one_hot_codon_logits,
-    resolve_checkpoint_source,
     run_codonfm_embeddings,
     run_codonfm_fitness,
     run_codonfm_gradient,
     run_codonfm_sample,
     run_codonfm_score,
 )
-from proto_tools.tools.masked_models.codonfm.shared_data_models import CODONFM_CHECKPOINTS, CODONFM_MAX_NT
+from proto_tools.tools.masked_models.codonfm.shared_data_models import CODONFM_MAX_NT, CodonFMCheckpoint
 from proto_tools.tools.mutagenesis.codons import CODON_TO_AA
 from proto_tools.transforms.masking import RandomMaskingStrategy
 from tests.conftest import benchmark_twice, make_persistent_fixture
@@ -172,6 +173,11 @@ def test_codonfm_worker_padding_and_early_validation(monkeypatch) -> None:
     with pytest.raises(ValueError, match="positive integer"):
         worker.dispatch({"operation": "fitness", "device": "cpu", "batch_size": 0, "sequences": ["ATG"]})
     assert loaded is False
+    with pytest.raises(ValueError, match="model_checkpoint must be one of"):
+        worker.dispatch(
+            {"operation": "fitness", "device": "cpu", "model_checkpoint": "encodon_2b", "sequences": ["ATG"]}
+        )
+    assert loaded is False
 
 
 @pytest.mark.uses_env
@@ -188,18 +194,18 @@ def test_codonfm_worker_gradient_is_padded_finite_and_does_not_touch_parameter_g
     assert "CODONFM_GRADIENT_OK" in output, output
 
 
-def test_codonfm_resolve_checkpoint_source_covers_all_aliases() -> None:
-    """Every checkpoint alias resolves to public HF URLs plus a stable cache subdir."""
-    for alias, entry in CODONFM_CHECKPOINTS.items():
-        safetensors_url, config_url, filename, subdir = resolve_checkpoint_source(alias)
-        assert safetensors_url.startswith("https://huggingface.co/")
-        assert safetensors_url.endswith(entry["safetensors"])
-        assert config_url.endswith("/config.json")
-        assert filename == entry["safetensors"]
-        assert subdir.startswith(f"codonfm-{alias}-")
-    # Distinct checkpoints get distinct cache subdirs (no cross-checkpoint clobbering).
-    subdirs = {resolve_checkpoint_source(alias)[3] for alias in CODONFM_CHECKPOINTS}
-    assert len(subdirs) == len(CODONFM_CHECKPOINTS)
+def test_codonfm_worker_checkpoints_match_the_config_and_are_pinned() -> None:
+    """The worker provisions every checkpoint the config accepts, pinned and with both files checksummed.
+
+    A name on only one side would pass config validation and then fail in the worker; ``resolve/main``
+    would follow upstream changes the pinned digests no longer match.
+    """
+    checkpoints = _load_codonfm_worker().CHECKPOINTS
+    assert set(checkpoints) == set(get_args(CodonFMCheckpoint))
+    for alias, entry in checkpoints.items():
+        assert re.fullmatch("[0-9a-f]{40}", entry["revision"]), alias
+        assert re.fullmatch("[0-9a-f]{64}", entry["safetensors_sha256"]), alias
+        assert re.fullmatch("[0-9a-f]{64}", entry["config_sha256"]), alias
 
 
 # ---------------------------------------------------------------------------
@@ -227,8 +233,7 @@ def test_codonfm_fitness_dispatch_contract(monkeypatch) -> None:
     assert captured["toolkit"] == "codonfm"
     assert captured["payload"]["operation"] == "fitness"
     assert captured["payload"]["sequences"] == [_CDS, "ATGGCCACC"]
-    assert captured["payload"]["safetensors_url"].endswith("NV-CodonFM-Encodon-80M-v1.safetensors")
-    assert captured["payload"]["config_url"].endswith("/config.json")
+    assert captured["payload"]["model_checkpoint"] == "encodon_80m"
     assert [r.fitness for r in result.results] == [-0.5, -0.5]
     assert [r.sequence_length for r in result.results] == [30, 9]
 

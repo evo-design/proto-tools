@@ -77,6 +77,129 @@ def test_download_redownloads_corrupt_file(tmp_path: Path, opener: _FakeOpener):
     assert dest.read_bytes() == _PAYLOAD
 
 
+# Longer than a filesystem timestamp tick, so a stamp written after it is not "racy"
+_PAST_A_CLOCK_TICK = 0.05
+# The real sleep: the ``opener`` fixture stubs ``time.sleep`` out for retry backoff
+_real_sleep = time.sleep
+
+
+def _count_hashing(monkeypatch) -> list[str]:
+    calls: list[str] = []
+    real = weights.file_digest
+
+    def counting(path, algorithm="sha256"):
+        calls.append(Path(path).name)
+        return real(path, algorithm)
+
+    monkeypatch.setattr(weights, "file_digest", counting)
+    return calls
+
+
+@pytest.mark.parametrize("placed_by", ["download", "hand"])
+def test_verified_file_is_hashed_once_while_unchanged(tmp_path: Path, opener: _FakeOpener, monkeypatch, placed_by: str):
+    """A checkpoint that matched once, downloaded or placed by hand, is trusted while unchanged."""
+    dest = tmp_path / "model.pt"
+    if placed_by == "download":
+        download_weights("https://example.org/model.pt", dest, sha256=_SHA256)
+        assert weights._stamp_path(dest).exists()
+    else:
+        dest.write_bytes(_PAYLOAD)
+    _real_sleep(_PAST_A_CLOCK_TICK)
+    hashed = _count_hashing(monkeypatch)
+
+    for _ in range(3):
+        download_weights("https://example.org/model.pt", dest, sha256=_SHA256)
+
+    if placed_by == "download":
+        # A stamp written in the download's own clock tick is distrusted, so at most one re-hash
+        assert len(hashed) <= 1
+        assert len(opener.requests) == 1
+    else:
+        assert hashed == ["model.pt"]
+        assert opener.requests == []
+
+
+def test_read_only_cache_still_verifies(tmp_path: Path, opener: _FakeOpener, monkeypatch):
+    """With no way to write a stamp, a present file is hashed each time instead of failing."""
+    dest = tmp_path / "model.pt"
+    dest.write_bytes(_PAYLOAD)
+
+    def read_only(*_args, **_kwargs):
+        raise PermissionError("read-only cache")
+
+    monkeypatch.setattr(weights.tempfile, "mkstemp", read_only)
+    hashed = _count_hashing(monkeypatch)
+
+    download_weights("https://example.org/model.pt", dest, sha256=_SHA256)
+    download_weights("https://example.org/model.pt", dest, sha256=_SHA256)
+
+    assert hashed == ["model.pt", "model.pt"]
+    assert opener.requests == []
+
+
+def test_same_size_rewrite_with_restored_mtime_is_hashed_again(tmp_path: Path, opener: _FakeOpener):
+    """``cp -p``, ``rsync -a`` or in-place corruption keep size and mtime, so the stamp must not."""
+    dest = tmp_path / "model.pt"
+    download_weights("https://example.org/model.pt", dest, sha256=_SHA256)
+    before = dest.stat()
+    with dest.open("r+b") as handle:  # flip one byte in place: same inode, same size
+        handle.write(b"M")
+    os.utime(dest, ns=(before.st_atime_ns, before.st_mtime_ns))
+
+    download_weights("https://example.org/model.pt", dest, sha256=_SHA256)
+
+    assert dest.read_bytes() == _PAYLOAD
+    assert len(opener.requests) == 2
+
+
+def test_planted_symlink_at_the_stamp_is_not_followed(tmp_path: Path, opener: _FakeOpener):
+    """Another user's symlink at the stamp's name must not make this user overwrite its target."""
+    dest = tmp_path / "model.pt"
+    dest.write_bytes(_PAYLOAD)
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep me")
+    stamp = weights._stamp_path(dest)
+    stamp.symlink_to(victim)
+
+    download_weights("https://example.org/model.pt", dest, sha256=_SHA256)
+
+    assert victim.read_text() == "keep me"
+    assert not stamp.is_symlink()
+
+
+def test_stamp_others_could_write_is_not_trusted(tmp_path: Path, opener: _FakeOpener):
+    """A group-writable stamp could have been forged by anyone sharing the cache, so it is ignored."""
+    dest = tmp_path / "model.pt"
+    dest.write_bytes(b"swapped in by someone else")
+    stamp = weights._stamp_path(dest)
+    stamp.write_text(weights._stamp_line(dest, _SHA256, None))
+    stamp.chmod(0o664)
+
+    download_weights("https://example.org/model.pt", dest, sha256=_SHA256)
+
+    assert dest.read_bytes() == _PAYLOAD
+    assert len(opener.requests) == 1
+
+
+def test_file_replaced_while_hashing_is_not_stamped(tmp_path: Path, opener: _FakeOpener, monkeypatch):
+    """A stamp vouches only for the file that was hashed, not one swapped in during the hash."""
+    dest = tmp_path / "model.pt"
+    dest.write_bytes(_PAYLOAD)
+    real = weights._verified
+
+    def replaced_during_hash(path, sha256, md5):
+        result = real(path, sha256, md5)
+        swap = tmp_path / "swap"
+        swap.write_bytes(b"unhashed")
+        os.replace(swap, path)
+        return result
+
+    monkeypatch.setattr(weights, "_verified", replaced_during_hash)
+    download_weights("https://example.org/model.pt", dest, sha256=_SHA256)
+
+    assert not weights._stamp_path(dest).exists()
+
+
 def test_download_checksum_mismatch_leaves_nothing(tmp_path: Path, opener: _FakeOpener):
     """A payload that fails verification never reaches ``dest`` and leaves no temp file."""
     dest = tmp_path / "model.pt"

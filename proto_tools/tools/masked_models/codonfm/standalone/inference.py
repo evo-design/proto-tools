@@ -5,9 +5,11 @@ JSON input file and writes a JSON output file, matching the proto one-shot dispa
 (``python inference.py input.json output.json``).
 """
 
+import hashlib
 import json
 import math
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -44,22 +46,61 @@ _MASK_CODON = "___"
 # ---------------------------------------------------------------------------
 # HuggingFace checkpoint provisioning (public NVIDIA Open Model License weights)
 # ---------------------------------------------------------------------------
-def _resolve_checkpoint(input_dict: dict[str, Any]) -> str:
+# Each checkpoint is pinned to a repository revision, and both of its files are checked against
+# their SHA-256 once downloaded, so a changed upstream file or a bad download is never loaded.
+# Keys match the host-side ``CodonFMCheckpoint`` aliases.
+CHECKPOINTS: dict[str, dict[str, str]] = {
+    "encodon_80m": {
+        "repo": "nvidia/NV-CodonFM-Encodon-80M-v1",
+        "safetensors": "NV-CodonFM-Encodon-80M-v1.safetensors",
+        "revision": "399ca9fe17b57941a7bebc6788033919b417413c",
+        "safetensors_sha256": "88c93c381d9ace4fcadd2f5d21a15d492371caad85e7fbdef7c4da4af7c82f69",
+        "config_sha256": "0c0e63a092656f6b81a1ad53993ba4cfef5fe59e57e55a33caeeb34928785a3e",
+    },
+    "encodon_600m": {
+        "repo": "nvidia/NV-CodonFM-Encodon-600M-v1",
+        "safetensors": "NV-CodonFM-Encodon-600M-v1.safetensors",
+        "revision": "43c785b8a1fbf1511449086ea13213b79e26f1f3",
+        "safetensors_sha256": "e81e4f63acd5e27be19848024a5912f5416f79192ecd32993fa09cbd2ae2976b",
+        "config_sha256": "5371b73fc1ca264a7b3567ba8286bacedfaf43bba2ff99e827fd07e7cce6f981",
+    },
+    "encodon_1b": {
+        "repo": "nvidia/NV-CodonFM-Encodon-1B-v1",
+        "safetensors": "NV-CodonFM-Encodon-1B-v1.safetensors",
+        "revision": "003013d9a764d2c8900cde9736749838cb30ffe2",
+        "safetensors_sha256": "7880a89baa83156e72d2f3b695c6cd91523067fd86301028bbf7614b2b801607",
+        "config_sha256": "0aac2cedb1f884882f6723b852dd74b99b4463bbb927cb45822d8a4190d56889",
+    },
+    "encodon_1b_cdwt": {
+        "repo": "nvidia/NV-CodonFM-Encodon-Cdwt-1B-v1",
+        "safetensors": "NV-CodonFM-Encodon-Cdwt-1B-v1.safetensors",
+        "revision": "a0457b334eae974147e74b8cad358e6c3c9d2b8b",
+        "safetensors_sha256": "b19928edfa5d02b95e57a61df465fb4af111ae80bb31e4f294bd3dfb5d4bf9e8",
+        "config_sha256": "0aac2cedb1f884882f6723b852dd74b99b4463bbb927cb45822d8a4190d56889",
+    },
+}
+
+
+def _resolve_checkpoint(model_checkpoint: str) -> str:
     """Provision ``<name>.safetensors`` + ``config.json`` into one cache dir; return the safetensors path.
 
     ``EncodonInference`` requires both files side by side. The repositories are public under the
     NVIDIA Open Model License; an available ``HF_TOKEN`` is used but is not required.
     """
-    safetensors_url = input_dict["safetensors_url"]
-    config_url = input_dict["config_url"]
-    filename = input_dict["safetensors_filename"]
-    cache_dir = Path(require_weights_dir("codonfm")) / input_dict["cache_subdir"]
-    safetensors_path = cache_dir / filename
-    config_path = cache_dir / "config.json"
+    entry = CHECKPOINTS[model_checkpoint]
+    base = f"https://huggingface.co/{urllib.parse.quote(entry['repo'])}/resolve/{entry['revision']}"
+    subdir = f"codonfm-{model_checkpoint}-{hashlib.sha256(entry['repo'].encode()).hexdigest()[:8]}"
+    cache_dir = Path(require_weights_dir("codonfm")) / subdir
+    safetensors_path = cache_dir / entry["safetensors"]
 
-    with file_lock(cache_dir.parent / f".{input_dict['cache_subdir']}.download.lock", progress=cache_dir):
-        download_weights(safetensors_url, safetensors_path, timeout=300)
-        download_weights(config_url, config_path, timeout=300)
+    with file_lock(cache_dir.parent / f".{subdir}.download.lock", progress=cache_dir):
+        download_weights(
+            f"{base}/{urllib.parse.quote(entry['safetensors'])}",
+            safetensors_path,
+            sha256=entry["safetensors_sha256"],
+            timeout=300,
+        )
+        download_weights(f"{base}/config.json", cache_dir / "config.json", sha256=entry["config_sha256"], timeout=300)
     return str(safetensors_path)
 
 
@@ -492,6 +533,8 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
     # Sampling rewrites codons, so its sequences carry ``___`` marking which ones to redraw.
     # No other operation does, and a mask reaching one of those is a caller error worth naming.
     alphabet = "ACGT_" if operation == "sample" else "ACGT"
+    if input_dict.get("model_checkpoint") not in CHECKPOINTS:
+        raise ValueError(f"codonfm: model_checkpoint must be one of {sorted(CHECKPOINTS)}")
 
     def valid_sequence(sequence: Any) -> bool:
         return (
@@ -577,7 +620,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     _validate_request(input_dict, operation)
     set_torch_seed(input_dict.get("seed"))
 
-    _MODEL.load(checkpoint_path=_resolve_checkpoint(input_dict), device=device)
+    _MODEL.load(checkpoint_path=_resolve_checkpoint(input_dict["model_checkpoint"]), device=device)
 
     if operation == "fitness":
         return {

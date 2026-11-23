@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field, model_validator
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     CodonFMConfig,
     normalize_codon_sequence,
-    resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolInput, BaseToolOutput, InputField, ToolInstance
@@ -218,7 +217,6 @@ def run_codonfm_score(
     Returns:
         CodonFMScoreOutput: Per-mutation reference/alternate log-likelihoods and their ratio.
     """
-    safetensors_url, config_url, filename, subdir = resolve_checkpoint_source(config.model_checkpoint)
     mutation_dicts = [
         {
             "sequence": m.sequence,
@@ -234,10 +232,7 @@ def run_codonfm_score(
         {
             "operation": "score",
             "mutations": mutation_dicts,
-            "safetensors_url": safetensors_url,
-            "config_url": config_url,
-            "safetensors_filename": filename,
-            "cache_subdir": subdir,
+            "model_checkpoint": config.model_checkpoint,
             "batch_size": config.batch_size,
             "device": config.device,
             "verbose": config.verbose,

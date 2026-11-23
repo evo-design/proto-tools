@@ -6,9 +6,7 @@ The tools score coding sequences (CDS) at codon resolution: mutation effect
 log-likelihood), CLS embeddings, and a differentiable codon objective.
 """
 
-import hashlib
 import math
-import urllib.parse
 from itertools import product
 from typing import Any, ClassVar, Literal
 
@@ -28,19 +26,6 @@ CodonFMCheckpoint = Literal[
     "encodon_1b",
     "encodon_1b_cdwt",
 ]
-
-CODONFM_CHECKPOINTS: dict[str, dict[str, str]] = {
-    "encodon_80m": {"repo": "nvidia/NV-CodonFM-Encodon-80M-v1", "safetensors": "NV-CodonFM-Encodon-80M-v1.safetensors"},
-    "encodon_600m": {
-        "repo": "nvidia/NV-CodonFM-Encodon-600M-v1",
-        "safetensors": "NV-CodonFM-Encodon-600M-v1.safetensors",
-    },
-    "encodon_1b": {"repo": "nvidia/NV-CodonFM-Encodon-1B-v1", "safetensors": "NV-CodonFM-Encodon-1B-v1.safetensors"},
-    "encodon_1b_cdwt": {
-        "repo": "nvidia/NV-CodonFM-Encodon-Cdwt-1B-v1",
-        "safetensors": "NV-CodonFM-Encodon-Cdwt-1B-v1.safetensors",
-    },
-}
 
 # Encodon's ``max_position_embeddings`` is 2048 tokens; two are the CLS/SEP specials, so a CDS is
 # capped at (2048 - 2) * 3 = 6138 nt (2046 codons). Longer inputs are out of the training regime.
@@ -228,22 +213,3 @@ class CodonFMConfig(BaseConfig):
         description="Number of sequences to score simultaneously on GPU.",
         include_in_key=False,
     )
-
-
-def resolve_checkpoint_source(model_checkpoint: str) -> tuple[str, str, str, str]:
-    """Resolve the HuggingFace download URLs + local cache names for an Encodon checkpoint.
-
-    ``EncodonInference`` requires the ``.safetensors`` file and ``config.json`` in the same
-    directory, so both are provisioned into one per-checkpoint cache subdir.
-
-    Args:
-        model_checkpoint (str): One of the ``CodonFMCheckpoint`` aliases.
-
-    Returns:
-        tuple[str, str, str, str]: ``(safetensors_url, config_url, safetensors_filename, cache_subdir)``.
-    """
-    entry = CODONFM_CHECKPOINTS[model_checkpoint]
-    repo, filename = entry["repo"], entry["safetensors"]
-    base = f"https://huggingface.co/{urllib.parse.quote(repo)}/resolve/main"
-    subdir = f"codonfm-{model_checkpoint}-{hashlib.sha256(repo.encode()).hexdigest()[:8]}"
-    return f"{base}/{urllib.parse.quote(filename)}", f"{base}/config.json", filename, subdir

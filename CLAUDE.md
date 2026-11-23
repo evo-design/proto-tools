@@ -182,6 +182,10 @@ Rules that affect behavior:
   requires a module-level import.
 - Tools with heavy dependencies use `standalone/` or shared environments. See
   `notes/tool-environments.md`.
+- Weight URLs, revisions and checksums live in the worker (`standalone/`
+  code or `setup.sh`), next to the download that checks them. The host side
+  owns only the checkpoint names a config accepts, and sends the name. See
+  `notes/storage.md`.
 - Credentials (API keys, tokens, account emails and passwords) are
   `ConfigField(credential="TOOLKIT_NAME")` fields named `{toolkit}_{name}`,
   such as `paperclip_api_key` and `PAPERCLIP_API_KEY`. Client code takes them
