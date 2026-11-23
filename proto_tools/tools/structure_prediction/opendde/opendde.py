@@ -439,7 +439,10 @@ def run_opendde_on_complex(
 
     structure = Structure(
         structure=cif_output,
-        b_factor_type=BFactorType.PLDDT,
+        # OpenDDE writes per-atom pLDDT (0-100) as B-factors only when the run emits full
+        # confidence data (--need_atom_confidence, i.e. include_pae_matrix); otherwise every
+        # B-factor is 0, so they carry no pLDDT.
+        b_factor_type=BFactorType.PLDDT if "pae" in formatted_metrics else BFactorType.UNKNOWN,
         metrics=OpenDDEMetrics(**metrics_dict),
         source="opendde-prediction",
     )

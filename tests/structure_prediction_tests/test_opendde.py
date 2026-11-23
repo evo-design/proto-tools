@@ -16,7 +16,7 @@ import pytest
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.msa import MSA
-from proto_tools.entities.structures import is_valid_structure
+from proto_tools.entities.structures import BFactorType, is_valid_structure
 from proto_tools.tools import (
     Chain,
     OpenDDEConfig,
@@ -484,6 +484,9 @@ def test_opendde_iptm_surfaced_when_present(monkeypatch):
     result = run_opendde(OpenDDEInput(complexes=[_CRO_SEQUENCE]), OpenDDEConfig(use_msa=False))
 
     assert result.structures[0].metrics["iptm"] == pytest.approx(0.62)
+    # Without full confidence data OpenDDE writes zero B-factors, which are not pLDDT.
+    assert result.structures[0].b_factor_type == BFactorType.UNKNOWN
+    assert result.structures[0].per_residue_plddt is None
 
 
 def test_opendde_pae_attached_when_requested(monkeypatch):
@@ -514,6 +517,8 @@ def test_opendde_pae_attached_when_requested(monkeypatch):
     m = result.structures[0].metrics
     assert m["avg_pae"] == pytest.approx(0.75)
     assert m["pae"] == pae
+    # The full-confidence run writes per-atom pLDDT as B-factors.
+    assert result.structures[0].b_factor_type == BFactorType.PLDDT
     assert_metrics_in_spec(result)
 
 
@@ -615,6 +620,10 @@ def test_opendde_pae_matrix_end_to_end():
     assert isinstance(pae, list) and len(pae) > 0
     assert all(len(row) == len(pae) for row in pae), "PAE matrix must be square (n_token x n_token)"
     assert 0.0 <= m["avg_pae"] <= 32.0
+    # B-factors carry the same pLDDT the summary reports (0-100 there, normalized here).
+    per_residue = result.structures[0].per_residue_plddt
+    assert per_residue is not None
+    assert sum(per_residue) / len(per_residue) == pytest.approx(m["avg_plddt"] / 100.0, abs=0.05)
     assert_metrics_in_spec(result)
 
 

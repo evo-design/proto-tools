@@ -449,7 +449,8 @@ def run_rf3_prediction_on_complex(
 
     structure = Structure(
         structure=cif_output,
-        b_factor_type=BFactorType.PLDDT,
+        # annotate_b_factor_with_plddt writes pLDDT on 0-1 (like avg_plddt), not 0-100.
+        b_factor_type=BFactorType.NORMALIZED_PLDDT,
         metrics=RF3Metrics(**metrics_kwargs),
         source="rf3-prediction",
     )
