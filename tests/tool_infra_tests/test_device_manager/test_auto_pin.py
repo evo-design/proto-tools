@@ -265,6 +265,64 @@ def test_move_model_to_device_takes_cached_tensors_along() -> None:
     assert out == {"cuda:0": on("cuda:0"), "cpu": on("cpu"), "cuda:1": on("cuda:1"), "same_param": True, "current": 1}
 
 
+_GPU_TO_GPU_MOVE = """
+import json, os, subprocess, time, torch
+from standalone_helpers import move_model_to_device
+
+def gpus_held():
+    out = subprocess.run(
+        ["nvidia-smi", "--query-compute-apps=pid,gpu_bus_id", "--format=csv,noheader"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    rows = (line.partition(",") for line in out.splitlines())
+    return len({bus.strip() for pid, _, bus in rows if pid.strip() == str(os.getpid())})
+
+def timed(fn):
+    torch.cuda.synchronize(0); torch.cuda.synchronize(1)
+    start = time.perf_counter()
+    result = fn()
+    torch.cuda.synchronize(0); torch.cuda.synchronize(1)
+    return result, time.perf_counter() - start
+
+# About 1 GB of fp32 weights, enough for a copy over the CPU to be far slower than a direct one
+model = torch.nn.Sequential(*[torch.nn.Linear(4096, 4096) for _ in range(16)])
+model = move_model_to_device(model, "cpu", "cuda:1")
+x = torch.randn(2, 4096)
+expected = model(x.to("cuda:1")).cpu()
+model, _ = timed(lambda: move_model_to_device(model, "cuda:1", "cuda:0"))  # warms cuda:0's allocator
+model, _ = timed(lambda: move_model_to_device(model, "cuda:0", "cuda:1"))
+model, direct = timed(lambda: move_model_to_device(model, "cuda:1", "cuda:0"))
+staged = timed(lambda: [p.detach().cpu().to("cuda:1") for p in model.parameters()])[1]  # what a CPU round trip costs
+print(json.dumps({
+    "gpus_held": gpus_held(),
+    "on": str(next(model.parameters()).device),
+    "same_output": bool(torch.allclose(model(x.to("cuda:0")).cpu(), expected)),
+    "direct_faster_than_staging": direct * 3 < staged,
+    "seconds": {"direct": round(direct, 4), "staged": round(staged, 4)},
+}))
+"""
+
+
+@pytest.mark.uses_env
+@pytest.mark.uses_gpu(3)
+def test_move_between_gpus_is_direct_and_opens_no_context_on_a_third_gpu() -> None:
+    """A model moving from one GPU to another goes straight across, touching only those two GPUs.
+
+    PyTorch's own GPU-to-GPU copy opens a CUDA context (~500 MB) on every visible GPU, so a worker
+    that followed one move held memory on GPUs leased to other tools. With three GPUs visible, the
+    moved worker may hold contexts on only the two it used, its outputs must be unchanged, and the
+    move must stay a direct copy: at least 3x faster than a round trip through the CPU.
+    """
+    import json
+
+    from proto_tools.utils import run_in_env
+
+    out = json.loads(run_in_env("esm2", code=_GPU_TO_GPU_MOVE, device="cudax3").strip().splitlines()[-1])
+    seconds = out.pop("seconds")
+
+    assert out == {"gpus_held": 2, "on": "cuda:0", "same_output": True, "direct_faster_than_staging": True}, seconds
+
+
 # ── The worker follows each request's device ─────────────────────────────────
 
 

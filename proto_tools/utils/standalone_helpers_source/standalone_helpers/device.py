@@ -11,6 +11,7 @@ Three related concerns live together here:
    memory cleanup. JAX tools pin their device and respawn instead of moving.
 """
 
+import functools
 import os
 from collections.abc import Callable
 from typing import Any
@@ -253,7 +254,7 @@ def set_current_cuda_device(device: str) -> None:
 _OFFLOADED_ATTRS = "_proto_offloaded_tensor_attrs"
 
 
-def _move_unregistered_tensors(module: Any, new_device: str) -> int:
+def _move_unregistered_tensors(module: Any, new_device: str, copy: Callable[[Any], Any] | None = None) -> int:
     """Move tensors that a module tree holds as plain attributes, which ``nn.Module.to`` skips.
 
     ``.to()`` moves only registered parameters and buffers. Models also cache tensors as plain
@@ -268,6 +269,8 @@ def _move_unregistered_tensors(module: Any, new_device: str) -> int:
     Args:
         module (Any): The root ``nn.Module``.
         new_device (str): Target device string.
+        copy (Callable[[Any], Any] | None): Moves one tensor to ``new_device``, for a move between
+            GPUs (``_gpu_to_gpu_copier``); ``None`` uses ``tensor.to(new_device)``.
 
     Returns:
         int: How many tensors were moved.
@@ -275,6 +278,7 @@ def _move_unregistered_tensors(module: Any, new_device: str) -> int:
     import torch
 
     target = torch.device(new_device.split(",")[0])
+    move = copy if copy is not None else (lambda tensor: tensor.to(target))
     offloaded: set[tuple[str, str]] = getattr(module, _OFFLOADED_ATTRS, set())
     still_offloaded: set[tuple[str, str]] = set()
     moved = 0
@@ -292,16 +296,113 @@ def _move_unregistered_tensors(module: Any, new_device: str) -> int:
             if isinstance(value, torch.nn.Parameter):
                 # A parameter whose owning module left the tree: move it in place so every
                 # reference (e.g. the module that still uses it) follows.
-                value.data = value.data.to(target)
+                value.data = move(value.data)
             else:
                 # A cached tensor. Replace it, since a tensor made under inference_mode
                 # cannot have its .data reassigned.
-                setattr(sub, name, value.to(target))
+                setattr(sub, name, move(value))
             if target.type == "cpu":
                 still_offloaded.add(key)
             moved += 1
     setattr(module, _OFFLOADED_ATTRS, still_offloaded)
     return moved
+
+
+# ``cudaErrorPeerAccessAlreadyEnabled``: enabling peer access a second time is not a failure.
+_CUDA_PEER_ACCESS_ALREADY_ENABLED = 704
+
+
+@functools.cache
+def _cudart() -> Any:
+    """The CUDA runtime PyTorch loaded into this process, through ``ctypes``; ``None`` if not found.
+
+    Found through ``/proc/self/maps`` rather than by name, so it is the same library (and version)
+    PyTorch itself uses, whichever CUDA build the env installed.
+    """
+    import ctypes
+
+    try:
+        with open("/proc/self/maps") as maps:
+            path = next(line.split()[-1] for line in maps if "libcudart.so" in line)
+        lib = ctypes.CDLL(path)
+        lib.cudaMemcpyPeerAsync.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.c_int,
+            ctypes.c_size_t,
+            ctypes.c_void_p,
+        ]
+        lib.cudaDeviceEnablePeerAccess.argtypes = [ctypes.c_int, ctypes.c_uint]
+    except (OSError, StopIteration, AttributeError):
+        return None
+    return lib
+
+
+def _gpu_to_gpu_copier(old_device: str, new_device: str) -> Callable[[Any], Any] | None:
+    """A tensor mover for a move from one GPU straight to another, or ``None`` when not one.
+
+    PyTorch's own GPU-to-GPU copy (``tensor.to``, ``copy_``) is direct, but the first one in a
+    process also builds an event pool that pre-creates events on *every* visible GPU (``Copy.cu``'s
+    ``getEventFromPool``, ``c10::cuda::CUDAEventPool``), which opens a CUDA context (~500 MB) on
+    each, including GPUs leased to other tools. This copies each tensor with
+    ``cudaMemcpyPeerAsync`` instead: the same direct transfer over NVLink or PCIe, at the same
+    speed, touching only the two GPUs involved.
+
+    Args:
+        old_device (str): The device the tensors are on, e.g. ``"cuda:1"``.
+        new_device (str): The device to move them to, e.g. ``"cuda:0"``.
+
+    Returns:
+        Callable[[Any], Any] | None: Moves one tensor and returns the copy; tensors it cannot
+            copy as raw memory (not on ``old_device``, sparse, or not dense) go through
+            ``tensor.to``. ``None`` unless both devices are single GPUs that differ and the CUDA
+            runtime was found.
+    """
+    old, new = _parse_cuda_indices(old_device), _parse_cuda_indices(new_device)
+    if not old or not new or len(old) != 1 or len(new) != 1 or old == new:
+        return None
+    import torch
+
+    if not torch.cuda.is_available():
+        return None
+    rt = _cudart()
+    if rt is None:
+        return None
+    src, dst = old[0], new[0]
+    target = torch.device("cuda", dst)
+
+    # Peer access lets the copy go over NVLink or PCIe peer-to-peer; enabling it opens no context
+    # beyond the two GPUs. Without it the driver stages the copy, which is still correct.
+    if torch.cuda.can_device_access_peer(dst, src):
+        for device, peer in ((dst, src), (src, dst)):
+            with torch.cuda.device(device):
+                rc = rt.cudaDeviceEnablePeerAccess(peer, 0)
+            if rc == _CUDA_PEER_ACCESS_ALREADY_ENABLED:
+                rt.cudaGetLastError()  # clear it, or PyTorch's next error check would raise it
+
+    def copy(tensor: Any) -> Any:
+        dense = tensor.is_contiguous() or any(
+            tensor.dim() == rank and tensor.is_contiguous(memory_format=fmt)
+            for rank, fmt in ((4, torch.channels_last), (5, torch.channels_last_3d))
+        )
+        if tensor.device != torch.device("cuda", src) or tensor.layout != torch.strided or not dense:
+            return tensor.to(target)
+        out = torch.empty_like(tensor, device=target)  # same strides: a dense block of the same bytes
+        nbytes = tensor.numel() * tensor.element_size()
+        if nbytes:
+            torch.cuda.current_stream(src).synchronize()  # writes to the source are finished
+            stream = torch.cuda.current_stream(dst)
+            rc = rt.cudaMemcpyPeerAsync(out.data_ptr(), dst, tensor.data_ptr(), src, nbytes, stream.cuda_stream)
+            if rc != 0:
+                raise RuntimeError(f"cudaMemcpyPeerAsync cuda:{src} -> cuda:{dst} failed with CUDA error {rc}")
+            # Before the source can be freed and its memory reused
+            stream.synchronize()
+        if tensor.requires_grad and not isinstance(tensor, torch.nn.Parameter):
+            out.requires_grad_()  # as tensor.to would keep it; a Parameter's flag stays on the Parameter
+        return out
+
+    return copy
 
 
 def move_model_to_device(
@@ -319,7 +420,9 @@ def move_model_to_device(
     path here.
 
     For PyTorch models (nn.Module or objects with .to()):
-        - Calls model.to(new_device)
+        - Calls model.to(new_device); a module or tensor moving from one GPU to another is copied
+          directly with ``cudaMemcpyPeerAsync`` instead, at the same speed, since PyTorch's own
+          GPU-to-GPU copy opens a CUDA context on every visible GPU (``_gpu_to_gpu_copier``)
         - Calls torch.cuda.empty_cache() when moving off CUDA
         - Makes ``new_device`` the current CUDA device (``set_current_cuda_device``), so later
           ``.cuda()``, bare ``"cuda"`` and Triton launches follow the model
@@ -382,9 +485,19 @@ def move_model_to_device(
 
         # Check if model has PyTorch's .to() method
         if hasattr(model_or_params, "to") and callable(model_or_params.to):
-            model_or_params = model_or_params.to(new_device)
+            # Between two GPUs, copy directly without PyTorch's copy path, which would open a CUDA
+            # context on every visible GPU (see _gpu_to_gpu_copier). Objects that are neither a
+            # module nor a tensor only offer their own .to(), so they move with it.
+            copy = _gpu_to_gpu_copier(old_device, new_device)
+            if copy is not None and isinstance(model_or_params, torch.nn.Module):
+                model_or_params._apply(copy)  # what Module.to does, with this copy per tensor
+            elif copy is not None and isinstance(model_or_params, torch.Tensor):
+                model_or_params = copy(model_or_params)
+            else:
+                copy = None
+                model_or_params = model_or_params.to(new_device)
             if isinstance(model_or_params, torch.nn.Module):
-                _move_unregistered_tensors(model_or_params, new_device)
+                _move_unregistered_tensors(model_or_params, new_device, copy=copy)
 
             # Free GPU memory when moving off CUDA device (while the old GPU is still current)
             if old_device != "cpu" and old_device.startswith("cuda") and torch.cuda.is_available():

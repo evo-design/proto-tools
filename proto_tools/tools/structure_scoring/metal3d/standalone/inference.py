@@ -19,7 +19,7 @@ from moleculekit.molecule import Molecule  # type: ignore[import-not-found]
 from moleculekit.tools.voxeldescriptors import getVoxelDescriptors  # type: ignore[import-not-found]
 from scipy.spatial import KDTree
 from sklearn.cluster import AgglomerativeClustering  # type: ignore[import-untyped]
-from standalone_helpers import StatusCounter, get_logger, get_pytorch_memory_stats
+from standalone_helpers import StatusCounter, get_logger, get_pytorch_memory_stats, move_model_to_device
 from standalone_helpers.weights import resolve_weights_dir
 
 logger = get_logger(__name__)
@@ -119,7 +119,7 @@ class Metal3DModel:
             return
         if self.device == device:
             return
-        self.model = self.model.to(device)
+        self.model = move_model_to_device(self.model, self.device, device)
         self.device = device
 
 
