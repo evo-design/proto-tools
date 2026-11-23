@@ -41,23 +41,11 @@
       },
       "cross_references": null,
       "pdb_structures": null,
-      "resolved_without_structure": false,
+      "status": "resolved",
       "warnings": [],
       "errors": []
     }
   ],
-  "ligands": {
-    "fragments": [
-      {
-        "id": null,
-        "smiles": "Nc1ncnc2c1ncn2[C@@H]1O[C@H](CO[P@@](=O)(O)O[P@](=O)(O)OP(=O)(O)O)[C@@H](O)[C@H]1O",
-        "ccd_code": "ATP",
-        "entity_type": "ligand",
-        "name": "ADENOSINE-5'-TRIPHOSPHATE",
-        "metrics": {}
-      }
-    ]
-  },
   "num_resolved": 1,
   "num_unresolved": 0
 }

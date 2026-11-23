@@ -36,7 +36,16 @@ Use this for user-facing enrichment workflows such as notebooks, scripts, dashbo
 #### Usage Tips
 
 - **For per-fragment SMILES-to-CCD lookups, use `proto_tools.entities.ligands.ccd_utils.map_smiles_to_ccd_code` instead.** It runs the same lookup in the current Python process, without the subprocess startup this tool incurs, so when you are not using the persistent tool context it can be much faster.
-- **A SMILES with no CCD match returns `ccd_code=None` rather than an error.** Check `result.results[i].fragment.ccd_code is not None` before treating an entry as found. `result.num_unresolved` gives the batch-level count.
+- **Short uppercase strings are read as CCD codes by default.** With `identifier_type="auto"`, a 1- to 5-character alphanumeric identifier is looked up as a CCD code, so `"CCO"` is the CCD entry CCO, not ethanol; the result's warnings say when a string also reads as a SMILES. Set `identifier_type="smiles"` or `"ccd_code"` to read every identifier one way.
+- **Check `result.results[i].status` before treating an entry as found.** It is `"resolved"` when the fragment carries a CCD code (another entry with the same structure is possible, and `warnings` says so), `"no_ccd_code"` when the identifier matched a CCD entry the fragment can't carry (the CCD metadata is kept, `errors` says why, and the fragment is the structure without its code, or None when none could be built), and `"not_found"` when nothing matched, as for a SMILES with no CCD entry. `result.num_resolved` and `result.num_unresolved` give the batch-level counts.
+- **`result.ligands` raises if any identifier has no structure.** Such a result has `fragment=None`, and `errors` says why. This keeps a complex from being predicted with a ligand missing. To predict each ligand on its own and skip the ones without a structure, go through `results`:
+
+  ```python
+  for r in result.results:
+      if r.fragment is None:
+          continue  # r.errors says why
+      complexes.append(Complex(chains=[protein, r.fragment]))
+  ```
 - **`parent_ccd_code` is populated only when the CCD entry declares a canonical parent component.** Modified residues like `SEP` (phosphoserine, parent `SER`), `MSE` (selenomethionine, parent `MET`), or `PTR` (phosphotyrosine, parent `TYR`) carry a parent code. Most small-molecule ligands have no parent and return `None`.
 - **`pdb_structures` can be very large.** For common cofactors and ions (`HEM`, `ATP`, `NAG`, `MG`, `ZN`) the list runs to many thousands of PDB IDs. It may be helpful to process it in chunks rather than loading every entry at once when you pass it to a downstream step.
 
