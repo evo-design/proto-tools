@@ -79,14 +79,34 @@ def _sequence_tokens(sequence: str) -> tuple[list[str], list[int]]:
         raise ValueError(f"ligandmpnn: unsupported residue {exc.args[0]!r}") from exc
 
 
+# Values Biotite's PDB writer fills in when an atom array has no such annotation.
+_PDB_DEFAULT_ANNOTATIONS: dict[str, float] = {"b_factor": 0.0, "occupancy": 1.0}
+
+
 def _atom_array_to_pdb(atom_array: Any) -> str:
-    """Serialize a Foundry/Biotite atom array to a PDB string."""
+    """Serialize a Foundry/Biotite atom array to a PDB string.
+
+    Atoms without finite coordinates are dropped. Foundry's output keeps the input's
+    annotations, and an input may carry non-finite B-factors or occupancies (RFD4 writes
+    ``B_iso_or_equiv = nan`` for designed residues), which Biotite's fixed-width writer
+    rejects. Those values are written as Biotite's defaults for an absent annotation.
+    """
     from biotite.structure.io.pdb import PDBFile
 
     finite_atoms = np.isfinite(np.asarray(atom_array.coord)).all(axis=-1)
+    # Boolean indexing copies, so the annotation edits below never reach the caller's array.
     atom_array = atom_array[finite_atoms]
     if len(atom_array) == 0:
         raise ValueError("ligandmpnn: sampled structure contains no finite-coordinate atoms.")
+    annotations = atom_array.get_annotation_categories()
+    for name, default in _PDB_DEFAULT_ANNOTATIONS.items():
+        if name not in annotations:
+            continue
+        values = np.asarray(atom_array.get_annotation(name), dtype=float)
+        non_finite = ~np.isfinite(values)
+        if non_finite.any():
+            logger.debug("ligandmpnn: writing %d non-finite %s values as %s", int(non_finite.sum()), name, default)
+            atom_array.set_annotation(name, np.where(non_finite, default, values))
     pdb_file = PDBFile()
     pdb_file.set_structure(atom_array)
     buffer = StringIO()
