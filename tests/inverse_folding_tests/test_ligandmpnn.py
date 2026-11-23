@@ -246,6 +246,29 @@ def test_ligandmpnn_bundled_weights_are_fetched_and_local_paths_stay_local() -> 
         assert "local file" in config_class(model_checkpoint="/data/mine.pt").remote_unsupported_reason("modal")
 
 
+@pytest.mark.parametrize(
+    "device",
+    [pytest.param("cuda", marks=pytest.mark.uses_gpu), pytest.param("cpu", marks=pytest.mark.uses_env)],
+)
+def test_ligandmpnn_original_samples_short_structure(device: str) -> None:
+    """The original implementation designs and packs a structure shorter than 20 residues, on GPU and CPU.
+
+    Guards the two fixes applied to the vendored original code: a gather that indexed past the end
+    of any structure under 20 residues, and a mask always built on CUDA, which broke ``device="cpu"``.
+    """
+    pdb_lines = (Path(__file__).parent.parent / "dummy_data" / "pdl1.pdb").read_text().splitlines()
+    chain_a = [line for line in pdb_lines if line.startswith("ATOM") and line[21] == "A"]
+    first_residues = list(dict.fromkeys(line[22:27] for line in chain_a))[:12]
+    short_pdb = "\n".join(line for line in chain_a if line[22:27] in first_residues) + "\nEND\n"
+    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=Structure.model_validate(short_pdb))])
+
+    output = run_ligandmpnn_sample(inp, LigandMPNNSampleConfig(implementation="original", seed=0, device=device))
+
+    design = output.design_sets[0].complexes[0]
+    assert len(design.chains[0].sequence) == 12
+    assert design.structure is not None
+
+
 @pytest.mark.uses_env
 def test_ligandmpnn_native_vocabularies_map_to_proto_columns() -> None:
     """Both scoring paths' runtime token orders must gather onto proto's 20 columns.
