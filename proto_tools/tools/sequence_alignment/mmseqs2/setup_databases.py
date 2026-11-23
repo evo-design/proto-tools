@@ -1,16 +1,10 @@
-"""Provision MMseqs2 databases for proto-tools.
+"""Provision registered datasets from the command line.
 
-User-invoked CLI; no auto-download anywhere else in the codebase. Reads
-the registry entries in ``proto_tools.databases``
-to know what URLs to fetch, what indexing commands to run, and where on
-disk each dataset belongs (the databases root: ``$PROTO_DATABASES_DIR`` if set,
-else ``$PROTO_MODEL_CACHE/databases/``; ``--workdir`` overrides per-invocation).
-Idempotent: re-runs skip already-provisioned datasets and already-downloaded files.
-
-Each registered ``DatasetEntry`` declares its own ``urls`` (download
-specs) and ``index_recipe.steps`` (argv to run after download). This
-script is a generic executor — adding a new dataset is a new entry
-in ``databases/entries/``, no script changes needed.
+User-invoked CLI over :func:`proto_tools.databases.provision.provision`, which downloads and builds
+each dataset into the databases root (``$PROTO_DATABASES_DIR`` if set, else
+``$PROTO_MODEL_CACHE/databases/``; ``--workdir`` overrides per-invocation). Idempotent: re-runs
+skip already-provisioned datasets and already-downloaded files. Adding a dataset is a new entry in
+``databases/entries/``, with no change here.
 
 Usage::
 
@@ -40,36 +34,17 @@ Prerequisites:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import logging
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from proto_tools.databases import (
-    DatasetEntry,
-    DatasetRegistry,
-    DownloadSpec,
-    IndexStep,
-    dataset_slug,
-    get_databases_root,
-    get_dataset_dir,
-)
-from proto_tools.utils.system_info import available_memory_bytes
+from proto_tools.databases import DatasetRegistry, get_databases_root
+from proto_tools.databases.provision import provision
 from proto_tools.utils.tool_instance import ToolInstance
 
 logger = logging.getLogger(__name__)
-
-# Fraction of the cgroup-aware budget allotted to mmseqs index builds (mmseqs sizes splits from physical RAM, so the cap keeps `createindex` from OOMing under Slurm / container memory limits).
-_INDEX_MEMORY_SAFETY_FRACTION = 0.7
-
-# Suffix an in-flight download occupies until it is verified and renamed into place.
-_PARTIAL_SUFFIX = ".part"
-
-# Read size for checksumming, large enough to keep multi-gigabyte datasets I/O bound.
-_HASH_BLOCK_BYTES = 1024 * 1024
 
 # ============================================================================
 # Presets — mirror predictor `preferred_datasets` defaults from the design doc
@@ -103,220 +78,6 @@ PRESETS: dict[str, list[str]] = {
 
 
 # ============================================================================
-# Provisioning
-# ============================================================================
-
-
-def _resolve_cache_dir(name: str, workdir: Path | None) -> Path:
-    """Return where ``name`` should be installed.
-
-    Without ``--workdir``, uses the registry's databases root
-    (:func:`get_databases_root` — ``$PROTO_DATABASES_DIR`` or
-    ``$PROTO_MODEL_CACHE/databases/``). With ``--workdir``, places each dataset
-    under ``<workdir>/<slug>/`` so multiple datasets stay isolated even with a
-    custom root.
-    """
-    if workdir is None:
-        return get_dataset_dir(name)
-    return workdir / dataset_slug(name)
-
-
-def _which_downloader() -> tuple[str, list[str]]:
-    """Pick the best available HTTP downloader: aria2c (parallel) > curl > wget.
-
-    Returns ``(name, base_argv)`` where ``base_argv`` is the static prefix
-    to which we append output / URL.
-    """
-    if shutil.which("aria2c"):
-        return "aria2c", [
-            "aria2c",
-            "--max-connection-per-server=8",
-            "--allow-overwrite=true",
-            "--auto-file-renaming=false",
-        ]
-    if shutil.which("curl"):
-        return "curl", ["curl", "-L", "--fail"]
-    if shutil.which("wget"):
-        return "wget", ["wget", "--no-verbose"]
-    raise RuntimeError("No download tool found in PATH. Install aria2c, curl, or wget.")
-
-
-def _wrong_size(path: Path, spec: DownloadSpec) -> str | None:
-    """Describe how ``path``'s size differs from ``spec``, or None when it matches or is unknown."""
-    if spec.expected_bytes is None:
-        return None
-    actual = path.stat().st_size
-    if actual == spec.expected_bytes:
-        return None
-    return f"{actual} bytes on disk, expected {spec.expected_bytes}"
-
-
-def _wrong_checksum(path: Path, spec: DownloadSpec) -> str | None:
-    """Describe how ``path``'s SHA-256 differs from ``spec``, or None when it matches or is unset."""
-    if spec.sha256 is None:
-        return None
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(_HASH_BLOCK_BYTES), b""):
-            digest.update(block)
-    actual = digest.hexdigest()
-    if actual == spec.sha256:
-        return None
-    return f"sha256 {actual}, expected {spec.sha256}"
-
-
-def _download_file(spec: DownloadSpec, cache_dir: Path, downloader: tuple[str, list[str]]) -> bool:
-    """Download a single ``DownloadSpec`` into ``cache_dir``. Returns True on success.
-
-    Idempotent: an existing file is reused only when its size agrees with ``spec``, so an
-    incomplete file left by an earlier run is fetched again rather than trusted. The transfer
-    lands on a ``.part`` file and is renamed only once verified, so an interrupted download
-    never occupies the final path. ``downloader`` is the ``(name, base_argv)`` tuple resolved
-    once per provisioning run by the caller (so we don't re-``shutil.which`` on every file).
-    """
-    target = cache_dir / spec.filename
-    if target.exists():
-        stale = _wrong_size(target, spec)
-        if stale is None:
-            print(f"  [skip] {spec.filename} already present")
-            return True
-        print(f"  [stale] {spec.filename}: {stale}; downloading again")
-        target.unlink()
-
-    name, base_argv = downloader
-    print(f"  [download] {spec.filename} via {name}: {spec.url}")
-    partial = target.with_name(target.name + _PARTIAL_SUFFIX)
-    partial.unlink(missing_ok=True)
-
-    if name == "aria2c":
-        cmd = [*base_argv, "-o", partial.name, "-d", str(cache_dir), spec.url]
-    elif name == "curl":
-        cmd = [*base_argv, "-o", str(partial), spec.url]
-    else:  # wget
-        cmd = [*base_argv, "-O", str(partial), spec.url]
-
-    try:
-        subprocess.run(cmd, check=True)
-        for problem in (_wrong_size(partial, spec), _wrong_checksum(partial, spec)):
-            if problem is not None:
-                msg = f"{spec.filename} did not download completely: {problem}"
-                raise RuntimeError(msg)
-    except (subprocess.CalledProcessError, RuntimeError) as e:
-        partial.unlink(missing_ok=True)
-        if not spec.required:
-            print(f"  [warn] optional file {spec.filename} download failed (continuing): {e}")
-            return True
-        raise
-    partial.replace(target)
-    return True
-
-
-def _split_memory_limit() -> str:
-    """``--split-memory-limit`` value sized to the cgroup-aware memory budget.
-
-    Formatted with mmseqs's ``G`` (GiB) suffix: mmseqs misreads a bare byte
-    count as an enormous limit (e.g. ``60129542144`` → ``57344T``, effectively
-    unbounded), so the suffix is required for the cap to take effect. Returns
-    ``"0"`` (mmseqs default = all available) when the budget can't be detected.
-    """
-    budget = available_memory_bytes()
-    if budget <= 0:
-        return "0"
-    gib = int(budget * _INDEX_MEMORY_SAFETY_FRACTION / 1024**3)
-    return f"{max(1, gib)}G"
-
-
-def _run_step(step: IndexStep, cache_dir: Path, name: str, *, split_memory_limit: str = "0") -> None:
-    """Run a single ``IndexStep`` argv with ``cwd=cache_dir``.
-
-    Substitutes template placeholders in each argv element: ``{name}`` →
-    the dataset's registry name (snake-cased to match filesystem conventions),
-    and ``{split_memory_limit}`` → a cgroup-aware ``mmseqs`` memory cap in bytes.
-    """
-    cmd = [
-        arg.replace("{name}", dataset_slug(name)).replace("{split_memory_limit}", split_memory_limit)
-        for arg in step.command
-    ]
-    print(f"  [step] {step.description}")
-    print(f"          $ {' '.join(cmd)}")
-    subprocess.run(cmd, cwd=cache_dir, check=True)
-
-
-def _is_provisioned(entry: DatasetEntry, cache_dir: Path) -> bool:
-    """A dataset is considered provisioned when every declared output file is present."""
-    if not entry.index_recipe.output_files:
-        # No declared outputs — fall back to the .dbtype check
-        return (cache_dir / f"{entry.db_prefix}.dbtype").is_file()
-    for output_file in entry.index_recipe.output_files:
-        path = cache_dir / output_file.replace("{name}", dataset_slug(entry.name))
-        # Allow glob patterns in output_files for consistency with mmseqs filename conventions
-        if "*" in output_file:
-            if not list(cache_dir.glob(output_file.replace("{name}", dataset_slug(entry.name)))):
-                return False
-        elif not path.exists():
-            return False
-    return True
-
-
-def provision(name: str, workdir: Path | None = None, *, force: bool = False) -> Path:
-    """Provision a single dataset by registry name.
-
-    Args:
-        name (str): Registered dataset key (e.g. ``"uniref30-2302"``).
-        workdir (Path | None): Override the standard cache root. When set,
-            the dataset goes to ``<workdir>/<slug>/`` (still isolated per dataset).
-        force (bool): Re-download / re-run index steps even if the dataset
-            looks provisioned.
-
-    Returns:
-        Path: The dataset's cache directory.
-    """
-    entry = DatasetRegistry.get(name)
-    cache_dir = _resolve_cache_dir(name, workdir)
-
-    print(f"\n=== {name} ({entry.display_name}) ===")
-    print(f"  type:    {entry.molecule_type}")
-    print(f"  cache:   {cache_dir}")
-    print(
-        f"  size:    ~{entry.total_download_bytes / 1e9:.1f} GB download / ~{entry.total_disk_bytes / 1e9:.1f} GB indexed"
-    )
-
-    if not force and _is_provisioned(entry, cache_dir):
-        print("  [skip] already provisioned (use --force to re-run)")
-        return cache_dir
-
-    # --force: wipe the cache dir before re-running so stale outputs don't
-    # collide with this run (e.g. ``zstd -d`` prompting on an existing FASTA,
-    # or ``mmseqs createdb`` refusing to overwrite a partial DB).
-    if force and cache_dir.exists():
-        print("  [force] wiping existing cache dir before re-provisioning")
-        shutil.rmtree(cache_dir)
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    print("\n  Downloading sources...")
-    # Inside a worker the prints reach no caller, so the long phases also travel as status records.
-    logger.info("Downloading sources for %s", entry.display_name, extra={"update_status": True})
-    downloader = _which_downloader()
-    for spec in entry.urls:
-        _download_file(spec, cache_dir, downloader)
-
-    print("\n  Running index recipe...")
-    logger.info("Indexing %s", entry.display_name, extra={"update_status": True})
-    # Only meaningful to a recipe that asks for it. An entry whose steps are plain shell — a
-    # reference genome that just decompresses — would otherwise report an mmseqs memory budget it
-    # never uses, which reads as though an index were about to be built.
-    wants_memory_limit = any("{split_memory_limit}" in arg for step in entry.index_recipe.steps for arg in step.command)
-    split_memory_limit = _split_memory_limit() if wants_memory_limit else "0"
-    if split_memory_limit != "0":
-        print(f"  memory budget: capping mmseqs index splits at {split_memory_limit}iB")
-    for step in entry.index_recipe.steps:
-        _run_step(step, cache_dir, name, split_memory_limit=split_memory_limit)
-
-    print(f"\n  ✓ {name} ready at {cache_dir}")
-    return cache_dir
-
-
-# ============================================================================
 # CLI
 # ============================================================================
 
@@ -324,7 +85,7 @@ def provision(name: str, workdir: Path | None = None, *, force: bool = False) ->
 def _list_available() -> None:
     """Print available datasets and presets."""
     print("Datasets (registered in proto_tools.databases):\n")
-    print(f"  {'name':<32} {'type':<8} {'size (download / indexed)':<32}")
+    print(f"  {'name':<32} {'type':<8} {'size (download / built)':<32}")
     print(f"  {'-' * 32} {'-' * 8} {'-' * 32}")
     for key in DatasetRegistry.list_all():
         entry = DatasetRegistry.get(key)
@@ -350,13 +111,7 @@ def _resolve_targets(args: argparse.Namespace) -> list[str]:
         # Default: smallest viable bootstrap (UniRef30 only)
         targets = PRESETS["colabfold-default"]
     # De-dup preserving order
-    seen: set[str] = set()
-    unique: list[str] = []
-    for name in targets:
-        if name not in seen:
-            unique.append(name)
-            seen.add(name)
-    return unique
+    return list(dict.fromkeys(targets))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -387,13 +142,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--list", action="store_true", help="List available datasets and presets, then exit.")
     parser.add_argument(
-        "--force", action="store_true", help="Re-download and re-run index steps even if a dataset looks provisioned."
+        "--force", action="store_true", help="Re-download and re-run build steps even if a dataset looks provisioned."
     )
     args = parser.parse_args(argv)
 
     if args.list:
         _list_available()
         return 0
+
+    # Provisioning reports progress through logging; show it on the terminal.
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     # Toolkit-bundled mmseqs is at $PROTO_HOME/proto_tool_envs/mmseqs2_env/bin/mmseqs; building the env on first run (matches tests/dummy_data/create_mini_mmseqs_db.py) so recipes find `mmseqs` via PATH without caller setup.
     _ensure_mmseqs_on_path()

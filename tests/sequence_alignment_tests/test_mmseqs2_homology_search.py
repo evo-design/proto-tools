@@ -8,7 +8,8 @@ from typing import Any, Literal, get_args
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.databases import DatasetRegistry, dataset_slug, get_dataset_dir
+from proto_tools.databases import DatasetRegistry, MMseqs2DatabaseEntry, dataset_slug, get_dataset_dir
+from proto_tools.databases.provision import is_provisioned
 from proto_tools.tools.sequence_alignment.mmseqs2 import (
     Mmseqs2HomologySearchConfig,
     Mmseqs2HomologySearchInput,
@@ -78,10 +79,10 @@ def _write_a3m(path: Path, query_seq: str, n_rows: int) -> None:
 
 def _provision_fake_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create a minimal on-disk cache so the pre-dispatch provisioning check passes."""
-    entry = DatasetRegistry.get("uniref30-2302")
+    entry = DatasetRegistry.get("uniref30-2302", MMseqs2DatabaseEntry)
     cache = tmp_path / dataset_slug("uniref30-2302")
     cache.mkdir()
-    for out in entry.index_recipe.output_files or []:
+    for out in entry.build.output_files:
         (cache / out.replace("{name}", dataset_slug("uniref30-2302"))).write_bytes(b"")
     monkeypatch.setattr(
         "proto_tools.tools.sequence_alignment.mmseqs2.homology_search.get_dataset_dir",
@@ -200,20 +201,14 @@ def test_input_accepts_mixed_singleton_and_paired_groups() -> None:
 def test_dataset_literal_matches_registry_searchable_set() -> None:
     """Drift guard: the ``dataset`` Literal must equal the registry's searchable product DBs.
 
-    Searchable == a search database (``is_search_database``) whose ``a3m_adapter`` is
-    ``"colabfold"``, minus the in-tree ``tiny-test-colabfold`` fixture. Registering a new
-    searchable DB fails this assertion, prompting an update to the Literal.
-
-    The ``is_search_database`` term matters: ``a3m_adapter`` defaults to ``"colabfold"``, so a
-    registered entry that is a plain reference asset rather than a DB — a reference genome, say —
-    would otherwise be counted as searchable.
+    Searchable == an MMseqs2 database whose ``a3m_adapter`` is ``"colabfold"``, minus the in-tree
+    ``tiny-test-colabfold`` fixture. Registering a new searchable DB fails this assertion,
+    prompting an update to the Literal.
     """
     searchable = {
         name
-        for name in DatasetRegistry.list_all()
-        if DatasetRegistry.get(name).is_search_database
-        and DatasetRegistry.get(name).a3m_adapter == "colabfold"
-        and name != "tiny-test-colabfold"
+        for name in DatasetRegistry.list_all(MMseqs2DatabaseEntry)
+        if DatasetRegistry.get(name, MMseqs2DatabaseEntry).a3m_adapter == "colabfold" and name != "tiny-test-colabfold"
     }
     literal_values = set(get_args(Mmseqs2HomologySearchConfig.model_fields["dataset"].annotation))
     assert literal_values == searchable
@@ -243,16 +238,16 @@ def test_gpus_per_instance_zero_when_cpu() -> None:
 
 def test_missing_dataset_dir_gives_provisioning_hint(tmp_path: Path) -> None:
     """Dispatch-time check points users at the mmseqs2 setup_databases CLI when the DB isn't on disk."""
-    entry = DatasetRegistry.get("uniref30-2302")
+    entry = DatasetRegistry.get("uniref30-2302", MMseqs2DatabaseEntry)
     bogus_cache = tmp_path / "nonexistent"
     with pytest.raises(FileNotFoundError, match=r"setup_databases uniref30-2302"):
         _check_dataset_provisioned("uniref30-2302", entry, bogus_cache, require_idx_pad=True)
 
 
-def test_missing_gpu_padded_marker_gives_cpu_device_hint(tmp_path: Path) -> None:
-    """Dispatch-time check explains the missing GPU marker and suggests a cpu device."""
-    entry = DatasetRegistry.get("uniref30-2302")
-    # Provision dbtype but NOT the gpu_padded_marker — simulates a CPU-only DB build.
+def test_missing_gpu_index_gives_cpu_device_hint(tmp_path: Path) -> None:
+    """Dispatch-time check explains the missing GPU index and suggests a cpu device."""
+    entry = DatasetRegistry.get("uniref30-2302", MMseqs2DatabaseEntry)
+    # Provision dbtype but NOT the GPU-padded sibling — simulates a CPU-only DB build.
     (tmp_path / f"{entry.db_prefix}.dbtype").write_bytes(b"")
     with pytest.raises(FileNotFoundError, match=r"device='cpu'"):
         _check_dataset_provisioned("uniref30-2302", entry, tmp_path, require_idx_pad=True)
@@ -260,9 +255,9 @@ def test_missing_gpu_padded_marker_gives_cpu_device_hint(tmp_path: Path) -> None
 
 def test_padded_marker_without_dbtype_is_rejected(tmp_path: Path) -> None:
     """Bare padded data file without sibling ``.dbtype`` is an incomplete build."""
-    entry = DatasetRegistry.get("uniref30-2302")
+    entry = DatasetRegistry.get("uniref30-2302", MMseqs2DatabaseEntry)
     (tmp_path / f"{entry.db_prefix}.dbtype").write_bytes(b"")
-    (tmp_path / entry.gpu_padded_marker).write_bytes(b"")
+    (tmp_path / str(entry.gpu_db)).write_bytes(b"")
     # No <marker>.dbtype companion — must reject.
     with pytest.raises(FileNotFoundError, match=r"sibling \.dbtype"):
         _check_dataset_provisioned("uniref30-2302", entry, tmp_path, require_idx_pad=True)
@@ -272,7 +267,7 @@ def test_local_search_low_memory_reason_tracks_seq_db_size(tmp_path: Path, monke
     """Reason fires when RAM < sequence-DB size, and clears when RAM fits or the file is absent."""
     import proto_tools.tools.sequence_alignment.mmseqs2.homology_search as hs
 
-    entry = DatasetRegistry.get("uniref30-2302")
+    entry = DatasetRegistry.get("uniref30-2302", MMseqs2DatabaseEntry)
     seq_db = tmp_path / f"{entry.db_prefix}_seq"
     with open(seq_db, "wb") as f:
         f.truncate(100 * 1024**3)  # 100 GiB, sparse (no real allocation)
@@ -307,10 +302,10 @@ def test_dispatch_payload_carries_operation_key(tmp_path: Path, monkeypatch: pyt
     from proto_tools.utils.tool_instance import ToolInstance
 
     # Provision a minimal cache so the pre-dispatch ``_check_dataset_provisioned`` passes.
-    entry = DatasetRegistry.get("uniref30-2302")
+    entry = DatasetRegistry.get("uniref30-2302", MMseqs2DatabaseEntry)
     cache = tmp_path / dataset_slug("uniref30-2302")
     cache.mkdir()
-    for out in entry.index_recipe.output_files or []:
+    for out in entry.build.output_files:
         (cache / out.replace("{name}", dataset_slug("uniref30-2302"))).write_bytes(b"")
     monkeypatch.setattr(
         "proto_tools.tools.sequence_alignment.mmseqs2.homology_search.get_dataset_dir",
@@ -378,17 +373,11 @@ def _provisioned_datasets() -> list[str]:
     isn't installed; a fresh dev machine sees no parametrize entries skipped
     here unless the user has run ``setup_databases.py`` for that dataset.
     """
-    found: list[str] = []
-    for name in DatasetRegistry.list_all():
-        entry = DatasetRegistry.get(name)
-        cache = get_dataset_dir(name)
-        if not entry.index_recipe.output_files:
-            if (cache / f"{entry.db_prefix}.dbtype").is_file():
-                found.append(name)
-            continue
-        if all((cache / out.replace("{name}", dataset_slug(name))).exists() for out in entry.index_recipe.output_files):
-            found.append(name)
-    return found
+    return [
+        name
+        for name in DatasetRegistry.list_all(MMseqs2DatabaseEntry)
+        if is_provisioned(DatasetRegistry.get(name), get_dataset_dir(name))
+    ]
 
 
 def _low_memory_skip_reason(*dataset_names: str) -> str | None:
@@ -427,11 +416,11 @@ def test_e2e_search_against_provisioned_protein_dataset(dataset_name: str) -> No
     if dataset_name == "__none_provisioned__":
         pytest.skip("No datasets provisioned on this device")
 
-    entry = DatasetRegistry.get(dataset_name)
+    entry = DatasetRegistry.get(dataset_name, MMseqs2DatabaseEntry)
     if entry.molecule_type != "protein":
         pytest.skip(f"{dataset_name} is {entry.molecule_type}; current tool is protein-only")
-    if not entry.supports_gpu:
-        pytest.skip(f"{dataset_name} declares supports_gpu=False")
+    if entry.gpu_db is None:
+        pytest.skip(f"{dataset_name} has no GPU index")
     if entry.a3m_adapter != "colabfold":
         pytest.skip(f"{dataset_name} uses a3m_adapter={entry.a3m_adapter!r}; tool only handles colabfold-style DBs")
     if dataset_name == "tiny-test-colabfold":
@@ -464,11 +453,7 @@ def _local_metagenomic_dbs_ready() -> bool:
     test runs only where both DBs are actually present and skips everywhere else.
     """
     for name in ("uniref30-2302", "colabfold-envdb-202108"):
-        entry = DatasetRegistry.get(name)
-        cache = get_dataset_dir(name)
-        if not (cache / f"{entry.db_prefix}.dbtype").is_file():
-            return False
-        if not (cache / entry.gpu_padded_marker).exists():
+        if not DatasetRegistry.get(name, MMseqs2DatabaseEntry).is_built(get_dataset_dir(name), gpu=True):
             return False
     return True
 

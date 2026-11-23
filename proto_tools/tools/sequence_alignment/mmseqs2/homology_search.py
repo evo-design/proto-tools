@@ -19,7 +19,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from proto_tools.databases import DatasetEntry, DatasetRegistry, get_dataset_dir
+from proto_tools.databases import DatasetRegistry, MMseqs2DatabaseEntry, get_dataset_dir
+from proto_tools.databases.provision import provision, provision_lock
 from proto_tools.entities.msa import MSA
 from proto_tools.tools.sequence_alignment.mmseqs2.remote_search import search_remote_msas
 from proto_tools.tools.tool_registry import tool
@@ -48,7 +49,7 @@ _REMOTE_DATASET_LABEL = "colabfold-remote"
 _METAGENOMIC_DATASET = "colabfold-envdb-202108"
 
 
-def local_search_low_memory_reason(entry: DatasetEntry, cache_dir: Path) -> str | None:
+def local_search_low_memory_reason(entry: MMseqs2DatabaseEntry, cache_dir: Path) -> str | None:
     """Reason a local search will be memory-starved, or ``None`` if RAM suffices.
 
     colabfold_search's align/expand steps load the dataset's ``{db_prefix}_seq``
@@ -58,7 +59,7 @@ def local_search_low_memory_reason(entry: DatasetEntry, cache_dir: Path) -> str 
     (size unknown) so callers fall through rather than guess.
 
     Args:
-        entry (DatasetEntry): The dataset being searched locally.
+        entry (MMseqs2DatabaseEntry): The dataset being searched locally.
         cache_dir (Path): Provisioned dataset directory holding the DB files.
 
     Returns:
@@ -490,14 +491,14 @@ def run_mmseqs2_homology_search(
 
     # The Literal type guarantees a colabfold-style protein dataset.
     dataset_name = config.dataset
-    entry: DatasetEntry = DatasetRegistry.get(dataset_name)
+    entry = DatasetRegistry.get(dataset_name, MMseqs2DatabaseEntry)
     cache_dir = get_dataset_dir(dataset_name)
 
     # Disk checks happen here (not as Config validators) so Config()
     # construction stays cheap and works in CI / fresh dev machines without
     # any datasets provisioned. The user only hits this error when they
     # actually try to dispatch a search.
-    if entry.auto_provision and not _is_provisioned(entry, cache_dir, require_idx_pad=config.uses_gpu_search):
+    if entry.auto_provision and not entry.is_built(cache_dir, gpu=config.uses_gpu_search):
         # Tiny in-tree fixture entries build themselves on first dispatch so
         # CI / smoke tests don't need a separate provisioning step.
         _auto_provision(dataset_name, cache_dir, require_idx_pad=config.uses_gpu_search)
@@ -507,7 +508,7 @@ def run_mmseqs2_homology_search(
     env_dataset_dir: str | None = None
     env_db_prefix: str | None = None
     if config.use_metagenomic_db:
-        env_entry = DatasetRegistry.get(_METAGENOMIC_DATASET)
+        env_entry = DatasetRegistry.get(_METAGENOMIC_DATASET, MMseqs2DatabaseEntry)
         env_cache = get_dataset_dir(_METAGENOMIC_DATASET)
         _check_dataset_provisioned(_METAGENOMIC_DATASET, env_entry, env_cache, require_idx_pad=config.uses_gpu_search)
         env_dataset_dir = str(env_cache)
@@ -522,7 +523,7 @@ def run_mmseqs2_homology_search(
     db_load_mode = 2 if low_memory_reason else 0
 
     # Sensitivity: user override > registry default
-    sensitivity = config.sensitivity if config.sensitivity is not None else entry.mmseqs_flags.sensitivity
+    sensitivity = config.sensitivity if config.sensitivity is not None else entry.search_flags.sensitivity
 
     # Inner colabfold_search timeout fires 30s before the framework's outer
     # ToolInstance timeout so the standalone returns a structured error with
@@ -539,10 +540,10 @@ def run_mmseqs2_homology_search(
         "num_threads": num_threads,
         "verbose": config.verbose,
         "sensitivity": sensitivity,
-        "prefilter_mode": entry.mmseqs_flags.prefilter_mode,
-        "max_seqs": entry.mmseqs_flags.max_seqs,
+        "prefilter_mode": entry.search_flags.prefilter_mode,
+        "max_seqs": entry.search_flags.max_seqs,
         "db_load_mode": db_load_mode,
-        "extra_args": list(entry.mmseqs_flags.extra_args),
+        "extra_args": list(entry.search_flags.extra_args),
         "colabfold_timeout": inner_timeout,
         "device": config.device,
         "use_metagenomic_db": config.use_metagenomic_db,
@@ -928,33 +929,18 @@ def _rename_a3m_to_sequence_id(msa_out_dir: Path, idx: int, sequence_id: str) ->
     return named
 
 
-def _is_provisioned(entry: DatasetEntry, cache_dir: Path, *, require_idx_pad: bool) -> bool:
-    """Cheap, side-effect-free check for whether the indexed DB exists on disk."""
-    if not (cache_dir / f"{entry.db_prefix}.dbtype").is_file():
-        return False
-    if require_idx_pad and entry.gpu_padded_marker:
-        # A complete padded DB has both the marker and its ``.dbtype`` companion.
-        marker = cache_dir / entry.gpu_padded_marker
-        if not marker.exists() or not Path(f"{marker}.dbtype").is_file():
-            return False
-    return True
-
-
 def _auto_provision(name: str, cache_dir: Path, *, require_idx_pad: bool) -> None:
-    """Provision an ``auto_provision=True`` entry by running its download + index recipe.
+    """Provision an ``auto_provision=True`` entry by running its download + build recipe.
 
     Reuses the standalone env's ``mmseqs`` binary (built lazily via
     ``ToolInstance.ensure_ready``) so callers don't need ``mmseqs`` on PATH.
     Reserved for tiny fixture datasets — production entries declare
     ``auto_provision=False`` and require ``setup_databases.py`` instead.
 
-    Concurrency: holds an advisory ``flock`` on a sibling lockfile across the
-    download + index steps so parallel pytest-xdist workers (or any other
-    concurrent caller) serialize cleanly instead of racing on ``mmseqs mvdb``
-    / ``tar`` against a half-written cache dir. The second arrival blocks,
-    then re-checks ``_is_provisioned`` and skips its own work. The re-check
-    uses the caller's ``require_idx_pad`` so a partial cpu-only provision
-    on disk doesn't fool a GPU caller into skipping the rebuild.
+    Holds :func:`~proto_tools.databases.provision.provision_lock` across the download and build so
+    concurrent callers serialize instead of racing on a half-written cache dir. The second arrival
+    re-checks with the caller's ``require_idx_pad``, so a CPU-only database on disk doesn't fool a
+    GPU caller into skipping the rebuild.
 
     Refuses to run under GitHub Actions (``GITHUB_ACTIONS=true``) so CI
     runners never silently pull fixture tarballs from the public mirror.
@@ -966,46 +952,18 @@ def _auto_provision(name: str, cache_dir: Path, *, require_idx_pad: bool) -> Non
             "fixture tarballs). Provision manually with setup_databases.py if needed."
         )
 
-    import fcntl
-    import subprocess
-
-    from proto_tools.databases import DatasetRegistry
-    from proto_tools.tools.sequence_alignment.mmseqs2.setup_databases import (
-        _is_provisioned as _setup_db_is_provisioned,
-    )
-    from proto_tools.tools.sequence_alignment.mmseqs2.setup_databases import (
-        provision,
-    )
     from proto_tools.utils.tool_instance import ToolInstance
 
     instance = ToolInstance("mmseqs2")
     instance.ensure_ready()
     env_bin = instance.env_path / "bin"
-
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    lock_path = cache_dir.parent / f".{cache_dir.name}.provision.lock"
+    entry = DatasetRegistry.get(name, MMseqs2DatabaseEntry)
 
     logger.info("Auto-provisioning fixture dataset %r at %s", name, cache_dir)
 
-    with open(lock_path, "w") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        entry = DatasetRegistry.get(name)
-        if _is_provisioned(entry, cache_dir, require_idx_pad=require_idx_pad):
+    with provision_lock(cache_dir):
+        if entry.is_built(cache_dir, gpu=require_idx_pad):
             logger.info("Auto-provision skipped for %r: another worker already provisioned it", name)
-            return
-
-        if require_idx_pad and entry.gpu_padded_marker and _setup_db_is_provisioned(entry, cache_dir):
-            mmseqs_bin = env_bin / "mmseqs"
-            logger.info(
-                "Auto-provision fast-path for %r: building missing GPU-padded index (%s) only",
-                name,
-                entry.gpu_padded_marker,
-            )
-            subprocess.run(  # noqa: S603 — args from trusted registry + env-resolved bin
-                [str(mmseqs_bin), "makepaddedseqdb", entry.db_prefix, entry.gpu_padded_marker],
-                cwd=cache_dir,
-                check=True,
-            )
             return
 
         # The mmseqs env carries the ``mmseqs`` binary; the download step inside
@@ -1033,26 +991,26 @@ def _auto_provision(name: str, cache_dir: Path, *, require_idx_pad: bool) -> Non
             os.environ["PATH"] = original_path
 
 
-def _check_dataset_provisioned(name: str, entry: DatasetEntry, cache_dir: Path, *, require_idx_pad: bool) -> None:
+def _check_dataset_provisioned(
+    name: str, entry: MMseqs2DatabaseEntry, cache_dir: Path, *, require_idx_pad: bool
+) -> None:
     """Raise with a provisioning hint if ``name`` isn't on disk.
 
     Run-time check (not a Config validator) so Config construction stays
-    cheap on machines without datasets provisioned. Verifies the indexed DB
+    cheap on machines without datasets provisioned. Verifies the built DB
     exists, and (when ``require_idx_pad=True``) the GPU-padded index too.
     """
-    if not (cache_dir / f"{entry.db_prefix}.dbtype").is_file():
+    if not entry.is_built(cache_dir, gpu=False):
         raise FileNotFoundError(
             f"Dataset {name!r} not provisioned on disk: expected {cache_dir}.\n"
             "Provision with:\n"
             f"  python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases {name}\n"
             "(see proto_tools/tools/sequence_alignment/mmseqs2/README.md)"
         )
-    if require_idx_pad and entry.gpu_padded_marker:
-        marker = cache_dir / entry.gpu_padded_marker
-        if not marker.exists() or not Path(f"{marker}.dbtype").is_file():
-            raise FileNotFoundError(
-                f"Dataset {name!r} is missing a complete GPU-padded DB "
-                f"({entry.gpu_padded_marker} with sibling .dbtype) at {cache_dir}.\n"
-                "Build it with: mmseqs makepaddedseqdb <db_prefix> <gpu_padded_marker>\n"
-                "(setup_databases.py runs this automatically; rerun or set device='cpu')"
-            )
+    if require_idx_pad and not entry.is_built(cache_dir, gpu=True):
+        raise FileNotFoundError(
+            f"Dataset {name!r} is missing a complete GPU-padded DB "
+            f"({entry.gpu_db} with sibling .dbtype) at {cache_dir}.\n"
+            "Build it with: mmseqs makepaddedseqdb <db_prefix> <gpu_db>\n"
+            "(setup_databases.py runs this automatically; rerun or set device='cpu')"
+        )

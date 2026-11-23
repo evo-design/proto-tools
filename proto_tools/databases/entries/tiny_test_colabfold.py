@@ -12,22 +12,21 @@ Auto-provisions on first dispatch so smoke tests don't need a separate
 script uses the same source tarball and rename pattern.
 """
 
+from proto_tools.databases.mmseqs2 import MMseqs2DatabaseEntry, MMseqs2SearchFlags
 from proto_tools.databases.registry import (
-    DatasetEntry,
+    BuildRecipe,
+    BuildStep,
     DatasetRegistry,
     DownloadSpec,
-    IndexRecipe,
-    IndexStep,
-    MmseqsFlags,
 )
 
-ENTRY = DatasetEntry(
+ENTRY = MMseqs2DatabaseEntry(
     name="tiny-test-colabfold",
     molecule_type="protein",
     display_name="Tiny test DB (mini SwissProt, colabfold-style)",
     description="Mini SwissProt colabfold-style DB used by mmseqs2-homology-search smoke tests; not for production search.",
     citation_doi=None,
-    urls=[
+    downloads=[
         DownloadSpec(
             url="https://opendata.mmseqs.org/colabfold/mini_swissprot2503.tar.gz",
             filename="mini_swissprot2503.tar.gz",
@@ -35,43 +34,43 @@ ENTRY = DatasetEntry(
     ],
     total_download_bytes=263_000_000,
     total_disk_bytes=3_000_000_000,
-    index_recipe=IndexRecipe(
+    build=BuildRecipe(
         steps=[
-            IndexStep(
+            BuildStep(
                 command=["tar", "-xzf", "mini_swissprot2503.tar.gz"],
                 description="Extract mini SwissProt tarball",
             ),
             # Rename the extracted sprot2503* DBs into the colabfold-standard
             # uniref30_mini_db* layout that colabfold_search auto-detects.
-            IndexStep(
+            BuildStep(
                 command=["mmseqs", "mvdb", "sprot2503_h", "uniref30_mini_db_h"],
                 description="Rename header DB",
             ),
-            IndexStep(
+            BuildStep(
                 command=["mmseqs", "mvdb", "sprot2503", "uniref30_mini_db"],
                 description="Rename main sequence DB",
             ),
-            IndexStep(
+            BuildStep(
                 command=["mmseqs", "mvdb", "sprot2503_aln", "uniref30_mini_db_aln"],
                 description="Rename alignment DB",
             ),
-            IndexStep(
+            BuildStep(
                 command=["mmseqs", "mvdb", "sprot2503_seq_h", "uniref30_mini_db_seq_h"],
                 description="Rename cluster-member header DB",
             ),
-            IndexStep(
+            BuildStep(
                 command=["mmseqs", "mvdb", "sprot2503_seq", "uniref30_mini_db_seq"],
                 description="Rename cluster-member sequence DB",
             ),
-            IndexStep(
+            BuildStep(
                 command=["mv", "-f", "sprot2503_taxonomy", "uniref30_mini_db_taxonomy"],
                 description="Rename taxonomy file",
             ),
-            IndexStep(
+            BuildStep(
                 command=["mv", "-f", "sprot2503_mapping", "uniref30_mini_db_mapping"],
                 description="Rename taxonomy mapping file",
             ),
-            IndexStep(
+            BuildStep(
                 command=["mmseqs", "makepaddedseqdb", "uniref30_mini_db", "uniref30_mini_db.idx_pad"],
                 description="Build GPU-padded sequence DB",
             ),
@@ -85,11 +84,9 @@ ENTRY = DatasetEntry(
             "uniref30_mini_db.idx_pad.dbtype",
         ],
     ),
-    mmseqs_flags=MmseqsFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
+    search_flags=MMseqs2SearchFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
     db_prefix="uniref30_mini_db",
-    supports_gpu=True,
-    gpu_padded_marker="uniref30_mini_db.idx_pad",
-    min_gpu_memory_gb=0.5,
+    gpu_db="uniref30_mini_db.idx_pad",
     a3m_adapter="colabfold",
     auto_provision=True,
 )

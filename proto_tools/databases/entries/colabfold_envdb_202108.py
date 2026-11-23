@@ -6,22 +6,21 @@ ColabFold workflow (UniRef30 alone produces usable MSAs); pulling envdb
 deepens MSAs at the cost of ~110 GB download + ~650 GB indexed.
 """
 
+from proto_tools.databases.mmseqs2 import MMseqs2DatabaseEntry, MMseqs2SearchFlags
 from proto_tools.databases.registry import (
-    DatasetEntry,
+    BuildRecipe,
+    BuildStep,
     DatasetRegistry,
     DownloadSpec,
-    IndexRecipe,
-    IndexStep,
-    MmseqsFlags,
 )
 
-ENTRY = DatasetEntry(
+ENTRY = MMseqs2DatabaseEntry(
     name="colabfold-envdb-202108",
     molecule_type="protein",
     display_name="ColabFold environmental DB (202108)",
     description="Metagenomic clustered protein DB from ColabFold release 202108.",
     citation_doi="10.1038/s41592-022-01488-1",  # ColabFold — Mirdita et al.
-    urls=[
+    downloads=[
         DownloadSpec(
             url="https://opendata.mmseqs.org/colabfold/colabfold_envdb_202108.db.tar.gz",
             filename="colabfold_envdb_202108.tar.gz",
@@ -29,13 +28,13 @@ ENTRY = DatasetEntry(
     ],
     total_download_bytes=110_000_000_000,
     total_disk_bytes=650_000_000_000,
-    index_recipe=IndexRecipe(
+    build=BuildRecipe(
         steps=[
-            IndexStep(
+            BuildStep(
                 command=["tar", "-xzvf", "colabfold_envdb_202108.tar.gz"],
                 description="Extract MMseqs2 DB tarball",
             ),
-            IndexStep(
+            BuildStep(
                 command=[
                     "mmseqs",
                     "createindex",
@@ -48,7 +47,7 @@ ENTRY = DatasetEntry(
                 ],
                 description="Build MMseqs2 sequence index for CPU search",
             ),
-            IndexStep(
+            BuildStep(
                 command=["mmseqs", "makepaddedseqdb", "colabfold_envdb_202108_db", "colabfold_envdb_202108_db.idx_pad"],
                 description="Build GPU padded-sequence DB for MMseqs2-GPU",
             ),
@@ -61,11 +60,9 @@ ENTRY = DatasetEntry(
             "colabfold_envdb_202108_db.idx_pad.dbtype",
         ],
     ),
-    mmseqs_flags=MmseqsFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
+    search_flags=MMseqs2SearchFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
     db_prefix="colabfold_envdb_202108_db",
-    supports_gpu=True,
-    gpu_padded_marker="colabfold_envdb_202108_db.idx_pad",
-    min_gpu_memory_gb=10.0,
+    gpu_db="colabfold_envdb_202108_db.idx_pad",
     a3m_adapter="colabfold",
 )
 
