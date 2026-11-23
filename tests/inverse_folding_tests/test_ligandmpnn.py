@@ -289,6 +289,22 @@ def test_ligandmpnn_native_vocabularies_map_to_proto_columns() -> None:
     assert "PASS foundry" in output, output
 
 
+@pytest.mark.uses_env
+def test_ligandmpnn_pdb_writer_handles_non_finite_annotations() -> None:
+    """The Foundry path writes NaN B-factors and occupancies, as an RFD4 backbone carries, as Biotite's defaults.
+
+    The check first confirms Biotite's own writer rejects the array, so it fails if it stops
+    exercising the crash, then compares what ``_atom_array_to_pdb`` wrote atom by atom.
+    """
+    from proto_tools.utils import run_in_env
+
+    check = Path(__file__).resolve().parent / "_ligandmpnn_pdb_writer_env_check.py"
+    output = run_in_env("ligandmpnn", script=str(check), timeout=900)
+
+    assert "CONTROL biotite rejects the array" in output, output
+    assert "ALL CHECKS PASSED" in output, output
+
+
 def test_ligandmpnn_score_dispatch_contract(monkeypatch):
     captured = {}
     structure = ligandmpnn_example_input().inputs[0].structure
