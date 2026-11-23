@@ -389,6 +389,9 @@ def _run_esmfold2_on_complex(
         "msas_paired": is_paired,
         "unpaired_msas": unpaired_payload,
         "model_checkpoint": config.model_checkpoint,
+        # Prediction folds without pair dropout; sending it keeps an inversion worker that has dropout
+        # on from being reused here.
+        "lm_dropout": 0.0,
         "num_loops": config.num_loops,
         "num_sampling_steps": config.num_sampling_steps,
         "diffusion_samples": config.diffusion_samples,

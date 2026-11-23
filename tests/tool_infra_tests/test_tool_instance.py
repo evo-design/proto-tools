@@ -15,11 +15,16 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from proto_tools.utils import download_progress
+from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import ESMFold2Config
+from proto_tools.tools.structure_prediction.esmfold2.esmfold2_inversion_gradient import (
+    ESMFold2InversionGradientConfig,
+)
+from proto_tools.utils import download_progress, tool_instance
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT
 from proto_tools.utils.tool_instance import (
     UV_VERSION,
@@ -27,6 +32,7 @@ from proto_tools.utils.tool_instance import (
     _active_cache,
     _instances,
     _persist_mode,
+    _reload_changes,
     _run_setup_script,
     _scope_override,
 )
@@ -789,6 +795,117 @@ def test_persistent_worker_no_restart_when_reload_on_unspecified():
         "otherwise the next sample call triggers a spurious worker restart."
     )
     assert result == {"result": "ok"}
+
+
+def _count_spawns(calls: list[tuple[dict[str, Any], set[str] | None]], toolkit: str = "esmfold2") -> int:
+    """Run ``(payload, reload_on)`` calls through one fake instance and return how many workers it spawned."""
+    inst = _make_fake_instance(toolkit=toolkit, device="cpu")
+    spawned: list[MagicMock] = []
+
+    def spawn(*_args: Any, **_kwargs: Any) -> MagicMock:
+        worker = MagicMock()
+        worker.script_path = inst.script_path
+        worker.send.return_value = {"result": "ok"}
+        spawned.append(worker)
+        return worker
+
+    with patch("proto_tools.utils.tool_instance.PersistentWorker", side_effect=spawn):
+        for payload, reload_on in calls:
+            inst._run_persistent({"device": "cpu", **payload}, reload_on=reload_on)
+    return len(spawned)
+
+
+def test_shared_worker_reused_across_tools_that_declare_different_reload_fields():
+    """ESMFold2 prediction and inversion share one worker; alternating them on one model must not restart it.
+
+    Prediction declares ``model_checkpoint``; inversion also declares ``lm_dropout``. Comparing the two
+    declared sets as whole dicts restarted the worker on every switch (~30 s each on an H100).
+    """
+    pred_fields, inv_fields = ESMFold2Config.reload_fields(), ESMFold2InversionGradientConfig.reload_fields()
+    assert pred_fields is not None and inv_fields is not None
+    assert pred_fields < inv_fields, "the scenario needs prediction to declare a strict subset"
+    pred = ({"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0}, pred_fields)
+    inv = ({"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0}, inv_fields)
+
+    assert _count_spawns([inv, pred, inv, pred, inv]) == 1
+    # A prediction-spawned worker never recorded lm_dropout, so the first inversion cannot prove the
+    # model equivalent and restarts once; the inversion-spawned worker then serves both.
+    assert _count_spawns([pred, inv, pred, inv, pred]) == 2
+
+
+@pytest.mark.parametrize(
+    "calls",
+    [
+        [
+            ({"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0}, {"model_checkpoint", "lm_dropout"}),
+            ({"model_checkpoint": "esmfold2"}, {"model_checkpoint"}),
+        ],
+        [
+            ({"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0}, {"model_checkpoint", "lm_dropout"}),
+            ({"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.1}, {"model_checkpoint", "lm_dropout"}),
+        ],
+    ],
+    ids=["checkpoint-across-tools", "dropout-same-tool"],
+)
+def test_shared_worker_restarts_when_a_declared_field_differs(calls: list[tuple[dict[str, Any], set[str]]]):
+    """Reuse across tools is allowed only for an equivalent model: a declared field that differs restarts."""
+    assert _count_spawns(calls) == 2
+
+
+def test_an_opted_in_field_sent_but_not_declared_must_still_match():
+    """Opting a field in excuses declaring it, not contradicting it.
+
+    ESMFold2 prediction does not declare ``lm_dropout`` but sends the 0.0 it folds with, so a worker an
+    inversion tool spawned with dropout on is replaced here rather than rebuilt inside the live process.
+    Evo2 ICL is the same shape — it pins ``model_checkpoint="evo2_7b"`` and declares nothing — but Evo2
+    has opted no field in, so it replaces the worker either way.
+    """
+    inversion_dropout_on = ({"model_checkpoint": "m", "lm_dropout": 0.3}, {"model_checkpoint", "lm_dropout"})
+    inversion_default = ({"model_checkpoint": "m", "lm_dropout": 0.0}, {"model_checkpoint", "lm_dropout"})
+    prediction = ({"model_checkpoint": "m", "lm_dropout": 0.0}, {"model_checkpoint"})
+
+    assert _count_spawns([inversion_dropout_on, prediction]) == 2
+    assert _count_spawns([inversion_default, prediction, inversion_default]) == 1
+
+
+def test_untracked_spawn_leaves_reload_state_unknown():
+    """A worker spawned by a ``reload_on=None`` dispatch records nothing, so the next tracked call restarts it."""
+    untracked = ({"operation": "release_kv_caches"}, None)
+    tracked = ({"model_checkpoint": "a"}, {"model_checkpoint"})
+    assert _count_spawns([untracked, tracked]) == 2
+
+
+def test_reload_changes_reports_unknown_and_contradicting_fields():
+    """The restart log names each blocking field with its recorded and requested value."""
+    changes = _reload_changes(
+        {"model_checkpoint": "esmfold2-fast", "seed_model": 1},
+        {"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0},
+        {"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0, "seed_model": 2},
+        shared_fields=frozenset({"seed_model"}),
+    )
+    assert changes == {"lm_dropout": ("<unset>", 0.0), "seed_model": (1, 2)}
+
+
+def test_leaving_a_reload_field_undeclared_is_opt_in_per_field():
+    """Only a field opted in for its toolkit may be left undeclared; every other one restarts.
+
+    Reuse is sound only when the worker holds the model the call asks for, which this layer cannot
+    see, so each field earns it individually (``_SHARED_RELOAD_FIELDS``).
+    """
+    wide = ({"model_checkpoint": "m", "lm_dropout": 0.0}, {"model_checkpoint", "lm_dropout"})
+    narrow = ({"model_checkpoint": "m"}, {"model_checkpoint"})
+    extra = (
+        {"model_checkpoint": "m", "lm_dropout": 0.0, "adapter": "a"},
+        {"model_checkpoint", "lm_dropout", "adapter"},
+    )
+
+    assert tool_instance._SHARED_RELOAD_FIELDS["esmfold2"] == frozenset({"lm_dropout"})
+    assert _count_spawns([wide, narrow, wide]) == 1
+    # A toolkit that has opted no field in replaces the worker on each switch.
+    assert "esm2" not in tool_instance._SHARED_RELOAD_FIELDS
+    assert _count_spawns([wide, narrow, wide], toolkit="esm2") == 3
+    # An opt-in names one field, so a second undeclared field added later still restarts.
+    assert _count_spawns([extra, narrow]) == 2
 
 
 @patch.object(ToolInstance, "__init__", return_value=None)

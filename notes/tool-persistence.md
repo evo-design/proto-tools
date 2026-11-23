@@ -210,12 +210,23 @@ and the `verbose` scale.
 
 ## Auto-restart on config change (`reload_on_change`)
 
-A persistent worker reflects the configuration it was last loaded with. When a
-**load-time** parameter changes between calls (`device`, `model_checkpoint`,
-`model_name`, or any other field marked `reload_on_change=True` on the tool's
-`Config`), the persistence layer detects the mismatch (`reload_fields()` /
-`_reload_params`) and transparently restarts the worker with the new config
-before running the call.
+A persistent worker reflects the configuration it was spawned with. When a
+**load-time** parameter changes between calls (`model_checkpoint`, `model_name`,
+or any other field marked `reload_on_change=True` on the tool's `Config`), the
+persistence layer detects the mismatch (`reload_fields()` / `_reload_params`)
+and transparently restarts the worker with the new config before running the
+call. A `device` change is not a reload field: the worker moves in-process
+(`to_device`), and only a pinned worker is respawned.
+
+The tools of one toolkit share its worker and may declare different reload
+fields (ESMFold2 prediction declares `model_checkpoint`; the inversion tools also
+declare `lm_dropout`). Reuse across them is only sound when the worker already
+holds the model the call asks for, which this layer cannot see, so leaving a
+recorded field undeclared is **opt-in per field**: `_SHARED_RELOAD_FIELDS` in
+`tool_instance.py` lists the fields a tool may omit, added one at a time once
+someone has checked that omitting it cannot change the model that tool gets.
+Anything else restarts the worker. A field every tool declares needs no entry,
+since those values are always compared. `_reload_changes` carries the exact rule.
 
 Two rules for tool authors:
 
