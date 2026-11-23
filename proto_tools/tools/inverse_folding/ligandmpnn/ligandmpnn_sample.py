@@ -28,25 +28,39 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
+from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.sequence import normalize_excluded_amino_acids
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
-LigandMPNNModelType = Literal[
-    "ligand_mpnn",
-    # The original LigandMPNN implementation. Its sampler emits packed full-atom structures and
-    # its scorer runs the same original code; code and weights are auto-provisioned on first use.
-    # Foundry is the default otherwise.
-    "original",
-    # Membrane variants need transmembrane-label inputs that are not wired; disabled for now.
-    # "per_residue_label_membrane_mpnn",
-    # "global_label_membrane_mpnn",
-]
+# Which LigandMPNN code runs: Foundry's implementation, or the upstream LigandMPNN code, whose
+# sampler also packs side chains (code and packer fetched on first use).
+LigandMPNNImplementation = Literal["foundry", "original"]
 
-# model_type values that run the original implementation instead of Foundry.
-LIGANDMPNN_LEGACY_MODEL_TYPES = frozenset({"original"})
+# Bundled weights, downloaded by setup.sh: the published LigandMPNN checkpoints trained with 0.10 Å
+# and 0.20 Å backbone noise. Either runs under either implementation; any other model_checkpoint is
+# a path to your own .pt checkpoint.
+LIGANDMPNN_BUNDLED_MODELS: frozenset[str] = frozenset({"ligandmpnn_v_32_010_25", "ligandmpnn_v_32_020_25"})
+
+
+def local_checkpoint_on_remote(model_checkpoint: str, device: str) -> str | None:
+    """Reject a local checkpoint path on a remote worker, where it doesn't exist.
+
+    Args:
+        model_checkpoint (str): A bundled model name or a local path.
+        device (str): The remote device the config is dispatched to.
+
+    Returns:
+        str | None: Why the config can't run on ``device``, or ``None`` if it can.
+    """
+    if model_checkpoint in LIGANDMPNN_BUNDLED_MODELS:
+        return None
+    return (
+        f"model_checkpoint points to a local file not available on device='{device}'. Use bundled weights "
+        f"({', '.join(sorted(LIGANDMPNN_BUNDLED_MODELS))}), or run locally with device='cuda' or device='cpu'."
+    )
 
 
 # ============================================================================
@@ -68,24 +82,29 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         temperature (float): Controls randomness in sampling from logits.
         excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
         seed (int): Random seed to use for sampling.
-        model_type (LigandMPNNModelType): LigandMPNN implementation. ``ligand_mpnn`` (default) is
-            the Foundry implementation; ``original`` runs the original LigandMPNN code and weights,
-            auto-provisioned on first use, and emits packed full-atom structures.
-        checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
+        implementation (LigandMPNNImplementation): Which LigandMPNN code runs. ``"foundry"``
+            (default) is RosettaCommons Foundry's implementation. ``"original"`` is the upstream
+            LigandMPNN code, fetched on first use: it matches the reference repository's outputs
+            and returns packed full-atom structures. The two prepare the structure differently, so
+            sequences and scores differ between them even with the same weights.
+        model_checkpoint (str): Sequence-model weights, which work with either implementation:
+            ``"ligandmpnn_v_32_010_25"`` (default) or ``"ligandmpnn_v_32_020_25"``, the published
+            weights trained with 0.10 Å and 0.20 Å backbone noise, or a path to your own ``.pt``
+            checkpoint, which runs only locally.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
             recovery score.
-        sc_num_denoising_steps (int): Side-chain denoising steps. Only used when model_type
-            is ``original``.
-        sc_num_samples (int): Side-chain packing samples. Only used when model_type is
-            ``original``.
+        sc_num_denoising_steps (int): Side-chain denoising steps. Only used with
+            ``implementation="original"``.
+        sc_num_samples (int): Side-chain packing samples. Only used with
+            ``implementation="original"``.
     """
 
-    model_type: LigandMPNNModelType = ConfigField(
-        title="Model Type",
-        default="ligand_mpnn",
-        description="Implementation: 'ligand_mpnn' (Foundry, default) or 'original' (packs full-atom structures).",
+    implementation: LigandMPNNImplementation = ConfigField(
+        title="Implementation",
+        default="foundry",
+        description="'foundry' (default) or 'original', the upstream code, which returns packed full-atom structures.",
         reload_on_change=True,
     )
     use_atom_context: bool = ConfigField(
@@ -93,10 +112,11 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         default=True,
         description="Encode ligand atom context in the message-passing graph",
     )
-    checkpoint_path: str | None = ConfigField(
-        title="Checkpoint Path",
-        default=None,
-        description="Optional explicit LigandMPNN checkpoint path.",
+    model_checkpoint: str = ConfigField(
+        title="Model / Checkpoint",
+        default="ligandmpnn_v_32_010_25",
+        min_length=1,
+        description="'ligandmpnn_v_32_010_25', 'ligandmpnn_v_32_020_25', or a path to a custom .pt checkpoint.",
         reload_on_change=True,
     )
     use_side_chain_context: bool = ConfigField(
@@ -121,13 +141,13 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         title="Sidechain Denoising Steps",
         default=8,
         ge=1,
-        description="Side-chain denoising steps; only used with model_type='original'.",
+        description="Side-chain denoising steps; only used with implementation='original'.",
     )
     sc_num_samples: int = ConfigField(
         title="Sidechain Samples",
         default=1,
         ge=1,
-        description="Side-chain packing samples; only used with model_type='original'.",
+        description="Side-chain packing samples; only used with implementation='original'.",
     )
 
     @field_validator("excluded_amino_acids", mode="before")
@@ -146,7 +166,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         Returns:
             LigandMPNNSampleConfig: The validated config.
         """
-        if self.model_type not in LIGANDMPNN_LEGACY_MODEL_TYPES:
+        if self.implementation != "original":
             fields = type(self).model_fields
             misused = [
                 name
@@ -155,14 +175,18 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
             ]
             if misused:
                 raise ValueError(
-                    f"{', '.join(misused)} only apply when model_type='original'; got model_type={self.model_type!r}."
+                    f"{', '.join(misused)} only apply when implementation='original'; got implementation={self.implementation!r}."
                 )
         return self
+
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
+        """A local checkpoint path isn't present on a remote worker."""
+        return local_checkpoint_on_remote(self.model_checkpoint, device)
 
     def readable_positions(self, inp: Any) -> dict[str, list[int]] | None:
         """Positions LigandMPNN designs, which excludes every HETATM residue.
 
-        Only the Foundry path has a declared rule. ``model_type='original'`` parses the
+        Only the Foundry path has a declared rule. ``implementation='original'`` parses the
         structure with the original implementation's own ``parse_PDB``, whose behaviour is
         not mirrored here, so it keeps strict length matching.
 
@@ -173,7 +197,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
             dict[str, list[int]] | None: Ascending readable positions per chain ID, or
                 ``None`` for the original implementation.
         """
-        if self.model_type in LIGANDMPNN_LEGACY_MODEL_TYPES:
+        if self.implementation == "original":
             return None
         return ligandmpnn_readable_positions(inp.structure)
 
@@ -393,9 +417,7 @@ def run_ligandmpnn_sample(
         # which addresses residues by number alone, sees every insertion-coded residue.
         # Only the Foundry parser loses a HETATM residue to the chain split; the original
         # implementation reads the staged file its own way and is not mirrored here.
-        record_residues = (
-            frozenset() if config.model_type in LIGANDMPNN_LEGACY_MODEL_TYPES else LIGANDMPNN_ATOM_RECORD_RESIDUES
-        )
+        record_residues = frozenset() if config.implementation == "original" else LIGANDMPNN_ATOM_RECORD_RESIDUES
         with inp.staged(atom_record_residues=record_residues) as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
@@ -412,8 +434,8 @@ def run_ligandmpnn_sample(
                     "seed": base_seed + dispatch_idx,
                     "device": config.device,
                     "verbose": config.verbose,
-                    "model_type": config.model_type,
-                    "checkpoint_path": config.checkpoint_path,
+                    "implementation": config.implementation,
+                    "model_checkpoint": config.model_checkpoint,
                     "ligand_mpnn_use_atom_context": config.use_atom_context,
                     "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,
                     "ligand_mpnn_cutoff_for_score": config.cutoff_for_score,

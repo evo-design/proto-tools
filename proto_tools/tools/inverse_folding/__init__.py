@@ -63,7 +63,7 @@ from proto_tools.tools.inverse_folding.ligandmpnn import (
     LigandMPNNDesign,
     LigandMPNNDesignMetrics,
     LigandMPNNDesignSet,
-    LigandMPNNModelType,
+    LigandMPNNImplementation,
     LigandMPNNSampleConfig,
     LigandMPNNSampleInput,
     LigandMPNNSampleOutput,
@@ -158,7 +158,7 @@ __all__ = [
     # LigandMPNN
     "run_ligandmpnn_sample",
     "run_ligandmpnn_score",
-    "LigandMPNNModelType",
+    "LigandMPNNImplementation",
     "LigandMPNNSampleInput",
     "LigandMPNNSampleConfig",
     "LigandMPNNSampleOutput",
