@@ -106,7 +106,7 @@ class AbLangModel:
 
     def load(self, device: str, verbose: bool = False) -> None:
         """Load AbLang model to device."""
-        # Validate + auto-recover from corruption. No-op on the warm path.
+        # Validate checkpoint files and recover corrupted downloads before loading.
         _validate_ablang_weights(self.model_choice)
 
         logger.update_status("Loading AbLang weights")
@@ -378,17 +378,20 @@ class AbLangModel:
         all_metrics: list[dict[str, float]] = []
         all_logits: list[Any] | None = [] if return_logits else None
 
+        # Score the sequences batch by batch.
         counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-len(sequences) // batch_size))
         for i in range(0, len(sequences), batch_size):
             counter(i // batch_size + 1)
             batch = sequences[i : i + batch_size]
             formatted = self._format_sequences(batch)
 
+            # AbLang-1 exposes each mode as a method; AbLang-2 takes the mode as an argument.
             if self._is_ablang1:
                 scores = getattr(self.model, scoring_mode)(formatted)
             else:
                 scores = self.model(formatted, mode=scoring_mode)
 
+            # Collect one metrics dict per sequence, with log-likelihood stats for PLL mode.
             for j, s in enumerate(scores):
                 score_val = float(s)
                 m: dict[str, float] = {scoring_mode: score_val}
@@ -397,6 +400,7 @@ class AbLangModel:
                     m.update(log_likelihood_metrics(score_val, len(batch[j].replace("|", ""))))
                 all_metrics.append(m)
 
+            # Run a separate likelihood pass for per-residue logits when requested.
             if all_logits is not None:
                 all_logits.extend(self._per_position_aa_logits(formatted))
 
@@ -720,7 +724,7 @@ class AbLangModel:
             pos_idx = torch.arange(seq_len, device=self.device)  # (S,)
 
             # Chunked PLL: mask each AA position, predict from bidirectional context.
-            # Per-chunk backward frees transformer activations immediately → O(chunk) memory.
+            # Backpropagate each chunk separately to free its transformer activations.
             ie_grad = torch.zeros_like(input_embeddings) if backprop else None
             total_loss_val = 0.0
             for start in range(0, n_aa, batch_size):
@@ -834,12 +838,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             excluded_amino_acids=input_dict["excluded_amino_acids"],
         )
     if operation == "compute_gradient":
-        # Grouped by checkpoint so each variant loads once; results are written back by original position.
+        # Group by checkpoint to load each variant once, then restore the original result order.
         items = input_dict["items"]
         groups: dict[str, list[int]] = {}
         for index, item in enumerate(items):
             groups.setdefault(item["model_choice"], []).append(index)
 
+        # Run each item's gradient with its checkpoint, writing results back to the item's slot.
         results: list[dict[str, Any] | None] = [None] * len(items)
         for model_choice, indices in groups.items():
             model = _ensure_model(model_choice)
@@ -858,9 +863,11 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                     verbose=input_dict["verbose"],
                 )
 
+        # Ensure every item produced a result.
         completed = [result for result in results if result is not None]
         if len(completed) != len(items):
             raise RuntimeError(f"ablang: produced {len(completed)} results for {len(items)} item(s)")
+        # Return per-item results with the shared vocabulary listed once.
         return {
             "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in completed],
             "vocab": completed[0]["vocab"],

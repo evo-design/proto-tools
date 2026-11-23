@@ -211,8 +211,7 @@ def run_dssp_secondary_structure(
     chain_ids: list[str] = []
     for inp in inputs.inputs:
         pdb_content, mmcif_to_pdb = inp.structure.to_pdb_with_chain_mapping()
-        # One result per input. mkdssp runs on the whole structure; we extract the
-        # selected chain's percentages from that single pass.
+        # Run mkdssp on the whole structure once, then select this chain's percentages.
         chain_id = inp.analyzed_chain_id
         pdb_contents.append(pdb_content)
         pdb_chain_ids.append(mmcif_to_pdb[chain_id])
@@ -230,6 +229,7 @@ def run_dssp_secondary_structure(
         config=config,
     )
 
+    # Restore the original chain IDs after scoring the PDB-compatible chain labels.
     results = [
         DSSPSecondaryStructureMetrics(chain_id=chain_id, **result)
         for chain_id, result in zip(chain_ids, output_data["results"], strict=True)

@@ -1,19 +1,15 @@
-"""proto_tools/utils/tool_instance.py.
+"""Run tools in isolated subprocesses and optionally keep workers alive across calls.
 
-**One-shot by default**: ``dispatch()`` runs an ephemeral subprocess —
-no leaked workers, no GPU memory retained after the call.
+By default, ``dispatch()`` starts a subprocess for one call and shuts it down
+afterward, releasing its GPU memory. To reuse a worker, use ``persist()`` to
+cache all tools in a block, ``persist_tool()`` for a specific tool, or ``get()``
+for a worker whose lifetime you manage yourself.
 
-**Opt-in persistence**: use ``persist()`` (auto-cache all tools),
-``persist_tool()`` (tool-specific), or ``get()`` (manual lifecycle)
-when you need to keep a worker alive across calls.
-
-Device is always driven by ``config.device`` (a ``BaseConfig`` field)
-which flows through ``input_dict["device"]``.  Persistent workers
-auto-restart when any ``reload_on_change`` config field changes between
-calls (device, model checkpoint, etc.).  Standalone scripts must NOT
-check for config changes themselves — the ToolInstance layer handles
-restarts.  Any config field that affects model initialization must be
-marked ``reload_on_change=True`` in the tool's Config class.
+``config.device`` reaches the worker through ``input_dict["device"]``.
+ToolInstance restarts persistent workers when a ``reload_on_change`` config
+field changes between calls, such as the device or model checkpoint. Standalone
+scripts should leave these checks to ToolInstance. Mark every config field
+that affects model initialization with ``reload_on_change=True``.
 
 Usage::
 
@@ -120,8 +116,8 @@ _scope_override: contextvars.ContextVar[dict[str, "ToolInstance"] | None] = cont
 _persist_mode: contextvars.ContextVar[bool] = contextvars.ContextVar("_persist_mode", default=False)
 
 # Set by the ``@tool()`` wrapper around each dispatch so ``ToolInstance`` can
-# read per-tool flags (e.g. ``gpu_only``) without plumbing the ``ToolSpec``
-# through every call site. Contents: {"key": str, "gpu_only": bool,
+# read flags such as ``gpu_only`` without passing ``ToolSpec`` through each
+# call site. The mapping contains {"key": str, "gpu_only": bool,
 # "pin_visible_devices": bool, "uses_gpu": bool}.
 _current_tool_invocation: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
     "_current_tool_invocation", default=None
@@ -411,10 +407,9 @@ class ToolInstance:
     ) -> dict[str, Any]:
         """Run a tool, reusing a cached persistent instance if one exists.
 
-        This is the primary entry point for tool wrappers.  When no
-        persistent instance is cached, runs an ephemeral one-shot
-        subprocess (no leak).  When a persistent instance exists (via
-        :meth:`persist`, :meth:`persist_tool`, or :meth:`get`), reuses it.
+        Tool wrappers use this entry point to find an existing worker or start
+        a one-shot subprocess. Workers cached through :meth:`persist`,
+        :meth:`persist_tool`, or :meth:`get` are reused.
 
         Args:
             toolkit (str): Worker-group folder name (e.g. ``"esm2"``).
@@ -519,10 +514,10 @@ class ToolInstance:
         verbose: int = 0,
         timeout: int | None = None,
     ) -> dict[str, Any]:
-        """Run a tool in an ephemeral subprocess — no caching, no worker.
+        """Run a tool once and release its subprocess afterward.
 
-        For GPU devices, acquires a transient lease from DeviceManager
-        to prevent concurrent one-shot calls from stomping the same GPU.
+        For GPU calls, hold a transient DeviceManager lease so concurrent
+        one-shot calls do not use the same GPU.
 
         Args:
             toolkit (str): Model-level folder name (e.g. ``"esm2"``).
@@ -821,7 +816,7 @@ class ToolInstance:
             if self.env_name not in self._env_build_locks:
                 self._env_build_locks[self.env_name] = threading.Lock()
         with self._env_build_locks[self.env_name], self._env_build_process_lock():
-            # Re-check under the build lock in case the race winner already recorded a failure.
+            # Another thread may have recorded a failure before this one acquired the lock.
             if self.toolkit in self._build_failures:
                 tail = self._build_failures[self.toolkit]
                 sentinel = self._parse_asset_sentinel(tail)
@@ -895,15 +890,13 @@ class ToolInstance:
         ``import torch`` mmaps gigabytes of CUDA libraries, and on a parallel filesystem each
         page fault is a network round-trip, so the first run on a node can spend far longer
         waiting on them than computing. Reading the files sequentially first fills the same
-        page cache at a thousand times the rate.
+        page cache much faster.
 
         Skipped unless page faults on the env's largest library are measured to be slow, which
         a local disk, a fast network filesystem, and an already-cached library all avoid.
-        Best-effort throughout: see :mod:`proto_tools.utils.env_warmup`.
-
-        Including the fingerprint lookup, which reads the setup files: a speed-up must not add
-        a way for :meth:`_ensure_env` to fail, so anything unexpected here just skips the
-        warm-up rather than propagating.
+        Warm-up is optional, including the fingerprint lookup that reads setup
+        files. If anything fails, skip warm-up so :meth:`_ensure_env` can still
+        run. See :mod:`proto_tools.utils.env_warmup`.
         """
         try:
             warm_environment(self.env_path, self._setup_hash())
@@ -1017,8 +1010,8 @@ class ToolInstance:
         cache key when it has one, otherwise a unique ``<toolkit>#<n>``. Falling back to the
         toolkit name would let an uncached instance (a nested ``persist_tool``, a direct
         ``ToolInstance(toolkit)``) share a cached instance's record. DeviceManager would then
-        see one process on a GPU that two hold, skip eviction, and on an ``Exclusive_Process``
-        GPU the second worker could not create a CUDA context. The name never changes once
+        record one worker even though two workers use the GPU, so it would skip eviction.
+        On an ``Exclusive_Process`` GPU, the second worker would fail to create a CUDA context. The name never changes once
         set, since the allocation is released under it at shutdown. Callers hold
         ``_instance_lock``.
 
@@ -1616,16 +1609,19 @@ class ToolInstance:
         if not registry.exists():
             return
 
+        # Registrations under these roots are envs proto-tools manages
         managed_roots = (
             ToolInstance._get_tool_envs_root().resolve(strict=False),
             ToolInstance._get_foundation_env_path().resolve(strict=False),
         )
+        # Read the registry, keeping line endings so kept lines are written back unchanged
         try:
             lines = registry.read_text().splitlines(keepends=True)
         except OSError as e:
             logger.warning("Could not read conda environment registry at %s: %s", registry, e)
             return
 
+        # Drop managed env registrations; keep comments, blank lines and every other env
         kept = []
         removed = 0
         for line in lines:
@@ -1637,9 +1633,11 @@ class ToolInstance:
                     continue
             kept.append(line)
 
+        # Leave the file untouched when nothing was removed
         if removed == 0:
             return
 
+        # Write a per-process temp file, then rename it over the registry so readers never see a partial file
         tmp_registry = registry.with_name(f"{registry.name}.{os.getpid()}.tmp")
         try:
             tmp_registry.write_text("".join(kept))
@@ -1647,6 +1645,7 @@ class ToolInstance:
             logger.info("Removed %d proto-tools env registrations from %s", removed, registry)
         except OSError as e:
             logger.warning("Could not update conda environment registry at %s: %s", registry, e)
+            # Remove the temp file if the write or rename failed
             with suppress(OSError):
                 tmp_registry.unlink()
 
@@ -1976,6 +1975,7 @@ class ToolInstance:
                 ``default`` key, or any value fails validation.
         """
         versions: dict[str, str] = {}
+        # Parse each `key: value` line, stripping comments and skipping blank lines
         for raw_line in content.splitlines():
             line = raw_line.split("#", 1)[0].strip()
             if not line:
@@ -1985,6 +1985,7 @@ class ToolInstance:
                     f"Invalid line in {source}: '{line}'. "
                     f"Expected 'key: value' format (e.g., 'default: {example}', 'linux-aarch64: {example}')."
                 )
+            # Split on the first colon and lowercase the key
             key, _, value = line.partition(":")
             key = key.strip().lower()
             value = value.strip()
@@ -1992,8 +1993,10 @@ class ToolInstance:
                 raise ValueError(f"Invalid line in {source}: '{line}'. Empty key before ':'.")
             if key in versions:
                 raise ValueError(f"Duplicate key '{key}' in {source}.")
+            # Validate each value as it is read so errors name the offending key
             versions[key] = validate(value, f"{source} (key '{key}')")
 
+        # Require at least one entry, and a default to fall back to
         if not versions:
             raise ValueError(
                 f"{file_name} at {source} has no entries after stripping comments and "
@@ -2009,6 +2012,7 @@ class ToolInstance:
         # Three-tier lookup: most specific wins.
         if platform_key in versions:
             return versions[platform_key]
+        # Fall back to the OS-only key (e.g. linux), then the default
         os_key = platform_key.partition("-")[0]
         if os_key and os_key in versions:
             return versions[os_key]
@@ -2217,9 +2221,11 @@ class ToolInstance:
         lifetime of the process. Phantom directories (stale helper copies
         without setup.sh or scripts) are filtered out and cleaned up.
         """
+        # Return the cached mapping after the first scan
         if cls._tool_dir_cache is not None:
             return cls._tool_dir_cache
 
+        # Collect each toolkit dir whose standalone/ has a setup.sh or runnable script
         tools_dir = Path(__file__).parent.parent / "tools"
         candidates: dict[str, list[Path]] = {}
         for standalone_dir in tools_dir.rglob("standalone"):
@@ -2228,11 +2234,13 @@ class ToolInstance:
             if cls._has_valid_standalone(standalone_dir):
                 candidates.setdefault(standalone_dir.parent.name, []).append(standalone_dir.parent)
 
+        # Pick one dir per toolkit; several paths usually mean stale copies left by a category move
         result: dict[str, Path] = {}
         for name, dirs in candidates.items():
             if len(dirs) == 1:
                 result[name] = dirs[0]
             else:
+                # Prefer the one copy that is still a package (has __init__.py); the rest are stale
                 with_init = [d for d in dirs if (d / "__init__.py").is_file()]
                 if len(with_init) == 1:
                     result[name] = with_init[0]
@@ -2243,6 +2251,7 @@ class ToolInstance:
                         [d for d in dirs if d != with_init[0]],
                     )
                 else:
+                    # Otherwise take the first path in sorted order so the choice is deterministic
                     ordered = sorted(dirs)
                     result[name] = ordered[0]
                     logger.warning(
@@ -2252,6 +2261,7 @@ class ToolInstance:
                         ordered[0],
                     )
 
+        # Cache the mapping, then remove phantom standalone dirs left behind by moved tools
         cls._tool_dir_cache = result
         cls._cleanup_stale_standalone_dirs(tools_dir)
         return cls._tool_dir_cache
@@ -2345,7 +2355,7 @@ class ToolInstance:
                 f"setup.sh and python_version.txt (missing: {missing}). "
                 f"`proto-tools eject-standalone {toolkit}` produces a valid starting point."
             )
-        # Older ejects included these. Say so, rather than let an edit to them quietly do nothing.
+        # Report implementation files left by older ejects because editing them has no effect.
         stray = [f for f in ("run.py", "inference.py") if (path / f).is_file()]
         if stray:
             logger.warning(
@@ -2411,10 +2421,9 @@ class ToolInstance:
         the *packaged* definition (resolving shared envs and ``toolkit:`` references),
         ignoring any active override.
 
-        The tool implementation (``run.py``, ``inference.py``, and any modules they
-        import) is deliberately excluded: the override redirects the environment
-        definition only, so copying implementation would offer an edit that silently
-        does nothing.
+        The override changes only the environment definition. Exclude tool
+        implementation files such as ``run.py``, ``inference.py``, and their
+        imports because editing copied versions would have no effect.
 
         Returns:
             Path: The destination directory (``dest_root/<toolkit>``).

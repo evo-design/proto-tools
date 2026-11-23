@@ -18,8 +18,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 class ViennaRNAModel:
     """ViennaRNA secondary structure prediction model.
 
-    This class provides a lightweight wrapper around ViennaRNA's MFE folding
-    algorithm with lazy loading and JSON-compatible I/O.
+    Wraps ViennaRNA's MFE folding algorithm with lazy loading and JSON-compatible I/O.
     """
 
     def __init__(self) -> None:

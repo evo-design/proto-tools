@@ -36,15 +36,15 @@ def _install_checkpoint_cache() -> None:
     """Memoize ``Boltz2.load_from_checkpoint`` so a resident worker loads each checkpoint once.
 
     ``boltz.main.predict`` reloads the checkpoint on every call; this memoization collapses those
-    repeated loads to one per checkpoint. Config fields baked into the load (sampling/recycling/
+    repeated loads to one per checkpoint. Config fields used during loading (sampling/recycling/
     diffusion steps, step_scale, subsample_msa, and the affinity settings) are marked
     ``reload_on_change=True``, so a config change restarts the worker and load args stay fixed for a
     worker's lifetime. The only distinct checkpoints are the structure (``boltz2_conf``) and affinity
     (``boltz2_aff``) files, so keying by checkpoint path bounds the cache to two entries.
 
-    The path-only key does not self-correct: correctness relies on the ``reload_on_change`` set
-    covering every field boltz threads into ``Boltz2.load_from_checkpoint``. An unmarked load-affecting
-    field would let a same-path entry serve a model loaded with stale args, wrong output, no error.
+    Every field passed to ``Boltz2.load_from_checkpoint`` must be marked
+    ``reload_on_change``. Otherwise, a cached model could keep stale loading
+    arguments and return incorrect results without raising an error.
 
     A checkpoint that fails to load as a corrupted archive is deleted before the error propagates, so
     boltz re-downloads it when ``_run_boltz_predict`` retries.
@@ -120,10 +120,11 @@ def _install_msa_row_logging() -> None:
 def _ensure_boltz_data(cache: Path) -> None:
     """Download boltz's checkpoints and CCD molecules, extracting the molecules again when any are gone.
 
-    boltz downloads a missing checkpoint or ``mols.tar`` but extracts the tar only when ``mols/`` does
-    not exist, so a scratch purge that empties the folder and leaves it would fail every run on missing
-    ligand files. ``ensure_complete`` records the files the extraction produced and removes ``mols/``
-    when any are gone, so boltz extracts it again; concurrent workers sharing the cache take turns.
+    Boltz downloads missing checkpoints or ``mols.tar``, but extracts the archive
+    only when ``mols/`` is absent. An emptied directory would therefore leave
+    ligand files missing on every run. ``ensure_complete`` records extracted
+    files and removes the directory if any disappear, allowing re-extraction.
+    Workers sharing a cache perform this check one at a time.
     """
     from boltz.main import download_boltz2
     from standalone_helpers import ensure_complete

@@ -120,7 +120,7 @@ class PuffinModel:
         from standalone_helpers import set_current_cuda_device
 
         # Puffin's predict/interpret call ``self.cuda()`` and ``.cuda()`` on inputs, which use the
-        # current device: make that the leased GPU before anything touches CUDA.
+        # current device. Select the leased GPU before anything touches CUDA.
         set_current_cuda_device(device)
         with _chdir(repo_dir):
             model = Puffin(use_cuda=device.startswith("cuda"))
@@ -286,7 +286,7 @@ def _compute_gradient(state: PuffinModel, input_dict: dict[str, Any]) -> dict[st
 
     Each item is relaxed and placed between the fixed ``context_left``/``context_right``, which
     are encoded as upstream encodes a string and never relaxed, so gradients cover the item's
-    rows only. The model's own ``predict`` is not reusable here: it takes a string, detaches,
+    rows only. The model's ``predict`` is not reusable here because it takes a string, detaches,
     and returns a DataFrame, so this runs the module's tensor forward directly and trims the
     same padding. Term positions index the output window of the full model input.
 
@@ -303,6 +303,7 @@ def _compute_gradient(state: PuffinModel, input_dict: dict[str, Any]) -> dict[st
     """
     import torch
 
+    # Read the relaxation settings, loss terms, and fixed flanking context from the payload
     device = input_dict["device"]
     verbose = bool(input_dict.get("verbose", False))
     backprop = bool(input_dict.get("compute_gradient", True))
@@ -313,6 +314,7 @@ def _compute_gradient(state: PuffinModel, input_dict: dict[str, Any]) -> dict[st
     context_left = input_dict["context_left"]
     context_right = input_dict["context_right"]
 
+    # Load the model, map each track name to its output channel, and one-hot encode the context
     model = state.load(device, verbose=verbose)
     channels = _channel_indices(model, list(input_dict["track_names"]))
     track_channel = dict(zip(input_dict["track_names"], channels, strict=True))
@@ -321,6 +323,7 @@ def _compute_gradient(state: PuffinModel, input_dict: dict[str, Any]) -> dict[st
 
     results: list[dict[str, Any]] = []
     for item in input_dict["items"]:
+        # Check the item is L x 4 logits and that context + item leaves a non-empty output window
         if not item or any(len(row) != 4 for row in item):
             raise ValueError("puffin: compute_gradient expects L x 4 logits in A,C,G,T order")
         length = len(context_left) + len(item) + len(context_right)
@@ -331,6 +334,7 @@ def _compute_gradient(state: PuffinModel, input_dict: dict[str, Any]) -> dict[st
             )
 
         with torch.set_grad_enabled(backprop):
+            # Relax the logits, run the forward pass, and trim the padding off the predicted tracks
             seq_dist = torch.tensor(item, device=state.device, dtype=torch.float32, requires_grad=backprop)
             relaxed = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
             prediction = model(_model_input(relaxed, left, right))
@@ -339,6 +343,7 @@ def _compute_gradient(state: PuffinModel, input_dict: dict[str, Any]) -> dict[st
             # One backward per track, sharing one forward graph retained until the last.
             terms: list[dict[str, Any]] = []
             for position, term in enumerate(gradient_terms):
+                # Resolve open span endpoints to the full window and average the track over the span
                 name = term["track"]
                 start = 1 if term["position_start"] is None else int(term["position_start"])
                 end = output_length if term["position_end"] is None else int(term["position_end"])
@@ -349,12 +354,13 @@ def _compute_gradient(state: PuffinModel, input_dict: dict[str, Any]) -> dict[st
                 signal = scored[track_channel[name], start - 1 : end].float().mean()
 
                 gradient_value: list[list[float]] | None = None
+                # Keep the graph alive for every term except the last
                 if backprop:
                     retain = position < len(gradient_terms) - 1
                     grad = torch.autograd.grad(signal, seq_dist, retain_graph=retain, allow_unused=False)[0]
                     gradient_value = grad.detach().cpu().tolist()
 
-                # The span reported is the one averaged; an open end resolves per candidate.
+                # Report the span actually averaged, resolving open endpoints for each candidate.
                 terms.append(
                     {
                         "term": {"track": name, "position_start": start, "position_end": end},

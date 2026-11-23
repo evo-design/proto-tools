@@ -59,10 +59,10 @@ def _all_registered() -> set[str]:
 def runs_in_process(tool_key: str) -> bool:
     """Report whether a call to ``tool_key`` on a remote device is answered here instead.
 
-    A ``local_only`` tool never has a deployment, and its inputs are on this machine anyway. A
-    ``local_cpu`` tool has no GPU and no environment, so it runs here only when nothing serves it
-    — deploying one is a choice, and ``pdockq2`` and ``structure-metrics`` were deployed. That is
-    the same question the tool wrapper asks, so the two paths agree on where a call landed.
+    A ``local_only`` tool always runs on this machine. A ``local_cpu`` tool needs
+    neither a GPU nor an isolated environment and runs here only when it has no deployment.
+    Such tools can still be deployed, as ``pdockq2`` and ``structure-metrics`` are.
+    This matches the tool wrapper's routing decision.
 
     Config-dependent redirects — a search mode that is an HTTP call — are excluded, because
     whether they apply depends on a config the caller has not written yet.

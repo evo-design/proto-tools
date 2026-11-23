@@ -1,7 +1,4 @@
-"""proto_tools/tools/sequence_scoring/borzoi/borzoi_prediction.py.
-
-Borzoi single-replicate sequence scoring tool.
-"""
+"""Borzoi single-replicate sequence scoring tool."""
 
 import csv
 import json

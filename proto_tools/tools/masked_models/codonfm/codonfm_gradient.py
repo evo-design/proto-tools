@@ -97,7 +97,7 @@ class CodonFMMaskedPLLTerm(DifferentiableTerm):
 
 
 class CodonFMGradientOutput(GradientOutput):
-    """CodonFM masked-PLL output; gradient is optional in forward-only mode.
+    """CodonFM masked-PLL output. Gradients are omitted in forward-only mode.
 
     Attributes:
         results (list[GradientResult]): One per input item, in input order. Contains a single
@@ -204,11 +204,13 @@ def run_codonfm_gradient(
         instance=instance,
         config=config,
     )
+    # Check the worker used the expected codon vocabulary and returned one result per item
     if result.get("vocab") != CODONFM_CODON_VOCAB:
         raise ValueError("CodonFM returned an unexpected codon vocabulary")
     items = result["results"]
     if len(items) != len(inputs.inputs):
         raise ValueError(f"CodonFM returned {len(items)} results for {len(inputs.inputs)} item(s)")
+    # Validate each item: a finite loss, plus a finite (L, 64) gradient only when requested
     for index, (item, matrix) in enumerate(zip(items, inputs.inputs, strict=True)):
         loss = float(item["loss"])
         if not math.isfinite(loss):
@@ -223,6 +225,7 @@ def run_codonfm_gradient(
                     raise ValueError(f"CodonFM returned an invalid gradient row at item {index}, row {row_index}")
         elif gradient is not None:
             raise ValueError("CodonFM returned a gradient when compute_gradient=False")
+    # Record the checkpoint and report the loss and gradient as the masked-PLL term
     result["metadata"] = {"model_checkpoint": config.model_checkpoint}
     attach_intrinsic_term(
         result,

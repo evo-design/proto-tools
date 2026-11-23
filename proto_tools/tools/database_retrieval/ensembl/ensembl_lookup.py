@@ -208,7 +208,7 @@ def run_ensembl_lookup(
     Args:
         inputs (EnsemblLookupInput): Ensembl ID or gene symbol.
         config (EnsemblLookupConfig): Species, assembly, request flags, and transcript selection.
-        instance (Any): Optional ToolInstance; unused for HTTP-only tools.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         EnsemblLookupOutput: Parsed ``EnsemblGene`` plus metadata.
@@ -218,6 +218,7 @@ def run_ensembl_lookup(
     base = base_url_for(config.assembly)
     eid = (inputs.ensembl_id or "").strip()
     sym = (inputs.symbol or "").strip()
+    # Use the ID endpoint when available, otherwise search by species and symbol.
     if eid:
         url = f"{base}/lookup/id/{eid}"
         params: dict[str, Any] = {"object_type": "gene"}
@@ -253,6 +254,7 @@ def run_ensembl_lookup(
             raise ValueError(f"Ensembl lookup returned non-dict payload: {type(payload).__name__}")
         gene = EnsemblGene.model_validate(payload)
         warnings: list[str] = []
+        # Keep only the requested transcript class while retaining the original payload.
         if config.transcripts != "all":
             gene.Transcript = [t for t in gene.Transcript if _is_selected(t, config.transcripts)]
             if not gene.Transcript:

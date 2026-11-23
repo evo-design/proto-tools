@@ -1,7 +1,4 @@
-"""proto_tools/entities/structures/utils.py.
-
-Utility functions for working with protein structures.
-"""
+"""Load, identify, and convert protein structure formats."""
 
 from __future__ import annotations
 
@@ -341,6 +338,7 @@ def _warn_cif_to_pdb_lossy(structure: gemmi.Structure, cif_content: str) -> None
     total_atoms = 0
     chains_over_residue_cap: set[str] = set()
 
+    # Scan every chain, residue, and atom for names and counts PDB cannot hold
     for model in structure:
         for chain in model:
             if len(chain.name) > _PDB_MAX_CHAIN_ID_LEN:
@@ -354,9 +352,11 @@ def _warn_cif_to_pdb_lossy(structure: gemmi.Structure, cif_content: str) -> None
                     total_atoms += 1
                     if len(atom.name) > _PDB_MAX_ATOM_NAME_LEN:
                         long_atom_names.add(atom.name)
+            # Check the chain's residue count once its residues are counted
             if residue_count > _PDB_MAX_RESIDUES_PER_CHAIN:
                 chains_over_residue_cap.add(chain.name)
 
+    # Warn once for each kind of overflow found
     if long_chain_ids:
         warnings.warn(
             f"CIF→PDB conversion: {len(long_chain_ids)} chain ID(s) exceed PDB's "
@@ -391,6 +391,7 @@ def _warn_cif_to_pdb_lossy(structure: gemmi.Structure, cif_content: str) -> None
             f"(e.g., {sorted(long_residue_names)[:3]}).",
             stacklevel=4,
         )
+    # Warn about CIF-only metadata categories that have no PDB equivalent
     if any(marker in cif_content for marker in _CIF_ONLY_METADATA_MARKERS):
         warnings.warn(
             "CIF→PDB conversion: source CIF contains extension metadata (assemblies, "

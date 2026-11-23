@@ -47,7 +47,7 @@ Use this to build or rebuild sidechains for a known sequence and backbone, for e
 #### Usage Tips
 
 - **pSCE tells you which sidechains to trust.** It is the predicted per-atom sidechain error in angstroms, so high-pSCE residues are the ones to inspect or rebuild.
-- **Lower `batch_size` if you run out of GPU memory.** It defaults to `16` samples per forward pass; reduce it for large structures.
+- **Lower `batch_size` if you run out of GPU memory.** It defaults to `16` samples per forward pass. Reduce it for large structures.
 
 ### FAMPNN Mutation Scoring (`fampnn-score`)
 
@@ -60,7 +60,7 @@ Use this to estimate the effect of specific point or multi-site mutations, for e
 #### Usage Tips
 
 - **Mutation strings are 1-indexed and colon-joined.** Use `A1V` for a single mutation and `A1V:G5L` for a multi-site variant. The position is counted from 1.
-- **`seq_only` (default `False`) removes sidechain context.** Leaving it off scores with full-atom context, which is the point of FAMPNN; set it `True` only for a faster, weaker backbone-style score.
+- **`seq_only` (default `False`) removes sidechain context.** Leaving it off scores with full-atom context, which is the point of FAMPNN. Set it `True` only for a faster, weaker backbone-style score.
 
 ### FAMPNN Score All Mutations (`fampnn-score-all-mutations`)
 

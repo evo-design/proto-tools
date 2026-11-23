@@ -136,7 +136,7 @@ class SpliceTransformerModel:
         return res.transpose(1, 2).numpy()  # type: ignore[no-any-return]  # 　(batch, 18, length) -> (batch, length, 18)
 
     # ============================================================================
-    # Model Loading & Device Management
+    # Model Loading and Device Management
     # ============================================================================
     def _fix_state_dict_keys(self, state_dict: dict[str, Any]) -> dict[str, Any]:
         """Fix mismatched weight keys in checkpoint."""
@@ -231,7 +231,7 @@ def _compute_gradient(model: "SpliceTransformerModel", input_dict: dict[str, Any
     """Weighted channel-and-position objective gradients for a relaxed target region.
 
     The model's own ``_step`` runs under ``torch.no_grad()`` and detaches, so this builds its own
-    forward. ``_post_decorate`` is also replayed out of place here: upstream writes the softmax and
+    forward. ``_post_decorate`` is also replayed out of place here. Upstream writes the softmax and
     sigmoid back into the output tensor, which autograd cannot differentiate through.
 
     Args:
@@ -298,7 +298,7 @@ def _compute_gradient(model: "SpliceTransformerModel", input_dict: dict[str, Any
                     grad = torch.autograd.grad(probability, seq_dist, retain_graph=retain, allow_unused=False)[0]
                     gradient_value = grad.detach().cpu().tolist()
 
-                # channel_index finds the row; an open end reports the span actually averaged.
+                # Resolve the channel and report the actual span when an endpoint was left open.
                 terms.append(
                     {
                         "term": {"channel": term["channel"], "position_start": start, "position_end": end},

@@ -53,8 +53,8 @@ def validate_checkpoint(checkpoint_path: Path) -> bool:
         logger.info(f"Checkpoint validation passed: {checkpoint_path.name}")
         return True
     except MemoryError:
-        # Resource constraint, not corruption — let the caller decide; we MUST NOT
-        # let _validate_single_checkpoint delete a valid file because we OOM'd here.
+        # Propagate resource failures so _validate_single_checkpoint does not delete
+        # a valid checkpoint after an out-of-memory error.
         raise
     except Exception as e:  # any other torch.load failure means "not a valid checkpoint"
         logger.warning(f"Checkpoint validation failed for {checkpoint_path}: {e}")
@@ -104,10 +104,9 @@ def _validate_single_checkpoint(checkpoint_path: Path) -> None:
 def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None:  # noqa: ARG001 — required by tool interface
     """Check and remove corrupted checkpoint files in the checkpoint directory.
 
-    Validates ALL .pt files in the directory (not just the named model),
-    because tools like protenix also download dependency checkpoints
-    (e.g., ESM2 embedding models) that can be corrupted by interrupted
-    downloads.
+    Validate every .pt file in the directory, including dependency checkpoints,
+    such as ESM2 embedding models, because interrupted downloads can corrupt
+    them as well as the primary model.
 
     Uses `.validated` marker files to cache validation results and avoid
     re-validating unchanged checkpoints on every inference call.

@@ -227,6 +227,7 @@ def run_codonfm_score(
         for m in inputs.mutations
     ]
 
+    # Run inference in the toolkit's isolated environment.
     output_data = ToolInstance.dispatch(
         "codonfm",
         {

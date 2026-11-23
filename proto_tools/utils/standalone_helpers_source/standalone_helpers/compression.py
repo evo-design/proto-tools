@@ -1,10 +1,9 @@
 """Array compression helpers for large-array subprocess IPC.
 
-Replaces ``numpy.ndarray.tolist()`` + ``json.dumps`` (billions of Python
-float objects + gigabytes of JSON text) with a compact wire format:
-``base85(zlib(array.tobytes()))``. The returned dict is JSON-safe and
-survives the existing subprocess IPC pipeline unchanged. Decompression
-lives on the parent side in ``proto_tools.utils.compressed_array``.
+Encode raw array bytes as ``base85(zlib(array.tobytes()))`` to avoid building
+large lists of Python floats and JSON text with ``tolist()`` and ``json.dumps``.
+The resulting dictionary passes through the JSON subprocess protocol unchanged.
+The parent decodes it in ``proto_tools.utils.compressed_array``.
 """
 
 from typing import Any

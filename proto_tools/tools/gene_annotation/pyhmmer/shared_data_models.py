@@ -197,8 +197,7 @@ class PyHmmerInput(BaseToolInput):
 class PyHmmerOutput(BaseToolOutput):
     """Output from PyHMMER search operations.
 
-    This class encapsulates the results of PyHMMER searches, providing both
-    sequence-level and domain-level hits as structured typed lists.
+    Results include typed lists of sequence-level and domain-level hits.
 
     Attributes:
         sequence_hits (list[SequenceHit]): List of sequence-level hits from
@@ -331,7 +330,7 @@ class PyHmmerConfig(BaseConfig):
     """Base configuration object for PyHMMER tools.
 
     Common settings for hmmsearch / hmmscan / phmmer / nhmmer / jackhmmer.
-    Reporting thresholds control what appears in output; inclusion thresholds
+    Reporting thresholds control what appears in output. Inclusion thresholds
     mark a hit as 'trusted' (jackhmmer uses included hits to seed the next
     iteration).
 

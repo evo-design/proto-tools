@@ -29,7 +29,7 @@ The mean-pooled embedding is a standard learned protein representation for downs
 
 #### Usage Tips
 
-- **The last transformer layer carries the richest bidirectional context.** `repr_layer` chooses which layer to read for the mean-pooled embedding; the default `-1` selects the last layer and is the standard pick for downstream classification, regression, and variant-effect work. Earlier layers can outperform the top on certain probes (contact prediction is the canonical example).
+- **The last transformer layer carries the richest bidirectional context.** `repr_layer` chooses which layer to read for the mean-pooled embedding. The default `-1` selects the last layer and is the standard pick for downstream classification, regression, and variant-effect work. Earlier layers can outperform the top on certain probes (contact prediction is the canonical example).
 - **Per-position logits are large and slow to materialize.** Enabling `return_logits` adds a `seq_len × 20` float tensor per sequence to the output, dominating wall time on long inputs. Leave it `False` unless you actually need the per-position distribution.
 
 ### ESM2 Sampling (`esm2-sample`)
@@ -44,8 +44,8 @@ This tool drives guided point mutation, variant generation, and infilling at des
 
 - **`iterative_refinement` produces more coherent joint samples than `single_pass`.** It is a multi-round MaskGIT-style commit loop (each round uses a cosine or linear unmask schedule) and is roughly `num_steps×` slower than the one-shot `single_pass` mode. Default to it whenever you mask more than a handful of sites.
 - **`masking_strategy` controls which positions get masked before sampling.** See the [masking strategy README](https://github.com/evo-design/proto-tools/blob/main/proto_tools/transforms/masking/README.md) for the available selection methods and tuning parameters. As an alternative to passing a strategy, pre-mask exact positions yourself with `_` directly in the input string and the masking strategy is skipped entirely.
-- **`temperature` scales the per-position logits before sampling.** Values of 0.5 to 0.7 yield conservative mutations close to the input; values above 1.0 broaden exploration of the model's distribution.
-- **`excluded_amino_acids` bans residues from masked positions.** Pass uppercase single-letter codes (e.g. `["C"]` to forbid new cysteines); their logits are set to `-inf` before sampling, on both the `single_pass` and `iterative_refinement` paths. Unmasked residues are untouched, and returned logits stay unmasked so they still show what the model would have predicted.
+- **`temperature` scales the per-position logits before sampling.** Values of 0.5 to 0.7 yield conservative mutations close to the input. Values above 1.0 broaden exploration of the model's distribution.
+- **`excluded_amino_acids` bans residues from masked positions.** Pass uppercase single-letter codes (e.g. `["C"]` to forbid new cysteines). Their logits are set to `-inf` before sampling, on both the `single_pass` and `iterative_refinement` paths. Unmasked residues are untouched, and returned logits stay unmasked so they still show what the model would have predicted.
 - **Long-range coherence is weak.** ESM-2 has no global coherence beyond its local context window, so very long-range dependencies between distant residues are not well captured even in iterative mode.
 - **ESM-2 was trained as a masked language model, not with a generative objective.** Resampling masked positions works for local edits, but the model was optimized for representation rather than de novo generation. For generative workloads (large-scale infilling, sequence design), [ESM3](https://bio-pro.mintlify.app/tools/masked-models/esm3) adds an explicit generative training objective and is the better fit.
 
@@ -74,7 +74,7 @@ This tool exposes ESM-2 as a differentiable, structure-free protein-language-mod
 
 - **`temperature`** controls how the input logits are converted into amino acid probabilities using `softmax(logits / temperature)`. Lower temperatures make the distribution more concentrated around the most likely amino acid at each position, while higher temperatures produce more uniform distributions. The default is `1.0`, and the returned gradient is calculated with respect to the input logits.
 - **Advanced option:** `temperature=None` skips softmax and treats the input as probabilities rather than logits. Most users should leave the default in place. In this case, each row must contain nonnegative values that sum to 1, and the returned gradient is calculated with respect to those probabilities. This is generally less convenient for gradient-based optimization because updating probabilities directly can cause them to become negative or no longer sum to 1. Optimizing logits avoids this issue, since softmax always produces a valid probability distribution. However, working directly with probabilities can be useful when using an optimizer designed for probability distributions or when exact zero probabilities are needed to exclude particular tokens.
-- **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator — the forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, which is differentiable but outside the model's training distribution.
+- **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator. The forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, which is differentiable but outside the model's training distribution.
 - **`compute_gradient` toggles whether the backward pass runs.** When set to `False`, the term's `gradient` is `None`, but its `term_value` and the item `metrics` (log-likelihood, perplexity, and so on) are still populated. Useful for ranking MCMC proposals without paying the backward cost.
 
 ## Toolkit Notes
@@ -83,7 +83,7 @@ This tool exposes ESM-2 as a differentiable, structure-free protein-language-mod
 
 These apply to every ESM-2 tool in this toolkit (`esm2-embedding`, `esm2-sample`, `esm2-score`, `esm2-gradient`).
 
-- **Different ESM-2 checkpoints produce different embedding sizes.** Downstream tasks built on one checkpoint will not transfer to another without re-fitting; pick one and stick with it for an analysis.
+- **Different ESM-2 checkpoints produce different embedding sizes.** Downstream tasks built on one checkpoint will not transfer to another without re-fitting. Pick one and stick with it for an analysis.
 - **Smaller checkpoints run faster.** The 150M and 35M variants are significantly faster than the 650M default, with drops in representation quality.
 - **Max sequence length is 1022 residues.** ESM-2's positional encoding caps inputs at 1022 residues, and will raise `ValueError` on longer inputs rather than truncating.
-- **`batch_size` controls memory usage across the toolkit.** Lower it if you OOM; raise it for short-sequence throughput. One nuance: for `esm2-score`, `batch_size` counts masked variants pooled across all input sequences rather than sequences themselves (each input contributes `L` masked variants).
+- **`batch_size` controls memory usage across the toolkit.** Lower it if you OOM. Raise it for short-sequence throughput. One nuance: for `esm2-score`, `batch_size` counts masked variants pooled across all input sequences rather than sequences themselves (each input contributes `L` masked variants).

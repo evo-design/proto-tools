@@ -94,7 +94,7 @@ class CRISPRGuideEnumerationConfig(BaseConfig):
     """PAM grammar, guide length, strands, and returned context.
 
     ``pam`` is written in nuclease orientation. For a three-prime PAM the
-    oriented target is ``protospacer + PAM``; for a five-prime PAM it is
+    oriented target is ``protospacer + PAM``. For a five-prime PAM it is
     ``PAM + protospacer``. The default 4-nt and 3-nt exterior flanks produce a
     30-nt Rule Set 3 context for a 20-nt SpCas9 protospacer and 3-nt PAM.
 
@@ -143,7 +143,7 @@ class CRISPRGuideCandidate(BaseModel):
     """One PAM-compatible protospacer with reference coordinates.
 
     Coordinates are 1-indexed and inclusive. ``pam_strand`` is the reference
-    strand carrying the oriented protospacer and PAM; the guide RNA matches the
+    strand carrying the oriented protospacer and PAM. The guide RNA matches the
     protospacer and pairs with the opposite strand.
 
     ``context_sequence`` is the oriented target plus whatever exterior flank the

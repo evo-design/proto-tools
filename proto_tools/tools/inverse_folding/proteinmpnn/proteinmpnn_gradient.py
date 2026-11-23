@@ -209,7 +209,7 @@ class ProteinMPNNNLLTerm(DifferentiableTerm):
 
 
 class ProteinMPNNGradientOutput(GradientOutput):
-    """ProteinMPNN mean-NLL output; gradient is optional in forward-only mode.
+    """ProteinMPNN mean-NLL output. Gradients are omitted in forward-only mode.
 
     Attributes:
         results (list[GradientResult]): One per input item, each holding its gradient w.r.t.

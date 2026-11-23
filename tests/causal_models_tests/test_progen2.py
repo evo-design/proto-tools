@@ -212,7 +212,7 @@ def test_progen2_sample_batched_many():
 
 @pytest.mark.uses_gpu
 def test_progen2_score_tool():
-    """Test the progen2 scoring tool with comprehensive validation."""
+    """Check ProGen2 scores, vocabulary, logits, and perplexity."""
     sequences = ["MKTLVIVTGASGAGK", "EVQLVESGGGLVQPG"]
     inputs = ProGen2ScoringInput(sequences=sequences)
     config = ProGen2ScoringConfig(model_checkpoint="progen2-small", verbose=False, return_logits=True)

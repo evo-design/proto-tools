@@ -1,8 +1,6 @@
-"""proto_tools/tools/causal_models/evo1/evo1_sample.py.
+"""Sample DNA sequences with Evo1.
 
-This module provides a standardized interface for sampling DNA sequences
-using the Evo1 language model, supporting multiple model checkpoints
-including CRISPR and transposon fine-tuned variants.
+Supported checkpoints include CRISPR and transposon fine-tuned variants.
 """
 
 import logging
@@ -194,6 +192,7 @@ def run_evo1_sample(
     """
     logger.debug(f"Using local venv for Evo1 sampling: {config.model_name}")
 
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "evo1",
         {

@@ -11,7 +11,7 @@ echo "Setting up AlphaGenome standalone environment..."
 CUDA_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_CONSTRAINT:-${ALPHAGENOME_CUDA_TOOLKIT_VERSION:-}}"
 proto_install_cuda_toolkit "$CUDA_CONSTRAINT"
 
-# Collapse CUDNN to a single source: delete the CUDNN shipped by the mamba
+# Use one CUDNN installation by deleting the copy shipped by the mamba
 # cuda-toolkit so JAX's pip-bundled nvidia-cudnn-cu12 (under
 # site-packages/nvidia/cudnn/lib) is the only CUDNN visible at runtime.
 # Without this, LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib (env_vars.txt)

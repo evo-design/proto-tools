@@ -10,7 +10,7 @@ import re
 def resolve_hf_token() -> str | None:
     """Resolve a HuggingFace token from all known sources.
 
-    Checks:
+    Check the following sources in order.
       1. ``HF_TOKEN`` environment variable
       2. ``HUGGING_FACE_HUB_TOKEN`` environment variable
       3. ``~/.cache/huggingface/token`` file (written by ``hf auth login``)
@@ -22,6 +22,7 @@ def resolve_hf_token() -> str | None:
     if token:
         return token
 
+    # Fall back to the token saved by the Hugging Face CLI.
     token_file = os.path.expanduser("~/.cache/huggingface/token")
     if os.path.isfile(token_file):
         try:
@@ -32,6 +33,7 @@ def resolve_hf_token() -> str | None:
     if token:
         return token
 
+    # The CLI can also store the token in Git's credential file.
     git_creds = os.path.expanduser("~/.git-credentials")
     if os.path.isfile(git_creds):
         try:
@@ -50,8 +52,8 @@ def require_hf_token(tool_display_name: str, repo_url: str = "") -> None:
     """Check that a HuggingFace token is available, raising a clear error if not.
 
     Call this at the top of tool functions that use gated HuggingFace models.
-    Fails fast with an actionable error message before dispatching to the
-    standalone subprocess.
+    Raise before starting the standalone subprocess so the caller can resolve
+    access first.
 
     Args:
         tool_display_name (str): Human-readable tool name for the error message (e.g., "ESM3").

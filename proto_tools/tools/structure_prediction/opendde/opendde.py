@@ -50,8 +50,8 @@ _BUNDLED_MODELS: frozenset[str] = frozenset({"opendde_v1", "opendde_abag"})
 class OpenDDEInput(StructurePredictionInput):
     """Input object for OpenDDE structure prediction.
 
-    This class defines the input parameters for predicting 3D structures of proteins,
-    DNA, RNA, and ligands using OpenDDE, an all-atom co-folding model.
+    Provide proteins, DNA, RNA, and ligands for all-atom structure prediction
+    with OpenDDE.
 
     Inherits from ``StructurePredictionInput``.
 
@@ -147,8 +147,8 @@ class OpenDDEOutput(StructurePredictionOutput):
 class OpenDDEConfig(MSAStructurePredictionConfig):
     """Configuration object for OpenDDE structure prediction.
 
-    This class defines configuration parameters for running OpenDDE, an all-atom
-    co-folding model supporting proteins, DNA, RNA, and ligands. Fields map to the
+    Configure OpenDDE all-atom structure prediction for proteins, DNA, RNA,
+    and ligands. Fields map to the
     ``opendde pred`` CLI (``--sample``, ``--step``, ``--cycle``, ``--use_template``,
     ``--use_rna_msa``, ``-n``).
 

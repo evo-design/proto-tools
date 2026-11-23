@@ -10,7 +10,7 @@ This note covers standalone tool environment setup, compute dependency managemen
 
 Tools with PyTorch/JAX dependencies use **centralized hardware detection** (`utils/compute_deps.py`) to automatically select compatible package versions based on the host's NVIDIA driver and CUDA versions.
 
-**How it works:**
+**How it works**
 
 1. `persistent_worker.py` calls `detect_compute_environment()` when building the subprocess environment
 2. Detection inspects `nvidia-smi` output to extract driver and CUDA versions
@@ -18,7 +18,7 @@ Tools with PyTorch/JAX dependencies use **centralized hardware detection** (`uti
 4. Environment variables are injected into the subprocess before `setup.sh` runs
 5. Tool setup scripts consume these variables to install the right package versions
 
-**Environment variables injected:**
+**Environment variables passed to the subprocess**
 
 | Variable | Example Value | Description |
 |---|---|---|
@@ -29,7 +29,7 @@ Tools with PyTorch/JAX dependencies use **centralized hardware detection** (`uti
 | `RECOMMENDED_JAX_SPEC` | `"jax[cuda12]>=0.4.20,<1"` | JAX version constraint with CUDA plugin |
 | `RECOMMENDED_JAX_VARIANT` | `"cuda12"` | JAX CUDA variant (cuda12, cuda13) |
 
-Every tool env is created with `pip` and `uv` (pinned by `UV_VERSION` in `proto_tools/utils/tool_instance.py`, or by the tool's optional `uv_version.txt`; see [uv Version Override](#uv-version-override)), so `setup.sh` calls `uv pip install` directly and never installs uv itself.
+Every tool env is created with `pip` and `uv` (pinned by `UV_VERSION` in `proto_tools/utils/tool_instance.py`, or by the tool's optional `uv_version.txt`, as described in [uv Version Override](#uv-version-override)), so `setup.sh` calls `uv pip install` directly and never installs uv itself.
 
 ### Standard PyTorch Setup Pattern
 
@@ -80,7 +80,7 @@ Tools can override centralized recommendations via env_vars.txt or tool-specific
 
 ### Patching Installed Packages
 
-uv hardlinks each installed file from its cache into every env that installs the same package, so envs on the same torch build share one copy of it. A `setup.sh` that patches an installed file must therefore write a new file and swap it in, never rewrite it in place: an in-place write (Python's `open(path, "w")` or `Path.write_text`) edits the shared copy, and the patch appears in every other env holding that file. `sed -i` and `os.replace` both give the env its own copy:
+uv hardlinks each installed file from its cache into every env that installs the same package, so envs on the same torch build share one copy of it. A `setup.sh` that patches an installed file must therefore write a new file and swap it in, never rewrite it in place. An in-place write (Python's `open(path, "w")` or `Path.write_text`) edits the shared copy, and the patch appears in every other env holding that file. `sed -i` and `os.replace` both give the env a separate copy:
 
 ```python
 with open(path + ".proto-patch", "w") as f:
@@ -98,19 +98,27 @@ Some tools have hard version pins for ABI compatibility with pre-built wheels (f
 - `borzoi`: `torch==2.7.1` (flash-attn wheel compatibility)
 
 PyTorch prunes old wheels from `download.pytorch.org/whl/<variant>`, so a pinned torch can stop
-resolving with no change here; uv's default `first-index` strategy will not fall back to PyPI.
+resolving even when this repository has not changed. uv's default `first-index` strategy will not fall back to PyPI.
 Affected pins pass `--index-strategy unsafe-best-match` on the install line.
 `tests/tool_infra_tests/test_torch_index_pruning.py` dry-runs every pin against each variant daily.
 
 ### Dependency Caps
 
-`proto_tools/utils/dependency_caps.txt` caps releases known to break, only on the machines they break. Each line gives the cap, the machines it applies to (`all`, or `driver<N` for NVIDIA drivers below `N`) and a link to the break:
+`proto_tools/utils/dependency_caps.txt` sets upper version limits for releases
+that cause known failures. Each limit applies only to the affected machines.
+Each line gives the cap, the affected machines (`all`, or `driver<N` for
+NVIDIA drivers below `N`), and a link describing the failure.
 
 ```
 triton<3.9    # driver<580: 3.9 builds sm_90+ kernels that CUDA 12 drivers reject (https://...)
 ```
 
-Each env build writes the caps that apply to its machine into `<env>/dependency_caps.txt` and installs under them through `UV_CONSTRAINT` and `PIP_CONSTRAINT`, so they also cap indirect dependencies. Machines no cap applies to install the newest release. Caps are read when an env is built; changing them, or using the env on another machine, doesn't rebuild it. `$MAMBA_BIN install` lines are not constrained.
+Each environment build writes the applicable caps to `<env>/dependency_caps.txt`.
+It uses `UV_CONSTRAINT` and `PIP_CONSTRAINT` to apply them during installation,
+including to indirect dependencies. If no cap applies to a machine, the newest
+release is installed. Caps are read when an environment is built. Changing them
+or using the environment on another machine does not rebuild it.
+`$MAMBA_BIN install` lines are not constrained.
 
 A break in a single tool is capped in that tool's `setup.sh` instead, as Mol-1 does with `triton<3.9`. Add such constraints to `UV_CONSTRAINT`: a `--constraint` flag replaces it, which drops the caps.
 
@@ -134,25 +142,30 @@ See `tests/tool_infra_tests/test_compute_deps.py` for comprehensive test coverag
 
 ## Hosted execution
 
-`PROTO_IS_HOSTED_ENV=1` marks a process running tools for someone else — a proto-modal container
-today, the proto service later. Set by whichever environment hosts them; proto-tools only reads it.
+`PROTO_IS_HOSTED_ENV=1` marks a process that runs tools on behalf of another
+user, such as a proto-modal container. This variable is set by the hosted
+environment, and proto-tools reads it to determine whether the call needs
+configuration adjustments for hosted execution.
 
-Such an environment cannot stage a large corpus on demand, and proto-modal rules a tool needing one
-out of scope. A config declares its own adjustment by overriding `BaseConfig.for_hosted_env`,
-returning a copy with whatever setting has to give way; the default returns it unchanged.
-`run_preprocess` applies it before freezing. `MSAStructurePredictionConfig` overrides it to force
-`search_mode="remote"`, since `uniref30-2302` is hundreds of gigabytes.
+Hosted environments cannot provision large datasets on demand, so proto-modal
+excludes tools that require them. Configs can override `BaseConfig.for_hosted_env`
+to return a copy with settings adjusted for these restrictions. The default
+returns the config unchanged, and `run_preprocess` applies any adjustments
+before freezing the config. For example, `MSAStructurePredictionConfig` sets
+`search_mode="remote"` because the local `uniref30-2302` database is hundreds
+of gigabytes.
 
-Only fires when `preprocess` runs in the hosted process, so the Python API is unaffected — those
-callers prepare the work on their own machine. It fires on the MCP path.
+This adjustment applies only when `preprocess` runs in the hosted process,
+including the MCP path. Python API callers prepare work on their local machine
+and are unaffected.
 
 A remote search uses a different database, so a hosted prediction will not match a local one. That
-is logged, but the log does not reach the output's `warnings`: `preprocess` runs before the wrapper
-starts capturing them.
+is logged, but the log does not reach the output's `warnings` because `preprocess` runs before
+the wrapper starts capturing them.
 
 ## Debugging Env Setup (`PROTO_ENV_VERBOSE`, `PROTO_ENV_LOG_DIR`)
 
-When `ToolInstance._create_env()` runs `standalone/setup.sh` to build a tool's venv, the subprocess output is normally captured quietly and only surfaced on failure (via `STATUS.txt` and the raised `RuntimeError`). Two env vars opt into richer visibility:
+When `ToolInstance._create_env()` runs `standalone/setup.sh` to build a tool's venv, the subprocess output is normally captured quietly and only surfaced on failure (via `STATUS.txt` and the raised `RuntimeError`). Two environment variables let you see more detail.
 
 - `PROTO_ENV_VERBOSE=1` streams each line of `setup.sh`'s output live to the caller's stderr as the subprocess runs. Useful for watching long installs (PyTorch, flash-attn, transformer-engine, etc.) in real time and for diagnosing hangs.
 - `PROTO_ENV_LOG_DIR=<path>` copies the complete log to `<PROTO_ENV_LOG_DIR>/<toolkit>_setup.log` after `setup.sh` exits (success or failure). Useful when the env directory itself is ephemeral and you want the log to survive a rollback.
@@ -163,12 +176,12 @@ Both variables default to off, so setup output stays quiet unless a caller opts 
 
 ## Overriding a tool's standalone env (`PROTO_<TOOLKIT>_STANDALONE_DIR`)
 
-When a tool's packaged `standalone/` setup does not work on your machine (a cluster needs a different CUDA wheel, a pinned version has to change, an install step needs patching) you can override the whole env definition without editing the installed package. This works identically whether proto-tools was installed editable (`pip install -e`) or as a regular wheel, since the override points at a directory you control rather than at the package. Two pieces:
+When a tool's packaged `standalone/` setup does not work on your machine (a cluster needs a different CUDA wheel, a pinned version has to change, an install step needs patching) you can override the whole env definition without editing the installed package. This works identically whether proto-tools was installed editable (`pip install -e`) or as a regular wheel, since the override points at a directory you control rather than at the package. Use the following command and environment variable together.
 
 - `proto-tools eject-standalone <toolkit> [--dir DIR]` copies the tool's packaged env-def directory (resolving shared envs) into `DIR/<toolkit>/` (default `./proto_standalone/<toolkit>/`), giving you an editable copy of every file the env is built from (`setup.sh`, `python_version.txt`, `requirements.txt`, `env_vars.txt`, `binary_config.py`, ...). It always copies the packaged baseline, ignoring any active override.
-- `PROTO_<TOOLKIT>_STANDALONE_DIR=<path>` makes `ToolInstance._resolve_env_def` use `<path>` as the env-def dir instead of the packaged one. `<TOOLKIT>` is the toolkit's **folder name** uppercased (e.g. `esm2` → `PROTO_ESM2_STANDALONE_DIR`), not a tool registration key like `esm2-embed`. `eject-standalone` accepts either form and prints the exact variable to export. The override builds under an isolated env name (`<toolkit>__override_<hash>_env`), so it never clobbers the packaged env and two projects pointing at different override dirs get separate envs on disk. Editing the override's files triggers the usual setup-hash rebuild. An out-of-tree toolkit's env is likewise namespaced, as `<toolkit>__ext_<hash>_env` (see `external-toolkits.md`).
+- `PROTO_<TOOLKIT>_STANDALONE_DIR=<path>` makes `ToolInstance._resolve_env_def` use `<path>` as the env-def dir instead of the packaged one. `<TOOLKIT>` is the toolkit's **folder name** uppercased (e.g. `esm2` → `PROTO_ESM2_STANDALONE_DIR`), not a tool registration key like `esm2-embed`. `eject-standalone` accepts either form and prints the exact variable to export. The override builds under an isolated env name (`<toolkit>__override_<hash>_env`), so it never overwrites the packaged environment and two projects pointing at different override dirs get separate envs on disk. Editing the override's files triggers the usual setup-hash rebuild. An out-of-tree toolkit's env is likewise namespaced, as `<toolkit>__ext_<hash>_env` (see `external-toolkits.md`).
 
-**Scope: the environment definition, not the tool implementation.** The override changes *how the environment is built* (which wheels, which CUDA build, which install steps), never what the tool computes. `run.py`, `inference.py`, and the modules they import are not ejected and are always loaded from the installed package, so a tool's results stay attributable to the version of proto-tools that produced them. `binary_config.py` is the one Python file that is ejected, because it configures the binary install rather than the computation. If an override directory left over from an older release still contains `run.py` or `inference.py`, proto-tools logs a warning that the file is ignored.
+**What the override changes.** The override changes *how the environment is built* (which wheels, which CUDA build, which install steps), never what the tool computes. `run.py`, `inference.py`, and the modules they import are not ejected and are always loaded from the installed package, so a tool's results stay attributable to the version of proto-tools that produced them. `binary_config.py` is the one Python file that is ejected, because it configures the binary install rather than the computation. If an override directory left over from an older release still contains `run.py` or `inference.py`, proto-tools logs a warning that the file is ignored.
 
 Typical flow:
 
@@ -189,9 +202,9 @@ Proto-tools writes `register_envs: false` to `PROTO_HOME/.micromamba/condarc` so
 
 ## Architecture and `--platform` Forcing
 
-A conda prefix holds packages from exactly one subdir. `ToolInstance._create_env` creates the tool env natively (`micromamba create -p $VENV_PATH python=...` on the host's own subdir), so **`setup.sh` must never pass `--platform` to a `micromamba install -p "$VENV_PATH"`**. Doing so mixes subdirs inside one prefix: the build succeeds, and the tool then dies at first invocation with dyld's `incompatible architecture` (foreign-arch executables resolving `@rpath` against the prefix's native libraries).
+A conda prefix holds packages from exactly one subdir. `ToolInstance._create_env` creates the tool env natively (`micromamba create -p $VENV_PATH python=...` on the host's subdir), so **`setup.sh` must never pass `--platform` to a `micromamba install -p "$VENV_PATH"`**. Doing so mixes subdirs inside one prefix. The build can succeed, but the tool then fails at first invocation with dyld's `incompatible architecture` (foreign-arch executables resolving `@rpath` against the prefix's native libraries).
 
-When a package genuinely has no build for the host arch, give it its own internally consistent prefix instead. `gene_annotation/crispr_tracr_rna` is the reference: its x86_64-only bioconda dependencies (`vmatch`, `scikit-learn=0.22.1`) go into `$VENV_PATH/conda_deps` via `micromamba create --platform osx-64`, leaving the tool env native. Before reaching for either, check whether conda-forge already ships the package for the host subdir; bioconda's coverage of `osx-arm64` is thin, and channel order (`-c conda-forge` first) is often the whole fix.
+When a package genuinely has no build for the host arch, give it a separate internally consistent prefix instead. `gene_annotation/crispr_tracr_rna` is the reference: its x86_64-only bioconda dependencies (`vmatch`, `scikit-learn=0.22.1`) go into `$VENV_PATH/conda_deps` via `micromamba create --platform osx-64`, leaving the tool env native. Before reaching for either, check whether conda-forge already ships the package for the host subdir. bioconda's coverage of `osx-arm64` is thin, and channel order (`-c conda-forge` first) is often the whole fix.
 
 `tests/style_consistency_tests/test_conda_platform_forcing.py` enforces the `install` half of this rule across every `setup.sh`.
 
@@ -213,7 +226,8 @@ Each tool's `standalone/env_vars.txt` supports three sections:
 
 ## Foundation Environment (git, curl, make, cmake, pkg-config, ar, gcc, g++)
 
-`setup.sh` scripts assume `git`, `curl`, `make`, `cmake`, `pkg-config`, `ar`, `gcc`, and `g++` are on `PATH` (tools like `bindcraft`/`pyrosetta` compile DAlphaBall via `make`, and AlphaFold3 builds a C++ extension whose CMake build needs `ar` for static libraries). The list lives in `foundation_env.FOUNDATION_TOOLS`. When the host already provides every one of them with `gcc`/`g++` major version `>= MIN_FOUNDATION_GCC`, `ToolInstance._ensure_foundation_env` is a no-op. Otherwise it provisions a shared micromamba env at `PROTO_HOME/.foundation_env/` (`git curl make cmake pkg-config binutils`, pinning `gcc>=MIN_FOUNDATION_GCC` / `gxx>=MIN_FOUNDATION_GCC`) and prepends its `bin/` to the setup script's `PATH`. Tool subprocesses (persistent workers, one-shot runs, `run_in_env`) get it too, but **last** on `PATH`, so it only fills gaps: Triton compiles a C launcher with `gcc` when it initializes and `torch.compile` JIT-compiles C++, so a host with no compiler needs it at run time, while a host with its own `gcc`/`curl`/binutils keeps using them. Ahead of the host, its conda-forge builds would change run-time behavior: they target a glibc 2.34 sysroot (libraries they build fail to load on older glibc), current gcc is newer than `nvcc` accepts, and its `curl` trusts only conda's CA bundle. An existing foundation env missing one of these tools gets just the missing packages installed into it. Set `PROTO_USE_FOUNDATION_ENV=1` to force-install or `=0` to force-skip the probe.
+`setup.sh` scripts assume `git`, `curl`, `make`, `cmake`, `pkg-config`, `ar`, `gcc`, and `g++` are on `PATH` (tools like `bindcraft`/`pyrosetta` compile DAlphaBall via `make`, and AlphaFold3 builds a C++ extension whose CMake build needs `ar` for static libraries). The list lives in `foundation_env.FOUNDATION_TOOLS`. When the host already provides every one of them with `gcc`/`g++` major version `>= MIN_FOUNDATION_GCC`, `ToolInstance._ensure_foundation_env` is a no-op. Otherwise it provisions a shared micromamba env at `PROTO_HOME/.foundation_env/` (`git curl make cmake pkg-config binutils`, pinning `gcc>=MIN_FOUNDATION_GCC` / `gxx>=MIN_FOUNDATION_GCC`) and prepends its `bin/` to the setup script's `PATH`. Tool subprocesses (persistent workers, one-shot runs, `run_in_env`) get it too, but **last** on `PATH`, so it only fills gaps: Triton compiles a C launcher with `gcc` when it initializes and `torch.compile` JIT-compiles C++, so a host with no compiler needs it at run time, while a host that provides `gcc`/`curl`/binutils keeps using them. Ahead of the host, its conda-forge builds would change run-time behavior: they target a glibc 2.34 sysroot (libraries they build fail to load on older glibc), current gcc is newer than `nvcc` accepts, and its `curl` trusts only conda's CA bundle. If an existing foundation environment is missing any of these tools,
+`ToolInstance` installs only the missing packages. Set `PROTO_USE_FOUNDATION_ENV=1` to force-install or `=0` to force-skip the probe.
 
 ## GCC/nvcc Compatibility for CUDA JIT Tools
 
@@ -361,9 +375,9 @@ proto_tools/
 
 **Concurrency:** Before checking or rebuilding an environment, `ToolInstance`
 takes a lock file beside it (`.<env dir name>.build.lock`), shared by every tool
-that uses the environment and every process using the same `PROTO_HOME`. A
-process that finds the lock held logs that it is waiting, then rechecks the
-environment once it gets the lock and reuses the finished build.
+that uses the environment and every process using the same `PROTO_HOME`.
+If another process holds the lock, the waiting process logs a message. After
+acquiring the lock, it checks the environment again and reuses the finished build.
 
 **When to use a shared env:**
 

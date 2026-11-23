@@ -1,7 +1,4 @@
-"""proto_tools/tools/sequence_scoring/enformer/enformer_prediction.py.
-
-Enformer sequence scoring tool.
-"""
+"""Enformer sequence scoring tool."""
 
 import csv
 import json

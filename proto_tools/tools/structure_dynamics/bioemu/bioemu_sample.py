@@ -1,7 +1,4 @@
-"""proto_tools/tools/structure_dynamics/bioemu/bioemu_sample.py.
-
-BioEmu conformational ensemble sampling tool.
-"""
+"""Sample protein conformational ensembles with BioEmu."""
 
 import json
 import logging
@@ -152,8 +149,8 @@ class BioEmuConfig(StructurePredictionConfig):
 
     BioEmu always requires MSA-derived Evoformer embeddings. Unlike structure
     prediction tools (which have an optional ``use_msa`` toggle), this config
-    always runs MMseqs2 homology search during preprocessing to generate MSAs. If MSAs
-    are pre-supplied on the input, the search is skipped.
+    runs MMseqs2 homology search during preprocessing unless the input already
+    includes MSAs.
 
     Attributes:
         num_samples (int): Number of conformations to sample per input sequence.
@@ -306,7 +303,7 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
 
     from proto_tools.tools.structure_prediction.msa_plan import protein_chain_msas
 
-    # Per-complex MSAs (index-aligned with complexes); keying by sequence would collide on duplicates.
+    # Keep MSAs in complex order so repeated sequences can use different alignments.
     msa_a3m_contents: list[str] = []
     for cplx_idx, complex_ in enumerate(inputs.complexes):
         seq = complex_.chain_sequences[0]

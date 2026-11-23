@@ -1,9 +1,9 @@
 """Pure-CPU mock of a stochastic LM sampler with internal batching.
 
-Implements an LM-shaped two-step inference: a deterministic "forward
+Implements two inference steps like a language model. A deterministic "forward
 pass" maps each prompt to a logits vector over a token vocabulary, then
 per-item weighted draws from a single ``random.Random(seed)`` stream
-pick SEQ_LEN tokens. Used to e2e-test the framework's stochastic-iterable
+pick SEQ_LEN tokens. Used to test the framework's stochastic-iterable
 cache/dedup routing without GPU or model load.
 
 ``items_processed`` is exposed on the output so tests can directly
@@ -26,12 +26,12 @@ SEQ_LEN = 4  # tokens per completion; 20^4 outputs makes collisions negligible
 
 
 def _logits_from_prompt(prompt: str) -> list[int]:
-    """Deterministic 'forward pass': prompt → logits (positive weights) over VOCAB.
+    """Map a prompt deterministically to positive weights over VOCAB.
 
     A real LM's transformer computes per-token logits from the prompt
     via embedding + attention. We hash the prompt to get a deterministic
     weight vector that varies per prompt but stays constant across
-    runs. Same prompt always produces the same distribution; different
+    runs. The same prompt always produces the same distribution. Different
     prompts produce different distributions.
 
     Args:
@@ -173,9 +173,9 @@ def run_mock_iterable_stochastic(
     """Sample SEQ_LEN tokens per prompt by weighted draws from prompt-derived logits.
 
     The single ``random.Random`` instance is the analogue of torch's
-    global RNG state: each weighted draw consumes it and advances state,
+    global RNG state. Each weighted draw consumes it and advances the state,
     so two identical prompts in the same internal batch see the same
-    logits but pick different tokens — the mechanism stochastic-iterable
+    logits but can pick different tokens — the mechanism stochastic-iterable
     routing relies on.
 
     Args:
@@ -189,6 +189,7 @@ def run_mock_iterable_stochastic(
             (count of items the framework handed to the tool function).
     """
     seed = config.seed if config.seed is not None else random.randint(0, 2**31 - 1)  # noqa: S311
+    # Share one random stream across items; each draw advances it, so repeated prompts can pick different tokens.
     rng = random.Random(seed)  # noqa: S311 -- not cryptographic
 
     prompts = list(inputs.prompts)

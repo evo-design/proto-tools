@@ -299,11 +299,10 @@ def run_proteinmpnn_sample_homooligomer(
 ) -> ProteinMPNNSampleOutput:
     """Design a symmetric homooligomer by tying corresponding protomer positions.
 
-    Ties corresponding positions across the protomer chains during decoding, so a single
-    protomer sequence is sampled with every tied protomer in context and then returned on
-    all of them. The alternative — designing one protomer against placeholder partner
-    sequences and copying the result — chooses a sequence the model never saw in its own
-    interface.
+    Tie corresponding positions across protomer chains during decoding. Sample one
+    sequence with every tied protomer in context, then return it on all protomers.
+    Designing one protomer against placeholder sequences and copying it afterward
+    would leave the final interface unevaluated by the model.
 
     Only the chains named in ``protomer_chains`` reach the model. Any other chain in the
     structure is copied into the output unchanged but does **not** condition the design,

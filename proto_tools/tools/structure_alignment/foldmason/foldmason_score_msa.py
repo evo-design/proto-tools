@@ -1,6 +1,6 @@
 """Wraps `foldmason msa2lddt` for scoring a precomputed MSA against a structure set.
 
-Local-only — no remote analog. Computes a per-MSA average LDDT score plus
+Runs locally because there is no corresponding remote endpoint. Computes a per-MSA average LDDT score plus
 per-column scores by aligning each row's structure with the alignment, useful
 as a quality metric for any structural-MSA pipeline.
 """

@@ -385,7 +385,7 @@ def run_alphafold_db_fetch(
         config (AlphaFoldDBFetchConfig): Format selection (pdb/cif) and
             artifact toggles (PAE, MSA).
 
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         AlphaFoldDBFetchOutput: Prediction metadata plus an optional parsed
@@ -408,8 +408,10 @@ def run_alphafold_db_fetch(
         if entries is None or not entries:
             raise ValueError(f"AlphaFold DB has no prediction for accession '{accession}'")
 
+        # Select the requested isoform, or the canonical record when none was specified.
         entry = _select_record(entries, accession, inputs.isoform)
 
+        # Download coordinates and confidence data only when a structure was requested.
         structure: Structure | None = None
         if config.include_structure:
             structure_url = entry["pdbUrl"] if config.structure_format == "pdb" else entry["cifUrl"]
@@ -432,6 +434,7 @@ def run_alphafold_db_fetch(
                 source="alphafold-db-fetch",
             )
 
+        # The MSA is optional and is not available for every prediction.
         msa_a3m: str | None = None
         if config.include_msa:
             msa_url = entry.get("msaUrl")

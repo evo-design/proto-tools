@@ -45,7 +45,7 @@ def _make_fake_instance(toolkit: str = "pyrosetta") -> ToolInstance:
 
 @pytest.fixture(autouse=True)
 def _reset_contextvars() -> Generator[None, None, None]:
-    """Reset all ContextVar + module-level state to a clean baseline per test."""
+    """Reset context variables and module state before and after each test."""
     _instances.clear()
     ToolInstance._build_failures.clear()
     _auto_persist_overlay.set(None)
@@ -271,7 +271,7 @@ def test_concurrent_threads_isolated_overlays() -> None:
     # Each thread sees its own instance.
     assert seen_a is inst_a
     assert seen_b is inst_b
-    # And crucially: the two threads' instances are different objects.
+    # Check that each thread received a distinct instance.
     assert inst_a is not inst_b
     # After both scopes exited the ContextVar in the main thread is still clean.
     assert _auto_persist_overlay.get() is None

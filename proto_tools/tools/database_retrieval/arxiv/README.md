@@ -33,16 +33,16 @@ Use search to find machine learning and computational biology preprints, such as
 #### Usage Tips
 
 - Queries use arXiv field prefixes: `ti:` (title), `au:` (author), `abs:` (abstract), `cat:` (category), and `all:`. Combine them with `AND`, `OR`, and `ANDNOT`, and quote phrases, as in `ti:"protein binder" AND cat:q-bio.BM`.
-- A bare word without a prefix searches all fields, which can match loosely; prefer `ti:` or `abs:` with a phrase.
+- A bare word without a prefix searches all fields, which can match loosely. Prefer `ti:` or `abs:` with a phrase.
 - Set `sort_by="submittedDate"` for the newest preprints first.
 - arXiv asks for at most one request every three seconds over a single connection. The limit applies across all calls in the process, retries included, so concurrent calls queue behind each other and each query waits its turn.
 - A query arXiv rejects, such as one with malformed syntax, returns a result with `error` set and no hits, and the other queries still run.
 - `doi` and `journal_ref` are filled only when authors add them after publication.
-- `paperclip-literature-search` with `sources=["papers"]` also covers arXiv, with full text and line-numbered reading, but needs a `PAPERCLIP_API_KEY`; this tool needs no key and returns arXiv metadata and abstracts only.
+- `paperclip-literature-search` with `sources=["papers"]` also covers arXiv, with full text and line-numbered reading, but needs a `PAPERCLIP_API_KEY`. This tool needs no key and returns arXiv metadata and abstracts only.
 
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-- **Requires network access.** Every call is an HTTPS request to the arXiv API; no API key is needed.
-- **Runs in process on CPU.** There is no environment to build and no worker to start; runtime is dominated by remote retrieval.
+- **Requires network access.** Every call is an HTTPS request to the arXiv API. No API key is needed.
+- **Runs in process on CPU.** There is no environment to build and no worker to start. Runtime is dominated by remote retrieval.

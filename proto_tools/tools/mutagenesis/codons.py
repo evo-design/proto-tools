@@ -1,8 +1,4 @@
-"""proto_tools/tools/mutagenesis/codons.py.
-
-Self-contained codon infrastructure for random mutagenesis tools.
-No BioPython dependency.
-"""
+"""Expand codon schemes and sample mutations without a BioPython dependency."""
 
 import functools
 import random
@@ -121,10 +117,10 @@ def codons_encoding(amino_acids: Collection[str]) -> list[str]:
     """Return every codon translating to one of ``amino_acids``, in genetic-code order.
 
     Args:
-        amino_acids (Collection[str]): One-letter codes; ``"*"`` selects the stop codons.
+        amino_acids (Collection[str]): One-letter codes. Use ``"*"`` to select stop codons.
 
     Returns:
-        list[str]: Matching codons; empty when nothing matches.
+        list[str]: Matching codons, or an empty list when nothing matches.
     """
     wanted = set(amino_acids)
     return [codon for codon, aa in CODON_TO_AA.items() if aa in wanted]
@@ -137,6 +133,7 @@ def codons_encoding(amino_acids: Collection[str]) -> list[str]:
 
 def _expand_degenerate_codon(codon: str) -> list[str]:
     """Expand a 3-letter degenerate codon into all concrete codons."""
+    # Expand each ambiguous base, then form every combination of the three positions.
     pools = [list(IUPAC_DNA[base]) for base in codon]
     results = [""]
     for pool in pools:
@@ -153,7 +150,7 @@ def get_codon_scheme(name: str, include_stop: bool = False) -> dict[str, list[st
             Case-insensitive. Must be a valid IUPAC degenerate codon or ``"UNIFORM"``.
         include_stop (bool): If True, include the stop symbol ``"*"`` in the
             returned amino acids and weights. For degenerate schemes ``"*"`` is
-            weighted by its stop-codon count, exactly like amino acids; for
+            weighted by its stop-codon count, exactly like amino acids. For
             ``"UNIFORM"`` it is added as an equally weighted 21st symbol.
 
     Returns a dict with:
@@ -176,6 +173,7 @@ def get_codon_scheme(name: str, include_stop: bool = False) -> dict[str, list[st
             "weights": weights,
         }
 
+    # Count how many codons encode each amino acid to obtain its sampling weight.
     codons = _expand_degenerate_codon(name)
     weights: dict[str, float] = {}  # type: ignore[no-redef]
     for codon in codons:

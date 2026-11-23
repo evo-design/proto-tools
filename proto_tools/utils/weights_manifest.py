@@ -5,14 +5,15 @@ Record the weight files a toolkit's setup leaves on disk, and find the ones that
 ``setup.sh`` downloads weights only when an environment is built, but the files can disappear
 afterwards while the environment still looks built: a scratch filesystem purges old files, or a
 user clears part of the model cache. After a successful setup, ``write_manifest`` records every
-file in the folders that setup filled, meaning each folder ``proto_resolve_weights_dir`` resolved
+file in each folder resolved by ``proto_resolve_weights_dir`` during setup
 (which covers shared folders such as ``alphafold2/`` and ``PROTO_{TOOLKIT}_WEIGHTS_DIR``
 overrides), together with the settings that located them. ``weights_problem`` compares that
-record with the disk, and ``ToolInstance`` rebuilds the environment when anything is gone, which
-runs ``setup.sh`` again and downloads it.
+record with the files on disk. If any are missing, ``ToolInstance`` rebuilds
+the environment, running ``setup.sh`` again to download them.
 
-Only setup's folders are recorded: what a worker downloads while it runs (Hugging Face and torch
-caches, ``download_weights``) is fetched again by the worker, so its loss needs no new setup.
+Only setup's folders are recorded. Workers fetch runtime downloads
+again if needed, including Hugging Face and torch caches and files fetched by
+``download_weights``. Losing those files does not require setup to run again.
 Which files count, and how their presence is checked, is shared with every other completeness
 check (``standalone_helpers.completeness``): caches the toolkit regenerates on its own
 (``jax_cache/``, ``compile_cache/``, Hugging Face's ``xet/`` chunk cache), dotfiles, and
@@ -39,7 +40,7 @@ _REGENERATED = ("jax_cache", "compile_cache", "xet")
 
 
 def _weights_location(toolkits: set[str]) -> dict[str, str | None]:
-    """The settings that decide where ``toolkits``' weights live."""
+    """Return the settings that determine where the toolkits store their weights."""
     location: dict[str, str | None] = {
         "PROTO_HOME": str(get_proto_home()),
         "PROTO_MODEL_CACHE": os.environ.get("PROTO_MODEL_CACHE") or None,
@@ -51,7 +52,7 @@ def _weights_location(toolkits: set[str]) -> dict[str, str | None]:
 
 
 def _read_record(record: Path) -> dict[str, str]:
-    """Toolkit to weights folder, from the lines ``proto_resolve_weights_dir`` appended."""
+    """Read each toolkit's weights folder from the setup record."""
     if not record.is_file():
         return {}
     folders = {}
@@ -66,7 +67,7 @@ def write_manifest(env_path: Path, toolkit: str) -> None:
     """Record the weight files present after ``toolkit``'s setup succeeded.
 
     Args:
-        env_path (Path): The tool environment; holds the setup record and receives the manifest.
+        env_path (Path): Tool environment holding the setup record and receiving the manifest.
         toolkit (str): The toolkit whose setup just ran.
     """
     folders = _read_record(env_path / RECORD_NAME)
@@ -81,14 +82,14 @@ def write_manifest(env_path: Path, toolkit: str) -> None:
 
 
 def weights_problem(env_path: Path) -> str | None:
-    """Why the weights recorded for ``env_path`` are no longer usable, or ``None`` when they are.
+    """Report a problem with the recorded weights, or return ``None`` if they are usable.
 
     Args:
         env_path (Path): A tool environment whose setup succeeded.
 
     Returns:
-        str | None: A description of the problem: no manifest (an environment built before
-            weights were tracked), weights now located elsewhere, or files that are gone.
+        str | None: A description of a missing or outdated manifest, changed storage
+            settings, or missing weight files.
     """
     manifest_path = env_path / MANIFEST_NAME
     if not manifest_path.is_file():
@@ -100,6 +101,7 @@ def weights_problem(env_path: Path) -> str | None:
     if manifest.get("version") != _MANIFEST_VERSION:
         return "its weights record has an old format"
 
+    # Compare storage settings before looking for missing files in the old locations.
     recorded_location = manifest.get("location", {})
     toolkits = {
         var[len("PROTO_") : -len("_WEIGHTS_DIR")].lower() for var in recorded_location if var.endswith("_WEIGHTS_DIR")
@@ -109,6 +111,7 @@ def weights_problem(env_path: Path) -> str | None:
     if moved:
         return f"its weights location changed ({', '.join(moved)})"
 
+    # Check only the files recorded after setup, excluding regenerable caches.
     missing = [
         os.path.join(folder, rel)
         for folder, rels in manifest.get("files", {}).items()

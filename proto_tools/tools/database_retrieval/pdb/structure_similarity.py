@@ -1,9 +1,9 @@
 """Search experimental PDB structures with RCSB's learned structure embedding.
 
-This is intentionally distinct from Foldseek.  The RCSB Search API embeds a
-query structure and retrieves structurally related experimental PDB chains or
-assemblies using its learned global representation.  Custom structures are
-uploaded to RCSB's public upload service before the search.
+The RCSB Search API uses a learned representation of the query structure to
+retrieve related experimental PDB chains or assemblies. This search is
+independent of Foldseek. Custom structures are uploaded to RCSB's public
+upload service before the search.
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@
 Wraps the CRISPRtracrRNA.py tool from the Backofen Lab to predict
 tracrRNA sequences from nucleotide CRISPR loci.
 
-Supports parallel execution: sequences are split into batches, each
+Supports parallel execution. Sequences are split into batches, each
 running in its own temp directory with a symlinked CWD to avoid file
 contention from CRISPRtracrRNA's intermediate files.
 
@@ -88,7 +88,7 @@ def _normalize_csv_value(value: Any) -> Any:
 def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict[str, Any]]:
     """Parse upstream CSVs into one per-sequence result, each with all candidate rows.
 
-    Columns pass through verbatim (typed Pydantic model on the wrapper side); NA-style
+    Columns pass through verbatim (typed Pydantic model on the wrapper side). NA-style
     cells normalize to None. The priority sort routes CRISPRtracrRNA_result.csv (the
     complete_run final, includes score) and complete_report.csv (model_run dedupe)
     first, then per-fasta intermediates are skipped for any accession a priority file
@@ -104,7 +104,7 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict
     candidates_by_id: dict[str, list[dict[str, Any]]] = {seq_id: [] for seq_id in sequence_ids}
     covered_by_priority: set[str] = set()
 
-    # complete_run final ranked CSV first; then model_run's per-accession dedupe.
+    # Prefer complete_run's final ranked CSV, then model_run's deduplicated per-accession output.
     priority = ("CRISPRtracrRNA_result.csv", "complete_report.csv")
     csv_files = sorted(
         output_dir.glob("*.csv"),
@@ -138,7 +138,7 @@ def _parse_tracr_results(output_dir: Path, sequence_ids: list[str]) -> list[dict
             len(sequence_ids),
         )
 
-    # Sort score-descending; rows with no score (NA / missing) sort last.
+    # Sort by descending score, placing rows with no score last.
     for cands in candidates_by_id.values():
         cands.sort(key=lambda c: float(c["score"]) if c.get("score") else float("-inf"), reverse=True)
 
@@ -214,9 +214,8 @@ def _build_upstream_flags(config: dict[str, Any]) -> list[str]:
 
     Only emits a flag when the configured value differs from upstream's
     documented default. ``perform_type_v_anti_repeat_analysis`` is special-
-    cased: upstream's argparse uses ``type=bool`` (the Python footgun where
-    any non-empty string evaluates True), so we only pass the flag when our
-    config is True.
+    cased because upstream's argparse uses ``type=bool``. Any non-empty string
+    evaluates to True, so we only pass the flag when our config is True.
     """
     flags: list[str] = []
     for key, default in _UPSTREAM_DEFAULTS.items():
@@ -310,7 +309,7 @@ def _run_tracr_batch(
         results = _parse_tracr_results(output_dir, sequence_ids)
 
         if proc.returncode != 0:
-            # Salvage partial output if upstream crashed mid-batch; raise if nothing salvaged.
+            # Keep partial output if upstream crashed mid-batch, raising if no results can be recovered.
             if any(r["candidates"] for r in results):
                 logger.warning(
                     "crispr-tracr-rna: batch %d CRISPRtracrRNA.py failed (exit %d) "

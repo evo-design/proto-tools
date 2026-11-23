@@ -26,11 +26,11 @@ class ParadeStabilityMetrics(Metrics):
     """PARADE mRNA stability metric for one 3' UTR sequence.
 
     Emitted as ``ParadeStabilityResult.scores`` and registered as the tool's
-    ``metrics_class``; the value is also exposed via the result's ``log_ratio``
+    ``metrics_class``. The value is also exposed via the result's ``log_ratio``
     convenience property.
 
     Metrics documented in ``metric_spec``:
-        log_ratio (float): Predicted RNA/gDNA log-ratio; higher means more stable.
+        log_ratio (float): Predicted RNA/gDNA log-ratio. Higher means more stable.
 
     Attributes:
         primary_metric (str | None): Headline metric used to rank results.
@@ -72,7 +72,7 @@ class ParadeStabilityResult(BaseModel):
 
     @property
     def log_ratio(self) -> float:
-        """Predicted RNA/gDNA log-ratio; higher means more stable."""
+        """Predicted RNA/gDNA log-ratio. Higher means more stable."""
         return float(cast(float, self.scores["log_ratio"]))
 
 
@@ -173,8 +173,8 @@ def run_parade_stability(
     """
     inputs = ParadeStabilityInput.model_validate(inputs.model_dump())
     config = ParadeStabilityConfig.model_validate(config.model_dump())
-    # Sequences may have mixed lengths; the standalone batches them per length group, so this
-    # is safe under the framework's per-item iterable cache (partial cache hits pass any subset).
+    # The standalone groups sequences by length before batching, so mixed lengths are
+    # safe even when partial cache hits leave an arbitrary subset of the inputs.
     output_data = ToolInstance.dispatch(
         "parade",
         {

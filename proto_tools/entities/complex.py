@@ -1,4 +1,4 @@
-"""Shared molecular-chain primitives reusable across tool categories."""
+"""Molecular chains and complexes shared by tools across categories."""
 
 import string
 from collections.abc import Iterator
@@ -21,11 +21,10 @@ CHAIN_IDS: Final[list[str]] = list(string.ascii_uppercase)
 
 
 def chain_label(i: int) -> str:
-    """Deterministic positional chain ID for the i-th chain: A..Z, AA..ZZ, AAA..., spreadsheet-style.
+    """Return a positional chain label using A..Z, AA..ZZ, AAA..., like spreadsheet columns.
 
-    Used by every consumer that needs a fallback chain ID when the entity's own ``id`` is None.
-    Unbounded so complexes with more than 26 chains roll over to two-letter labels rather than
-    crashing with ``IndexError``.
+    Use this when an entity has no explicit ``id``. Labels can grow beyond one letter,
+    so complexes with more than 26 chains still receive unique positional labels.
 
     Args:
         i (int): Non-negative chain index.
@@ -40,6 +39,7 @@ def chain_label(i: int) -> str:
         raise ValueError(f"chain index must be non-negative, got {i}")
     label = ""
     n = i
+    # Build the label from right to left, carrying into another letter after Z.
     while True:
         label = string.ascii_uppercase[n % 26] + label
         n = n // 26 - 1
@@ -53,8 +53,7 @@ class ChainModification(BaseModel):
     Modifications are specified using Chemical Component Dictionary (CCD) codes
     from the wwPDB.
 
-    IMPORTANT NOTE: THE MODIFICATION POSITIONS USE 1-BASED INDEXING, WHICH
-    FOLLOWS THE STANDARD BIOLOGICAL CONVENTIONS.
+    Positions are 1-indexed, so the first residue or base is position 1.
 
     Attributes:
         position (int): 1-based position in the sequence where the modification occurs.
@@ -108,10 +107,9 @@ class ChainModification(BaseModel):
 class Chain(BaseModel):
     """Represents a single molecular chain with optional modifications.
 
-    A chain consists of a sequence (protein, DNA, RNA, or ligand) along with
-    its entity type and any chemical modifications. This class supports both
-    simple use cases (just a sequence) and complex cases with post-translational
-    modifications or nucleotide modifications.
+    Store a protein, DNA, RNA, or ligand sequence with its entity type and any
+    chemical modifications. A sequence alone is enough. Post-translational and
+    nucleotide modifications are optional.
 
     Attributes:
         id (str | None): Optional chain identifier. ``None`` when the

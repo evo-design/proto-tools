@@ -78,12 +78,12 @@ Use this to materialize a fixed genome, transcript, protein, and annotation refe
 
 #### Usage Tips
 
-- **Pin a version.** `accession` needs a versioned `GCA_` or `GCF_` accession such as `GCF_000005845.2`; an NCBI Datasets page link works too. An unversioned accession is rejected, since its content can change.
+- **Pin a version.** `accession` needs a versioned `GCA_` or `GCF_` accession such as `GCF_000005845.2`. An NCBI Datasets page link works too. An unversioned accession is rejected, since its content can change.
 - **Pick formats with `annotation_types`.** NCBI serves each format natively, so there is no conversion: `GENOME_FASTA`, `GENOME_GFF`, `RNA_FASTA` and `PROT_FASTA` by default, plus `GENOME_GBFF` (GenBank flat file), `GENOME_GTF`, and `CDS_FASTA` on request. Only the requested files are downloaded and stored.
-- **Not every assembly has every file.** A path is `None` when the assembly has no such file; for example, E. coli K-12 has no transcript FASTA.
-- **Bundles are reused.** A second call for the same accession returns the existing bundle without a download, as long as it was fetched with at least the requested `annotation_types`. Pass `destination_dir` to extract somewhere else; it must be empty or hold an earlier bundle.
+- **Not every assembly has every file.** A path is `None` when the assembly has no such file. For example, E. coli K-12 has no transcript FASTA.
+- **Bundles are reused.** A second call for the same accession returns the existing bundle without a download, as long as it was fetched with at least the requested `annotation_types`. Pass `destination_dir` to extract somewhere else. It must be empty or hold an earlier bundle.
 - **Runs only where you can read its files.** The bundle is written to the disk of the machine running the tool, so it works with the local proto-tools MCP server, the CLI, or Python, and the hosted service refuses it.
-- **Size is checked before downloading.** NCBI's size estimate is compared with `max_download_bytes` (5 GB by default; the human assembly is about 1.2 GB), and the download stops if it runs past the limit. A failed download never leaves a partial bundle.
+- **Size is checked before downloading.** NCBI's size estimate is compared with `max_download_bytes` (5 GB by default. The human assembly is about 1.2 GB), and the download stops if it runs past the limit. A failed download never leaves a partial bundle.
 
 ## Toolkit Notes
 
@@ -92,4 +92,4 @@ Use this to materialize a fixed genome, transcript, protein, and annotation refe
 These apply to every NCBI tool in this toolkit (`ncbi-esearch`, `ncbi-esummary`, `ncbi-efetch`, `ncbi-reference-bundle`).
 
 - **Requires network access.** The Entrez tools call the live NCBI E-utilities, and `ncbi-reference-bundle` calls the NCBI Datasets API.
-- **An NCBI API key raises the rate limit.** Without credentials, NCBI E-utilities permits 3 requests per second per IP. Setting credentials raises this to 10 requests per second. A key is obtained at no cost from the Settings page of a free NCBI account (https://www.ncbi.nlm.nih.gov/account/). NCBI also asks that a contact email be set; it uses the email for abuse handling and IP-block recovery. Provide credentials either via the `ncbi_api_key` / `ncbi_email` config attributes or via the `NCBI_API_KEY` / `NCBI_EMAIL` environment variables; an explicit config value overrides the env var.
+- **An NCBI API key raises the rate limit.** Without credentials, NCBI E-utilities permits 3 requests per second per IP. Setting credentials raises this to 10 requests per second. A key is obtained at no cost from the Settings page of a free NCBI account (https://www.ncbi.nlm.nih.gov/account/). NCBI also asks that a contact email be set. It uses the email for abuse handling and IP-block recovery. Provide credentials either via the `ncbi_api_key` / `ncbi_email` config attributes or via the `NCBI_API_KEY` / `NCBI_EMAIL` environment variables. An explicit config value overrides the env var.

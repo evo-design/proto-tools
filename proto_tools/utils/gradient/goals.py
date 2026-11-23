@@ -2,10 +2,9 @@
 
 What a caller wants from a single scalar quantity, expressed as a minimizable loss.
 
-A goal is pure scalar mathematics: it maps a term's raw value to a loss and supplies that loss's
-derivative with respect to the value. It knows nothing about gradients, inputs, tools or models,
-which is what lets :mod:`proto_tools.utils.gradient.objectives` apply the chain rule to any term
-without either side knowing about the other.
+A goal maps a term's raw value to a loss and provides the derivative of that loss.
+It works with scalars alone. :mod:`proto_tools.utils.gradient.objectives` uses those
+derivatives to apply the chain rule to terms from any tool or model.
 """
 
 from __future__ import annotations
@@ -96,7 +95,7 @@ class AtLeastGoal(Goal):
         return max(0.0, self.threshold - value) ** 2
 
     def dloss_dvalue(self, value: float) -> float:
-        """Return the derivative of the squared shortfall; zero once satisfied."""
+        """Return the squared-shortfall derivative, or zero once the goal is satisfied."""
         return -2.0 * max(0.0, self.threshold - value)
 
 
@@ -114,7 +113,7 @@ class AtMostGoal(Goal):
         return max(0.0, value - self.threshold) ** 2
 
     def dloss_dvalue(self, value: float) -> float:
-        """Return the derivative of the squared excess; zero while satisfied."""
+        """Return the squared-excess derivative, or zero while the goal is satisfied."""
         return 2.0 * max(0.0, value - self.threshold)
 
 
@@ -139,15 +138,15 @@ class RangeGoal(Goal):
         return max(0.0, self.lower - value) ** 2 + max(0.0, value - self.upper) ** 2
 
     def dloss_dvalue(self, value: float) -> float:
-        """Return the derivative of whichever hinge is active; zero within the band."""
+        """Return the active hinge's derivative, or zero within the band."""
         return -2.0 * max(0.0, self.lower - value) + 2.0 * max(0.0, value - self.upper)
 
 
 class SigmoidGoal(Goal):
     """Push a quantity one way with saturating pressure, bounding its contribution.
 
-    Saturation is the point: past a few multiples of ``scale`` from ``center`` the loss flattens,
-    so one term cannot dominate a weighted sum however extreme its value becomes.
+    The loss flattens a few multiples of ``scale`` away from ``center``. This bounds the
+    term's contribution to a weighted sum even when its raw value is extreme.
 
     Attributes:
         direction (GoalDirection): Whether higher or lower raw values are wanted.
@@ -192,13 +191,13 @@ class SigmoidGoal(Goal):
 class ClippedLinearGoal(Goal):
     """Rescale a quantity affinely and clip the result, capping how much it can contribute.
 
-    This is the goal for reconciling units: a quantity on one natural scale is mapped onto a
-    comparable one before terms are summed, and clipped so an extreme value stops adding
-    pressure. ``scale`` carries the direction, so a negative scale drives the quantity up.
+    Use this goal to put quantities with different units on comparable scales before
+    summing them. Clipping limits the effect of extreme values. A negative ``scale``
+    drives the quantity up.
 
-    At least one bound is required, because the clipping is the point. Plain affine rescaling
-    with no bound is :class:`MinimizeGoal` or :class:`MaximizeGoal` under an objective weight,
-    and the offset only shifts a loss that nothing compares across objectives.
+    At least one bound is required. For an unbounded linear loss, use
+    :class:`MinimizeGoal` or :class:`MaximizeGoal` with an objective weight. The offset
+    changes the loss value without changing the gradient.
 
     Attributes:
         scale (float): Multiplier applied to the value; negative drives the quantity up.
@@ -224,7 +223,7 @@ class ClippedLinearGoal(Goal):
 
     def loss(self, value: float) -> float:
         """Return the affine transform of the value, clamped to the bounds."""
-        # Rescale onto a comparable range; a negative scale drives the quantity up
+        # Rescale onto a comparable range. A negative scale drives the quantity up.
         raw = self.scale * value + self.offset
 
         # Clamp so an extreme value stops adding pressure

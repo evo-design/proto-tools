@@ -361,10 +361,13 @@ def run_evo2_icl(inputs: Evo2ICLInput, config: Evo2ICLConfig, instance: Any = No
         >>> result.export("designs", file_format="fasta")
     """
     logger.debug("Using the persistent Evo 2 worker for in-context DNA design")
+    # Compose prompts from the example pool, then repeat each one once per design it should produce
     prompts, selections = config.compose_prompts(inputs)
     request_prompts = [prompt for prompt in prompts for _ in range(config.num_sequences)]
+    # Protein designs are generated as DNA, so request three bases per residue
     protein = inputs.sequence_type == "protein"
     generated_bases = config.sequence_length * (3 if protein else 1)
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "evo2",
         {
@@ -393,14 +396,17 @@ def run_evo2_icl(inputs: Evo2ICLInput, config: Evo2ICLConfig, instance: Any = No
         config=config,
     )
     sequences = result["sequences"]
+    # Ensure Evo 2 returned one generation per requested design
     if len(sequences) != config.total_sequences:
         raise ValueError(f"Evo 2 returned {len(sequences)} generations for {config.total_sequences} requested designs")
+    # Keep only full-length generations made entirely of A/C/G/T/N
     valid_indices = [
         i
         for i, sequence in enumerate(sequences)
         if len(sequence) == generated_bases and not set(sequence) - set("ACGTN")
     ]
     dna_sequences = [sequences[i] for i in valid_indices]
+    # Translate protein designs codon by codon, marking unknown codons as X
     translated = (
         [
             "".join(_CODON_TO_AA.get(sequence[i : i + 3], "X") for i in range(0, len(sequence), 3))
@@ -412,6 +418,7 @@ def run_evo2_icl(inputs: Evo2ICLInput, config: Evo2ICLConfig, instance: Any = No
     designs = [CausalModelSample(sequence=sequence) for sequence in translated]
     if not designs:
         raise ValueError("No usable A/C/G/T/N designs were generated. Try different examples or sampling settings.")
+    # Warn when some generations were dropped
     omitted = len(sequences) - len(designs)
     warnings = []
     if omitted:
@@ -419,6 +426,7 @@ def run_evo2_icl(inputs: Evo2ICLInput, config: Evo2ICLConfig, instance: Any = No
             f"Returned {len(designs)} of {config.total_sequences} requested designs; "
             f"{omitted} generations were empty, invalid, or did not meet the length requirement."
         )
+    # Flag protein designs that contain stop or ambiguous codons
     if protein:
         stop_count = sum("*" in sequence for sequence in translated)
         ambiguous_count = sum("X" in sequence for sequence in translated)
@@ -428,6 +436,7 @@ def run_evo2_icl(inputs: Evo2ICLInput, config: Evo2ICLConfig, instance: Any = No
             )
         if ambiguous_count:
             warnings.append(f"{ambiguous_count} protein designs contain ambiguous codons, shown as X.")
+    # Return the designs with prompt composition and sampling provenance
     return Evo2ICLOutput(
         results=designs,
         sequence_type=inputs.sequence_type,

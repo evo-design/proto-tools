@@ -1,9 +1,8 @@
 """tests/tool_infra_tests/test_cli.py.
 
-Smoke tests for the ``proto-tools`` CLI entry point. Verbs are thin adapters,
-so coverage here is intentionally thin — just enough to catch breakage in
-argparse wiring, exit codes, and the text-vs-JSON output toggle, plus a check
-that the verbs mirroring MCP tools print exactly what those tools return.
+Smoke tests for the ``proto-tools`` CLI entry point. These check argument parsing,
+exit codes, text and JSON output, and whether commands that mirror MCP tools
+print the same results.
 Behavioral coverage of the underlying functions lives in ``test_tool_docs.py``
 and ``tests/modal_tests/test_mcp*.py``.
 
@@ -51,7 +50,7 @@ def _run(*argv: str) -> tuple[int, str, str]:
     ids=lambda v: v[0] if isinstance(v, tuple) else "",
 )
 def test_mirrored_verb_prints_the_mcp_payload(argv, expected) -> None:
-    """One implementation behind both surfaces: the CLI adds nothing and drops nothing."""
+    """The CLI returns the same payload as the MCP implementation."""
     code, out, _ = _run(*argv)
     assert code == 0
     assert json.loads(out) == json.loads(json.dumps(expected(), default=str))

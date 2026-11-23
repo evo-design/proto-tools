@@ -1,7 +1,4 @@
-"""proto_tools/tools/sequence_scoring/borzoi/borzoi_ensemble.py.
-
-Borzoi ensemble sequence scoring tool.
-"""
+"""Borzoi ensemble sequence scoring tool."""
 
 import csv
 import json

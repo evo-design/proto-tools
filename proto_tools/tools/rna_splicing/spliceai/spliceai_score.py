@@ -292,9 +292,9 @@ class SpliceAIScoreConfig(ReferenceGenomeConfig):
             Either a provisioned assembly name (``'grch38'``/``'grch37'``, or
             their UCSC spellings ``'hg38'``/``'hg19'``), downloaded on first use
             and the only form a remote worker can resolve, or a path to a FASTA
-            on this machine. Required at call time; ``None`` raises a
+            on this machine. Required at call time. ``None`` raises a
             ``MissingAssetError`` so un-provisioned hosts skip cleanly.
-        annotation (str): Gene annotation source: ``'grch37'`` or ``'grch38'``
+        annotation (str): Gene annotation source, either ``'grch37'`` or ``'grch38'``
             (GENCODE files bundled with SpliceAI) or a path to a custom
             tab-separated annotation file. Defaults to the named assembly when
             ``reference_fasta`` gives one, since the two describe one build.
@@ -303,7 +303,7 @@ class SpliceAIScoreConfig(ReferenceGenomeConfig):
         mask (bool): Mask scores for annotated acceptor/donor gain and
             unannotated acceptor/donor loss (the SpliceAI ``-M`` flag).
         device (str): Device to run inference on. SpliceAI (TensorFlow)
-            auto-falls-back to CPU when no GPU is visible.
+            automatically falls back to CPU when no GPU is visible.
     """
 
     annotation: str = ConfigField(
@@ -337,7 +337,7 @@ class SpliceAIScoreConfig(ReferenceGenomeConfig):
 
         A variant's coordinates mean a different place in each assembly, so an annotation from one
         build against a genome from another is wrong rather than merely inconsistent. Naming a
-        provisioned assembly settles both; an explicitly set ``annotation`` still wins.
+        provisioned assembly settles both. An explicitly set ``annotation`` still wins.
         """
         if "annotation" not in self.model_fields_set and self.reference_fasta in GENOME_FASTA:
             self.annotation = self.reference_fasta

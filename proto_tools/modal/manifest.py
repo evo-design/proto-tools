@@ -1,6 +1,6 @@
-"""Source of truth for the per-app Modal split.
+"""Define which services run in each Modal app.
 
-Declares which services belong to which app, their timeouts, and their modules.
+Each service declaration records its app, timeout, and Python module.
 """
 
 import logging

@@ -321,7 +321,7 @@ def run_paperclip_search(
     Args:
         inputs (PaperclipSearchInput): The literature query.
         config (PaperclipSearchConfig): Corpus selection, filters, and client settings.
-        instance (Any): Unused; the tool runs in process.
+        instance (Any): Unused because the tool runs in the current process.
 
     Returns:
         PaperclipSearchOutput: Normalized, citable hits, each with its citation URL.
@@ -426,7 +426,7 @@ def run_paperclip_lookup(
     Args:
         inputs (PaperclipLookupInput): The metadata field and value.
         config (PaperclipLookupConfig): Result limit and client settings.
-        instance (Any): Unused; the tool runs in process.
+        instance (Any): Unused because the tool runs in the current process.
 
     Returns:
         PaperclipLookupOutput: Matching papers, each with its citation URL.
@@ -547,7 +547,7 @@ def run_paperclip_grep(
     Args:
         inputs (PaperclipGrepInput): The regular expression.
         config (PaperclipGrepConfig): Match limit, case handling, scan budget, and client settings.
-        instance (Any): Unused; the tool runs in process.
+        instance (Any): Unused because the tool runs in the current process.
 
     Returns:
         PaperclipGrepOutput: Matching paragraphs and the papers they came from.
@@ -764,7 +764,7 @@ def run_paperclip_document(
     Args:
         inputs (PaperclipDocumentInput): The Paperclip document identifier.
         config (PaperclipDocumentConfig): What to read and client settings.
-        instance (Any): Unused; the tool runs in process.
+        instance (Any): Unused because the tool runs in the current process.
 
     Returns:
         PaperclipDocumentOutput: Metadata and the requested content.

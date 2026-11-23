@@ -1,7 +1,6 @@
 """Prodigal ORF prediction for prokaryotic genomes.
 
-This module provides standardized interfaces for ORF (Open Reading Frame) prediction
-using Prodigal for prokaryotic ORF prediction and analysis of results.
+Predict open reading frames (ORFs) in prokaryotic genomes and inspect the results.
 """
 
 import os
@@ -76,8 +75,7 @@ TRANSLATION_TABLE_MAP: dict[str, int] = {
 class ProdigalInput(BaseToolInput):
     """Input object for Prodigal ORF (Open Reading Frame) prediction.
 
-    This class defines the input parameters for predicting genes in prokaryotic
-    DNA sequences using Prodigal, a fast and reliable gene prediction tool.
+    Provide prokaryotic DNA sequences for gene prediction with Prodigal.
 
     Attributes:
         input_sequences (list[str]): DNA sequence(s) to analyze for
@@ -127,9 +125,8 @@ class ProdigalInput(BaseToolInput):
 class ProdigalConfig(BaseConfig):
     """Configuration object for Prodigal ORF prediction.
 
-    This class defines all configuration parameters for running Prodigal, a fast
-    and reliable protein-coding gene prediction tool specifically designed for
-    prokaryotic genomes (bacteria and archaea).
+    Settings control protein-coding gene prediction in bacterial and archaeal
+    genomes with Prodigal.
 
     Attributes:
         meta_mode (bool): Use meta mode for gene prediction. Options:
@@ -216,9 +213,7 @@ class ProdigalConfig(BaseConfig):
 class ProdigalOutput(BaseToolOutput):
     """Output from Prodigal ORF prediction.
 
-    This class encapsulates the results of Prodigal gene prediction, providing
-    detailed information about predicted genes including sequences, coordinates,
-    and quality metrics.
+    Contains predicted genes with their sequences, coordinates, and quality metrics.
 
     Attributes:
         results (list[OrfPredictionResult]): One entry per input sequence, in input
@@ -375,6 +370,7 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, insta
         - Use single-genome mode only for complete genomes (>100kb recommended)
         - Set ``closed_ends=True`` only for complete circular genomes
     """
+    # Send the sequences and gene-calling settings to the isolated Prodigal worker.
     output_data = ToolInstance.dispatch(
         "prodigal",
         {
@@ -393,7 +389,7 @@ def run_prodigal_prediction(inputs: ProdigalInput, config: ProdigalConfig, insta
         config=config,
     )
 
-    # Reconstruct ORF objects from returned dicts
+    # Rebuild the predicted ORFs, keeping each input sequence's genes together.
     predicted_orfs = []
     for seq_orfs in output_data["predicted_orfs"]:
         orfs = [ORF(**orf_dict) for orf_dict in seq_orfs]

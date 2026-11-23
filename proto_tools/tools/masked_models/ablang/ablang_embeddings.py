@@ -121,6 +121,7 @@ def run_ablang_embeddings(
     sequences = [ab.to_sequence() for ab in inputs.antibodies]
     model_choice = _resolve_model_choice(inputs.antibodies)
     logger.debug("Using local venv for AbLang embeddings: %s", model_choice)
+    # Run inference in the toolkit's isolated environment.
     outputs = ToolInstance.dispatch(
         "ablang",
         {

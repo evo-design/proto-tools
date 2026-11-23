@@ -183,14 +183,14 @@ def run_rfam_family(
 ) -> RfamFamilyOutput:
     """Fetch an Rfam family record and its consensus structure.
 
-    The consensus structure and sequence are always read from the seed
-    alignment; the alignment itself is returned only when requested.
+    Always read the consensus structure and sequence from the seed alignment.
+    Return the alignment itself only when requested.
 
     Args:
         inputs (RfamFamilyInput): Rfam accession or family ID.
         config (RfamFamilyConfig): Whether to return the full seed alignment.
 
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         RfamFamilyOutput: Curation record, cutoffs, release, and consensus lines.
@@ -199,12 +199,14 @@ def run_rfam_family(
 
     session = _rfam_session(config)
     try:
+        # Resolve the family name or accession to its curation record.
         record_response = _rfam_get(session, _family_url(inputs.family), {"content-type": "application/json"})
         if record_response is None:
             raise _not_found(inputs.family)
         record = record_response.json()["rfam"]
         source_url = str(record_response.url)
         accession = record["acc"]
+        # Read consensus annotations from the seed alignment even if it will not be returned.
         alignment_response = _rfam_get(session, _family_url(accession, "alignment", "stockholm"))
         if alignment_response is None:
             raise ValueError(f"Rfam has no seed alignment for {accession}")

@@ -15,7 +15,7 @@ The RCSB Protein Data Bank is a database of experimentally determined three-dime
 
 The Protein Data Bank ([Berman et al., 2000](https://doi.org/10.1093/nar/28.1.235)) is the single worldwide archive of experimentally determined macromolecular structures, served here through the RCSB PDB. It is operated by the Research Collaboratory for Structural Bioinformatics (RCSB) at Rutgers University and the University of California San Diego, with funding from the National Science Foundation, the National Institutes of Health, and the Department of Energy. Entries are solved by X-ray crystallography, cryo-electron microscopy, nuclear magnetic resonance spectroscopy, and other experimental methods.
 
-The tools call two RCSB HTTP endpoints directly. `pdb-fetch-entry` issues a GET request to the RCSB Data API core entry endpoint (`https://data.rcsb.org/rest/v1/core/entry/{pdb_id}`) and reads the structure title from `struct.title`, the experimental method from the first `exptl` record, and the resolution from `rcsb_entry_info.resolution_combined`, which covers both X-ray and cryo-EM entries; entries solved by NMR have no resolution value. `pdb-fetch-fasta` requests the FASTA endpoint (`https://www.rcsb.org/fasta/entry/{pdb_id}`), parses each record, extracts the author-assigned chain identifiers from the header, and classifies a sequence as protein when it contains amino-acid letters that do not also occur in nucleotide alphabets. Both tools uppercase the supplied accession, retry transient HTTP failures with backoff, and return an empty result when the accession is not found (HTTP 404). Results reflect the live archive at query time rather than a fixed release snapshot.
+The tools call two RCSB HTTP endpoints directly. `pdb-fetch-entry` issues a GET request to the RCSB Data API core entry endpoint (`https://data.rcsb.org/rest/v1/core/entry/{pdb_id}`) and reads the structure title from `struct.title`, the experimental method from the first `exptl` record, and the resolution from `rcsb_entry_info.resolution_combined`, which covers both X-ray and cryo-EM entries. Entries solved by NMR have no resolution value. `pdb-fetch-fasta` requests the FASTA endpoint (`https://www.rcsb.org/fasta/entry/{pdb_id}`), parses each record, extracts the author-assigned chain identifiers from the header, and classifies a sequence as protein when it contains amino-acid letters that do not also occur in nucleotide alphabets. Both tools uppercase the supplied accession, retry transient HTTP failures with backoff, and return an empty result when the accession is not found (HTTP 404). Results reflect the live archive at query time rather than a fixed release snapshot.
 
 `pdb-structure-similarity` calls the RCSB Search API's structure service. The service represents structures with ESM3 residue embeddings followed by a learned aggregator whose cosine similarity was trained to approximate maximum TM-score ([Segura et al., 2026](https://doi.org/10.1093/bioinformatics/btag058)). It is an independent approximate-nearest-neighbor search, not Foldseek or an exact structural alignment. Public PDB references are queried by entry and chain/assembly ID. Custom structures are converted to PDB format and sent to RCSB's public upload service.
 
@@ -40,7 +40,7 @@ Use this to assess whether an experimental structure is suitable as a reference 
 
 #### Usage Tips
 
-- **Resolution is absent for some methods.** NMR and fiber-diffraction entries have no resolution value, so `resolution` is `None`; filter on it before sorting entries by quality.
+- **Resolution is absent for some methods.** NMR and fiber-diffraction entries have no resolution value, so `resolution` is `None`. Filter on it before sorting entries by quality.
 - **This is metadata only.** The tool returns the title, method, and resolution, not atomic coordinates or a structure file.
 - **An unknown accession is not an error.** A missing or obsolete accession returns an empty output rather than raising, so check the populated fields before using the result.
 
@@ -55,9 +55,9 @@ Use this to extract reference sequences from an experimental structure for seque
 #### Usage Tips
 
 - **One record can cover several chains.** A single `PdbChain` carries every author-assigned chain identifier that shares its sequence, so a homo-oligomer collapses to one record with multiple `chain_ids`.
-- **Protein classification is heuristic.** A chain is called protein only when it contains amino-acid letters absent from nucleotide alphabets; peptide nucleic acids and other hybrid molecules may be misclassified.
+- **Protein classification is heuristic.** A chain is called protein only when it contains amino-acid letters absent from nucleotide alphabets. Peptide nucleic acids and other hybrid molecules may be misclassified.
 - **An unknown accession is not an error.** A missing or obsolete accession returns an empty `chains` list rather than raising.
-- **Exporting to `fasta` writes the original headers.** The `fasta` export emits each record using its stored FASTA header verbatim; `json` and `csv` are also supported, with the `csv` form joining shared chain identifiers with a semicolon.
+- **Exporting to `fasta` writes the original headers.** The `fasta` export emits each record using its stored FASTA header verbatim. `json` and `csv` are also supported, with the `csv` form joining shared chain identifiers with a semicolon.
 
 ### PDB Sequence Search (`pdb-sequence-search`)
 
@@ -70,7 +70,7 @@ Use this to identify which protein a fragment or design comes from, to find expe
 #### Usage Tips
 
 - **Coverage is the PDB, not all of UniProt.** Only sequences with a deposited structure can match. For proteins without one, search UniProt or NCBI with `blast-search` instead.
-- **Identity is over the aligned region.** A short fragment can match at 1.0 identity while covering a small part of the entity; check `query_beg`/`query_end` and `subject_beg`/`subject_end` before treating a hit as the same protein.
+- **Identity is over the aligned region.** A short fragment can match at 1.0 identity while covering a small part of the entity. Check `query_beg`/`query_end` and `subject_beg`/`subject_end` before treating a hit as the same protein.
 - **`chain_ids` are author chain IDs.** They match what `pdb-fetch-fasta` reports, unlike the `label_asym_id` values `pdb-structure-similarity` uses.
 - **No match returns an empty result.** RCSB answers HTTP 204 when nothing passes the cutoffs, which comes back as an empty `hits` list with `total_count` 0. Loosen `evalue_cutoff` or `identity_cutoff` if you expected hits.
 - **Queries shorter than 10 residues are rejected.** RCSB does not search shorter sequences, so the input fails validation before any request is sent.
@@ -78,7 +78,7 @@ Use this to identify which protein a fragment or design comes from, to find expe
 - **RNA queries are converted from T to U.** RCSB rejects T in an RNA query, so a sequence copied from a DNA source is converted automatically and the conversion is logged at INFO.
 - **Unsupported characters fail validation.** Gaps (`-`), stops (`*`), and letters RCSB cannot search for the chosen `sequence_type` are rejected before any request. This includes `X` in proteins and `N` in nucleic acids: RCSB accepts them, but its sequence server then fails with HTTP 500. Remove or replace them before searching.
 - **Computed models are off by default.** `include_computed_models` adds RCSB's computed structure models to the search, but RCSB's sequence server often times out on that index.
-- **Turn off `annotate` for large result sets.** Annotation adds one GraphQL request per query; with `annotate=False`, hits carry only identifiers and alignment statistics.
+- **Turn off `annotate` for large result sets.** Annotation adds one GraphQL request per query. With `annotate=False`, hits carry only identifiers and alignment statistics.
 - **Annotation failures are reported, not hidden.** If the GraphQL request returns only errors, the tool raises. If some hits come back without annotation, those hits keep `None` annotation fields and the output's `warnings` lists their entity IDs.
 
 ### PDB Structure Similarity (`pdb-structure-similarity`)
@@ -87,7 +87,7 @@ Searches the experimental PDB structure index for chains or assemblies similar t
 
 #### Applications
 
-Use this to find experimental structures related to a design or a known protein: screen de novo structures for close experimental neighbors, identify remote structural analogs, or compare assemblies at whole-complex scale. Pass several queries in one call to search a shortlist; results come back in input order.
+Use this to find experimental structures related to a design or a known protein: screen de novo structures for close experimental neighbors, identify remote structural analogs, or compare assemblies at whole-complex scale. Pass several queries in one call to search a shortlist. Results come back in input order.
 
 #### Usage Tips
 
@@ -96,7 +96,7 @@ Use this to find experimental structures related to a design or a known protein:
 - **`chain_id` is RCSB's `label_asym_id`, not the author chain ID.** The two often match but can differ: in 1EFA, author chains A to C (protein) are label chains C to E, and label chains A and B are DNA. `pdb-fetch-fasta` reports author IDs, so check the label ID on the entry's RCSB page before querying. Chain hit identifiers (`1YCR.A`) use label IDs too.
 - **Use `global` for whole-fold similarity and `local` for shared substructures.** Match `target_search_space` to chains (`polymer_entity_instance`) or assemblies (`assembly`).
 - **Custom structures leave the local environment.** Their coordinates and embedded sequences are sent to RCSB's public upload service. Public `pdb_id` queries upload nothing.
-- **A small result limit can miss hits.** `number_of_candidates` (at most 10,000, RCSB's per-request cap) bounds the approximate search, and `predicted_tm_score_cutoff` filters by score; `total_count` reports how many matches RCSB found in all.
+- **A small result limit can miss hits.** `number_of_candidates` (at most 10,000, RCSB's per-request cap) bounds the approximate search, and `predicted_tm_score_cutoff` filters by score. `total_count` reports how many matches RCSB found in all.
 
 ## Toolkit Notes
 
@@ -104,6 +104,6 @@ Use this to find experimental structures related to a design or a known protein:
 
 These apply to every PDB tool in this toolkit (`pdb-fetch-entry`, `pdb-fetch-fasta`, `pdb-sequence-search`, `pdb-structure-similarity`).
 
-- **Requires network access.** The tools call the live RCSB PDB HTTP endpoints; they do not run offline and keep no local copy of the archive.
-- **Subject to RCSB rate limits.** RCSB throttles clients that exceed a few requests per second and returns HTTP 429 when the limit is exceeded; space out high-volume requests, since no account or API key is available to raise the limit.
-- **Runs on CPU.** There is no model and no GPU; latency is dominated by the network round-trip.
+- **Requires network access.** The tools call the live RCSB PDB HTTP endpoints. They do not run offline and keep no local copy of the archive.
+- **Subject to RCSB rate limits.** RCSB throttles clients that exceed a few requests per second and returns HTTP 429 when the limit is exceeded. Space out high-volume requests, since no account or API key is available to raise the limit.
+- **Runs on CPU.** There is no model and no GPU. Latency is dominated by the network round-trip.

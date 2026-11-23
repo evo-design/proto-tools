@@ -82,7 +82,7 @@ class BorzoiModel:
             torch.cuda.empty_cache()
 
     def _reload_to_device(self, model: Any, old_device: str, new_device: str) -> Any:  # noqa: ARG002 — required by device transition callback signature
-        """Custom move function: reload the model onto the target GPU.
+        """Reload the model onto the target GPU when moving it.
 
         Borzoi uses flash-attn/Triton kernels that cannot run on CPU, so
         CPU→GPU transitions require a full reload rather than a simple .to().
@@ -200,8 +200,8 @@ class BorzoiModel:
         """Per-term track-and-bin activity gradients for relaxed positions in a Borzoi context.
 
         The context is one-hot encoded, the relaxed distribution is written into the designed
-        positions, and each term's mean track activity over its bin span is differentiated on its
-        own. Only the designed positions carry gradient; the rest of the context is fixed.
+        positions, and each term's mean track activity over its bin span is differentiated
+        separately. Only the designed positions carry gradients. The rest of the context is fixed.
 
         Args:
             sequence: Full ``BORZOI_CONTEXT`` bp context window.
@@ -230,6 +230,7 @@ class BorzoiModel:
         if any(len(row) != 4 for row in logits_list):
             raise ValueError("borzoi: compute_gradient expects L x 4 logits in A,C,G,T order")
 
+        # Load the model, or move it if it already sits on another device.
         if not self._loaded:
             self.load(device, verbose=verbose)
         elif self.device != device:
@@ -237,9 +238,11 @@ class BorzoiModel:
 
         mapping = {"A": 0, "C": 1, "G": 2, "T": 3}
         with torch.set_grad_enabled(backprop):
+            # Wrap the input logits as the leaf tensor the gradient is taken against.
             seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
             relaxed = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
 
+            # One-hot encode the fixed context, skipping any non-ACGT base.
             onehot = torch.zeros(1, 4, BORZOI_CONTEXT, device=self.device)
             fixed_positions = [index for index, char in enumerate(sequence) if char in mapping]
             if fixed_positions:
@@ -253,7 +256,7 @@ class BorzoiModel:
             designed = torch.tensor([p - 1 for p in positions], dtype=torch.long, device=self.device)
             onehot = onehot.index_copy(2, designed, relaxed.t().unsqueeze(0))
 
-            # No inference_mode here: the prediction path uses it, which would block autograd.
+            # Keep autograd enabled here so the model can differentiate the relaxed sequence.
             with torch.autocast(device_type=torch.device(self.device).type):
                 output = self.model(onehot, is_human=(self.species == "human"))
 
@@ -265,8 +268,10 @@ class BorzoiModel:
                 end = int(term["bin_end"])
                 if track >= output.shape[1]:
                     raise ValueError(f"borzoi: track {track} is out of range for {output.shape[1]} output tracks")
+                # Average the track over its 1-indexed inclusive bin span.
                 activity = output[0, track, start:end].float().mean()
 
+                # Differentiate this term's activity back to the relaxed input rows.
                 gradient_value: list[list[float]] | None = None
                 if backprop:
                     retain = position < len(gradient_terms) - 1
@@ -363,7 +368,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "applied_replicate": _model.replicate,
         }
     if operation == "compute_gradient":
-        # One chunk of independent candidates: the weights load once and each is evaluated in turn.
+        # Load the weights once, then evaluate each independent candidate in this chunk.
         results = [
             _model.compute_gradient(
                 sequence=item["sequence"],

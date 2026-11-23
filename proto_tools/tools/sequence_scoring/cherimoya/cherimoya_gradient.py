@@ -49,10 +49,10 @@ class CherimoyaCountsTerm(DifferentiableTerm):
     """Shared selectors for a differentiable Cherimoya read-count quantity.
 
     Both quantities are natural-log read counts, which depend on each experiment's sequencing
-    depth. The value reported is that log count itself, in its own units; a bounded objective
+    depth. The value reported is that log count itself, in the model's units. A bounded objective
     over it is a goal the caller composes, and the centre it should saturate around is
     experiment-specific. For the default model (ENCSR000EOT, K562 DNase-seq) the median fold 0
-    ``log_counts`` over 5,000 sampled hg38 SCREEN cCREs is 4.5; a target span shorter than
+    ``log_counts`` over 5,000 sampled hg38 SCREEN cCREs is 4.5. A target span shorter than
     1,000 bp holds fewer reads, and a BATv1 ChIP-seq model run with its all-zero control
     has its own scale.
 
@@ -92,7 +92,7 @@ class CherimoyaLogCountsTerm(CherimoyaCountsTerm):
 class CherimoyaLogTargetCountsTerm(CherimoyaCountsTerm):
     """ln(expected reads + 1) predicted inside the config's target span.
 
-    Requires ``target_start``/``target_end`` on the config to name a span; without them the
+    Requires ``target_start``/``target_end`` on the config to name a span. Without them the
     span is the whole designed segment.
 
     Attributes:
@@ -342,7 +342,7 @@ class CherimoyaGradientOutput(GradientOutput):
         """
         entries = list(payload["terms"])
         batch_size = int(payload["metrics"]["batch_size"])
-        # The config's catalog is the one place the ids are declared; narrow it to the two
+        # The config's catalog declares the IDs. Narrow it to the two
         # concrete classes, since the shared base pins no id of its own.
         term_classes = cast(
             dict[str, type[CherimoyaLogCountsTerm | CherimoyaLogTargetCountsTerm]],
@@ -430,6 +430,7 @@ def run_cherimoya_gradient(
         CherimoyaGradientOutput: Per-sample loss, metrics, and the gradient with respect to
             each designed segment.
     """
+    # Ensure the flanking context plus the designed segment fills Cherimoya's input window
     length = len(inputs.inputs[0])
     total = len(config.context_left) + length + len(config.context_right)
     if total != CHERIMOYA_CONTEXT:
@@ -437,16 +438,19 @@ def run_cherimoya_gradient(
             f"context_left ({len(config.context_left)}) + inputs ({length}) + context_right "
             f"({len(config.context_right)}) is {total} bp; Cherimoya needs {CHERIMOYA_CONTEXT}"
         )
+    # Locate the log_target_counts span in output-window coordinates, if any term needs it
     target_span = _target_span(config, length)
 
     # Each checkpoint is loaded once even when several terms share a model.
     models = list(dict.fromkeys(term.model for term in config.gradient_terms))
+    # Build one checkpoint spec per (model, fold), taking the union of folds across terms
     specs: list[dict[str, Any]] = []
     for model in models:
         folds = list(
             dict.fromkeys(fold for term in config.gradient_terms if term.model == model for fold in term.folds)
         )
         specs.extend(checkpoint_specs([model], folds, config.collection))
+    # Point each loss term at the indices of the checkpoints it uses
     index = {(spec["model"], spec["fold"]): i for i, spec in enumerate(specs)}
     terms = [
         {
@@ -460,6 +464,7 @@ def run_cherimoya_gradient(
         for term in config.gradient_terms
     ]
 
+    # Evaluate the loss terms on the relaxed logits in the Cherimoya environment
     result = ToolInstance.dispatch(
         "cherimoya",
         {
@@ -482,6 +487,7 @@ def run_cherimoya_gradient(
         instance=instance,
         config=config,
     )
+    # Package per-sample losses, metrics and gradients with the models that were applied
     return CherimoyaGradientOutput.from_batch(
         result,
         model_infos(models, config.collection, specs, result["applied"]),

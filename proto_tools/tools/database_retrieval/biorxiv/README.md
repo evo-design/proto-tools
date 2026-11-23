@@ -37,7 +37,7 @@ Use details to cite the exact version of a preprint that reports a result, to ch
 - The bioRxiv API has no keyword search. To find preprints by topic, use `europepmc-search` with `SRC:PPR` in the query, then pass the DOI of a hit here.
 - DOIs may be bare (`10.1101/2022.12.09.519842`) or a `https://doi.org/` link. Newer bioRxiv and medRxiv DOIs use the `10.64898` prefix.
 - The default `server="auto"` tries bioRxiv, then medRxiv. Both servers issue the same DOI prefixes, so the prefix does not identify the server. The result's `server` field names the one that answered. Set `server="biorxiv"` or `server="medrxiv"` to query only that server.
-- A DOI that is not found, or that the API rejects, returns a record with `error` set and no metadata; the other DOIs in the call still return.
+- A DOI that is not found, or that the API rejects, returns a record with `error` set and no metadata. The other DOIs in the call still return.
 - Take `published_doi` to `europepmc-search` (`DOI:"..."`) to find the published article and its PMCID.
 - Each version's `jats_xml_url` is bioRxiv's full text, including for preprints whose full text Europe PMC does not hold. bioRxiv serves these files behind Cloudflare rate limits, so space out bulk downloads and expect occasional HTTP 429 responses.
 - `paperclip-literature-*` also indexes bioRxiv and medRxiv full text, with line-numbered reading, but needs a `PAPERCLIP_API_KEY`.
@@ -46,5 +46,5 @@ Use details to cite the exact version of a preprint that reports a result, to ch
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-- **Requires network access.** Every call is an HTTPS request to the bioRxiv API; no API key is needed.
-- **Runs in process on CPU.** There is no environment to build and no worker to start; runtime is dominated by remote retrieval.
+- **Requires network access.** Every call is an HTTPS request to the bioRxiv API. No API key is needed.
+- **Runs in process on CPU.** There is no environment to build and no worker to start. Runtime is dominated by remote retrieval.

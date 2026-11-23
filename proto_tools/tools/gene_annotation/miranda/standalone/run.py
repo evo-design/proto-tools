@@ -114,12 +114,12 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def to_device(device: str) -> dict[str, Any]:
-    """DeviceManager protocol no-op: miRanda is a CPU CLI tool that auto-unloads."""
+    """Leave the device unchanged because miRanda is a CPU CLI tool that auto-unloads."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """DeviceManager protocol stub: miRanda is CPU-only, so no GPU memory to report."""
+    """Report no GPU memory usage because miRanda is CPU-only."""
     return {"available": False, "framework": "cpu", "reason": "CPU tool"}
 
 

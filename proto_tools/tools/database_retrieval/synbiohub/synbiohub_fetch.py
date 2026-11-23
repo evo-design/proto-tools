@@ -496,6 +496,7 @@ def _parse_part(
     sequences: dict[str, str],
 ) -> SynBioHubPart:
     """Parse one ComponentDefinition."""
+    # Map the BioPAX type to a molecule kind, defaulting to 'other'
     molecule: SynBioHubMolecule = next(
         (
             _BIOPAX_MOLECULES[fragment]
@@ -504,14 +505,17 @@ def _parse_part(
         ),
         "other",
     )
+    # Read the topology from the SO types and the sequence from its referenced Sequence
     topology = next(
         (_SO_TOPOLOGIES[term] for term in _so_terms(_resources(element, "type")) if term in _SO_TOPOLOGIES), None
     )
     sequence = next((sequences[ref] for ref in _resources(element, "sequence") if ref in sequences), None)
+    # Map each Component URI to the subpart definition it instantiates
     subpart_by_component = {
         component.get(f"{_RDF}about", ""): _resource(component, "definition")
         for component in element.findall(f"{_SBOL}component/{_SBOL}Component")
     }
+    # Collect sequence annotations that carry at least one Range location
     features = []
     for annotation in element.findall(f"{_SBOL}sequenceAnnotation/{_SBOL}SequenceAnnotation"):
         locations = [
@@ -524,6 +528,7 @@ def _parse_part(
         ]
         if not locations:
             continue
+        # Fall back to the subpart's name and roles when the annotation has none
         subpart_uri = subpart_by_component.get(_resource(annotation, "component") or "")
         subpart = definitions.get(subpart_uri or "")
         features.append(

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class ParadeStabilityGradientInput(BatchedNucleotideGradientInput):
-    """Input for the PARADE stability gradient tool: one or many relaxed 3' UTR states.
+    """One or more relaxed 3' UTR states for the PARADE stability gradient tool.
 
     Attributes:
         inputs (list[NucleotideSequenceLogits]): One relaxed ``(L, 4)`` DNA state per candidate in
@@ -42,7 +42,7 @@ class ParadeStabilityGradientInput(BatchedNucleotideGradientInput):
 
 
 class ParadeStabilityLogRatioTerm(DifferentiableTerm):
-    """PARADE stability's one differentiable quantity: the predicted RNA/gDNA log-ratio.
+    """Predicted RNA/gDNA log-ratio, PARADE stability's differentiable quantity.
 
     The tool exposes a single scalar, so the term carries no selectors beyond the identifier
     naming what it is.

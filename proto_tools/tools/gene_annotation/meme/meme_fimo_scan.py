@@ -1,4 +1,4 @@
-"""MEME Suite FIMO motif scanning: find occurrences of known motifs in sequences."""
+"""Find occurrences of known motifs in sequences with MEME Suite FIMO."""
 
 import warnings
 from pathlib import Path
@@ -55,7 +55,7 @@ class FimoSequenceMatches(BaseModel):
     """All motif occurrences found in a single target sequence.
 
     One of these is returned per input sequence (positionally aligned to
-    ``MEMEFimoScanInput.sequences``); a sequence with no occurrences yields an
+    ``MEMEFimoScanInput.sequences``). A sequence with no occurrences yields an
     empty ``matches`` list.
 
     Attributes:
@@ -111,7 +111,7 @@ class MEMEFimoScanInput(BaseToolInput):
 class MEMEFimoScanConfig(BaseConfig):
     """Configuration for FIMO motif scanning.
 
-    Exposes the two FIMO settings end users commonly set; defaults reproduce FIMO's
+    Exposes the two FIMO settings end users commonly set. Defaults reproduce FIMO's
     command-line behavior for nucleotide motifs.
 
     Attributes:

@@ -257,6 +257,7 @@ def run_progen2_sample(
         - Original ProGen2 GitHub: https://github.com/enijkamp/progen2
     """
     logger.debug(f"Using local venv for ProGen2 sampling: {config.model_checkpoint}")
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "progen2",
         {

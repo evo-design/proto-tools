@@ -22,14 +22,17 @@ logger = get_logger(__name__)
 
 def _extract_structure_and_scores(output_dir: str, include_pae_matrix: bool = False) -> dict[str, Any]:
     """Read the best sample's CIF and confidence values without changing their scales."""
+    # Collect one confidence summary per diffusion sample
     summaries = sorted(Path(output_dir).rglob("*_summary_confidence_sample_*.json"))
     if not summaries:
         raise FileNotFoundError(f"mol1: prediction produced no confidence files under {output_dir}")
+    # Keep the highest-ranked sample and the CIF written beside its summary
     candidates = [(path, json.loads(path.read_text())) for path in summaries]
     if any(not math.isfinite(float(summary["ranking_score"])) for _, summary in candidates):
         raise ValueError("mol1: prediction produced a non-finite ranking score")
     summary_path, summary = max(candidates, key=lambda candidate: float(candidate[1]["ranking_score"]))
     cif_path = summary_path.with_name(summary_path.name.replace("_summary_confidence", "")).with_suffix(".cif")
+    # Copy the upstream confidence values through unchanged
     metrics = {
         "ranking_score": float(summary["ranking_score"]),
         "avg_plddt": float(summary["plddt"]),
@@ -40,6 +43,7 @@ def _extract_structure_and_scores(output_dir: str, include_pae_matrix: bool = Fa
         "chain_plddt": summary["chain_plddt"],
         "chain_pair_iptm": summary["chain_pair_iptm"],
     }
+    # The token-pair PAE lives in the companion full-data file, not the summary
     if include_pae_matrix:
         full_path = summary_path.with_name(summary_path.name.replace("_summary_confidence", "_full_data"))
         pae = json.loads(full_path.read_text()).get("token_pair_pae")
@@ -51,6 +55,7 @@ def _extract_structure_and_scores(output_dir: str, include_pae_matrix: bool = Fa
         ):
             raise ValueError("mol1: token_pair_pae must be a non-empty square matrix of finite numbers")
         metrics["pae"] = pae
+        # Average over every token pair in the square matrix
         metrics["avg_pae"] = sum(sum(row) for row in pae) / len(pae) ** 2
     return {"structure_cif_output": cif_path.read_text(), "metrics": metrics}
 

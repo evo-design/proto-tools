@@ -34,9 +34,9 @@ This tool produces candidate DNA sequences for downstream design and screening, 
 
 #### Usage Tips
 
-- **Match the checkpoint to the task.** `evo-1-8k-base` (the default) is the general prokaryotic and phage DNA model and `evo-1-131k-base` is its genome-scale, long-context counterpart. `evo-1-8k-crispr` and `evo-1-8k-transposon` are task-specific variants of `evo-1-8k-base` for generating CRISPR-Cas systems and IS200/IS605 transposons; use them when generating those systems and a base checkpoint otherwise.
-- **`top_k` defaults to 4, the size of the DNA alphabet.** Sampling is already limited to the four bases, so values of 4 or more do not narrow it further, and `top_k` is not the diversity parameter; control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
-- **Output excludes the prompt by default.** `prepend_prompt=False` returns only the newly generated nucleotides, not the prompt joined to its continuation; set it `True` if you need the full sequence back. Prompts are not validated, so with `prepend_prompt=True` the prompt part is returned exactly as given (any case or characters), and only the generated part is guaranteed to be `ACGT`.
+- **Match the checkpoint to the task.** `evo-1-8k-base` (the default) is the general prokaryotic and phage DNA model and `evo-1-131k-base` is its genome-scale, long-context counterpart. `evo-1-8k-crispr` and `evo-1-8k-transposon` are task-specific variants of `evo-1-8k-base` for generating CRISPR-Cas systems and IS200/IS605 transposons. Use them when generating those systems and a base checkpoint otherwise.
+- **`top_k` defaults to 4, the size of the DNA alphabet.** Sampling is already limited to the four bases, so values of 4 or more do not narrow it further, and `top_k` is not the diversity parameter. Control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
+- **Output excludes the prompt by default.** `prepend_prompt=False` returns only the newly generated nucleotides, not the prompt joined to its continuation. Set it `True` if you need the full sequence back. Prompts are not validated, so with `prepend_prompt=True` the prompt part is returned exactly as given (any case or characters), and only the generated part is guaranteed to be `ACGT`.
 - **Prompt length plus `max_new_tokens` must fit the checkpoint's context window** (8,192 nucleotides for the 8k checkpoints, 131,072 for `evo-1-131k-base`). The model cannot attend beyond that window, so a long prompt directly reduces how much can be generated.
 - **Generated sequences are candidates.** Validate them with downstream tools (for example ORF detection, structure prediction, or homology search) before drawing biological conclusions.
 
@@ -50,7 +50,7 @@ This tool measures how well a DNA sequence matches the patterns the model learne
 
 #### Usage Tips
 
-- **Compare length-normalized scores within one checkpoint.** Total `log_likelihood` scales with sequence length, so use `perplexity` or `avg_log_likelihood` when comparing sequences of different lengths. Different checkpoints learn different distributions that are not calibrated to a common scale, so scores from different `model_name` values are hard to compare directly; a lower perplexity means the sequence is more consistent with that checkpoint's training distribution.
+- **Compare length-normalized scores within one checkpoint.** Total `log_likelihood` scales with sequence length, so use `perplexity` or `avg_log_likelihood` when comparing sequences of different lengths. Different checkpoints learn different distributions that are not calibrated to a common scale, so scores from different `model_name` values are hard to compare directly. A lower perplexity means the sequence is more consistent with that checkpoint's training distribution.
 - **`return_logits` defaults to `False`.** Leave it off unless you need the per-position distributions, since the logits tensor is large (sequence length by a 512-token vocabulary).
 
 ## Toolkit Notes
@@ -59,6 +59,6 @@ This tool measures how well a DNA sequence matches the patterns the model learne
 
 These apply to every Evo1 tool in this toolkit (`evo1-sample`, `evo1-score`).
 
-- **Requires a GPU.** An NVIDIA GPU with at least 24 GB of memory is recommended; CPU execution is possible but very slow and not practical for typical use.
-- **`batch_size` trades memory for throughput across both tools.** It sets how many prompts (`evo1-sample`) or sequences (`evo1-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it (default `4` for `evo1-sample`, `8` for `evo1-score`) if generation or scoring runs out of GPU memory.
+- **Requires a GPU.** An NVIDIA GPU with at least 24 GB of memory is recommended. CPU execution is possible but very slow and not practical for typical use.
+- **`batch_size` trades memory for throughput across both tools.** It sets how many prompts (`evo1-sample`) or sequences (`evo1-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences. Lower it (default `4` for `evo1-sample`, `8` for `evo1-score`) if generation or scoring runs out of GPU memory.
 - **Trained on prokaryotic and phage genomes.** Predictions are most reliable within that domain. For eukaryotic genomes or longer context, use [Evo2](https://bio-pro.mintlify.app/tools/causal-models/evo2).

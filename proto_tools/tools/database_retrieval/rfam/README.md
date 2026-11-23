@@ -39,8 +39,8 @@ Family records provide context for interpreting RNA annotations. The consensus s
 #### Usage Tips
 
 - **Families can be identified by accession or ID.** For example, `RF01731` and `TwoAYGGAY` identify the same [Rfam family](https://rfam.org/family/RF01731). The output reports both identifiers.
-- **Consensus annotations use alignment coordinates.** `consensus_structure` contains the Stockholm `SS_cons` annotation in [WUSS notation](https://docs.rfam.org/en/latest/glossary.html#wuss-format); `consensus_sequence` contains the `RF` reference annotation. These strings include alignment columns and should not be interpreted as an unaligned nucleotide sequence or genomic coordinates.
-- **Structural annotations have different sources.** Rfam includes both experimentally supported and computationally predicted structures. The `structure_source` field records provenance when available; the [Rfam documentation](https://docs.rfam.org/en/latest/building-families.html) explains why an underlying publication may be needed to establish the type of evidence.
+- **Consensus annotations use alignment coordinates.** `consensus_structure` contains the Stockholm `SS_cons` annotation in [WUSS notation](https://docs.rfam.org/en/latest/glossary.html#wuss-format). `consensus_sequence` contains the `RF` reference annotation. These strings include alignment columns and should not be interpreted as an unaligned nucleotide sequence or genomic coordinates.
+- **Structural annotations have different sources.** Rfam includes both experimentally supported and computationally predicted structures. The `structure_source` field records provenance when available. The [Rfam documentation](https://docs.rfam.org/en/latest/building-families.html) explains why an underlying publication may be needed to establish the type of evidence.
 - **The seed alignment is optional in the output.** Set `include_seed_alignment=True` to retain it and enable `sto` export. The tool downloads the alignment to extract the consensus annotations even when this option is disabled. Family records can also be exported as JSON.
 
 ### Rfam Regions (`rfam-regions`)
@@ -57,7 +57,7 @@ Region records locate candidate family members in the sequences represented by R
 - **Filters are applied after download.** `taxid` matches an exact taxonomy ID, `species` matches a case-insensitive substring, and `sequence_accession` accepts either a versioned or an unversioned accession. When several filters are provided, a region must satisfy all of them.
 - **The return limit applies after filtering.** `max_regions` defaults to 500. `total_regions` reports the family-wide count, `matched_regions` counts all regions satisfying the filters, and `truncated` indicates that some matching regions were omitted. The limit does not reduce the size of the download.
 - **Some families are too large for the endpoint.** The [Rfam API documentation](https://docs.rfam.org/en/latest/api.html#sequence-regions) states that the server can refuse region downloads for very large families. Local filters cannot bypass this restriction.
-- **Region tables can be exported.** JSON preserves the full output, including counts and release information; TSV and CSV contain the returned region rows.
+- **Region tables can be exported.** JSON preserves the full output, including counts and release information. TSV and CSV contain the returned region rows.
 
 ## Toolkit Notes
 

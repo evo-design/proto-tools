@@ -37,7 +37,7 @@ from proto_tools.utils.tool_io import Directionality
 
 
 class ParadeActivityTerm(DifferentiableTerm):
-    """One differentiable PARADE UTR-activity quantity: a single cell's predicted activity.
+    """Predicted PARADE UTR activity for one cell.
 
     Attributes:
         id (Literal["activity"]): Fixed identifier for this kind of quantity. Every cell's term
@@ -165,7 +165,7 @@ class ParadeGradientConfig(_SafeCheckpointUrlConfigMixin, RelaxationConfig):
         """Reject a construct that strands an already-selected cell, before the assignment lands.
 
         This runs *before* the field is written, so a rejected assignment leaves the config
-        unchanged. The model validator below cannot do that: it runs after Pydantic has already
+        unchanged. The model validator below runs after Pydantic has already
         mutated the field, so raising there would leave an invalid construct in place. At
         construction time ``info.data`` has no ``gradient_terms`` yet, which is why both exist.
         """

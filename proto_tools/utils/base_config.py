@@ -1,7 +1,4 @@
-"""proto_tools/utils/base_config.py.
-
-Base configuration class for all pydantic configs.
-"""
+"""Shared configuration models and field metadata for tools."""
 
 import getpass
 import json
@@ -86,7 +83,7 @@ def ConfigField(
     credential: str | None = None,
     **kwargs: Any,
 ) -> Any:
-    """Custom Field wrapper that automatically adds metadata flags to json_schema_extra.
+    """Define a config field and add its framework metadata to ``json_schema_extra``.
 
     Args:
         default (Any): Default value. Use ``...`` for required fields.
@@ -99,7 +96,7 @@ def ConfigField(
             verbose, timeout) should set this to False.
         credential (str | None): Marks the field as a credential (an API key, or a contact
             email sent with requests) and names the environment variable it falls back to.
-            A value set in the config takes precedence; a blank one counts as unset. The
+            A value set in the config takes precedence. A blank value counts as unset. The
             field defaults from the environment, never enters the cache key, and is left
             out of ``repr``. Anything that persists or displays configs should drop it.
         kwargs: All other standard Pydantic Field arguments.
@@ -211,7 +208,7 @@ class BaseConfig(BaseModel):
         include_in_key=False,
     )
 
-    # Fields a nested config takes from the config holding it when it did not set its own.
+    # If a nested config leaves one of these fields unset, it inherits the value from its parent.
     # A nested config is part of one call, so settings that describe how that call should be
     # carried out belong to the whole tree rather than to whichever config was named directly.
     INHERITED_BY_NESTED_CONFIGS: ClassVar[tuple[str, ...]] = ("verbose",)
@@ -242,9 +239,9 @@ class BaseConfig(BaseModel):
     def for_hosted_env(self) -> "BaseConfig":
         """Return a config this call can honour in a hosted environment.
 
-        A hosted environment runs tools for someone else and cannot stage a large corpus on
-        demand, so a setting that depends on one has to give way. Return a copy with that setting
-        changed; the default changes nothing, which is what almost every config wants.
+        A hosted environment cannot stage a large corpus on demand. Override
+        this method to return a copy with settings adjusted for that restriction.
+        The default returns the config unchanged.
 
         Only reached when ``preprocess`` runs in the hosted process itself. A caller who prepared
         the work on their own machine keeps every setting they chose, since the corpus was
@@ -279,11 +276,11 @@ class BaseConfig(BaseModel):
     def to_transport_dict(self, **dump_kwargs: Any) -> dict[str, Any]:
         """Serialize for dispatch to another process, including framework state.
 
-        Used instead of :meth:`model_dump` when sending a config to a remote device, so the
-        receiver learns that preprocess already ran. Serialization is explicit rather than a
-        :func:`model_serializer` override so that :meth:`cache_key`, which dumps the same model,
-        cannot pick the state up and split the cache between caller and worker. A sender that
-        forgets this method therefore sends no state, and the worker preprocesses as it does today.
+        Use this instead of :meth:`model_dump` for remote dispatch so the worker
+        knows preprocessing is complete. Keeping this separate from the model
+        serializer prevents framework state from changing :meth:`cache_key`.
+        A sender using ``model_dump`` sends no state, so the worker preprocesses
+        the inputs again.
 
         Args:
             dump_kwargs (Any): Passed to :meth:`model_dump`, letting each transport keep its own
@@ -410,16 +407,13 @@ class BaseConfig(BaseModel):
 
         Read by ToolPool only when ``gpus_per_instance == 0`` (CPU mode):
 
-            - ``None`` (default): no fan-out. ToolPool dispatches a single
-              direct call with all items and ``pool.cpus`` is ignored — the
-              tool stays off the pool's CPU scheduler. This is the safe
-              default: spinning up N persistent worker subprocesses (each
-              holding its own venv in RAM, each paying a startup tax) only
-              pays off when per-call work is heavy enough to amortize that
-              cost. For most CPU tools — short per-item compute, internal
-              threading (mmseqs2 ``--threads``, mafft), or network IO
-              against rate-limited services (NCBI, UniProt, RCSB) — the
-              single direct call is the right answer.
+            - ``None`` is the default. ToolPool makes one direct call with all
+              items and ignores ``pool.cpus``. Each extra subprocess consumes
+              memory and takes time to start, so parallel workers help only
+              when individual calls do enough work to offset that cost. Most
+              CPU tools should keep this default, including quick operations,
+              tools with internal threading such as MMseqs2 and MAFFT, and
+              requests to rate-limited services such as NCBI, UniProt, and RCSB.
             - Positive int N: opt in to fan-out. ToolPool spawns
               ``max(1, pool.cpus // N)`` independent worker subprocesses,
               partitions items via LPT, and pins each worker's
@@ -428,8 +422,9 @@ class BaseConfig(BaseModel):
               startup, (b) the tool is single-threaded (or N-threaded) per
               call, and (c) items are embarrassingly parallel.
 
-        Canonical opt-in: PyRosetta (heavy ``init``, multi-second per pose,
-        independent poses). Most other CPU tools should leave the default.
+        PyRosetta benefits from this option because initialization is expensive,
+        scoring takes several seconds per pose, and poses are independent. Most
+        other CPU tools should keep the default.
 
         When ``gpus_per_instance > 0`` this property is ignored.
         """
@@ -660,13 +655,13 @@ def _marked_preprocessed(config: BaseConfig) -> BaseConfig:
 def run_preprocess(config: BaseConfig, inputs: BaseToolInput) -> tuple[BaseToolInput, BaseConfig]:
     """Run ``config.preprocess`` with the config frozen, returning prepared inputs and config.
 
-    Accepts either return shape: bare prepared inputs (the common case), or
-    ``(inputs, config)`` when preprocess also resolves a config setting that execution must
-    see. Callers always get the pair, so the two shapes are normalized in one place.
+    ``preprocess`` may return prepared inputs alone or an ``(inputs, config)``
+    pair when it also resolves settings needed for execution. Normalize both
+    forms to a pair for the caller.
 
-    Freezing makes the no-mutation contract enforced rather than merely documented: a
-    ``preprocess`` that assigns to ``self`` (or to a nested config the caller owns) raises at
-    the offending line instead of silently changing the caller's config for later calls.
+    Freeze the config and its nested configs during preprocessing. Assigning to
+    one then raises at the assignment instead of changing the caller's settings
+    for later calls.
 
     Args:
         config (BaseConfig): Config whose ``preprocess`` to run.

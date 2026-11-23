@@ -72,8 +72,8 @@ _PROTENIX_V2_MAX_TOKENS = 2560
 class ProtenixInput(StructurePredictionInput):
     """Input object for Protenix structure prediction.
 
-    This class defines the input parameters for predicting 3D structures of proteins,
-    DNA, RNA, and ligands using Protenix, an open-source reimplementation of AlphaFold3.
+    Provide proteins, DNA, RNA, and ligands for 3D structure prediction with Protenix,
+    an open-source reimplementation of AlphaFold3.
 
     Inherits from ``StructurePredictionInput``.
 
@@ -111,6 +111,7 @@ class ProtenixInput(StructurePredictionInput):
         comp = self.complexes[complex_idx]
         sequences = []
 
+        # Build one Protenix sequence entry per chain
         for chain in comp.chains:
             entry: dict[str, Any]
             if isinstance(chain, Fragment):
@@ -124,6 +125,7 @@ class ProtenixInput(StructurePredictionInput):
             e_type = chain.entity_type
             seq = chain.sequence
 
+            # Map protein PTMs to CCD-coded ptmType entries
             if e_type == "protein":
                 entry = {"proteinChain": {"sequence": seq, "count": 1}}
                 if chain.modifications:
@@ -135,6 +137,7 @@ class ProtenixInput(StructurePredictionInput):
                         for mod in chain.modifications
                     ]
 
+            # Map DNA and RNA modifications the same way, with nucleotide field names
             elif e_type == "dna":
                 entry = {"dnaSequence": {"sequence": seq, "count": 1}}
                 if chain.modifications:
@@ -245,9 +248,8 @@ class ProtenixOutput(StructurePredictionOutput):
 class ProtenixConfig(MSAStructurePredictionConfig):
     """Configuration object for Protenix structure prediction.
 
-    This class defines configuration parameters for running Protenix, an open-source
-    reimplementation of AlphaFold3 by ByteDance Research. Protenix is a multi-modal
-    structure prediction model supporting proteins, DNA, RNA, and ligands.
+    Configure Protenix, ByteDance Research's open-source reimplementation of
+    AlphaFold3 for proteins, DNA, RNA, and ligands.
 
     Inherits from ``MSAStructurePredictionConfig``.
 

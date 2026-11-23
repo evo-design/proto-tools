@@ -1,10 +1,4 @@
-"""proto_tools/tools/structure_prediction/alphafold3/alphafold3.py.
-
-Protein structure prediction using AlphaFold3.
-
-This module provides standardized interfaces for protein structure prediction
-using AlphaFold3 from Google DeepMind.
-"""
+"""Predict protein structures with Google DeepMind's AlphaFold3."""
 
 import json
 import logging
@@ -50,8 +44,8 @@ AlphaFold3JSON = dict[str, Any]
 class AlphaFold3Input(StructurePredictionInput):
     """Input object for AlphaFold3 structure prediction.
 
-    This class defines the input parameters for predicting 3D structures of proteins,
-    nucleic acids, and ligands using AlphaFold3.
+    Provide proteins, nucleic acids, and ligands for 3D structure prediction with
+    AlphaFold3.
 
     Inherits from ``StructurePredictionInput``.
 
@@ -145,8 +139,8 @@ class AlphaFold3Output(StructurePredictionOutput):
 class AlphaFold3Config(MSAStructurePredictionConfig):
     """Configuration object for AlphaFold3 structure prediction.
 
-    This class defines configuration parameters for running AlphaFold3, a state-of-the-art
-    multi-modal structure predictor.
+    Configure AlphaFold3 structure prediction for complexes containing
+    different molecule types.
 
     Inherits from ``MSAStructurePredictionConfig``.
 

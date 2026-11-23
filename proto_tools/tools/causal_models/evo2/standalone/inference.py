@@ -115,9 +115,10 @@ class Evo2Model:
     ) -> dict[str, Any]:
         """Generate continuations in one continuously batched vLLM submission.
 
-        Legacy batch_size and force_prompt_threshold are compatibility arguments;
-        vLLM schedules ragged requests and chunked prefill automatically. Cache
-        handles retain exact token prefixes; vLLM owns and may evict their GPU state.
+        ``batch_size`` and ``force_prompt_threshold`` are retained for compatibility.
+        vLLM handles variable-length requests and chunked prefill automatically.
+        Cache handles retain exact token prefixes, while vLLM manages their GPU state
+        and may evict it.
         """
         self._ready(device)
         from vllm import SamplingParams
@@ -125,6 +126,7 @@ class Evo2Model:
 
         if not prompts:
             raise ValueError("evo2: cannot generate from an empty prompt list")
+        # Reuse cached token prefixes when supplied, then check the total context length.
         ids = []
         for prompt in prompts:
             if old_kv_cache is None:
@@ -178,8 +180,8 @@ class Evo2Model:
             if return_kv_cache:
                 caches.append({"tokens": prefix_ids + tokens, "text": prompt + text})
             if return_logits:
-                # Full-vocabulary logits are deliberately opt-in: reconstruct
-                # them by prefill only for this request, without padding neighbors.
+                # Recompute optional full-vocabulary logits for this request alone,
+                # without padding it to match neighboring requests.
                 if tokens:
                     tensor = torch.tensor([prefix_ids + tokens[:-1]], dtype=torch.long, device="cuda:0")
                     logits, _ = self.model(tensor)
@@ -279,15 +281,19 @@ _model: Evo2Model | None = None
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Execute a tool operation in the managed standalone worker."""
     global _model
+    # Reject KV-cache handles in a one-shot script run, since they live in worker memory
     _ensure_cache_handles_use_persistent_worker(input_dict)
     operation = input_dict["operation"]
+    # Drop released KV caches from the worker-local store
     if operation == "release_kv_caches":
         _release_cache_handles(input_dict.get("kv_caches"))
         return {"released": True}
     if operation not in ("sample", "score"):
         raise ValueError(f"evo2: unknown operation {operation!r}")
+    # Load the model once and reuse it across calls
     if _model is None:
         _model = Evo2Model(input_dict["model_checkpoint"], input_dict.get("local_path"))
+    # Forward only the sampling arguments the caller supplied
     if operation == "sample":
         keys: tuple[str, ...] = (
             "prompts",
@@ -308,12 +314,15 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "seed",
         )
         kwargs = {k: input_dict[k] for k in keys if k in input_dict}
+        # Swap a KV-cache handle for the cached state it points to
         handle = input_dict.get("old_kv_cache")
         kwargs["old_kv_cache"] = _resolve_cache_handle(handle) if handle is not None else None
         result = _model.sample(**kwargs)
+        # Keep returned KV caches in the worker and hand back handles instead
         if result["kv_caches"] is not None:
             result["kv_caches"] = [_store_cache_handle(c) for c in result["kv_caches"]]
         return result
+    # Otherwise score the sequences
     keys = ("sequences", "device", "batch_size", "return_logits", "prepend_bos", "seed")
     return _model.score(**{k: input_dict[k] for k in keys if k in input_dict})
 

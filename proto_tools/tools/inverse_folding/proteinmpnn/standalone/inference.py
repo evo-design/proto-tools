@@ -237,6 +237,7 @@ class ProteinMPNNModel:
         position into the key, leaving index 0 on the base key so a lone candidate and the first
         of a batch agree.
         """
+        # Check the logits are a non-empty L x 20 matrix
         if not logits_list:
             raise ValueError("proteinmpnn: compute_gradient requires at least one residue")
         if any(len(row) != len(CANONICAL_VOCAB) for row in logits_list):
@@ -247,6 +248,7 @@ class ProteinMPNNModel:
         from colabdesign.shared.utils import copy_dict
         from standalone_helpers import set_jax_seed
 
+        # Build the JAX key, offset by the candidate's index within its batch
         key = set_jax_seed(seed)
         if key is None:
             raise ValueError(
@@ -255,8 +257,10 @@ class ProteinMPNNModel:
         if seed_index:
             key = jax.random.fold_in(key, seed_index)
 
+        # Load the model without backbone noise so the gradient is deterministic for a key
         self._ensure_loaded(device, model_choice, verbose, backbone_noise=0.0)
 
+        # Featurize the structure with the fixed positions and chains to design
         fix_pos = (
             ",".join(f"{chain}{idx}" for chain, positions in fixed_positions.items() for idx in positions)
             if fixed_positions is not None
@@ -268,32 +272,39 @@ class ProteinMPNNModel:
             chain=",".join(chain_ids),
         )
 
+        # Check the logits cover every parsed residue
         parsed_len = int(self.model._inputs["S"].shape[0])
         if len(logits_list) != parsed_len:
             raise ValueError(f"Logits length {len(logits_list)} does not match structure ({parsed_len} residues).")
 
+        # Drop the native sequence so the relaxed sequence replaces it in the loss
         base_inputs = copy_dict(self.model._inputs)
         base_inputs.pop("S", None)
         raw_logits = jnp.asarray(logits_list, dtype=jnp.float32)
         canonical_to_af = jnp.asarray(CANONICAL_TO_PROTEINMPNN_INDICES, dtype=jnp.int32)
 
         def _loss_fn(logits: Any) -> Any:
+            # Relax the logits into a soft or straight-through one-hot sequence
             context_canonical = relaxed_sequence_jax(logits, temperature=temperature, soft=soft, hard=hard)
             # NLL labels are the decoded sequence, not the blend; softmax is monotonic, so argmax(logits) suffices.
             labels_canonical = jax.nn.one_hot(jnp.argmax(logits, axis=-1), len(CANONICAL_VOCAB))
 
+            # Reorder both into the AlphaFold amino acid order ProteinMPNN uses
             context_af = context_canonical[:, canonical_to_af]
             labels_af = labels_canonical[:, canonical_to_af]
 
+            # Score the relaxed sequence and take the NLL of the decoded residues
             output = self.model._score(**base_inputs, key=key, S=context_af)
             log_probs = jax.nn.log_softmax(output["logits"], axis=-1)[..., :20]
             per_position_nll = -(labels_af * log_probs).sum(axis=-1)
 
+            # Average over valid residues, excluding fixed positions
             mask = jnp.asarray(base_inputs["mask"], dtype=per_position_nll.dtype)
             if "fix_pos" in base_inputs:
                 mask = mask.at[jnp.asarray(base_inputs["fix_pos"])].set(0.0)
             return (per_position_nll * mask).sum() / (mask.sum() + 1e-8)
 
+        # Take the gradient with respect to the canonical-order logits, or just the loss
         if backprop:
             loss_value, gradient = jax.value_and_grad(_loss_fn)(raw_logits)
             gradient_value: list[list[float]] | None = np.asarray(gradient).tolist()
@@ -304,6 +315,7 @@ class ProteinMPNNModel:
         mean_nll = float(loss_value)
         effective_length = _effective_score_length(base_inputs)
 
+        # Free the model, then return the gradient with the NLL metrics
         self.unload()
         return {
             "gradient": gradient_value,
@@ -413,7 +425,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         _model = ProteinMPNNModel()
 
     operation = input_dict["operation"]
-    # The gradient operation carries one backbone per item; sample and score take a single one.
+    # Gradient candidates each carry a backbone. Sampling and scoring use one backbone per call.
     pdb_path = input_dict.get("pdb_path", "")
     model_choice = input_dict["model_choice"]
     if operation == "sample":
@@ -445,7 +457,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
         )
     if operation == "compute_gradient":
-        # One chunk of independent candidates: the weights load once and prep_inputs re-runs per item.
+        # Load weights once for this chunk and prepare each candidate's backbone independently.
         results = [
             _model.compute_gradient(
                 pdb_path=item["pdb_path"],

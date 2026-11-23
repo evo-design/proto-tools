@@ -9,9 +9,9 @@ Atom/bond detail and 2D/3D rendering are not produced here — the calling
 tool reconstructs an RDKit ``Mol`` from the canonical SMILES, and
 ``Fragment.visualize()`` covers visualization on the consumer side.
 
-This module runs in an isolated micromamba environment and MUST NOT import
-from `proto_tools`. All heavy chemistry deps are imported lazily inside
-function bodies to keep subprocess startup cost minimal.
+This module runs in an isolated micromamba environment and must not import
+from `proto_tools`. Import chemistry dependencies inside functions to keep
+subprocess startup fast.
 """
 
 from __future__ import annotations
@@ -161,9 +161,9 @@ def _parses_as_smiles(s: str) -> bool:
 def _compute_ccd_indices(components_path: str) -> tuple[dict[str, str], dict[str, str]]:
     """Build canonical SMILES and InChIKey -> CCD code maps from the CCD bundle.
 
-    Expensive: parses every block of the CCD (about a minute and several GB of
-    memory). Blocks that fail to parse are skipped. Ambiguous InChIKeys
-    (multiple codes mapping to one key) are dropped to keep lookups deterministic.
+    Parse every CCD block, taking about a minute and several GB of memory. Blocks that fail
+    to parse are skipped. Ambiguous InChIKeys (multiple codes mapping to one key) are
+    dropped to keep lookups deterministic.
 
     Args:
         components_path (str): Path to the uncompressed components.cif.
@@ -436,8 +436,8 @@ def _physchem_properties(component: Any, mol: Any) -> dict[str, float]:
 
     Pulls documented values from ``component.physchem_properties`` (RDKit
     Properties() output) when available, falling back to direct RDKit calls for
-    any missing key. Always returns the same key schema; pdbeccdutils' bulk
-    descriptor output (chi*/kappa*/etc.) is intentionally dropped.
+    any missing key. Return a consistent set of keys. Omit pdbeccdutils' bulk
+    descriptor output, such as chi and kappa indices.
     """
     from rdkit.Chem import Crippen, Descriptors, Lipinski
 
@@ -733,11 +733,13 @@ def _process_identifiers(
     records: list[dict[str, Any]] = []
     for raw_id in StatusCounter(logger, "Looking up compound %d/%d", identifiers):
         identifier = (raw_id or "").strip()
+        # Record blank identifiers as errors without looking them up
         if not identifier:
             records.append(_empty_record(None, ["Empty identifier"]))
             continue
 
         try:
+            # Read the identifier as a CCD code or a SMILES, warning when both fit
             is_ccd = identifier_type == "ccd_code" or (identifier_type == "auto" and _is_likely_ccd_code(identifier))
             resolved_code: str | None = None
             warnings: list[str] = []
@@ -747,6 +749,7 @@ def _process_identifiers(
                     "set identifier_type='smiles' to read it as one"
                 )
 
+            # Uppercase CCD codes directly, or resolve a SMILES to its matching CCD code
             if is_ccd:
                 resolved_code = identifier.upper()
             else:
@@ -760,6 +763,7 @@ def _process_identifiers(
                     records.append(_empty_record(None, [], ["No CCD match for SMILES"]))
                     continue
 
+            # Load the component from components.cif, recording an error if it is absent
             component, component_warnings = _load_component(resolved_code, components_path, sanitize=sanitize)
             warnings.extend(component_warnings)
             if component is None:
@@ -772,10 +776,12 @@ def _process_identifiers(
                 )
                 continue
 
+            # Build the enrichment record and carry over any warnings collected so far
             record = _extract_record(component, components_path)
             if warnings:
                 record["warnings"] = list(record.get("warnings", [])) + warnings
 
+            # Optionally attach UniChem cross-references and RCSB PDB usage
             if include_xrefs and resolved_code is not None:
                 xrefs, warn = _fetch_unichem_cross_refs(resolved_code, record.get("inchikey"))
                 record["cross_references"] = xrefs
@@ -790,6 +796,7 @@ def _process_identifiers(
 
             records.append(record)
         except Exception as exc:
+            # Turn any unexpected failure into an error record so the batch continues
             logger.exception("Unhandled error processing identifier %r", identifier)
             records.append(_empty_record(None, [f"Unhandled error: {exc}"]))
 

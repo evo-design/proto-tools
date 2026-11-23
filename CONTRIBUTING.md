@@ -1,6 +1,6 @@
 # Contributing to proto-tools
 
-Thank you for your interest in contributing! The codebase is in a mature state with well-established patterns, but it is very much still in active development. Our goal is to make this a hub for the open source computational biology community to collaborate: whether that's wrapping new models as they come out, improving existing tools, or building infrastructure that makes everything easier to use. Contributions of all kinds are welcome! Please try to adhere to the existing patterns and conventions as much as possible. (Coding agents are very helpful for this!)
+Contributions are welcome, whether you want to wrap a new model, improve an existing tool, or make the library easier to use. The project is actively developed and has established patterns. Please follow those patterns when making changes. Coding agents can help with this.
 
 This guide covers the conventions and workflows used in this project.
 
@@ -12,7 +12,7 @@ All you need is Python 3.10+ and pip:
 pip install -e ".[dev]"
 ```
 
-System tools that standalone tool environments need (git, curl, gcc) are automatically provisioned on first use via a shared foundation environment — no manual setup required.
+A shared foundation environment installs system tools such as git, curl, and gcc on first use. You do not need to install them manually.
 
 
 ### Agent skills
@@ -135,7 +135,7 @@ See [notes/testing.md](notes/testing.md) for full conventions including naming, 
 
 ## Implementing a New Tool
 
-Every tool follows the universal `Input` / `Config` / `run_{tool}()` / `Output` pattern. The `/implement-tool` Claude Code skill provides the complete step-by-step guide with templates and examples.
+Every tool follows the `Input` / `Config` / `run_{tool}()` / `Output` pattern. The `/implement-tool` Claude Code skill provides the complete step-by-step guide with templates and examples.
 
 Key requirements for new tools:
 

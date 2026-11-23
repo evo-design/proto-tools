@@ -140,11 +140,10 @@ def iterative_sample(
             probs = torch.softmax(scaled, dim=-1)  # (B, L, vocab)
             entropy = -(probs * torch.log(probs.clamp(min=1e-12))).sum(dim=-1)  # (B, L)
 
-        # Schedule maps progress in [0, 1] to fraction still masked AFTER this step.
+        # Use the schedule to find the fraction that should remain masked after this step.
         perc_after = float(schedule_fn(torch.tensor((step + 1) / num_steps, device=device)).item())
 
-        # Per-prompt commit: schedule + strategy decide which still-masked
-        # positions adopt their sampled candidate this round.
+        # For each prompt, choose which masked positions to fill with their sampled candidates.
         for b in range(tokens.size(0)):
             still_masked = tokens[b] == mask_token_id  # (L,) bool
             still_count = int(still_masked.sum().item())

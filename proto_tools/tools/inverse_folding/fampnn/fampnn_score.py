@@ -79,20 +79,24 @@ def _to_model_numbering(mutations: list[str], structure: Structure) -> tuple[lis
             Renumbering only the parts that parse would put two numberings in one string, so
             a malformed part rejects its whole mutation.
     """
+    # List the structure-wide positions FAMPNN's parser reads, in the order it numbers them
     readable = flat_readable_positions(fampnn_readable_positions(structure), structure)
     renumbered: list[str] = []
     kept: list[str] = []
     for mutation in mutations:
+        # Pass the wild-type entry through unchanged
         if mutation.lower() == "wt":
             renumbered.append(mutation)
             kept.append(mutation)
             continue
+        # Parse every ':'-joined part and reject the whole mutation if any part is malformed
         matches = [re.fullmatch(r"([A-Z])(\d+)([A-Z])", part) for part in mutation.split(":")]
         if any(match is None for match in matches):
             raise ValueError(
                 f"fampnn-score: invalid mutation {mutation!r}; expected '<WT><position><MUT>' such as "
                 "'A1V', with ':' between simultaneous mutations."
             )
+        # Renumber each part, collecting positions the parser does not read
         parts: list[str] = []
         unreadable: list[int] = []
         for wild_type, position_text, mutant in (match.groups() for match in matches if match is not None):
@@ -102,6 +106,7 @@ def _to_model_numbering(mutations: list[str], structure: Structure) -> tuple[lis
                 unreadable.append(position)
                 continue
             parts.append(f"{wild_type}{model_position[0]}{mutant}")
+        # Drop a mutation that names any unread residue, since it cannot be scored
         if unreadable:
             logger.warning(
                 "fampnn-score: mutation %r names position %s, which FAMPNN's structure parser does "
@@ -112,6 +117,7 @@ def _to_model_numbering(mutations: list[str], structure: Structure) -> tuple[lis
                 ", ".join(str(position) for position in unreadable),
             )
             continue
+        # Keep the renumbered mutation alongside the caller's original spelling
         renumbered.append(":".join(parts))
         kept.append(mutation)
     return renumbered, kept

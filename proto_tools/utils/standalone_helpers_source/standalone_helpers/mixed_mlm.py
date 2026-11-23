@@ -122,28 +122,33 @@ class MixedMLMRuntime:
 
     def dispatch(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Validate token axes, load the requested checkpoint, and run one operation."""
+        # Reject unknown operations, and interactions on models without interaction heads
         operation = payload.get("operation")
         if operation not in {"embeddings", "sample", "score", "gradient", "interactions"}:
             raise ValueError(f"{self.adapter.toolkit}: unknown operation {operation!r}")
         if operation == "interactions" and self.adapter.toolkit != "minerva":
             raise ValueError("Only Minerva provides trained interaction heads")
+        # Check the checkpoint name and batch size
         checkpoint = payload.get("model_checkpoint", self.adapter.default_checkpoint)
         if checkpoint not in self.adapter.checkpoints:
             raise ValueError(f"Unknown {self.adapter.toolkit} checkpoint: {checkpoint!r}")
         batch_size = payload.get("batch_size", 1)
         if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
             raise ValueError("batch_size must be a positive integer")
+        # Gradient payloads nest each sequence in its input; other operations list them directly
         sequences = (
             [item["sequence"] for item in payload["inputs"]] if operation == "gradient" else payload["sequences"]
         )
         if not isinstance(sequences, list) or not sequences:
             raise ValueError("At least one prepared sequence is required")
+        # Tokenize, allowing masks only for sampling, and enforce the checkpoint context length
         tokens = [tokenize_mixed_sequence(sequence, allow_masks=operation == "sample") for sequence in sequences]
         limit = 8192 if checkpoint.endswith("-8k") else 4096
         if any(len(row) > limit for row in tokens):
             raise ValueError(f"{checkpoint} supports at most {limit} model tokens per sequence")
         if operation in {"score", "gradient"} and any(not any(t in MIXED_VOCAB for t in row) for row in tokens):
             raise ValueError("Masked PLL requires at least one canonical protein or DNA token")
+        # Sampling needs a protein or DNA modality for exactly the masked (1-indexed) positions
         if operation == "sample":
             mappings = payload.get("mask_modalities") or [{} for _ in tokens]
             if len(mappings) != len(tokens):
@@ -154,6 +159,7 @@ class MixedMLMRuntime:
                     raise ValueError("mask_modalities must label exactly the masked token positions")
                 if any(modality not in {"protein", "dna"} for modality in mapping.values()):
                     raise ValueError("Masked positions must have protein or dna modality")
+        # Load the checkpoint and route to the requested operation
         self.adapter.load(checkpoint, payload.get("device", "cuda"))
         if operation == "embeddings":
             return self.embeddings(
@@ -320,10 +326,12 @@ class MixedMLMRuntime:
         import torch
         import torch.nn.functional as F
 
+        # Tokenize the sequence and read the relaxation settings
         tokens = tokenize_mixed_sequence(payload["sequence"])
         backprop = payload.get("compute_gradient", True)
         temperature = resolve_temperature(payload.get("temperature", 1.0))
         batch_size = payload.get("batch_size", 1)
+        # Collect the canonical protein and DNA positions, the only ones masked and scored
         self.adapter.reset_rotary_cache()
         embed_layer = self.adapter.embedding_layer
         vocab_ids = torch.tensor(self._vocab_ids(), device=self.adapter.device)
@@ -333,6 +341,7 @@ class MixedMLMRuntime:
         )
         if not len(positions):
             raise ValueError("Masked PLL requires at least one canonical protein or DNA token")
+        # Restrict each row to its modality: protein columns for residues, DNA columns for bases
         allowed = torch.zeros((len(tokens), len(MIXED_VOCAB)), dtype=torch.bool, device=self.adapter.device)
         for index, token in enumerate(tokens):
             if token in PROTEIN_TOKENS:
@@ -340,6 +349,7 @@ class MixedMLMRuntime:
             elif token in DNA_TOKENS:
                 allowed[index, 20:] = True
         with torch.set_grad_enabled(backprop):
+            # Load the logits and convert them to per-modality probabilities P
             state = torch.tensor(
                 payload["logits"], dtype=torch.float32, device=self.adapter.device, requires_grad=backprop
             )
@@ -364,10 +374,12 @@ class MixedMLMRuntime:
                 discrete = F.one_hot(hard_indices, num_classes=len(MIXED_VOCAB)).float() * allowed
                 straight_through = discrete - probs.detach() + probs
                 x = ((1.0 - hard) * x + hard * straight_through) * allowed
+            # Take argmax tokens as targets and embed modality rows from the relaxed blend x
             ids[0, positions] = vocab_ids[hard_indices[positions]]
             fixed_embeddings = embed_layer(ids).detach()
             relaxed = x.to(embed_layer.weight.dtype) @ embed_layer.weight[vocab_ids]
             input_embeddings = torch.where(allowed.any(dim=1).view(1, -1, 1), relaxed.unsqueeze(0), fixed_embeddings)
+            # Accumulate the embedding gradient chunk by chunk, so each chunk frees its graph
             mask_id = self.adapter.tokenizer.mask_token_id
             mask_embedding = embed_layer.weight[mask_id].detach()
             embedding_grad = torch.zeros_like(input_embeddings) if backprop else None
@@ -376,6 +388,7 @@ class MixedMLMRuntime:
             for start in range(0, len(positions), batch_size):
                 selected = positions[start : start + batch_size]
                 batch_rows = torch.arange(len(selected), device=self.adapter.device)
+                # Mask one position per row by swapping in the mask embedding at that position
                 chunk_leaf = input_embeddings.detach().requires_grad_(backprop)
                 masked_embeddings = torch.where(
                     (all_positions[None, :] == selected[:, None]).unsqueeze(-1),
@@ -384,6 +397,7 @@ class MixedMLMRuntime:
                 )
                 masked_ids = ids.expand(len(selected), -1).clone()
                 masked_ids[batch_rows, selected] = mask_id
+                # Hook the embedding layer so the model sees the masked relaxed embeddings
                 handle = embed_layer.register_forward_hook(
                     lambda _module, _inputs, _output, value=masked_embeddings: value
                 )
@@ -391,6 +405,7 @@ class MixedMLMRuntime:
                     predictions = self.adapter.forward(masked_ids).logits[batch_rows, selected].float()
                 finally:
                     handle.remove()
+                # Sum the target NLL at the masked positions; backprop its share of the mean
                 loss = F.cross_entropy(predictions, ids[0, selected], reduction="sum")
                 total_nll += loss.item()
                 if backprop:
@@ -398,6 +413,7 @@ class MixedMLMRuntime:
                     if embedding_grad is None:
                         raise RuntimeError("Missing input-embedding gradient accumulator")
                     embedding_grad = embedding_grad + chunk_gradient
+            # Chain the accumulated embedding gradient back to the input logits
             gradient = None
             if backprop:
                 (state_grad,) = torch.autograd.grad(input_embeddings, state, grad_outputs=embedding_grad)

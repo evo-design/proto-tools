@@ -430,16 +430,18 @@ class CalibyRunner:
         Raises:
             ValueError: If Caliby returns a different number of designs than requested.
         """
+        # Check that every fixed and pinned residue exists in the primary structure.
         _verify_fixed_positions(primary_path, fixed_positions)
         _verify_fixed_positions(primary_path, {cid: list(pins) for cid, pins in (pinned_residues or {}).items()})
         self.ensure_loaded(model_checkpoint, device)
 
         from caliby import make_constraints, make_ensemble_constraints
 
+        # Translate fixed, symmetric and pinned residues into Caliby's constraint strings.
         fixed_pos_seq = _build_fixed_pos_seq(chain_ids, chains_to_redesign, fixed_positions)
         symmetry_pos = _build_symmetry_pos(symmetric_chains, primary_path)
         override_seq = _build_fixed_pos_override_seq(pinned_residues)
-        # Only the columns that carry a value; an all-empty dict must stay None.
+        # Include only active constraints so an unconstrained request can pass None.
         constraint_cols = {
             key: value
             for key, value in (
@@ -449,6 +451,7 @@ class CalibyRunner:
             )
             if value
         }
+        # Set the number of Potts MCMC sweeps per designed sequence.
         overrides = {"potts_sampling_cfg": {"potts_sweeps": potts_sweeps}}
 
         with (
@@ -456,7 +459,7 @@ class CalibyRunner:
             tempfile.TemporaryDirectory() as out_dir,
         ):
             if staged_conformers:
-                # Element 0 is the primary conformer; the rest are aggregated position-wise.
+                # Place the primary conformer first and aggregate the others by matching positions.
                 pdb_to_conformers = {_ENSEMBLE_KEY: [str(staged_primary), *(str(path) for path in staged_conformers)]}
                 constraint_df = (
                     make_ensemble_constraints({_ENSEMBLE_KEY: constraint_cols}, pdb_to_conformers)
@@ -477,6 +480,7 @@ class CalibyRunner:
                     sampling_overrides=overrides,
                 )
             else:
+                # Design against the primary structure alone.
                 constraint_df = make_constraints({staged_primary.stem: constraint_cols}) if constraint_cols else None
                 results = self.model.sample(
                     [str(staged_primary)],
@@ -490,6 +494,7 @@ class CalibyRunner:
                     pos_constraint_df=constraint_df,
                     sampling_overrides=overrides,
                 )
+            # Read the designed structures before the output directory is removed.
             cif_strings = [Path(out_pdb).read_text() for out_pdb in results["out_pdb"]]
 
         if len(results["seq"]) != num_sequences:
@@ -497,6 +502,7 @@ class CalibyRunner:
                 f"caliby: requested {num_sequences} sequence(s) but the model returned {len(results['seq'])}"
             )
 
+        # Split each design into per-chain sequences and score recovery against the input.
         chain_sequences = [_split_chain_sequences(seq, chain_ids) for seq in results["seq"]]
         recoveries = [
             _sequence_recovery(designed, _split_chain_sequences(native, chain_ids), chain_ids, chains_to_redesign)

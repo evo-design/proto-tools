@@ -44,6 +44,7 @@ def build_msa_conditioning(
     Homolog rows a chain had but the backend did not use are logged as a warning naming ``tool``,
     once per tool and reason per process; repeats log at DEBUG.
     """
+    # Find the chains the bundle carries rows for and the chains it asked an MSA for
     present = set(complex_msas.per_chain) | set(complex_msas.unpaired_per_chain or {}) if complex_msas else set()
     if complex_msas is not None and complex_msas.requested_chain_indices is not None:
         requested = set(complex_msas.requested_chain_indices)
@@ -55,9 +56,12 @@ def build_msa_conditioning(
     unused: list[tuple[str, str]] = []
     # Pairing is across chains: a chain whose paired rows have no partner chain is not paired
     partnered = sum(r.paired and r.rows > 1 and r.ignored_reason is None for r in sent.values()) >= 2
+    # Classify each protein chain by what its writer sent the backend
     for chain in protein_chain_msas(chains, complex_msas):
         record = sent.get(chain.index, SentMSA())
+        # Count the rows the bundle held for this chain, query included
         bundle_rows = max(len(chain.primary or []), len(chain.unpaired or []))
+        # Consumed when the backend used homolog rows; otherwise record why not
         status: MSAStatus
         if record.ignored_reason is None and has_homolog_rows(record):
             status = "consumed"
@@ -67,9 +71,11 @@ def build_msa_conditioning(
             status = "no_hits"
         else:
             status = "ignored"
+        # Collect chains whose homolog rows went unused, to warn about below
         reason = record.ignored_reason or "no alignment rows reached the backend"
         if status == "ignored" and bundle_rows > 1:
             unused.append((chain.chain_id, reason))
+        # Report paired only when a partner chain was also paired; other homolog rows count as unpaired
         mode: MSAMode = (
             "paired"
             if partnered and record.paired and record.rows > 1 and record.ignored_reason is None
@@ -89,6 +95,7 @@ def build_msa_conditioning(
                 ignored_reason=reason if status == "ignored" else None,
             )
         )
+    # Warn once per tool and reason, naming every chain it applies to; repeats log at DEBUG
     for reason in dict.fromkeys(reason for _chain_id, reason in unused):
         chain_ids = ", ".join(chain_id for chain_id, chain_reason in unused if chain_reason == reason)
         level = logging.DEBUG if (tool, reason) in _WARNED_UNUSED else logging.WARNING

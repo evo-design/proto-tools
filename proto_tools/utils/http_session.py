@@ -2,11 +2,11 @@
 
 Shared HTTP session builder with retry logic.
 
-Under the tool's ambient deadline (:mod:`proto_tools.utils.deadlines`), sessions from
-``build_http_session`` end connects, response bodies, retries and ``Retry-After`` waits at it. A
-``requests`` ``timeout=`` alone bounds each socket read, not the request, so it cannot do this.
-Response headers, and urllib3's drain of an error body it is about to retry, remain bounded only
-per socket read.
+Sessions from ``build_http_session`` use the tool's deadline
+(:mod:`proto_tools.utils.deadlines`) to limit connection attempts, response body
+reads, retries, and ``Retry-After`` waits. A ``requests`` timeout alone limits
+each socket read rather than the whole request. Response headers and urllib3's
+reading of error bodies before a retry are still limited only per socket read.
 
 """
 
@@ -46,14 +46,14 @@ T = TypeVar("T")
 class _DeadlineSignal(Exception):
     """Stop urllib3 at the deadline.
 
-    Deliberately not an ``OSError``: requests' ``HTTPAdapter.send`` re-raises any ``OSError``
+    This does not inherit from ``OSError`` because requests' ``HTTPAdapter.send`` re-raises any ``OSError``
     (including ``TimeoutError``) as a retryable ``requests.ConnectionError``. ``DeadlineAdapter``
     turns this into :class:`DeadlineExceededError` instead.
     """
 
 
 def _clamp(seconds: Any, cap: float) -> float:
-    """Return ``seconds`` capped at ``cap``; an unset or infinite timeout becomes ``cap``."""
+    """Cap ``seconds`` at ``cap``, using ``cap`` for an unset or infinite timeout."""
     return min(seconds, cap) if isinstance(seconds, int | float) else cap
 
 
@@ -97,7 +97,7 @@ class DeadlineRetry(Retry):
         return super().increment(method, url, response, error, _pool, _stacktrace)
 
     def _check_wait(self, seconds: float | None) -> None:
-        """Stop at the deadline, sleeping out the time left, when waiting ``seconds`` would pass it."""
+        """If waiting ``seconds`` would reach or pass the deadline, sleep until it and stop."""
         left = remaining()
         if left is not None and seconds and seconds >= left:
             time.sleep(max(left, 0.0))
@@ -209,7 +209,7 @@ class DeadlineAdapter(HTTPAdapter):
         cert: Any = None,
         proxies: Mapping[str, str] | None = None,
     ) -> requests.Response:
-        """Send ``request`` within the deadline; see the class docstring."""
+        """Send ``request`` within the deadline described by the adapter."""
         if remaining() is None:
             return super().send(request, stream=stream, timeout=timeout, verify=verify, cert=cert, proxies=proxies)
         what = f"requesting {request.url}"
@@ -240,8 +240,8 @@ def _proto_tools_version() -> str:
     """Return the installed proto-tools version, or ``unknown`` where there is no distribution.
 
     A Modal container puts proto-tools on the path by mounting the source tree rather than
-    installing it, so it carries no dist-info and ``version()`` raises. The version only decorates
-    a ``User-Agent``, so a request that would otherwise succeed must not fail for the want of it.
+    installing it, so it carries no dist-info and ``version()`` raises. The version is used only in
+    the ``User-Agent`` header, so missing package metadata should not fail a request.
     """
     try:
         return version("proto-tools")
@@ -279,7 +279,7 @@ def build_http_session(
         allowed_methods (list[str] | None): Methods that may be retried. Defaults to ``["GET"]``.
         mount_http (bool): Also mount the adapter for plain ``http://`` URLs.
         status_forcelist (list[int] | None): Statuses the adapter retries. Defaults to 429 and
-            5xx; ``[]`` returns every response to the caller, for callers that retry themselves.
+            5xx. Use ``[]`` to return every response to callers that retry themselves.
     """
     retry = DeadlineRetry(
         total=http_retries,
@@ -333,7 +333,7 @@ def request_with_retry(
     that case explicitly instead.
 
     Args:
-        call (Callable[[], T]): Zero-argument callable making the request; wraps any
+        call (Callable[[], T]): Zero-argument callable making the request, wrapping any
             ``session.get``/``.post`` call.
         retries (int): Extra attempts after the first.
         backoff_seconds (float): Delay before the first retry, doubling (and jittered) after each

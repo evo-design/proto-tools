@@ -30,8 +30,8 @@ class SpliceAI2PredictInput(BaseToolInput):
 
     Attributes:
         sequences (list[str]): Sense-strand DNA sequence(s) to predict on. A
-            single string is auto-wrapped into a list. Any length is accepted:
-            the model's 65,536 bp of context per side is padded with unknown
+            single string is auto-wrapped into a list. Any length is accepted.
+            The model's 65,536 bp of context per side is padded with unknown
             bases, so predictions cover every input position.
     """
 
@@ -217,7 +217,7 @@ def run_spliceai2_predict(
 
     Each sequence is read on its sense strand and padded with 65,536 unknown
     bases per side, the context SpliceAI2 crops away. Splice donor and acceptor
-    usage is predicted at every position; sites above 0.01 usage become
+    usage is predicted at every position. Sites above 0.01 usage become
     candidates for junction prediction, and transcripts are decoded as the
     highest-scoring paths through the resulting splice graph.
 

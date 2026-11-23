@@ -24,8 +24,8 @@ from proto_tools.utils import ConfigField, InputField, ToolInstance
 class PyHmmsearchInput(PyHmmerInput):
     """Input object for PyHMMER hmmsearch (HMM profile vs protein sequences).
 
-    This class defines the input parameters for searching one or more HMM profiles
-    against protein sequences to identify matching protein families or domains.
+    Provide HMM profiles and the protein sequences to search for matching families
+    or domains.
 
     Attributes:
         sequences (list[str]): Target protein sequences to search.
@@ -119,10 +119,8 @@ def run_pyhmmer_hmmsearch(
 ) -> PyHmmsearchOutput:
     """Search HMM profile(s) against protein sequences using PyHMMER.
 
-    This function implements the hmmsearch algorithm, searching one or more HMM
-    profiles against protein sequences to identify sequences that match the
-    profile(s). This is useful for finding proteins belonging to specific families
-    or containing particular domains.
+    Search one or more HMM profiles against protein sequences to find members of
+    specific families or proteins containing particular domains.
 
     Args:
         inputs (PyHmmsearchInput): Validated PyHMMER hmmsearch input containing
@@ -155,6 +153,7 @@ def run_pyhmmer_hmmsearch(
         >>> if result.domain_hits:
         ...     high_score = [hit for hit in result.domain_hits if hit.domain_score > 50]
     """
+    # Search the profiles against the supplied sequences in the PyHMMER worker.
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {
@@ -179,6 +178,7 @@ def run_pyhmmer_hmmsearch(
         config=config,
     )
 
+    # Convert worker dictionaries to typed sequence and domain hits.
     sequence_hits, domain_hits = _build_hit_models(output_data["sequence_hits"], output_data["domain_hits"])
 
     return PyHmmsearchOutput(

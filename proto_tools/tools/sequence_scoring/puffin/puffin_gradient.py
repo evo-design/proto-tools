@@ -48,14 +48,14 @@ PuffinTrack = Literal[
 
 
 class PuffinSignalTerm(DifferentiableTerm):
-    """One differentiable Puffin quantity: mean initiation signal over a track and position span.
+    """Mean Puffin initiation signal over one track and position span.
 
     Whether more signal is wanted depends on whether the track is a target or an off-target,
     and how much it matters relative to other tracks is a weight — both are goals a caller
     applies to the returned value, not properties of the quantity.
 
     Positions index the scored output window of the full model input,
-    ``context_left + candidate + context_right``: output position ``p`` is model-input base
+    ``context_left + candidate + context_right``. Output position ``p`` is model-input base
     ``p + PUFFIN_PADDING``, which is candidate row ``p + PUFFIN_PADDING - len(context_left)``.
     With ``PUFFIN_PADDING`` bases of context on each side the window is exactly the candidate.
     An open-ended span is resolved against the candidate's own output window, so the term that
@@ -115,10 +115,10 @@ class PuffinSignalTerm(DifferentiableTerm):
 
 
 class PuffinGradientInput(GradientInput):
-    """Input for the Puffin gradient tool: one or many relaxed DNA states.
+    """One or more relaxed DNA states for the Puffin gradient tool.
 
     Each candidate is relaxed and differentiated in full. Fixed DNA around it (the config's
-    ``context_left``/``context_right``) is one-hot encoded and never relaxed; without context
+    ``context_left``/``context_right``) is one-hot encoded and never relaxed. Without context
     the candidate is the whole model input.
 
     Attributes:
@@ -195,7 +195,7 @@ class PuffinGradientSampleMetrics(Metrics):
 
 
 class PuffinGradientOutput(GradientOutput):
-    """Puffin track-signal output; gradients are optional in forward-only mode.
+    """Puffin track-signal output. Gradients are omitted in forward-only mode.
 
     Attributes:
         results (list[PuffinGradientResult]): One per input candidate, in input order, each
@@ -214,7 +214,7 @@ class PuffinGradientConfig(GradientConfig):
     """Configuration for the Puffin transcription-initiation gradient tool.
 
     The model input is ``context_left + candidate + context_right`` and must be at least
-    ``PUFFIN_MIN_INPUT_LENGTH`` bp. Only the candidate is relaxed and differentiated; the
+    ``PUFFIN_MIN_INPUT_LENGTH`` bp. Only the candidate is relaxed and differentiated. The
     contexts are encoded exactly as ``puffin-prediction`` encodes a string, ``N`` as 0.25 per base.
 
     Attributes:

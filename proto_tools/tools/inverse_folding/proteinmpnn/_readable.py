@@ -2,8 +2,8 @@
 
 Which residues ProteinMPNN actually reads from a staged structure.
 
-Mirrors ColabDesign v1.1.3, the pin in ``standalone/requirements.txt``. Two gates decide it,
-and both are easy to get wrong from the outside:
+Mirrors ColabDesign v1.1.3, the pin in ``standalone/requirements.txt``. Two gates
+determine which residues are kept.
 
 1. ``pdb_to_string`` (``colabdesign/shared/protein.py:52-58``) rewrites a ``HETATM`` line to
    ``ATOM`` when its residue name is in the ``MODRES`` table below, giving it the parent
@@ -17,7 +17,7 @@ and both are easy to get wrong from the outside:
    backbone, and it is why the chromophore would be skipped even after gate 1: its atoms are
    named ``N1``/``CA1``/``C1``, not ``N``/``CA``/``C``.
 
-Keep this in step with the pin: a bump to ColabDesign should be checked against both gates.
+When updating the pinned ColabDesign version, check both gates against upstream.
 """
 
 from typing import Any

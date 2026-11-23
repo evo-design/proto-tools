@@ -1,6 +1,6 @@
-"""proto_tools/tools/testing/mock_pytorch_multi_gpu_tool/mock_pytorch_multi_gpu_tool.py.
+"""Test allocation, movement, and eviction with a two-GPU PyTorch mock.
 
-This is a minimal 2-GPU PyTorch tool designed for testing multi-device allocation,
+A minimal 2-GPU PyTorch tool designed for testing multi-device allocation,
 movement, and eviction. It loads two tiny models (one per GPU) while exercising
 all DeviceManager multi-device code paths.
 """

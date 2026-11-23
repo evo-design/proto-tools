@@ -10,18 +10,18 @@ A relaxed sequence is a matrix of shape `(L, V)`, where `L` is the sequence leng
 
 A call carries one or many such candidates, and returns one result per candidate in the order they were supplied. Tools whose model needs more than a matrix per candidate — a backbone, a template, a complex — take each candidate as a bundle holding its matrix together with that context, so candidates in one call may differ in all of it.
 
-The `temperature` field determines how the tool interprets those values:
+The `temperature` field determines how the tool interprets those values.
 
 | `temperature` | Input represents | Probability calculation | Returned gradient |
 | --- | --- | --- | --- |
 | Positive float (default `1.0`) | Unnormalized logits | `P = softmax(preprocess(X) / temperature)` | With respect to the supplied logits `X` |
-| `None` | An existing probability distribution | No new softmax; `P = X` | With respect to the supplied probabilities `X` |
+| `None` | An existing probability distribution | Use `P = X` without a new softmax | With respect to the supplied probabilities `X` |
 
-Here, `preprocess(X)` is normally just `X`. AlphaFold2 is an exception: ColabDesign can scale the logits and add bias before softmax.
+Here, `preprocess(X)` is normally just `X`. For AlphaFold2, ColabDesign can also scale the logits and add bias before softmax.
 
-A tool takes its candidates in `inputs`, one entry per sequence it should evaluate. A single candidate may be passed on its own and is normalized to a one-item list, so a caller never has to wrap one. `temperature` belongs to the tool's **Input** and is shared by every candidate; the `soft` and `hard` controls discussed below belong to its **Config**.
+A tool takes its candidates in `inputs`, one entry per sequence it should evaluate. A single candidate may be passed alone and is normalized to a one-item list, so a caller never has to wrap one. `temperature` belongs to the tool's **Input** and is shared by every candidate. The `soft` and `hard` controls discussed below belong to its **Config**.
 
-For most gradient-based optimization, use a positive temperature. Logits can be updated without constraints, and softmax converts them into a valid probability distribution. Lower temperatures favor the highest-scoring token at each position; higher temperatures spread the probability more evenly.
+For most gradient-based optimization, use a positive temperature. Logits can be updated without constraints, and softmax converts them into a valid probability distribution. Lower temperatures favor the highest-scoring token at each position. Higher temperatures spread the probability more evenly.
 
 ```python
 # Start from unnormalized amino acid scores.
@@ -34,13 +34,13 @@ request = ESM2GradientInput(inputs=[my_logits, other_logits], temperature=1.0)
 request = ESM2GradientInput(inputs=my_probabilities, temperature=None)
 ```
 
-**A note on terminology:** The probability matrix `P` is not always exactly what the predictive model receives. Proto can further blend it with raw logits or a hard one-hot sequence, depending on `soft` and `hard`.
+The probability matrix `P` is not always exactly what the predictive model receives. Proto can further blend it with raw logits or a hard one-hot sequence, depending on `soft` and `hard`.
 
 ## 2. How `soft` and `hard` change the model input
 
 Every gradient tool exposes two relaxation controls through its config:
 
-- **`soft`** blends the raw input matrix with its softmax probabilities. At `soft=0`, the blend uses raw values; at `soft=1`, it uses probabilities.
+- **`soft`** blends the raw input matrix with its softmax probabilities. At `soft=0`, the blend uses raw values. At `soft=1`, it uses probabilities.
 - **`hard`** blends in a one-hot sequence using a straight-through estimator (STE). At `hard=1`, the model evaluates a hard sequence, while backpropagation follows a differentiable surrogate.
 
 Both controls are finite numbers between `0` and `1`. Their shared defaults are **`soft=1.0` and `hard=0.0`**. The default `temperature` is `1.0`.
@@ -86,9 +86,10 @@ When `hard=1`, the result no longer depends on `soft`: the entire forward repres
 
 ### Why keep raw and blended modes?
 
-Raw and intermediate representations give an optimizer more freedom than a normalized probability matrix. ColabDesign uses this kind of progression during sequence design. But raw values can be outside the inputs on which other predictive models were trained. Proto supports these modes mathematically; that does **not** establish that they improve sequence design or produce better-calibrated predictions.
+Raw and intermediate representations give an optimizer more freedom than a normalized probability matrix. ColabDesign uses this kind of progression during sequence design. But raw values can be outside the inputs on which other predictive models were trained. Proto implements these modes, but this does **not** establish that they improve
+sequence design or produce better-calibrated predictions.
 
-The shared implementation preserves a gradient path for each mode. That does not guarantee that every objective produces a nonzero gradient: a gradient can still be zero because of the model, the loss, or local saturation.
+The shared implementation preserves a gradient path for each mode. A gradient can still be zero because of the model, the loss, or local saturation.
 
 ## 3. Using existing probabilities (`temperature=None`)
 
@@ -139,15 +140,15 @@ request = ESM2GradientInput(
 )
 ```
 
-That repetition is the whole point of the factory. Its job is less the arithmetic than binding the
-conversion temperature to the reading temperature so the two cannot disagree: convert at `0.5`,
-read at `1.0`, and nothing raises — the model sees `softmax(0.5 * log p)`, a flatter distribution
-than the one you meant, and the optimization chases the wrong target. Building the list by hand
-hands that guarantee back to you.
+The factory keeps the conversion and evaluation temperatures in agreement.
+If you convert at `0.5` and evaluate at `1.0`, no error is raised, but the model
+sees `softmax(0.5 * log p)`. That distribution is flatter than the one supplied.
+When building the list yourself, use the same temperature for both steps.
 
-For a tool whose candidates carry context, such as the ProteinMPNN example above, the factory takes
-that context by keyword and requires it, packing it into the one candidate it builds. Several such
-candidates means constructing each `...GradientCandidate` yourself, with its own context.
+For tools whose candidates need context, such as ProteinMPNN, pass the required
+context as keyword arguments to the factory. It stores that context with the
+single candidate it builds. For several candidates, construct each
+`...GradientCandidate` with the context it needs.
 
 For strictly positive probabilities, the factory calculates:
 
@@ -157,11 +158,13 @@ logits = temperature * log(probabilities)
 
 It sets the matching temperature on the constructed input, so `softmax(logits / temperature)` reconstructs the original distribution (up to floating-point precision). This avoids accidentally converting at one temperature and evaluating at another.
 
-The factory rejects exact zeros in ordinary sequence distributions rather than silently replacing them with small positive values. Exact zeros would require infinite logits, which Proto does not accept. To preserve zeros, supply the distribution directly with `temperature=None`. Permanently excluding tokens during logit optimization requires a model-supported constraint; Proto does not yet expose a universal public `allowed_mask`.
+The factory rejects exact zeros in ordinary sequence distributions rather than silently replacing them with small positive values. Exact zeros would require infinite logits, which Proto does not accept. To preserve zeros, supply the distribution directly with `temperature=None`. Permanently excluding tokens during logit optimization requires a model-supported constraint. Proto does not yet expose a universal public `allowed_mask`.
 
-Mixed protein/DNA models are a special case: their factories convert probabilities within each position's permitted vocabulary block, preserving zeros outside that block. AbLang supports separate heavy- and light-chain distributions, and batched nucleotide tools accept a distribution for each batch item.
+For mixed protein/DNA models, the factories convert probabilities within each position's permitted vocabulary block, preserving zeros outside that block. AbLang supports separate heavy- and light-chain distributions, and batched nucleotide tools accept a distribution for each batch item.
 
-**AlphaFold2 caveat:** Its effective `P` can also depend on ColabDesign's logit scaling and bias. The formula above guarantees reconstruction for an ordinary softmax on the supplied logits, not necessarily for an additional model-specific preprocessing step.
+**AlphaFold2 caveat**
+
+AlphaFold2's effective `P` can also depend on ColabDesign's logit scaling and bias. The formula above guarantees reconstruction for an ordinary softmax on the supplied logits, not necessarily for an additional model-specific preprocessing step.
 
 ## 5. Sequence types and vocabulary ordering
 
@@ -188,7 +191,8 @@ These constraints come from an internal `allowed_tokens()` validation hook, not 
 
 ### AlphaFold2 / ColabDesign
 
-AlphaFold2 uses ColabDesign's own `soft_seq()` implementation rather than the shared helper. The meaning of `soft` and `hard` is the same, but the distribution `P` may be computed from scaled and biased logits. For example, the Germinal backend can use `softmax((2 * X + bias) / T)`; the raw branch still uses the original `X`.
+AlphaFold2 uses ColabDesign's `soft_seq()` implementation rather than the shared helper. The meaning of `soft` and `hard` is the same, but the distribution `P` may be computed from scaled and biased logits. For example, the Germinal backend can use `softmax((2 * X + bias) / T)`.
+The raw branch still uses the original `X`.
 
 In probability mode, the adapter selects the raw-input branch internally so validated probabilities pass through unchanged. It rejects settings that would otherwise be ignored, including incompatible relaxation and bias/exclusion options.
 
@@ -196,16 +200,17 @@ In probability mode, the adapter selects the raw-input branch internally so vali
 
 A gradient tool returns a `GradientOutput` with:
 
-- `results`: one `GradientResult` per input item, in the order the items were supplied;
+- `results`: one `GradientResult` per input item, in the order the items were supplied.
 - `vocab`: the public token order associated with the output, shared by every item.
 
 Each `results[i]` carries:
 
-- `loss`: the objective that was differentiated for item `i` — never a batch mean or total;
-- `metrics`: additional model-specific scores for that item;
+- `loss`: the objective that was differentiated for item `i` — never a batch mean or total.
+- `metrics`: additional model-specific scores for that item.
 - `gradient`: derivatives with respect to that item's sequence matrix, in the same shape and vocabulary order.
 
-With positive temperature, the gradient is with respect to **logits**. With `temperature=None`, it is with respect to **probabilities**. In a hard-STE mode, it is a **surrogate gradient**: the forward pass evaluates one-hot inputs, but the backward pass follows the differentiable probability pathway.
+With positive temperature, the gradient is with respect to **logits**. With `temperature=None`, it is with respect to **probabilities**. In a hard-STE mode, it is a **surrogate gradient**. The forward pass evaluates one-hot inputs,
+but the backward pass follows the differentiable probability pathway.
 
 Setting `compute_gradient=False` runs forward-only scoring and returns `gradient=None`.
 

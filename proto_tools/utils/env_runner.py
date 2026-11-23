@@ -45,13 +45,13 @@ def run_in_env(
 
     Exactly one of ``code`` or ``script`` must be provided. The environment is built if
     it does not yet exist (build time is not counted against ``timeout``). In-env
-    proto-logging is streamed to the parent's ``proto_tools.worker.{toolkit}`` logger;
-    only stdout is captured and returned.
+    proto-logging is streamed to the parent's ``proto_tools.worker.{toolkit}`` logger.
+    Only stdout is captured and returned.
 
     For ``cuda`` devices a transient :class:`DeviceManager` lease is held for the run — it
     is never evicted and honors shared-GPU mode (``allow_multiple_per_device``). The program
     sees only the leased GPU(s), renumbered ``cuda:0..N-1``, so bare ``"cuda"`` and JAX land on
-    the lease rather than on a GPU a tool worker holds; the device to use is exported as
+    the lease rather than on a GPU a tool worker holds. The device is exported as
     ``RUN_IN_ENV_DEVICE``. A ``cpu`` run sees no GPU at all (``JAX_PLATFORMS=cpu``), so it
     cannot claim one. ``timeout`` bounds the run, except for time spent while the toolkit's
     weights download keeps progressing.
@@ -61,9 +61,9 @@ def run_in_env(
         code (str | None): A Python source string to execute.
         script (Path | str | None): Path to a Python script to execute.
         args (Sequence[str]): Command-line arguments passed to the code/script as ``sys.argv[1:]``.
-        device (str): Device to lease and run on; the resolved value is exported as ``RUN_IN_ENV_DEVICE``.
+        device (str): Device to lease. The resolved value is exported as ``RUN_IN_ENV_DEVICE``.
         timeout (int): Maximum seconds to wait for the run, not counting weight downloads.
-        verbose (int): Verbosity for re-emitted logs; ``>= 3`` also tees raw stderr.
+        verbose (int): Verbosity for re-emitted logs. Values ``>= 3`` also show raw stderr.
 
     Returns:
         str: The captured standard output of the run.
@@ -109,7 +109,7 @@ def run_in_env(
             pin_visible_devices=pinned,
         )
         env["TOOL_VENV_PATH"] = str(instance.env_path)
-        # The device as the program sees it: a pinned lease is renumbered cuda:0..N-1.
+        # Export the device as the program sees it, renumbered cuda:0..N-1 for a pinned lease.
         env["RUN_IN_ENV_DEVICE"] = _local_visible_device(run_device) if pinned else run_device
         # Append, so the published helpers stay ahead of any stale copy in the standalone dir.
         env["PYTHONPATH"] = os.pathsep.join(p for p in (env.get("PYTHONPATH", ""), standalone_dir) if p)

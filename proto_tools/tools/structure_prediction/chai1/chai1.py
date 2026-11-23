@@ -57,8 +57,7 @@ from proto_tools.utils.tool_io import Metrics, MetricSpec
 class Chai1Input(StructurePredictionInput):
     """Input object for Chai1 structure prediction.
 
-    This class defines the input parameters for predicting 3D structures of proteins,
-    ligands, and glycans using Chai1, a multi-modal structure prediction model.
+    Provide proteins, ligands, and glycans for 3D structure prediction with Chai1.
 
     Inherits from ``StructurePredictionInput``.
 
@@ -143,8 +142,7 @@ class Chai1Output(StructurePredictionOutput):
 class Chai1Config(MSAStructurePredictionConfig):
     """Configuration object for Chai1 structure prediction.
 
-    This class defines configuration parameters for running Chai1, a multi-modal
-    structure prediction model supporting proteins, ligands, and glycans.
+    Configure Chai1 prediction for protein, ligand, and glycan complexes.
 
     Inherits from ``MSAStructurePredictionConfig``.
 
@@ -433,9 +431,9 @@ def run_chai1_on_complex(
     instance: Any = None,
     seed: int | None = None,
 ) -> Structure:
-    """Run Chai1 structure prediction on a single complex. This function is wrapped.
+    """Run Chai1 structure prediction on a single complex.
 
-    by ``run_chai1`` to sequentially predict all complexes in the input.
+    ``run_chai1`` calls this function sequentially for each input complex.
 
     Args:
         comp (Complex): The complex to fold.

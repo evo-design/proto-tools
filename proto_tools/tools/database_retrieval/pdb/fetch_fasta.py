@@ -137,7 +137,7 @@ def run_pdb_fetch_fasta(
     Args:
         inputs (PdbFetchFastaInput): PDB accession to look up.
         config (PdbFetchConfig): Empty placeholder (PDB fetch has no user settings).
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         PdbFetchFastaOutput: PdbFetchFastaOutput with chain sequences.

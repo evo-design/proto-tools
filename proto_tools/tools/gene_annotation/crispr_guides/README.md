@@ -29,7 +29,7 @@ Use this operation to create an auditable candidate pool before applying on-targ
 
 #### Usage Tips
 
-- **Supply intervals in reference plus-strand orientation.** Set each region's 1-indexed `start`; the tool derives all plus- and minus-strand coordinates from that representation.
+- **Supply intervals in reference plus-strand orientation.** Set each region's 1-indexed `start`. The tool derives all plus- and minus-strand coordinates from that representation.
 - **Write the PAM in nuclease orientation.** Use `pam_side="three_prime"` for patterns such as SpCas9 `NGG`, or `pam_side="five_prime"` for patterns such as Cas12a `TTTV`.
 - **`pam_strand` is the strand carrying the protospacer and PAM.** The guide RNA matches the protospacer and pairs with the opposite strand.
 - **Fetch enough exterior sequence.** A candidate near an interval edge keeps whatever flank is available, so its `context_sequence` is shorter than `context_5p + protospacer + PAM + context_3p`.

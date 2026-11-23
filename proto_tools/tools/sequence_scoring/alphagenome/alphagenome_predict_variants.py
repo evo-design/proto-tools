@@ -1,7 +1,4 @@
-"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_variants.py.
-
-AlphaGenome batched variant-effect prediction tool.
-"""
+"""AlphaGenome batched variant-effect prediction tool."""
 
 import json
 import logging

@@ -401,7 +401,7 @@ def run_encode_search(
     Args:
         inputs (EncodeSearchInput): Facet filters and optional free text per query.
         config (EncodeSearchConfig): Item type, released/default filters and result size.
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         EncodeSearchOutput: One result per query, with download URLs for files.
@@ -496,10 +496,10 @@ def _diagnose(
 ) -> list[str]:
     """Explain filters whose value matches no item.
 
-    The portal echoes unknown facet names and misspelled values back without complaint, so a typo
-    looks like a real empty result. Each suspect value is counted on its own: every value when the
-    search found nothing; otherwise negated values and values in lists, since a misspelled ``key!``
-    excludes nothing and a misspelled list value adds nothing, with no effect on the hit count.
+    The portal accepts unknown facet names and misspelled values, so a typo can look
+    like a valid empty result. If the search found nothing, check each value alone.
+    Otherwise check negated values and list values, since mistakes in those filters
+    can leave the hit count unchanged.
     """
     in_list = {key for key, val in query.filters.items() if isinstance(val, list)}
     suspects = [(key, value) for key, value in query.filter_pairs() if no_hits or key.endswith("!") or key in in_list]

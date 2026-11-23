@@ -1,7 +1,8 @@
 """proto_tools/tools/database_retrieval/sequence_fetch/sequence_fetch.py.
 
-Thin orchestrator that chains database-specific tools (ncbi, uniprot,
-pdb) with molecule-type routing and cross-fetcher ID resolution.
+Retrieve sequences and structures through NCBI, UniProt, and PDB tools.
+
+Route each request by molecule type and resolve identifiers across databases.
 """
 
 import csv
@@ -671,7 +672,7 @@ def run_sequence_fetch(
         inputs (SequenceFetchInput): One or more sequence retrieval requests.
         config (SequenceFetchConfig): Candidate-limit, type-check, and NCBI credential settings.
 
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         SequenceFetchOutput: Per-request retrieval status, sequences, and metadata.
@@ -732,6 +733,7 @@ def _process_single_request(
     structures: list[FetchedStructure] = []
     resolved_ids: dict[str, str] = {}
 
+    # Check that the supplied identifier can support the requested molecule types.
     type_error = _validate_request_type_compatibility(request, config)
     if type_error:
         if config.type_check_mode == "error":
@@ -762,6 +764,7 @@ def _process_single_request(
         "rna_premrna": _fetch_rna_premrna,
     }
 
+    # Retrieve each molecule type independently so one missing record does not discard the others.
     for sequence_type in request.sequence_types:
         try:
             if sequence_type == "structure":
@@ -788,6 +791,7 @@ def _process_single_request(
             errors.append(f"UNEXPECTED_ERROR[{sequence_type}]: {exc}")
 
     status: Literal["success", "warning", "failed"]
+    # Distinguish a complete failure from a result that still contains usable records.
     if errors and not (sequences or structures):
         status = "failed"
     elif errors or warnings:
@@ -845,6 +849,7 @@ def _fetch_protein(
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
+    # Use the UniProt entry directly when a UniProt ID is given
     if request.uniprot_id:
         entry = _fetch_uniprot_entry(request.uniprot_id, session)
         if entry is None:
@@ -856,6 +861,7 @@ def _fetch_protein(
         accession = entry.get("primaryAccession", request.uniprot_id)
         ids = {"uniprot_id": accession}
 
+        # Point at linked PDB structures when the request did not ask for one
         pdb_xrefs = _extract_pdb_crossrefs(entry)
         if pdb_xrefs and not request.pdb_id and "structure" not in request.sequence_types:
             warnings.append(f"UniProt entry maps to PDB IDs {', '.join(pdb_xrefs[:3])}; use structure type to fetch")
@@ -873,6 +879,7 @@ def _fetch_protein(
             warnings,
         )
 
+    # Otherwise fetch the FASTA record for an NCBI protein accession
     protein_accession = request.protein_accession
     if protein_accession:
         result = _ncbi_fetch_first_fasta(
@@ -899,6 +906,7 @@ def _fetch_protein(
             warnings,
         )
 
+    # Otherwise read the protein chains from the PDB entry's FASTA
     if request.pdb_id:
         fasta_records = _fetch_pdb_fasta(request.pdb_id.upper(), session)
         if not fasta_records:
@@ -908,6 +916,7 @@ def _fetch_protein(
             raise SequenceFetchError(
                 f"PDB ID '{request.pdb_id}' has no protein chains (found {len(fasta_records)} non-protein chain(s))"
             )
+        # Take the first protein chain and warn if there were others
         header, sequence = protein_records[0]
         accession = request.pdb_id.upper()
         if len(protein_records) > 1:
@@ -937,6 +946,7 @@ def _fetch_protein(
             max_candidates=config.max_candidates_per_source,
             session=session,
         )
+    # Return the UniProt hit only if it has both a sequence and an accession
     if entry is not None:
         sequence = entry.get("sequence", {}).get("value")
         accession = entry.get("primaryAccession")
@@ -954,6 +964,7 @@ def _fetch_protein(
                 [],
             )
 
+    # Fall back to an NCBI protein search
     term = _ncbi_term_for_request(request)
     search_ids, _ = _ncbi_esearch(
         db="protein",
@@ -968,6 +979,7 @@ def _fetch_protein(
     if len(search_ids) > 1:
         warnings.append(f"Multiple NCBI protein candidates found ({len(search_ids)}); using top hit {search_ids[0]}")
 
+    # Fetch the FASTA record of the top NCBI hit
     result = _ncbi_fetch_first_fasta(
         db="protein",
         identifier=search_ids[0],
@@ -1003,14 +1015,17 @@ def _fetch_dna_genomic(
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
+    # Parse accession:start-end:strand coordinates, if any were given
     coords = _parse_coordinates(request.genomic_coordinates)
     accession_hint = request.genomic_accession
 
     if coords is not None:
+        # Anchor the coordinates to their accession, or the request's genomic accession
         coord_accession = coords[0] or accession_hint
         if coord_accession is None:
             raise SequenceFetchError("Genomic coordinates provided but no accession to anchor them")
 
+        # Fetch only the requested interval from nuccore
         result = _ncbi_fetch_first_fasta(
             db="nuccore",
             identifier=coord_accession,
@@ -1038,6 +1053,7 @@ def _fetch_dna_genomic(
             warnings,
         )
 
+    # Otherwise fetch the whole record for a direct genomic accession
     direct_accession = request.genomic_accession
     if direct_accession:
         result = _ncbi_fetch_first_fasta(
@@ -1071,6 +1087,7 @@ def _fetch_dna_genomic(
     except SequenceFetchError as exc:
         warnings.append(f"Gene-locus lookup failed ({exc}); fell back to a nuccore search")
 
+    # Search nuccore for genomic records, retrying without the genomic filter if none match
     term = f"({_ncbi_term_for_request(request)}) AND biomol_genomic[PROP]"
     ids, _ = _ncbi_esearch(
         db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
@@ -1086,6 +1103,7 @@ def _fetch_dna_genomic(
     if not ids:
         raise SequenceFetchError(f"No genomic DNA found for {_target_label(request)}")
 
+    # Take the first candidate that returns a FASTA record
     attempted_not_found: list[str] = []
     selected_id: str | None = None
     header = ""
@@ -1137,6 +1155,7 @@ def _fetch_dna_genomic_from_gene_locus(
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
+    # Use the given gene ID, or search NCBI gene by name and organism
     if request.gene_id:
         gene_ids = [request.gene_id]
     else:
@@ -1154,6 +1173,7 @@ def _fetch_dna_genomic_from_gene_locus(
     if len(gene_ids) > 1:
         warnings.append(f"Multiple gene candidates found ({len(gene_ids)}); using top hit {selected_gene_id}")
 
+    # Look up the gene's genomic placement in its esummary record
     summary_result = _ncbi_esummary(
         db="gene",
         identifier=selected_gene_id,
@@ -1169,6 +1189,7 @@ def _fetch_dna_genomic_from_gene_locus(
     if not genomic_info:
         raise SequenceFetchError(f"Gene record '{selected_gene_id}' lacks genomic coordinates in esummary")
 
+    # Use the first region that names a versioned chromosome accession
     selected_region = None
     for region in genomic_info:
         if region.get("chraccver"):
@@ -1177,6 +1198,8 @@ def _fetch_dna_genomic_from_gene_locus(
     if selected_region is None:
         raise SequenceFetchError(f"Gene record '{selected_gene_id}' has genomic info but no chromosome accession")
 
+    # Convert the 0-based esummary bounds to a 1-based interval
+    # A start greater than the stop means the gene is on the minus strand
     chr_accession = selected_region["chraccver"]
     chr_start = int(selected_region["chrstart"])
     chr_stop = int(selected_region["chrstop"])
@@ -1184,6 +1207,7 @@ def _fetch_dna_genomic_from_gene_locus(
     seq_stop = max(chr_start, chr_stop) + 1
     strand = "-" if chr_start > chr_stop else "+"
 
+    # Fetch the gene interval from the chromosome record
     result = _ncbi_fetch_first_fasta(
         db="nuccore",
         identifier=chr_accession,
@@ -1338,6 +1362,7 @@ def _fetch_rna_transcript(
     warnings: list[str] = []
     ncfg = _ncbi_config(config)
 
+    # Fetch a given transcript accession directly, transcribing the DNA FASTA to RNA
     transcript_accession = request.transcript_accession
     if transcript_accession:
         result = _ncbi_fetch_first_fasta(
@@ -1364,6 +1389,7 @@ def _fetch_rna_transcript(
             warnings,
         )
 
+    # Otherwise search nuccore for mRNA or RNA records by name and organism
     term = f"({_ncbi_term_for_request(request)}) AND (biomol_mrna[PROP] OR biomol_rna[PROP])"
     ids, _ = _ncbi_esearch(
         db="nuccore", term=term, config=ncfg, session=session, max_results=config.max_candidates_per_source
@@ -1374,6 +1400,7 @@ def _fetch_rna_transcript(
     if len(ids) > 1:
         warnings.append(f"Multiple transcript candidates found ({len(ids)}); using top hit {ids[0]}")
 
+    # Fetch the top hit's FASTA and transcribe it to RNA
     result = _ncbi_fetch_first_fasta(
         db="nuccore",
         identifier=ids[0],
@@ -1440,8 +1467,8 @@ def _fetch_structure(
 ) -> tuple[FetchedStructure, dict[str, str], list[str], list[str]]:
     """Fetch a structure's metadata and coordinates from PDB, and the warnings and errors along the way.
 
-    An entry that can't be found raises; coordinates that can't be downloaded leave ``structure`` None and an
-    error, so the metadata is still returned.
+    Raise if the entry cannot be found. If only the coordinate download fails, return
+    the metadata with ``structure=None`` and an error describing the failed download.
     """
     warnings: list[str] = []
     errors: list[str] = []

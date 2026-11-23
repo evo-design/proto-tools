@@ -121,6 +121,7 @@ class ProGen3Model:
         """
         set_torch_seed(seed)
 
+        # Load the model, or move it if it already sits on another device.
         if not self._loaded:
             self.load(device, verbose)
         elif self.device != device:
@@ -138,6 +139,7 @@ class ProGen3Model:
             top_p=top_p,
         )
 
+        # Parse each prompt's direction and tokenize it for generation.
         prompt_infos = [self._prepare_generation_prompt(generator, idx, prompt) for idx, prompt in enumerate(prompts)]
         outputs: dict[int, dict[str, str]] = {}
 
@@ -145,6 +147,7 @@ class ProGen3Model:
         for chunk_start in range(0, len(prompt_infos), batch_size):
             counter(chunk_start // batch_size + 1)
             chunk = prompt_infos[chunk_start : chunk_start + batch_size]
+            # Group prompts by token length and end token so each group stacks into one batch.
             grouped: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
             for info in chunk:
                 grouped[(info["num_input_tokens"], info["end_token_id"])].append(info)
@@ -152,6 +155,7 @@ class ProGen3Model:
             for group in grouped.values():
                 if verbose:
                     logger.info(f"Generating ProGen3 batch with {len(group)} prompt(s)")
+                # Generate the group and file each completion under its prompt's original index.
                 for info, generated in zip(
                     group,
                     self._generate_batch(
@@ -164,6 +168,7 @@ class ProGen3Model:
                 ):
                     outputs[info["index"]] = generated
 
+        # Restore the input prompt order.
         generated_outputs = [outputs[i] for i in range(len(prompt_infos))]
 
         return {
@@ -219,11 +224,12 @@ class ProGen3Model:
 
         gen_config = deepcopy(generator.default_gen_config)
         gen_config.eos_token_id = prompt_infos[0]["end_token_id"]
-        # Mirror upstream: generated token limits include completion terminators.
+        # Include the two completion terminators in the token limits, as upstream does.
         gen_config.max_new_tokens = max_new_tokens + 2
         gen_config.min_new_tokens = min_new_tokens + 2
         gen_config.num_return_sequences = 1
 
+        # Prefill all but the final prompt token before autoregressive generation.
         cached_length = num_input_tokens - 1
         key_value_cache = None
         if cached_length > 0:
@@ -451,7 +457,7 @@ class _PerPositionScorer:
             fwd_full = fwd_full[:seq_len]
             rev_full = rev_full[:seq_len]
 
-            # Bidirectional: average where both exist
+            # Average forward and reverse scores where both are available.
             bidir: list[float | None] = []
             for f, r in zip(fwd_full, rev_full, strict=True):
                 if f is not None and r is not None:

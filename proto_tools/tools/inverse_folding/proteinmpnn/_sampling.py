@@ -3,8 +3,8 @@
 Shared sampling machinery for the ProteinMPNN sampling tools.
 
 ``proteinmpnn-sample`` and ``proteinmpnn-sample-homooligomer`` differ only in how
-they resolve chains and fixed positions; the staging, chunked dispatch, and
-segment handling below are common to both and live here so the two cannot drift.
+they resolve chains and fixed positions. Both use the staging, chunked dispatch,
+and segment handling defined here.
 """
 
 import logging
@@ -71,6 +71,7 @@ def collect_samples(
                 "backbone_noise": config.backbone_noise,
                 "homooligomer": homooligomer,
             }
+            # Generate this chunk and accumulate its sequences and per-design scores.
             result = ToolInstance.dispatch("proteinmpnn", input_dict, instance=instance, config=config)
             all_seqs.extend(result["seq"])
             all_perp.extend(np.exp(result["score"]).tolist())
@@ -97,10 +98,8 @@ def split_chain_segments(raw_seq: str, chain_ids: list[str], *, tied: bool) -> l
     """
     segments = raw_seq.split("/")
     if tied:
-        # Tied decoding always collapses the oligomer to exactly one protomer segment
-        # (ColabDesign's _get_seq keeps only seq.split("/")[0]), so anything else means the
-        # tie did not happen. Accepting a per-chain split here would silently return
-        # independently designed protomers from a tool whose whole promise is that they match.
+        # ColabDesign's tied decoding returns one protomer segment. Reject multiple
+        # segments because they indicate the chains were designed independently.
         if len(segments) != 1:
             raise ValueError(
                 f"Tied ProteinMPNN decoding must return exactly one protomer segment, but got "

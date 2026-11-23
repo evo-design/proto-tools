@@ -2,7 +2,7 @@
 
 Finds transcripts in raw sequence without a reference, returning each
 transcript's bounds, strand, confidence score, and TSS and poly(A) positions.
-Detection is strand-insensitive: genes on either strand are found from a single
+Detection is strand-insensitive. Genes on either strand are found from a single
 submission, and the reported ``strand`` is relative to the sequence as
 submitted.
 

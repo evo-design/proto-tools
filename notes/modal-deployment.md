@@ -1,19 +1,18 @@
 # Modal deployment and dispatch
 
-How `proto_tools/modal/` turns a registered tool into a deployed Modal app, and how
-`device="modal"` reaches one. User-facing setup lives in
-[`proto_tools/modal/README.md`](../proto_tools/modal/README.md); this note is the
-developer reference for the machinery behind it.
+This note covers how `proto_tools/modal/` deploys registered tools as Modal apps
+and sends calls to them with `device="modal"`. For setup instructions, see
+[`proto_tools/modal/README.md`](../proto_tools/modal/README.md).
 
-Two separable activities share the module, usually performed by different people at
-different times:
+The module handles two activities, often performed by different people at
+different times.
 
 - **Deploying** a tool into a Modal workspace, one app per service, built from this
   repository's own tool definitions.
 - **Dispatching** a call to an already-deployed app, which is what `device="modal"` does.
 
-Nothing about the second requires you to have done the first. A workspace someone else
-deployed into serves calls the same way.
+You can call an app that someone else deployed to the workspace. You do not
+need to deploy it yourself.
 
 ## Why deployments build from your checkout
 
@@ -24,8 +23,8 @@ revision. Add the tool, register its service, deploy.
 
 A non-editable install has no source tree, so the image is built from the installed
 package instead. Its dependencies come from the distribution metadata and the package
-itself is mounted. The catalogue that shipped with the release deploys; a tool you added
-locally does not exist to deploy, which needs an editable install.
+itself is mounted. You can deploy the tools shipped with that release. To deploy a tool added
+to a local checkout, use an editable install.
 
 `PROTO_MODAL_PROTO_TOOLS` overrides the resolution when you want to build from a
 different checkout than the one you are running.
@@ -33,7 +32,7 @@ different checkout than the one you are running.
 ## The manifest
 
 `manifest.py` is the single declaration of what exists. Everything else derives from it,
-and a startup check fails loudly when the pieces disagree.
+and a startup check raises an error if they disagree.
 
 | Table | Holds |
 |---|---|
@@ -48,26 +47,25 @@ Grouping several services into one app is how tools sharing a model and environm
 share an image and a warm container. Splitting them would mean paying for the same
 weights twice.
 
-## App entrypoints are rendered, not committed
+## App entrypoints
 
 `modal deploy` needs a module path to import. That module used to be 35 generated files
 checked into the tree, with a generator and a consistency test to keep them honest.
 
-They are now rendered into a temporary directory at deploy time and discarded. The
-staleness class is removed structurally rather than tested for, and nothing is written
-into a user's tree. `render_entrypoint` in `deploy.py` builds the module text from
-`APP_BUCKETS`; `import_all_services()` in `registry.py` replaced the aggregate import the
+They are now rendered into a temporary directory at deploy time and discarded.
+This avoids stale generated files and does not write into the user's checkout. `render_entrypoint` in `deploy.py` builds the module text from
+`APP_BUCKETS`. `import_all_services()` in `registry.py` replaced the aggregate import the
 deleted package used to provide.
 
 ## Images
 
 `base_images.py` builds every image from a shared base plus the tool's own requirements.
 
-One rule is load-bearing and was learned the hard way. Modal auto-mounts the package
+Modal automatically mounts the package
 containing a service class, and that mount lands at `/root`, which **precedes** `/pkg` on
 `sys.path`. An image that also mounted proto-tools at `/pkg` therefore had two copies,
-and imports resolved to the one nothing had been written to. Standalone overrides applied
-to `/pkg` were inert. Images now ship exactly one copy, at the path imports resolve to:
+and imports resolved to the unmodified copy. Standalone overrides applied to
+`/pkg` had no effect. Images now ship one copy at the path Python imports.
 
 ```python
 image = image.add_local_python_source("proto_tools", copy=True, ignore=[])
@@ -78,8 +76,9 @@ files, and a standalone directory is not all Python.
 
 ## Standalone overrides
 
-An escape hatch for when a tool's environment builds on bare metal but not inside a
-container: a different wheel index, a pinned system library, an extra variable.
+Use a standalone override when a tool's environment needs different setup in a
+Modal container, such as a different wheel index, a pinned system library, or
+an extra environment variable.
 
 Each tool ships a `standalone/` directory describing how to build its isolated
 environment. To replace part of it for Modal only, put the modified file beside the
@@ -102,12 +101,12 @@ image = with_proto_tools(GPU_BASE, overrides="evo1", overrides_dir=Path(__file__
 With no `standalone_overrides/` directory the call returns the image unchanged, so it is
 safe to leave in place.
 
-Record why each override exists at the top of the file: which upstream file it replaces,
-what the deliberate difference is, and when it was last checked against upstream.
+At the top of each override, explain which upstream file it replaces, what
+changed, and when it was last checked against upstream.
 
-Changing an override forces a full environment rebuild, because proto-tools fingerprints
-the standalone directory and any edit invalidates the cached environment. For a tool
-whose environment takes half an hour to resolve, that is the whole build again.
+Changing an override triggers a full environment rebuild. Proto-tools
+fingerprints the standalone directory, so an edit invalidates the cached
+environment.
 
 ## Fingerprinting and drift
 
@@ -122,13 +121,12 @@ volume, and the client compares them on dispatch.
 | `env_hash` | a recursive walk of the standalone directory | a dependency or setup change |
 
 `ALGORITHM` is a version guard. A deployment recorded under a different algorithm reports
-that it cannot be compared rather than guessing, which is the correct answer and not a
-failure.
+that the hashes cannot be compared.
 
 `code_hash` autodetects a tool's defining files from `spec.source_file` and its
 first-party MRO, so a tool that inherits behaviour from a shared base is covered without
 declaring anything. The blind spot found in review was `standalone_helpers/`, which
-`env_hash` now walks; for ESM2 that is 61 files that previously could change with no
+`env_hash` now walks. For ESM2 that is 61 files that previously could change with no
 effect on any hash.
 
 Drift produces a warning rather than an error. A stale deployment still runs, which is
@@ -136,8 +134,8 @@ usually what a caller wants, and the warning names which of the three moved.
 
 ## Dispatch
 
-`client.py` holds both forms. `dispatch_to_modal` runs one call through `.remote()`;
-`dispatch_batch_to_modal` fans a batch out through `starmap`, which queues chunks and
+`client.py` handles single calls and batches. `dispatch_to_modal` runs one call
+through `.remote()`. `dispatch_batch_to_modal` fans a batch out through `starmap`, which queues chunks and
 reuses warm containers, with `return_exceptions=True` so a failed chunk does not discard
 chunks that already succeeded and were already billed, and `order_outputs=True` so each
 entry stays aligned with the input that produced it.
@@ -149,12 +147,12 @@ know, and should not need to know, what hardware the deployment sits on.
 ### The transport envelope
 
 A config crossing a process boundary carries framework state that is not a field.
-`to_transport_dict()` adds it under `_proto_internal`; `BaseConfig`'s wrap validator
+`to_transport_dict()` adds it under `_proto_internal`. `BaseConfig`'s wrap validator
 strips the key before validation so `extra="forbid"` never sees it, restores what it
 recognises, and **ignores what it does not**.
 
 That last property is what makes rollout safe in both directions. A worker predating a
-new key reads an unchanged envelope; a worker that understands a key streams nothing when
+new key reads an unchanged envelope. A worker that understands a key streams nothing when
 it is absent. It is also why live progress needed no change to any service's method
 signature.
 
@@ -173,7 +171,7 @@ never the caller. Progress travels beside the call on a `modal.Queue`: one persi
 queue per environment, partitioned per call, with the partition carried in the transport
 envelope described above.
 
-The performance contract is enforced by construction, not by measurement:
+Progress streaming keeps work off the tool's execution thread.
 
 - `emit` runs on the tool's own thread and does one bounded-deque append of the
   **unformatted** record. Deferring `%`-formatting is the whole trick, worth +16.8%
@@ -183,7 +181,7 @@ The performance contract is enforced by construction, not by measurement:
 - The queue is resolved on the drainer thread, so the tool thread does no network work
   even at setup.
 - The buffer drops its oldest entry rather than applying backpressure. A lost progress
-  line costs nothing; a slow `emit` would cost the run.
+  line is less disruptive than slowing the tool's execution.
 - The first queue error disables streaming for the rest of the run.
 - Closing the stream is off the result path. On exit the handler comes off at once, and the
   final flush and end sentinel run on a daemon thread, so the result never waits on them.
@@ -198,7 +196,7 @@ be lost. Progress tolerates that by design.
 Records replay through `proto_tools.modal.remote` carrying the `update_status` flag the
 spinner keys on, so a remote line renders exactly as the same line does locally.
 
-One gap worth knowing: progress opens per call, inside `dispatch_tool_call`. A container
+Progress opens per call inside `dispatch_tool_call`. A container
 still waking up has not reached that point, so a cold start streams nothing for its first
 several seconds. The client covers the interval by naming the backend on the spinner.
 
@@ -209,7 +207,7 @@ remote worker. The registry calls it once before dispatch, for whichever remote 
 was chosen.
 
 The hook takes the device so an override can tell remote targets apart should there be
-more than one; today `"modal"` is the only one. A local checkpoint path exists on no
+more than one. Currently `"modal"` is the only one. A local checkpoint path exists on no
 remote machine, so it is refused there.
 
 The name matters more than it looks. Three configs once spelled it
@@ -234,17 +232,18 @@ rather than erroring.
 | | Runs | Sees |
 |---|---|---|
 | `register_payload_hook` | before validation | the raw `input_dict` and `config_dict`, mutable |
-| `register_call_middleware` | around the call | a `CallContext` and the next step; may transform the result |
+| `register_call_middleware` | around the call | a `CallContext` and the next step, with the option to transform the result |
 
 A payload hook is the only place a value can still be rewritten. Middleware follows the ASGI
-shape; first registered is outermost, and `CallContext.tool_key` says which tool it wrapped.
+shape. The first registered middleware is outermost, and `CallContext.tool_key` says which tool it wrapped.
 
 Both are process-wide. Register during import, from whatever module defines the deployment's
 entry point — registration is not synchronized. Nothing registers by default.
 
-Two limits worth knowing: payload hooks run before the progress context opens, so a slow one is
-silent on the caller's spinner; and a middleware that forgets to return raises `TypeError` rather
-than returning `None` to the client.
+Payload hooks run before the progress context opens, so a slow hook shows no
+progress on the caller's spinner. Middleware must return a result. If it
+forgets to return, the call raises `TypeError` rather than sending `None`
+to the client.
 
 ### Getting extension code into a worker
 
@@ -278,7 +277,7 @@ through `run_tool_call`, so it never loads them.
 Both failure modes are surfaced rather than deferred, because a worker serving calls with a
 deployment's extensions silently absent is worse than a loud failure:
 
-- a module that cannot be imported raises an `ImportError` naming `PROTO_MODAL_WORKER_PLUGINS`;
+- a module that cannot be imported raises an `ImportError` naming `PROTO_MODAL_WORKER_PLUGINS`.
 - a directory that does not exist, or whose name nothing could import, fails the deploy up front
   rather than inside a subprocess whose output is filtered to phase lines.
 
@@ -286,7 +285,7 @@ Extension code that reaches a credentialed service needs credentials in the cont
 `PROTO_MODAL_SECRETS` names further Modal secrets, attached to the app rather than to each service
 class — Modal gives a function its app's secrets in addition to its own, so a service declaring
 secrets of its own keeps them. The HuggingFace secret is the default member of that list and needs
-no entry; naming others adds to it rather than replacing it, so gated weight downloads keep
+no entry. Naming others adds to it rather than replacing it, so gated weight downloads keep
 working. A name that does not exist in the workspace fails the deploy.
 
 A mounted directory excludes `.git` and the usual build artefacts. It does *not* exclude `tests`,
@@ -321,8 +320,8 @@ truthiness — `MODAL_TOKEN_ID=""` still shadows a readable config file and then
 authenticate, which is why `credentials_checked` reports `set`/`empty`/`unset` rather than a
 boolean.
 
-The distinction matters most where proto-tools does not run on a laptop. A token file written
-outside the process is frequently unreadable from inside it: the file may be absent, or present
+This distinction matters when a token file written outside the process is unreadable
+from inside it. The file may be absent or present
 in a directory the uid cannot traverse. Those two states are indistinguishable to
 `Path.exists()`, so `config_state()` separates `absent` from `unreadable` — only the first is
 fixed by writing a token. For the same reason `config_path()` uses `os.path.expanduser` rather
@@ -335,8 +334,8 @@ diagnose.
 
 ### `proto-tools doctor`
 
-One command that reports whether this environment can reach Modal, and exits non-zero naming a
-remedy when it cannot. It verifies the credential with `Client.hello()` rather than stopping at
+`proto-tools doctor` reports whether this environment can reach Modal. If it
+cannot, the command exits with a nonzero status and suggests a remedy. It verifies the credential with `Client.hello()` rather than stopping at
 `Client.from_env()`, which only checks that a token is *present* — a revoked or wrong-workspace
 token passes that check and fails every real call. Four outcomes are reported apart because
 each needs a different fix:
@@ -346,7 +345,7 @@ each needs a different fix:
 | `OK via <source>` | Verified against the server, naming which of the three sources was used. |
 | `not found` | No credential in any source, listing what was checked. |
 | `rejected` | A credential was found and the server refused it — revoked, or another workspace. |
-| `unverified` | A credential was found but Modal was unreachable; a network fault, not a bad token. |
+| `unverified` | A credential was found but Modal was unreachable due to a network fault, so the token could not be verified. |
 
 `workspace_info` in the MCP still stops at `from_env()`, so it reports `authenticated: true`
 for a token the server would refuse. Verifying there would add a network roundtrip to an
@@ -354,7 +353,7 @@ agent's first orienting call, so the two surfaces differ on purpose.
 
 ## Configuration
 
-Nine environment variables, all optional, read in the environment a deploy runs from.
+Deployment reads nine optional environment variables from the process running it.
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -409,11 +408,12 @@ export PROTO_MODAL_HF_SECRET=huggingface-secret
 ```
 
 `app.py` resolves this once at import. Inside a container the token has already arrived
-through the attached secret, so re-reading the environment there would only rewrap it; the
+through the attached secret, so re-reading the environment there would only rewrap it. The
 local-machine branch is guarded by `modal.is_local()`.
 
-Missing this is not loud. A build with no token still succeeds for ungated weights and fails
-only where a licence is required, which is how 34 of 35 warmups once ran without one.
+A build without a token can still succeed for ungated weights and fail only
+when a licence is required. In one deployment, 34 of 35 warmups ran without a
+token before this was noticed.
 
 ## JAX compilation cache
 
@@ -439,7 +439,7 @@ scale to your plan's ceiling.
 Cached weights persist on a Modal volume and accrue storage cost until removed.
 
 `SCALEDOWN_WINDOW` (30s, `PROTO_MODAL_SCALEDOWN_WINDOW`) is the direct trade. A longer
-window keeps a container warm and skips cold starts on the next call; it also bills for
+window keeps a container warm and skips cold starts on the next call. It also bills for
 an idle GPU for that long. Raise it for an interactive session, leave it low for
 occasional calls.
 
@@ -451,10 +451,10 @@ multiplies the worst-case wall clock by four. Startup shares that budget.
 `tests/modal_tests/` runs entirely offline. Fakes stand in for the Modal SDK, which means
 the suite pins the contracts the client depends on rather than Modal's behaviour.
 
-That boundary has a cost worth stating: a bug in how a Modal object comes into being is
-invisible to it. `modal.Queue.from_name` is lazy, so `create_if_missing=True` never
+Offline tests cannot detect every problem with the lifecycle of a real Modal
+object. `modal.Queue.from_name` is lazy, so `create_if_missing=True` never
 created the progress queue, every worker's lookup failed, and the feature produced nothing
 while results still came back correct. The unit tests substituted a fake for the very
 object whose lifecycle was broken. A real deploy found it in one run.
 
-Deploy against a development environment before trusting anything here.
+Verify deployment changes in a development environment as well as with offline tests.

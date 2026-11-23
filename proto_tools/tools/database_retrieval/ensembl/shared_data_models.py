@@ -1,7 +1,7 @@
 """proto_tools/tools/database_retrieval/ensembl/shared_data_models.py.
 
-Pydantic submodels + HTTP helpers shared by the ensembl-* tools (lookup,
-sequence, overlap, xrefs, vep).
+Shared Pydantic models and HTTP helpers for Ensembl lookup, sequence, overlap,
+cross-reference, and variant-effect tools.
 """
 
 from typing import Any, Literal
@@ -411,9 +411,8 @@ class EnsemblOverlapFeatureRecord(BaseModel):
     """One feature returned by /overlap/id.
 
     Different ``feature`` query values (gene, regulatory, variation, ...)
-    return divergent payload shapes; the typed fields below are the
-    intersection across feature types, with ``raw`` carrying the full
-    upstream record for type-specific access.
+    return different payload shapes. The typed fields below cover shared fields,
+    while ``raw`` preserves the complete record for access to feature-specific data.
 
     Attributes:
         feature_type (str): Feature type ('gene', 'transcript', 'exon',

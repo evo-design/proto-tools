@@ -53,7 +53,7 @@ def local_search_low_memory_reason(entry: MMseqs2DatabaseEntry, cache_dir: Path)
     """Reason a local search will be memory-starved, or ``None`` if RAM suffices.
 
     colabfold_search's align/expand steps load the dataset's ``{db_prefix}_seq``
-    file; when available RAM is below its on-disk size the search either OOMs (in
+    file. When available RAM is below its on-disk size the search either OOMs (in
     the default load mode) or runs very slowly (mmap). Compares that file's size
     against the cgroup-aware budget. Returns ``None`` when the file is absent
     (size unknown) so callers fall through rather than guess.
@@ -383,14 +383,14 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
 
     @property
     def uses_gpu_search(self) -> bool:
-        """Whether ``device`` selects MMseqs2-GPU; ignored when the search is remote."""
+        """Whether ``device`` selects MMseqs2-GPU. Ignored when the search is remote."""
         from proto_tools.utils.device import parse_device_string
 
         return parse_device_string(self.device).kind == "cuda"
 
     @model_validator(mode="after")
     def _validate_gpu_device_platform(self) -> Any:
-        """GPU search requires Linux (the GPU MMseqs2 binary is Linux-only); device is ignored when remote."""
+        """GPU search requires Linux (the GPU MMseqs2 binary is Linux-only). The device is ignored for remote searches."""
         if self.uses_gpu_search and self.search_mode == "local" and platform.system() != "Linux":
             raise ValueError(
                 f"device={self.device!r} requires Linux (current: {platform.system()} {platform.machine()}). "
@@ -400,7 +400,7 @@ class Mmseqs2HomologySearchConfig(BaseConfig):
 
     @property
     def gpus_per_instance(self) -> int:
-        """Number of GPUs the configured search uses; remote search runs over the network and claims none."""
+        """Number of GPUs the configured search uses. Remote search runs over the network and claims none."""
         return 0 if self.search_mode == "remote" else super().gpus_per_instance
 
     def local_execution_reason(self, device: RemoteDevice) -> str | None:
@@ -659,9 +659,9 @@ def _remote_paired_group(
     The ColabFold API returns the row-aligned paired MSAs and each chain's deep
     *unpaired* MSA from separate calls, so both are dispatched in parallel. On
     success both ``paired_msas`` (cross-chain) and ``msas`` (per-chain unpaired
-    depth) are populated; when no taxonomy is shared ``paired_msas`` stays
-    ``[None, ...]`` and consumers read ``msas``. The unpaired call is best-effort:
-    if it fails, ``msas`` degrades to ``[None, ...]`` without affecting a
+    depth) are populated. When no taxonomy is shared ``paired_msas`` stays
+    ``[None, ...]`` and consumers read ``msas``. The unpaired call is best-effort.
+    If it fails, ``msas`` degrades to ``[None, ...]`` without affecting a
     successful paired result.
     """
     sequence_ids: list[str] = []
@@ -741,7 +741,7 @@ def _run_remote_homology_search(
 ) -> Mmseqs2HomologySearchOutput:
     """Generate MSAs via the ColabFold remote API (no local DB / GPU / provisioning).
 
-    Singletons share one batched unpaired API call; each paired (multi-chain)
+    Singletons share one batched unpaired API call. Each paired (multi-chain)
     group makes its own ``use_pairing=True`` call (see ``_remote_paired_group``).
     ``dataset``/``device``/``sensitivity`` are ignored in this mode.
     """
@@ -798,7 +798,7 @@ def _parse_a3m(a3m_path: Path | None) -> tuple[MSA | None, int]:
     """Parse an A3M into an ``(MSA, homolog_count)`` pair.
 
     Returns ``(None, 0)`` when the file is missing or holds only the query row
-    (no homologs); otherwise the parsed MSA and its homolog count (rows beyond
+    (no homologs). Otherwise returns the parsed MSA and its homolog count (rows beyond
     the query).
     """
     if a3m_path is None or not a3m_path.exists():
@@ -885,7 +885,7 @@ def _count_sequences_in_a3m(a3m_path: Path) -> int:
 def _replace_query_header_in_a3m(a3m_path: Path, seq_id: str) -> None:
     """Rewrite the first header line of an A3M file to use ``seq_id``.
 
-    Neither search names the query the way its caller does: a local one writes internal
+    Neither search names the query the way its caller does. A local one writes internal
     ``__q{idx}`` headers (see ``standalone/run.py``) and the remote server echoes its own
     ``>101`` counter. This rewrites the first header to the user's sequence_id so downstream
     consumers see the real identifier. All other homolog headers are untouched.

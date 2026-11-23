@@ -181,6 +181,7 @@ def run_iglm_score(
     """
     logger.debug("Using local venv for IgLM scoring: %s", config.model_checkpoint)
     spans = inputs.spans or [None] * len(inputs.sequences)
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "iglm",
         {

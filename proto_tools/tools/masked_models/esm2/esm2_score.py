@@ -177,6 +177,7 @@ def run_esm2_score(
           are needed
     """
     logger.debug(f"Using local for ESM2 scoring: {config.model_checkpoint}")
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "esm2",
         {

@@ -237,7 +237,7 @@ def run_europepmc_fulltext(
     Args:
         inputs (EuropePMCFullTextInput): PubMed Central IDs.
         config (EuropePMCFullTextConfig): Shared configuration only.
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         EuropePMCFullTextOutput: One document per PMCID, in input order. A PMCID that is not in

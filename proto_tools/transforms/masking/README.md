@@ -52,7 +52,7 @@ MaskingStrategy(mask_fraction=0.5, fixed_positions=[1]).mask(["MKTLLIFLA"])
 
 The masked strings are handed directly to ESM2 / ESM3 sampling tools; see the [ESM2](../../tools/masked_models/esm2/README.md) and [ESM3](../../tools/masked_models/esm3/README.md) example notebooks for end-to-end usage.
 
-## Best Practices & Gotchas
+## Practical notes
 
 - **Don't set both `num_mutations` and `mask_fraction`.** The config validates this at construction time and raises.
 - **`mask_fraction` is applied to the *designable* count**, not the full sequence length. With `fixed_positions=[1, 2, 3]` on a 100-residue sequence, `mask_fraction=0.3` masks ~29 positions, not 30.

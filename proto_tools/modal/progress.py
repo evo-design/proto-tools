@@ -51,12 +51,12 @@ CALL_ID_FIELD = "proto_call_id"
 class QueueProgressHandler(logging.Handler):
     """Buffer log records for a :class:`ProgressDrainer` to batch to a Modal Queue.
 
-    ``emit`` runs on the tool's own thread and therefore never blocks, formats, or raises. It
-    performs one bounded-deque append of the raw record. Formatting is deferred to :meth:`drain`,
-    which the drainer thread calls, and that deferral is what keeps the cost off the tool.
+    ``emit`` appends each raw record to a bounded deque on the tool's thread.
+    It does not block, format messages, or raise errors. The drainer thread
+    formats records later in :meth:`drain`.
 
-    A dropped record costs nothing beyond a missing progress line, whereas a slow ``emit`` would
-    cost the run, which is why the buffer discards the oldest rather than applying backpressure.
+    When the buffer fills, discard the oldest record so progress reporting
+    does not slow the tool down. A dropped record only loses a progress line.
     """
 
     def __init__(self, chunk_id: int | None = None, *, maxlen: int = BUFFER_LIMIT, level: int = logging.INFO) -> None:
@@ -106,8 +106,8 @@ class ProgressDrainer(threading.Thread):
     roughly one network write per interval regardless of log volume. The queue itself is resolved on
     this thread rather than at construction, so the tool thread performs no network work at all.
 
-    Best-effort throughout. The first queue error disables writing for the remainder of the run and
-    the tool continues untouched.
+    The first queue error disables further writes for that run. The tool
+    continues even if progress reporting fails.
 
     The stop Event is ``_stopping`` rather than ``_stop`` because ``threading.Thread`` defines its
     own ``_stop()`` and shadowing it crashes the thread at teardown.

@@ -182,7 +182,7 @@ def run_hmmsearch(input_data: dict[str, Any]) -> dict[str, Any]:
     }
     # pyhmmer's Pipeline rejects seed=None (TypeError on int conversion); Z/domZ
     # accept None directly and resolve to "use actual count". Skip all three when
-    # unset to keep the kwarg dict symmetric and the seed branch the load-bearing one.
+    # unset so the same filtering handles both the optional thresholds and the seed.
     if input_data["z_value"] is not None:
         kwargs["Z"] = input_data["z_value"]
     if input_data["domain_z_value"] is not None:
@@ -308,7 +308,7 @@ def run_nhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
         kwargs["seed"] = input_data["seed"]
     if input_data["skip_filters"]:
         kwargs |= {"F1": 1.0, "F2": 1.0, "F3": 1.0, "bias_filter": False}
-    # 'both' is the wrapper-default; pyhmmer expects None in that case.
+    # The wrapper uses 'both' by default, which pyhmmer represents as None.
     if input_data["strand"] != "both":
         kwargs["strand"] = input_data["strand"]
 
@@ -330,9 +330,11 @@ def run_nhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
 
 def run_jackhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run PyHMMER jackhmmer (iterative protein sequence search)."""
+    # Convert query and target strings to digital protein sequences
     query_sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="amino")
     target_sequences = _create_sequences_from_strings(input_data["target_sequences"], alphabet="amino")
 
+    # Map reporting and inclusion thresholds onto pyhmmer's keyword arguments
     kwargs: dict[str, Any] = {
         "cpus": input_data["num_threads"],
         "E": input_data["evalue_threshold"],
@@ -342,15 +344,18 @@ def run_jackhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
         "incE": input_data["inclusion_evalue_threshold"],
         "incdomE": input_data["inclusion_domain_evalue_threshold"],
     }
+    # Pass optional search-space sizes and seed only when set
     if input_data["z_value"] is not None:
         kwargs["Z"] = input_data["z_value"]
     if input_data["domain_z_value"] is not None:
         kwargs["domZ"] = input_data["domain_z_value"]
     if input_data["seed"] is not None:
         kwargs["seed"] = input_data["seed"]
+    # Disable the MSV, Viterbi and Forward filters and the bias filter for maximum sensitivity
     if input_data["skip_filters"]:
         kwargs |= {"F1": 1.0, "F2": 1.0, "F3": 1.0, "bias_filter": False}
 
+    # Iterate each query to convergence or max_iterations, keeping only the final iteration
     iteration_results = _collect_with_status(
         pyhmmer.jackhmmer(
             queries=query_sequences,
@@ -363,9 +368,11 @@ def run_jackhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
         len(query_sequences),
     )
 
+    # Convert the final iteration's hits into sequence and domain records
     final_hits = [result.hits for result in iteration_results]
     sequence_hits, domain_hits = _convert_hits_to_dicts(hits=final_hits, queries=query_sequences)
 
+    # Report per-query iteration counts and whether each search converged
     return {
         "sequence_hits": sequence_hits,
         "domain_hits": domain_hits,

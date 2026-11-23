@@ -10,8 +10,10 @@ def dispatch_masked_model(
     toolkit: str, operation: str, inputs: BaseToolInput, config: BaseConfig, instance: Any
 ) -> dict[str, Any]:
     """Dispatch an operation and decode dense outputs through the standard worker infrastructure."""
+    # Combine the validated request with the operation expected by the worker.
     payload = {**config.model_dump(), **inputs.model_dump(), "operation": operation}
     result = ToolInstance.dispatch(toolkit, payload, instance=instance, config=config)
+    # Convert compressed arrays to lists before building the public output model.
     result = decompress_result(result, to_list=True)
     result["metadata"] = {"model_checkpoint": payload["model_checkpoint"]}
     return result  # type: ignore[no-any-return]

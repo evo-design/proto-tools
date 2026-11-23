@@ -1,10 +1,4 @@
-"""proto_tools/tools/structure_prediction/esmfold/esmfold.py.
-
-Protein structure prediction using ESMFold.
-
-This module provides standardized interfaces for protein structure prediction
-using ESMFold from Meta AI.
-"""
+"""Predict protein structures with Meta AI's ESMFold."""
 
 import json
 import logging
@@ -78,8 +72,7 @@ def _is_cuda_oom(exc: RuntimeError) -> bool:
 class ESMFoldInput(StructurePredictionInput):
     """Input object for ESMFold structure prediction.
 
-    This class defines the input parameters for predicting 3D structures of proteins
-    using ESMFold, a fast protein structure prediction model from Meta AI.
+    Provide proteins for 3D structure prediction with Meta AI's ESMFold.
 
     Inherits from ``StructurePredictionInput``.
 
@@ -217,8 +210,7 @@ class ESMFoldOutput(StructurePredictionOutput):
 class ESMFoldConfig(StructurePredictionConfig):
     """Configuration object for ESMFold structure prediction.
 
-    This class defines configuration parameters for running ESMFold, a fast
-    protein structure prediction model that does not require multiple sequence
+    Configure ESMFold prediction, which does not require multiple sequence
     alignments (MSAs).
 
     Inherits from ``StructurePredictionConfig``.

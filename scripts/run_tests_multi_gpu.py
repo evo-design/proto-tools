@@ -11,8 +11,8 @@ Run the test suite across every visible GPU at once (see ``tests/_gpu_shards.py`
    toolkit, and by then the shards have left their envs and weights in the file cache.
 
 Environment builds and weight downloads already take cross-process locks under ``PROTO_HOME``, so
-shards that share a tool env wait for each other rather than collide; sharding by toolkit means
-they rarely need to.
+shards that share a tool environment wait for each other. Grouping tests by toolkit means
+this is rarely needed.
 
 Usage::
 
@@ -39,7 +39,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def visible_gpus() -> list[str]:
-    """Physical GPU indices this process may use: CUDA_VISIBLE_DEVICES, else every GPU nvidia-smi lists."""
+    """Return GPU indices from CUDA_VISIBLE_DEVICES, or every GPU listed by nvidia-smi."""
     cvd = os.environ.get("CUDA_VISIBLE_DEVICES")
     if cvd is not None:
         return [g for g in cvd.split(",") if g.strip()]
@@ -67,8 +67,8 @@ def pytest_cmd(pytest_args: list[str], out: Path, name: str, extra: list[str]) -
 def launch(cmd: list[str], out: Path, name: str, env: dict[str, str]) -> subprocess.Popen:
     """Start one phase or shard, logging to ``<out>/<name>.log``.
 
-    Its proto log goes to ``<out>/logs_<name>/``: the log file is named by start time (or ``-k``),
-    so shards started together would otherwise share, and interleave, one file.
+    Its proto log goes to ``<out>/logs_<name>/``. Log files are named by start time
+    or ``-k``, so shards started together could otherwise write to the same file.
     """
     log = (out / f"{name}.log").open("w")
     env = {

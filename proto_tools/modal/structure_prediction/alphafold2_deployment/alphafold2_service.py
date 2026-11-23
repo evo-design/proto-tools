@@ -23,12 +23,11 @@ from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_
 
 
 def _warmup() -> None:
-    """Deploy-time: warm the weights without searching for an MSA.
+    """Warm the weights at deploy time without searching for an MSA.
 
-    ``use_msa`` defaults to True, so leaving the config off made the build depend on the ColabFold
-    server — slow, external, and unrelated to whether the image is sound. Every other structure
-    predictor already states this; alphafold2 was relying on something short-circuiting the search
-    for a four-residue input, which is not a property to build on.
+    ``use_msa`` defaults to True. Disable it so the build verifies inference
+    without depending on ColabFold server availability or an MSA search being
+    skipped for the short example input.
     """
     from proto_tools.tools.structure_prediction.alphafold2 import AlphaFold2Config
     from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import (

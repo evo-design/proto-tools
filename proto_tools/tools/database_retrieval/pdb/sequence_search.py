@@ -372,6 +372,7 @@ def _annotate(session: requests.Session, hits: list[PdbSequenceSearchHit]) -> li
     """Fill annotation fields from one GraphQL request, joined by entity ID (RCSB does not keep order)."""
     if not hits:
         return hits
+    # Fetch annotations for every hit's entity ID in one GraphQL request
     request_payload = {"query": _ANNOTATION_QUERY, "variables": {"ids": [hit.entity_id for hit in hits]}}
     response = request_with_retry(
         lambda: session.post(_GRAPHQL_URL, json=request_payload, timeout=_REQUEST_TIMEOUT_SECONDS),
@@ -383,8 +384,10 @@ def _annotate(session: requests.Session, hits: list[PdbSequenceSearchHit]) -> li
     # GraphQL reports failures in an `errors` list, usually with HTTP 200.
     errors = "; ".join(str(error.get("message", error)) for error in body.get("errors") or [] if error)
     entities = (body.get("data") or {}).get("polymer_entities") or []
+    # Fail only when GraphQL returned errors and no entities at all
     if errors and not entities:
         raise RuntimeError(f"RCSB entity annotation failed: {errors[:1000]}")
+    # Index entities by ID and warn about hits RCSB did not annotate
     by_id = {entity["rcsb_id"]: entity for entity in entities if isinstance(entity, dict) and entity.get("rcsb_id")}
     missing = [hit.entity_id for hit in hits if hit.entity_id not in by_id]
     if missing:
@@ -396,9 +399,11 @@ def _annotate(session: requests.Session, hits: list[PdbSequenceSearchHit]) -> li
             UserWarning,
             stacklevel=2,
         )
+    # Copy each hit with its description, organism, UniProt IDs, chains and sequence
     annotated = []
     for hit in hits:
         entity = by_id.get(hit.entity_id)
+        # Keep hits without an annotation unchanged
         if entity is None:
             annotated.append(hit)
             continue

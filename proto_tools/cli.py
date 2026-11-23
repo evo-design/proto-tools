@@ -3,13 +3,12 @@
 Reachable as the ``proto-tools`` shell command after ``pip install``, or as
 ``python -m proto_tools`` without one.
 
-The verbs ``list``, ``search``, ``schema``, ``example``, ``info``, ``run`` and
-``workspace`` mirror the MCP server's tools and call the same functions in
-:mod:`proto_tools.mcp.tools`, so an agent gets identical answers whichever
-surface it uses. Their JSON output is the MCP payload, and a payload with
-``ok: false`` exits 1. The remaining verbs are developer docs views over
-``ToolRegistry``; they default to human-readable text and accept ``--json``
-where they return structured data.
+The ``list``, ``search``, ``schema``, ``example``, ``info``, ``run``, and
+``workspace`` commands call the same functions in :mod:`proto_tools.mcp.tools`
+as the MCP server. Their JSON output is the MCP payload, and the CLI exits with
+status 1 when ``ok`` is false. The remaining commands show developer
+documentation from ``ToolRegistry``. They default to readable text and accept
+``--json`` when they return structured data.
 """
 
 from __future__ import annotations

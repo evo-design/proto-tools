@@ -137,6 +137,7 @@ def run_ablang_sample(
             "light_chain. Supply the missing chain, or set align=False."
         )
     logger.debug("Using local venv for AbLang sampling: %s", model_choice)
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "ablang",
         {

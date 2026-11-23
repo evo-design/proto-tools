@@ -3,8 +3,8 @@ set -euo pipefail
 
 echo "Setting up TMalign standalone environment..."
 
-# Select C++ compiler: prefer system clang++ on macOS (conda-forge GCC
-# cross-compiler produces broken binaries on ARM64), g++ elsewhere.
+# Use system clang++ on macOS because the conda-forge GCC cross-compiler
+# produces broken binaries on ARM64. Use g++ on other platforms.
 if [[ "$(uname)" == "Darwin" ]]; then
     CXX="/usr/bin/clang++"
 else
@@ -29,7 +29,7 @@ git -C "$BUILD_DIR/usalign_src" checkout 177cc8a2bbd3e2a6e9c5faaaa4ff5dfa1e6048f
 BIN_DIR="${VENV_PATH}/bin"
 $CXX -O3 -ffast-math "$BUILD_DIR/usalign_src/TMalign.cpp" -lm -o "$BUILD_DIR/TMalign"
 
-# Confirm the binary actually runs here; a compile can succeed and still produce
+# Confirm the binary runs on this host. A compile can succeed and still produce
 # an executable this host cannot load.
 "$BUILD_DIR/TMalign" -h > "$BUILD_DIR/help.txt" 2>&1 || true
 if ! grep -q 'TM-align' "$BUILD_DIR/help.txt"; then

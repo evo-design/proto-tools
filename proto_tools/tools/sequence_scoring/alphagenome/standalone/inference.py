@@ -119,7 +119,7 @@ _DOWNLOAD_ATTEMPTS = 3
 
 
 def _https_url(path: str) -> str:
-    """Map a public ``gs://`` path to its HTTPS URL; return other paths unchanged."""
+    """Map a public ``gs://`` path to HTTPS and return other paths unchanged."""
     if path.startswith("gs://"):
         return "https://storage.googleapis.com/" + path.removeprefix("gs://").lstrip("/")
     return path
@@ -353,7 +353,7 @@ class AlphaGenomeModel:
         organism: str = "human",
         device: str = "cuda",
     ) -> dict[str, Any]:
-        """Run batched ISM scoring (sequential; upstream has no batched ISM)."""
+        """Run batched ISM scoring sequentially because upstream has no batched ISM."""
         self._ensure_loaded(device)
         scorers = _resolve_variant_scorers(variant_scorers, organism)
 
@@ -429,7 +429,7 @@ class AlphaGenomeModel:
     def to_device(self, device: str) -> None:
         """Move model to a different device.
 
-        AlphaGenome is GPU-only; CPU inference is impractical. When asked to
+        AlphaGenome is GPU-only. CPU inference is impractical. When asked to
         move to CPU (e.g., LRU eviction), the model is unloaded to free GPU
         memory while its compiled programs stay in memory, so reloading on a
         GPU skips compilation. A new worker process reads them from the
@@ -464,7 +464,7 @@ class AlphaGenomeModel:
         clear_jax_caches : bool
             If True (default), also clear JAX's XLA compilation caches.
             Set to False when unloading for GPU eviction to preserve
-            compiled kernels; reloading on the same GPU can then skip
+            compiled kernels. Reloading on the same GPU can then skip
             the expensive recompilation step.
         """
         if not self._loaded:

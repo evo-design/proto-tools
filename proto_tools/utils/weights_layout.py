@@ -20,10 +20,10 @@ toolkit's folder, so toolkits that load the same checkpoints share one copy.
 import os
 from pathlib import Path
 
-# JIT and compile caches that libraries keep in ~ or /tmp by default. Every entry is a cache:
-# deleting it only costs a recompile.
+# JIT and compile caches that libraries keep in ~ or /tmp by default.
+# Deleting an entry triggers recompilation when it is next needed.
 #
-# Toolkit-specific: artifacts compiled from the toolkit's own model code against its env's library
+# Toolkit caches hold artifacts compiled from the model code against the environment's library
 # versions, so they go in the toolkit's compile_cache/. Extensions are keyed by name, so sharing
 # them across envs with different torch versions would load the wrong build.
 COMPILE_CACHE_VARS: dict[str, str] = {
@@ -37,7 +37,7 @@ COMPILE_CACHE_VARS: dict[str, str] = {
     "NUMBA_CACHE_DIR": "numba",  # __pycache__ beside the source
 }
 
-# General: depend on the GPU driver and generic kernels, not on any model, so one per-user copy
+# General caches depend on the GPU driver and generic kernels, so one per-user copy
 # under PROTO_HOME/compile_cache/ serves every toolkit (not PROTO_MODEL_CACHE, which teams share).
 GENERAL_COMPILE_CACHE_VARS: dict[str, str] = {
     "CUDA_CACHE_PATH": "cuda",  # ~/.nv/ComputeCache: the driver's JIT cache for any CUDA code
@@ -57,7 +57,7 @@ def weights_key(toolkit: str) -> str:
     Raises:
         ValueError: If ``weights_key.txt`` exists but is empty.
     """
-    # Lazy import to avoid circular dep: tool_instance imports persistent_worker, which imports this
+    # Import here to avoid a cycle through tool_instance and persistent_worker.
     from proto_tools.utils.tool_instance import ToolInstance
 
     tool_dir = ToolInstance._find_tool_dir(toolkit)

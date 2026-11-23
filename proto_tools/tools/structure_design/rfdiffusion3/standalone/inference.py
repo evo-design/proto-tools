@@ -57,7 +57,7 @@ class RFdiffusion3Model:
         """Run RFdiffusion3 structure design.
 
         This method supports all CLI arguments documented in the RFdiffusion3 input specification.
-        Common parameters are explicit; all other RFdiffusion3 CLI args can be passed as keyword arguments.
+        Common parameters are explicit. Pass other RFdiffusion3 CLI arguments as keyword arguments.
 
         For the full list of available CLI arguments, see:
         https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
@@ -147,8 +147,7 @@ class RFdiffusion3Model:
 
         logger.update_status("Generating designs", level=logging.DEBUG)
 
-        # Run the command — inherit streams when verbose for real-time progress;
-        # capture when not verbose so we can surface stderr tail on failure.
+        # Stream output when verbose, or capture it so failures can include the stderr tail.
         try:
             subprocess.run(
                 cmd,  # type: ignore[arg-type]

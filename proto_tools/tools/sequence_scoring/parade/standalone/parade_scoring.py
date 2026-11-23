@@ -42,7 +42,7 @@ _ACTIVITY_AUGMENT_KWS = {
 def load_legnet(checkpoint_path: str) -> Any:
     """Load a PARADE ``RNARegressor`` checkpoint and return its LegNet module.
 
-    ``weights_only=False`` is required: the Lightning hyperparameters pickle the LegNet
+    ``weights_only=False`` is required because the Lightning hyperparameters pickle the LegNet
     model class, which is resolved via the vendored ``legnet_classifier`` module.
     """
     regressor = RNARegressor.load_from_checkpoint(checkpoint_path, map_location="cpu", weights_only=False)
@@ -135,6 +135,7 @@ def _predict_activity_group(
     row_batch_size = batch_size * len(cell_types)
     frame["activity"] = _predict(model, dataset, row_batch_size, device)[:, _ACTIVITY_MASS_CENTER_INDEX]
 
+    # Gather each sequence's conditioned predictions using the requested cell-code order.
     rows: list[dict[str, float]] = []
     for seq_id in range(len(sequences)):
         sub = frame[frame["id"] == seq_id]
@@ -145,6 +146,7 @@ def _predict_activity_group(
 
 def predict_stability(model: Any, *, sequences: list[str], batch_size: int, device: str) -> list[float]:
     """Predict the RNA/gDNA log-ratio for each 3' UTR sequence, batching per length group."""
+    # Batch equal-length UTRs together, then restore predictions to the original order.
     values: list[float | None] = [None] * len(sequences)
     for indices in _group_by_length(sequences).values():
         group = _predict_stability_group(
@@ -195,8 +197,8 @@ def compute_stability_gradient(
     """Differentiate the PARADE stability log-ratio with respect to a relaxed state.
 
     The stability checkpoint predicts one RNA/gDNA log-ratio per sequence, higher being more
-    stable, and that raw scalar is what is differentiated: no sign is applied, so the gradient is
-    ``d(log_ratio)/d(input)``. Its featurization is simpler than the activity model's:
+    stable, and that raw scalar is what is differentiated. No sign is applied, so the gradient is
+    ``d(log_ratio)/d(input)``. Its featurization is simpler than the activity model's.
     ``StabilityData`` is built with ``features=("sequence",)``, meaning four sequence channels and
     no positional or condition channels, so the relaxed matrix only needs transposing to
     ``(B, 4, L)``.
@@ -230,7 +232,7 @@ def compute_stability_gradient(
 
         gradients: list[list[list[float]]] | None = None
         if compute_gradient:
-            # Samples are independent in the graph, so summing only batches the backward pass
+            # Sum independent samples to compute their gradients in one backward pass.
             log_ratio.sum().backward()
             if logits.grad is None:
                 raise RuntimeError("parade: missing relaxed-state gradient after backward")
@@ -257,7 +259,7 @@ def compute_gradient(
 ) -> dict[str, Any]:
     """Differentiate each requested PARADE cell activity with respect to a relaxed state.
 
-    Every term names one cell, and its value is that cell's raw predicted activity: no direction,
+    Every term names one cell, and its value is that cell's raw predicted activity. No direction,
     weight or sigmoid is applied, so each gradient is ``d(activity)/d(input)``. PARADE conditions
     on a single cell per forward pass via its condition channels, so one forward runs per cell and
     is differentiated immediately, keeping at most one gradient on the device at a time. The
@@ -310,11 +312,11 @@ def compute_gradient(
             }
 
             if compute_gradient:
-                # Samples are independent, so summing only batches the backward pass.
+                # Sum independent samples to compute their gradients in one backward pass.
                 (gradient,) = torch.autograd.grad(activity.sum(), logits, retain_graph=(position < len(cells) - 1))
                 if gradient is None:
                     raise RuntimeError(f"parade: missing gradient for cell {cell!r} after backward")
-                # Off the device before the next cell's forward, so peak memory holds one gradient
+                # Move this gradient to CPU before evaluating the next cell to limit GPU memory use.
                 entry["gradients"] = gradient.detach().cpu().tolist()
                 del gradient
 

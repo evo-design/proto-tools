@@ -199,6 +199,7 @@ def run_progen3_sample(
             "progen3 needs a GPU: its model code places tensors with torch.cuda, so device='cpu' cannot run"
         )
 
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "progen3",
         {

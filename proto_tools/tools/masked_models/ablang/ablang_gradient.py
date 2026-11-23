@@ -138,7 +138,7 @@ class AbLangMaskedPLLTerm(DifferentiableTerm):
 
 
 class AbLangGradientOutput(GradientOutput):
-    """AbLang masked PLL output; gradient is optional in forward-only mode.
+    """AbLang masked PLL output. Gradients are omitted in forward-only mode.
 
     Attributes:
         results (list[GradientResult]): One per input antibody. Contains a single masked-PLL
@@ -248,6 +248,7 @@ def run_ablang_gradient(
         "device": config.device,
         "verbose": config.verbose,
     }
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "ablang",
         payload,

@@ -125,7 +125,7 @@ _M8_FORMAT_MULTIMER = f"{_M8_FORMAT_PIDENT},complexqtmscore,complexttmscore"
 
 
 def _gpu_args(use_gpu: bool) -> list[str]:
-    """Return foldseek GPU flags for use_gpu, [] for CPU; raise if the GPU build is absent."""
+    """Return foldseek GPU flags for use_gpu, [] for CPU, raising if the GPU build is absent."""
     if not use_gpu:
         return []
     marker = Path(sys.executable).parent / ".foldseek_build_variant"
@@ -205,7 +205,7 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
     """
     foldseek = _find_binary()
     formats = input_data["structure_formats"]
-    # Validator guarantees uniform mode; all entries are the same format.
+    # Validation guarantees that all entries use the same format.
     is_fasta_mode = formats[0] == "fasta"
 
     with tempfile.TemporaryDirectory() as tmp:

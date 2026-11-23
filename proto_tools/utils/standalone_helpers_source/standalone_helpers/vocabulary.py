@@ -2,7 +2,7 @@
 
 Index mapping between proto's column order and a model's own vocabulary order.
 
-Re-exported from the package ``__init__``; standalones may also import the submodule
+Re-exported from the package ``__init__``. Standalones may also import the submodule
 directly as ``from standalone_helpers.vocabulary import gather_indices``.
 """
 
@@ -53,7 +53,7 @@ def gather_indices(
     """Return indices into ``source_vocab`` that reorder a source-ordered axis into target order.
 
     ``result[i]`` is the position of ``target_vocab[i]`` within ``source_vocab``, plus ``offset``.
-    A ``Mapping`` source is looked up directly, which is what a tokenizer vocabulary is; a
+    A ``Mapping`` source, such as a tokenizer vocabulary, is looked up directly. A
     ``Sequence`` source is indexed by position.
 
     The argument order carries the direction, so one call covers every use:

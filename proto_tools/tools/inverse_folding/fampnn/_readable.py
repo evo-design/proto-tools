@@ -3,8 +3,7 @@
 Which residues FAMPNN actually reads from a staged structure.
 
 Mirrors upstream commit ``aaf788b``, the pin in ``standalone/setup.sh``.
-``fampnn.data.protein.read_pdb`` parses the staged PDB with Biopython, and two gates decide
-what survives:
+``fampnn.data.protein.read_pdb`` parses the staged PDB with Biopython, and applies two gates.
 
 1. A ``HETATM`` residue is skipped unless its name is in ``ncaa_mapping``
    (``fampnn/data/protein.py:130-134``, table at ``fampnn/data/residue_constants.py:1302``).
@@ -21,8 +20,7 @@ Unlike ProteinMPNN, an incomplete backbone keeps its residue: missing atoms popu
 ``missing_atom_mask`` (``fampnn/data/data.py:46-50``) and the residue stays in the sequence.
 An unrecognized residue name is kept as ``X`` (``fampnn/data/protein.py:136-139``).
 
-Keep this in step with the pin: a bump to the FAMPNN commit should be checked against both
-gates.
+When updating the pinned FAMPNN commit, check both gates against upstream.
 """
 
 from typing import Any

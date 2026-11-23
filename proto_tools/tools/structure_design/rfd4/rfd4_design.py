@@ -542,6 +542,7 @@ class RFD4DesignSpec(BaseModel):
         if coordinate:
             conditions["C_CRD"] = coordinate
 
+        # Map free and known sequence selections to C_SEQ False/True entries
         sequence: dict[Any, Any] = {}
         if self.free_sequence:
             sequence[False] = self._entries(self.free_sequence, auth_to_label)
@@ -550,16 +551,19 @@ class RFD4DesignSpec(BaseModel):
         if sequence:
             conditions["C_SEQ"] = sequence
 
+        # Emit one C_CRDGRP entry list per rigid group ID
         if self.rigid_groups:
             conditions["C_CRDGRP"] = {
                 group_id: self._entries(selections, auth_to_label) for group_id, selections in self.rigid_groups.items()
             }
 
+        # Emit hotspot and pi-stacking selections under a single True key
         if self.hotspots:
             conditions["C_HOT"] = {True: self._entries(self.hotspots, auth_to_label)}
         if self.pi_stacking:
             conditions["C_PISTACK"] = {True: self._entries(self.pi_stacking, auth_to_label)}
 
+        # Copy each keyed condition field under its upstream alias, translating every selection
         for field_name, alias in (
             ("burial", "C_RAS"),
             ("hbond", "C_HB"),
@@ -572,6 +576,7 @@ class RFD4DesignSpec(BaseModel):
             if value:
                 conditions[alias] = {key: self._entries(selections, auth_to_label) for key, selections in value.items()}
 
+        # Group sequence-probability constraints by token, then by probability, merging selections
         for constraint in self.sequence_probabilities or []:
             alias = f"C_SEQ_PROB_{constraint.token}"
             entries = self._entries(constraint.select, auth_to_label)
@@ -587,6 +592,7 @@ class RFD4DesignSpec(BaseModel):
                 ]
             }
 
+        # Apply raw conditions last so they override any typed condition with the same alias
         if self.raw_conditions:
             conditions.update(self.raw_conditions)
 
@@ -1372,8 +1378,8 @@ def run_rfd4_design(inputs: RFD4Input, config: RFD4DesignConfig, instance: Any =
     """Design protein sequence and all-atom structure jointly with RFD4-Proteina.
 
     RFD4-Proteina is a flow-matching model that co-generates sequence and all-atom
-    structure in one pass, so designs arrive with sequences already assigned. Supported
-    design tasks include:
+    structure in one pass, so designs arrive with sequences already assigned. It
+    supports the following design tasks.
 
     - Unconditional and monomer generation
     - Motif scaffolding, indexed or unindexed (free placement)
@@ -1439,7 +1445,7 @@ def _dispatch_rfd4(
         temp_dir = Path(temp_dir_str)
         input_dir = temp_dir / "inputs"
         if config.output_dir:
-            # Per-call subdir: _collect_designs globs the whole root, so a reused dir returns stale designs.
+            # Use a new directory for each call so collection does not include earlier designs.
             Path(config.output_dir).mkdir(parents=True, exist_ok=True)
             output_dir = Path(tempfile.mkdtemp(prefix="run-", dir=config.output_dir))
         else:

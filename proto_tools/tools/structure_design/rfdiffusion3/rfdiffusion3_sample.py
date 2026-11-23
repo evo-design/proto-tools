@@ -56,8 +56,8 @@ def _resolve_input_structure_path(value: str) -> str:
 class RFdiffusion3DesignSpec(BaseModel):
     r"""Single design specification for RFdiffusion3.
 
-    This class represents a single design task with its constraints. Multiple
-    design specs can be provided to generate designs under different conditions.
+    Specify a design task and its constraints. Provide multiple specifications
+    to generate designs under different conditions.
 
     For the full list of available InputSpecification fields, see:
     https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
@@ -406,6 +406,8 @@ class RFdiffusion3DesignSpec(BaseModel):
         spec: dict[str, Any] = {}
 
         # input_structure is emitted by to_json_spec as a file path, not here.
+        # Emit only the fields that are set, so RFdiffusion3 keeps its defaults for the rest
+        # Copy the design topology: contig, length, ligand and unindexed residues
         if self.contig is not None:
             spec["contig"] = self.contig
         if self.length is not None:
@@ -414,6 +416,7 @@ class RFdiffusion3DesignSpec(BaseModel):
             spec["ligand"] = self.ligand
         if self.unindex is not None:
             spec["unindex"] = self.unindex
+        # Copy the fixed-atom, sequence, hotspot, symmetry, burial and H-bond conditioning
         if self.select_fixed_atoms is not None:
             spec["select_fixed_atoms"] = self.select_fixed_atoms
         if self.select_unfixed_sequence is not None:
@@ -432,6 +435,7 @@ class RFdiffusion3DesignSpec(BaseModel):
             spec["select_hbond_donor"] = self.select_hbond_donor
         if self.select_hbond_acceptor is not None:
             spec["select_hbond_acceptor"] = self.select_hbond_acceptor
+        # Copy the remaining design options
         if self.redesign_motif_sidechains is not None:
             spec["redesign_motif_sidechains"] = self.redesign_motif_sidechains
         if self.plddt_enhanced is not None:
@@ -451,9 +455,8 @@ class RFdiffusion3DesignSpec(BaseModel):
 class RFdiffusion3Input(BaseToolInput):
     """Input for RFdiffusion3 structure design.
 
-    This class provides a flexible interface for specifying one or more design
-    tasks for RFdiffusion3. Supports both structured Pydantic models for common
-    use cases and raw JSON passthrough for advanced users.
+    Specify one or more RFdiffusion3 design tasks using structured Pydantic models
+    for common use cases or raw JSON for options beyond those models.
 
     Attributes:
         design_specs (list[RFdiffusion3DesignSpec]): List of design specifications. Each
@@ -614,9 +617,7 @@ class RFdiffusion3SamplerTuning(BaseModel):
 class RFdiffusion3Config(BaseConfig):
     """Configuration for RFdiffusion3 structure design.
 
-    This class defines configuration parameters for running RFdiffusion3,
-    controlling the number of designs generated, diffusion parameters,
-    and execution options.
+    Choose the number of designs, diffusion parameters, and execution settings.
 
     Attributes:
         n_batches (int): Independent batches per spec
@@ -1042,9 +1043,8 @@ def _unguided_cfg_specs(inputs: RFdiffusion3Input) -> list[str]:
 def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, instance: Any = None) -> RFdiffusion3Output:
     """Design protein structures using RFdiffusion3.
 
-    Uses RFdiffusion3, a diffusion-based generative model, to design novel
-    protein structures under specified constraints. Unlike structure prediction,
-    RFdiffusion3 generates both structure AND sequence, making it suitable for:
+    RFdiffusion3 generates protein structures and sequences under the supplied
+    constraints. It supports the following design tasks.
 
     - De novo protein design (unconditional generation)
     - Motif scaffolding (design around fixed structural motifs)
@@ -1052,7 +1052,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
     - Enzyme design (scaffold around catalytic sites)
     - Symmetric protein design (design homo-oligomers)
 
-    Runs via local GPU execution in isolated Python environments.
+    Run the model on a local GPU in an isolated Python environment.
 
     Args:
         inputs (RFdiffusion3Input): Validated input containing one or more design
@@ -1086,7 +1086,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         >>> print(f"First sequence (chain A): {bundle[0].complex.chains[0].sequence}")
 
     Note:
-        - RFdiffusion3 generates both structure AND sequence
+        - Each design includes a structure and sequence.
         - Memory usage scales with batch size and protein length
         - Dependency isolation is handled automatically via venv subprocess
     """

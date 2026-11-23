@@ -56,10 +56,11 @@ def _relaxation_opt(*, temperature: float | None, soft: float, hard: float) -> d
     ``alpha`` scales the logits before the softmax, so ColabDesign's default of 2.0 would make
     ``temperature`` mean half what the shared gradient contract says and would stop
     ``from_probabilities`` reconstructing the supplied distribution. It is pinned to 1.0, which
-    costs no expressiveness: ``alpha=a`` with temperature ``T`` is ``alpha=1`` at ``T / a``.
+    preserves the same range of behavior. ``alpha=a`` with temperature ``T`` is
+    equivalent to ``alpha=1`` with temperature ``T / a``.
 
-    Probability mode is expressed as ``soft=0``, which selects ``soft_seq``'s raw-input branch;
-    ``temp`` then feeds only the unused softmax branch and is pinned to keep it finite.
+    In probability mode, ``soft=0`` selects ``soft_seq``'s raw-input branch.
+    ``temp`` affects only the unused softmax branch and is pinned to a finite value.
 
     Args:
         temperature (float | None): Positive softmax temperature, or ``None`` for probability mode.
@@ -151,9 +152,10 @@ def _loss_key(term_id: str, options: Mapping[str, Any], index: int, redesign: bo
 
     A term with any selector set is computed by an extension under its own per-request key, so
     ColabDesign's own value is never shadowed, the cached model's options are never mutated, and
-    two terms sharing an id but not their selectors stay apart; the reported id drops the suffix.
+    two terms with the same id but different selectors remain separate. The
+    reported id omits the suffix.
     Template redesign parses the binder from the template, so ColabDesign's unsupervised masks are
-    empty and its own ``plddt``/``pae``/``con``/``helix`` would read zero; those always take the
+    empty and its ``plddt``/``pae``/``con``/``helix`` would read zero. Those always use the
     extension, which masks by the designed residues instead.
     """
     selected = any(value is not None for value in options.values()) or (redesign and term_id in _UNSUPERVISED_ONLY)
@@ -187,6 +189,7 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
         mask = jnp.zeros(length)
         if positions is None:
             return mask.at[length - designed_len :].set(1)
+        # Shift the 1-indexed selector positions onto the designed segment at the end of the complex
         return mask.at[jnp.asarray(positions) + length - designed_len - 1].set(1)
 
     def contact_opt(opt: Any, opt_key: str) -> dict[str, Any]:
@@ -209,6 +212,7 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
     def rg(outputs: Any) -> dict[str, Any]:
         """Excess radius of gyration, as in BindCraft and Germinal."""
         ca = designed_ca(outputs)
+        # Measure the radius against the one expected of a globular chain of this length
         radius = jnp.sqrt(jnp.square(ca - ca.mean(0)).sum(-1).mean() + 1e-8)
         return {key: jax.nn.elu(radius - 2.38 * designed_len**0.365)}
 
@@ -225,6 +229,7 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
         """Mean of the worst third of per-pair ``-log P`` over selected i,i+3 pairs."""
         mask = select(inputs, options.get("positions"))
         worst = jnp.sort(jnp.diagonal(jnp.outer(mask, mask) * range_loss(outputs, 9.75, 11.5), 3))[::-1]
+        # Average over the requested top_k pairs, or a third of the selected residues by default
         count = options.get("top_k") or len(options.get("positions") or range(designed_len)) // 3
         return {key: worst[: max(count, 1)].mean()}
 
@@ -277,6 +282,7 @@ def _extension_loss_fn(term_id: str, options: Mapping[str, Any], key: str, desig
         rows, columns = (inputs["hotspot"], binder) if "hotspot" in inputs else (binder, 1 - select(inputs, None))
         return {key: get_con_loss(inputs, outputs, contact_opt(opt, "i_con"), mask_1d=rows, mask_1b=columns)}
 
+    # Pick the callback for the requested term; ColabDesign calls it with the arguments it names
     builders = {
         "rg": rg,
         "NC": termini,
@@ -356,18 +362,16 @@ def _configure_extension_losses(
 def _per_term_gradients(af_model: Any, term_names: list[str]) -> Any:
     """Make the backprop pass yield one gradient per loss term instead of one fused gradient.
 
-    ColabDesign sums its weighted terms into a single scalar and differentiates that, so
-    ``aux["grad"]`` answers "how does the whole objective move" and cannot be taken apart
-    afterwards. The individual terms are right there though: ``_model["fn"]`` is the same
-    function ``grad_fn`` differentiates, exposed undifferentiated, and it returns the per-term
-    scalars in ``aux["losses"]`` one line before they are summed.
+    ColabDesign normally differentiates a weighted sum of loss terms. Its
+    ``aux["grad"]`` therefore cannot provide each term's gradient separately.
+    The underlying ``_model["fn"]`` also exposes the individual values in
+    ``aux["losses"]`` before summation.
 
-    So this linearizes that function once and pushes a one-hot cotangent through it per
-    requested term: one forward pass and one cheap backward each, which is JAX's equivalent of
-    retaining a graph across several backwards. The per-term gradients are stashed on
-    ``aux["per_term_grad"]``; ColabDesign's own ``aux["grad"]`` is zeroed, because a raw-term
-    tool never reports a fused gradient and reproducing it would cost a backward per
-    unrequested term as well.
+    Linearize that function once and apply a one-hot cotangent for each requested
+    term. This uses one forward pass in total and one backward pass per term,
+    reusing the same linearization. Store the gradients in ``aux["per_term_grad"]`` and zero
+    ``aux["grad"]`` because this tool does not report a combined gradient.
+    Computing one would add backward passes for unrequested terms.
 
     Only the backprop pass is replaced, so recycling, model selection and PDB export behave
     exactly as before.
@@ -452,7 +456,8 @@ def _per_term_gradients(af_model: Any, term_names: list[str]) -> Any:
     return restore
 
 
-# AlphaFold-Multimer MSA layout: row 0 = concatenated queries; paired rows span all columns, unpaired rows are block-diagonal; ColabDesign gap char = 21.
+# In the AlphaFold-Multimer MSA, row 0 holds the concatenated queries. Paired rows span all chains,
+# unpaired rows are block-diagonal, and ColabDesign uses 21 for gaps.
 _AA_GAP = 21
 
 

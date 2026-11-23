@@ -34,14 +34,17 @@ _AFFINITY_MAX_HEAVY_ATOMS = 128
 
 def _resolve_binder_chain_id(comp: Any, binder_chain: SingleChainSelection | None, index: int) -> str:
     """Resolve and validate one complex's binder ligand chain ID."""
+    # Resolve chain IDs and collect the ones that hold ligand fragments
     chain_ids = resolve_chain_ids(comp.chains)
     ligand_ids = [cid for cid, chain in zip(chain_ids, comp.chains, strict=True) if isinstance(chain, Fragment)]
+    # Ensure the complex has a protein chain to act as the affinity target
     if not any(not isinstance(chain, Fragment) and chain.entity_type == "protein" for chain in comp.chains):
         raise ValueError(
             f"Complex {index} must contain at least one protein chain (the affinity target); "
             f"got entity types {comp.entity_types}."
         )
 
+    # Auto-detect the sole ligand, or check the requested binder is a ligand chain
     if binder_chain is None:
         if len(ligand_ids) != 1:
             raise ValueError(
@@ -59,6 +62,7 @@ def _resolve_binder_chain_id(comp: Any, binder_chain: SingleChainSelection | Non
                 f"affinity is supported only for small-molecule ligand binders."
             )
 
+    # Check the binder ligand is small enough for Boltz-2 affinity
     binder = comp.chains[chain_ids.index(binder_id)]
     assert isinstance(binder, Fragment)  # noqa: S101 -- narrowed by the ligand-id check above
     if binder.heavy_atom_count > _AFFINITY_MAX_HEAVY_ATOMS:

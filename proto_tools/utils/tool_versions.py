@@ -3,11 +3,11 @@
 Toolkit versions pinned to a hash of the toolkit's source.
 
 Each toolkit's ``versions.yaml`` maps version to source hash, newest first. The hash
-covers the code a toolkit's results depend on: every file in the toolkit directory
-except docs, examples, and example data, the shared environment it builds from, its
-category's shared modules, and the first-party modules defining its models. The toolkit
+covers the files a toolkit's results depend on. These include toolkit files
+other than docs, examples, and example data, along with its shared environment,
+category modules, and first-party model definitions. The toolkit
 and category ``__init__.py`` files only re-export tools, so they are left out. Python
-comments and blank lines are ignored, so only code edits move it. See
+comments and blank lines are ignored, while docstring edits change the hash. See
 ``notes/versioning.md``.
 """
 
@@ -57,9 +57,9 @@ _DOC_SUFFIXES = frozenset({".md", ".ipynb"})
 def defining_files(tool_key: str) -> list[Path]:
     """Return the first-party files defining a tool's behaviour and its models.
 
-    Autodetected: the run function's own module, plus the defining module of every
-    class in each model's MRO, so a shared base such as
-    ``structure_prediction/shared_data_models.py`` is covered without being declared.
+    Find the run function's module and the defining module of each class in the
+    models' MRO. This includes shared bases such as
+    ``structure_prediction/shared_data_models.py`` without an explicit declaration.
 
     Args:
         tool_key (str): Registry key of the tool.
@@ -120,7 +120,7 @@ def load_versions(toolkit_dir: Path) -> dict[str, str]:
         toolkit_dir (Path): The toolkit directory.
 
     Returns:
-        dict[str, str]: Version to source hash, newest first; empty if the file is missing.
+        dict[str, str]: Version to source hash, newest first. Empty if the file is missing.
     """
     path = toolkit_dir / VERSIONS_FILE
     if not path.is_file():
@@ -236,7 +236,7 @@ def next_version(version: str, bump: Bump) -> str:
 
     Args:
         version (str): An ``X.Y.Z`` version.
-        bump (Bump): Which part to increment; the parts after it reset to zero.
+        bump (Bump): Part to increment. The parts after it reset to zero.
 
     Returns:
         str: The bumped ``X.Y.Z`` version.

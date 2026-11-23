@@ -159,8 +159,8 @@ class LigandMPNNModel:
 
         fixed_residues = _fixed_residues(fixed_positions)
 
-        # Foundry can't mix residue-based (fixed_residues) and chain-based (designed_chains) constraints;
-        # when fixed_residues is set, designed_chains is implicit (the unfixed residues).
+        # Foundry accepts either residue-based or chain-based constraints. With
+        # fixed_residues, every unfixed residue is implicitly designable.
         input_dict = {
             "structure_path": pdb_path,
             "name": "design",
@@ -249,14 +249,17 @@ class LigandMPNNModel:
         from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
         from mpnn.utils.inference import MPNNInferenceInput
 
+        # Validate the seed and scoring mode before loading anything
         if seed is None:
             raise ValueError("ligandmpnn: score requires an explicit int seed")
         if scoring_mode not in SCORING_CAUSALITY:
             raise ValueError(f"ligandmpnn: scoring_mode must be one of {sorted(SCORING_CAUSALITY)}")
 
+        # Load the model unless it is already loaded on this device
         if not self._loaded or self.device != device:
             self.load(device, verbose)
 
+        # Seed torch and numpy, including the CUDA or MPS generator
         torch.manual_seed(seed)
         np.random.seed(seed)
         if torch.cuda.is_available():
@@ -264,6 +267,7 @@ class LigandMPNNModel:
         elif torch.backends.mps.is_available():
             torch.mps.manual_seed(seed)
 
+        # Request one teacher-forced pass that returns the target tokens, loss mask, and logits
         input_dict = {
             "structure_path": pdb_path,
             "name": "score",
@@ -282,14 +286,17 @@ class LigandMPNNModel:
                 "decoder_features": ["logits", "log_probs"],
             },
         }
+        # Pass the fixed residues if any, otherwise the chains to design
         fixed_residues = _fixed_residues(fixed_positions)
         if fixed_residues:
             input_dict["fixed_residues"] = fixed_residues
         else:
             input_dict["designed_chains"] = chain_ids
 
+        # Parse the structure and fill in Foundry's defaults for the remaining input fields
         inference_input = MPNNInferenceInput.from_atom_array_and_dict(input_dict=input_dict)
         input_dict = inference_input.input_dict
+        # Forward only the filtering options that were set to the transform pipeline
         pipeline_args = {}
         if input_dict["occupancy_threshold_sidechain"] is not None:
             pipeline_args["occupancy_threshold_sidechain"] = input_dict["occupancy_threshold_sidechain"]
@@ -304,6 +311,7 @@ class LigandMPNNModel:
             device=self._engine.device,
             **pipeline_args,
         )
+        # Featurize the structure and collate it into a batch of one
         network_input = FeatureCollator()(
             [
                 pipeline(
@@ -323,18 +331,21 @@ class LigandMPNNModel:
             ]
         )
 
+        # Tokenize the query sequence and check it matches the parsed residue count
         vocab, token_ids = _sequence_tokens(sequence)
         canonical_columns = gather_indices(AMINO_ACIDS_LIST, vocab, label="ligandmpnn")
         parsed_len = int(network_input["input_features"]["S"].shape[1])
         if len(token_ids) != parsed_len:
             raise ValueError(f"Sequence length {len(sequence)} does not match structure ({parsed_len} residues).")
 
+        # Swap the structure's native sequence for the query sequence
         target = torch.tensor([token_ids], dtype=network_input["input_features"]["S"].dtype, device=self._engine.device)
         network_input["input_features"]["S"] = target
 
         with torch.no_grad():
             output = self._engine.model(network_input)
 
+        # Gather each residue's log-probability of its query token over the scored positions
         mask = output["input_features"]["mask_for_loss"][0].bool()
         log_probs = output["decoder_features"]["log_probs"][0]
         selected = log_probs[torch.arange(parsed_len, device=log_probs.device), target[0]][mask]
@@ -342,8 +353,10 @@ class LigandMPNNModel:
         if effective_length == 0:
             raise ValueError("ligandmpnn: no residues available to score")
 
+        # Average the log-likelihood over the scored residues
         avg_log_likelihood = float(selected.sum().item()) / effective_length
 
+        # Free the model, then return logits reordered to the canonical amino acid vocabulary
         self.unload()
         return {
             "logits": output["decoder_features"]["logits"][0][..., canonical_columns] if return_logits else None,
@@ -750,9 +763,11 @@ class LegacyCompatibleLigandMPNNModel:
         **_: Any,
     ) -> dict[str, Any]:
         """Score a sequence against a structure with original-compatible semantics."""
+        # Load the upstream model on the target device and seed its RNGs
         set_current_cuda_device(device)  # upstream builds some tensors on the current CUDA device
         self.load(device)
         _set_legacy_seed(seed)
+        # Build the upstream CLI arguments and featurize the structure with its ligand context
         args = self._args(
             chain_ids=chain_ids,
             fixed_positions=fixed_positions,
@@ -767,12 +782,14 @@ class LegacyCompatibleLigandMPNNModel:
         protein_dict, _other_atoms, _icodes, feature_dict = self._prepare(
             pdb_path, args, device, use_atom_context=ligand_mpnn_use_atom_context
         )
+        # Tokenize the query sequence and check it matches the parsed residue count
         data_utils = self._modules["data_utils"]
         token_ids = [data_utils.restype_str_to_int[aa] for aa in sequence]
         if len(token_ids) != int(feature_dict["mask"].shape[1]):
             raise ValueError(
                 f"Sequence length {len(token_ids)} does not match structure ({int(feature_dict['mask'].shape[1])} residues)."
             )
+        # Swap in the query sequence and run the chosen upstream scoring pass
         feature_dict["S"] = torch.tensor([token_ids], device=device, dtype=torch.int32)
         with torch.inference_mode():
             if scoring_mode == "single_aa":
@@ -782,15 +799,19 @@ class LegacyCompatibleLigandMPNNModel:
             else:
                 raise ValueError(f"ligandmpnn: scoring_mode must be one of {sorted(SCORING_CAUSALITY)}")
 
+        # Average probabilities over the batch, then pick each residue's query-token probability
         probs_2d = torch.mean(torch.exp(score_dict["log_probs"]), 0)
         seq_tensor = feature_dict["S"].squeeze()
         selected = probs_2d[torch.arange(len(token_ids), device=device), seq_tensor].detach().cpu().numpy()
+        # Keep only the designable residues
         chain_mask = protein_dict["chain_mask"].detach().cpu().numpy().astype(bool)
         selected_masked = selected[chain_mask]
         if selected_masked.size == 0:
             raise ValueError("ligandmpnn score found no residues available to score")
+        # Average log-probabilities, clamped to avoid log(0)
         avg_log_likelihood = float(np.mean(np.log(np.maximum(selected_masked, 1e-12))))
         logits = None
+        # Convert the probabilities to log-probabilities in canonical amino acid order
         if return_logits:
             native_vocab = [data_utils.restype_int_to_str[idx] for idx in range(len(data_utils.restype_int_to_str))]
             canonical_columns = gather_indices(AMINO_ACIDS_LIST, native_vocab, label="ligandmpnn")

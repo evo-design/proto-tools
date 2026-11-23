@@ -42,11 +42,11 @@ def schedule(uv: Path, cache_dir: Path) -> None:
         uv (Path): The uv binary that built the env.
         cache_dir (Path): The ``UV_CACHE_DIR`` the build used.
     """
-    # A recent prune leaves nothing worth spawning for
+    # Skip starting a process if this cache was pruned recently.
     if _pruned_recently(cache_dir):
         return
 
-    # Detach, so the build that triggered it returns at once
+    # Run in a detached process so the environment build can return immediately.
     state = state_dir(cache_dir)
     state.mkdir(parents=True, exist_ok=True)
     with open(state / "prune.log", "a") as log:
@@ -75,7 +75,7 @@ def prune(uv: Path, cache_dir: Path) -> bool:
     state = state_dir(cache_dir)
     state.mkdir(parents=True, exist_ok=True)
     with open(state / "prune.lock", "a") as lock:
-        # One prune at a time; a second would find nothing left to do
+        # Take the lock so only one process prunes this cache at a time.
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -83,7 +83,7 @@ def prune(uv: Path, cache_dir: Path) -> bool:
         if _pruned_recently(cache_dir):
             return False
 
-        # Prune at idle I/O priority where ionice exists, then record when
+        # Use idle I/O priority where available, then record when pruning finished.
         ionice = ["ionice", "-c", "3"] if shutil.which("ionice") else []
         subprocess.run(
             [*ionice, str(uv), "cache", "prune"], env={**os.environ, "UV_CACHE_DIR": str(cache_dir)}, check=True
@@ -99,7 +99,7 @@ def _pruned_recently(cache_dir: Path) -> bool:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Prune at idle CPU priority, logging and swallowing any failure: it never affects a build."""
+    """Prune at idle CPU priority and log failures without failing the environment build."""
     uv, cache_dir = (Path(arg) for arg in (argv if argv is not None else sys.argv[1:]))
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     os.nice(19)

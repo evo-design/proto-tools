@@ -98,7 +98,7 @@ class FoldseekMultimerHitMetrics(FoldseekHitMetrics):
 
 
 class FoldseekMultimerHit(FoldseekHit):
-    """One Foldseek Multimer alignment hit: one query chain against one target chain.
+    """One Foldseek Multimer alignment hit between a query chain and a target chain.
 
     ``target_id`` carries the chain suffix Foldseek appends, so a multi-chain target
     contributes one hit per aligned chain pair.
@@ -261,7 +261,7 @@ class FoldseekMultimerSearchConfig(BaseConfig):
 
     @model_validator(mode="after")
     def validate_mode_requirements(self) -> "FoldseekMultimerSearchConfig":
-        """Hard-error on missing required local fields; soft-warn on cross-mode misuse."""
+        """Reject missing required local fields and warn about settings for the other mode."""
         if self.search_mode == "local" and not self.local_db:
             raise ValueError("local_db is required when search_mode='local'")
 

@@ -42,18 +42,18 @@ This tool is appropriate for any analysis that begins with a genomic locus and a
 
 ### SpliceTransformer Gradient (`splice-transformer-gradient`)
 
-Reports SpliceTransformer's predicted splice-channel probabilities and their derivatives with respect to a relaxed distribution over the target region, one quantity at a time. Each requested term names an output channel — a splice class or a tissue — plus a span of target positions, and comes back with its own mean probability and its own raw gradient.
+Reports SpliceTransformer's predicted splice-channel probabilities and their derivatives with respect to a relaxed distribution over the target region, one quantity at a time. Each requested term names an output channel (a splice class or a tissue) plus a span of target positions, and comes back with its own mean probability and its own raw gradient.
 
 #### Applications
 
-This is the differentiable form of SpliceTransformer prediction, intended as an objective inside a splice-engineering loop: an optimizer holds a relaxed distribution over the 1,000 bp target region, asks for the gradients, and combines them into whatever objective it wants — strengthening or weakening a splice site, or shifting tissue-specific usage — then steps the sequence accordingly. Setting `compute_gradient=False` turns it into a forward-only probability score for ranking candidates.
+This is the differentiable form of SpliceTransformer prediction, intended as an objective inside a splice-engineering loop. An optimizer holds a relaxed distribution over the 1,000 bp target region, asks for the gradients, and combines them into whatever objective it wants (strengthening or weakening a splice site, or shifting tissue-specific usage), then steps the sequence accordingly. Setting `compute_gradient=False` turns it into a forward-only probability score for ranking candidates.
 
 #### Usage Tips
 
-- **Only the target region is relaxed.** A candidate bundles the two fixed 4,000 bp flanking contexts with a `(1000, 4)` relaxed target matrix, so the returned gradient covers the target positions alone while both contexts still reach the model — the flanks shape the prediction but are not design variables.
+- **Only the target region is relaxed.** A candidate bundles the two fixed 4,000 bp flanking contexts with a `(1000, 4)` relaxed target matrix, so the returned gradient covers the target positions alone while both contexts still reach the model. The flanks shape the prediction but are not design variables.
 - **Channels are named, not indexed.** `NEITHER`/`ACCEPTOR`/`DONOR` are the three splice classes (softmaxed across each other), and the fifteen tissue names select sigmoid-activated channels. The names resolve to the same indices the prediction tool reports.
-- **Position spans are 1-indexed, inclusive, and relative to the target region.** Leaving `position_start`/`position_end` unset covers the whole region, and the term that comes back names the span actually averaged rather than the `None` that was asked for; a narrow span around a candidate splice site is usually what you want.
-- **Gradients run through the whole model.** Upstream freezes the conv encoders with `torch.no_grad()` for training; that is removed here, so the gradient includes the encoders' sequence sensitivity rather than only the shallow path beside them. Predicted probabilities are unchanged.
+- **Position spans are 1-indexed, inclusive, and relative to the target region.** Leaving `position_start`/`position_end` unset covers the whole region, and the term that comes back names the span actually averaged rather than the `None` that was asked for. A narrow span around a candidate splice site is usually what you want.
+- **Gradients run through the whole model.** Upstream freezes the conv encoders with `torch.no_grad()` for training. That is removed here, so the gradient includes the encoders' sequence sensitivity rather than only the shallow path beside them. Predicted probabilities are unchanged.
 - **Several channels share one forward pass.** Each requested quantity gets its own backward over that shared graph, so asking for K channels costs one forward and K backwards rather than K of each.
 
 ## Toolkit Notes
