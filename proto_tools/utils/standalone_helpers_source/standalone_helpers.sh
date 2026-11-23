@@ -718,7 +718,8 @@ _proto_download_locked() {
 # trusted only alongside them. Same format and the same files as Python
 # record_files / missing_recorded_files in standalone_helpers.completeness:
 # dotfiles, dot-directories, and in-progress downloads (*.incomplete, *.lock,
-# *.tmp) are not recorded.
+# *.tmp) are not recorded. A <dir> with no files to record (a download that
+# fetched nothing) fails proto_record_files and gets no marker.
 #
 # Example:
 #   proto_recorded_files_complete "$DEST" || { build "$DEST" && proto_record_files "$DEST"; }
@@ -727,6 +728,11 @@ proto_record_files() {
     local dir="$1" marker="${2:-.proto_complete}"
     (cd "$dir" && find . -type f ! -path '*/.*' ! -name '*.incomplete' ! -name '*.lock' ! -name '*.tmp' \
         | sed 's|^\./||' | sort) > "${dir}/${marker}.tmp"
+    if [ ! -s "${dir}/${marker}.tmp" ]; then
+        rm -f "${dir}/${marker}.tmp"
+        echo "ERROR: ${dir} holds no files to record" >&2
+        return 1
+    fi
     mv -f "${dir}/${marker}.tmp" "${dir}/${marker}"
 }
 
@@ -743,7 +749,8 @@ proto_recorded_files_complete() {
 # proto_download_archive <url> <dest_dir> [tar_flags...]
 #
 # Stream the tar archive at <url> into <dest_dir> and record its files with
-# proto_record_files, which happens only after curl and tar both succeed. An
+# proto_record_files, which happens only after curl and tar both succeed and
+# the extraction holds files; one that holds none counts as a failed attempt. An
 # extraction that is partial, or lost files since (a scratch purge), is
 # extracted again from scratch. Concurrent callers for the same <dest_dir> take
 # turns under proto_with_lock, so one extracts and the rest find it complete. A
@@ -781,8 +788,8 @@ _proto_download_archive_locked() {
         # Whatever is there is a partial or purged earlier extraction
         rm -rf "$dest_dir"
         mkdir -p "$dest_dir"
-        if (set -o pipefail; curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" "$url" | tar -x -C "$dest_dir" "$@"); then
-            proto_record_files "$dest_dir"
+        if (set -o pipefail; curl -fsSL --speed-limit 1 --speed-time "${PROTO_DOWNLOAD_STALL_SECONDS:-300}" "$url" | tar -x -C "$dest_dir" "$@") \
+            && proto_record_files "$dest_dir"; then
             return 0
         fi
         if [ "$attempt" -lt "$retries" ]; then
