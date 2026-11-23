@@ -1,5 +1,6 @@
 """ESMFold2 worker: folds all-atom complexes and differentiates structure objectives."""
 
+import gc
 import json
 import logging
 import sys
@@ -698,7 +699,16 @@ def _wrapper(model_checkpoint: str, lm_dropout: float = 0.0, esmc_cache_dir: str
     """Return the cached wrapper for this checkpoint and dropout, replacing it if either changed."""
     global _model
     if _model is None or (_model.model_checkpoint, _model.lm_dropout) != (model_checkpoint, lm_dropout):
-        _model = ESMFold2Model(model_checkpoint=model_checkpoint, lm_dropout=lm_dropout, esmc_cache_dir=esmc_cache_dir)
+        # Construct first, which loads no weights, so a rejected request keeps the warm model. Then
+        # release the old one before the successor's weights load, leaving one model on the GPU.
+        successor = ESMFold2Model(
+            model_checkpoint=model_checkpoint, lm_dropout=lm_dropout, esmc_cache_dir=esmc_cache_dir
+        )
+        _model = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        _model = successor
     return _model
 
 
@@ -716,7 +726,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """
     operation = input_dict["operation"]
     if operation == "predict":
-        return _wrapper(input_dict["model_checkpoint"])(
+        return _wrapper(input_dict["model_checkpoint"], input_dict.get("lm_dropout", 0.0))(
             chains=input_dict["chains"],
             msas=input_dict.get("msas"),
             msas_paired=input_dict.get("msas_paired", False),

@@ -234,6 +234,34 @@ def check_lm_dropout_applies_only_to_the_experimental_checkpoints() -> None:
     assert inference._wrapper("esmfold2-experimental-fast", 0.5) is not first
 
 
+def check_a_rebuild_releases_the_old_model_and_a_rejected_one_keeps_it() -> None:
+    """A rebuild swaps the cached model; a request the constructor rejects leaves the warm one in place.
+
+    A dropout or checkpoint change reloads every weight, so the model being replaced is released before
+    the successor loads. The successor is constructed first, which validates it without loading
+    anything, so an invalid request cannot evict a loaded model.
+    """
+    real_model_class = inference.ESMFold2Model
+    try:
+        inference._model = None
+        first = inference._wrapper("esmfold2-experimental-fast", 0.0)
+        assert inference._wrapper("esmfold2-experimental-fast", 0.0) is first, "an unchanged key must reuse"
+        second = inference._wrapper("esmfold2-experimental-fast", 0.5)
+        assert second is not first, "a dropout change must rebuild"
+
+        # Dropout outside the experimental checkpoints is rejected in the constructor, before any load.
+        try:
+            inference._wrapper("esmfold2-fast", 0.5)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("dropout on a production checkpoint was accepted")
+        assert inference._model is second, "a rejected request must not evict the loaded model"
+    finally:
+        inference.ESMFold2Model = real_model_class  # type: ignore[misc]
+        inference._model = None
+
+
 CHECKS = [
     check_bin_midpoints_span_the_distogram,
     check_span_mask_rejects_a_span_outside_the_complex,
@@ -249,6 +277,7 @@ CHECKS = [
     check_each_checkpoint_family_gets_its_own_distance_grid,
     check_the_production_grid_is_unchanged_by_the_grid_table,
     check_lm_dropout_applies_only_to_the_experimental_checkpoints,
+    check_a_rebuild_releases_the_old_model_and_a_rejected_one_keeps_it,
 ]
 
 

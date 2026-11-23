@@ -7,7 +7,10 @@ for a worker whose lifetime you manage yourself.
 
 ``config.device`` reaches the worker through ``input_dict["device"]``.
 ToolInstance restarts persistent workers when a ``reload_on_change`` config
-field changes between calls, such as the device or model checkpoint. Standalone
+field, such as the model checkpoint, differs from the value the live worker was
+spawned with. Tools of one toolkit share that worker and may declare different
+reload fields; a field listed in ``_SHARED_RELOAD_FIELDS`` may be left
+undeclared without replacing the worker (see ``_reload_changes``). Standalone
 scripts should leave these checks to ToolInstance. Mark every config field
 that affects model initialization with ``reload_on_change=True``.
 
@@ -135,6 +138,71 @@ def _device_change_needed(current: str, requested: str) -> bool:
     if req.devices is None:  # auto request (cuda / cudaxN) satisfied by any same-kind, same-count allocation
         return not (cur.kind == req.kind and cur.count == req.count)
     return (cur.kind, cur.devices) != (req.kind, req.devices)
+
+
+_UNSET = "<unset>"
+
+# Per toolkit, the reload fields a tool may leave undeclared without replacing a live worker. Add one
+# only after checking that omitting it cannot change the model that tool gets, since whether the worker
+# already holds the right model is a property of its own cache, which this layer cannot see. A field
+# every tool declares needs no entry: those values are always compared.
+_SHARED_RELOAD_FIELDS: dict[str, frozenset[str]] = {
+    # The worker keys its model on ``(model_checkpoint, lm_dropout)`` and every tool sends both, so it
+    # holds the requested model or rebuilds it.
+    "esmfold2": frozenset({"lm_dropout"}),
+}
+
+
+def _reload_changes(
+    spawned_with: dict[str, Any],
+    reload_params: dict[str, Any],
+    input_dict: dict[str, Any],
+    *,
+    shared_fields: frozenset[str],
+) -> dict[str, tuple[Any, Any]]:
+    """Return the reload values that keep a live worker from serving this call, as ``{key: (old, new)}``.
+
+    ``spawned_with`` holds the reload values of the call that spawned the worker.
+
+    The call must declare the values the worker was spawned with. A recorded field the call does not declare
+    restarts the worker unless that field is opted in for this toolkit (``shared_fields``, see
+    ``_SHARED_RELOAD_FIELDS``), which states that a tool not declaring it is unaffected by its value.
+
+    So a reuse is allowed only when the worker is known to hold an equivalent model:
+
+    - every field this call declares was recorded at spawn with the same value (one never recorded is unknown,
+      so it restarts, with ``old`` reported as ``"<unset>"``), and
+    - every recorded field this call sends without declaring it also matches, so a tool that pins a value
+      (e.g. a fixed ``model_checkpoint``) never reuses a worker spawned with another.
+
+    Recorded fields this call neither declares nor sends are ignored: they configure a model this tool does
+    not use differently.
+
+    Args:
+        spawned_with (dict[str, Any]): Reload values recorded when the live worker was spawned.
+        reload_params (dict[str, Any]): This call's declared reload fields and their values.
+        input_dict (dict[str, Any]): This call's worker payload.
+        shared_fields (frozenset[str]): Reload fields a call of this toolkit may leave undeclared without
+            replacing the worker.
+
+    Returns:
+        dict[str, tuple[Any, Any]]: Each blocking field with its recorded and requested value; empty to reuse.
+    """
+    changes = {
+        key: (spawned_with.get(key, _UNSET), value)
+        for key, value in reload_params.items()
+        if key not in spawned_with or spawned_with[key] != value
+    }
+    for key, recorded in spawned_with.items():
+        if key in reload_params:
+            continue
+        if key not in shared_fields:
+            # Nothing here can show the loaded model still suits a call that never declared this field, so
+            # the worker is replaced rather than reused.
+            changes[key] = (recorded, _UNSET)
+        elif key in input_dict and input_dict[key] != recorded:
+            changes[key] = (recorded, input_dict[key])
+    return changes
 
 
 def _dispatch_pins_worker() -> bool:
@@ -1211,10 +1279,14 @@ class ToolInstance:
     ) -> dict[str, Any]:
         """Execute via the persistent worker, restarting if config changed.
 
-        Compares the current reload-field values against the previous call.
-        If any tracked field changed (or the script path changed), the
-        existing worker is stopped and a new one is created.  On the very
-        first call the worker is lazily created.
+        Compares this call's reload-field values against those the live worker
+        was spawned with (see :func:`_reload_changes`). If any differs or is
+        unknown (or the script path changed), the existing worker is stopped
+        and a new one is created. A tool that declares fewer reload fields than
+        the one that spawned the worker reuses it when the fields it does
+        declare match and the rest are opted in for that toolkit
+        (``_SHARED_RELOAD_FIELDS``); otherwise the worker is replaced. On the
+        very first call the worker is lazily created.
 
         Args:
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
@@ -1260,25 +1332,31 @@ class ToolInstance:
 
         if self._worker is not None:
             script_changed = self._worker.script_path != sp
-            params_changed = reload_params is not None and reload_params != self._reload_params
-            if script_changed or params_changed:
-                if params_changed:
-                    assert reload_params is not None
-                    changed = {k for k in (reload_on or set()) if self._reload_params.get(k) != reload_params.get(k)}
+            changes = (
+                _reload_changes(
+                    self._reload_params,
+                    reload_params,
+                    input_dict,
+                    shared_fields=_SHARED_RELOAD_FIELDS.get(self.toolkit, frozenset()),
+                )
+                if reload_params is not None
+                else {}
+            )
+            if script_changed or changes:
+                if changes:
                     logger.info(
                         "Config changed (%s) for %s, restarting worker",
-                        ", ".join(
-                            f"{k}: {self._reload_params.get(k)!r} → {reload_params[k]!r}" for k in sorted(changed)
-                        ),
+                        ", ".join(f"{k}: {old!r} → {new!r}" for k, (old, new) in sorted(changes.items())),
                         self.toolkit,
                     )
                 set_substatus("Restarting worker")
                 self._worker.stop()
                 self._worker = None
 
-        if track_reload:
-            assert reload_params is not None
-            self._reload_params = reload_params
+        # The tracked values describe what the live worker was spawned with, so they are set only when one is
+        # about to spawn; a reused worker keeps them, even when the reusing tool declares a narrower set.
+        if self._worker is None:
+            self._reload_params = dict(reload_params) if reload_params is not None else {}
 
         instance_name = self._device_manager_name()
 
