@@ -18,7 +18,6 @@ from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     ParadeConstructType,
     ParadeSequenceInput,
     resolve_cell_type,
-    resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolOutput, ConfigField, ToolInstance
@@ -39,8 +38,8 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
             code (``"c2"``) or cell-line name (``"HepG2"``, case-insensitive); names are
             resolved to canonical codes. Empty means the full panel for ``construct_type``.
             Requested codes must belong to that panel.
-        checkpoint (str): Optional override for the pinned checkpoint — a local ``.ckpt`` path or an
-            ``https`` link (a schemeless ``host.tld/path`` is accepted). Empty uses the pinned per-target checkpoint.
+        model_checkpoint (str): ``"parade"`` (the bundled checkpoint for ``construct_type``) or your
+            own local ``.ckpt`` path or ``https`` link (a schemeless ``host.tld/path`` is accepted).
         batch_size (int): Number of sequences to run per GPU batch.
     """
 
@@ -272,8 +271,6 @@ def run_parade_activity(
     config = ParadeActivityConfig.model_validate(config.model_dump())
     # Sequences may have mixed lengths; the standalone batches them per length group, so this
     # is safe under the framework's per-item iterable cache (partial cache hits pass any subset).
-    checkpoint_path, url, md5, filename = resolve_checkpoint_source(config.construct_type, config.checkpoint)
-
     output_data = ToolInstance.dispatch(
         "parade",
         {
@@ -281,10 +278,7 @@ def run_parade_activity(
             "sequences": inputs.sequences,
             "construct_type": config.construct_type,
             "cell_types": config.resolved_cell_types,
-            "checkpoint_path": checkpoint_path,
-            "checkpoint_url": url,
-            "checkpoint_md5": md5,
-            "checkpoint_filename": filename,
+            "model_checkpoint": config.model_checkpoint,
             "batch_size": config.batch_size,
             "device": config.device,
             "verbose": config.verbose,

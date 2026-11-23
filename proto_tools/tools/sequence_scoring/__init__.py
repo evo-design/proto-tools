@@ -192,10 +192,7 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence import (
     run_gi_splice,
 )
 from proto_tools.tools.sequence_scoring.malinois import (
-    DEFAULT_MALINOIS_ARTIFACT_FILENAME,
-    DEFAULT_MALINOIS_ARTIFACT_MD5,
     DEFAULT_MALINOIS_ARTIFACT_PATH,
-    DEFAULT_MALINOIS_ARTIFACT_URL,
     DEFAULT_MALINOIS_DIR,
     MALINOIS_CELL_TYPES,
     MalinoisActivityTerm,
@@ -221,8 +218,6 @@ from proto_tools.tools.sequence_scoring.na_mpnn_specificity import (
 )
 from proto_tools.tools.sequence_scoring.parade import (
     PARADE_CELL_TYPES,
-    PARADE_CHECKPOINTS,
-    PARADE_COMMIT,
     ParadeActivityConfig,
     ParadeActivityInput,
     ParadeActivityMetrics,
@@ -490,10 +485,7 @@ __all__ = [
     "ENFORMER_OUTPUT_LENGTH",
     "ENFORMER_OUTPUT_FLANK",
     # Malinois
-    "DEFAULT_MALINOIS_ARTIFACT_FILENAME",
-    "DEFAULT_MALINOIS_ARTIFACT_MD5",
     "DEFAULT_MALINOIS_ARTIFACT_PATH",
-    "DEFAULT_MALINOIS_ARTIFACT_URL",
     "DEFAULT_MALINOIS_DIR",
     "MALINOIS_CELL_TYPES",
     "MalinoisCellType",
@@ -526,8 +518,6 @@ __all__ = [
     "run_na_mpnn_specificity",
     # PARADE
     "PARADE_CELL_TYPES",
-    "PARADE_CHECKPOINTS",
-    "PARADE_COMMIT",
     "ParadeActivityInput",
     "ParadeActivityConfig",
     "ParadeActivityMetrics",

@@ -35,8 +35,6 @@ from proto_tools.tools.sequence_scoring.parade.parade_stability_gradient import 
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     PARADE_CELL_LINE_NAMES,
     PARADE_CELL_TYPES,
-    PARADE_CHECKPOINTS,
-    PARADE_COMMIT,
     ParadeActivityMetrics,
     ParadeCellType,
     ParadeConstructType,
@@ -53,8 +51,6 @@ __all__ = [
     # Shared constants and types
     "PARADE_CELL_LINE_NAMES",
     "PARADE_CELL_TYPES",
-    "PARADE_CHECKPOINTS",
-    "PARADE_COMMIT",
     "ParadeCellType",
     "ParadeConstructType",
     "resolve_cell_type",

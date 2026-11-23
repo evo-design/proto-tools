@@ -1,10 +1,7 @@
 """Malinois MPRA regulatory DNA activity scoring."""
 
 from proto_tools.tools.sequence_scoring.malinois.malinois_score import (
-    DEFAULT_MALINOIS_ARTIFACT_FILENAME,
-    DEFAULT_MALINOIS_ARTIFACT_MD5,
     DEFAULT_MALINOIS_ARTIFACT_PATH,
-    DEFAULT_MALINOIS_ARTIFACT_URL,
     DEFAULT_MALINOIS_DIR,
     MALINOIS_CELL_TYPES,
     MalinoisActivityMetrics,
@@ -24,10 +21,7 @@ from proto_tools.tools.sequence_scoring.malinois.malinois_score import (
 )
 
 __all__ = [
-    "DEFAULT_MALINOIS_ARTIFACT_FILENAME",
-    "DEFAULT_MALINOIS_ARTIFACT_MD5",
     "DEFAULT_MALINOIS_ARTIFACT_PATH",
-    "DEFAULT_MALINOIS_ARTIFACT_URL",
     "DEFAULT_MALINOIS_DIR",
     "MALINOIS_CELL_TYPES",
     "MalinoisActivityMetrics",

@@ -17,6 +17,34 @@ def _skip_if_no_malinois_gpu() -> None:
         pytest.skip("Malinois GPU test requires a visible CUDA GPU")
 
 
+def test_malinois_worker_downloads_the_pinned_artifact(monkeypatch, tmp_path) -> None:
+    """The worker fetches the published artifact under its upstream name, checked against its pinned MD5."""
+    import importlib.util
+    import re
+    import sys
+    import types
+    from pathlib import Path
+    from urllib.parse import urlparse
+
+    root = Path(__file__).parents[2]
+    for heavy in ("malinois_scoring", "torch"):  # the worker only touches these when scoring
+        monkeypatch.setitem(sys.modules, heavy, types.ModuleType(heavy))
+    monkeypatch.syspath_prepend(str(root / "proto_tools/utils/standalone_helpers_source"))
+    path = root / "proto_tools/tools/sequence_scoring/malinois/standalone/inference.py"
+    spec = importlib.util.spec_from_file_location("_malinois_test_worker", path)
+    assert spec is not None and spec.loader is not None
+    worker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker)
+
+    calls: list[tuple[str, Path, str | None]] = []
+    monkeypatch.setattr(worker, "download_weights", lambda url, dest, md5=None: calls.append((url, dest, md5)) or dest)
+    worker._download_artifact(tmp_path)
+
+    ((url, dest, md5),) = calls
+    assert dest.name == Path(urlparse(url).path).name, "cached under its upstream name"
+    assert md5 is not None and re.fullmatch("[0-9a-f]{32}", md5)
+
+
 def test_malinois_input_normalizes_and_validates_dna() -> None:
     """Malinois input accepts one DNA string and rejects non-ACGT bases."""
     from proto_tools.tools.sequence_scoring.malinois import MalinoisScoreInput
@@ -82,8 +110,6 @@ def test_malinois_run_dispatches_and_maps_scores(monkeypatch) -> None:
     assert captured_payloads[0][1]["cell_types"] == ["K562", "HepG2"]
     assert captured_payloads[0][1]["seq_length"] == 200
     assert captured_payloads[0][1]["artifact_path"] == ""
-    assert captured_payloads[0][1]["artifact_url"].startswith("https://zenodo.org/records/10698014/files/")
-    assert captured_payloads[0][1]["artifact_md5"] == "375142a714e7df73c463b46113a65210"
     assert captured_payloads[0][1]["malinois_dir"] == ""
     assert result.cell_types == ["K562", "HepG2"]
     assert dict(result.results[0].scores.items()) == {"K562": 4.0, "HepG2": 1.5}

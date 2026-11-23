@@ -34,11 +34,6 @@ from proto_tools.utils.tool_io import Directionality, Metrics, MetricSpec
 
 DEFAULT_MALINOIS_ARTIFACT_PATH = ""
 DEFAULT_MALINOIS_DIR = ""
-DEFAULT_MALINOIS_ARTIFACT_FILENAME = "MODELS-malinois_artifacts__20211113_021200__287348.tar.gz"
-DEFAULT_MALINOIS_ARTIFACT_URL = (
-    "https://zenodo.org/records/10698014/files/MODELS-malinois_artifacts__20211113_021200__287348.tar.gz?download=1"
-)
-DEFAULT_MALINOIS_ARTIFACT_MD5 = "375142a714e7df73c463b46113a65210"
 MALINOIS_CELL_TYPES = ("K562", "HepG2", "SKNSH")
 MalinoisCellType = Literal["K562", "HepG2", "SKNSH"]
 
@@ -221,10 +216,8 @@ class MalinoisScoreConfig(BaseConfig):
         cell_types (list[MalinoisCellType]): Cell-type outputs to return.
         seq_length (int): Expected insert length before MPRA flank padding.
         artifact_path (str): Optional local override path to the Malinois model
-            artifact tarball. Leave empty to download ``artifact_url`` into the
+            artifact tarball. Leave empty to download the published artifact into the
             managed weights cache.
-        artifact_url (str): HTTPS URL used to provision the Malinois artifact.
-        artifact_md5 (str): Optional MD5 checksum for the downloaded artifact.
         malinois_dir (str): Optional local override directory containing
             unpacked artifact metadata. Leave empty to use the cache extraction
             directory.
@@ -254,18 +247,6 @@ class MalinoisScoreConfig(BaseConfig):
         title="Artifact Path",
         default=DEFAULT_MALINOIS_ARTIFACT_PATH,
         description="Optional local artifact tarball path; empty uses the managed cache download.",
-        reload_on_change=True,
-    )
-    artifact_url: str = ConfigField(
-        title="Artifact URL",
-        default=DEFAULT_MALINOIS_ARTIFACT_URL,
-        description="HTTPS URL used to provision the Malinois artifact.",
-        reload_on_change=True,
-    )
-    artifact_md5: str = ConfigField(
-        title="Artifact MD5",
-        default=DEFAULT_MALINOIS_ARTIFACT_MD5,
-        description="Expected MD5 checksum for the downloaded Malinois artifact.",
         reload_on_change=True,
     )
     malinois_dir: str = ConfigField(
@@ -382,8 +363,6 @@ class MalinoisGradientConfig(GradientConfig):
             differentiate, by name or as instances.
         seq_length (int): Expected insert length before Malinois flank padding.
         artifact_path (str): Optional local artifact tarball path.
-        artifact_url (str): URL used to provision the Malinois artifact.
-        artifact_md5 (str): Expected checksum for the downloaded artifact.
         malinois_dir (str): Optional extracted Malinois artifact directory.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
             (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
@@ -419,18 +398,6 @@ class MalinoisGradientConfig(GradientConfig):
         title="Artifact Path",
         default=DEFAULT_MALINOIS_ARTIFACT_PATH,
         description="Optional local artifact tarball path; empty uses the managed cache download.",
-        reload_on_change=True,
-    )
-    artifact_url: str = ConfigField(
-        title="Artifact URL",
-        default=DEFAULT_MALINOIS_ARTIFACT_URL,
-        description="HTTPS URL used to provision the Malinois artifact.",
-        reload_on_change=True,
-    )
-    artifact_md5: str = ConfigField(
-        title="Artifact MD5",
-        default=DEFAULT_MALINOIS_ARTIFACT_MD5,
-        description="Expected MD5 checksum for the downloaded Malinois artifact.",
         reload_on_change=True,
     )
     malinois_dir: str = ConfigField(
@@ -605,8 +572,6 @@ def run_malinois_score(
             "cell_types": config.cell_types,
             "seq_length": config.seq_length,
             "artifact_path": config.artifact_path,
-            "artifact_url": config.artifact_url,
-            "artifact_md5": config.artifact_md5,
             "malinois_dir": config.malinois_dir,
             "batch_size": config.batch_size,
             "device": config.device,
@@ -671,8 +636,6 @@ def run_malinois_gradient(
             "gradient_terms": [term.model_dump() for term in config.gradient_terms],
             "seq_length": config.seq_length,
             "artifact_path": config.artifact_path,
-            "artifact_url": config.artifact_url,
-            "artifact_md5": config.artifact_md5,
             "malinois_dir": config.malinois_dir,
             "soft": config.soft,
             "hard": config.hard,

@@ -186,6 +186,14 @@ Rules that affect behavior:
   code or `setup.sh`), next to the download that checks them. The host side
   owns only the checkpoint names a config accepts, and sends the name. See
   `notes/storage.md`.
+- **Checkpoint selection is one `model_checkpoint` field**, even when a tool
+  has a single checkpoint. It takes a short bundled name (the default) or
+  the user's own checkpoint as a path (or https link); never add separate
+  `model_name` / `checkpoint_path` / `checkpoint` fields or an empty-string
+  default. Bundled files are downloaded by `setup.sh`, and a test asserts
+  `setup.sh` fetches every one. Reject a local path in
+  `remote_unsupported_reason`. See the implement-tool skill's "one
+  `model_checkpoint` field" section; `opendde` and `parade` follow it.
 - Credentials (API keys, tokens, account emails and passwords) are
   `ConfigField(credential="TOOLKIT_NAME")` fields named `{toolkit}_{name}`,
   such as `paperclip_api_key` and `PAPERCLIP_API_KEY`. Client code takes them

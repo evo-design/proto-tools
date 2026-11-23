@@ -8,7 +8,6 @@ from pydantic import Field
 
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     ParadeCheckpointConfig,
-    resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -160,8 +159,8 @@ class ParadeStabilityGradientConfig(RelaxationConfig, ParadeCheckpointConfig):
     """Configuration for the PARADE 3' UTR stability gradient tool.
 
     Attributes:
-        checkpoint (str): Inherited; your own ``.ckpt`` path or https link, used instead of the
-            pinned stability checkpoint.
+        model_checkpoint (str): Inherited; ``"parade"`` (the bundled stability checkpoint) or your
+            own ``.ckpt`` path or https link.
         batch_size (int): Inherited; sequences per GPU forward pass.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
             (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
@@ -215,18 +214,13 @@ def run_parade_stability_gradient(
     """Compute PARADE stability gradients with respect to relaxed 3' UTR logits."""
     logger.debug("Using local worker for PARADE stability gradient (%d candidate(s))", len(inputs.inputs))
     # The objective runs through the same stability checkpoint as parade-stability.
-    checkpoint_path, url, md5, filename = resolve_checkpoint_source("stability", config.checkpoint)
-
     result = ToolInstance.dispatch(
         "parade",
         {
             "operation": "stability_gradient",
             "logits": [item.root for item in inputs.inputs],
             "temperature": inputs.temperature,
-            "checkpoint_path": checkpoint_path,
-            "checkpoint_url": url,
-            "checkpoint_md5": md5,
-            "checkpoint_filename": filename,
+            "model_checkpoint": config.model_checkpoint,
             "soft": config.soft,
             "hard": config.hard,
             "compute_gradient": config.compute_gradient,

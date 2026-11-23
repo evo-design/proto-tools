@@ -6,8 +6,6 @@ import logging
 import os
 import sys
 import tempfile
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -29,23 +27,20 @@ logger = get_logger(__name__)
 
 CELL_TYPE_INDEX = {"K562": 0, "HepG2": 1, "SKNSH": 2}
 DNA_VOCAB = list(DNA_NUCLEOTIDES)
-DEFAULT_ARTIFACT_FILENAME = "MODELS-malinois_artifacts__20211113_021200__287348.tar.gz"
-DEFAULT_ARTIFACT_MD5 = "375142a714e7df73c463b46113a65210"
+# The published Malinois artifact (Gosai et al., 2024), pinned by MD5: one tarball holding the
+# model checkpoint and its metadata.
+ARTIFACT_URL = (
+    "https://zenodo.org/records/10698014/files/MODELS-malinois_artifacts__20211113_021200__287348.tar.gz?download=1"
+)
+ARTIFACT_FILENAME = "MODELS-malinois_artifacts__20211113_021200__287348.tar.gz"
+ARTIFACT_MD5 = "375142a714e7df73c463b46113a65210"
 
 
-def _filename_from_url(url: str) -> str:
-    parsed = urllib.parse.urlparse(url)
-    name = Path(parsed.path).name
-    return name or DEFAULT_ARTIFACT_FILENAME
-
-
-def _download_artifact(url: str, expected_md5: str | None, cache_dir: Path) -> Path:
-    if not url:
-        raise FileNotFoundError("malinois: artifact_path is unavailable and artifact_url is empty")
-    target = cache_dir / _filename_from_url(url)
+def _download_artifact(cache_dir: Path) -> Path:
+    target = cache_dir / ARTIFACT_FILENAME
     if not target.is_file():
         logger.update_status("Downloading Malinois weights")
-    return Path(download_weights(url, target, md5=expected_md5 or None))
+    return Path(download_weights(ARTIFACT_URL, target, md5=ARTIFACT_MD5))
 
 
 def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:
@@ -87,8 +82,6 @@ def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:
 def _resolve_artifact_paths(
     *,
     artifact_path: str,
-    artifact_url: str,
-    artifact_md5: str,
     malinois_dir: str,
 ) -> tuple[str, str]:
     cache_dir = Path(require_weights_dir("malinois"))
@@ -96,8 +89,7 @@ def _resolve_artifact_paths(
     if artifact_candidate is not None and artifact_candidate.is_file():
         resolved_artifact = artifact_candidate
     else:
-        expected_md5 = artifact_md5 or DEFAULT_ARTIFACT_MD5
-        resolved_artifact = _download_artifact(artifact_url, expected_md5, cache_dir)
+        resolved_artifact = _download_artifact(cache_dir)
 
     metadata_candidate = Path(malinois_dir).expanduser() if malinois_dir else None
     if metadata_candidate is not None and (metadata_candidate / "artifacts" / "torch_checkpoint.pt").is_file():
@@ -122,8 +114,6 @@ class MalinoisModel:
         self,
         *,
         artifact_path: str,
-        artifact_url: str,
-        artifact_md5: str,
         malinois_dir: str,
         seq_length: int,
         device: str,
@@ -132,8 +122,6 @@ class MalinoisModel:
         """Load the Malinois model and MPRA flank builder."""
         artifact_path, malinois_dir = _resolve_artifact_paths(
             artifact_path=artifact_path,
-            artifact_url=artifact_url,
-            artifact_md5=artifact_md5,
             malinois_dir=malinois_dir,
         )
         model_key = (artifact_path, malinois_dir, seq_length)
@@ -298,8 +286,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"malinois: unsupported cell_types: {unsupported}")
         _model.load(
             artifact_path=input_dict["artifact_path"],
-            artifact_url=input_dict.get("artifact_url", ""),
-            artifact_md5=input_dict.get("artifact_md5", DEFAULT_ARTIFACT_MD5),
             malinois_dir=input_dict["malinois_dir"],
             seq_length=int(input_dict["seq_length"]),
             device=input_dict["device"],
@@ -325,8 +311,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     _model.load(
         artifact_path=input_dict["artifact_path"],
-        artifact_url=input_dict.get("artifact_url", ""),
-        artifact_md5=input_dict.get("artifact_md5", DEFAULT_ARTIFACT_MD5),
         malinois_dir=input_dict["malinois_dir"],
         seq_length=int(input_dict["seq_length"]),
         device=input_dict["device"],
