@@ -908,7 +908,10 @@ class ToolInstance:
                         # With unchanged setup files, the env is being set up again for its weights
                         unchanged = f"Setup hash: {self._setup_hash()}" in status
                         problem = weights_problem(self.env_path) if unchanged else None
-                        if problem is not None:
+                        # A CPU build being rebuilt for the GPU is reported by _create_env, which every rebuild runs
+                        if unchanged and self._built_without_gpu_now_visible(status):
+                            pass
+                        elif problem is not None:
                             logger.info(
                                 "Setting up %s again to download its weights: %s",
                                 self.toolkit,
@@ -2875,8 +2878,37 @@ class ToolInstance:
                 return line[:200]
         return ""
 
+    def _built_without_gpu_now_visible(self, status: str) -> bool:
+        """Whether the env was built where no GPU was visible, and one is visible now.
+
+        ``setup.sh`` installs CPU-only PyTorch and JAX when it sees no GPU (a login node, or a run with
+        ``CUDA_VISIBLE_DEVICES=``), so such an env must be built again before it can use one. Only that
+        direction: a GPU build runs on CPU too, so a CPU-only machine sharing the env keeps it. An env
+        built before the platform was recorded counts as a CPU build when it holds a ``+cpu`` torch.
+
+        Args:
+            status (str): The env's STATUS.txt.
+
+        Returns:
+            bool: True when the env should be built again for the GPU.
+        """
+        from proto_tools.utils.compute_deps import detect_compute_environment
+
+        if detect_compute_environment()["DETECTED_COMPUTE_PLATFORM"] != "cuda":
+            return False
+        recorded = next(
+            (line.split(":", 1)[1].strip() for line in status.splitlines() if line.startswith("Compute platform:")),
+            None,
+        )
+        if recorded is not None:
+            stale = recorded == "cpu"
+        else:
+            # Built before the platform was recorded: a CPU-only torch on disk says it was a CPU build.
+            stale = any(self.env_path.glob("lib/python*/site-packages/torch-*+cpu.dist-info"))
+        return stale
+
     def _is_env_ok(self) -> bool:
-        """Check STATUS.txt, the Python executable, the setup hash, and that the weights are on disk."""
+        """Check STATUS.txt, the Python executable, the setup hash, the compute platform, and the weights."""
         status_file = self.env_path / "STATUS.txt"
         if not status_file.exists():
             return False
@@ -2898,6 +2930,8 @@ class ToolInstance:
             # Compare stored hash to current setup files
             current_hash = self._setup_hash()
             if f"Setup hash: {current_hash}" not in status:
+                return False
+            if self._built_without_gpu_now_visible(status):
                 return False
             # Weights setup.sh downloaded may have been deleted since (e.g. a scratch purge)
             return weights_problem(self.env_path) is None
@@ -2955,8 +2989,14 @@ class ToolInstance:
         """
         status_file = self.env_path / "STATUS.txt"
 
-        # Remove env if setup files changed
+        # Remove env if setup files changed, or it was built without a GPU and one is visible now
         if self.env_path.exists() and not self._is_env_ok():
+            status = status_file.read_text() if status_file.exists() else ""
+            if status.startswith("SUCCESS") and self._built_without_gpu_now_visible(status):
+                logger.info(
+                    "Rebuilding %s for the GPU: it was built where no GPU was visible, so it has CPU-only packages",
+                    self.toolkit,
+                )
             logger.info("Removing environment at %s", self.env_path)
             shutil.rmtree(self.env_path)
 
@@ -3068,7 +3108,10 @@ class ToolInstance:
 
         if returncode == 0:
             write_manifest(self.env_path, self.toolkit)
-            status_file.write_text(f"SUCCESS\nSetup hash: {self._setup_hash()}\n")
+            status_file.write_text(
+                f"SUCCESS\nSetup hash: {self._setup_hash()}\n"
+                f"Compute platform: {env.get('DETECTED_COMPUTE_PLATFORM', 'cpu')}\n"
+            )
             logger.debug("Environment setup completed for %s", self.toolkit)
             self._clean_package_archives(mamba_bin)
             self._schedule_uv_prune(Path(env["UV_CACHE_DIR"]))
