@@ -4,7 +4,7 @@ The quantities here are reimplemented from the ESMFold2 binder-design recipe pub
 Chan Zuckerberg Biohub under the MIT license, at
 https://github.com/bviggiano/esm/blob/1ad44674ef25f5a783273751ee3261617f4c5504/cookbook/tutorials/binder_design.py
 The "Algorithm N" labels in the docstrings below refer to that reference, which is the authority
-on what each quantity means; the implementations are our own.
+on what each quantity means. The implementations are ours.
 
 Every function takes distogram logits shaped ``(batch, length, length, bins)`` over the full
 complex, with the target occupying the leading positions and the binder the trailing ones, and
@@ -87,8 +87,8 @@ def bin_midpoints(n_bins: int, device: torch.device | None = None) -> torch.Tens
 
     ``n_bins`` is the width of the distogram actually returned, and selects the discretization
     from :data:`DISTOGRAM_GRIDS`. A head this module does not know is rejected rather than scored
-    on a guessed grid: reading the wrong distances is silent rather than loud, since the
-    quantities stay finite and differentiable while meaning something else entirely.
+    on a guessed grid. Incorrect distances could produce finite, differentiable
+    scores with the wrong meaning and no visible error.
 
     Args:
         n_bins (int): Bin count of the distogram being scored.
@@ -141,10 +141,10 @@ def contact_entropy(distogram_logits: torch.Tensor, midpoints: torch.Tensor, cut
 def mean_of_smallest(values: torch.Tensor, mask: torch.Tensor, count: int) -> torch.Tensor:
     """Average the ``count`` smallest unmasked values along the last axis.
 
-    Taking only the best few contacts per residue is what makes the contact objectives local: a
-    residue is satisfied by a handful of close partners rather than by its average distance to
-    everything. Where fewer than ``count`` entries are unmasked, the mean is over those available,
-    and where none are, the result is zero.
+    Taking the best few contacts keeps the objective local. Each residue needs
+    only a few close partners, regardless of its distance to the rest of the
+    structure. Where fewer than ``count`` entries are unmasked, the mean is over
+    those available, and where none are, the result is zero.
 
     Args:
         values (torch.Tensor): Values to reduce, any shape.
@@ -406,7 +406,8 @@ def straight_through(relaxed: torch.Tensor) -> torch.Tensor:
 
     The language model is trained on discrete tokens, so feeding it the relaxed distribution
     directly would score a state it never sees. Passing the argmax forward while routing the
-    derivative through the distribution keeps the score honest and the objective differentiable.
+    derivative through the distribution preserves discrete forward inputs and
+    a differentiable objective.
 
     Args:
         relaxed (torch.Tensor): Distribution over the last axis.

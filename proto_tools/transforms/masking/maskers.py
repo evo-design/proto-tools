@@ -1,4 +1,4 @@
-"""proto_tools/transforms/masking/maskers.py.
+"""Score sequence positions for masking.
 
 Each masker has:
 - ``requires``: which external input it needs to score positions
@@ -32,7 +32,7 @@ class MaskingInput(str, Enum):
 
     A sampling tool declares the set it can supply via ``masking_inputs``;
     a masker declares the one it needs via :attr:`Masker.requires`. A method
-    is available on a tool iff the tool provides what the masker requires
+    is available on a tool if and only if the tool provides what the masker requires
     (see :func:`compatible_methods`). Extend this enum to add new
     model-/data-informed maskers (e.g. ``MSA``, ``STRUCTURE``).
     """

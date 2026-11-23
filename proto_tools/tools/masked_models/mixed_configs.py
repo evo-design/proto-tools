@@ -20,7 +20,7 @@ PROTECTED_TOKENS = frozenset(STRAND_TOKENS + AMBIGUOUS_PROTEIN_TOKENS)
 
 
 class MixedModelConfig(BaseConfig):
-    """Shared execution configuration; registered tools specialize checkpoint choices.
+    """Shared execution settings with checkpoint choices supplied by each registered tool.
 
     Attributes:
         model_checkpoint (str): Public Hugging Face checkpoint.
@@ -46,7 +46,7 @@ class MixedModelConfig(BaseConfig):
 
     def preprocess(self, inputs: Any) -> Any:
         """Check context limits before loading weights and warn on a missing leading strand marker."""
-        # Scoring, embedding and sampling take a list of templates; the gradient takes one per item.
+        # Read templates from the sequence list or from each gradient candidate.
         sequences = (
             list(inputs.sequences) if hasattr(inputs, "sequences") else [item.sequence for item in inputs.inputs]
         )
@@ -193,7 +193,8 @@ class MixedSampleConfig(MixedModelConfig):
                     "Remove '_' tokens to use the strategy, or omit masking_strategy to silence this warning."
                 )
             return inputs
-        # One-character tokens make string indices token positions; strand markers stay fixed.
+        # Each token is one character, so string indices also identify token positions.
+        # Strand markers remain fixed.
         sequences = ["".join(tokenize_mixed_sequence(sequence)) for sequence in inputs.sequences]
         position_score_fn = None
         if self.masking_strategy.method != "random":

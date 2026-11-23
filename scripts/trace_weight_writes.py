@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """scripts/trace_weight_writes.py.
 
-Run a command and report every file it wrote, grouped by folder, so a toolkit's downloads
-can be audited before and after moving it to the per-toolkit model-cache layout.
+Run a command and report the files it wrote, grouped by folder. Use this to check
+a toolkit's downloads before and after moving them to its model-cache directory.
 
 Files modified after the command starts are collected under ``PROTO_HOME``, ``$HOME``, and
 the temp dir. Tool envs and package caches under ``PROTO_HOME`` are summarized in one line

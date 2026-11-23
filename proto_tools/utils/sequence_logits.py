@@ -25,8 +25,8 @@ class SequenceLogits(RootModel[list[list[float]]]):
 
     Subclasses set ``VOCAB`` to the column symbols, so ``V`` is its length and ``L`` is the
     number of rows. Construction validates shape, rectangularity, and finiteness. The
-    probability-simplex rules are separate, since they apply only in probability mode; a
-    gradient input runs them through :meth:`validate_probabilities` when its ``temperature``
+    probability-simplex rules are separate because they apply only in probability mode.
+    A gradient input checks them through :meth:`validate_probabilities` when its ``temperature``
     is ``None``.
 
     Parses from and serializes to ordinary nested lists, so the JSON request shape callers
@@ -82,7 +82,7 @@ class SequenceLogits(RootModel[list[list[float]]]):
             return self.root == other
         return NotImplemented
 
-    # Pydantic leaves non-frozen models unhashable; defining __eq__ keeps that explicit.
+    # Keep the model unhashable when defining equality, as with other non-frozen Pydantic models.
     __hash__ = None  # type: ignore[assignment]
 
     @property
@@ -123,8 +123,8 @@ class SequenceLogits(RootModel[list[list[float]]]):
     def validate_fixed_rows(self, *, allowed: list[list[bool]], label: str = "logits") -> None:
         """Require rows with no permitted column to be exactly zero.
 
-        A row whose mask is entirely ``False`` is fixed context: it is not a design variable, so
-        it carries no state in either temperature mode.
+        A row whose mask is entirely ``False`` is fixed context. It is not a design
+        variable and carries no state in either temperature mode.
 
         Args:
             allowed (list[list[bool]]): ``(L, V)`` mask of permitted columns per position.
@@ -142,8 +142,8 @@ class SequenceLogits(RootModel[list[list[float]]]):
     def validate_probabilities(self, *, allowed: list[list[bool]] | None = None, label: str = "logits") -> None:
         """Require every active row to be a probability distribution over its permitted columns.
 
-        Rows whose mask is entirely ``False`` are fixed context and are skipped; see
-        :meth:`validate_fixed_rows`, which covers them in both temperature modes.
+        Rows whose mask is entirely ``False`` are fixed context and are skipped.
+        :meth:`validate_fixed_rows` checks them in both temperature modes.
 
         Args:
             allowed (list[list[bool]] | None): ``(L, V)`` mask of permitted columns per position.
@@ -183,7 +183,7 @@ class SequenceLogits(RootModel[list[list[float]]]):
 
         This is the numerical primitive. Prefer a gradient input's own ``from_probabilities()``,
         which also stores the matching ``temperature`` so the conversion and the reading cannot
-        disagree; pairing this result with a different temperature reshapes the distribution.
+        disagree. Pairing this result with a different temperature reshapes the distribution.
 
         Args:
             probabilities (Sequence[Sequence[float]]): ``(L, V)`` rows, each a strictly positive

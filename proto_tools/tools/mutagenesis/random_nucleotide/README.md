@@ -13,7 +13,7 @@ Random Nucleotide Sampling fills the masked positions of a DNA or RNA sequence w
 
 ## Background
 
-Random Nucleotide Sampling performs random mutagenesis at the nucleotide level: it takes a DNA or RNA sequence, determines which positions are designable, and replaces each with a base drawn uniformly from a chosen IUPAC degenerate-base pool. It generates nucleotide diversity without any learned model, the simplest possible baseline against which model-guided generators can be compared.
+Random Nucleotide Sampling performs random mutagenesis at the nucleotide level. It takes a DNA or RNA sequence, determines which positions are designable, and replaces each with a base drawn uniformly from a chosen IUPAC degenerate-base pool. It generates nucleotide diversity without any learned model, the simplest possible baseline against which model-guided generators can be compared.
 
 Internally, designable positions are either the `_` characters already present in the input or, when none are present, positions chosen by the configured masking strategy. Each masked position is filled independently by drawing one base uniformly at random from the pool that the IUPAC code expands to: `N` expands to A/C/G/T, `R` to A/G, `S` to G/C, and so on. Sampling is uniform within the pool, with no frequency weighting. When the input is RNA, sampled `T` bases are converted to `U`. With a fixed seed the output is deterministic.
 
@@ -43,5 +43,5 @@ Use this to build randomized nucleotide libraries: degenerate positions in promo
 
 These apply to every Random Nucleotide Sampling tool in this toolkit (`random-nucleotide-sample`).
 
-- **Runs on CPU.** The sampler is pure Python with no model and no external dependencies; execution is near-instant.
-- **Deterministic only with a seed.** Without a `seed` the filled positions differ every run; set one when you need reproducible libraries.
+- **Runs on CPU.** The sampler is pure Python with no model and no external dependencies. Execution is near-instant.
+- **Deterministic only with a seed.** Without a `seed` the filled positions differ every run. Set one when you need reproducible libraries.

@@ -1,12 +1,11 @@
 """Notebook display helpers for tool documentation.
 
-Thin Jupyter-display wrappers over the text-extraction API in
-``proto_tools.utils.tool_docs``. Each ``display_*`` function pulls structured
+Display documentation from ``proto_tools.utils.tool_docs`` in Jupyter. Each ``display_*`` function pulls structured
 content via the public extractors, renders it through ``IPython.display``, and
 returns ``None`` (the display is the side-effect).
 
-Use ``proto_tools.utils.tool_docs`` directly for programmatic access — agents,
-MCP servers, and any non-notebook consumer should not import from this module.
+For programmatic access from agents, MCP servers, or other code outside
+notebooks, use ``proto_tools.utils.tool_docs`` directly.
 """
 
 from __future__ import annotations

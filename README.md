@@ -25,9 +25,9 @@
 >
 > [Contact us](https://forms.gle/8PiYPDiuf3YfNxxH8) and let us know how we can help!
 
-Welcome! This repository contains the open-source implementation of `proto-tools`, a Python package containing a large suite of computational biology and biological AI tools, all accessible through a single, consistent Python interface. Language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all available through a single `pip install` command.
+`proto-tools` is an open-source Python package that gives computational biology and biological AI tools a common interface. It includes language models, structure prediction, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more, all available through a single `pip install` command.
 
-Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or from an AI assistant through our [hosted MCP server](https://proto.evodesign.org/docs/mcp/installation). Tools can run on local compute or on Modal.
+Tool environments are isolated and managed automatically, so you can use tools with conflicting dependencies together. Device management and GPU fan-out support repeated calls and parallel workloads. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or from an AI assistant through our [hosted MCP server](https://proto.evodesign.org/docs/mcp/installation). Tools can run on local compute or on Modal.
 
 Proto-tools is open source under an MIT license. Contributions are welcome!
 
@@ -57,7 +57,7 @@ To use these tools from Claude, ChatGPT, or another AI assistant, connect our MC
 
 All persistent data (model weights and tool environments) is cached under the `PROTO_HOME` directory on first use (defaults to `~/.proto/`).
 
-To customize the storage location, you can specify a path via the following environment variable:
+To choose another storage location, set this environment variable.
 
 ```bash
 # Add to your shell profile:
@@ -72,11 +72,9 @@ A few tools use gated models or software that require accepting a license / term
 
 ### Step 4: Remote compute (optional) <a href="https://modal.com"><img src="guides/assets/modal/modal-logo.png" alt="Modal" height="20" align="absmiddle"></a>
 
-`proto-tools` enables users to scale their tool use beyond their local machine through an
-integration with [Modal](https://modal.com), a serverless compute platform that
-allows users to execute models and tools in remote containers. To learn more about
-setting up Modal, see [proto_tools/modal/README.md](proto_tools/modal/README.md)
-for instructions related to account setup, deploying a tool, and costs, or the [Cloud Inference guide](guides/cloud_inference.ipynb) for a runnable walkthrough.
+Run tools remotely with [Modal](https://modal.com), a serverless compute platform.
+See [proto_tools/modal/README.md](proto_tools/modal/README.md) for account setup,
+deployment, and costs, or work through the [Cloud Inference guide](guides/cloud_inference.ipynb).
 
 > [!TIP]
 > **You're all set up!** Start with the [quickstart](guides/quickstart.ipynb), then check out the rest of the [guides](guides/) — short notebooks covering tool environments, persistent execution, device management, parallel multi-GPU runs, and remote execution.
@@ -234,7 +232,7 @@ Each specific tool also ships a minimal `examples/example.ipynb` under `proto_to
 
 Our hosted MCP server lets Claude, ChatGPT, and other AI assistants find and run these tools for you. To set up, follow our [MCP installation guide here](https://proto.evodesign.org/docs/mcp/installation).
 
-## Development & Contributing
+## Development and Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage
 configuration, PR format, code style, and testing conventions.

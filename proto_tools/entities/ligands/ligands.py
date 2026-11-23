@@ -75,7 +75,7 @@ class Fragment(BaseModel):
         if raw_smiles is None and raw_ccd is None:
             raise ValueError("At least one of 'smiles' or 'ccd_code' must be provided")
 
-        # Resolve SMILES → canonical form + attempt CCD lookup
+        # Canonicalize the supplied SMILES and look for its CCD code.
         canonical_smiles: str | None = None
         if raw_smiles is not None:
             parsed = Chem.MolFromSmiles(raw_smiles)
@@ -91,7 +91,7 @@ class Fragment(BaseModel):
             canonical_smiles = Chem.MolToSmiles(parsed, canonical=True)
             data["smiles"] = canonical_smiles
 
-        # Resolve CCD code → SMILES
+        # Resolve a supplied CCD code to its SMILES representation.
         if raw_ccd is not None:
             if not is_valid_ccd_code(raw_ccd):
                 raise ValueError(f"Invalid CCD code: {raw_ccd}")
@@ -189,6 +189,7 @@ class Fragment(BaseModel):
         """
         from rdkit.Chem import AllChem
 
+        # Set the embedding seed and the threshold for removing similar conformers.
         params = AllChem.ETKDGv3()  # type: ignore[attr-defined]
         if random_seed is not None:
             params.randomSeed = random_seed
@@ -202,6 +203,7 @@ class Fragment(BaseModel):
                 f"prune_rms_threshold={prune_rms_threshold}"
             )
 
+        # Minimize each embedded conformer with the UFF force field.
         for conf_id in conf_ids:
             AllChem.UFFOptimizeMolecule(self.mol, confId=conf_id)  # type: ignore[attr-defined]
 
@@ -466,16 +468,19 @@ class Ligands(BaseModel):
         if len(self.fragments) == 0:
             raise ValueError("Cannot generate PDB: no fragments in Ligands object")
 
+        # Embed a 3D conformer for any fragment that has none yet
         for frag in self.fragments:
             if frag.mol.GetNumConformers() == 0:
                 frag.generate_conformers(num_conformers=1)
 
+        # Track the running atom serial number and X offset across fragments
         pdb_lines = []
         current_atom_num = 1
         current_x_offset = 0.0
         chain_ids = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
         for frag_idx, frag in enumerate(self.fragments):
+            # Measure the bounding box of this fragment's first conformer
             conf = frag.mol.GetConformer(0)
 
             positions = conf.GetPositions()
@@ -483,14 +488,17 @@ class Ligands(BaseModel):
             max_coords = np.max(positions, axis=0)
             bbox_size = max_coords - min_coords
 
+            # Copy the molecule so the translation leaves the fragment's coordinates untouched
             mol_copy = Chem.Mol(frag.mol)
             conf_copy = mol_copy.GetConformer(0)
 
+            # Place the box at the current X offset, centered on the Y and Z axes
             fragment_center = (min_coords + max_coords) / 2
             translation = np.array(
                 [current_x_offset + bbox_size[0] / 2 - fragment_center[0], -fragment_center[1], -fragment_center[2]]
             )
 
+            # Shift every atom by that translation
             for atom_idx in range(mol_copy.GetNumAtoms()):
                 pos = conf_copy.GetAtomPosition(atom_idx)
                 new_pos = np.array([pos.x, pos.y, pos.z]) + translation
@@ -498,6 +506,7 @@ class Ligands(BaseModel):
 
             pdb_block = Chem.MolToPDBBlock(mol_copy, confId=0)
 
+            # Renumber atom serials, stamp this fragment's chain ID, and drop CONECT records
             chain_id = chain_ids[frag_idx % len(chain_ids)]
             for line in pdb_block.split("\n"):
                 if line.startswith(("HETATM", "ATOM")):
@@ -508,16 +517,19 @@ class Ligands(BaseModel):
                 elif line.startswith("CONECT"):
                     continue
 
+            # Close the chain with a TER record labeled by the fragment name
             frag_label = (frag.name or "UNK")[:3]
             pdb_lines.append(f"TER   {current_atom_num:5d}      {frag_label:3s} {chain_id}")
             current_atom_num += 1
 
+            # Move the offset past this fragment's box plus the spacing gap
             current_x_offset += bbox_size[0] + spacing
 
         pdb_lines.append("END")
 
         pdb_string = "\n".join(pdb_lines)
 
+        # Write the PDB to disk if a path was given
         if filepath is not None:
             filepath = Path(filepath)
             with open(filepath, "w") as f:
@@ -618,7 +630,8 @@ def read_ligand_file_smiles(path: Path) -> list[str]:
     """Return one SMILES per molecule in a ``.smi`` or ``.sdf`` file, optionally gzipped.
 
     A ``.smi`` line holds one molecule (a salt such as ``CC(=O)[O-].[Na+]`` stays whole) and an
-    optional name after whitespace; ``#`` lines are comments. Each SDF record is one molecule.
+    optional name after whitespace. Lines starting with ``#`` are comments.
+    Each SDF record is one molecule.
 
     Args:
         path (Path): Path to the file.

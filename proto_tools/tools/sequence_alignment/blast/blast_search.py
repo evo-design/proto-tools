@@ -147,7 +147,7 @@ class BlastSearchInput(BaseToolInput):
 
     The ``query`` field accepts either a raw sequence string or a path to a
     FASTA file. A ``Path`` is always a file. A string of sequence characters is
-    a sequence, even if a file by that name exists; any other string is read as
+    a sequence, even if a file by that name exists. Any other string is read as
     a FASTA path, and fails validation if no such file exists.
 
     Attributes:
@@ -183,7 +183,7 @@ class BlastSearchInput(BaseToolInput):
 
     @model_validator(mode="after")
     def infer_query_type(self) -> "BlastSearchInput":
-        """Set ``query_type``: a resolved FASTA path is absolute, so it never matches the sequence characters."""
+        """Set ``query_type`` from the resolved query. A FASTA path is absolute, so it never matches the sequence characters."""
         query_type = "sequence" if _SEQUENCE_CHARS.match(str(self.query).strip()) else "fasta_path"
         object.__setattr__(self, "query_type", query_type)
         return self
@@ -251,8 +251,8 @@ class BlastSearchConfig(BaseConfig):
 
     Controls search mode (online vs local), BLAST program selection, scoring,
     filtering, and output options. The wrapper's online path goes through
-    NCBI's QBLAST web API which only exposes a subset of BLAST+ flags;
-    fields outside that subset are local-only and gated via ``depends_on`` /
+    NCBI's QBLAST web API which only exposes a subset of BLAST+ flags.
+    Fields outside that subset are local-only and gated via ``depends_on`` /
     listed in ``_local_only_fields``.
 
     Attributes:

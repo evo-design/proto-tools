@@ -1,11 +1,10 @@
 """Animated progress bars and status indicators for long-running operations.
 
-Provides ``progress_bar()`` as a drop-in ``tqdm`` replacement that shows an
-animated dots spinner in the description prefix.  Infrastructure code calls
-``set_substatus()`` to update the description as phases change (env setup →
-subprocess launch → inference).  A process-wide active-bar stack connects
-the two without any direct coupling, and stays visible across thread
-boundaries (worker drain threads call ``set_substatus`` too).
+Use ``progress_bar()`` in place of ``tqdm`` to add an animated spinner to the
+description. Infrastructure code calls ``set_substatus()`` as work moves
+through environment setup, subprocess launch, and inference. A process-wide
+stack tracks the active bar so status updates also work from worker drain
+threads.
 
 Styles are registered in ``SPINNER_STYLES`` — add new entries there
 to create new animation patterns.
@@ -355,9 +354,8 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
             icon = "\u2714" if completed else "\u2718"
             self.set_description(_compose_desc(self._prefix, icon, self._base_desc), refresh=True)
         else:
-            # Draw the substatus one last time. Only the animation thread renders, and it has
-            # just been stopped, so without this the frame left on screen is whatever phase it
-            # happened to stop on rather than the final one the caller set.
+            # Draw the latest substatus after stopping the animation thread. Otherwise,
+            # the display may retain an earlier phase instead of the caller's final status.
             self.set_description(_compose_desc(self._prefix, "", self._base_desc), refresh=True)
         _pop_active_bar(self)
         super().close()
@@ -568,9 +566,8 @@ def progress_bar(  # noqa: D417
     """
     if kwargs.get("disable"):
         return tqdm(*args, **kwargs)
-    # Tested before interactivity, not after. A Jupyter kernel's stderr is a ZMQ stream rather
-    # than a tty, so an ``isatty`` gate placed first makes this branch unreachable -- which is
-    # exactly backwards, since this renderer exists because notebooks are not ttys.
+    # Check for notebooks before terminal interactivity. Jupyter stderr is a ZMQ stream,
+    # so checking isatty first would prevent the notebook renderer from being selected.
     in_notebook = _in_notebook()
     stream = kwargs.get("file")
     if stream is None:
@@ -616,10 +613,9 @@ def remote_spinner_style(device: str) -> tuple[str, str | None]:
 def remote_progress(device: str) -> Generator[None, None, None]:
     """Hold a status-only spinner for the round trip to a remote worker.
 
-    Nothing else opens a bar on the remote path: the tool wrapper's bar belongs to local subprocess
-    execution, and a tool's own bar runs inside the remote container. Without this a remote call
-    shows nothing at all, and the machinery that streams a worker's log output finds no active
-    bar to write into.
+    The wrapper opens a bar for local subprocess execution, and a remote tool
+    opens a separate bar inside the container. This spinner gives streamed remote
+    logs an active bar to update on the caller's machine.
 
     A bar already open is left alone rather than nested, which is what happens under
     ``ToolPool`` or inside a tool that opened its own.

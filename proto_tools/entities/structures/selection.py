@@ -18,9 +18,8 @@ logger = logging.getLogger(__name__)
 class ChainSelection(BaseModel):
     """Selection of one or more whole chains.
 
-    Replaces ``chain_ids: list[str] | None`` fields that select chains without
-    per-residue granularity. Empty selections are rejected; the absent-selection
-    state is the parent field being ``None``.
+    Use this for tools that select whole chains. Empty selections are rejected.
+    Set the parent field to ``None`` when no selection is needed.
 
     Accepts shorthand at construction:
 
@@ -42,12 +41,12 @@ class ChainSelection(BaseModel):
         if isinstance(data, ChainSelection):
             return {"chains": list(data.chains)}
         if isinstance(data, str):
-            # Match Structure.select_chains: comma-separated, whitespace stripped, empties dropped.
+            # Split comma-separated chain IDs, trim whitespace, and discard empty entries.
             return {"chains": [c.strip() for c in data.split(",") if c.strip()]}
         if isinstance(data, list):
             if not all(isinstance(c, str) for c in data):
                 raise ValueError("List must contain only chain ID strings")
-            # Same strip + drop-empties as the string branch (and Structure.select_chains' list path).
+            # Apply the same whitespace and empty-entry handling to a list of chain IDs.
             return {"chains": [c.strip() for c in data if c.strip()]}
         if isinstance(data, dict):
             keys = set(data.keys())
@@ -158,11 +157,11 @@ class ResidueSelection(BaseModel):
     """Selection of explicit per-chain residue positions.
 
     Replaces ``*_positions: dict[str, list[int]] | None`` fields. Every chain
-    must have a non-empty list of positions; whole-chain semantics are not
-    part of this primitive (use ``ChainSelection`` for that).
+    must have a nonempty list of positions. To select whole chains, use
+    ``ChainSelection`` instead.
 
-    **All positions are 1-indexed** (matching biological residue numbering and
-    the rest of proto-tools); position ``1`` is the first residue in the chain.
+    **All positions are 1-indexed**, matching the rest of proto-tools. Position
+    ``1`` is the first residue in the chain.
 
     Accepts at construction (positions are 1-indexed):
 
@@ -202,7 +201,7 @@ class ResidueSelection(BaseModel):
 
     @staticmethod
     def _dedup_positions(chains: dict[str, Any]) -> dict[str, Any]:
-        """Validate + dedupe each chain's positions; drop chains with empty lists (with warning)."""
+        """Validate and deduplicate positions, warning when dropping a chain with no positions."""
         cleaned: dict[str, Any] = {}
         for chain_id, positions in chains.items():
             # Non-list values pass through; field-type coercion handles the type error.
@@ -297,7 +296,7 @@ class StructureInputBase(BaseModel):
     ResidueSelection-typed field and validates it against ``self.structure``,
     using the field name as the error label.
 
-    Single-chain shorthand: when the resolved structure has exactly one chain,
+    When the resolved structure has exactly one chain,
     every ``ResidueSelection``-typed field on the subclass also accepts a bare
     ``list[int]`` of positions, automatically coerced to ``{<chain>: [...]}``.
     Passing a bare list against a multi-chain structure raises a clear error

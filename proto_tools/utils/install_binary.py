@@ -58,7 +58,7 @@ def _load_tool_config(config_path: Path) -> Any:
 
 
 def _download_with_progress(url: str, dest: Path) -> None:
-    """Stream a URL to ``dest`` with a progress bar; raise if truncated.
+    """Stream a URL to ``dest`` with a progress bar and raise if the download is truncated.
 
     A per-read socket timeout makes stalled connections fail fast so the
     retry loop in ``install_binary`` can take over. Compares the final size
@@ -68,6 +68,7 @@ def _download_with_progress(url: str, dest: Path) -> None:
         url (str): URL to download from.
         dest (Path): Local file path to save the download to.
     """
+    # Use tqdm for the progress bar when installed, else print percentages
     try:
         from tqdm import tqdm
 
@@ -75,16 +76,19 @@ def _download_with_progress(url: str, dest: Path) -> None:
     except ImportError:
         tqdm_cls = None
 
+    # Open the response with a per-read timeout so a stalled connection raises
     with urllib.request.urlopen(url, timeout=_SOCKET_TIMEOUT_SECONDS) as response:  # noqa: S310 -- URL from trusted config
         total = int(response.headers.get("Content-Length", 0))
         downloaded = 0
         last_pct = -1
+        # Size the tqdm bar from Content-Length, or leave it None to print percentages
         pbar = (
             tqdm_cls(total=total, unit="B", unit_scale=True, desc="  Downloading", file=sys.stdout)
             if tqdm_cls
             else None
         )
 
+        # Stream the response to disk in 8 KiB chunks
         with open(dest, "wb") as f:
             try:
                 while chunk := response.read(8192):
@@ -93,17 +97,20 @@ def _download_with_progress(url: str, dest: Path) -> None:
                     if pbar is not None:
                         pbar.update(len(chunk))
                     elif total > 0:
+                        # Without tqdm, print a progress line only when the whole percent changes
                         pct = int(downloaded * 100 / total)
                         if pct != last_pct:
                             mb, mb_total = downloaded / 1024 / 1024, total / 1024 / 1024
                             print(f"\r  Downloading: {mb:.1f}/{mb_total:.1f} MB ({pct}%)", end="", flush=True)
                             last_pct = pct
             finally:
+                # Close the bar, or end the printed progress line with a newline
                 if pbar is not None:
                     pbar.close()
                 elif last_pct >= 0:
                     print()
 
+    # Raise on a short read so the caller's retry loop treats truncation as a failure
     if total and downloaded != total:
         raise OSError(f"Download truncated from {url}: got {downloaded}/{total} bytes")
 

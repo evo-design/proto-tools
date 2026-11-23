@@ -195,6 +195,7 @@ def run_evo2_score(
     """
     logger.debug(f"Using local venv for Evo 2 scoring: {config.model_checkpoint}")
 
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "evo2",
         {

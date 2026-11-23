@@ -143,6 +143,7 @@ def run_esm3_score(
           are needed
     """
     logger.debug(f"Using local for ESM3 scoring: {config.model_checkpoint}")
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "esm3",
         {

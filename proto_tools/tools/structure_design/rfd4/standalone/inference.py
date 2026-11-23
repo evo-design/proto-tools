@@ -1,10 +1,10 @@
 """RFD4-Proteina inference implementation.
 
-Generation runs in-process so a persistent worker can hold the checkpoint across calls.
-There is deliberately no module-level ``to_device()``: both tools register
-``pin_visible_devices=True`` because upstream's Lightning trainer claims local
-``cuda:0..N-1`` and cannot be retargeted at a logical index from inside the process, so
-DeviceManager respawns a pinned worker on a device change instead of moving the model.
+Generation runs in-process so persistent workers can reuse the checkpoint.
+Both tools set ``pin_visible_devices=True`` because upstream's Lightning trainer
+uses local ``cuda:0..N-1`` and cannot switch to another logical GPU within the
+process. DeviceManager therefore starts a new pinned worker when the device
+changes, and this module has no ``to_device()`` function.
 
 References:
     https://github.com/RosettaCommons/RFD4-Proteina
@@ -47,9 +47,9 @@ def _drop_ephemeral_paths(row: dict[str, Any]) -> dict[str, Any]:
 
     Upstream's ``per_example_metrics.csv`` records absolute paths for the run it came from
     (``designed_structure_path``, ``dataset_name``, ...). The implementation runs in a fresh
-    temporary directory every call, so those values differ between two otherwise identical
-    runs: they would leak host paths to callers and defeat output comparison and seeded
-    reproducibility. The design's content is returned directly, so the paths carry nothing.
+    temporary directory for each call, so those paths differ even when results
+    match. Remove them to avoid exposing host paths or breaking comparisons
+    between seeded runs. The returned design already contains the structure.
 
     Args:
         row (dict[str, Any]): One metrics row.
@@ -72,8 +72,8 @@ def _format_override(key: str, value: Any) -> str:
     Hydra override syntax (``metrics_tags=[]``), and bools use Hydra's literal form.
 
     A key prefixed with ``~`` is Hydra's config-group *deletion* syntax and renders as a
-    bare token with no value. Removing a group default is the only way to switch one off:
-    a config group takes a group name, so ``recycle_strategy=null`` fails composition with
+    bare token with no value. Remove a group default to switch it off. Config
+    groups require a group name, so ``recycle_strategy=null`` fails composition with
     "Config group override must be a string or a list. Got NoneType".
 
     Args:
@@ -206,7 +206,7 @@ class RFD4Model:
     ) -> None:
         """Load the RFD4-Proteina checkpoint and hold it for subsequent calls.
 
-        The adapter is applied here rather than per call: upstream's
+        Apply the adapter during loading because upstream's
         ``load_ckpt_n_configure_inference`` re-applies ``adapter_path`` every time it is
         given one, which would stack LoRA layers onto a model that is being reused.
         ``adapter_path`` is ``reload_on_change``, so a different adapter respawns the worker.
@@ -246,9 +246,9 @@ class RFD4Model:
     def _compose(self, spec_path: str, output_dir: str, seed: int | None, cli_kwargs: dict[str, Any]) -> Any:
         """Compose the inference config the ``rfd4-generate`` CLI would have composed.
 
-        A fresh config is built per call because ``run_generation`` mutates what it is
-        given (``cfg.seed``, ``cfg.out_dir``). ``adapter_path`` is dropped: the adapter is
-        already on the held model, and passing it again would re-apply it.
+        Build a fresh config because ``run_generation`` changes ``cfg.seed`` and
+        ``cfg.out_dir``. Leave out ``adapter_path`` because the held model already
+        has the adapter and passing it again would apply it twice.
 
         Args:
             spec_path (str): Path to the condition-spec YAML/JSON.

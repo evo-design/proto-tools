@@ -288,7 +288,7 @@ class MalinoisScoreConfig(BaseConfig):
 
 
 class MalinoisActivityTerm(DifferentiableTerm):
-    """One differentiable Malinois quantity: a single cell type's predicted MPRA activity.
+    """Predicted Malinois MPRA activity for one cell type.
 
     The value is the raw activity score in the model's own units, not a bounded transform of
     it. Whether more activity is wanted, how steeply to saturate it, and how it balances

@@ -66,10 +66,9 @@ class PdbChain(BaseModel):
 class PdbFetchConfig(BaseConfig):
     """Configuration for PDB fetch operations.
 
-    PDB tools have no user-facing settings — all behavior comes from the
-    PDB ID supplied as input. This class is kept (rather than removed)
-    so callers can still pass ``run_pdb_fetch_entry(input, config)``
-    without breakage, but it has no fields.
+    Fetch operations use the PDB ID supplied as input and need no additional
+    settings. Keep this empty config so existing callers can still pass
+    ``run_pdb_fetch_entry(input, config)``.
     """
 
 

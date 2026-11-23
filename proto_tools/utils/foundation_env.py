@@ -1,10 +1,10 @@
-"""Foundation env host-probe helpers.
+"""Check whether the host needs the shared foundation environment.
 
 The foundation env (a shared micromamba env with git, curl, make, cmake,
 pkg-config, binutils, gcc, gxx) is provisioned by
 ``ToolInstance._ensure_foundation_env`` only when the host can't satisfy those
-dependencies on its own. This module owns the tool list, the probe logic, and the
-minimum-version constant that decides "satisfies".
+dependencies. This module lists the required tools and checks
+whether they are present with supported compiler versions.
 """
 
 import functools
@@ -42,17 +42,18 @@ def host_has_foundation_tools() -> bool:
     The foundation env is skipped only when nothing is missing. Probes
     ``shutil.which`` for each binary and parses the major version
     from ``gcc --version`` / ``g++ --version``. Returns False (and logs the
-    reason) on any of: missing binary, gcc/g++ too old, or unparseable
-    version output.
+    reason) if a binary is missing, gcc/g++ is too old, or the version output
+    cannot be parsed.
 
     Returns:
-        bool: True iff the host satisfies the foundation env contract.
+        bool: True when the host has all required tools and supported compiler versions.
     """
     for tool in FOUNDATION_TOOLS:
         if shutil.which(tool) is None:
             logger.debug("Foundation env probe: %s not on PATH", tool)
             return False
 
+    # Check both C and C++ compilers against the minimum supported major version.
     for compiler in ("gcc", "g++"):
         path = shutil.which(compiler)
         if path is None:
@@ -83,8 +84,8 @@ def host_has_foundation_tools() -> bool:
 def missing_foundation_packages(foundation_path: Path) -> list[str]:
     """Return the packages whose ``FOUNDATION_TOOLS`` binary is absent from a built foundation env.
 
-    An env created before a tool joined ``FOUNDATION_TOOLS`` (``ar`` was added later)
-    lacks it; ``ToolInstance._ensure_foundation_env`` installs these into the env.
+    If an environment was created before a tool was added to ``FOUNDATION_TOOLS``,
+    that tool will be missing. For example, ``ar`` was added later. ``ToolInstance._ensure_foundation_env`` installs the missing packages.
 
     Args:
         foundation_path (Path): Root of the foundation env.
@@ -116,11 +117,11 @@ def _host_has_foundation_tools_cached() -> bool:
 def active_foundation_bin() -> Path | None:
     """Return the foundation env's ``bin/`` when tool subprocesses should use it, else ``None``.
 
-    Tool workers need the foundation tools at run time as well as during setup:
+    Tool workers need the foundation tools at run time as well as during setup.
     Triton compiles a small C launcher with ``gcc`` when it initializes, and
     ``torch.compile`` JIT-compiles C++. This mirrors the decision
-    ``ToolInstance._ensure_foundation_env`` makes, without creating anything: the
-    env must already be built, and the host must not satisfy the contract itself
+    ``ToolInstance._ensure_foundation_env`` makes without creating anything. The
+    environment must already be built, and the host must lack the required tools or compiler versions
     (unless ``PROTO_USE_FOUNDATION_ENV=1``). ``PROTO_USE_FOUNDATION_ENV=0`` disables it.
 
     Returns:

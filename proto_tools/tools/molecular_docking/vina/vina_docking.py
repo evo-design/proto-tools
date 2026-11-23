@@ -449,11 +449,11 @@ class VinaDockingConfig(BaseConfig):
         num_poses (int): Maximum poses retained and returned.
         energy_range (float): Maximum affinity difference from the best returned pose.
         min_rmsd (float): Minimum RMSD separation between retained poses.
-        max_evaluations (int): Search evaluation cap; zero uses Vina's heuristic.
-        cpu (int): Worker threads; zero lets Vina use all available CPUs.
+        max_evaluations (int): Search evaluation cap. Zero uses Vina's heuristic.
+        cpu (int): Worker threads. Zero lets Vina use all available CPUs.
         grid_spacing (float): Affinity-map grid spacing in angstroms.
         allow_bad_residues (bool): Delete receptor residues Meeko cannot parameterize.
-        seed (int | None): Positive signed 32-bit seed; generated and returned when omitted.
+        seed (int | None): Positive signed 32-bit seed. Generated and returned when omitted.
     """
 
     scoring_function: Literal["vina", "vinardo"] = ConfigField(
@@ -573,6 +573,7 @@ def run_vina_docking(
     """Dock one or more small molecules into a rigid receptor with AutoDock Vina."""
     logger.debug("Using local venv for AutoDock Vina docking")
 
+    # Reject waters and ligands in the receptor up front, unless the caller lets Meeko drop them
     if not config.allow_bad_residues:
         non_polymer = _non_polymer_residues(inputs.receptor)
         if non_polymer:
@@ -584,9 +585,12 @@ def run_vina_docking(
                 f"allow_bad_residues=True to drop them during preparation."
             )
 
+    # Resolve the search box and fail early if its grid would be too large to allocate
     search_box = inputs.resolved_search_box()
     grid_point_count = _validated_grid_point_count(search_box, config.grid_spacing)
+    # Draw a seed of at least 1 when none is set
     seed = config.seed if config.seed is not None else max(1, config.get_random_int())
+    # Send the receptor as PDB with the ligand SMILES and settings to the Vina environment
     receptor_pdb, _ = inputs.receptor.to_pdb_with_chain_mapping()
     output_data = ToolInstance.dispatch(
         "vina",
@@ -612,6 +616,7 @@ def run_vina_docking(
         config=config,
     )
 
+    # Rebuild each ligand's ranked poses and preparation details as typed results
     results = [
         VinaLigandResult(
             smiles=result["smiles"],
@@ -639,6 +644,7 @@ def run_vina_docking(
         )
         for result in output_data["results"]
     ]
+    # Return the poses with run settings and receptor preparation details as metadata
     receptor_preparation = output_data.get("receptor_preparation", {})
     return VinaDockingOutput(
         results=results,

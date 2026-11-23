@@ -249,7 +249,7 @@ class MalinoisModel:
                 }
 
                 if compute_gradient:
-                    # Samples are independent, so summing only batches the backward pass.
+                    # Sum independent samples to compute their gradients in one backward pass.
                     (gradient,) = torch.autograd.grad(raw_score.sum(), logits, retain_graph=(position < len(cells) - 1))
                     if gradient is None:
                         raise RuntimeError(f"malinois: missing gradient for cell {cell_type!r} after backward")
@@ -279,11 +279,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     set_torch_seed(input_dict.get("seed"))
     operation = input_dict["operation"]
 
+    # Gradient path: validate the requested cell types, load the model, and backpropagate
     if operation == "compute_gradient":
         gradient_terms = input_dict["gradient_terms"]
         unsupported = sorted({term["cell_type"] for term in gradient_terms} - set(CELL_TYPE_INDEX))
         if unsupported:
             raise ValueError(f"malinois: unsupported cell_types: {unsupported}")
+        # Load the model, reusing it when the artifact and sequence length are unchanged
         _model.load(
             artifact_path=input_dict["artifact_path"],
             malinois_dir=input_dict["malinois_dir"],
@@ -304,6 +306,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation != "score":
         raise ValueError(f"malinois: unknown operation {operation!r}; valid: ['score', 'compute_gradient']")
 
+    # Scoring path: reject cell types that are not among the Malinois outputs
     cell_types = input_dict["cell_types"]
     unsupported = sorted(set(cell_types) - set(CELL_TYPE_INDEX))
     if unsupported:
@@ -316,6 +319,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         device=input_dict["device"],
         verbose=bool(input_dict.get("verbose", False)),
     )
+    # Score the sequences in batches of at least one
     return {
         "scores": _model.score_sequences(
             sequences=input_dict["sequences"],

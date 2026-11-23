@@ -56,10 +56,10 @@ _DESIGN_NAME_INDICES = re.compile(r"_s(\d+)(?:_abmpnn_(\d+))?$")
 
 
 class GerminalRunner:
-    """Stateless runner that locates the Germinal repo + weights and dispatches one campaign."""
+    """Locate the Germinal repository and weights, then run one campaign."""
 
     def __init__(self) -> None:
-        """Lazy-init; setup happens in `load()` on first call."""
+        """Defer setup until ``load()`` runs on the first call."""
         self._loaded = False
         self.germinal_repo: Path | None = None
         self.weights_dir: Path | None = None
@@ -185,7 +185,7 @@ class GerminalRunner:
         """True if ``value`` is a path to an existing file.
 
         Inline PDB content can exceed the filesystem's NAME_MAX and make
-        ``Path.is_file()`` raise ENAMETOOLONG; treat that as "not a file".
+        ``Path.is_file()`` raise ENAMETOOLONG. Treat that as inline content.
         """
         try:
             return Path(value).is_file()
@@ -208,12 +208,12 @@ class GerminalRunner:
             out.write_text(source)
 
     def _write_overlay_configs(self, workdir: Path, target_name: str, d: dict[str, Any]) -> None:
-        """Write target + per-call filter overlay YAMLs into ``{workdir}/configs/``.
+        """Write target and per-call filter overlay YAMLs into ``{workdir}/configs/``.
 
         Filter overlays use a unique ``<design_type>_<target_name>`` stem because
-        Hydra's ``+hydra.searchpath=`` is appended AFTER the primary config_path
-        — writing under the upstream stem would silently lose to the bundled
-        preset. ``_build_cmd`` selects the unique stem via ``filter/initial=``.
+        Hydra searches ``+hydra.searchpath=`` after the primary config path.
+        Reusing the upstream stem would therefore select the bundled preset
+        instead of the overlay. ``_build_cmd`` selects the unique stem via ``filter/initial=``.
         """
         import yaml
 
@@ -291,7 +291,7 @@ class GerminalRunner:
             f"structure_model={d['structure_model']}",
             f"af_params_dir={self.af_params_dir}",
         ]
-        # cfg.seed is not in upstream's struct config; numpy/torch seeded via set_torch_seed.
+        # Upstream's structured config has no cfg.seed. Seed NumPy and torch through set_torch_seed.
         for key, val in (d.get("germinal_overrides") or {}).items():
             cmd.append(f"{key}={val}")
         return cmd
@@ -348,8 +348,7 @@ class GerminalRunner:
                     }
                 )
 
-        # failure_counts.csv is a single-row "header → counts" CSV with no
-        # design_name key column, so it's parsed flat (NOT through _read_csv).
+        # Parse failure_counts.csv as a single row of counts because it has no design_name column.
         fail_csv = run_dir / "failure_counts.csv"
         pipeline_stats = self._read_flat_counts(fail_csv) if fail_csv.exists() else {}
 
@@ -475,7 +474,7 @@ class GerminalRunner:
         if design_type != "scfv" or len(residues) < 2:
             return full_seq, None
 
-        # Find the largest CA-CA gap to split the H + L chains
+        # Find the largest CA-CA gap to separate the heavy and light chains.
         max_gap = 0.0
         split_idx: int | None = None
         for i in range(1, len(residues)):

@@ -1,14 +1,14 @@
 """Extension points for code that runs inside a deployed worker.
 
-Whoever operates a deployment may need to adapt a call or observe it without forking every
-service class. Two extension points cover that, distinguished by what they can still see:
+Deployment operators can adapt or observe calls without editing every service class.
+Two extension points run at different stages of a call.
 
-- A :data:`PayloadHook` runs on the raw mappings, before validation. The only place a value can
-  still be rewritten.
+- A :data:`PayloadHook` runs on the raw mappings before validation. It is the only place
+  input and config values can still be rewritten.
 - A :data:`CallMiddleware` wraps the call, and may transform what it returns.
 
-Both are process-wide and applied in registration order. Register during import, before any call
-is served: registration is not synchronized.
+Both apply across the process in registration order. Register them during import,
+before serving any calls, because registration is not synchronized.
 
 :data:`PLUGINS_ENV` names the modules a worker imports to perform that registration, since a
 deployed container imports only what a service module reaches.
@@ -33,7 +33,7 @@ PayloadHook = Callable[[dict[str, Any], dict[str, Any]], None]
 
 @dataclass(frozen=True)
 class CallContext:
-    """What a middleware is told about the call it is wrapping.
+    """Information passed to middleware about the call it wraps.
 
     Attributes:
         run_fn (Callable[..., Any]): The tool's ``run_*`` function.
@@ -48,7 +48,7 @@ class CallContext:
 
 
 #: Wraps one tool call. Receives its :class:`CallContext` and a zero-argument callable that
-#: performs it; must call that and return a mapping.
+#: performs it. The middleware must invoke that callable and return a mapping.
 CallMiddleware = Callable[[CallContext, Callable[[], dict[str, Any]]], dict[str, Any]]
 
 _payload_hooks: list[PayloadHook] = []
@@ -57,7 +57,7 @@ _call_middleware: list[CallMiddleware] = []
 
 @functools.cache
 def _tool_key_for(run_fn: Callable[..., Any]) -> str | None:
-    """Return the registry key whose tool is ``run_fn``, or ``None``. Cached: the map is static."""
+    """Return the registry key for ``run_fn``, or ``None``, caching the static lookup."""
     from proto_tools.tools import ToolRegistry
 
     return next((spec.key for spec in ToolRegistry.list_all() if spec.function is run_fn), None)
@@ -67,8 +67,8 @@ def register_payload_hook(hook: PayloadHook) -> None:
     """Register ``hook`` to run on every call's raw mappings before validation.
 
     Args:
-        hook (PayloadHook): Callable taking ``(input_dict, config_dict)``. Mutates in place;
-            its return value is ignored.
+        hook (PayloadHook): Callable taking ``(input_dict, config_dict)`` and mutating them in place.
+            Its return value is ignored.
     """
     _payload_hooks.append(hook)
 
@@ -76,8 +76,8 @@ def register_payload_hook(hook: PayloadHook) -> None:
 def register_call_middleware(middleware: CallMiddleware) -> None:
     """Register ``middleware`` to wrap every tool call in this process.
 
-    Registration order is outermost first: the first registered sees the call before the second,
-    and sees the second's result.
+    The first middleware registered is the outermost. It sees the call before
+    the second middleware and receives the second middleware's result.
 
     Args:
         middleware (CallMiddleware): Callable taking the next step and returning a result mapping.
@@ -101,10 +101,9 @@ def _plugin_modules(raw: str) -> tuple[str, ...]:
 def load_plugins() -> tuple[str, ...]:
     """Import every module named in :data:`PLUGINS_ENV`.
 
-    An unimportable name raises rather than being skipped. A worker that quietly served calls
-    without a deployment's extensions would drop whatever they were responsible for.
-
-    Cached to keep this off the hot path; ``sys.modules`` is what makes a module body run once.
+    If a named module cannot be imported, raise instead of serving calls without
+    the deployment's extensions. Cache the lookup to avoid repeating it on every
+    call. Python's ``sys.modules`` ensures each module body runs only once.
 
     Returns:
         tuple[str, ...]: The module names imported, in the order given.
@@ -146,7 +145,7 @@ def plugin_env() -> dict[str, str]:
 def clear_hooks() -> None:
     """Remove every registered hook and forget which plugins were loaded.
 
-    Intended for tests, which must not leak into each other.
+    Use this in tests to keep registrations from carrying over between tests.
     """
     _payload_hooks.clear()
     _call_middleware.clear()

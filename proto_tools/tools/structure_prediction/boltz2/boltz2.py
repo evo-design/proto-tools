@@ -42,8 +42,7 @@ logger = getLogger(__name__)
 class Boltz2Input(StructurePredictionInput):
     """Input object for Boltz2 structure prediction.
 
-    This class defines the input parameters for predicting 3D structures of proteins,
-    DNA, RNA, and ligands using Boltz2, a multi-modal structure prediction model.
+    Provide proteins, DNA, RNA, and ligands for 3D structure prediction with Boltz2.
 
     Inherits from ``StructurePredictionInput``.
 
@@ -178,8 +177,7 @@ class Boltz2Output(StructurePredictionOutput):
 class Boltz2Config(MSAStructurePredictionConfig):
     """Configuration object for Boltz2 structure prediction.
 
-    This class defines configuration parameters for running Boltz2, a multi-modal
-    structure prediction model supporting proteins, DNA, RNA, and ligands.
+    Configure Boltz2 prediction for proteins, DNA, RNA, and ligands.
 
     Inherits from ``MSAStructurePredictionConfig``.
 
@@ -447,9 +445,9 @@ def run_boltz2_on_complex(
     instance: Any = None,
     seed: int | None = None,
 ) -> Structure:
-    """Run Boltz2 structure prediction on a single complex. This function is wrapped.
+    """Run Boltz2 structure prediction on a single complex.
 
-    by ``run_boltz2`` to sequentially predict all complexes in the input.
+    ``run_boltz2`` calls this function sequentially for each input complex.
 
     Args:
         config (Boltz2Config): Boltz2 configuration

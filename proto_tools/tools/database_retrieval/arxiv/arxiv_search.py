@@ -265,7 +265,7 @@ def run_arxiv_search(
     Args:
         inputs (ArxivSearchInput): arXiv ``search_query`` strings.
         config (ArxivSearchConfig): Result size and sort order.
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         ArxivSearchOutput: One result per query, in input order.

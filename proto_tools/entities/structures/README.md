@@ -1,26 +1,29 @@
 # Structures
 
 ## Overview
-This module provides the `Structure` class - a unified representation for macromolecular 3D structures (proteins, nucleic acids, ligands). It handles loading from PDB/CIF files, format conversions, sequence extraction, chain manipulation, and visualization. The class serves as the standard structure representation throughout the proto-tools library, bridging the gap between structure prediction outputs and downstream analysis.
+The `Structure` class represents macromolecular 3D structures, including proteins,
+nucleic acids, and ligands. Use it to load PDB/CIF files, convert formats, extract
+sequences, manipulate chains, and visualize structures. Tools throughout
+proto-tools use this class to pass predicted structures to downstream analyses.
 
-## When to Use This Tool
+## When to use this module
 
-**Primary use cases:**
+Use this module for the following tasks.
 - Loading and parsing protein structures (PDB/CIF files or strings)
 - Extracting sequences from structural data
 - Converting between PDB and mmCIF formats
 - Visualizing structures with confidence coloring (pLDDT)
 - Preparing structures for inverse folding or scoring tools
 
-**When NOT to use this tool:**
+Use other tools for the following tasks.
 - For sequence-only analysis: Use sequence tools directly
 - For molecular dynamics: Use MDAnalysis, MDTraj, or OpenMM
 - For small molecule structures: Use the `ligands` module
 
 ## Biological Background
 
-**What is a protein structure?**
-A protein's 3D structure determines its function. Structures are represented as atomic coordinates, typically including:
+A protein's 3D structure determines its function. Structure files represent atomic
+coordinates and typically include the following information.
 - **Backbone atoms**: N, Cα, C, O for each residue
 - **Side chain atoms**: Variable per amino acid type
 - **B-factors**: Temperature factors or prediction confidence (pLDDT)
@@ -32,8 +35,8 @@ A protein's 3D structure determines its function. Structures are represented as 
 | **PDB** | `.pdb` | Legacy format, human-readable, limited to 99,999 atoms |
 | **mmCIF** | `.cif` | Modern format, no size limits, machine-readable |
 
-**What is pLDDT?**
-Predicted Local Distance Difference Test (pLDDT) is a per-residue confidence metric from structure prediction tools (AlphaFold, ESMFold, Boltz2, etc.):
+Predicted Local Distance Difference Test (pLDDT) is a per-residue confidence metric
+reported by structure prediction tools such as AlphaFold, ESMFold, and Boltz2.
 - **90-100**: Very high confidence (well-ordered domains)
 - **70-89**: Confident prediction (most structured regions)
 - **50-69**: Low confidence (flexible loops, disordered)
@@ -117,7 +120,7 @@ pLDDT is often stored in the B-factor column of structure files.
 | `visualize(style)` | `None` | Render an interactive 3D view in the notebook |
 | `add_metric(metric, value)` | `None` | Add a metric to the structure |
 
-## Best Practices & Gotchas
+## Practical notes
 
 **Loading structures:**
 

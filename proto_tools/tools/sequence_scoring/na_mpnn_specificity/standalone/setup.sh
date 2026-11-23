@@ -1,11 +1,11 @@
 #!/bin/bash
 # Setup script for the NA-MPNN specificity standalone environment.
 #
-# NA-MPNN (https://github.com/baker-laboratory/NA-MPNN) is not on PyPI: the tool
+# NA-MPNN (https://github.com/baker-laboratory/NA-MPNN) is not on PyPI. The tool
 # shells out to a local checkout of the repository, which also ships the
 # specificity checkpoint (models/specificity_model/s_70114.pt) in-tree. The repo
 # is public and MIT / BSD-3 licensed, so this script clones a pinned revision
-# into the managed weights cache; no GitHub sign-in is required for the public
+# into the managed weights cache. No GitHub sign-in is required for the public
 # repository. To reuse an existing checkout instead, point
 # PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR (or NAMPNNSpecificityConfig) at it.
 set -euo pipefail
@@ -14,7 +14,7 @@ source standalone_helpers.sh
 echo "Setting up NA-MPNN specificity standalone environment..."
 
 # ─── Provision the NA-MPNN checkout (pinned clone into the weights cache) ────
-# Pinned revision of baker-laboratory/NA-MPNN; bump deliberately when updating.
+# Keep the baker-laboratory/NA-MPNN revision pinned and update it explicitly.
 NA_MPNN_REPO_URL="https://github.com/baker-laboratory/NA-MPNN.git"
 NA_MPNN_COMMIT="aafa32c87b65046a02db152f6e6235a7078e5fef"
 
@@ -40,7 +40,7 @@ if ! proto_ensure_git_checkout "$NA_MPNN_REPO_URL" "$NA_MPNN_DIR" "$NA_MPNN_COMM
 fi
 echo "[na-mpnn] NA-MPNN pinned to ${NA_MPNN_COMMIT}"
 # The in-tree specificity checkpoint (models/specificity_model/s_70114.pt) is
-# resolved directly by the runtime; no extra placement is needed.
+# resolved directly by the runtime, so no extra placement is needed.
 
 echo "Installing PyTorch: ${RECOMMENDED_TORCH_SPEC:-torch} (platform: ${DETECTED_COMPUTE_PLATFORM:-unknown})"
 uv pip install "${RECOMMENDED_TORCH_SPEC:-torch}" --torch-backend=auto

@@ -13,9 +13,8 @@ from pydantic import BaseModel
 
 from proto_tools.utils.tool_versions import PACKAGE_ROOT, defining_files
 
-# Bump when the hashing rules change. Without this, redefining a fingerprint
-# makes every deployment report drift at once, which is indistinguishable from
-# everything actually being broken.
+# Bump this when the hashing rules change so deployments can distinguish a new
+# fingerprint format from a change to the tool itself.
 ALGORITHM = 2
 
 # JSON-schema keys that describe presentation or local behaviour rather than
@@ -297,7 +296,7 @@ def drifted_fields(tool_key: str, manifest: dict[str, Any]) -> dict[str, tuple[A
 def drift_warnings(
     tool_key: str, service_class: str, environment: str | None = None, client: Any | None = None
 ) -> list[str]:
-    """Return human-readable drift warnings for ``tool_key``, empty if aligned.
+    """Return drift warnings for ``tool_key``, or an empty list when fingerprints match.
 
     Never raises: a check that breaks a working call is worse than a missed
     warning, so any failure reads as "nothing to report".

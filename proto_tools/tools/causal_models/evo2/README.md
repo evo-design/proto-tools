@@ -26,18 +26,18 @@ The autoregressive objective yields two capabilities directly. Sampling from the
 
 ### Evo 2 In-context Design (`evo2-icl`)
 
-In-context learning (ICL) conditions pretrained Evo 2 7B on example DNA without retraining. Supply a FASTA-derived pool of DNA or protein sequences; the tool selects examples, composes DNA prompts, and returns designs in the input alphabet for FASTA export.
+In-context learning (ICL) conditions pretrained Evo 2 7B on example DNA without retraining. Supply a FASTA-derived pool of DNA or protein sequences. The tool selects examples, composes DNA prompts, and returns designs in the input alphabet for FASTA export.
 
 #### Applications
 
-Use examples of a sequence family, such as regulatory DNA with a shared experimental activity, to condition candidate generation. The ICL study is **Few-shot regulatory sequence design with a genomic language model** (manuscript; paper URL coming soon). The [HepG2 example pool](https://github.com/evo-design/ICL_regulatory/blob/main/inference/data/invitro_cell_activity_seqprop/HepG2.fasta) contains 463 regulatory sequences of 200 bp each.
+Use examples of a sequence family, such as regulatory DNA with a shared experimental activity, to condition candidate generation. The ICL study is **Few-shot regulatory sequence design with a genomic language model** (manuscript, paper URL coming soon). The [HepG2 example pool](https://github.com/evo-design/ICL_regulatory/blob/main/inference/data/invitro_cell_activity_seqprop/HepG2.fasta) contains 463 regulatory sequences of 200 bp each.
 
 #### Usage Tips
 
 - **Default run.** Draw up to 16 examples, join them with a single `N` separator, and generate 20 designs of 200 bp. Generation always runs to the requested length. Sampling defaults are temperature `1.0`, top K `4`, and top P `0.9`.
-- **Choose the examples.** `n_shots` sets examples per prompt; `n_prompts` sets the number of prompts, each producing `num_sequences` designs. Use `fixed_examples=True` to take the first records in FASTA order instead of sampling.
-- **Protein input and output.** Set `sequence_type="protein"` to supply the 20 standard amino acids. Examples are reverse-translated by uniformly sampling synonymous codons from the standard genetic code, using `codon_seed` (default `42`). Length is measured in amino acids. Outputs include protein designs and matching `dna_sequences`; stop codons remain `*` and ambiguous codons become `X`, with warnings. No start or stop codon is added.
-- **Reproduce a run.** `example_seed` controls example selection, `codon_seed` controls reverse translation, and `seed` controls generation. Keep all three seeds and the prompt order fixed to reproduce a run; change only `seed` to sample new designs from the same prompts.
+- **Choose the examples.** `n_shots` sets examples per prompt. `n_prompts` sets the number of prompts, each producing `num_sequences` designs. Use `fixed_examples=True` to take the first records in FASTA order instead of sampling.
+- **Protein input and output.** Set `sequence_type="protein"` to supply the 20 standard amino acids. Examples are reverse-translated by uniformly sampling synonymous codons from the standard genetic code, using `codon_seed` (default `42`). Length is measured in amino acids. Outputs include protein designs and matching `dna_sequences`. Stop codons remain `*` and ambiguous codons become `X`, with warnings. No start or stop codon is added.
+- **Reproduce a run.** `example_seed` controls example selection, `codon_seed` controls reverse translation, and `seed` controls generation. Keep all three seeds and the prompt order fixed to reproduce a run. Change only `seed` to sample new designs from the same prompts.
 
 ### Evo 2 Sampling (`evo2-sample`)
 
@@ -49,12 +49,12 @@ This tool produces candidate DNA sequences for downstream design and screening, 
 
 #### Usage Tips
 
-- **Match the checkpoint to the task.** `evo2_7b` (the default), `evo2_20b`, and `evo2_40b` are the 1M-context models in increasing size and capability. The `evo2_7b_base`, `evo2_40b_base`, and `evo2_1b_base` checkpoints are 8K-context counterparts (`evo2_1b_base` is the smallest); `evo2_7b_262k` is a 262K-context variant; `evo2_7b_microviridae` is a 7B model adapted on Microviridae genomes for generating that bacteriophage family.
-- **Prompts use Evo 2's prompt format.** Prompt strings follow Evo 2's special tokenization (for example a leading `+~` before DNA); see the upstream [Evo 2 documentation](https://github.com/arcinstitute/evo2) for the conventions.
-- **`top_k` defaults to 4, the size of the DNA alphabet.** It exists mainly to keep generation on the four bases rather than other byte tokens, so it is not the diversity parameter; control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
-- **Output includes the prompt by default.** `prepend_prompt=True` (the default for this toolkit) returns the prompt joined to its continuation; set it `False` to receive only the newly generated nucleotides.
-- **Prompt length plus `max_new_tokens` (default 32) must fit the engine's context window.** vLLM fits the context to the checkpoint and available GPU memory; requests that exceed it fail before generation.
-- **`stop_at_eos` ends generation early** when the model emits an end-of-sequence token; set it to `False` to always produce the full `max_new_tokens`.
+- **Match the checkpoint to the task.** `evo2_7b` (the default), `evo2_20b`, and `evo2_40b` are the 1M-context models in increasing size and capability. The `evo2_7b_base`, `evo2_40b_base`, and `evo2_1b_base` checkpoints are 8K-context counterparts (`evo2_1b_base` is the smallest). `evo2_7b_262k` is a 262K-context variant. `evo2_7b_microviridae` is a 7B model adapted on Microviridae genomes for generating that bacteriophage family.
+- **Prompts use Evo 2's prompt format.** Prompt strings follow Evo 2's special tokenization (for example a leading `+~` before DNA). See the upstream [Evo 2 documentation](https://github.com/arcinstitute/evo2) for the conventions.
+- **`top_k` defaults to 4, the size of the DNA alphabet.** It exists mainly to keep generation on the four bases rather than other byte tokens, so it is not the diversity parameter. Control diversity with `temperature` (lower stays near the training distribution, higher explores it) and leave `top_p` at its default unless you specifically want nucleus sampling.
+- **Output includes the prompt by default.** `prepend_prompt=True` (the default for this toolkit) returns the prompt joined to its continuation. Set it `False` to receive only the newly generated nucleotides.
+- **Prompt length plus `max_new_tokens` (default 32) must fit the engine's context window.** vLLM fits the context to the checkpoint and available GPU memory. Requests that exceed it fail before generation.
+- **`stop_at_eos` ends generation early** when the model emits an end-of-sequence token. Set it to `False` to always produce the full `max_new_tokens`.
 - **Generated sequences are candidates.** Validate them with downstream tools (for example ORF detection, structure prediction, or homology search) before drawing biological conclusions.
 
 ### Evo 2 Scoring (`evo2-score`)
@@ -67,9 +67,9 @@ This tool measures how well a DNA sequence matches the patterns the model learne
 
 #### Usage Tips
 
-- **Compare length-normalized scores within one checkpoint.** Total `log_likelihood` scales with sequence length, so use `perplexity` or `avg_log_likelihood` when comparing sequences of different lengths. Different checkpoints learn different distributions that are not calibrated to a common scale, so scores from different `model_checkpoint` values are hard to compare directly; a lower perplexity means the sequence is more consistent with that checkpoint's training distribution.
+- **Compare length-normalized scores within one checkpoint.** Total `log_likelihood` scales with sequence length, so use `perplexity` or `avg_log_likelihood` when comparing sequences of different lengths. Different checkpoints learn different distributions that are not calibrated to a common scale, so scores from different `model_checkpoint` values are hard to compare directly. A lower perplexity means the sequence is more consistent with that checkpoint's training distribution.
 - **`return_logits` defaults to `False`.** Leave it off unless you need the per-position distributions, since the logits tensor is large (sequence length by a 512-token vocabulary).
-- **`prepend_bos` adds a beginning-of-sequence token** before scoring; leave it `False` unless matching a specific upstream convention.
+- **`prepend_bos` adds a beginning-of-sequence token** before scoring. Leave it `False` unless matching a specific upstream convention.
 
 ## Toolkit Notes
 
@@ -77,14 +77,14 @@ This tool measures how well a DNA sequence matches the patterns the model learne
 
 These apply to every Evo 2 tool in this toolkit (`evo2-icl`, `evo2-sample`, `evo2-score`).
 
-- **Requires a high-memory GPU; memory scales with model size and context length.** The 7B checkpoint needs a high-memory NVIDIA GPU; the 20B model needs more. The 40B variants remain unsupported in this wrapper. CPU execution is not supported.
-- **Fast inference.** All three tools use [evo2_flash](https://github.com/evo-design/evo2_flash) on vLLM, with continuous batching, chunked prefill, and shared-prefix caching. `batch_size`, `cached_generation`, and `force_prompt_threshold` remain accepted for compatibility; vLLM manages these internally.
+- **Requires a high-memory GPU. Memory scales with model size and context length.** The 7B checkpoint needs a high-memory NVIDIA GPU. The 20B model needs more. The 40B variants remain unsupported in this wrapper. CPU execution is not supported.
+- **Fast inference.** All three tools use [evo2_flash](https://github.com/evo-design/evo2_flash) on vLLM, with continuous batching, chunked prefill, and shared-prefix caching. `batch_size`, `cached_generation`, and `force_prompt_threshold` remain accepted for compatibility. vLLM manages these internally.
 - **Trained across all domains of life.** Evo 2 covers prokaryotic, eukaryotic, archaeal, and phage genomes. For prokaryote-and-phage-only generation with a smaller model, [Evo1](https://bio-pro.mintlify.app/tools/causal-models/evo1) is an alternative.
 
 ### Inference backend
 
 The managed environment pins evo2_flash to `c71eb6f4`, vLLM to `0.26.0+cu129`, and PyTorch to `2.11.0+cu129` on Python 3.12, plus a tool-local CUDA 12.9 toolkit and GCC 14 that Triton and FlashInfer use to compile kernels at runtime. It requires Linux x86_64 and an NVIDIA GPU. Published Flash checkpoints use the shared Hugging Face cache. Checkpoints that need conversion, including local Vortex weights, are converted once into that cache. Inference uses bfloat16 and the default, unquantized KV cache.
 
-A sampling seed assigns an independent stream to each prompt in input order. Repeated seeded calls are reproducible within this backend; samples need not match the previous Vortex implementation byte for byte. Scoring uses each sequence's real length, without scoring padding. `return_logits=True` performs an additional prefill to reconstruct full-vocabulary logits.
+A sampling seed assigns an independent stream to each prompt in input order. Repeated seeded calls are reproducible within this backend. Samples need not match the previous Vortex implementation byte for byte. Scoring uses each sequence's real length, without scoring padding. `return_logits=True` performs an additional prefill to reconstruct full-vocabulary logits.
 
-Persistent-worker continuation handles retain exact token prefixes while vLLM manages their GPU cache. Continue with the full returned sequence as the prompt; handles may be forked and released as before. Workers are bound to their assigned GPU. Device changes and eviction restart the worker, releasing the engine and invalidating its continuation handles; in-process CPU offload is not supported.
+Persistent-worker continuation handles retain exact token prefixes while vLLM manages their GPU cache. Continue with the full returned sequence as the prompt. Handles may be forked and released as before. Workers are bound to their assigned GPU. Device changes and eviction restart the worker, releasing the engine and invalidating its continuation handles. In-process CPU offload is not supported.

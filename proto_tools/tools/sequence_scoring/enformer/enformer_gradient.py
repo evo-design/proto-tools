@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 class EnformerActivityTerm(DifferentiableTerm):
-    """One differentiable Enformer quantity: mean predicted activity over a track and bin span.
+    """Mean predicted Enformer activity over one track and bin span.
 
     Whether more activity is wanted depends on whether the track is a target or an off-target,
     and how much it matters relative to other tracks is a weight — both are goals a caller
@@ -113,7 +113,7 @@ class EnformerGradientResult(GradientResult):
 
 
 class EnformerGradientCandidate(BaseModel):
-    """One candidate: relaxed bases at selected positions inside a full Enformer context window.
+    """Relaxed bases at selected positions inside a full Enformer context window.
 
     Enformer reads a fixed 196,608 bp context, but a design problem usually varies only a small
     part of it. The candidate therefore carries the whole context as a sequence plus the
@@ -174,7 +174,7 @@ class EnformerGradientCandidate(BaseModel):
 
 
 class EnformerGradientInput(GradientInput):
-    """Input for the Enformer gradient tool: one or many relaxed candidates.
+    """One or more relaxed candidates for the Enformer gradient tool.
 
     Attributes:
         inputs (list[EnformerGradientCandidate]): One context-and-relaxed-positions bundle per
@@ -251,7 +251,7 @@ class EnformerGradientSampleMetrics(Metrics):
 
 
 class EnformerGradientOutput(GradientOutput):
-    """Enformer track-activity output; gradients are optional in forward-only mode.
+    """Enformer track-activity output. Gradients are omitted in forward-only mode.
 
     Attributes:
         results (list[EnformerGradientResult]): One per input candidate, in input order, each

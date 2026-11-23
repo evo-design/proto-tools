@@ -92,7 +92,7 @@ class ESM2MaskedPLLTerm(DifferentiableTerm):
 
 
 class ESM2GradientOutput(GradientOutput):
-    """ESM2 masked PLL output; gradient is optional in forward-only mode.
+    """ESM2 masked PLL output. Gradients are omitted in forward-only mode.
 
     Attributes:
         results (list[GradientResult]): One per input item, in input order. Contains a single
@@ -179,6 +179,7 @@ def run_esm2_gradient(
 ) -> ESM2GradientOutput:
     """Compute ESM2 masked PLL gradient with respect to relaxed protein logits."""
     logger.debug("Using local worker for ESM2 gradient: %s (%d item(s))", config.model_checkpoint, len(inputs.inputs))
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "esm2",
         {

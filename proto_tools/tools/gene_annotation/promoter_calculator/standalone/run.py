@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 # =============================================================================
 def _get(prediction: Any, name: str) -> Any:
     # Upstream returns each promoter as a dict in some paths and as an object in
-    # others; read both transparently.
+    # others. Read both forms.
     if isinstance(prediction, dict):
         return prediction[name]
     return getattr(prediction, name)

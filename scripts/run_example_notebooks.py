@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """scripts/run_example_notebooks.py.
 
-Re-execute (optional) and post-process every example notebook named
-``example.ipynb`` under ``proto_tools/`` (tool and entity examples alike) to
-strip output mime types that don't render outside the original execution
-context (ipywidgets progress bars, live Plotly/Bokeh handles, etc.). The
-text/plain and text/html fallbacks stay.
+Clean every ``example.ipynb`` under ``proto_tools/``, optionally re-running it first.
+This includes both tool and entity examples. Remove output MIME types that do not
+render outside the original session, such as ipywidgets progress bars and live
+Plotly or Bokeh handles. Keep the text/plain and text/html fallbacks.
 
 py3Dmol viewers are the exception: their text/html is a script that GitHub and
 other static viewers strip, leaving a "3Dmol.js failed to load" box. Each one is

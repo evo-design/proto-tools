@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 
 
 def _msa_cache_dir(cache_embeds_dir: str | None, msa_a3m: str | None) -> str | None:
-    """Embedding cache directory for this MSA: a sub-directory of the base cache per MSA hash.
+    """Return the embedding cache directory for this MSA, keyed by its hash.
 
     BioEmu keys cached embeddings by sequence alone, so a shared directory would serve one MSA's
     embeddings for another. Keying the directory by MSA keeps reuse correct and repeat calls cheap.
@@ -72,7 +72,7 @@ def _check_msa_source(sequence: str, msa_a3m: str | None, cache_embeds_dir: str 
 class BioEmuModel:
     """BioEmu standalone model wrapper.
 
-    Holds the score model + SDEs across calls so the worker only loads weights
+    Holds the score model and SDEs across calls so the worker only loads weights
     once. ``__call__`` moves the model to the requested device, runs sampling,
     then moves it back to CPU (matches the ``ProteinMPNNModel`` pattern).
     """
@@ -228,7 +228,7 @@ class BioEmuModel:
                 "num_residues": num_residues,
             }
         finally:
-            # Park weights on CPU between calls (proteinmpnn pattern); next
+            # Park weights on CPU between calls, as ProteinMPNN does. The next
             # call's to_device() brings them back without reloading from disk.
             self.unload()
             if use_temp_dir:
@@ -313,7 +313,7 @@ class BioEmuModel:
             logger.info(f"Moving BioEmu to {device}")
         self.score_model = move_model_to_device(self.score_model, self.device, device)
         # sdes["node_orientations"] (SO3SDE) is a torch.nn.Module with precomputed IGSO(3)
-        # lookup tables; sdes["pos"] (CosineVPSDE) has no device state.
+        # lookup tables. sdes["pos"] (CosineVPSDE) has no device state.
         if self.sdes is not None and "node_orientations" in self.sdes:
             self.sdes["node_orientations"] = move_model_to_device(self.sdes["node_orientations"], self.device, device)
         self.device = device
@@ -338,8 +338,8 @@ def _use_managed_caches(input_data: dict[str, Any]) -> tuple[str, str]:
 
     Upstream defaults are ``~/.bioemu_embeds_cache`` (embeddings), ``~/sampling_so3_cache`` (SO3
     lookup tables), and ``~/.cache/colabfold`` (the AF2 params the embeddings need, downloaded on
-    first use). Config values still win for the first two; the AF2 params have no config field and
-    are read from the alphafold2 toolkit's shared copy (setup.sh: proto_ensure_af2_params).
+    first use). Config values override the first two locations. The AF2 parameters have no config field and
+    are read from the alphafold2 toolkit's shared copy (set up by ``proto_ensure_af2_params`` in setup.sh).
 
     Args:
         input_data (dict[str, Any]): Dispatch payload.

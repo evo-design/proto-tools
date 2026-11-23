@@ -2,12 +2,12 @@ r"""proto_tools/utils/file_inputs.py.
 
 Resolve tool inputs that may be either a path to a file or that file's content.
 
-Each kind of file input has a :class:`FileInput` rule, resolved in this order:
+Each kind of file input has a :class:`FileInput` rule. Resolution follows this order.
 
 1. A ``Path`` is always a path.
 2. A string that is valid content (PDB text, a sequence, a SMILES) is content, even when a
    file by that name exists.
-3. Otherwise a one-line string naming an existing file is that file; one naming a
+3. Otherwise a one-line string naming an existing file is treated as that file. A string naming a
    directory, or clearly meant as a path (an extension, a ``/`` or ``\``, or a leading
    ``~`` or ``.``) but naming nothing, raises :class:`FileInputError`.
 4. Anything else is returned as content, so the content parser reports its own error.
@@ -31,9 +31,9 @@ from typing import Any, get_args
 
 logger = logging.getLogger(__name__)
 
-# Longest string probed as a path; Linux caps a path at 4096 bytes
+# Limit path checks to this length. Linux caps paths at 4096 bytes.
 _MAX_PATH_LENGTH = 4096
-# A file extension such as `.pdb` or `.fa.gz`; it starts with a letter so decimals like `0.00` don't count
+# Match extensions such as `.pdb` or `.fa.gz`, starting with a letter to exclude decimals.
 _EXTENSION = re.compile(r"\.[A-Za-z][A-Za-z0-9]{0,7}(\.gz)?$")
 
 
@@ -47,11 +47,11 @@ class FileInputError(FileNotFoundError, ValueError):
 
 @dataclass(frozen=True)
 class FileInput:
-    """How one kind of input tells a path from content.
+    """Define how to distinguish a file path from content for one input kind.
 
     Attributes:
         kind (str): Name of the input kind used in messages, such as ``"structure"``.
-        extensions (tuple[str, ...]): Expected file extensions; each also accepts ``.gz``.
+        extensions (tuple[str, ...]): Expected file extensions, each optionally followed by ``.gz``.
         is_content (Callable[[str], bool]): Whether a string is valid content of this kind.
         require_extension (bool): Reject a file with an unexpected extension instead of reading
             it with a warning, for inputs whose parser depends on the extension.
@@ -82,6 +82,7 @@ class FileInput:
         if isinstance(value, Path):
             return self.check_file(value)
         text = value.strip()
+        # Valid content takes precedence, even if a file with the same name exists.
         if self.is_content(text):
             return None
         if not text or "\n" in text or len(text) > _MAX_PATH_LENGTH or text.startswith(("http://", "https://")):
@@ -119,7 +120,7 @@ class FileInput:
 
         Args:
             path (Path): The path to check.
-            value (str | Path | None): The input it came from, quoted in messages; defaults to ``path``.
+            value (str | Path | None): The input it came from, quoted in messages. Defaults to ``path``.
 
         Returns:
             Path: The checked path.
@@ -201,7 +202,7 @@ LIGAND_FILES = FileInput("ligand", (".sdf", ".smi"), is_smiles_content, require_
 # Path objects for str path fields
 # ============================================================================
 def coerce_path_values(model_cls: Any, data: Any) -> Any:
-    """``mode="before"`` helper: turn ``Path`` values into ``str`` for fields typed ``str`` but not ``Path``.
+    """Convert ``Path`` values before validation for fields typed ``str`` rather than ``Path``.
 
     Lets every field that takes a path as a string also take a ``Path``, including items of
     ``list[str]`` fields, without changing the field's type. A subclass's own ``mode="before"``
@@ -217,7 +218,7 @@ def coerce_path_values(model_cls: Any, data: Any) -> Any:
 
 
 def coerce_path_field(model_cls: Any, name: str, value: Any) -> Any:
-    """Turn a ``Path`` assigned to a ``str``-typed field into ``str``; other values pass through."""
+    """Convert a ``Path`` assigned to a string field, leaving other values unchanged."""
     return _fspath(value) if name in _str_path_keys(model_cls) else value
 
 

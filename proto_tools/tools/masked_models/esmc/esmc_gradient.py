@@ -76,7 +76,7 @@ class ESMCMaskedPLLTerm(DifferentiableTerm):
 
 
 class ESMCGradientOutput(GradientOutput):
-    """ESM C masked PLL output; gradient is optional in forward-only mode.
+    """ESM C masked PLL output. Gradients are omitted in forward-only mode.
 
     Attributes:
         results (list[GradientResult]): One per input item, in input order. Contains a single
@@ -157,6 +157,7 @@ def run_esmc_gradient(
 ) -> ESMCGradientOutput:
     """Compute ESM C masked PLL gradient with respect to relaxed protein logits."""
     logger.debug("Using local worker for ESM C gradient: %s (%d item(s))", config.model_checkpoint, len(inputs.inputs))
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "esmc",
         {

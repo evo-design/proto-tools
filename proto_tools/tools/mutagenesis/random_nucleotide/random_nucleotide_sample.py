@@ -1,7 +1,4 @@
-"""proto_tools/tools/mutagenesis/random_nucleotide/random_nucleotide_sample.py.
-
-Random nucleotide sampling with IUPAC degenerate base support.
-"""
+"""Fill masked DNA or RNA positions with bases sampled from an IUPAC scheme."""
 
 import json
 import logging
@@ -139,11 +136,11 @@ class RandomNucleotideSampleConfig(BaseConfig):
             pool for substitutions. ``"N"`` = any base (ACGT);
             ``"R"`` = purines (AG); ``"Y"`` = pyrimidines (CT); etc.
         sequence_type (Literal['auto', 'dna', 'rna']): How to interpret input sequences. ``"auto"``
-            detects DNA vs RNA by presence of U; ``"dna"`` or ``"rna"``
+            detects RNA by the presence of U. ``"dna"`` or ``"rna"``
             forces the type.
     """
 
-    # No scoring model → supplies no masker inputs → only random masking is valid.
+    # Without a scoring model, only random masking has the inputs it needs.
     masking_inputs: ClassVar[frozenset[MaskingInput]] = frozenset()
 
     masking_strategy: RandomMaskingStrategy = ConfigField(
@@ -234,18 +231,20 @@ def run_random_nucleotide_sample(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        RandomNucleotideSampleOutput: RandomNucleotideSampleOutput with sampled sequences.
+        RandomNucleotideSampleOutput: Sampled sequences in input order.
     """
+    # Reuse one seeded generator across the batch so each item advances the random state.
     rng = random.Random(config.seed)  # noqa: S311 -- not cryptographic
     scheme = config.substitution_scheme
 
-    # Resolve sequence type
+    # Detect RNA from uracil unless the caller explicitly chose the sequence type.
     seq_type = config.sequence_type
     if seq_type == "auto":
         seq_type = _detect_sequence_type(inputs.sequences)
 
     is_rna = seq_type == "rna"
 
+    # Fill the masked positions and use uracil instead of thymine for RNA.
     sampled = []
     for seq in inputs.sequences:
         chars = list(seq)

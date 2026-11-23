@@ -293,12 +293,14 @@ class ESMFoldModel:
         cfg = self.model.config.esmfold_config
         batch_size, seq_len = aa.shape
 
+        # Translate the AF2 residue indices into ESM ids and wrap them in BOS and EOS
         esmaa = self.model.af2_idx_to_esm_idx(aa, attention_mask)
         bos = esmaa.new_full((batch_size, 1), self.model.esm_dict_cls_idx)
         eos = esmaa.new_full((batch_size, 1), self.model.esm_dict_padding_idx)
         esmaa = torch.cat([bos, esmaa, eos], dim=1)
         esmaa[range(batch_size), (esmaa != self.model.esm_dict_padding_idx).sum(1)] = self.model.esm_dict_eos_idx
 
+        # Overwrite the designed spans with the relaxed distribution over ESM embedding rows
         esm_attention_mask = esmaa != self.model.esm_dict_padding_idx
         token_embeddings = self.model.esm.embeddings.word_embeddings(esmaa)
         esm_ids = torch.tensor(
@@ -309,6 +311,7 @@ class ESMFoldModel:
         for start, end in target_spans:
             token_embeddings[0, start + 1 : end + 1] = relaxed_esm_embeddings
 
+        # Run the language model over those embeddings and keep every hidden state
         embedding_output = self.model.esm.embeddings(
             input_ids=esmaa,
             attention_mask=esm_attention_mask,
@@ -320,6 +323,7 @@ class ESMFoldModel:
             output_hidden_states=True,
             return_dict=True,
         )
+        # Drop BOS and EOS, then combine the layers into the single sequence state the trunk takes
         esm_s = torch.stack(esm_outputs["hidden_states"], dim=2)[:, 1:-1]
         esm_s = esm_s.to(self.model.esm_s_combine.dtype)
         if cfg.esm_ablate_sequence:
@@ -327,7 +331,9 @@ class ESMFoldModel:
         esm_s = (self.model.esm_s_combine.softmax(0).unsqueeze(0) @ esm_s).squeeze(2)
         s_s_0 = self.model.esm_s_mlp(esm_s)
 
+        # The trunk's pair state starts empty
         s_z_0 = s_s_0.new_zeros(batch_size, seq_len, seq_len, cfg.trunk.pairwise_state_dim)
+        # Add the residue-type embedding, again relaxed over the designed spans
         if self.model.config.esmfold_config.embed_aa:
             aa_embeddings = self.model.embedding(aa)
             # embedding takes 0-based restype indices; the +1 shift belongs to af2_to_esm, handled by esm_ids.
@@ -340,6 +346,7 @@ class ESMFoldModel:
                 aa_embeddings[0, start:end] = relaxed_aa_embeddings
             s_s_0 = s_s_0 + aa_embeddings
 
+        # Fold the sequence and pair states, keeping only the trunk outputs the heads below need
         structure = self.model.trunk(s_s_0, s_z_0, aa, position_ids, attention_mask, no_recycles=num_recycles)
         structure = {
             key: value
@@ -356,16 +363,19 @@ class ESMFoldModel:
                 "states",
             ]
         }
+        # Run the distogram and language-model heads, symmetrizing the distogram over the pair axes
         disto_logits = self.model.distogram_head(structure["s_z"])
         structure["distogram_logits"] = (disto_logits + disto_logits.transpose(1, 2)) / 2
         structure["lm_logits"] = self.model.lm_head(structure["s_s"])
 
+        # Build the per-residue atom masks and blank out the atoms of padded positions
         structure["aatype"] = aa
         make_atom14_masks(structure)
         for key in ["atom14_atom_exists", "atom37_atom_exists"]:
             structure[key] *= attention_mask.unsqueeze(-1)
         structure["residue_index"] = position_ids
 
+        # Turn the final structure-module state into per-residue pLDDT
         lddt_head = self.model.lddt_head(structure["states"]).reshape(
             structure["states"].shape[0],
             batch_size,
@@ -376,6 +386,7 @@ class ESMFoldModel:
         structure["lddt_head"] = lddt_head
         structure["plddt"] = categorical_lddt(lddt_head[-1], bins=self.model.lddt_bins)
 
+        # Derive pTM and the predicted aligned error from the same pairwise head
         ptm_logits = self.model.ptm_head(structure["s_z"])
         structure["ptm_logits"] = ptm_logits
         structure["ptm"] = compute_tm(ptm_logits, max_bin=31, no_bins=self.model.distogram_bins)

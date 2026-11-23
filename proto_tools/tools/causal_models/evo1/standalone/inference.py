@@ -33,7 +33,7 @@ EVO1_MODEL_CHECKPOINTS = Literal[
     "evo-1-8k-transposon",
 ]
 
-# Byte-level token ids of A, C, G, T; Evo1's vocabulary is 512 bytes
+# Byte-level IDs for A, C, G, and T in Evo1's 512-token vocabulary.
 DNA_TOKEN_IDS = [ord(base) for base in "ACGT"]
 
 
@@ -129,6 +129,7 @@ class Evo1Model:
 
         from evo.generation import generate as evo_generate
 
+        # Generate in prompt batches and retain their original order.
         all_sequences: list[str] = []
         all_scores: list[float] = []
 
@@ -243,10 +244,8 @@ class Evo1Model:
                 for i, length in enumerate(seq_lengths):
                     seq_logprobs = logprobs[i, :length].float()
                     all_metrics.append(log_likelihood_metrics(seq_logprobs.mean().item(), length))
-                    # Store full logits (unshifted) for the sequence positions
-                    # logits has BOS-prepended length, so positions 0..length-1
-                    # correspond to predictions for positions 1..length
-                    # We return logits for the original sequence length
+                    # Keep one unshifted logit row per original sequence position.
+                    # The leading BOS means row 0 predicts the first nucleotide.
                     all_logits.append(logits[i, :length, :].cpu())
 
         return {

@@ -1,7 +1,7 @@
-"""proto_tools/utils/device_manager.py.
+"""Track GPU allocations across persistent workers.
 
-Automatically tracks and manages GPU allocation across persistent workers,
-with LRU eviction, CPU offloading, and configurable strategies.
+DeviceManager assigns GPUs and handles memory pressure through least-recently-used
+eviction, CPU offloading, and configurable allocation strategies.
 
 Usage::
 
@@ -21,7 +21,7 @@ Usage::
 
 Configuration
 -------------
-DeviceManager can be configured via environment variables or programmatically.
+Configure DeviceManager through environment variables or its Python API.
 
 **Environment Variables:**
 
@@ -35,7 +35,7 @@ DeviceManager can be configured via environment variables or programmatically.
   Default: auto-detect all visible GPUs.
 
 - ``BIO_TOOLS_OFFLOAD_STRATEGY``: Eviction strategy when GPUs are full (``"cpu"`` or ``"restart"``).
-  Default: ``"restart"`` (frees GPU memory; the evicted worker reloads on next use).
+  The default is ``"restart"``, which frees GPU memory and reloads the evicted worker on its next call.
 
 - ``BIO_TOOLS_ALLOW_MULTI_DEVICE``: Allow multiple tool instances per GPU (``"true"`` or ``"false"``).
   Default: ``"false"`` (one model per GPU).
@@ -717,7 +717,7 @@ class DeviceManager:
 
             # Update allocation record - model is now on CPU
             allocation.device_ids = ["cpu"]
-            # DON'T update last_used - preserve LRU ordering for next eviction
+            # Preserve last_used so the next eviction keeps the same LRU ordering.
         else:  # RESTART
             logger.info(
                 "DeviceManager: Restarting %s on %s (LRU eviction, strategy: RESTART)",
@@ -754,9 +754,11 @@ class DeviceManager:
         Raises:
             RuntimeError: If conflicting devices are held by unevictable allocations.
         """
+        # Devices may be shared, so there is nothing to evict
         if self._allow_multiple_per_device:
             return
 
+        # Collect devices already held, leaving out the instance being moved
         all_allocated = self._get_all_allocated_devices()
         if exclude_instance:
             excluded_devs = set()
@@ -765,10 +767,12 @@ class DeviceManager:
                 excluded_devs = set(alloc.device_ids)
             all_allocated -= excluded_devs
 
+        # Find the requested devices that are already held
         conflicts = [dev for dev in requested_devices if dev in all_allocated]
         if not conflicts:
             return
 
+        # Persistent allocations holding a conflicting device can be evicted
         evictable_conflicts = [
             alloc
             for alloc in self._allocations.values()
@@ -777,6 +781,7 @@ class DeviceManager:
             and alloc.allocation_type == AllocationType.PERSISTENT
         ]
 
+        # Refuse when a conflicting device is held only by a transient (one-shot, non-evictable) lease
         evictable_devices = {dev for alloc in evictable_conflicts for dev in alloc.device_ids}
         unevictable = [dev for dev in conflicts if dev not in evictable_devices]
         if unevictable:
@@ -795,6 +800,7 @@ class DeviceManager:
                 free_alternatives,
             )
 
+        # Evict the conflicting holders, least recently used first
         for alloc in sorted(evictable_conflicts, key=lambda a: a.last_used):
             self._evict_allocation(alloc)
 
@@ -1172,11 +1178,10 @@ class DeviceManager:
             }
 
     def get_gpu_memory_used(self, device: str) -> int:
-        """Get TOTAL GPU memory used in bytes for a logical device (all processes).
+        """Return total GPU memory use in bytes for a logical device.
 
-        IMPORTANT: This returns the total memory used on the GPU across ALL processes
-        and contexts, not just memory for a specific instance. Multiple tool instances
-        or external processes may be sharing the GPU.
+        Include every process and CUDA context on that GPU. Multiple tool
+        instances or external processes may contribute to the total.
 
         This method handles logical device IDs (e.g., "cuda:0") and maps them to
         physical GPU indices, respecting CUDA_VISIBLE_DEVICES settings.
@@ -1306,9 +1311,9 @@ class DeviceManager:
         moves. Updates allocation record and invokes worker_callback to send
         the ``to_device`` command to the subprocess.
 
-        This is NOT used for eviction moves — eviction is handled entirely
-        by ``_evict_allocation()`` (bookkeeping) + the eviction callback
-        (worker command), which avoids lock ordering issues.
+        Eviction uses ``_evict_allocation()`` for bookkeeping and the eviction
+        callback for worker commands. Keeping those moves separate avoids
+        lock ordering issues.
 
         Args:
             instance_name (str): Unique instance identifier (cache key).

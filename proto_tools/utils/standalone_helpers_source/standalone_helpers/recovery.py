@@ -27,8 +27,9 @@ def retry_on_checkpoint_corruption(
 ) -> None:
     """Run ``load``, retrying only while it fails on a corrupted checkpoint.
 
-    ``recover`` runs between attempts to remove the corrupt file so upstream
-    re-downloads it. Unrelated failures, and the final attempt's, propagate unchanged.
+    ``recover`` runs between attempts to remove the corrupt file so the next load
+    downloads it again. Unrelated errors and errors on the final attempt are raised
+    unchanged.
     """
     for attempt in range(1, max_attempts + 1):
         try:

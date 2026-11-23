@@ -1,12 +1,12 @@
 """pDockQ2 Modal service.
 
-Like structure-metrics, this tool has no standalone environment and no model — it scores an
-interface arithmetically from pLDDT and PAE already attached to the structure. The container
-imports proto-tools and calls the function; there is no env to build and no worker to hold open.
+The tool scores an interface from pLDDT and PAE already attached to the structure.
+It has no standalone environment, model, or persistent worker. The container
+imports proto-tools and calls the function.
 
-Note this tool is not iterable, so a call is one structure and gains no fan-out from being here.
-It is deployed so that a caller working against a remote device can reach it alongside the tools
-that do benefit, rather than having one step of a scoring pipeline behave differently from the rest.
+Each call scores one structure, so deployment provides no batch fan-out. This
+service lets remote callers include pDockQ2 in the same scoring pipeline as their
+other deployed tools.
 """
 
 from typing import Any

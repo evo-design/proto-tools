@@ -59,9 +59,8 @@ class ESM2EmbeddingsInput(MaskedModelInput):
 class ESM2EmbeddingsOutput(MaskedModelEmbeddingsOutput):
     """Output from ESM2 protein language model inference.
 
-    This class encapsulates the results of ESM2 inference, providing sequence
-    embeddings, per-position logits, and attention masks for downstream analysis
-    and visualization.
+    Contains sequence embeddings, per-position logits, and attention masks for
+    downstream analysis and visualization.
 
     Inherits from ``MaskedModelEmbeddingsOutput``.
 
@@ -208,6 +207,7 @@ def run_esm2_embeddings(
         - Larger models require more GPU memory but provide better representations
     """
     logger.debug(f"Using local for ESM2 inference: {config.model_checkpoint}")
+    # Run inference in the toolkit's isolated environment.
     outputs = ToolInstance.dispatch(
         "esm2",
         {

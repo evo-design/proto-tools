@@ -3,14 +3,14 @@
 Which residues ESM-IF1 actually reads from a staged structure.
 
 Mirrors fair-esm 2.0.0 as ``standalone/setup.sh`` patches it, together with biotite, which
-``standalone/requirements.txt`` leaves unpinned. Two gates decide it, and they run in order:
+``standalone/requirements.txt`` leaves unpinned. Two gates run in order.
 
 1. ``load_structure`` keeps only atoms named ``N``, ``CA``, ``C`` or ``O``
    (``esm/inverse_folding/util.py:41``). ``standalone/setup.sh`` supplies that line, because
    biotite >= 1.0 has no ``filter_backbone``, and it keeps only the atom-name half of what
    that function tested. A residue carrying none of those four names loses every atom and so
    ceases to exist. GFP's chromophore is named ``N1``/``CA1``/``C1``..., never a bare
-   ``N``/``CA``/``C``/``O``, and goes here.
+   ``N``/``CA``/``C``/``O``, and is removed by this gate.
 2. ``standalone/inference.py`` then keeps only residues whose name
    ``biotite.sequence.ProteinSequence.convert_letter_3to1`` maps to one letter: the 20
    standard names plus ``ASX``, ``GLX``, ``XLE``, ``UNK``, ``SEC`` and ``MSE``. The ``HETATM``

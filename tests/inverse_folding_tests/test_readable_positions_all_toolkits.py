@@ -2,14 +2,13 @@
 
 Every inverse-folding toolkit's residue mapping, against the same awkward structures.
 
-Each model ships its own structure parser and they disagree about what they will read, so a
-rule is declared per toolkit. These tests pin all of them side by side: the same fixture goes
-to every rule and each is asserted against what its own upstream parser does, which is what
-makes a disagreement visible rather than plausible. CPU-only, no model execution.
+Models use different structure parsers, so each toolkit declares which residues it can read.
+These tests apply every rule to the same structures and compare the results with that
+model's upstream parser. They run on CPU without executing a model.
 
-``test_every_migrated_toolkit_declares_a_rule`` is the guard that matters most: a toolkit
-whose config extends :class:`InverseFoldingConfig` without declaring a rule reverts to strict
-length matching and fails on any structure containing a residue its parser skips.
+``test_every_migrated_toolkit_declares_a_rule`` checks that each config extending
+:class:`InverseFoldingConfig` declares a rule. Without one, strict length matching rejects
+structures containing residues that the parser skips.
 """
 
 import pytest

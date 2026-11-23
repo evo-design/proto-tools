@@ -2,9 +2,9 @@
 
 Fetches protein domain annotations from InterPro — by UniProt accession via
 the InterPro REST API (direct lookup) or by raw protein sequence via EBI's
-iprscan5 submit-and-poll service. Both paths converge on a unified
-``InterProDomain`` row schema covering Pfam, SMART, PROSITE, Gene3D /
-CATH-Gene3D, Panther, and the rest of the InterPro member-DB catalog.
+iprscan5 submit-and-poll service. Both paths return
+``InterProDomain`` rows for Pfam, SMART, PROSITE, Gene3D / CATH-Gene3D,
+Panther, and other InterPro member databases.
 """
 
 import csv
@@ -370,7 +370,7 @@ def run_interproscan_fetch(
         inputs (InterProScanFetchInput): UniProt accession or protein sequence.
         config (InterProScanFetchConfig): Optional fetch settings (email,
             applications, paging, polling).
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         InterProScanFetchOutput: Domain hits across all InterPro member
@@ -392,6 +392,7 @@ def run_interproscan_fetch(
     )
 
     try:
+        # Known accessions use stored annotations. Raw sequences need a new scan.
         if inputs.uniprot_id:
             return _direct_lookup(inputs.uniprot_id, config, session)
         sequence = inputs.sequence  # validator guarantees this is not None when uniprot_id is None
@@ -543,9 +544,8 @@ def _extract_xref_ids(raw: Any) -> list[str]:
     """Extract identifier strings from a cross-reference list.
 
     Tolerates the union of shapes both InterPro REST and iprscan5 use for
-    GO/pathway cross-references: list-of-dicts keyed by ``id`` or
-    ``identifier``, or a list of plain strings. Drops empty / missing
-    values silently.
+    GO and pathway cross-references. Accept lists of dictionaries keyed by ``id``
+    or ``identifier``, or lists of strings. Drop empty or missing values.
 
     Args:
         raw (Any): Potential xref list — accepts ``None``, non-list, or
@@ -661,10 +661,12 @@ def _parse_iprscan_payload(
     has a ``signature`` block (the source InterPro / member-DB entry) and
     a ``locations`` list whose start/end fields populate the row.
     """
+    # Ensure the payload holds a result for the submitted sequence
     results = payload.get("results") or []
     if not results:
         raise ValueError(f"iprscan5 returned no results at {result_url}")
 
+    # Read the sequence length and UniProt accession from the first result
     first = results[0]
     sequence_length = first.get("sequenceLength")
     sequence_length_int: int | None = int(sequence_length) if isinstance(sequence_length, int | float) else None
@@ -674,11 +676,13 @@ def _parse_iprscan_payload(
     raw_matches: list[dict[str, Any]] = []
     for match in first.get("matches") or []:
         raw_matches.append(match)
+        # Read the signature's member database, accession, and name
         signature = match.get("signature") or {}
         signature_library = signature.get("signatureLibraryRelease") or {}
         member_database = str(signature_library.get("library") or "").lower()
         accession_match = str(signature.get("accession") or "").upper()
         name = str(signature.get("name") or signature.get("description") or "")
+        # Take the integrated InterPro accession and entry type, if the signature has one
         entry = signature.get("entry") or {}
         integrated_ipr_raw = entry.get("accession") if isinstance(entry, dict) else None
         integrated_ipr: str | None = None
@@ -686,8 +690,10 @@ def _parse_iprscan_payload(
             integrated_ipr = integrated_ipr_raw.strip().upper()
         type_raw = str(entry.get("type") or "").strip().lower() if isinstance(entry, dict) else ""
         domain_type: InterProDomainType = _TYPE_MAP.get(type_raw, "unknown")
+        # Keep the model accession only when it is a string
         model = match.get("model-ac")
         model_str = str(model) if isinstance(model, str) else None
+        # Collect GO terms and pathways only when the config asks for them
         go_terms = (
             _extract_xref_ids(entry.get("goXRefs") if isinstance(entry, dict) else None)
             if config.include_go_terms
@@ -699,6 +705,7 @@ def _parse_iprscan_payload(
             else []
         )
 
+        # Emit one domain row per match location, preferring the E-value over the raw score
         for location in match.get("locations") or []:
             score_raw = location.get("evalue") if location.get("evalue") is not None else location.get("score")
             score = float(score_raw) if isinstance(score_raw, int | float) else None

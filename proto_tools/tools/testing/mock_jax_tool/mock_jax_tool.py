@@ -1,7 +1,7 @@
-"""proto_tools/tools/testing/mock_jax_tool/mock_jax_tool.py.
+"""Test device management with a minimal JAX mock.
 
-This is a minimal JAX-pattern tool designed for testing device management with
-JAX semantics: no in-place .to(), model reload on device change, and
+A minimal JAX-pattern tool designed for testing device management with
+JAX behavior including no in-place .to(), model reload on device change, and
 get_jax_memory_stats() reporting.
 """
 

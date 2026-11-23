@@ -56,7 +56,7 @@ def resolve_cell_type(value: str) -> ParadeCellType:
     """Resolve a PARADE cell selector to its canonical code.
 
     Accepts either a cell code (``"c2"``) or a cell-line name (``"HepG2"``), matched
-    case-insensitively after stripping surrounding whitespace; a code is returned unchanged.
+    case-insensitively after stripping surrounding whitespace. A code is returned unchanged.
     Panel membership (which codes are valid for a given construct type) is enforced separately
     by the tool configs -- this only maps a name or code to a code.
 
@@ -85,7 +85,7 @@ _VALID_INPUT_CHARS = "N"  # U is normalized to T; A/C/G/T come from DNA_NUCLEOTI
 def normalize_utr_sequence(sequence: str) -> str:
     """Uppercase, strip whitespace, map RNA ``U`` to ``T``, and validate A/C/G/T/N.
 
-    PARADE encodes UTRs in the DNA alphabet (``T``, not ``U``); accepting ``U`` and
+    PARADE encodes UTRs in the DNA alphabet (``T``, not ``U``). Accepting ``U`` and
     normalizing it lets callers pass RNA. ``N`` is accepted but, matching the upstream
     featurizer (which assigns 0.25 into an integer one-hot tensor and so truncates to 0),
     encodes as an all-zero column ``[0, 0, 0, 0]`` rather than a uniform 0.25 base.
@@ -111,7 +111,7 @@ def normalize_utr_sequence(sequence: str) -> str:
 
 
 def require_https_checkpoint_url(value: str) -> str:
-    """Validate a custom checkpoint URL: HTTPS scheme, a real host, and no embedded credentials.
+    """Validate a custom checkpoint URL, requiring HTTPS, a real host, and no embedded credentials.
 
     A PARADE checkpoint is unpickled after download, so a custom URL must be well-formed and
     fetched over a non-downgradeable transport. Malformed values (``https:relative``,
@@ -121,19 +121,23 @@ def require_https_checkpoint_url(value: str) -> str:
 
     Error messages never echo the raw value, which may itself contain the credential.
     """
+    # Leave an empty value alone so the pinned checkpoint URL is used
     if not value:
         return value
+    # Reject whitespace, control characters and raw non-ASCII before parsing
     if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in value):
         raise ValueError("model_checkpoint link must not contain whitespace or control characters")
     try:
         value.encode("ascii")
     except UnicodeEncodeError:
         raise ValueError("model_checkpoint link must use ASCII with non-ASCII characters percent-encoded") from None
+    # Parse the URL; reading the port raises on a non-numeric or out-of-range value
     try:
         parsed = urllib.parse.urlparse(value)
         parsed.port  # noqa: B018 - property access validates the port (ValueError if non-numeric/out of range)
     except ValueError:
         raise ValueError("model_checkpoint link is not a valid URL") from None
+    # Require https, a host and no embedded user:pass credentials
     if parsed.scheme != "https":
         raise ValueError("model_checkpoint link must be an https:// URL")
     if not parsed.hostname:
@@ -141,6 +145,7 @@ def require_https_checkpoint_url(value: str) -> str:
     if parsed.username or parsed.password:
         raise ValueError("model_checkpoint link must not embed credentials (user:pass@); use HF_TOKEN instead")
     host = parsed.hostname.rstrip(".")
+    # Accept an IP literal; otherwise check every DNS label is well-formed
     try:
         ipaddress.ip_address(host)
     except ValueError:
@@ -158,7 +163,7 @@ def _looks_like_checkpoint_url(value: str) -> bool:
     """True if ``value`` is a download link — ``http(s)://…`` or a schemeless ``host.tld/path``.
 
     A bare filename or local path (``model.ckpt``, ``sub/x.ckpt``, ``/oak/x.ckpt``, ``./x``) is not a
-    link; a schemeless ``huggingface.co/user/model.ckpt`` is (and is normalized to ``https://`` on use).
+    link. A schemeless ``huggingface.co/user/model.ckpt`` is (and is normalized to ``https://`` on use).
     """
     if not value:
         return False
@@ -273,12 +278,10 @@ class _SafeCheckpointUrlConfigMixin:
     def model_validate_json(cls, json_data: str | bytes | bytearray, **kwargs: Any) -> Any:
         """Validate JSON, redacting the raw input (which may hold a signed URL) from parse errors.
 
-        The pre-parse with ``json.loads`` is deliberate, not gratuitous: pydantic's own
-        ``json_invalid`` error echoes the offending payload verbatim, which could leak a
-        credentialed/signed ``checkpoint_url``. So we detect malformedness first and raise our own
-        redacted error, then hand a valid payload to pydantic UNCHANGED (preserving JSON-mode
-        validation semantics). The surfaced message keeps the parser's POSITION (line/column or
-        byte offset) — which says *where* the JSON is broken without reproducing its contents.
+        Parse with ``json.loads`` first because Pydantic's ``json_invalid`` error echoes the
+        payload, which could expose credentials in a signed ``checkpoint_url``. Malformed
+        JSON raises a redacted error that retains the parser's line, column, or byte
+        offset. Valid JSON is passed unchanged to Pydantic to preserve JSON-mode validation.
         """
         try:
             json.loads(json_data)
@@ -299,9 +302,9 @@ class _SafeCheckpointUrlConfigMixin:
     def __setattr__(self, name: str, value: Any) -> None:
         """Prevalidate a ``model_checkpoint`` assignment so the error is a plain, non-echoing ValueError.
 
-        NOT redundant with ``validate_assignment``: assignment re-validation runs the field schema
-        directly (never the model wrap-validator above), so its ValidationError would render the raw
-        value. Raising a plain ValueError here first keeps any embedded credential out of the text.
+        Assignment validation runs the field schema directly and bypasses the model
+        wrap-validator above. Its ValidationError would expose the raw value, so this
+        check raises a plain ValueError first to keep embedded credentials out of the error.
         """
         if name == "model_checkpoint" and isinstance(value, str):
             normalize_checkpoint_override(value)
@@ -394,8 +397,8 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
 class ParadeActivityMetrics(Metrics):
     """PARADE per-cell-type UTR activity predictions for one sequence.
 
-    Values are the predicted activity mass-center for each requested PARADE cell code;
-    higher means higher predicted activity in that cell line. Metrics documented in
+    Values are the predicted activity mass-center for each requested PARADE cell code.
+    Higher means higher predicted activity in that cell line. Metrics documented in
     ``metric_spec`` cover every code across the 5'UTR and 3'UTR panels.
     """
 

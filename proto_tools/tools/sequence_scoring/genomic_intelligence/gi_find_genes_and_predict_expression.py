@@ -2,13 +2,13 @@
 
 Runs annotation over the submitted locus, then scores expression for every gene
 it finds, centring each window on that gene's own TSS. Use it when the TSS
-positions are not known in advance; use ``gi-expression`` directly when they are.
+positions are not known in advance. Use ``gi-expression`` directly when they are.
 
-This is the one endpoint with a delivery rule rather than a delivery preference:
-a synchronous request above 50,000 bp is refused with ``413 sync_too_large``, so
+This endpoint requires asynchronous delivery for long inputs.
+A synchronous request above 50,000 bp is refused with ``413 sync_too_large``, so
 long loci must set ``respond_async``. The tool does that automatically. Its
 length ceiling is the endpoint's own 500,000 bp, which is not the same as the
-expression model's window; gating on the model's number here rejects input the
+expression model's window. Gating on the model's number here rejects input the
 service accepts.
 """
 

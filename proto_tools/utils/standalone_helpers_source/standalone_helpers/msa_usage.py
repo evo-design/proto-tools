@@ -2,8 +2,8 @@
 
 Standalones count rows per chain from the backend's own featurized MSA (the rows that are not
 all-gap within a chain's columns) and compare them with the rows proto-tools sent. A chain that
-was sent an alignment but loaded only its query means the MSA was dropped somewhere: that is a
-WARNING, the one level production always surfaces. Everything else is a single DEBUG line.
+was sent an alignment but loaded only its query indicates that the MSA was dropped. Log this
+at WARNING so it is visible in production. Log other row counts in a single DEBUG line.
 """
 
 from __future__ import annotations

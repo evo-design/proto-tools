@@ -168,7 +168,7 @@ def _parse_interface_aas(s: str) -> dict[str, int]:
     """Parse a Python-dict-as-string or JSON dict cell into {aa: count}."""
     if not s:
         return {}
-    # CSV cells are stringified Python dicts (single quotes); flip to JSON.
+    # Convert single-quoted Python dictionary cells to JSON before parsing.
     try:
         return {str(k): int(v) for k, v in json.loads(s.replace("'", '"')).items()}
     except (TypeError, ValueError, json.JSONDecodeError):
@@ -221,7 +221,7 @@ def _parse_outputs(designs_dir: Path) -> dict[str, Any]:
                     }
                 )
     n_trajectories = _count_trajectories(designs_dir)
-    # Floor at len(designs) — can't have accepted more designs than trajectories run.
+    # Count at least one trajectory for every accepted design.
     n_trajectories = max(n_trajectories, len(designs))
     return {
         "designs": designs,
@@ -236,7 +236,7 @@ def _parse_outputs(designs_dir: Path) -> dict[str, Any]:
 
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
-    """Materialize settings, invoke bindcraft.py, parse outputs."""
+    """Write settings files, run bindcraft.py, and parse the results."""
     operation = input_dict["operation"]
     if operation != "design":
         raise ValueError(f"Unknown BindCraft operation: {operation}")
@@ -248,6 +248,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         work_dir = Path(work_dir_str)
         (work_dir / "designs").mkdir(parents=True, exist_ok=True)
 
+        # Write the target, sampling, and filter settings expected by the upstream CLI.
         target = _build_target_settings(input_dict, work_dir)
         advanced = _build_advanced_settings(input_dict)
         filters = _build_filters(input_dict)
@@ -293,7 +294,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         except subprocess.CalledProcessError as e:
             full_stderr = (e.stderr or "").strip()
             if full_stderr:
-                # Surface full stderr; a 10-line tail previously hid the root cause.
+                # Keep the full stderr text so earlier diagnostic messages remain available.
                 print(full_stderr, file=sys.stderr)
             stderr_tail = " | ".join(full_stderr.splitlines()) or "<no stderr>"
             raise RuntimeError(f"bindcraft: failed (exit {e.returncode}): {stderr_tail}") from e

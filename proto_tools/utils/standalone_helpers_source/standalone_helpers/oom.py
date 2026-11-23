@@ -1,8 +1,8 @@
 """CUDA out-of-memory detection, cleanup, and actionable errors for standalone scripts.
 
 GPU OOM is hardware/config-dependent (sequence length x batch x precision x VRAM), so
-proto-tools does not predict it with fixed caps. Instead each tool reacts to a real OOM:
-free cached memory and surface a clear, actionable error instead of a deep CUDA trace.
+proto-tools does not predict it with fixed caps. On an OOM, each tool frees cached
+memory and raises an error explaining how to adjust the call.
 
 Torch/JAX are imported lazily so this module is importable in torch-free environments.
 """

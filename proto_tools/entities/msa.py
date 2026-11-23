@@ -1,4 +1,4 @@
-"""Multiple Sequence Alignment (MSA) representation as a Pydantic BaseModel."""
+"""Represent and validate a multiple sequence alignment (MSA)."""
 
 from collections import Counter
 from collections.abc import Iterator
@@ -60,6 +60,7 @@ class MSA(BaseModel):
                 f"must match number of sequences ({len(self.aligned_sequences)})"
             )
             raise ValueError(msg)
+        # Every sequence must span the same nonempty set of alignment columns.
         first_len = len(self.aligned_sequences[0])
         if first_len == 0:
             msg = "MSA must contain at least one column"
@@ -109,6 +110,7 @@ class MSA(BaseModel):
 
         ids: list[str] = []
         seqs: list[str] = []
+        # Keep each FASTA description alongside its aligned sequence.
         for record in SeqIO.parse(StringIO(text), "fasta"):  # type: ignore[no-untyped-call]
             ids.append(record.description)
             seqs.append(str(record.seq))

@@ -1,6 +1,6 @@
 # Standalone Helpers
 
-**This directory is published to every tool subprocess; it is never copied.**
+**This directory is made available to every tool subprocess without copying it.**
 
 Tool environments contain the tool's dependencies but not `proto_tools`, so
 `_build_subprocess_env()` puts this directory on the subprocess's `PYTHONPATH`
@@ -9,8 +9,8 @@ Tool environments contain the tool's dependencies but not `proto_tools`, so
 `PROTO_STANDALONE_HELPERS_DIR`. Nothing is written into the installed package,
 so proto-tools works from a read-only install.
 
-Do NOT import from this directory by its full dotted path in tool code; use the
-published name, `from standalone_helpers import ...`.
+In tool code, import from the published name, `from standalone_helpers import ...`.
+Do not use the full dotted path to this directory.
 
 ## Layout
 
@@ -38,10 +38,10 @@ have the full `proto_tools` package importable.
 
 ## Editing
 
-Edit these source files here; they take effect on the next tool invocation with
+Edit the source files in this directory. Changes take effect on the next tool invocation with
 no environment rebuild. When adding a new helper, add it to the appropriate
 submodule and re-export it from `standalone_helpers/__init__.py`.
 
-Keep this directory free of anything that is not part of the published surface.
-It lands on both `PATH` and `PYTHONPATH` inside every tool environment, so a
-stray script or module here would leak into all of them.
+Keep only published helpers in this directory. It is added to both `PATH` and
+`PYTHONPATH` inside every tool environment, so any script or module placed here
+becomes available to all tools.

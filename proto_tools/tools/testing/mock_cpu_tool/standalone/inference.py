@@ -19,7 +19,7 @@ from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 
-# Stable per-worker id: same across all requests this subprocess handles,
+# Keep the worker ID the same across every request this subprocess handles,
 # distinct across subprocesses. Module import happens once per worker.
 _WORKER_UUID = uuid.uuid4().hex[:8]
 

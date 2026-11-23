@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """scripts/list_incomplete_tests.py.
 
-Given a pytest log file, list every test that pytest *would have
-actually run* on this machine but for which no ``TEST PASSED`` /
-``TEST FAILED`` / ``TEST ERROR`` line was emitted before the run was
-killed.
+Find tests that were not completed before a pytest run was interrupted.
+
+Compare the tests that would run on this machine with the log's
+``TEST PASSED``, ``TEST FAILED``, and ``TEST ERROR`` lines.
 
 The log's first line records the exact pytest invocation, e.g.::
 
@@ -15,9 +15,8 @@ We re-run that command via the inline plugin in
 (so the project conftest applies its custom-marker-driven skips:
 ``uses_gpu``, ``skip_ci``, ``test_on_platforms``, missing assets, …)
 and then evaluates every ``skip``/``skipif`` marker. Tests that would
-be skipped are excluded; the survivors form the canonical "should have
-run" set. Subtracting the IDs with a terminal log line yields the
-tests that never ran or were killed mid-flight.
+be skipped are excluded. Removing tests with a recorded outcome leaves
+those that never ran or were interrupted.
 
 Usage::
 

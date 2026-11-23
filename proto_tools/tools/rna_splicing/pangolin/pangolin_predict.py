@@ -31,7 +31,7 @@ class PangolinPredictInput(BaseToolInput):
     Attributes:
         sequences (list[str]): DNA sequence(s) to score, each >= 10,001 bp
             (5,000 bp of flank on each side). Scores cover the central
-            ``len - 10000`` positions; a single string is wrapped to a list.
+            ``len - 10000`` positions. A single string is wrapped to a list.
     """
 
     sequences: list[str] = InputField(

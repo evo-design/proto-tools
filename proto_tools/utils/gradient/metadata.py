@@ -2,9 +2,9 @@
 
 What a returned gradient was taken with respect to, and whether two of them can be combined.
 
-A gradient is only meaningful alongside the state it differentiates: the same numbers taken at a
-different point, in a different coordinate space or against a different column order do not add
-up. :class:`GradientMetadata` records those quantities so a caller can check before combining.
+Gradients can be combined only when they refer to compatible states, coordinate spaces,
+and column orders. :class:`GradientMetadata` records these details so callers can check
+before adding gradients.
 """
 
 from __future__ import annotations
@@ -43,9 +43,8 @@ class GradientMetadata(BaseModel):
     """Metadata tracking the quantities that determine whether a gradient can be combined with others.
 
     Adding two gradients is only meaningful when they are derivatives of different scalars with
-    respect to the same variable, at the same point, and in the same columns. Shape alone
-    establishes none of that: two ``(60, 4)`` matrices can describe different loci of different
-    molecules in different parameterizations. Each field below pins one of those axes.
+    respect to the same variable, at the same point, and in the same columns. Matching shapes are not enough. Two ``(60, 4)`` matrices can describe different loci,
+    molecules, or parameterizations. The fields below identify those differences.
 
     Attributes:
         description (str): What the scalar measures.
@@ -143,10 +142,9 @@ class GradientMetadata(BaseModel):
     def incompatibility_with(self, other: GradientMetadata, *, strict: bool = True) -> str | None:
         """Explain why these two gradients cannot be combined, or return ``None`` if they can.
 
-        ``vocab``, ``coordinate_space`` and the row positions are never negotiable: a mismatch
-        there makes the sum meaningless rather than approximate. The fingerprint is: reusing a
-        gradient from an earlier step is a deliberate approximation some optimizers make, so
-        ``strict=False`` permits it.
+        The vocabulary, coordinate space, and row positions must match. By default, the
+        input fingerprint must also match. Set ``strict=False`` to permit gradients
+        from different points, for example when reusing one from an earlier step.
 
         Args:
             other (GradientMetadata): The metadata to compare against.
@@ -179,8 +177,8 @@ def input_fingerprint(matrix: Sequence[Sequence[float]]) -> str:
     """Return a short digest identifying the exact values of a differentiated matrix.
 
     Hashes the float64 bytes rather than a formatted string, so the digest is stable across
-    processes. It identifies the *values*, not where they live: two windows of one context
-    initialized identically share a digest, which is why positions are compared separately.
+    processes. It identifies values alone. Two identically initialized windows share a digest,
+    so positions are compared separately.
 
     Args:
         matrix (Sequence[Sequence[float]]): The differentiated relaxed state.

@@ -2,7 +2,7 @@
 
 This script runs in an isolated environment and implements a minimal JAX
 model for testing DeviceManager functionality. Follows real JAX/Flax
-conventions: params are a dict pytree separated from the model function,
+conventions. Parameters are a dict pytree separated from the model function,
 and device movement uses jax.device_put() on the params pytree (matching
 ProteinMPNN, Flax, Haiku, etc.).
 """
@@ -82,7 +82,7 @@ def _apply(params: dict[str, Any], x: jax.Array) -> jax.Array:
 class MockJAXToolModel:
     """Wrapper managing params pytree and device placement.
 
-    Follows the ProteinMPNN pattern: params are a dict pytree moved via
+    Follows the ProteinMPNN pattern. Parameters are a dict pytree moved via
     move_model_to_device(), which uses jax.device_put() natively on dicts.
     """
 

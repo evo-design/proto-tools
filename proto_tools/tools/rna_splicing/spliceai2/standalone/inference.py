@@ -40,7 +40,7 @@ _PREDICT_OOM_HINT = (
 
 
 def _encode(sequence: str, assembly: str, reverse_complement: bool = False) -> Any:
-    """One-hot encode a sequence with its species channel; padding stays all-zero."""
+    """One-hot encode a sequence with its species channel. Padding stays all-zero."""
     import numpy as np
     from spliceai2.dataset import _one_hot_encode
 
@@ -72,7 +72,7 @@ class SpliceAI2Model:
         self._loaded = False
 
     # ============================================================================
-    # Model Loading & Device Management
+    # Model Loading and Device Management
     # ============================================================================
     def load(self, device: str) -> None:
         """Load both ensemble checkpoints onto device."""
@@ -182,6 +182,7 @@ class SpliceAI2Model:
         import torch
         from spliceai2.utils import decode_topk_tx
 
+        # Pad both flanks and round the input length to the model's pooling multiple.
         n = len(sequence)
         tail = -n % LENGTH_MULTIPLE
         padded = PAD * FLANK + sequence + PAD * (FLANK + tail)
@@ -194,7 +195,7 @@ class SpliceAI2Model:
             out_ss = torch.stack([model.forward_1d(ftrs) for model, ftrs in zip(self.models, ftrs_list, strict=True)])
             out_ss = out_ss.mean(dim=0)[:, :, :n]
 
-            # Candidate sites: every position whose donor or acceptor usage clears the threshold.
+            # Select positions whose donor or acceptor usage clears the candidate threshold.
             site_logits = out_ss.amax(dim=1)
             num_candidates = int((site_logits.sigmoid() > CANDIDATE_SITE_THRESHOLD).sum())
             probabilities = out_ss[0].sigmoid().cpu().numpy()
@@ -207,6 +208,7 @@ class SpliceAI2Model:
             if num_candidates < 2:
                 return prediction
 
+            # Score junctions between the selected splice sites using the shared features.
             idxs = site_logits.topk(num_candidates, dim=1)[1].sort(dim=1).values
             out_jxn = torch.stack(
                 [model.forward_2d(ftrs, idxs) for model, ftrs in zip(self.models, ftrs_list, strict=True)]
@@ -223,6 +225,7 @@ class SpliceAI2Model:
             for d, a in zip(donors, acceptors, strict=True)
         ]
 
+        # Decode transcript paths and remove duplicate exon arrangements.
         masks = decode_topk_tx(out_tx[0].cpu().numpy(), sites, n, num_candidates, k=num_transcripts)
         transcripts: list[list[tuple[int, int]]] = []
         for mask in masks:

@@ -3,23 +3,21 @@
 Guards the rule that a test needing a toolkit's dependencies runs inside that toolkit's
 environment, rather than against a copy installed next to proto-tools.
 
-``pytest.importorskip("torch")`` reads like a safety net and is the opposite. The
-orchestrator has no ML dependencies by design -- models live in isolated tool envs -- so
-the import never succeeds there and the test does not fail, it *skips*: silently, green,
-in CI (``pytest --cpu-only --no-envs``) and in an ordinary local run alike.
+The main environment has no ML dependencies. Using ``pytest.importorskip("torch")``
+there skips tests when the dependency is absent, both in CI
+(``pytest --cpu-only --no-envs``) and in local runs. Failures in those tests can go unnoticed.
 
-That is not hypothetical. Every objective test in ``test_esmfold2_inversion.py`` was
-guarded this way, so eight of them spent months calling ``bin_midpoints()`` with no
-argument, long after the signature gained ``n_bins``, while the suite stayed green. A
-skipped test and a passing test are indistinguishable in the summary line.
+This happened to eight objective tests in ``test_esmfold2_inversion.py``. They kept
+calling ``bin_midpoints()`` without an argument after its signature gained ``n_bins``,
+but the tests were skipped and the suite continued to pass.
 
-The fix is ``run_in_env``: ship the assertions as a ``_{thing}_env_checks.py`` and run them
-inside the toolkit's env, where its real dependencies are. See the testing section of
+Put the assertions in a ``_{thing}_env_checks.py`` file and use ``run_in_env`` to run it
+inside the toolkit's environment with its dependencies. See the testing section of
 CLAUDE.md.
 
-``importorskip`` stays legitimate for a genuinely optional extra that the orchestrator
-could plausibly have -- add it to :data:`ALLOWED_OPTIONAL_IMPORTS` with a comment saying
-why. The allowlist is deliberately empty: every entry should be argued for in review.
+Reserve ``importorskip`` for optional extras in the main environment. Add each one to
+:data:`ALLOWED_OPTIONAL_IMPORTS` with a comment explaining why it is optional. The
+allowlist is empty, and adding an entry requires review.
 """
 
 from __future__ import annotations
@@ -50,8 +48,7 @@ def _collected_test_files() -> list[Path]:
 def _importorskipped_modules(source: str) -> list[tuple[int, str]]:
     """Every ``importorskip("mod")`` *call* in ``source``, as ``(line, module)``.
 
-    Parsed rather than matched, so a docstring explaining this rule -- of which there are
-    several, including this file's -- is not mistaken for a call.
+    Parse the source so examples inside docstrings are not mistaken for calls.
     """
     found: list[tuple[int, str]] = []
     for node in ast.walk(ast.parse(source)):

@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 class BorzoiActivityTerm(DifferentiableTerm):
-    """One differentiable Borzoi quantity: mean predicted activity over a track and bin span.
+    """Mean predicted Borzoi activity over one track and bin span.
 
     Whether more activity is wanted depends on whether the track is a target or an off-target,
     and how much it matters relative to other tracks is a weight — both are goals a caller
@@ -113,7 +113,7 @@ class BorzoiGradientResult(GradientResult):
 
 
 class BorzoiGradientCandidate(BaseModel):
-    """One candidate: relaxed bases at selected positions inside a full Borzoi context window.
+    """Relaxed bases at selected positions inside a full Borzoi context window.
 
     Borzoi reads a fixed 524,288 bp context, but a design problem usually varies only a small
     part of it. The candidate therefore carries the whole context as a sequence plus the
@@ -170,7 +170,7 @@ class BorzoiGradientCandidate(BaseModel):
 
 
 class BorzoiGradientInput(GradientInput):
-    """Input for the Borzoi gradient tool: one or many relaxed candidates.
+    """One or more relaxed candidates for the Borzoi gradient tool.
 
     Attributes:
         inputs (list[BorzoiGradientCandidate]): One context-and-relaxed-positions bundle per
@@ -247,7 +247,7 @@ class BorzoiGradientSampleMetrics(Metrics):
 
 
 class BorzoiGradientOutput(GradientOutput):
-    """Borzoi track-activity output; gradients are optional in forward-only mode.
+    """Borzoi track-activity output. Gradients are omitted in forward-only mode.
 
     Attributes:
         results (list[BorzoiGradientResult]): One per input candidate, in input order, each

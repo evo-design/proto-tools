@@ -95,7 +95,7 @@ class PuffinPredictionInput(BaseToolInput):
 class PuffinPredictionResult(BaseModel):
     """Per-sequence Puffin prediction result.
 
-    The 10 output channels are ordered as ``TRACK_NAMES``: five forward-strand
+    The 10 output channels follow ``TRACK_NAMES``, with five forward-strand
     targets (FANTOM_CAGE+, ENCODE_CAGE+, ENCODE_RAMPAGE+, GRO_CAP+, PRO_CAP+),
     then five reverse-strand targets (PRO_CAP-, GRO_CAP-, ENCODE_RAMPAGE-,
     ENCODE_CAGE-, FANTOM_CAGE-). Per-base values are in log-scale and can be

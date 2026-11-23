@@ -298,6 +298,7 @@ def run_evo2_sample(
     # Local GPU - use standalone venv
     logger.debug(f"Using local venv for Evo 2 sampling: {config.model_checkpoint}")
 
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "evo2",
         {

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """scripts/update_versions.py.
 
-Pin every toolkit's current source hash in its ``versions.yaml``, the fix that
-``tests/style_consistency_tests/test_toolkit_versions.py`` asks for. Toolkits whose top
+Record each toolkit's current source hash in ``versions.yaml`` to satisfy
+``tests/style_consistency_tests/test_toolkit_versions.py``. Toolkits whose top
 entry already matches are left alone. See ``notes/versioning.md``.
 
 Usage::

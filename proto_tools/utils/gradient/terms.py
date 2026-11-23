@@ -2,10 +2,9 @@
 
 The quantities a gradient tool can differentiate, and what comes back for one.
 
-A tool declares its quantities as :class:`DifferentiableTerm` subclasses and catalogues them by
-name, so a caller can discover what is on offer and ask for it by name, class or instance.
-:class:`TermGradient` is the answer to one such request: the term itself, its raw value, and the
-raw derivative of that value.
+Tools declare quantities as named :class:`DifferentiableTerm` subclasses. Callers can
+discover them and request one by name, class, or instance. :class:`TermGradient` holds
+the requested term, its raw value, and the derivative of that value.
 """
 
 from __future__ import annotations
@@ -28,9 +27,8 @@ class DifferentiableTerm(BaseModel):
     """One differentiable scalar quantity a tool can expose, and how to ask for it.
 
     A subclass pins ``id`` to the kind of quantity it is and declares the selectors that identify
-    which one — a cell type, a track and a bin span — and nothing else. Optimization intent does
-    not belong here: weights, directions to optimize in, loss shaping and normalization are all
-    properties of an objective a caller composes, not of the quantity itself.
+    which one — a cell type, a track and a bin span — and nothing else. The caller supplies weights, optimization directions, loss shaping, and normalization
+    when composing an objective.
 
     A term is frozen and closed, so a selection cannot drift between being asked for and being
     reported, and a mistyped selector fails where it was written rather than quietly selecting
@@ -87,7 +85,7 @@ GroupedTermCatalog = Mapping[str, TermCatalog]
 
 
 class TermGradient(BaseModel):
-    """One differentiated scalar: the term that was asked for, and what came back for it.
+    """A requested scalar term with its value and derivative.
 
     The invariant this model carries is ``gradient == d(term_value)/d(input)``. No optimization
     direction, weight, loss transform or normalization is folded in, so a caller applies those

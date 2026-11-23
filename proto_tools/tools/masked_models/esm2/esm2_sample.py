@@ -216,6 +216,7 @@ def run_esm2_sample(
         ESM2SampleOutput: ESM2SampleOutput with sampled sequences and optional logits.
     """
     logger.debug(f"Using local for ESM2 sampling: {config.model_checkpoint}")
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "esm2",
         {

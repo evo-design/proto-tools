@@ -1,4 +1,4 @@
-"""Macromolecular structure representation as a Pydantic BaseModel."""
+"""Represent macromolecular structures and provide access to their sequences and coordinates."""
 
 from __future__ import annotations
 
@@ -39,13 +39,10 @@ from proto_tools.utils.tool_io import Metrics, MetricValue
 def _reject_private_address(url: str) -> None:
     """Refuse a URL naming an address that is not routable on the public internet.
 
-    A structure field accepts a URL, and whoever supplies it does not necessarily own the machine
-    that fetches it -- a server accepting structures fetches on behalf of its callers. Left
-    unchecked that turns the field into a request-forgery primitive: ``169.254.169.254`` for cloud
-    instance credentials, or a private address for a service reachable only from inside.
-
-    Resolved rather than pattern-matched, so a public hostname pointing at a private address is
-    refused too.
+    Servers may fetch structure URLs on behalf of callers. Restrict destinations
+    to public addresses so a URL cannot request internal services or cloud
+    instance credentials at ``169.254.169.254``. Resolve the hostname before
+    checking it so a public hostname pointing to a private address is rejected too.
 
     Raises:
         ValueError: If the host is unresolvable or resolves to a non-public address.
@@ -285,7 +282,7 @@ class Structure(BaseModel):
     ``SequenceStructurePair.structure``, ``MutationInput.structure``) takes a raw
     PDB/CIF string or file path directly — no ``{"structure": ...}`` envelope required.
 
-    Heavy objects (gemmi parsed structure) are lazy-loaded via ``PrivateAttr``.
+    Load the parsed gemmi structure on first access and store it in ``PrivateAttr``.
 
     Attributes:
         structure (str): Raw structure content in PDB or CIF format.
@@ -539,7 +536,7 @@ class Structure(BaseModel):
         Tools return metrics parallel to their input structures without
         mutating the inputs (so caching and reproducibility invariants hold).
         Use this helper to carry tool-emitted metrics back onto the original
-        ``Structure`` in place; existing keys are overwritten.
+        ``Structure`` in place. Existing keys are overwritten.
 
         Args:
             metrics (Metrics): The metrics container to merge into ``self.metrics``.
@@ -609,9 +606,9 @@ class Structure(BaseModel):
     def ca_coordinates_by_chain(self, model_index: int = 0) -> dict[str, list[tuple[float, float, float]]]:
         """CA ``(x, y, z)`` coordinates (angstroms) per chain, read via gemmi.
 
-        Handles both PDB and mmCIF content; prefer this over a hand-rolled
-        fixed-column PDB parser, which finds zero atoms in mmCIF output (e.g.
-        from RFdiffusion3). Chains without a CA atom are omitted.
+        Handles both PDB and mmCIF content. Use this instead of a fixed-column
+        PDB parser when inputs may include mmCIF, such as RFdiffusion3 outputs.
+        Chains without a CA atom are omitted.
 
         Args:
             model_index (int): Model to read; defaults to the first.
@@ -780,13 +777,14 @@ class Structure(BaseModel):
     def with_chain_types(self, types: dict[str, str]) -> Structure:
         """Return a new CIF Structure whose chains are typed as given, with matching entity records.
 
-        A file's own entity records (or, in PDB, their absence) can misstate what a chain holds:
-        predictors write ligands as one-residue polymers, or omit entities entirely. When the
+        File metadata may misclassify chains. Predictors sometimes write ligands
+        as one-residue polymers or omit entity records entirely. When the
         true type of each chain is known, as it is for a predicted complex, this sets it
         directly, so :meth:`get_chain_types`, :attr:`num_chains`, and the written ``_entity``
         records all agree with it. A structure whose own file already types its chains as given
-        is returned unchanged. Otherwise the result is CIF, because PDB cannot carry entity types;
-        ``b_factor_type``, ``source``, ``metrics``, and ``msa_conditioning`` are preserved.
+        is returned unchanged. Otherwise, return CIF because PDB cannot carry
+        entity types. Preserve ``b_factor_type``, ``source``, ``metrics``, and
+        ``msa_conditioning``.
 
         Args:
             types (dict[str, str]): Chain ID to ``"protein"``, ``"dna"``, ``"rna"``, or
@@ -1024,7 +1022,7 @@ class Structure(BaseModel):
     def write_pdb(self, filepath: Path | str) -> None:
         """Write the structure to a PDB file.
 
-        WARNING: PDB format has limitations that may cause data loss.
+        PDB format has limitations that may cause data loss.
 
         Args:
             filepath (Path | str): Path where to save the PDB file.
@@ -1445,7 +1443,7 @@ class Structure(BaseModel):
         residue_ids: dict[str, list[tuple[int, str]]],
         chain_map: dict[str, str] | None = None,
     ) -> Structure:
-        """Return a new Structure wearing the given chain IDs and residue numbering.
+        """Return a new Structure with the supplied chain IDs and residue numbering.
 
         Each chain's ``i``-th polymer residue takes the ``i``-th ID given for it, insertion code
         included, which puts a structure written in :meth:`renumbered_sequentially` numbering back
@@ -1457,7 +1455,7 @@ class Structure(BaseModel):
             chain_map (dict[str, str] | None): Original to current chain IDs, as
                 :meth:`renumbered_sequentially` returns them. ``None`` leaves IDs unchanged.
 
-        Only polymer residues are renumbered; a ligand or water keeps the number it carries,
+        Only polymer residues are renumbered. Ligands and waters keep their numbers,
         since ``residue_ids`` describes polymer chains alone.
 
         Returns:
@@ -1942,6 +1940,7 @@ class Structure(BaseModel):
         import py3Dmol
         from IPython.display import HTML, display
 
+        # Default to chain coloring when the B-factors carry no defined meaning
         if color_by is None:
             color_by = "chain" if self.b_factor_type == BFactorType.UNSPECIFIED else "bfactor"
 
@@ -1949,6 +1948,7 @@ class Structure(BaseModel):
         if color_by not in valid_color_modes:
             raise ValueError(f"Invalid color_by value: '{color_by}'. Must be one of: {', '.join(valid_color_modes)}")
 
+        # Load the structure into a py3Dmol viewer in its stored format
         viewer = py3Dmol.view(width=width, height=height)
 
         if self.structure_format == "cif":
@@ -1959,9 +1959,11 @@ class Structure(BaseModel):
         legend_html = ""
 
         if color_by == "bfactor":
+            # Color each chain on a B-factor gradient, scaled 0-1 for normalized pLDDT else 0-100
             range_max = 1.0 if self.b_factor_type == BFactorType.NORMALIZED_PLDDT else 100.0
             chain_types = self.get_chain_types()
 
+            # Ligand chains take ligand_style, polymer chains take style
             for chain_id, chain_type in chain_types.items():
                 chain_style = ligand_style if chain_type == "ligand" else style
                 viewer.setStyle(
@@ -1982,6 +1984,7 @@ class Structure(BaseModel):
                 legend_html = _create_bfactor_legend_html(self.b_factor_type, range_max)
 
         elif color_by == "chain":
+            # Give each chain a distinct color, cycling through CHAIN_COLORS
             chain_ids = self.get_chain_ids()
             chain_types = self.get_chain_types()
             chain_color_map = {}
@@ -1996,8 +1999,10 @@ class Structure(BaseModel):
             if show_legend:
                 legend_html = _create_chain_legend_html(chain_color_map)
 
+        # Fit the camera to the whole structure
         viewer.zoomTo()
 
+        # Overlay the legend on the viewer HTML, or show the bare viewer
         if show_legend and legend_html:
             viewer_html = viewer._make_html()
             combined_html = f"""
@@ -2075,10 +2080,9 @@ def _mark_lone_hetatm_residues_nonpolymer(struct: gemmi.Structure) -> bool:
 def _name_unnamed_chains(gemmi_struct: gemmi.Structure) -> None:
     """Give every unnamed chain an ID, in place.
 
-    A deposited file may leave the chain identifier blank -- CASP target files do, for one -- and a
-    chain with no ID cannot be named in a selection, carried on a ``Chain``, or addressed by the
-    tools that read a chain column. Each unnamed chain takes the first single character not already
-    in use, so the rest of the library can address it.
+    Some deposited files, including CASP targets, leave chain identifiers blank.
+    Assign each unnamed chain the first unused single character so selections,
+    ``Chain`` objects, and tools that read chain columns can refer to it.
 
     Args:
         gemmi_struct (gemmi.Structure): Structure to name in place.

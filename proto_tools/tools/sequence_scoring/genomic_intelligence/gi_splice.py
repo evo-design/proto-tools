@@ -1,8 +1,8 @@
 """Splice donor/acceptor site prediction via the Genomic Intelligence hosted API.
 
-The model is strand-specific: submit the sequence in transcript orientation.
-Scoring the opposite strand does not fail loudly — it returns sites at different
-positions, frequently at high confidence — so there is no score or count that
+The model is strand-specific. Submit the sequence in transcript orientation.
+Scoring the opposite strand does not raise an error. It returns sites at different
+positions, frequently at high confidence, so no score or count
 identifies a mis-oriented submission after the fact. Reverse-complement
 minus-strand genes before calling.
 """

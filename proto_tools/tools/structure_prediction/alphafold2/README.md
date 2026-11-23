@@ -46,7 +46,7 @@ Differentiates AlphaFold2's own confidence in a sequence that has no reference: 
 
 #### Applications
 
-De novo design driven only by what AlphaFold2 believes about a sequence — maximizing confidence, encouraging compactness through contacts, or shaping secondary structure — with no target and no backbone to match.
+De novo design driven only by what AlphaFold2 believes about a sequence (maximizing confidence, encouraging compactness through contacts, or shaping secondary structure), with no target and no backbone to match.
 
 #### Usage Tips
 

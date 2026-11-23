@@ -39,11 +39,9 @@ if TYPE_CHECKING:
 def coerce_to_item_list(value: Any) -> Any:
     """Wrap one supplied gradient item in a list, leaving a list of items alone.
 
-    A caller evaluating a single candidate should not have to type a list, and a caller
-    evaluating many should not have to wrap each one. One matrix is recognized by its rows being
-    numbers; a list whose first element is itself a matrix, a model or a mapping is already a
-    collection of items. Ambiguity is not guessed at: anything else is handed to Pydantic as-is
-    so it reports the real type error.
+    Accept a single candidate without requiring a surrounding list. A sequence of numeric
+    rows is treated as one matrix. A list starting with a matrix, model, or mapping is
+    already a collection of candidates. Leave other values for Pydantic to validate.
 
     Args:
         value (Any): Whatever was supplied for the ``inputs`` field.
@@ -68,9 +66,9 @@ def coerce_to_item_list(value: Any) -> Any:
 class RelaxationConfig(BaseConfig):
     """Blend coefficients controlling how a relaxed sequence reaches the model.
 
-    These are scalars, not tensors: they weight the terms of
+    These scalar coefficients weight the terms of
     :func:`standalone_helpers.relaxation.relaxed_sequence`. ``temperature`` lives on the Input
-    because it describes the supplied numbers; relaxation is a property of the run.
+    because it describes the supplied numbers. Relaxation controls how the tool runs.
 
     Both coefficients are applied the way ColabDesign applies them, one after the other, at
     https://github.com/sokrypton/ColabDesign/blob/5ab4efaba2321a6c3c314b82d2fff8e0241f5c2d/colabdesign/shared/model.py#L205-L206
@@ -87,8 +85,7 @@ class RelaxationConfig(BaseConfig):
             the gradient describes a sequence the model scored exactly as it would score a real
             one. Values in between interpolate between the two.
 
-            This is the setting to reach for when the goal is to evaluate a *discrete* sequence;
-            lowering ``soft`` is not.
+            Use ``hard`` to evaluate a discrete sequence. Lowering ``soft`` does not do this.
         soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
 
             It is recommended to leave ``soft`` at ``1.0`` in almost all use cases. That feeds
@@ -493,7 +490,7 @@ class GradientConfig(RelaxationConfig):
 
 
 class GradientResult(BaseModel):
-    """One evaluated item: the gradients it was asked for, its objective, and its own metrics.
+    """The requested gradients, objective, and metrics for one evaluated item.
 
     Everything a gradient tool produces per item lives here, so a batch split across workers
     reassembles into exactly one of these per input. Only the vocabulary stays at the top level,

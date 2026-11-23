@@ -1,7 +1,4 @@
-"""proto_tools/tools/mutagenesis/random_protein/random_protein_sample.py.
-
-Random protein sampling with codon scheme-biased amino acid selection.
-"""
+"""Fill masked protein positions with amino acids sampled from a codon scheme."""
 
 import json
 import logging
@@ -31,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Data Models
 # ============================================================================
 
-# Input: protein sequences, optionally pre-masked with '_'
+# Accept protein sequences with optional '_' masks.
 RandomProteinSampleInput = MaskedModelSampleInput
 
 CodonScheme = Literal["UNIFORM", "NNN", "NNK", "NNS", "NDT", "DBK", "NRT"]
@@ -100,19 +97,19 @@ class RandomProteinSampleConfig(BaseConfig):
             Default: random 30%.
         codon_scheme (CodonScheme): Codon scheme controlling amino acid sampling
             probabilities. ``"UNIFORM"`` gives equal weight to all 20
-            amino acids; other schemes (NNK, NNS, NDT, etc.) weight
+            amino acids. Other schemes (NNK, NNS, NDT, etc.) weight
             amino acids by the number of codons encoding them.
         allow_stop_codons (bool): If True, the stop symbol ``"*"`` is included in
             the sampling distribution. For degenerate schemes it is weighted by
-            its stop-codon count; for ``"UNIFORM"`` it is an equally weighted
-            21st symbol. Default: False (stops never sampled).
+            its stop-codon count. For ``"UNIFORM"`` it is an equally weighted
+            21st symbol. Defaults to False, so stops are never sampled.
         excluded_amino_acids (list[AminoAcid] | None): One-letter codes of
             amino acids to remove from the sampling distribution after
             codon-scheme and stop-codon handling. An empty list is treated as
             ``None``.
     """
 
-    # No scoring model → supplies no masker inputs → only random masking is valid.
+    # Without a scoring model, only random masking has the inputs it needs.
     masking_inputs: ClassVar[frozenset[MaskingInput]] = frozenset()
 
     masking_strategy: RandomMaskingStrategy = ConfigField(
@@ -191,10 +188,12 @@ def run_random_protein_sample(
         instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
-        RandomProteinSampleOutput: RandomProteinSampleOutput with sampled sequences.
+        RandomProteinSampleOutput: Sampled sequences in input order.
     """
+    # Reuse one seeded generator across the batch so each item advances the random state.
     rng = random.Random(config.seed)  # noqa: S311 -- not cryptographic
     scheme = config.codon_scheme
+    # Build the sampling distribution after applying stop-codon and residue exclusions.
     weights = amino_acid_weights(
         scheme,
         include_stop=config.allow_stop_codons,
@@ -203,6 +202,7 @@ def run_random_protein_sample(
     amino_acids = list(weights.keys())
     amino_acid_sampling_weights = list(weights.values())
 
+    # Replace only the masked positions, leaving the rest of each sequence in place.
     sampled = []
     for seq in inputs.sequences:
         chars = list(seq)

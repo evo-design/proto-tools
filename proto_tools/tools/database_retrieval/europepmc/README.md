@@ -37,8 +37,8 @@ Use search to find the paper behind a design fact, such as the study that report
 - Queries use Europe PMC syntax: combine terms with `AND`, `OR`, and `NOT`, quote phrases, and restrict fields with `TITLE:`, `ABSTRACT:`, `AUTH:`, `PUB_YEAR:2020`, or `PUB_YEAR:[2018 TO 2022]`.
 - Add `OPEN_ACCESS:y` to keep only papers whose full text `europepmc-fulltext` can fetch, or `HAS_FT:y` for any paper with full text in Europe PMC.
 - Add `SRC:PPR` to search preprints only, including bioRxiv and medRxiv. For a preprint, `published_pmid` gives the PMID of its journal version, when there is one.
-- Set `include_abstracts=False` for a compact hit list; each result's `total_count` reports how many records matched.
-- A query Europe PMC rejects, such as one with a syntax error, gets an `error` and no hits; the other queries still run.
+- Set `include_abstracts=False` for a compact hit list. Each result's `total_count` reports how many records matched.
+- A query Europe PMC rejects, such as one with a syntax error, gets an `error` and no hits. The other queries still run.
 - `paperclip-literature-*` covers the same PMC full text plus bioRxiv, medRxiv and arXiv, with line-numbered reading for citing evidence, but needs a `PAPERCLIP_API_KEY`. Use these tools when you have no key, and `ncbi-esearch` with `db="pubmed"` for PubMed's own query syntax and MeSH terms.
 
 ### Europe PMC Full Text (`europepmc-fulltext`)
@@ -51,7 +51,7 @@ Use full text to find and quote the passage, table row, or figure caption that s
 
 #### Usage Tips
 
-- Pass the `pmcid` of a search hit with `is_open_access=True`. A PMCID that is not in Europe PMC or not open access gets an `error` and no sections; the other articles are still read.
+- Pass the `pmcid` of a search hit with `is_open_access=True`. A PMCID that is not in Europe PMC or not open access gets an `error` and no sections. The other articles are still read.
 - Each section has a `kind` (`title`, `abstract`, `section`, `figure`, `table`) and a `heading` such as `Results > Binding assays` or `Table 2`, so a match can be cited by where it appears.
 - `document.text` joins every section into one string for searching, and the output exports to `txt` as well as `json`.
 - Reference lists are left out. Inline formulas are kept as plain text, so superscripts and subscripts run together (`10^12` reads as `1012`).
@@ -63,5 +63,5 @@ Use full text to find and quote the passage, table row, or figure caption that s
 
 These notes apply to both Europe PMC tools.
 
-- **Requires network access.** Every call is an HTTPS request to the Europe PMC REST API; no API key is needed.
-- **Runs in process on CPU.** There is no environment to build and no worker to start; runtime is dominated by remote retrieval.
+- **Requires network access.** Every call is an HTTPS request to the Europe PMC REST API. No API key is needed.
+- **Runs in process on CPU.** There is no environment to build and no worker to start. Runtime is dominated by remote retrieval.

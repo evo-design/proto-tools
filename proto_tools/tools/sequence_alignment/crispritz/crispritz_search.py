@@ -18,7 +18,7 @@ IUPAC_DNA = set("ACGTRYSWKMBDHVN")
 class CRISPRitzSearchInput(BaseToolInput):
     """Guide protospacers and a local reference genome to search.
 
-    ``guides`` contains protospacers only: do not append the PAM or CRISPRitz's
+    ``guides`` contains protospacers only. Do not append the PAM or CRISPRitz's
     placeholder ``N`` bases. All guides in one call must have the same length.
     RNA ``U`` is accepted and normalized to DNA ``T``. ``reference_fasta`` may
     name one FASTA file, including a multi-record NCBI ``.fna``, or a directory

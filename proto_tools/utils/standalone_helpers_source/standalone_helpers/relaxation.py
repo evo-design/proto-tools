@@ -2,8 +2,8 @@
 
 Shared continuous relaxation of a sequence state for gradient backends.
 
-One definition per array library, kept to the same formula: :func:`relaxed_sequence` for torch
-backends and :func:`relaxed_sequence_jax` for JAX ones. Neither is re-exported from the package
+The PyTorch :func:`relaxed_sequence` and JAX :func:`relaxed_sequence_jax` helpers
+use the same formula. Neither is re-exported from the package
 ``__init__`` and each imports its library lazily, so an environment that has only one of them
 can still import the package.
 """

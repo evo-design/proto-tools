@@ -1,7 +1,4 @@
-"""proto_tools/entities/ligands/utils.py.
-
-Utility functions for working with ligands.
-"""
+"""Validate ligands and look up molecular names and SMILES through PubChem."""
 
 from __future__ import annotations
 
@@ -64,6 +61,7 @@ def fetch_pubchem_txt(url: str) -> str | None:
             if resp.status_code == 200 and resp.text.strip():
                 result: str = resp.text.strip()
                 return result
+            # Retry rate limits and server errors with an increasing delay.
             if resp.status_code == 429 or resp.status_code >= 500:
                 time.sleep(2**attempt)
                 continue

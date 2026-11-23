@@ -139,10 +139,12 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     set_torch_seed(input_dict.get("seed"))
     operation = input_dict["operation"]
+    # Reject unknown operations before loading any weights
     valid_operations = {"activity", "stability", "gradient", "stability_gradient"}
     if operation not in valid_operations:
         raise ValueError(f"parade: unknown operation {operation!r}; valid: {sorted(valid_operations)}")
 
+    # Resolve or download the checkpoint, then load it once and reuse it across calls
     checkpoint_path = _resolve_checkpoint(input_dict)
     _model.load(
         checkpoint_path=checkpoint_path,
@@ -150,6 +152,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         verbose=bool(input_dict.get("verbose", False)),
     )
 
+    # Gradient paths take relaxed logits instead of sequences
     if operation == "stability_gradient":
         return _model.compute_stability_gradient(
             logits_list=input_dict["logits"],
@@ -172,6 +175,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
         )
 
+    # Scoring paths: activity per cell type, otherwise the stability log-ratio
     batch_size = max(1, int(input_dict.get("batch_size", 1)))
     count = len(input_dict["sequences"])
     logger.update_status(f"Scoring {count} sequence{'s' if count != 1 else ''}", level=logging.DEBUG)

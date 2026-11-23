@@ -1,7 +1,7 @@
-"""proto_tools/tools/testing/mock_jax_multi_gpu_tool/mock_jax_multi_gpu_tool.py.
+"""Test allocation, movement, and eviction with a two-GPU JAX mock.
 
-This is a minimal 2-GPU JAX-pattern tool designed for testing multi-device
-allocation, movement, and eviction with JAX semantics: model reload on
+A minimal 2-GPU JAX-pattern tool designed for testing multi-device
+allocation, movement, and eviction with JAX behavior including model reload on
 device change, no in-place .to().
 """
 

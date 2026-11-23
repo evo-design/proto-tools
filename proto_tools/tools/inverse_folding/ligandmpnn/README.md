@@ -65,4 +65,4 @@ These apply to every LigandMPNN tool in this toolkit (`ligandmpnn-sample`, `liga
 - **`fixed_positions` keeps the structure's numbering.** The model matches a fixed position by residue number, so no renumbering is needed. A position naming a residue read only as context is dropped with a warning rather than failing the run, since the model never redesigns it.
 
 - **A GPU is recommended.** LigandMPNN is a small message-passing model that also runs on CPU, but a GPU is much faster when designing or scoring many sequences.
-- **The non-protein context must be in the input structure.** LigandMPNN only conditions on ligands, nucleotides, or metals that are present in the supplied structure; if they are absent, it behaves like backbone-only ProteinMPNN.
+- **The non-protein context must be in the input structure.** LigandMPNN only conditions on ligands, nucleotides, or metals that are present in the supplied structure. If they are absent, it behaves like backbone-only ProteinMPNN.

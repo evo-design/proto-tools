@@ -120,9 +120,8 @@ class ComplexMSAs(BaseModel):
 class StructurePredictionInput(BaseToolInput):
     """Input object for structure prediction models.
 
-    This class provides a flexible interface for specifying one or more biological
-    complexes for structure prediction. After validation, always contains a list of
-    ``Complex`` instances.
+    Specify one or more biological complexes. Validation converts the input to a
+    list of ``Complex`` instances.
 
     Supports multiple input formats:
 
@@ -348,8 +347,7 @@ class StructurePredictionInput(BaseToolInput):
 class StructurePredictionConfig(BaseConfig):
     """Base configuration for structure prediction models.
 
-    This class provides common configuration parameters for all structure prediction
-    tools. Individual prediction models should inherit from this class and add
+    Structure prediction tools inherit these shared settings and add
     model-specific parameters.
 
     Attributes:
@@ -489,8 +487,7 @@ class MSAStructurePredictionConfig(StructurePredictionConfig):
 class StructurePredictionOutput(BaseToolOutput):
     """Output from structure prediction models.
 
-    This class encapsulates the results of structure prediction, containing predicted
-    3D structures for one or more input complexes.
+    Contains predicted 3D structures for one or more input complexes.
 
     Attributes:
         structures (list[Structure]): List of predicted structures, one per
@@ -499,7 +496,7 @@ class StructurePredictionOutput(BaseToolOutput):
             input complexes order.
 
     Note:
-        This class supports list-like operations for convenient access to individual
+        Supports list-like operations to access individual
         structures: indexing (``output[0]``), iteration (``for struct in output``),
         and length (``len(output)``).
     """

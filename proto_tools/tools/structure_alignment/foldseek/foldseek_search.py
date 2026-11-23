@@ -369,7 +369,7 @@ class FoldseekSearchConfig(BaseConfig):
 
     @model_validator(mode="after")
     def validate_mode_requirements(self) -> "FoldseekSearchConfig":
-        """Hard-error on missing required local fields; soft-warn on cross-mode misuse."""
+        """Reject missing required local fields and warn about settings for the other mode."""
         if self.search_mode == "local" and not self.local_db:
             raise ValueError("local_db is required when search_mode='local'")
 
@@ -584,7 +584,7 @@ def _submit(
     mode: str,
     session: requests.Session,
 ) -> str:
-    """Submit a structure to Foldseek; return the job ticket ID."""
+    """Submit a structure to Foldseek and return the job ticket ID."""
     files = {"q": ("query.pdb", structure_text, "chemical/x-pdb")}
     data = [("database[]", db) for db in databases] + [("mode", mode)]
     response = request_with_retry(

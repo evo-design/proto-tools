@@ -2,9 +2,9 @@
 
 Resolving which residues ProteinMPNN is allowed to redesign.
 
-A residue is redesignable unless the caller fixed it or the parser cannot read it. A CCD
-modification does not fix anything on its own; it only decides which annotations survive
-reconstruction and how a warning is worded.
+A residue is redesignable unless the caller fixed it or the parser cannot read it. CCD
+modifications affect which annotations survive reconstruction and how warnings are
+worded. They do not fix residue identities by themselves.
 
 Resolved in one place so the model, the output and the warnings cannot disagree.
 """
@@ -68,9 +68,9 @@ def resolve_constraints(
 ) -> ProteinMPNNConstraints:
     """Resolve the fixed positions for one input structure, warning about automatic ones.
 
-    A modified residue is kept fixed by default: the model either cannot read it, or reads it
-    as its parent amino acid and would otherwise design it away. A position the caller fixed
-    explicitly is honoured silently, since that is what they asked for.
+    Combine the caller's fixed positions with residues skipped by the parser. Send only
+    readable fixed positions to the worker, and preserve skipped residues during output
+    reconstruction. Modification annotations alone do not fix a position.
 
     Args:
         structure (Structure): The input structure.
@@ -95,7 +95,7 @@ def resolve_constraints(
         modified = {m.position for m in structure.get_chain(chain_id).modifications}
         excluded = set(skipped.get(chain_id, ()))
 
-        # A modification does not fix a position; only the caller or the parser does.
+        # Preserve positions fixed by the caller or excluded by the parser.
         effective_fixed = requested_fixed | excluded
         worker_fixed = requested_fixed & chain_readable
 

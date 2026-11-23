@@ -162,6 +162,7 @@ def run_progen2_score(
           are needed
     """
     logger.debug(f"Using local venv for ProGen2 scoring: {config.model_checkpoint}")
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "progen2",
         {

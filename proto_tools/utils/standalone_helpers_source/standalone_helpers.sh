@@ -2,11 +2,11 @@
 # ============================================================================
 # Shared shell helper functions for tool standalone setup scripts.
 #
-# This file is automatically copied to each tool's standalone/ directory
-# at runtime alongside the standalone_helpers/ Python package.
+# The parent makes this directory available on each tool subprocess's PATH
+# alongside the standalone_helpers/ Python package on PYTHONPATH.
 #
-# DO NOT EDIT copies in tools/*/standalone/ — they are overwritten.
-# Edit the source at: utils/standalone_helpers_source/standalone_helpers.sh
+# DO NOT EDIT copies in tools/*/standalone/.
+# Edit utils/standalone_helpers_source/standalone_helpers.sh.
 #
 # Usage in setup.sh:
 #   source standalone_helpers.sh
@@ -195,11 +195,11 @@ proto_resolve_weights_dir() {
 # germinal, and bioemu all read this one copy (~5.3 GB), so the version below is pinned in
 # one place (tests/style_consistency_tests/test_shared_weights_pins.py).
 #
-# The copy counts as complete when all 15 model files are present; a partial
-# extraction, or a copy whose files were since deleted, is downloaded again.
+# The copy is complete when all 15 model files are present. Download it again
+# if extraction was incomplete or files have since been deleted.
 # .params_complete records a verified copy, and is trusted only with its files.
 # Concurrent setups (any of those toolkits, on any node) take turns under
-# proto_with_lock: one downloads and extracts, the rest wait and find it complete.
+# proto_with_lock. One downloads and extracts while the others wait.
 #
 # Example:
 #   proto_ensure_af2_params
@@ -259,7 +259,7 @@ _proto_af2_params_fetch() {
 #
 # Stage Chai-1's weights into the chai1 toolkit's weights directory and set
 # CHAI1_WEIGHTS_DIR to it. chai1 and germinal both point CHAI_DOWNLOADS_DIR there,
-# so chai_lab never falls back to its own (flaky) downloader. Every file is
+# so chai_lab does not use its built-in downloader. Every file is
 # sha256-pinned, so both toolkits load exactly the same weights.
 #
 # Example:
@@ -312,7 +312,7 @@ proto_ensure_chai1_weights() {
 # from env vars, token file, and git-credentials. Exits with a clear error
 # message if access is denied.
 #
-# The probe file must be gated: HuggingFace serves a gated repo's README.md
+# The probe file must be gated. HuggingFace serves a gated repo's README.md
 # (and often its LICENSE) to anyone, so probing those passes without a token
 # or accepted terms. The default .gitattributes exists in every repo and is
 # gated along with the weights.
@@ -338,7 +338,7 @@ proto_check_gated_hf_repo() {
             "$HOME/.git-credentials" 2>/dev/null | head -1)" || true
     fi
 
-    # -L follows HF's 307 redirect (resolve/main -> resolve-cache CDN); without it
+    # -L follows HF's 307 redirect (resolve/main -> resolve-cache CDN). Without it
     # the probe sees 307 and a valid, authorized token is wrongly rejected.
     local http_code
     if [ -n "$hf_token" ]; then
@@ -389,8 +389,8 @@ proto_check_gated_hf_repo() {
 #
 # Download a Google Drive file by ID to <dest>, handling the >100MB
 # confirm interstitial (re-submits the hidden-field form to
-# drive.usercontent.google.com with cookies preserved). Self-contained:
-# uses only stdlib so it works inside setup.sh subprocesses where
+# drive.usercontent.google.com with cookies preserved). Uses only the standard
+# library so it works inside setup.sh subprocesses where
 # proto_tools is not on PYTHONPATH.
 #
 # Example:

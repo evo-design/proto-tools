@@ -50,9 +50,9 @@ METAL_BINDING_RESNAMES = "HIS HID HIE HIP CYS CYX GLU GLH GLN ASP ASH ASN MET"
 class Model(nn.Module):  # type: ignore[misc, unused-ignore]
     """Metal3D 3D-convolutional network.
 
-    ``kernel_size`` selects the architecture variant: 3 for the original Metal3D
-    weights, 4 for dEVA's retrained cat/clean checkpoints. conv5 always uses a
-    large filter to aggregate features over the whole box.
+    Use ``kernel_size=3`` for the original Metal3D weights or 4 for dEVA's
+    retrained cat/clean checkpoints. ``conv5`` always uses a large filter to aggregate
+    features over the whole box.
     """
 
     def __init__(self, kernel_size: int) -> None:
@@ -418,7 +418,7 @@ def _get_probability_mean(grid: np.ndarray, prot_centers: np.ndarray, pvalues: n
     """Average per-voxel probabilities onto each grid point from nearby voxel centers.
 
     For each grid point, averages ``pvalues`` over voxel centers within ``cutoff`` Angstroms
-    (up to 20 neighbors); points with no neighbor in range get 0.
+    (up to 20 neighbors). Points with no neighbor in range get 0.
     """
     tree = KDTree(prot_centers)
     probabilities = []

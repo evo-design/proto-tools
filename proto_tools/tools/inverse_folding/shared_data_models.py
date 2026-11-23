@@ -267,12 +267,11 @@ def unreadable_positions(
 def preserved_positions(
     readable: dict[str, list[int]], structure: Structure, selection: Any = None
 ) -> dict[str, list[int]]:
-    """Positions that will not be redesigned: the parser's skips plus the caller's own.
+    """Return positions preserved by the parser or fixed by the caller.
 
-    What :meth:`DesignedComplex.from_design` wants as ``fixed_positions``. Passing only the
-    parser's skips would make its fixed-position check vacuous, since those positions are by
-    definition absent from ``readable``, and would drop the annotation on a modified residue
-    the caller fixed deliberately.
+    Build ``fixed_positions`` for :meth:`DesignedComplex.from_design`. Include the caller's
+    fixed positions as well as parser exclusions so reconstruction checks fixed residues
+    and preserves their modification annotations.
 
     Args:
         readable (dict[str, list[int]]): Positions the model processes, per chain ID.
@@ -456,10 +455,9 @@ class InverseFoldingConfig(BaseConfig):
 def _surviving_modifications(entry: Any, readable: list[int] | None, fixed: list[int] | None) -> list[Any]:
     """Modification annotations that still describe the designed chain.
 
-    An annotation survives only where the input residue survives: a position the parser
-    excluded, or one the caller fixed. A freely redesigned position loses it even when the
-    model happens to return the same letter -- an unfixed MSE coming back as ``M`` is a
-    designed methionine, not the selenomethionine that was there.
+    Keep annotations at positions excluded by the parser or fixed by the caller. Remove
+    them at freely redesigned positions even if the model returns the same letter. For
+    example, an unfixed MSE returned as ``M`` is a designed methionine.
 
     Args:
         entry (Any): The input chain.
@@ -626,7 +624,9 @@ class DesignedComplex(Complex):
                 is not a polymer chain of ``input_structure``, or its length differs from that
                 chain's observed residues.
         """
+        # Start with the input chains so context and untouched residues retain their metadata.
         native = Complex.from_structure(input_structure, include_ligands=include_ligands).chains
+        # Reject sequences for non-polymer chains and designed chains with no sequence
         polymer_ids = {entry.id for entry in native if isinstance(entry, Chain)}
         unknown = sorted(set(sequences) - polymer_ids)
         if unknown:
@@ -634,10 +634,12 @@ class DesignedComplex(Complex):
         missing = sorted(designed - set(sequences))
         if missing:
             raise ValueError(f"{tool}: the model returned no sequence for designed chain(s) {missing}")
+        # Substitute each redesigned chain's sequence and pass every other entry through
         chains: list[Chain | Fragment] = []
         for entry in native:
             if isinstance(entry, Chain) and entry.id in sequences:
                 sequence = sequences[entry.id]
+                # Look up the positions this model reads, which must cover every redesigned chain
                 readable = (readable_positions or {}).get(entry.id)
                 if readable_positions is not None and readable is None:
                     raise ValueError(
@@ -654,7 +656,9 @@ class DesignedComplex(Complex):
                             "design cannot be placed back on the chain unless those agree. The rule "
                             "most likely no longer matches the installed version of the model."
                         )
+                    # Restore residues skipped by the parser around the model's designed positions.
                     sequence = _splice_design(entry.sequence, sequence, readable)
+                # Without a readable_positions rule, require one residue per input residue
                 elif len(sequence) != len(entry.sequence):
                     raise ValueError(
                         f"{tool}: the model returned {len(sequence)} residues for chain {entry.id}, "
@@ -663,6 +667,7 @@ class DesignedComplex(Complex):
                         "ones differs by model. This toolkit has not declared a readable_positions "
                         "rule, so the design cannot be placed back on the chain."
                     )
+                # Check fixed residues were kept and keep only modifications that still apply
                 chain_fixed = (fixed_positions or {}).get(entry.id) or []
                 if readable is not None:
                     _check_fixed_positions_honoured(entry, sequence, readable, chain_fixed, tool)
@@ -670,6 +675,7 @@ class DesignedComplex(Complex):
                 chains.append(Chain(id=entry.id, sequence=sequence, entity_type="protein", modifications=preserved))
             else:
                 chains.append(entry)
+        # Flag the chains that were designed, aligned with the chain list
         flags = [isinstance(entry, Chain) and entry.id in designed for entry in chains]
         return cls(chains=chains, designed=flags, **fields)
 
@@ -735,7 +741,7 @@ class InverseFoldingOutput(BaseToolOutput):
             structure. Entry ``i`` holds all complexes for input structure ``i``.
     """
 
-    # SerializeAsAny covers model_dump only; concrete tools narrow this for model_validate.
+    # Concrete tools narrow the type for validation. SerializeAsAny controls serialization.
     design_sets: list[SerializeAsAny[DesignSet]] = Field(
         title="Design Sets",
         description="One DesignSet per input structure, in input order.",
@@ -780,7 +786,7 @@ class InverseFoldingOutput(BaseToolOutput):
                 out_file = path / f"input_{i}.fasta"
                 with open(out_file, "w") as f:
                     for j, design in enumerate(design_set.complexes):
-                        # Biopolymers as sequences, ligand Fragments as SMILES; header convention `_chain_` vs `_ligand_` lets consumers filter by type.
+                        # Write polymer sequences and ligand SMILES with `_chain_` or `_ligand_` headers.
                         for k, entry in enumerate(design.chains):
                             entry_id = entry.id if entry.id is not None else chain_label(k)
                             if isinstance(entry, Chain):

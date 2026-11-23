@@ -254,7 +254,7 @@ def run_uniprot_search(
         inputs (UniProtSearchInput): Free-text or query-syntax searches.
         config (UniProtSearchConfig): Organism, taxon and review filters, result size and
             whether to include sequences.
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         UniProtSearchOutput: One result per query, hits in UniProt's relevance order.

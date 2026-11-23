@@ -201,7 +201,7 @@ def run_ncbi_esearch(
             max results.
         config (NCBIFetchConfig): NCBI API key and email settings.
 
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         NCBIEsearchOutput: Matching NCBI record IDs and the sanitized request URL.

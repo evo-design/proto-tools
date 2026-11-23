@@ -2,18 +2,18 @@
 
 The model reads the sequence around a transcription start site. Submit at least
 9,198 bp with the TSS at least 4,599 bp from each end, plus ``tss_index`` unless
-the sequence is exactly 9,198 bp. Longer input is welcome: each model's
+the sequence is exactly 9,198 bp. For longer inputs, each model's
 ``bio_spec.recommended_flank_bp`` says how many bp to fetch on each side of the
-TSS, and how much it reads is its own. The part of the submission the model
+TSS. The model determines how much of the submitted sequence it reads. The part of the submission the model
 used is echoed back as ``scored_window``. A TSS too close to either end is
 rejected rather than padded.
 
-Two properties are easy to get wrong:
+Two details matter when preparing the input.
 
 * ``description`` is conditioning text, not a label. It is fed to the model, so
   its wording changes the predicted value — hold it fixed when comparing runs.
 * The sequence is never reverse-complemented. Submit minus-strand genes in
-  transcript orientation; the opposite strand returns a confident, wrong number.
+  transcript orientation. The opposite strand returns a confident, wrong number.
 """
 
 from __future__ import annotations

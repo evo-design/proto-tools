@@ -82,7 +82,7 @@ SPLICE_CHANNEL_INDEX: dict[str, int] = {
 
 
 class SpliceTransformerProbabilityTerm(DifferentiableTerm):
-    """One differentiable SpliceTransformer quantity: mean predicted probability for a channel.
+    """Mean predicted probability for one SpliceTransformer channel.
 
     Whether more probability is wanted depends on whether the channel is a target or an
     off-target, and how much it matters relative to other channels is a weight — both are goals
@@ -151,7 +151,7 @@ class SpliceTransformerProbabilityTerm(DifferentiableTerm):
 
 
 class SpliceTransformerGradientCandidate(BaseModel):
-    """One candidate: a relaxed target region between its two fixed flanking contexts.
+    """One relaxed target region between its two fixed flanking contexts.
 
     SpliceTransformer scores a 1,000 bp target region in the presence of 4,000 bp of flanking
     context on each side. The contexts belong to the candidate, so a batch may score different
@@ -209,14 +209,14 @@ class SpliceTransformerGradientCandidate(BaseModel):
 
 
 class SpliceTransformerGradientInput(GradientInput):
-    """Input for the SpliceTransformer gradient tool: one or many relaxed candidates.
+    """One or more relaxed candidates for the SpliceTransformer gradient tool.
 
     Attributes:
         inputs (list[SpliceTransformerGradientCandidate]): One target-and-contexts bundle per
             candidate.
         temperature (float | None): Softmax temperature, shared by every candidate. The default
             ``1.0`` reads each state as unnormalized and applies ``softmax(logits / T)``,
-            returning logit-space gradients; ``None`` reads them as probabilities and returns
+            returning logit-space gradients. ``None`` reads them as probabilities and returns
             probability-space gradients.
     """
 
@@ -244,7 +244,7 @@ class SpliceTransformerGradientInput(GradientInput):
         Args:
             probabilities (Any): ``(TARGET_LENGTH, 4)`` strictly positive rows.
             temperature (float): Positive, finite temperature the matrix is converted at.
-            fields (Any): This candidate's remaining fields; must include ``left_context`` and
+            fields (Any): This candidate's remaining fields, which must include ``left_context`` and
                 ``right_context``.
 
         Returns:
@@ -310,7 +310,7 @@ class SpliceTransformerGradientSampleMetrics(Metrics):
 
 
 class SpliceTransformerGradientOutput(GradientOutput):
-    """SpliceTransformer channel-probability output; gradients are optional in forward-only mode.
+    """SpliceTransformer channel probabilities and requested gradients. Gradients are omitted in forward-only mode.
 
     Attributes:
         results (list[SpliceTransformerGradientResult]): One per input candidate, in input order,
@@ -332,10 +332,10 @@ class SpliceTransformerGradientConfig(GradientConfig):
         gradient_terms (list[SpliceTransformerProbabilityTerm]): Channel-and-position quantities
             to differentiate.
         soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
-            (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
+            (1). Recommended to leave at 1.0 in almost all use cases. Exposed for research
             and ColabDesign parity. See
             :class:`~proto_tools.utils.gradient.models.RelaxationConfig`.
-        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
+        hard (float): Inherited straight-through coefficient. A value of 1 forwards a hard one-hot.
         compute_gradient (bool): Run backward pass and return gradient. Set ``False`` for
             forward-only objective scoring.
         device (str): Device to run the model on.

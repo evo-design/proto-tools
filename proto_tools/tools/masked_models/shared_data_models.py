@@ -1,7 +1,6 @@
 """proto_tools/tools/masked_models/shared_data_models.py.
 
-Contains base schemas for embeddings, scoring, and sampling operations
-shared across all masked/bidirectional protein language models.
+Shared schemas for protein masked-model embeddings, scoring, and sampling.
 """
 
 import csv
@@ -176,9 +175,9 @@ class MaskedModelEmbeddingsConfig(BaseConfig):
 class SequenceEmbedding(BaseModel):
     """Per-sequence embedding data bundle.
 
-    Bundles all per-sequence outputs (embedding, attention mask, logits)
-    into a single object so the caching/dedup system in tool_registry can correctly
-    expand all parallel fields together via ``iterable_output_field="results"``.
+    Keeps the embedding, attention mask, and logits for one sequence together.
+    The registry can then cache and deduplicate them as one result through
+    ``iterable_output_field="results"``.
 
     Follows the same pattern as ``MaskedModelScoringMetrics`` for scoring tools.
 

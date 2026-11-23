@@ -30,8 +30,8 @@ ESMCEmbeddingsInput = MaskedModelInput
 class ESMCEmbeddingsOutput(MaskedModelEmbeddingsOutput):
     """Output from ESM C protein language model embeddings/logits extraction.
 
-    This class encapsulates the results of ESM C inference, providing sequence
-    embeddings, per-position logits, and attention masks for downstream analysis.
+    Contains sequence embeddings, per-position logits, and attention masks for
+    downstream analysis.
 
     Inherits from ``MaskedModelEmbeddingsOutput``.
 
@@ -158,6 +158,7 @@ def run_esmc_embeddings(
         >>> print(f"Embedding dimension: {len(result.results[0].mean_embedding)}")
     """
     logger.debug(f"Using local for ESM C inference: {config.model_checkpoint}")
+    # Run inference in the toolkit's isolated environment.
     outputs = ToolInstance.dispatch(
         "esmc",
         {

@@ -1,10 +1,10 @@
-"""Compressed array utilities for IPC deserialization.
+"""Decompress arrays returned by tool subprocesses.
 
 Provides decompression of arrays compressed by
 ``standalone_helpers.compress_array()``. The compression side lives in
 ``standalone_helpers_source/standalone_helpers/compression.py`` (published to
-each tool's isolated subprocess environment); the decompression side lives here
-in the main ``proto_tools`` package (parent process).
+each tool's isolated subprocess environment). Decompression runs here
+in the parent process.
 """
 
 from __future__ import annotations
@@ -58,18 +58,19 @@ def decompress_array(compressed: dict[str, Any]) -> Any:
     dtype = compressed["dtype"]
     shape = tuple(compressed["shape"])
 
+    # Decode the transport string, decompress the bytes, and restore the array shape.
     raw_compressed = base64.b85decode(encoded.encode("ascii"))
     raw_bytes = zlib.decompress(raw_compressed)
     arr = np.frombuffer(raw_bytes, dtype=dtype).reshape(shape)
+    # Copy the buffer so callers receive a writable, contiguous array.
     return arr.copy()
 
 
 def decompress_result(obj: Any, *, to_list: bool = False) -> Any:
     """Recursively walk a result structure and decompress any compressed arrays.
 
-    Leaves non-compressed values (primitives, plain dicts, plain lists)
-    unchanged, so this function is safe to call on results that were
-    produced before compression was enabled (backward compatible).
+    Leave uncompressed values unchanged. This also accepts results produced
+    before array compression was enabled.
 
     Args:
         obj (Any): Any JSON-deserialized object (dict, list, or primitive).

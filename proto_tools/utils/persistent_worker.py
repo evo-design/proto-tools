@@ -1,7 +1,6 @@
-"""proto_tools/utils/persistent_worker.py.
+"""Keep a tool subprocess alive between calls so its model can be reused.
 
-Manages a subprocess that stays alive between calls, communicating via
-stdin/stdout JSON-line protocol. This avoids reloading models on every call.
+The parent and worker exchange JSON-line messages over stdin and stdout.
 """
 
 import collections
@@ -71,10 +70,10 @@ def _verbose_to_log_level(verbose: int) -> int:
 def _apply_verbose_to_console_handlers(verbose: int) -> None:
     """Set every console ``StreamHandler`` reachable from ``proto_tools`` to the verbose-mapped level.
 
-    Filters live on the *handlers*, not on the originating logger, so file
-    handlers and :class:`SpinnerFromLogsHandler` continue to receive records at
-    every level. Walks ``proto_tools`` and ``root`` since ``setup_logging``
-    attaches its console handler to root.
+    Change console handlers without filtering the originating logger, so file
+    handlers and :class:`SpinnerFromLogsHandler` still receive every level.
+    Check both ``proto_tools`` and ``root`` because ``setup_logging`` attaches
+    its console handler to the root logger.
     """
     target_level = _verbose_to_log_level(verbose)
     for logger_name in ("proto_tools", ""):
@@ -141,10 +140,10 @@ def _reemit_tagged_line(
 ) -> None:
     r"""Parse one ``\x00LOG\x00<json>\n`` line and re-emit it on the parent logger.
 
-    On JSON parse failure, the line is treated as untagged via
-    :func:`_handle_raw_stderr_line` with ``raw_tee=False`` (defensive fallback;
-    a malformed tag is almost certainly noise that happened to start with the
-    sentinel — don't show it to the user even at verbose level 2).
+    If JSON parsing fails, pass the line to :func:`_handle_raw_stderr_line`
+    as untagged output with ``raw_tee=False``. It may be ordinary output
+    that happens to start with the sentinel. Retain it in the diagnostic
+    buffer without displaying it, including at verbosity level 2.
 
     Args:
         parent_logger (logging.Logger): Logger under which to re-emit
@@ -502,10 +501,9 @@ def _build_subprocess_env(
 ) -> dict[str, str]:
     """Build a clean env dict for subprocess execution.
 
-    Uses a **whitelist** approach: starts with an empty dict and only
-    copies explicitly allowed variables from the parent environment.
-    This prevents conda, jupyter, mamba, and other host-specific vars
-    from leaking into isolated tool venvs.
+    Start with an empty dictionary and copy only allowed variables from the
+    parent. This keeps host-specific conda, Jupyter, and mamba settings out
+    of isolated tool environments.
 
     Args:
         device (str): Target device (``"cpu"``, ``"cuda"``, ``"cuda:0"``, etc.).
@@ -519,7 +517,8 @@ def _build_subprocess_env(
             any caller that needs to override a specific variable for one
             worker subprocess.
         pin_visible_devices (bool): Restrict ``CUDA_VISIBLE_DEVICES`` to ``device``'s physical GPU(s) (local cuda:0..N-1) instead of the parent's value. For tools whose runtime picks a GPU itself.
-        toolkit (str | None): Toolkit the subprocess runs, which names its JAX compilation cache directory. ``None`` leaves the cache off.
+        toolkit (str | None): Name of the toolkit running in the subprocess, used to choose its
+            JAX compilation cache directory. If ``None``, leave the cache disabled.
     """
     from proto_tools.utils.foundation_env import active_foundation_bin
     from proto_tools.utils.system_info import capture_subprocess_env
@@ -537,11 +536,9 @@ def _build_subprocess_env(
         if val is not None:
             env[var] = val
 
-    # Isolate the venv from the host user-site (~/.local/lib/pythonX/site-packages), which the
-    # interpreter adds to sys.path by DEFAULT even inside a venv — the whitelist above can't stop
-    # it because it's interpreter behavior, not an inherited env var. A polluted user-site (e.g. a
-    # broken `transformers` missing `huggingface_hub`) otherwise shadows the venv's own packages
-    # and breaks the isolated tool. This is the env-var equivalent of `python -s`.
+    # Disable user-site packages explicitly. Python can add them to sys.path even inside
+    # the venv, allowing incompatible host packages to shadow the tool's dependencies.
+    # Filtering inherited variables alone does not prevent this. This matches python -s.
     env["PYTHONNOUSERSITE"] = "1"
 
     # Ensure HF_TOKEN is explicitly set even if the token was stored
@@ -755,9 +752,9 @@ def _build_subprocess_env(
 
 
 class PersistentWorker:
-    """A long-running subprocess that accepts JSON requests on stdin and.
+    """Keep a tool subprocess alive to exchange JSON requests and responses.
 
-    returns JSON responses on stdout.
+    Requests arrive on stdin and responses return on stdout.
 
     The subprocess runs ``_worker_bootstrap.py`` inside a tool's venv,
     which discovers and imports the tool's standalone script module. The
@@ -779,14 +776,14 @@ class PersistentWorker:
         Effective verbosity on the 0-3 scale (already merged with
         ``PROTO_WORKER_VERBOSE`` by the caller). Drives both the parent-side
         log level on ``proto_tools.worker.{toolkit}`` and whether untagged
-        subprocess stderr is teed to the parent's ``sys.stderr``. Latched at
-        construction time so the drain thread never races a mid-run env-var
-        toggle.
+        subprocess stderr is also written to the parent's ``sys.stderr``. Read
+        this once at construction so changes to environment variables cannot
+        alter the drain thread's setting during a run.
     env_overrides : dict | None
         Caller-supplied env vars applied as the final layer when the worker
         subprocess is spawned. Used by ToolPool's CPU fan-out path to pin
-        per-worker thread budgets (``OMP_NUM_THREADS`` etc.); harmless to
-        any other caller.
+        per-worker thread budgets such as ``OMP_NUM_THREADS``. Other callers
+        can use it to override individual variables too.
     """
 
     def __init__(
@@ -971,10 +968,10 @@ class PersistentWorker:
         return self._read_response_deadline(request_id, timeout)
 
     def _read_response_blocking(self, request_id: str) -> dict[str, Any]:
-        """Legacy buffered read path (unbounded); used only when no timeout is set."""
+        """Read a buffered response without a deadline when no timeout is set."""
         assert self._process is not None and self._process.stdout is not None
         # Header is PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path> (temp-file payload).
-        # proto_tools own logs route to stderr; anything else on stdout is third-party noise we skip.
+        # Proto-tools logs go to stderr. Skip unrelated stdout until a response header arrives.
         while True:
             header_line = self._process.stdout.readline()
             if not header_line:
@@ -1006,18 +1003,18 @@ class PersistentWorker:
         return self._decode_body(request_id, response_bytes)
 
     def _read_response_deadline(self, request_id: str, timeout: int) -> dict[str, Any]:
-        """Deadline-bounded raw-fd read: the entire wait for a response is capped at *timeout*.
+        """Read a response from stdout while enforcing the request deadline.
 
-        Reads raw bytes off the stdout fd (not the buffered text stream, which is select-unsafe)
-        and frames the protocol itself, so a worker that emits native fd-1 noise and then stalls
-        still trips the timeout instead of blocking forever in readline().
+        Read raw bytes and identify response headers directly. Using ``select``
+        with the buffered text stream could block inside ``readline()`` after
+        partial third-party output, preventing the timeout from taking effect.
         """
         assert self._process is not None and self._process.stdout is not None
         fd = self._process.stdout.fileno()
         buf = bytearray()
 
-        # Phase 1: wait for the PROTO_* header, skipping noise lines. Compute happens here, and so
-        # do first-load weight downloads, which the deadline does not charge while they progress.
+        # Wait for the response header while computation or initial downloads run.
+        # Skip unrelated lines and pause the execution deadline while downloads progress.
         deadline = self._deadline = ProgressDeadline(timeout, self._download_dirs, label=self.toolkit)
         header_line = None
         while header_line is None:
@@ -1027,7 +1024,7 @@ class PersistentWorker:
                 del buf[: nl + 1]
                 if line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
                     header_line = line
-                continue  # noise line, or already-buffered bytes still to scan
+                continue  # Scan the remaining buffered bytes before waiting for more.
             deadline.tick()
             if deadline.expired():
                 raise TimeoutError(
@@ -1055,8 +1052,8 @@ class PersistentWorker:
                 f"for request {request_id} ({self._crash_context()})"
             ) from exc
 
-        # Phase 2: drain the body. Compute is done, so a fresh short grace window bounds the
-        # transfer without risking killing a finished worker that produced a large result.
+        # Computation is finished. Allow a separate short window to transfer the response body,
+        # including large results that arrive just before the execution deadline.
         body_deadline = time.monotonic() + _BODY_GRACE_SECONDS
         while len(buf) < json_length:
             remaining = body_deadline - time.monotonic()
@@ -1111,13 +1108,14 @@ class PersistentWorker:
     def _request_heartbeat(self, request_id: str, *, watch_downloads: bool = False) -> Iterator[None]:
         """Log a WARNING for as long as a request stays in flight past the heartbeat interval.
 
-        A background daemon thread wakes every ``interval`` seconds and, while the request is
-        still pending, emits a WARNING with elapsed time. This is the only live signal a wedged
-        inference / model load produces in prod, where proto_tools INFO/DEBUG are dropped and the
-        worker itself is silent. While weights are downloading, the warning says so instead of
-        suggesting a wedge: the request's deadline measures that, or, for a request with no timeout
-        and so no deadline (``watch_downloads``), the heartbeat watches the download folders itself.
-        Disabled when the interval is <= 0.
+        A daemon thread reports elapsed time every ``interval`` seconds until
+        the request finishes. This keeps long or stalled model loads and
+        inference visible when INFO and DEBUG logs are hidden.
+
+        Report active weight downloads separately, using the request deadline
+        to track them. When no timeout is set, ``watch_downloads`` checks the
+        download directories instead. An interval of 0 or less disables the
+        heartbeat.
         """
         interval = _heartbeat_interval_seconds()
         if interval <= 0:
@@ -1167,12 +1165,11 @@ class PersistentWorker:
     def stop(self) -> None:
         """Terminate the worker and all of its child processes.
 
-        Never raises. A worker that ignores SIGTERM then SIGKILL is stuck in an
-        uninterruptible kernel sleep (D-state) — typically a wedged GPU/CUDA driver
-        call — and cannot be reaped from the parent; the OS reaps it once the syscall
-        returns or the container exits. Propagating the reap ``TimeoutExpired`` would
-        mask the caller's real error and abort the run, so the
-        unreapable process is logged and abandoned instead.
+        Never raise during cleanup. A worker that remains after SIGTERM and
+        SIGKILL is in uninterruptible kernel sleep, often inside a GPU driver
+        call. The parent cannot reap it until the system call returns or the
+        container exits. Log that condition rather than letting cleanup
+        ``TimeoutExpired`` replace the caller's original error.
         """
         if self._process is not None:
             t0 = time.monotonic()

@@ -100,7 +100,7 @@ def _list_available() -> None:
 
 
 def _resolve_targets(args: argparse.Namespace) -> list[str]:
-    """Combine positional dataset args + ``--preset`` into the final list."""
+    """Combine positional dataset arguments and ``--preset`` into the final list."""
     targets: list[str] = []
     if args.preset:
         if args.preset not in PRESETS:
@@ -174,7 +174,7 @@ def _ensure_mmseqs_on_path() -> None:
     """Build the mmseqs2 toolkit env if needed and prepend its bin to PATH.
 
     Idempotent. ``ToolInstance.ensure_ready()`` is a no-op when the env already
-    exists; first call builds it (~minutes). The bin prepend is process-local
+    exists. The first call builds it, which can take minutes. The bin prepend is process-local
     (doesn't leak beyond this script invocation) and only adds the toolkit's
     bin, so system utilities (``tar``, ``mv``, etc.) resolve unchanged.
     """
@@ -190,7 +190,7 @@ def _ensure_mmseqs_on_path() -> None:
 
 
 def _provision_each(targets: list[str], *, workdir: Path | None, force: bool) -> int:
-    """Provision each dataset; abort on first failure with a clear error."""
+    """Provision each dataset, stopping with a clear error on the first failure."""
     for name in targets:
         try:
             provision(name, workdir=workdir, force=force)

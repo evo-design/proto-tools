@@ -6,13 +6,13 @@ A gradient tool returns each requested scalar's raw value and gradient, with no 
 or loss shaping applied. This module combines a selection of them into one objective, keeping
 ``ObjectiveResult.gradient`` the gradient of ``ObjectiveResult.objective_loss``.
 
-Everything here depends on the term models; the goals themselves do not, and live in
+Composition depends on the term models. The goals are independent and live in
 :mod:`proto_tools.utils.gradient.goals`.
 
 NumPy and plain Python only, no PyTorch, so composition runs in the main process.
 
-Shapes are written ``(L, V)``: relaxed input positions by vocabulary columns, matching the
-gradients the tool returned.
+Shapes use ``(L, V)`` for relaxed input positions by vocabulary columns, matching
+the gradients returned by the tool.
 """
 
 from __future__ import annotations
@@ -45,17 +45,15 @@ WeightsArgument = Mapping[TermKey, float | None] | Sequence[float | None]
 class TermContribution(BaseModel):
     """What one term contributed to a composed objective.
 
-    This is what composition did with one term, not a restatement of what the term was. The raw
-    value stays on the :class:`TermGradient` it came from, and the goal stays with the caller who
-    supplied it; what is recorded here is the loss it produced, the coefficient its gradient was
-    scaled by, and how much of the objective's gradient it accounts for.
+    Record the term's loss, the coefficient applied to its gradient, and the norm of its
+    weighted contribution. The raw value stays on the original :class:`TermGradient`,
+    and the caller keeps the goal used to transform it.
 
-    ``term`` serializes duck-typed, so a concrete term's selectors survive a dump:
-    ``{"id": "activity", "cell_type": "HepG2"}``, not just the id. Reading one back is a
-    different matter — the annotation is the base class, so validation builds *that*, and the
-    base forbids unknown fields, which makes a dumped selector a loud ``ValidationError`` rather
-    than a silently dropped one. Restoring concrete terms needs the tool's own narrowed model, as
-    :class:`TermGradient` does; nothing here keeps a registry of term classes to guess from.
+    Serialization preserves a concrete term's selectors, such as
+    ``{"id": "activity", "cell_type": "HepG2"}``. Validation uses the annotated base
+    class, however, which rejects those extra selector fields with ``ValidationError``.
+    Restoring a concrete term requires the tool's narrowed model, as in
+    :class:`TermGradient`. There is no registry here to choose a term class automatically.
 
     Attributes:
         term (SerializeAsAny[DifferentiableTerm]): The quantity this describes, as it was
@@ -76,7 +74,7 @@ class TermContribution(BaseModel):
 
 
 class ObjectiveResult(BaseModel):
-    """One composed objective: its scalar loss and the gradient that minimizes it.
+    """The scalar loss and gradient of a composed objective.
 
     The pair satisfies ``objective_loss = sum(w_i * f_i(v_i))`` and
     ``gradient = sum(w_i * f_i'(v_i) * grad(v_i))``, so the gradient is exactly the derivative of
@@ -413,7 +411,7 @@ def compose_terms(
     if len(shapes) > 1:
         raise ValueError(f"term gradients disagree in shape: {sorted(shapes)}; they must share one coordinate system")
 
-    # Matching shapes are not enough: the gradients must be derivatives w.r.t. the same thing
+    # Check that the gradients refer to the same differentiated input.
     _reject_incompatible(gradients, strict=strict)
 
     # Initialize the running objective and its gradient (L, V)
@@ -428,7 +426,7 @@ def compose_terms(
         if weight < 0.0 or not math.isfinite(weight):
             raise ValueError(f"weight for term {answer.term!r} must be finite and non-negative, got {weight}")
 
-        # Evaluate the goal at the raw scalar value: its loss and its derivative
+        # Evaluate the goal's loss and derivative at the raw scalar value.
         term_loss = goal.loss(answer.term_value)
         coefficient = goal.dloss_dvalue(answer.term_value)
         if not math.isfinite(term_loss) or not math.isfinite(coefficient):

@@ -954,8 +954,8 @@ def run_bindcraft_design(
     """Run the BindCraft binder-design pipeline against a target.
 
     Args:
-        inputs (BindCraftInput): Target + binder spec.
-        config (BindCraftConfig): Advanced settings + ``filter_overrides``.
+        inputs (BindCraftInput): Target structure and binder specification.
+        config (BindCraftConfig): Advanced settings and ``filter_overrides``.
         instance (Any): Optional ``ToolInstance`` for persistent execution.
 
     Returns:
@@ -963,7 +963,7 @@ def run_bindcraft_design(
     """
     logger.debug("Dispatching BindCraft design pipeline (target_chain=%s)", inputs.target_chain)
 
-    # Materialize the target Structure to a tempfile for the standalone to read.
+    # Write the target structure to a temporary file for the standalone worker.
     with inputs.target_pdb.temp_file() as target_pdb_path:
         payload: dict[str, Any] = {
             "operation": "design",
@@ -987,6 +987,7 @@ def run_bindcraft_design(
 
         result = ToolInstance.dispatch("bindcraft", payload, instance=instance, config=config)
 
+    # Attach the returned confidence metrics to each accepted complex.
     designs: list[BindCraftDesign] = []
     for raw in result["designs"]:
         metrics = BindCraftMetrics(**raw["metrics"])

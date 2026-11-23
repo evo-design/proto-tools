@@ -247,7 +247,7 @@ def run_europepmc_search(
     Args:
         inputs (EuropePMCSearchInput): Free-text or query-syntax searches.
         config (EuropePMCSearchConfig): Result size and whether to include abstracts.
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         EuropePMCSearchOutput: One result per query, hits in Europe PMC's relevance order. A query
@@ -349,7 +349,7 @@ def _authors(record: dict[str, Any]) -> list[str]:
 
 
 def _item_error(response: requests.Response, operation: str) -> str | None:
-    """Return why a rejected item (HTTP 4xx other than 429) has no data; raise for any other failure.
+    """Return why a rejected item (HTTP 4xx other than 429) has no data. Raise for any other failure.
 
     Args:
         response (requests.Response): Response to check.

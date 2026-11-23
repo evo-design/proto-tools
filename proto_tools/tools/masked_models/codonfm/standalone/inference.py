@@ -303,13 +303,13 @@ class CodonFMModel:
         from src.data.metadata import MetadataFields
         from tqdm import tqdm
 
-        # Proto's column order, not the tokenizer's: codon_token_ids below carries the mapping,
-        # so every gather keyed off it is proto-ordered on both the input and the gradient side.
+        # Map Proto's codon columns to tokenizer IDs so inputs and gradients use the same order.
         codons = list(DNA_CODONS)
         n_codons_vocab = len(codons)
         missing = [codon for codon in codons if codon not in self.tokenizer.encoder]
         if missing:
             raise ValueError(f"codonfm: tokenizer is missing codons {missing}")
+        # Check the relaxed sequence is a non-empty L x 64 matrix before touching the model
         if not logits_list:
             raise ValueError("codonfm: compute_gradient requires at least one codon position")
         if any(len(row) != n_codons_vocab for row in logits_list):
@@ -318,6 +318,7 @@ class CodonFMModel:
         self.to_device(device)
         dev = torch.device(device)
 
+        # Collect the embedding table and the special-token ids the assembly below needs
         embed_layer = self._embedding_layer()
         weight = embed_layer.word_embeddings.weight
         codon_token_ids = torch.tensor([self.tokenizer.encoder[c] for c in codons], device=dev)
@@ -334,12 +335,15 @@ class CodonFMModel:
             codon_idx = probs.argmax(dim=-1).detach()
             residue_token_ids = codon_token_ids[codon_idx].detach()
 
+            # Build the soft/hard blend, which is the relaxed sequence forwarded through the model
             x = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
 
+            # Mix each position's embedding from the 64 codon rows, weighted by the blend
             codon_weight = weight[codon_token_ids]
             residue_embeddings = x @ codon_weight
             special_embeddings = weight[torch.tensor([cls_id, sep_id], device=dev)]
 
+            # Wrap the codons in the CLS and SEP embeddings
             raw_embeddings = torch.cat(
                 (special_embeddings[0:1], residue_embeddings, special_embeddings[1:2]),
                 dim=0,
@@ -350,15 +354,18 @@ class CodonFMModel:
             padding = len(id_row) - raw_embeddings.shape[0]
             if padding:
                 raw_embeddings = torch.cat((raw_embeddings, weight[pad_id].expand(padding, -1)), dim=0)
+            # Apply the norm and dropout the embedding layer would have applied to a token lookup
             input_embeddings = embed_layer.dropout(embed_layer.post_ln(raw_embeddings)).unsqueeze(0)
             token_ids = torch.tensor(id_row, device=dev, dtype=torch.long).unsqueeze(0)
             attention_mask = torch.tensor(mask_row, device=dev, dtype=torch.long).unsqueeze(0)
 
+            # Codon positions sit one past CLS; keep the mask embedding out of the graph
             codon_positions = torch.arange(1, sequence_length + 1, device=dev)
             seq_len = input_embeddings.shape[1]
             pos_idx = torch.arange(seq_len, device=dev)
             mask_emb = embed_layer.dropout(embed_layer.post_ln(weight[mask_id])).detach()
 
+            # Walk the sequence in chunks, masking one codon position per row of the chunk
             ie_grad = torch.zeros_like(input_embeddings) if backprop else None
             total_loss_val = 0.0
             for start in tqdm(
@@ -371,6 +378,7 @@ class CodonFMModel:
                 chunk_pos = codon_positions[start:end]
                 chunk_len = end - start
 
+                # Replace the masked position of each row with the mask embedding and its token id
                 chunk_masked = pos_idx.unsqueeze(0) == chunk_pos.unsqueeze(1)
                 ie_chunk = input_embeddings.detach().requires_grad_(True) if backprop else input_embeddings
                 chunk_input = torch.where(
@@ -383,6 +391,7 @@ class CodonFMModel:
                 chunk_token_ids[chunk_idx, chunk_pos] = mask_id
                 chunk_attention = attention_mask.expand(chunk_len, -1)
 
+                # Override the embedding lookup so the soft embeddings, not the ids, reach the model
                 handle = embed_layer.register_forward_hook(lambda _m, _i, _o, ci=chunk_input: ci)
                 try:
                     outputs = self.inference.model(
@@ -394,11 +403,13 @@ class CodonFMModel:
                 finally:
                     handle.remove()
 
+                # Score each masked position against the codon the relaxed sequence currently holds
                 pred = outputs.logits[chunk_idx, chunk_pos, :]
                 labels = token_ids[0, chunk_pos]
                 loss_sum = F.cross_entropy(pred, labels, reduction="sum")
                 total_loss_val += loss_sum.item()
 
+                # Accumulate this chunk's share of the mean NLL gradient on the input embeddings
                 if backprop:
                     (loss_sum / sequence_length).backward()  # type: ignore[no-untyped-call, unused-ignore]
                     ie_chunk_grad = ie_chunk.grad
@@ -413,6 +424,7 @@ class CodonFMModel:
         if backprop:
             if ie_grad is None:
                 raise RuntimeError("codonfm: missing accumulated input-embedding gradient")
+            # Carry the embedding gradient back through the relaxation onto the input codon logits
             (x_grad,) = torch.autograd.grad(input_embeddings, seq_dist, grad_outputs=ie_grad)
             gradient_value = x_grad.detach().cpu().tolist()
 
@@ -544,10 +556,12 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
             and all(base in alphabet for base in sequence)
         )
 
+    # Sequence operations each take a non-empty list of codon-aligned sequences
     if operation in {"fitness", "embeddings", "sample"}:
         sequences = input_dict.get("sequences")
         if not isinstance(sequences, list) or not sequences or not all(valid_sequence(seq) for seq in sequences):
             raise ValueError(f"codonfm: {operation} requires non-empty, codon-aligned {alphabet} sequences")
+    # Scoring takes mutations, each a sequence plus a codon position that must fall inside it
     elif operation == "score":
         mutations = input_dict.get("mutations")
         if not isinstance(mutations, list) or not mutations or not all(isinstance(item, dict) for item in mutations):
@@ -560,6 +574,7 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
                 raise ValueError("codonfm: score requires codon-aligned ACGT sequences")
             if position >= len(mutation["sequence"]) // 3:
                 raise ValueError("codonfm: worker codon_position is out of range")
+    # Gradient takes relaxed sequences, each a finite L x 64 logits matrix within the context window
     elif operation == "gradient":
         items = input_dict.get("items")
         if not isinstance(items, list) or not items:
@@ -578,12 +593,14 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
             ):
                 raise ValueError("codonfm: gradient logits must be a finite L x 64 numeric matrix")
 
+    # Sampling needs a usable temperature and something actually marked for resampling
     if operation == "sample":
         value = input_dict.get("temperature", 1.0)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
             raise ValueError("codonfm: temperature must be a positive finite number")
         if not any(_MASK_CODON in sequence for sequence in input_dict["sequences"]):
             raise ValueError("codonfm: sample needs at least one masked codon ('___') to resample")
+    # Gradient may leave the temperature out, meaning the logits are used as they arrive
     elif operation == "gradient":
         temperature = input_dict.get("temperature")
         if temperature is not None and (
@@ -597,6 +614,7 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Route a decoded input dict to the requested CodonFM operation."""
+    # Check the operation and the runtime arguments every operation shares
     operation = input_dict.get("operation")
     allowed_operations = {"fitness", "embeddings", "score", "sample", "gradient"}
     if operation not in allowed_operations:
@@ -604,6 +622,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     device = input_dict.get("device")
     if not isinstance(device, str) or not device:
         raise ValueError("codonfm: device must be a non-empty string")
+    # Accept verbosity as either a flag or a level, as callers send both
     verbose_raw = input_dict.get("verbose", False)
     if isinstance(verbose_raw, bool):
         verbose = verbose_raw
@@ -617,11 +636,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     for name in ("compute_gradient",):
         if name in input_dict and not isinstance(input_dict[name], bool):
             raise ValueError(f"codonfm: {name} must be a boolean")
+    # Validate the operation payload, then seed and load before any operation runs
     _validate_request(input_dict, operation)
     set_torch_seed(input_dict.get("seed"))
 
     _MODEL.load(checkpoint_path=_resolve_checkpoint(input_dict["model_checkpoint"]), device=device)
 
+    # Hand the payload to the matching model method
     if operation == "fitness":
         return {
             "fitness": _MODEL.score_fitness(sequences=input_dict["sequences"], batch_size=batch_size, device=device)
@@ -647,7 +668,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             )
         }
     if operation == "gradient":
-        # One chunk of independent candidates: the checkpoint loads once and items are evaluated in turn.
+        # Load the checkpoint once for this chunk, then evaluate each candidate independently.
         results = [
             _MODEL.compute_gradient(
                 item,
@@ -661,6 +682,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             )
             for item in input_dict["items"]
         ]
+        # Report each candidate separately, with the codon vocabulary they all share reported once
         return {
             "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
             "vocab": results[0]["vocab"],

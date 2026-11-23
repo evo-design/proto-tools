@@ -1,10 +1,10 @@
 #!/bin/bash
 #
 # DeepPBS (https://github.com/timkartar/DeepPBS) is not on PyPI. The public
-# BSD-3 repo is self-contained: it bundles the X3DNA/DSSR binaries, the
+# BSD-3 repository bundles the X3DNA/DSSR binaries, the
 # process/predict config JSONs, and the trained inference weights. This script
 # clones a pinned revision into the managed weights cache and installs it
-# editable; no GitHub sign-in is required for the public repository. To reuse an
+# in editable mode. No GitHub sign-in is required for the public repository. To reuse an
 # existing checkout instead, point PROTO_DEEPPBS_SPECIFICITY_WEIGHTS_DIR at it.
 set -euo pipefail
 source standalone_helpers.sh
@@ -33,7 +33,7 @@ uv pip install -r requirements.txt
 uv pip install pdb2pqr
 
 # ─── Provision the DeepPBS checkout (pinned clone into the weights cache) ────
-# Pinned revision of timkartar/DeepPBS; bump deliberately when updating.
+# Keep the timkartar/DeepPBS revision pinned and update it explicitly.
 DEEPPBS_REPO_URL="https://github.com/timkartar/DeepPBS.git"
 DEEPPBS_COMMIT="8bfb211dd67f02877841f6f33aa493ddf7daedf9"
 

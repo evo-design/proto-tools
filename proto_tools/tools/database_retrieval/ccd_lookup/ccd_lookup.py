@@ -174,7 +174,7 @@ class CcdLookupInput(BaseToolInput):
 class CcdLookupConfig(BaseConfig):
     """Configuration for CCD result.
 
-    Network features are off by default; enable explicitly when needed. For
+    Enable network features explicitly when needed. They are off by default. For
     2D / 3D ligand visualization use
     :meth:`proto_tools.entities.ligands.Fragment.visualize` on the resolved
     ``result.ligands.fragments[i]`` instead.
@@ -397,13 +397,13 @@ def run_ccd_lookup(
     config: CcdLookupConfig,
     instance: Any = None,
 ) -> CcdLookupOutput:
-    """Enrich CCD codes or SMILES with rich metadata via pdbeccdutils.
+    """Look up CCD codes or SMILES and return chemical metadata with pdbeccdutils.
 
-    Inputs may be a mix of 1- to 5-character CCD codes and SMILES strings; the
-    standalone auto-detects per identifier. Default operation is fully offline
+    Inputs may mix 1- to 5-character CCD codes and SMILES strings. The worker
+    detects the type of each identifier. Default operation is fully offline
     (uses bundled CCD mmCIF data). Network features (UniChem cross-references,
     PDB usage) are opt-in via config flags. See ``examples/example.ipynb`` and
-    ``README.md`` for usage patterns; for the microsecond-latency hot path see
+    ``README.md`` for usage. For lookups within the calling process, see
     :mod:`proto_tools.entities.ligands.ccd_utils`.
 
     Args:

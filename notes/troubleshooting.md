@@ -1,11 +1,11 @@
 # Troubleshooting
 
 This note covers the common failure modes when running proto-tools on shared HPC
-clusters and their recommended remedies, all of which apply to any cluster.
-proto-tools behaves identically on a laptop and on a cluster, but shared HPC
-environments impose constraints that account for most setup problems, namely an
+clusters and ways to resolve them, all of which apply to any cluster. proto-tools
+behaves the same on a laptop and on a cluster, but shared HPC environments often have an
 outdated host operating system, restrictive storage quotas, batch GPU
-scheduling, and locked-down networking. The underlying mechanisms are documented
+scheduling, or restricted networking. These constraints account for most
+cluster setup problems. The underlying mechanisms are documented
 in full in [tool-environments.md](tool-environments.md) and
 [storage.md](storage.md).
 
@@ -17,8 +17,8 @@ wheel that does not match the cluster's drivers, a pinned dependency version tha
 is unavailable for the platform, or an installation step that requires patching
 for the host operating system.
 
-Resolving this does not require forking proto-tools. The procedure is to diagnose
-the failure and then override the environment definition.
+Diagnose the failure, then override the environment definition. You can do
+this without forking proto-tools.
 
 To diagnose, enable verbose build output. Setting `PROTO_ENV_VERBOSE=1` streams
 the output of `setup.sh` to stderr as the environment builds, and setting
@@ -36,8 +36,8 @@ packaged environment is never overwritten. This works whether proto-tools was
 installed in editable mode or as a regular wheel. Full details are given in
 [Overriding a tool's standalone env](tool-environments.md#overriding-a-tools-standalone-env-proto_toolkit_standalone_dir).
 
-This is the self-healing path for environments: eject, patch, point, and rerun,
-with no changes to the installed package.
+Eject the environment definition, patch the copy, set the override, and rerun
+the tool. The installed package stays unchanged.
 
 ## Incompatible host operating system
 
@@ -46,7 +46,7 @@ with errors such as `GLIBC_2.28 not found`, the host operating system is too old
 Older cluster login and compute nodes, for example CentOS 7 with glibc 2.17,
 predate the manylinux baseline that modern machine-learning wheels target.
 
-The remedy is to run proto-tools inside a container that provides a modern
+Run proto-tools inside a container that provides a modern
 userland while reusing the host kernel, GPU drivers, and filesystems. On HPC
 systems, [Apptainer](https://apptainer.org/) (formerly Singularity) is the
 conventional choice. Build the image once from a base image whose CUDA version

@@ -140,6 +140,7 @@ def run_progen3_score(
 
     logger.debug(f"Using local venv for ProGen3 scoring: {config.model_checkpoint}")
 
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "progen3",
         {

@@ -17,7 +17,7 @@ In 2024, [Dudnyk et al.](https://doi.org/10.1126/science.adj0116) introduced Puf
 
 Puffin is structurally constrained: its first convolutional layer plays the role of a learned [motif](https://en.wikipedia.org/wiki/Sequence_motif) filter bank, and the model exposes per-base activation and contribution scores for nine promoter motifs (CREB, ETS, NFY, NRF1, SP, TATA, U1_snRNP, YY1, ZNF143) on each strand. A tenth `Long Inr` filter is used internally by the model to construct the per-base initiator-effect track but is not exposed per-motif. The minimum input is 651 bp because the model uses 325 bp of padding on each side of the predicted output span.
 
-The wrapper accepts raw DNA strings; the upstream coordinate / region / FASTA-file CLI modes (which require an hg38 reference) are intentionally not exposed and callers extract genomic sequences themselves.
+The wrapper accepts raw DNA strings. The upstream coordinate / region / FASTA-file CLI modes (which require an hg38 reference) are intentionally not exposed and callers extract genomic sequences themselves.
 
 ## Tools
 
@@ -33,7 +33,7 @@ Use this tool to score transcription start sites, rank candidate promoters, or m
 
 - **Per-base output length is `len(sequence) - 650`.** The model uses 325 bp of padding on each side; output coordinates run from 325 to `len(sequence) - 325` in the input frame.
 - **Channel order is mirrored across strands.** The first 5 channels are FANTOM_CAGE+ → PRO_CAP+; the next 5 are PRO_CAP- → FANTOM_CAGE-. Index by name via `TRACK_NAMES.index(...)` rather than memorizing positions.
-- **Outputs are in log scale.** Treat predicted values as `ln(count_scale_signal + 1)`. To compare two sequences, subtract — the difference is already in log space.
+- **Outputs are in log scale.** Treat predicted values as `ln(count_scale_signal + 1)`. To compare two sequences, subtract. The difference is already in log space.
 
 ### Puffin Interpretation (`puffin-interpretation`)
 
@@ -55,13 +55,13 @@ Reports Puffin's predicted transcription-initiation signal and its derivative wi
 
 #### Applications
 
-This is the differentiable form of Puffin prediction, intended as an objective inside a promoter-design loop: an optimizer holds a relaxed distribution over the sequence, asks for the gradients, and combines them into whatever objective it wants — concentrating initiation at a position, raising one assay's signal, or suppressing the opposite strand — then steps the sequence accordingly. Setting `compute_gradient=False` turns it into a forward-only signal score for ranking candidates.
+This is the differentiable form of Puffin prediction, intended as an objective inside a promoter-design loop: an optimizer holds a relaxed distribution over the sequence, asks for the gradients, and combines them into whatever objective it wants (concentrating initiation at a position, raising one assay's signal, or suppressing the opposite strand), then steps the sequence accordingly. Setting `compute_gradient=False` turns it into a forward-only signal score for ranking candidates.
 
 #### Usage Tips
 
 - **Fixed flanks go in `context_left`/`context_right`, never in the relaxed matrix.** The model input is `context_left + candidate + context_right`; the contexts are encoded exactly as `puffin-prediction` encodes a string (`N` as 0.25 per base) and are never relaxed, so any `soft`/`hard` schedule leaves them intact. Only the candidate's `(L, 4)` rows are relaxed and carry gradient. With both contexts empty (the default) the candidate is the whole model input.
 - **The model input needs at least 651 bp.** Puffin trims 325 bp from each end, so the scored output span is `len(context_left) + L + len(context_right) - 650` positions and anything shorter scores nothing. 325 bp of context on each side makes the output window exactly the candidate.
-- **Position spans are 1-indexed, inclusive, and relative to the output window** of the full model input — not to the candidate. Output position `p` is candidate row `p + 325 - len(context_left)`. Leaving `position_start`/`position_end` unset covers the whole output window, and the term that comes back names the span actually averaged rather than the `None` that was asked for.
+- **Position spans are 1-indexed, inclusive, and relative to the output window** of the full model input, not to the candidate. Output position `p` is candidate row `p + 325 - len(context_left)`. Leaving `position_start`/`position_end` unset covers the whole output window, and the term that comes back names the span actually averaged rather than the `None` that was asked for.
 - **Tracks are named with a strand suffix.** `FANTOM_CAGE+` and `FANTOM_CAGE-` select the forward and reverse heads, which are distinct model channels; the ten names match `TRACK_NAMES`.
 - **Several tracks share one forward pass.** Each requested quantity gets its own backward over that shared graph, so asking for K tracks costs one forward and K backwards rather than K of each.
 

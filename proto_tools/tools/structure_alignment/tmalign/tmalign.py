@@ -1,6 +1,6 @@
 """proto_tools/tools/structure_alignment/tmalign/tmalign.py.
 
-Wraps the TMalign binary (Zhang & Skolnick, 2005) as a ToolInstance-dispatched
+Wraps the TMalign binary (Zhang and Skolnick, 2005) as a ToolInstance-dispatched
 tool.  Accepts two PDB text blobs, writes them to temp files, calls the binary,
 and parses the two TM-scores from stdout.
 """
@@ -138,7 +138,7 @@ class TMalignOutput(BaseToolOutput):
 
     @property
     def output_format_options(self) -> list[str]:
-        """Supported export formats; ``pdb`` is offered when a superimposed overlay exists."""
+        """Supported export formats. ``pdb`` is offered when a superimposed overlay exists."""
         return ["json", "pdb"] if self.superimposed_pdb else ["json"]
 
     @property

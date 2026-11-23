@@ -244,7 +244,7 @@ class ProGen2Model:
         # Prepend the '1' start token so raw residue prompts condition on a sequence start.
         prompts = self._prepend_start_token(prompts)
 
-        # Batch processing logic
+        # Group prompts into batches for generation.
         all_sequences: list[str] = []
         all_logits: list[Any | None] = []
         batches = [prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)]
@@ -350,7 +350,7 @@ class ProGen2Model:
         # Ensure sequences have start token
         normalized_seqs = self._prepend_start_token(sequences)
 
-        # Batch processing logic
+        # Group sequences into batches for scoring.
         all_logits: list[Any] = []
         all_metrics: list[dict[str, float]] = []
         batches = [normalized_seqs[i : i + batch_size] for i in range(0, len(normalized_seqs), batch_size)]
@@ -391,7 +391,7 @@ class ProGen2Model:
 
                     all_metrics.append(log_likelihood_metrics(seq_log_probs.mean().item(), seq_log_probs.shape[0]))
                     # Return unpadded logits (full vocabulary)
-                    # Note: model outputs 32 logits but tokenizer has 30 tokens
+                    # The model outputs 32 logits, while the tokenizer defines 30 tokens.
                     all_logits.append(logits[i, :length, : len(PROGEN2_VOCAB)].cpu())
 
         return {

@@ -33,7 +33,7 @@ def _configure_tf_once() -> None:
     """Enable GPU memory growth once, before any GPU is initialized (for co-tenancy).
 
     GPU visibility is controlled by CUDA_VISIBLE_DEVICES, which the worker framework
-    sets per allocated device; the standalone does not hide/unhide GPUs — TF's
+    sets per allocated device. The standalone does not hide/unhide GPUs — TF's
     set_visible_devices is process-sticky and cannot be undone after init.
     """
     global _tf_configured
@@ -50,7 +50,7 @@ def _configure_tf_once() -> None:
 
 
 def _one_hot_encode(seq: str) -> np.ndarray:
-    """One-hot encode a DNA sequence to shape (len, 4); unknown bases map to N."""
+    """One-hot encode a DNA sequence to shape (len, 4). Unknown bases map to N."""
     seq = (
         seq.upper()
         .replace("A", "1")
@@ -109,7 +109,7 @@ def _ensure_annotator(reference_fasta: str, annotation: str, device: str) -> Any
 
 # ── Operations ───────────────────────────────────────────────────────────────
 def _parse_delta_score(record: str) -> dict[str, Any]:
-    """Parse a SpliceAI ``ALLELE|SYMBOL|DS_*x4|DP_*x4`` string; ``.`` (complex MNV) maps to None."""
+    """Parse a SpliceAI ``ALLELE|SYMBOL|DS_*x4|DP_*x4`` string. ``.`` (complex MNV) maps to None."""
     allele, symbol, *fields = record.split("|")
     return {
         "allele": allele,
@@ -126,7 +126,7 @@ def _parse_delta_score(record: str) -> dict[str, Any]:
 
 
 def score(input_dict: dict[str, Any]) -> dict[str, Any]:
-    """Score variants for splice-altering effects; returns per-variant gene records."""
+    """Score variants for splice-altering effects and return per-variant gene records."""
     from spliceai.utils import get_delta_scores
 
     annotator = _ensure_annotator(input_dict["reference_fasta"], input_dict["annotation"], input_dict["device"])
@@ -153,6 +153,7 @@ def predict(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     predictions: list[list[list[float]]] = []
     for seq in StatusCounter(logger, "Predicting sequence %d/%d", input_dict["sequences"]):
+        # Supply the flanking context expected by the model before averaging ensemble predictions.
         encoded = _one_hot_encode("N" * _CONTEXT_PAD + seq + "N" * _CONTEXT_PAD)[None, :]
         averaged = np.mean([model.predict(encoded, verbose=0) for model in models], axis=0)
         predictions.append(averaged[0].tolist())

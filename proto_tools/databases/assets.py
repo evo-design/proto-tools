@@ -1,4 +1,4 @@
-"""Resolution of a config value that is either a registered dataset name or a local path."""
+"""Resolve configuration values that name a registered dataset or a local path."""
 
 import logging
 from pathlib import Path
@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 def is_registered_dataset(value: str) -> bool:
     """Whether ``value`` names a registered dataset rather than a filesystem path.
 
-    The discriminator for every "slug or path" config field. A registered name is the only form a
-    remote worker can resolve, since a path means something only on the machine that wrote it.
+    Use this for config fields that accept a dataset name or a path. Remote workers can
+    resolve registered names. Local paths refer to files on the caller's machine.
     """
     return value in DatasetRegistry.list_all()
 

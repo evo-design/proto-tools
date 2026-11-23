@@ -117,16 +117,20 @@ def _fallback_canonical_from_pdb(canonical_npz_path: str, pdb_path: str) -> dict
     true_sequence: list[int] = []
     chain_labels: list[int] = []
 
+    # Collect one entry per unique DNA residue from the ATOM records
     with open(pdb_path, encoding="utf-8", errors="ignore") as handle:
         for line in handle:
+            # Keep only ATOM records from the primary (blank or A) alternate location
             if not line.startswith("ATOM  "):
                 continue
             altloc = line[16]
             if altloc not in (" ", "A"):
                 continue
+            # Skip residues that are not DNA nucleotides
             resn = line[17:20].strip().upper()
             if resn not in _DNA_RES_TO_INT:
                 continue
+            # Key on chain, residue number, insertion code and name so each residue counts once
             chain_id = line[21].strip() or "_"
             resseq = line[22:26].strip()
             icode = line[26].strip()
@@ -135,15 +139,18 @@ def _fallback_canonical_from_pdb(canonical_npz_path: str, pdb_path: str) -> dict
                 continue
             seen.add(key)
 
+            # Number chains in order of first appearance
             if chain_id not in chain_to_idx:
                 chain_to_idx[chain_id] = len(chain_to_idx)
             true_sequence.append(_DNA_RES_TO_INT[resn])
             chain_labels.append(chain_to_idx[chain_id])
 
+    # Emit a single placeholder row when the PDB has no DNA residues
     if not true_sequence:
         true_sequence = [0]
         chain_labels = [0]
 
+    # Build a uniform 0.25 PPM with every position unmasked
     length = len(true_sequence)
     predicted_ppm = np.full((length, 4), 0.25, dtype=np.float64)
     mask = np.ones(length, dtype=np.int64)
@@ -151,6 +158,7 @@ def _fallback_canonical_from_pdb(canonical_npz_path: str, pdb_path: str) -> dict
     chain_labels_arr = np.asarray(chain_labels, dtype=np.int64)
     true_arr = np.asarray(true_sequence, dtype=np.int64)
 
+    # Save the canonical NPZ
     np.savez_compressed(
         canonical_npz_path,
         predicted_ppm=predicted_ppm,
@@ -161,6 +169,7 @@ def _fallback_canonical_from_pdb(canonical_npz_path: str, pdb_path: str) -> dict
         source_method=np.array("deeppbs"),
     )
 
+    # Return the same arrays as JSON-serializable lists
     return {
         "predicted_ppm": predicted_ppm.tolist(),
         "true_sequence": true_arr.tolist(),
@@ -175,7 +184,7 @@ def _scratch_dir(config: dict[str, Any], output_root: str, input_name: str) -> I
     """Yield the working directory for one structure's DeepPBS run.
 
     With ``keep_intermediate``, the files stay in ``output_root/intermediate/<input_name>``
-    (``output_root`` is then the caller's ``output_directory``); otherwise they go in a
+    (``output_root`` is then the caller's ``output_directory``). Otherwise they go in a
     temporary directory that is removed afterwards.
     """
     if config.get("keep_intermediate", False):
@@ -194,10 +203,12 @@ def _run_one_structure(
 
     ``progress`` is this structure's ``<n>/<total>`` for the status messages.
     """
+    # Ensure that the input PDB exists
     pdb_path = os.path.abspath(pdb_path)
     if not os.path.exists(pdb_path):
         raise FileNotFoundError(f"PDB path does not exist: {pdb_path}")
 
+    # Locate the DeepPBS checkout and its preprocessing and prediction scripts
     repo_path = _resolve_deeppbs_repo()
     allow_fallback = bool(config.get("allow_fallback", False))
     process_script = os.path.join(repo_path, "run", "process_co_crystal.py")
@@ -219,14 +230,17 @@ def _run_one_structure(
 
     input_name = Path(pdb_path).stem
     with _scratch_dir(config, output_root, input_name) as tmp_dir:
+        # Copy the PDB into the scratch directory's pdb/ folder
         pdb_dir = os.path.join(tmp_dir, "pdb")
         os.makedirs(pdb_dir, exist_ok=True)
         input_filename = os.path.basename(pdb_path)
         shutil.copy(pdb_path, os.path.join(pdb_dir, input_filename))
 
+        # Create the npz/ folder that preprocessing writes into
         npz_dir = os.path.join(tmp_dir, "npz")
         os.makedirs(npz_dir, exist_ok=True)
 
+        # Write the list files naming the PDB for preprocessing and its NPZ for prediction
         input_txt = os.path.join(tmp_dir, "input.txt")
         _write_text(input_txt, f"{input_filename}\n")
 
@@ -236,6 +250,7 @@ def _run_one_structure(
         output_dir = os.path.join(tmp_dir, "output")
         os.makedirs(output_dir, exist_ok=True)
 
+        # Build the subprocess environment with the DeepPBS repo on PYTHONPATH
         repo_pythonpath = os.pathsep.join([repo_path, os.environ.get("PYTHONPATH", "")]).strip(os.pathsep)
         env = get_subprocess_device_env(config.get("device", "cuda"))
         env["PYTHONPATH"] = repo_pythonpath
@@ -249,12 +264,14 @@ def _run_one_structure(
         # Keep order stable while deduplicating.
         x3dna_bin_paths = list(dict.fromkeys(x3dna_bin_paths))
         x3dna_home = x3dna_env_root or os.path.join(repo_path, "x3dna-v2.3-linux-64bit", "x3dna-v2.3")
+        # Prepend the X3DNA bin directories that exist to PATH
         existing_bins = [path for path in x3dna_bin_paths if os.path.isdir(path)]
         if existing_bins:
             env["PATH"] = os.pathsep.join([*existing_bins, env.get("PATH", "")]).strip(os.pathsep)
         if os.path.isdir(x3dna_home):
             env["X3DNA"] = x3dna_home
 
+        # Check that the X3DNA binaries DeepPBS calls are on PATH
         missing_bins = [
             binary for binary in ("x3dna-dssr", "analyze") if shutil.which(binary, path=env.get("PATH")) is None
         ]
@@ -267,6 +284,7 @@ def _run_one_structure(
                 + ", ".join(existing_bins or x3dna_bin_paths)
                 + "."
             )
+            # Raise unless fallback is allowed, then write the uniform fallback output
             if not allow_fallback:
                 raise RuntimeError(fallback_reason)
             canonical_dir = os.path.join(output_root, "canonical_npz")
@@ -286,6 +304,7 @@ def _run_one_structure(
         verbose = bool(config.get("verbose", False))
 
         def _run_or_raise(cmd: list[str], step_name: str) -> dict[str, str]:
+            # Stream output straight to the terminal when verbose
             if verbose:
                 subprocess.run(
                     cmd,
@@ -295,6 +314,7 @@ def _run_one_structure(
                 )
                 return {"stdout": "", "stderr": ""}
 
+            # Otherwise capture output and raise with its last 40 lines on failure
             proc = subprocess.run(
                 cmd,
                 cwd=tmp_dir,
@@ -312,6 +332,7 @@ def _run_one_structure(
                 )
             return {"stdout": proc.stdout or "", "stderr": proc.stderr or ""}
 
+        # Run DeepPBS preprocessing on the co-crystal
         process_cmd = [
             sys.executable,
             process_script,
@@ -324,10 +345,12 @@ def _run_one_structure(
         logger.update_status(f"Preprocessing structure {progress}", level=logging.DEBUG)
         process_io = _run_or_raise(process_cmd, step_name="preprocessing")
 
+        # Set the canonical NPZ path under output_root
         canonical_dir = os.path.join(output_root, "canonical_npz")
         os.makedirs(canonical_dir, exist_ok=True)
         canonical_npz = os.path.join(canonical_dir, f"{input_name}.npz")
 
+        # Fall back (or fail) if preprocessing produced no NPZ, citing the tail of its output
         preprocessed_npz = os.path.join(npz_dir, f"{input_name}.npz")
         if not os.path.exists(preprocessed_npz):
             stdout_tail = (process_io["stdout"] or "").strip().splitlines()[-4:]
@@ -358,6 +381,7 @@ def _run_one_structure(
                 **fallback,
             }
 
+        # Run DeepPBS prediction, falling back on failure when allowed
         logger.update_status(f"Predicting specificity for structure {progress}", level=logging.DEBUG)
         try:
             _run_or_raise(
@@ -385,6 +409,7 @@ def _run_one_structure(
                 **fallback,
             }
 
+        # Fall back (or fail) if prediction produced no output NPZ
         raw_npz = os.path.join(output_dir, "npzs", f"{input_name}.npz_predict.npz")
         if not os.path.exists(raw_npz):
             fallback_reason = "DeepPBS prediction produced no output NPZ"
@@ -401,6 +426,7 @@ def _run_one_structure(
                 **fallback,
             }
 
+        # Convert the raw prediction into the canonical NPZ and return it
         canonical = _canonicalize_prediction(raw_npz, canonical_npz)
 
         return {
@@ -418,7 +444,7 @@ def run_deeppbs_specificity(input_data: dict[str, Any]) -> dict[str, Any]:
 
     Files are kept only under ``output_directory``. Without it, the canonical NPZ files are
     written to a temporary directory that is removed before returning, and each result's
-    ``output_npz_path`` is ``None``; its arrays already carry the NPZ's contents.
+    ``output_npz_path`` is ``None``. Its arrays already carry the NPZ's contents.
     """
     output_directory = input_data.get("output_directory")
     config = {

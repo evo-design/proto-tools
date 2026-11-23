@@ -125,7 +125,7 @@ class EnformerModel:
 
         Enformer's forward accepts a float one-hot of shape ``(batch, length, 4)`` directly, so the
         relaxed distribution is written into the designed rows and differentiated through without
-        an embedding hook. Only those positions carry gradient; the rest of the context is fixed.
+        an embedding hook. Only those positions carry gradients. The rest of the context is fixed.
 
         Args:
             sequence: Full ``ENFORMER_CONTEXT`` bp context window.
@@ -179,7 +179,7 @@ class EnformerModel:
             designed = torch.tensor([p - 1 for p in positions], dtype=torch.long, device=self.device)
             onehot = onehot.index_copy(1, designed, relaxed.unsqueeze(0))
 
-            # No inference_mode here: the prediction path uses it, which would block autograd.
+            # Keep autograd enabled here so the model can differentiate the relaxed sequence.
             output = self.model(onehot)
             if species not in output:
                 raise ValueError(f"enformer: unknown species head {species!r}; have {sorted(output)}")
@@ -234,6 +234,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         # Load before the progress statuses below, so the loading status doesn't replace them mid-run.
         _model.load(input_dict["device"], verbose=input_dict["verbose"])
     if operation == "predict":
+        # Split the sequences into forward-pass chunks.
         sequences = input_dict["sequences"]
         batch_size = max(1, int(input_dict.get("batch_size", len(sequences))))
         predictions = []
@@ -242,6 +243,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             logger.update_status(
                 f"Predicting {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
             )
+        # Predict each chunk and move the tracks off the GPU before the next one.
         counter = StatusCounter(logger, "Predicting batch %d/%d", total=len(chunks))
         for number, chunk in enumerate(chunks, start=1):
             if len(chunks) > 1:
@@ -257,12 +259,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 .detach()
                 .cpu()
             )
+        # Stack the chunk predictions back into one tensor in input order.
         return {
             "predictions": torch.cat(predictions, dim=0),
             "applied_species": input_dict["species"],
         }
     if operation == "compute_gradient":
-        # One chunk of independent candidates: the weights load once and each is evaluated in turn.
+        # Load the weights once, then evaluate each independent candidate in this chunk.
         results = [
             _model.compute_gradient(
                 sequence=item["sequence"],
@@ -279,6 +282,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             )
             for item in input_dict["items"]
         ]
+        # Return per-candidate terms and metrics with the shared vocabulary listed once.
         return {
             "results": [{key: result[key] for key in ("terms", "metrics")} for result in results],
             "vocab": results[0]["vocab"],

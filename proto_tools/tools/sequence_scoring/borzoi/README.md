@@ -64,7 +64,7 @@ Reports Borzoi's predicted track activity and its derivative with respect to a r
 
 #### Applications
 
-This is the differentiable form of Borzoi prediction, intended as an objective inside a regulatory-sequence design loop: an optimizer holds a relaxed distribution over the bases it is allowed to change, asks for the gradients, and combines them into whatever objective it wants — raising a track over an enhancer window, or raising one cell type while suppressing another — then steps those bases accordingly. Setting `compute_gradient=False` turns it into a forward-only objective score for ranking candidates.
+This is the differentiable form of Borzoi prediction, intended as an objective inside a regulatory-sequence design loop: an optimizer holds a relaxed distribution over the bases it is allowed to change, asks for the gradients, and combines them into whatever objective it wants (raising a track over an enhancer window, or raising one cell type while suppressing another), then steps those bases accordingly. Setting `compute_gradient=False` turns it into a forward-only objective score for ranking candidates.
 
 #### Usage Tips
 

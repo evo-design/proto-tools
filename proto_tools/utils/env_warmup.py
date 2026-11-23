@@ -18,8 +18,7 @@ already in the page cache  ~15,000 MB/s
 On Lustre a plain sequential read of the same files runs at ~1.3 GB/s, and it fills the same
 page cache the faults would. Pre-reading 5.4 GB took 5 seconds and moved a worker that had
 been stalled for 27 minutes straight into compute. On WekaFS the same pre-read costs 6-8
-seconds to save about one, so the decision is made by measuring rather than by filesystem type,
-in two separate questions:
+seconds to save about one. Two measurements decide whether warm-up is useful.
 
 * Is the environment already warm? :func:`_resident_fraction` asks the kernel with ``mincore``,
   which reads nothing. At ``_WARM_FRACTION`` or more of the libraries' bytes resident, the
@@ -29,14 +28,14 @@ in two separate questions:
   at most ``_PROBE_SECONDS``, and only a throughput below ``_SLOW_FAULT_BYTES_PER_SECOND``
   triggers a read. It probes the library with the most uncached pages, not the largest, which
   another env sharing it by hardlink may have cached, and times that library's longest stretch
-  of uncached pages: a probe that re-timed a window an earlier probe had faulted in would
-  measure the page cache and call a cold environment fast.
+  of uncached pages. Reusing a window touched by an earlier probe would measure
+  cached reads and incorrectly classify a cold environment as fast.
 * The libraries to read are listed once per build and kept in the environment, so a process
   that does not need to warm pays for one small file read and the probe.
 * Reading is bounded by a wall-clock budget and a concurrency cap. The caller warms under the
-  env's build lock, so processes starting together on a node warm it once: the rest find it
-  cached.
-* Every failure is swallowed. A warm-up that cannot run leaves behavior exactly as it was.
+  environment's build lock, so processes starting together on a node warm it
+  once and the rest find it cached.
+* Failures are caught so an unsuccessful warm-up does not prevent a run.
 """
 
 from __future__ import annotations
@@ -66,12 +65,10 @@ _WARM_FRACTION = 0.9
 _PROBE_SECONDS = 0.1
 _PROBE_BYTES = 16 * 2**20
 
-#: Give up after this long. A filesystem slow enough to blow this budget would also have made
-#: the lazy path miserable, but a warm-up must never be the reason a run fails to start.
+#: Stop after this budget so warm-up cannot delay startup indefinitely.
 _DEFAULT_BUDGET_SECONDS = 30.0
 
-#: Parallel readers. Enough to keep a parallel filesystem busy, few enough that a node-full of
-#: ranks does not multiply into a flood.
+#: Limit parallel readers to keep the filesystem busy without excessive concurrent reads.
 _READERS = 8
 
 #: Read size per request. Large enough that the syscall overhead disappears.
@@ -84,7 +81,7 @@ _WARM_ENV_VAR = "PROTO_WARM_ENV"
 
 
 def _forced() -> bool | None:
-    """Whether ``PROTO_WARM_ENV`` forces warming on or off; ``None`` to decide by measuring."""
+    """Read the warm-up override, returning ``None`` to choose based on measurements."""
     raw = os.environ.get(_WARM_ENV_VAR, "").strip().lower()
     if raw in {"1", "true", "yes", "on"}:
         return True
@@ -94,7 +91,7 @@ def _forced() -> bool | None:
 
 
 def _scan_libraries(env_path: Path, deadline: float) -> list[Path] | None:
-    """The env's shared libraries worth pre-reading, largest first; ``None`` if out of time.
+    """Find large shared libraries to pre-read, largest first, or return ``None`` on timeout.
 
     Walks ``lib/``, which holds both ``site-packages`` and the libraries a conda env installs
     beside it. Symlinks are skipped, to files (``libfoo.so -> libfoo.so.1``, whose target is
@@ -119,7 +116,7 @@ def _scan_libraries(env_path: Path, deadline: float) -> list[Path] | None:
 
 
 def _large_shared_libraries(env_path: Path, fingerprint: str, deadline: float) -> list[Path]:
-    """The env's libraries worth pre-reading, largest first, from the env's list when current.
+    """Return large libraries to pre-read, reusing the saved list if it is still current.
 
     The list is written on first use and reused while ``fingerprint`` matches and every library
     on it still exists, so the walk is paid once per build rather than once per process. An env
@@ -147,10 +144,10 @@ def _large_shared_libraries(env_path: Path, fingerprint: str, deadline: float) -
 
 
 def _page_residency(path: Path) -> bytes | None:
-    """One byte per page of ``path``, odd where the page is in the page cache.
+    """Return one byte per file page, with the low bit set for cached pages.
 
-    Asks the kernel with ``mincore``, which reads nothing from the file. ``None`` where that is
-    unavailable: outside Linux and macOS, or when ``ctypes`` cannot reach libc.
+    Ask the kernel with ``mincore`` without reading the file. Return ``None``
+    outside Linux and macOS or when ``ctypes`` cannot reach libc.
     """
     size = path.stat().st_size
     if size == 0:
@@ -175,7 +172,7 @@ def _page_residency(path: Path) -> bytes | None:
 
 
 def _residency(libraries: list[Path]) -> dict[Path, bytes] | None:
-    """Each library's page residency (see :func:`_page_residency`); ``None`` if any is unknowable."""
+    """Read each library's page residency, returning ``None`` if any cannot be measured."""
     residency = {}
     for path in libraries:
         try:
@@ -189,7 +186,7 @@ def _residency(libraries: list[Path]) -> dict[Path, bytes] | None:
 
 
 def _resident_fraction(residency: dict[Path, bytes] | None) -> float:
-    """The share of the libraries' pages in the page cache; ``0.0`` where it cannot be known."""
+    """Return the fraction of library pages in the page cache, or ``0.0`` if unknown."""
     if not residency:
         return 0.0
     resident = sum(page & 1 for pages in residency.values() for page in pages)
@@ -197,7 +194,7 @@ def _resident_fraction(residency: dict[Path, bytes] | None) -> float:
 
 
 def _probe_window(pages: bytes) -> tuple[int, int] | None:
-    """The longest run of uncached pages as ``(first, past the last)``; ``None`` if all are cached."""
+    """Find the longest uncached page range, or return ``None`` if all pages are cached."""
     best: tuple[int, int] | None = None
     start = None
     for index, page in enumerate([*pages, 1]):
@@ -239,7 +236,7 @@ def _fault_throughput(path: Path, pages: bytes | None) -> float:
 
 
 def _read_whole(path: Path, deadline: float) -> int:
-    """Read ``path`` sequentially into the page cache, stopping at ``deadline``. Bytes read."""
+    """Read into the page cache until ``deadline`` and return the bytes read."""
     total = 0
     try:
         with path.open("rb", buffering=0) as handle:
@@ -248,7 +245,7 @@ def _read_whole(path: Path, deadline: float) -> int:
                 if not chunk:
                     break
                 total += len(chunk)
-    except OSError as error:  # a library removed or unreadable mid-walk is not our problem
+    except OSError as error:  # skip libraries that become unavailable during warm-up
         logger.debug("env warm-up: could not read %s: %s", path, error)
     return total
 
@@ -259,15 +256,15 @@ def warm_environment(
     *,
     budget_seconds: float = _DEFAULT_BUDGET_SECONDS,
 ) -> int:
-    """Pre-read ``env_path``'s large shared libraries into the page cache. Bytes read.
+    """Pre-read large shared libraries into the page cache and return the bytes read.
 
     Does nothing, and returns ``0``, when the libraries are already mostly in the page cache or
-    page faults are fast, as probed on the library with the most uncached pages: envs hardlink
-    shared libraries, so the largest may have been cached by another env while the rest are
-    cold. ``PROTO_WARM_ENV`` set to ``1`` or ``0`` skips both measurements in either direction.
+    page faults are fast. The probe uses the library with the most uncached pages.
+    Environments hardlink shared libraries, so another environment may have
+    cached the largest one while the rest remain cold. Set ``PROTO_WARM_ENV``
+    to ``1`` or ``0`` to force or skip warm-up without taking either measurement.
 
-    Never raises. A warm-up that fails for any reason leaves the environment exactly as it was,
-    and the caller is no worse off than before this function existed.
+    Warm-up failures are caught and leave the environment unchanged.
 
     Args:
         env_path (Path): The tool environment to warm.
@@ -276,7 +273,7 @@ def warm_environment(
         budget_seconds (float): Stop listing and reading libraries after this long.
 
     Returns:
-        int: Bytes read into the page cache; ``0`` when warming was skipped or failed.
+        int: Bytes read into the page cache, or ``0`` when warm-up was skipped or failed.
     """
     try:
         forced = _forced()
@@ -288,6 +285,7 @@ def warm_environment(
         if not libraries:
             return 0
         if not forced:
+            # Skip environments whose libraries are already mostly cached.
             residency = _residency(libraries)
             resident = _resident_fraction(residency)
             if resident >= _WARM_FRACTION:
@@ -298,6 +296,7 @@ def warm_environment(
             else:
                 probed = max(libraries, key=lambda path: sum(not page & 1 for page in residency[path]))
                 pages = residency[probed]
+            # Measure uncached reads before paying for a full warm-up.
             throughput = _fault_throughput(probed, pages)
             if throughput >= _SLOW_FAULT_BYTES_PER_SECOND:
                 logger.debug("env warm-up: page faults in %s run at %.0f MB/s, skipping", env_path, throughput / 2**20)
@@ -308,6 +307,7 @@ def warm_environment(
                 throughput / 2**20,
             )
 
+        # Read the libraries in parallel, with each reader observing the deadline.
         with ThreadPoolExecutor(max_workers=_READERS) as pool:
             total = sum(pool.map(lambda path: _read_whole(path, deadline), libraries))
         logger.debug(

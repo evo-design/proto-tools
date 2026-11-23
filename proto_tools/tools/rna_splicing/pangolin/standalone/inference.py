@@ -39,7 +39,7 @@ class PangolinModel:
         self._loaded = False
 
     # ============================================================================
-    # Model Loading & Device Management
+    # Model Loading and Device Management
     # ============================================================================
     def _models_dir(self) -> str:
         """Locate the bundled Pangolin model weights directory."""
@@ -124,7 +124,7 @@ class PangolinModel:
         return results
 
     def _compute_score(self, ref_seq: str, alt_seq: str, strand: str, d: int, tissues: list[str]) -> tuple[Any, Any]:
-        """Port of upstream compute_score: per-position loss/gain across tissues."""
+        """Compute per-position loss and gain across tissues, matching upstream compute_score."""
         import numpy as np
 
         ref_onehot = self._one_hot(ref_seq, strand)
@@ -182,6 +182,7 @@ class PangolinModel:
             if eff_d < distance:
                 logger.debug("variant at %d: window clipped to +/-%d (requested +/-%d) by flank", vp, eff_d, distance)
 
+            # Build matching reference and alternate windows with enough context for scoring.
             lo = vp - FLANK - eff_d
             hi = vp + ref_len + FLANK + eff_d
             window = seq[lo:hi]
@@ -189,6 +190,7 @@ class PangolinModel:
             alt_window = window[:off] + alt + window[off + ref_len :]
 
             loss, gain = self._compute_score(window, alt_window, strand, eff_d, tissues)
+            # Locate the strongest effects and report their offsets from the variant.
             gain_idx = int(np.argmax(gain))
             loss_idx = int(np.argmin(loss))
             results.append(

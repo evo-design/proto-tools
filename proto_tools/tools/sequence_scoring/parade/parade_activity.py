@@ -65,7 +65,7 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
             value = [value]
         if not isinstance(value, list):
             return value  # type: ignore[no-any-return]
-        # Resolve every str selector (a cell code or cell-line name) to its canonical code; leave
+        # Resolve each str selector to its canonical cell code. Leave
         # non-str items untouched so the field's type validation rejects them with a clear error.
         return [resolve_cell_type(item) if isinstance(item, str) else item for item in value]
 
@@ -159,7 +159,7 @@ class ParadeActivityOutput(BaseToolOutput):
     def cell_line_names(self) -> dict[str, str]:
         """Human-readable cell-line name for each present code, ``{code: name}`` (computed field).
 
-        A display aid derived from ``cell_types``; ``scores`` stays keyed by the canonical code.
+        A display aid derived from ``cell_types``. ``scores`` stays keyed by the canonical code.
         """
         return {code: PARADE_CELL_LINE_NAMES[cast(ParadeCellType, code)] for code in self.cell_types}
 
@@ -255,7 +255,7 @@ def run_parade_activity(
     """Predict cell-type-specific UTR activity with PARADE.
 
     A requested cell line may be given by code (``"c2"``) or by cell-line name (``"HepG2"``,
-    case-insensitive); names are resolved to canonical codes and the scores stay code-keyed.
+    case-insensitive). Names are resolved to canonical codes and the scores stay code-keyed.
 
     Args:
         inputs (ParadeActivityInput): UTR sequences to score.
@@ -269,8 +269,8 @@ def run_parade_activity(
     # Revalidate a dumped copy so in-place mutation of the list field cannot bypass
     # Pydantic's assignment hooks between config construction and execution.
     config = ParadeActivityConfig.model_validate(config.model_dump())
-    # Sequences may have mixed lengths; the standalone batches them per length group, so this
-    # is safe under the framework's per-item iterable cache (partial cache hits pass any subset).
+    # The standalone groups sequences by length before batching, so mixed lengths are
+    # safe even when partial cache hits leave an arbitrary subset of the inputs.
     output_data = ToolInstance.dispatch(
         "parade",
         {

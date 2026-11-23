@@ -49,8 +49,8 @@ def _is_complementable(motif: Any) -> bool:
     """Whether a motif's alphabet supports reverse-complement scanning.
 
     The FIMO CLI only scans the reverse strand for complementable (nucleotide)
-    alphabets; protein and other non-complementable alphabets are forward-only.
-    Detected from the motif alphabet: nucleotide alphabets have 4 core symbols
+    alphabets. Protein and other non-complementable alphabets are forward-only.
+    Detected from the motif alphabet. Nucleotide alphabets have 4 core symbols
     including A/C/G and T or U, whereas protein has 20.
     """
     symbols = set(motif.alphabet.symbols.upper())
@@ -86,7 +86,7 @@ def run_fimo_scan(input_data: dict[str, Any]) -> dict[str, Any]:
     sequences = [Sequence(seq + _END_PAD, name=f"seq_{i}".encode()) for i, seq in enumerate(input_data["sequences"])]
     motifs, background = _read_motifs(input_data["motifs_path"])
 
-    # FIMO only reverse-complements nucleotide alphabets; mirror the CLI by scanning
+    # FIMO only reverse-complements nucleotide alphabets. Mirror the CLI by scanning
     # the given strand only for protein / non-complementable motifs, even if both_strands
     # was requested (otherwise pymemesuite emits spurious reverse-strand hits on protein).
     both_strands = input_data["both_strands"] and bool(motifs) and _is_complementable(motifs[0])
@@ -107,7 +107,7 @@ def run_fimo_scan(input_data: dict[str, Any]) -> dict[str, Any]:
             idx = _sequence_index(_decode(element.source.name))
             if idx is None or not 0 <= idx < len(results):
                 continue
-            # FIMO reports start <= stop with strand separate; pymemesuite gives
+            # FIMO reports start <= stop with strand separate. pymemesuite gives
             # strand-oriented coordinates, so normalize to (min, max).
             start, stop = int(min(element.start, element.stop)), int(max(element.start, element.stop))
             if stop > lengths[idx]:  # window overlapping the end pad, not a real site
@@ -138,7 +138,7 @@ def to_device(device: str) -> dict[str, Any]:
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """FIMO is CPU-only; no GPU memory to report."""
+    """FIMO runs on CPU, so there is no GPU memory to report."""
     return {"available": False, "framework": "cpu", "note": "CPU tool"}
 
 

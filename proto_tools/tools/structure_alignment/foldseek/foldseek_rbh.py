@@ -3,7 +3,7 @@
 Local-only — the public Foldseek server does not expose RBH (verified against
 ``GET https://search.foldseek.com/api/databases``). RBH returns only mutual
 best hits between a query and a target DB, useful for structural orthology
-calls. The typed output schema is shared with ``foldseek-search``; local
+calls. The typed output schema is shared with ``foldseek-search``. Local
 15-column rows additionally carry the three TM-score normalizations.
 """
 
@@ -140,7 +140,7 @@ class FoldseekRBHConfig(BaseConfig):
 
     @model_validator(mode="after")
     def _local_db_required(self) -> "FoldseekRBHConfig":
-        """foldseek-rbh has no remote analog; ``local_db`` must always be supplied."""
+        """foldseek-rbh has no remote endpoint, so ``local_db`` must always be supplied."""
         if not self.local_db:
             raise ValueError("local_db is required for foldseek-rbh (no remote mode exists)")
         return self

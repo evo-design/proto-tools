@@ -1,7 +1,4 @@
-"""proto_tools/tools/sequence_scoring/deeppbs_specificity/deeppbs_specificity.py.
-
-DeepPBS DNA specificity prediction tool.
-"""
+"""DeepPBS DNA specificity prediction tool."""
 
 import csv
 import json
@@ -267,7 +264,7 @@ def run_deeppbs_specificity(
     protein-DNA structure and returns a canonical DNA-only position probability
     matrix (PPM) in A,C,G,T order. When a required DeepPBS dependency (X3DNA
     binaries) is missing, or preprocessing/prediction fails to produce output,
-    the runner raises; with ``allow_fallback`` it instead returns a conservative
+    the runner raises. With ``allow_fallback`` it instead returns a conservative
     uniform PPM derived from the DNA residues in the PDB and flags the result
     via ``used_fallback`` / ``fallback_reason``.
 

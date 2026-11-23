@@ -1,11 +1,9 @@
-"""proto_tools/utils/tool_pool.py.
+"""Run list-input tools in parallel across devices.
 
-Parallel fan-out across multiple devices for list-input tools.
-
-ToolPool intercepts @tool-decorated function calls, partitions input items
-across persistent workers on different devices using cost-aware LPT scheduling,
-runs them concurrently via ThreadPoolExecutor, and reassembles results in
-original order.
+ToolPool intercepts ``@tool`` calls and divides input items among persistent
+workers on different devices. Cost-aware LPT scheduling balances the work,
+ThreadPoolExecutor runs the workers concurrently, and results are restored
+to the original input order.
 """
 
 import contextlib
@@ -47,13 +45,10 @@ _DEFAULT_CPU_CAP = 4
 def _detect_cpus() -> int:
     """Return the number of CPUs this process can use (always ``>= 1``).
 
-    Prefers ``os.sched_getaffinity(0)`` (Linux/cgroup-aware: returns the
-    Slurm/Kubernetes-allocated cores), falling back to ``os.cpu_count()`` on
-    platforms where ``sched_getaffinity`` is unavailable (macOS, Windows).
-    Both branches floor at ``1`` for symmetry — the kernel won't permit a
-    running process to have an empty affinity set, but downstream callers
-    (ToolPool budget math, the ``uses_cpu(n)`` test gate) rely on a positive
-    value, so the floor keeps the contract honest.
+    Use ``os.sched_getaffinity(0)`` on Linux to respect cores allocated by
+    Slurm or Kubernetes. Fall back to ``os.cpu_count()`` when affinity queries
+    are unavailable, such as on macOS and Windows. Return at least 1 because
+    pool scheduling and the ``uses_cpu(n)`` test marker require a positive count.
     """
     try:
         return len(os.sched_getaffinity(0)) or 1
@@ -70,7 +65,7 @@ logger = logging.getLogger(__name__)
 
 
 class PartialFailureError(RuntimeError):
-    """Some worker partitions failed; successful results are preserved.
+    """Report failed worker partitions while preserving successful results.
 
     Attributes:
         succeeded: List of ``(original_index, output_item)`` tuples from

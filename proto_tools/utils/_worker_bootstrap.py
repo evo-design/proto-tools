@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""proto_tools/utils/_worker_bootstrap.py.
+"""Serve tool requests in a persistent standalone subprocess.
 
 Usage:
     python _worker_bootstrap.py <standalone_script_path>
@@ -10,11 +10,9 @@ Protocol:
     Response: {"id": "abc123", "result": { ... }}
     Error:    {"id": "abc123", "error": "traceback text"}
 
-The standalone script is imported as a module. Its ``__main__`` block is
-skipped because we import it, not run it.  We look for a ``dispatch``
-function first; if absent, we fall back to the script's original
-read-input / run-operation / write-output pattern by calling the
-operations directly based on the ``operation`` key in the input dict.
+Import the standalone script as a module, skipping its ``__main__`` block.
+Call its ``dispatch`` function when available. Otherwise, select the
+operation from the input dictionary's ``operation`` key and call it directly.
 """
 
 import contextlib
@@ -72,7 +70,7 @@ def _prepend_helpers_dir_to_sys_path() -> None:
 def _install_subprocess_logging_bridge() -> None:
     """Trigger ``standalone_helpers.proto_logging.install`` for this subprocess.
 
-    Imports ``standalone_helpers``; the package ``__init__`` gates ``install()``
+    Imports ``standalone_helpers``. The package ``__init__`` gates ``install()``
     on ``TOOL_VENV_PATH`` so this is a no-op when the bootstrap is imported by
     parent-side code. Caller must have placed the standalone dir on ``sys.path``
     via :func:`_prepend_standalone_dir_to_sys_path` first.
@@ -111,11 +109,11 @@ def _follow_request_device(input_dict: dict[str, Any]) -> None:
     a bare ``"cuda"``, Triton kernel launches, which also key their compiled-kernel cache on it)
     uses the current device, so it must be the GPU the tool was dispatched to.
 
-    Only once this process has initialized CUDA through torch. Setting the device opens a context
-    on that GPU, and a worker that only shells out (a per-call CLI tool) or uses another framework
-    must not hold one: on an Exclusive_Process GPU it would lock out the subprocess doing the work.
-    A torch worker's first load sets the device itself (``move_model_to_device`` or
-    ``set_current_cuda_device``), so nothing is lost before CUDA is up.
+    Switch only after torch has initialized CUDA. Setting a device opens a
+    CUDA context, which a CLI-only worker or another framework must not hold.
+    On an Exclusive_Process GPU, that context would prevent the tool subprocess
+    from using the GPU. A torch worker sets the device itself on first load through
+    ``move_model_to_device`` or ``set_current_cuda_device``.
     """
     device = input_dict.get("device")
     if not (isinstance(device, str) and device.startswith("cuda:")):
@@ -289,7 +287,7 @@ def main() -> None:
                     if hasattr(module, "to_device"):
                         result = module.to_device(device)
                     else:
-                        # Graceful fallback if tool doesn't support to_device
+                        # Report that the tool has no to_device hook instead of raising.
                         sys.stderr.write(f"[worker] Warning: {script_path} does not have to_device() function\n")
                         result = {"success": False, "error": "to_device not supported"}
                     result = _serialize(result)
@@ -299,8 +297,8 @@ def main() -> None:
                     if hasattr(module, "get_memory_stats"):
                         result = module.get_memory_stats()
                     else:
-                        # Graceful fallback if tool doesn't support get_memory_stats; framework is
-                        # None because there is no ML runtime to report allocations from.
+                        # Report unavailable statistics when the tool provides no get_memory_stats hook.
+                        # No framework is named because no ML runtime supplied the values.
                         sys.stderr.write(f"[worker] Warning: {script_path} does not have get_memory_stats() function\n")
                         result = {"available": False, "framework": None, "reason": "get_memory_stats not supported"}
                     result = _serialize(result)

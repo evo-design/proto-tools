@@ -33,7 +33,7 @@ def _sha256(path: str) -> str:
 
 
 def _one_hot(sequences: list[str], device: str) -> Any:
-    """Encode DNA as a ``(B, 4, L)`` float tensor in A,C,G,T order; N and other bases are all zeros."""
+    """Encode DNA as a ``(B, 4, L)`` float tensor in A,C,G,T order, with zeros for N and other bases."""
     import numpy
     import torch
 
@@ -91,7 +91,7 @@ def _aggregate(models: list[Any], X: Any, reverse_complement: bool) -> tuple[Any
 class CherimoyaWorker:
     """Holds loaded Cherimoya checkpoints and runs the toolkit's operations.
 
-    Checkpoints are swapped in-process: the selecting config fields are not
+    Checkpoints are swapped in-process. The selecting config fields are not
     ``reload_on_change``, so this worker is the only reloader. Each cached checkpoint keeps
     the source file and SHA-256 it was loaded from, and every call reports those for the
     wrapper to check against the request.
@@ -274,7 +274,7 @@ class CherimoyaWorker:
     def gradient(self, input_dict: dict[str, Any]) -> dict[str, Any]:
         """Return the summed loss terms and their gradient with respect to the relaxed state.
 
-        ``temperature`` fixes the coordinate space: a positive value reads the state as logits
+        ``temperature`` sets the coordinate space. A positive value reads the state as logits
         and returns logit-space gradients, ``None`` consumes probabilities directly and returns
         probability-space gradients.
         """
@@ -308,6 +308,7 @@ class CherimoyaWorker:
             terms: list[dict[str, Any]] = []
             for position, term in enumerate(requested):
                 probs, counts, _ = _aggregate([loaded[i] for i in term["checkpoints"]], X, rc)
+                # Use the total count directly or apportion it to the selected output span.
                 if term["id"] == "log_counts":
                     value = counts
                 else:
@@ -322,11 +323,11 @@ class CherimoyaWorker:
                 }
 
                 if compute_gradient:
-                    # Samples are independent, so summing only batches the backward pass.
+                    # Sum independent samples to compute their gradients in one backward pass.
                     (gradient,) = torch.autograd.grad(value.sum(), logits, retain_graph=(position < len(requested) - 1))
                     if gradient is None:
                         raise RuntimeError(f"cherimoya: missing gradient for term {term['id']!r} after backward")
-                    # Off the device before the next term's forward, so peak memory holds one
+                    # Move this gradient to CPU before evaluating the next term to limit GPU memory use.
                     entry["gradients"] = gradient.detach().cpu().tolist()
                     del gradient
 

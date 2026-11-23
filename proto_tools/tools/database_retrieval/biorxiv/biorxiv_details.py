@@ -230,7 +230,7 @@ def run_biorxiv_details(
     Args:
         inputs (BiorxivDetailsInput): Preprint DOIs.
         config (BiorxivDetailsConfig): Server to query.
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         BiorxivDetailsOutput: One record per DOI, in input order. A DOI that no queried server
@@ -263,7 +263,7 @@ def run_biorxiv_details(
 
 
 def _details(doi: str, server: str, session: requests.Session) -> BiorxivPreprint:
-    """Look the DOI up on each candidate server in turn; return the first hit or an item error."""
+    """Look up a DOI on each candidate server and return the first hit or an item error."""
     servers = _AUTO_SERVERS if server == "auto" else (server,)
     status = None
     for name in servers:

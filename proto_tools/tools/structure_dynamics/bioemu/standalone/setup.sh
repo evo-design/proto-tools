@@ -12,7 +12,7 @@ echo "Installing remaining dependencies..."
 uv pip install -r requirements.txt
 
 # Upgrade JAX to GPU-enabled build with driver-compatible CUDA libs.
-# bioemu pins jax==0.4.35 (CPU-only); we need CUDA support for Evoformer.
+# bioemu pins the CPU-only jax==0.4.35 package. Evoformer needs CUDA support.
 # Hardcoded instead of proto_install_jax because bioemu requires exactly
 # jax==0.4.35, and cuda12 is the only GPU extra at that version.
 JAX_SPEC="jax[cuda12]==0.4.35"

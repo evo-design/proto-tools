@@ -1,6 +1,6 @@
 """proto_tools/utils/download_progress.py.
 
-Request deadlines that do not charge the time a worker spends downloading weights.
+Exclude active weight downloads from a worker request's timeout.
 
 A tool's first request can download gigabytes of weights at whatever speed the link allows, so
 a fixed wall-clock timeout kills healthy downloads on slow links. ``ProgressDeadline`` bounds a
@@ -9,9 +9,9 @@ request by its timeout, but adds back every interval in which the toolkit's down
 is charged in full. A stalled download stops growing, so the clock runs again and the remaining
 timeout bounds it.
 
-Growth is measured by summing file sizes under those folders, which covers every download path
-(Hugging Face ``*.incomplete`` blobs, ``download_weights`` temp files, and libraries that write
-the final filename directly) with no hook in the worker. The walk runs at most once per
+Summing file sizes under those folders tracks Hugging Face ``*.incomplete``
+blobs, ``download_weights`` temporary files, and libraries that write directly
+to the final filename. No worker hook is needed. The walk runs at most once per
 ``PROTO_DOWNLOAD_POLL_SECONDS`` (default 30), and not at all for a request that finishes
 within its first poll.
 """
@@ -26,10 +26,10 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _DEFAULT_POLL_SECONDS = 30.0
-# Growth below this between two checks is not a download; caches and logs write less.
+# Growth below this threshold is not treated as a download. Caches and logs write less.
 _MIN_GROWTH_BYTES = 1 << 20
-# Most download time one request may exclude, so a writer mistaken for a download cannot hold a
-# wedged worker open forever.
+# Limit the download time excluded from a request so an unrelated writer cannot keep
+# an unresponsive worker alive indefinitely.
 _DEFAULT_MAX_CREDIT_SECONDS = 12 * 3600.0
 
 

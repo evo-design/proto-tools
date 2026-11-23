@@ -1,8 +1,8 @@
 """Modal credential discovery, and which apps are live in the active workspace.
 
-Lives outside ``proto_tools.modal`` because that package builds Modal objects at import
-time, which is exactly what fails when Modal is unconfigured. Nothing here imports the
-SDK at module scope, so the credential checks still answer in that state.
+This module lives outside ``proto_tools.modal``, which builds Modal objects
+at import time and can fail when Modal is unconfigured. Keeping SDK imports
+inside functions lets credential checks run in that state.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ TOKEN_VARS = ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET")
 def config_path() -> Path:
     """Return the config file Modal reads, resolved the way the SDK resolves it.
 
-    ``os.path.expanduser`` rather than ``Path.home()``: the latter raises when ``HOME`` is
-    unset and the uid has no passwd entry, an ordinary state inside a container.
+    Use ``os.path.expanduser`` because ``Path.home()`` raises when ``HOME`` is
+    unset and the uid has no passwd entry, as can happen in a container.
     """
     return Path(os.environ.get("MODAL_CONFIG_PATH") or os.path.expanduser("~/.modal.toml"))
 
@@ -66,7 +66,7 @@ def auth_mechanism() -> str | None:
     """Name the source the SDK will authenticate from, or ``None`` when there is none.
 
     Environment variables take precedence over the config file, so they are reported first
-    when both are available. An empty variable still counts: Modal reads it and fails,
+    when both are available. An empty variable still takes precedence. Modal reads it and fails
     rather than falling back to the file.
     """
     if all(var in os.environ for var in TOKEN_VARS):
@@ -95,10 +95,11 @@ def _listed_apps(environment: str, client: Any | None) -> set[str]:
 
 
 def _hydrated_apps(environment: str, client: Any | None) -> set[str]:
-    """The same answer, asked one app at a time.
+    """Find deployed apps by checking each app separately.
 
     Kept as the fallback for :func:`deployed_apps` because the fast path reaches into SDK
-    internals: if a Modal upgrade moves them, this still answers, only slowly.
+    internals. If a Modal upgrade changes them, individual app lookups can still
+    provide the result, though more slowly.
     """
     import modal
 
@@ -125,14 +126,14 @@ def deployed_apps(environment: str | None = None, client: Any | None = None) -> 
     question is "what is deployed here" rather than "is this one app deployed", and Modal answers
     that in a single request.
 
-    The environment is named rather than inherited, and must be: a dispatch resolves
-    ``proto-env`` while an unconfigured Modal profile resolves the workspace default, so asking
-    ambiently reports on a different environment than the one a call would actually reach.
+    Name the environment explicitly. Dispatch defaults to ``proto-env``, while an
+    unconfigured Modal profile uses the workspace default. Inheriting the profile
+    could therefore report on a different environment from the one dispatch uses.
 
     Args:
         environment (str | None): Modal environment to look in. ``None`` resolves the default.
         client (Any | None): Modal client to ask as. ``None`` uses the process's own credentials,
-            which is what a local caller wants; a server answering for someone else passes theirs,
+            which suits a local caller. A server answering for someone else passes theirs,
             or it would report its own deployments as though they were the caller's.
 
     Returns:

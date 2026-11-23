@@ -1,12 +1,12 @@
 """proto_tools/utils/fanout.py.
 
-Splitting one iterable call across several executions and stitching the results back.
+Split a batch across executions and combine their results.
 
-Both the local worker pool and a remote device do the same thing: divide a batch, run the
-pieces independently, and reassemble one output. Only the per-item list is genuinely split,
-so every other output field is carried through from one piece. A field that differs between
-pieces is per-item data in disguise, and the merged output would hold one piece's value for
-the whole batch, which is why that case is reported rather than passed over.
+Both the local worker pool and remote dispatch divide a batch, run its pieces
+independently, and combine them into one output. Only the per-item list is
+split. Other output fields are copied from one piece. If one of those fields
+differs across pieces, the merge reports it because one piece's value would
+otherwise be used for the whole batch.
 """
 
 import functools
@@ -51,12 +51,12 @@ def _warn_unrecognised_partial_failure_value(value: str) -> None:
 
 
 def is_fatal_dispatch_error(exc: BaseException) -> bool:
-    """Whether a failure condemns the whole call rather than one chunk of it.
+    """Check whether a dispatch error affects the whole call rather than one chunk.
 
-    Missing credentials, an undeployed tool, an uninstalled client: none of these are properties of
-    the items being sent, so every chunk would fail the same way. Recording them per chunk would
-    hand back one placeholder per item, each repeating the same setup problem, and bury the single
-    thing the caller has to act on. Retrying them is equally pointless.
+    Missing credentials, an undeployed tool, or an uninstalled client would make
+    every chunk fail in the same way. Report the shared cause directly instead
+    of returning a placeholder for each item. Retrying individual chunks cannot
+    resolve these failures.
 
     Args:
         exc (BaseException): Failure raised while dispatching.
@@ -78,8 +78,8 @@ def is_fatal_dispatch_error(exc: BaseException) -> bool:
 def on_partial_failure() -> Literal["raise", "return_partial"]:
     """How to report a split batch where only some executions succeeded.
 
-    An unrecognised value falls back to raising rather than guessing, but says so: someone who
-    wrote the wrong case would otherwise see the default behaviour and no indication why.
+    An unrecognised value logs a warning and falls back to raising. This makes
+    mistakes such as incorrect capitalization visible to the caller.
 
     Returns:
         Literal["raise", "return_partial"]: ``"return_partial"`` when the environment asks for the
@@ -201,8 +201,7 @@ def merge_piece_outputs(
 def item_costs(input_cls: type[BaseToolInput], items: list[Any]) -> list[float]:
     """Cost of each item, as the tool's own input class reports it.
 
-    The single place either fan-out path asks what an item is worth, so the pool and a remote
-    device cut the same batch the same way. A tool that does not override
+    Both fan-out paths use this helper to obtain item costs from the input model. A tool that does not override
     :meth:`BaseToolInput.item_cost` reports ``1.0`` for everything, which makes cost and count the
     same measure and leaves its behaviour unchanged.
 
@@ -220,17 +219,17 @@ def chunk_indices(total: int, max_chunk_size: int | None, costs: list[float] | N
     """Return ``(start, stop)`` spans covering ``total`` items.
 
     Cuts so each span carries a comparable share of the batch's cost, never exceeding
-    ``max_chunk_size`` items. Cost decides where a cut falls; count caps how wide it can get. A
+    ``max_chunk_size`` items. Cost determines where to split, and count limits the number of items per span. A
     batch of uneven items otherwise splits into even counts of wildly different work, and the
     slowest span sets the wall clock.
 
-    Cost can produce **more** pieces than counting alone: peeling an expensive item into its own
-    span is the point, and the rest then packs behind it. Every piece still respects
+    Cost balancing can produce **more** pieces than counting alone by giving an
+    expensive item a separate span and packing the remaining items into other spans. Every piece still respects
     ``max_chunk_size``, and there are never more pieces than items. ``starmap`` queues pieces and
     reuses warm containers, so the extra ones cost dispatches rather than container starts.
 
-    Spans stay contiguous and in order. The remote path derives a chunk's seed from where it starts
-    and merges by concatenation, so reordering to balance further would cost both.
+    Spans stay contiguous and in order because the remote path derives each
+    chunk's seed from its start index and merges results by concatenation.
 
     Every span is computed from the whole batch's costs rather than from a running total, so the
     result does not depend on which end the batch is read from. An earlier attempt derived one

@@ -43,7 +43,7 @@ newly fetched genome assemblies without maintaining a bundled database.
 - `reference_id`: optional versioned assembly/accession provenance, such as
   `GCF_000001405.40`.
 - `pam` and `pam_side`: the IUPAC PAM without the guide. SpCas9 is `NGG` on
-  `three_prime`; Cas12a is commonly `TTTV` on `five_prime`.
+  `three_prime`. Cas12a is commonly `TTTV` on `five_prime`.
 - mismatch, DNA-bulge, RNA-bulge, and optional combined edit limits are
   inclusive maxima.
 
@@ -66,7 +66,7 @@ Every upstream target row is returned, including aligned guide and genomic
 strings, explicit DNA/RNA bulge class and size, mismatch count, total edits,
 strand, chromosome, and the aligned target's `start` and `end`, converted from
 CRISPRitz's zero-based coordinates to the 1-indexed inclusive convention used
-throughout Proto. CRISPRitz 2.8 can also emit joint `RNA,DNA` alignments; these
+throughout Proto. CRISPRitz 2.8 can also emit joint `RNA,DNA` alignments. These
 are represented as `dna_rna` while the unmodified upstream label remains
 available. The output also records the combined reference checksum, index reuse,
 all search parameters, and the pinned CRISPRitz version.

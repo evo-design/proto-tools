@@ -2,7 +2,7 @@
 
 Reports two activity scores per window, following the STARR-seq split between
 developmental and housekeeping enhancer programmes. That split is a *Drosophila*
-assay definition; read the scores as relative activity within a comparison
+assay definition. Read the scores as relative activity within a comparison
 rather than as calibrated cross-species values.
 """
 

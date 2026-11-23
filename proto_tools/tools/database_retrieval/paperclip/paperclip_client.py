@@ -1,8 +1,7 @@
 """Minimal HTTP client for the hosted Paperclip literature service.
 
 Paperclip runs entirely on GXL's servers and exposes each operation as a tool on its MCP
-endpoint, so this module calls those tools directly with ``requests`` and needs no extra
-dependency:
+endpoint, so this module calls them directly with ``requests`` without adding a dependency.
 
 - Each operation is a JSON-RPC ``tools/call`` to ``{base_url}/mcp`` naming one Paperclip tool
   (``search``, ``lookup``, ``grep``, ``cat``) with typed arguments, authenticated with an
@@ -74,8 +73,8 @@ class PaperclipToolResult:
 class PaperclipClient:
     """Authenticated client for the Paperclip MCP endpoint.
 
-    Authenticates with ``api_key`` when given, else ``token`` as a bearer token; the tool
-    config resolves both from ``PAPERCLIP_API_KEY`` and ``PAPERCLIP_TOKEN``. The
+    Authenticate with ``api_key`` when supplied, or with ``token`` as a bearer token.
+    The tool config resolves these from ``PAPERCLIP_API_KEY`` and ``PAPERCLIP_TOKEN``. The
     ``PAPERCLIP_BASE_URL`` environment variable overrides the service origin.
     """
 
@@ -230,7 +229,7 @@ class PaperclipClient:
         return result.result_id, self.fetch_result_papers(result.result_id)
 
     def lookup(self, field: str, value: str, *, limit: int) -> tuple[str | None, list[dict[str, Any]]]:
-        """Find papers by one metadata field; return the saved result id, if any, and the hits.
+        """Find papers by a metadata field and return any saved result ID and the hits.
 
         Paperclip saves a result only for some lookups. Without one, each listed paper's
         ``meta.json`` stands in for its saved hit.
@@ -290,6 +289,7 @@ class PaperclipClient:
                 for raw in output.splitlines()
                 if (match := _NUMBERED_LINE.match(raw)) is not None
             ]
+            # Drop the possibly incomplete final line of a truncated reply; the next read repeats it.
             if truncated:
                 numbered = numbered[:-1]
             if not numbered:

@@ -1,7 +1,4 @@
-"""proto_tools/tools/sequence_scoring/alphagenome/shared_data_models.py.
-
-Shared data models, constants, and Literal types for AlphaGenome tools.
-"""
+"""Shared data models, constants, and Literal types for AlphaGenome tools."""
 
 import csv
 import json

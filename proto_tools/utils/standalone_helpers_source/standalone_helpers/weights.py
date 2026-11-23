@@ -135,8 +135,9 @@ def export_weights_dir(env_var: str, toolkit: str, *, prepend: bool = False) -> 
 
     Libraries such as Foundry (``FOUNDRY_CHECKPOINT_DIRS``), Chai-1 (``CHAI_DOWNLOADS_DIR``), and
     Protenix (``PROTENIX_ROOT_DIR``) read their download location from an environment variable.
-    Setting it through this helper keeps every toolkit on one rule: the managed directory wins,
-    and ``PROTO_{TOOLKIT}_WEIGHTS_DIR`` is the way to choose another location.
+    This helper points those variables to the managed directory, overriding any value already
+    set, so every toolkit follows one rule. Use ``PROTO_{TOOLKIT}_WEIGHTS_DIR`` to choose
+    another location.
 
     Args:
         env_var (str): The library's environment variable.
@@ -192,9 +193,9 @@ def file_lock(
     """Hold an exclusive cross-process ``flock`` on ``lock_path`` so concurrent workers don't race.
 
     The kernel releases the lock when its holder exits, so a crashed downloader leaves no stale
-    lock. The 0-byte lock file is never unlinked; deleting it would let a second process lock a
+    lock. The empty lock file is never deleted. Deleting it would let a second process lock a
     fresh inode while a third still holds the old one. This is the Python side of
-    ``proto_with_lock`` in ``standalone_helpers.sh``: same lock files, same waiting rules, and
+    ``proto_with_lock`` in ``standalone_helpers.sh``. They use the same lock files, waiting rules, and
     the same ``PROTO_LOCK_*`` settings, so bash and Python callers for one target take turns.
 
     Waiting for another holder has no fixed deadline. With ``progress`` (a path or glob, such as
@@ -216,6 +217,7 @@ def file_lock(
         TimeoutError: If the cap is reached, or ``progress`` stops growing for the stall window.
     """
     lock_path = Path(lock_path)
+    # Enter without locking if this thread or a parent proto_with_lock already holds it
     key = str(lock_path)
     held: set[str] = getattr(_held_locks, "paths", None) or set()
     _held_locks.paths = held
@@ -223,13 +225,16 @@ def file_lock(
         yield
         return
 
+    # Resolve the total wait cap, stall window, and poll interval from arguments or env
     cap = timeout if timeout is not None else _env_seconds("PROTO_LOCK_TIMEOUT_SECONDS", 0)
     capped = timeout is not None or cap > 0
     stall = _env_seconds("PROTO_LOCK_STALL_SECONDS", 600)
     poll = _env_seconds("PROTO_LOCK_POLL_SECONDS", 60)
+    # Open the lock file, creating it if needed
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o666)
     try:
+        # Poll for the lock without blocking so the wait can be capped and stall-checked
         started = last_check = idle_since = time.monotonic()
         last_size: int | None = None
         waiting = False
@@ -239,11 +244,13 @@ def file_lock(
                 break
             except BlockingIOError as err:
                 now = time.monotonic()
+                # Log once that another process holds the lock
                 if not waiting:
                     logger.info("Waiting for another process to finish with %s", lock_path.name)
                     waiting = True
                 if capped and now - started >= cap:
                     raise TimeoutError(f"timed out after {now - started:.0f}s waiting for lock {lock_path}") from err
+                # Every poll interval, check whether the holder's progress path has grown
                 if progress is not None and now - last_check >= poll:
                     last_check = now
                     size = _progress_size(str(progress))
@@ -256,12 +263,14 @@ def file_lock(
                             "to wait longer)"
                         ) from err
                 time.sleep(min(1.0, poll))
+        # Mark the lock held by this thread while the caller's block runs
         held.add(key)
         try:
             yield
         finally:
             held.discard(key)
     finally:
+        # Release the lock and close the file descriptor
         with contextlib.suppress(OSError):
             fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)

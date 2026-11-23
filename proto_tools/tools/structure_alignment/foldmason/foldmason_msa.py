@@ -359,9 +359,9 @@ def _submit_foldmason(
     structure_ids: list[str],
     session: requests.Session,
 ) -> str:
-    """Submit a list of structures to FoldMason; return the job ticket ID.
+    """Submit a list of structures to FoldMason and return the job ticket ID.
 
-    Multipart wire format (per ``FoldMasonSearch.vue``): one ``fileNames[]`` +
+    The multipart format in ``FoldMasonSearch.vue`` uses one ``fileNames[]`` and
     one ``queries[]`` per structure. Filenames omit the ``.pdb`` extension so
     the server preserves user-supplied IDs verbatim as entry names.
     """

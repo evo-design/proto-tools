@@ -192,7 +192,7 @@ class ESMIF1Model:
                 )
             sequences.append(sampled_seq)
 
-            # Score sampled sequence; avg_ll is the mean per-position log-likelihood.
+            # Score the sampled sequence and retain its mean per-position log-likelihood.
             avg_ll, _ = esm.inverse_folding.multichain_util.score_sequence_in_complex(
                 self.model,
                 self.alphabet,

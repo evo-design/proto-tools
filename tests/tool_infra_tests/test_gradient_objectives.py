@@ -371,12 +371,12 @@ def test_a_contribution_serializes_the_concrete_term_with_its_selectors() -> Non
 
 
 def test_reading_a_dumped_contribution_back_fails_rather_than_dropping_selectors() -> None:
-    """What ``SerializeAsAny`` does and does not buy.
+    """Validate dumped selectors against the declared term type.
 
-    It is a serialization hint, not a polymorphic loader: validation still builds the declared
-    base class, which forbids unknown fields. A dumped selector therefore comes back as a loud
-    error rather than quietly disappearing. Restoring concrete terms needs a narrowed model of
-    the tool's own, as ``TermGradient`` has; nothing here keeps a registry to guess from.
+    ``SerializeAsAny`` controls serialization. Validation still builds the declared
+    base class, which rejects unknown fields, so a dumped selector raises an error.
+    Restoring a concrete term requires a model narrowed to that term type, as in
+    ``TermGradient``. There is no registry here to choose a type automatically.
     """
     objective = compose_terms(
         [answer(3.0, [[1.0, -2.0]], term=ActivityTerm(cell_type="HepG2"))],

@@ -113,6 +113,7 @@ def _ensure_index(
     pam_spec = (
         ("N" * guide_length + pam, len(pam)) if pam_side == "three_prime" else (pam + "N" * guide_length, -len(pam))
     )
+    # Reuse an index only when the reference and every indexing parameter agree.
     key_material = json.dumps(
         {
             "version": VERSION,
@@ -128,6 +129,7 @@ def _ensure_index(
     cache_root.mkdir(parents=True, exist_ok=True)
     destination = cache_root / index_key
     lock_path = cache_root / f".{index_key}.lock"
+    # Serialize builds for this cache key so concurrent requests share one finished index.
     with lock_path.open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         manifest_path = destination / "manifest.json"
@@ -187,6 +189,7 @@ def _parse_hits(path: Path, pam_length: int, pam_side: str) -> list[dict[str, An
             normalized_bulge = {"x": "none", "dna": "dna", "rna": "rna", "rna,dna": "dna_rna"}.get(bulge)
             if normalized_bulge is None:
                 raise ValueError(f"unexpected CRISPRitz bulge type: {row['#Bulge type']}")
+            # Convert the native zero-based start to a 1-indexed inclusive interval.
             hits.append(
                 {
                     "guide": _guide_from_alignment(row["crRNA"], pam_length, pam_side),
@@ -231,6 +234,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         pam_value = pam_length if pam_side == "three_prime" else -pam_length
         pam_path = work / "pam.txt"
         pam_path.write_text(f"{pam_pattern} {pam_value}\n")
+        # CRISPRitz expects PAM placeholders attached to each guide in nuclease orientation.
         placeholder = "N" * pam_length
         guide_path = work / "guides.txt"
         guide_path.write_text(

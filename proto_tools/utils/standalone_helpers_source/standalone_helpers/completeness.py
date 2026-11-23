@@ -1,9 +1,8 @@
 """Know a downloaded or built directory is complete by the files it holds, not by a marker alone.
 
-A completion marker that outlives the files it describes (a scratch purge deletes files one by one)
-makes every later run trust a broken directory. Here the marker *is* the list of files: a directory
-is complete only while every file recorded in its marker exists, so whatever lost files is built
-again. ``proto_record_files`` and ``proto_recorded_files_complete`` in ``standalone_helpers.sh``
+A completion marker can remain after files are deleted, for example during a scratch purge.
+Record the directory's files in the marker and check that each one still exists. Rebuild the
+directory if any are missing. ``proto_record_files`` and ``proto_recorded_files_complete`` in ``standalone_helpers.sh``
 read and write the same marker format, so bash and Python callers agree.
 
 Layers, each usable on its own:
@@ -179,16 +178,21 @@ def ensure_complete(
     from .weights import file_lock
 
     dest = Path(dest)
+    # Return early, without the lock, when every recorded file is present
     if not force and missing_recorded_files(dest, marker=marker) == []:
         return dest
+    # Place the lock beside dest under the name bash proto_with_lock callers also use
     dest.parent.mkdir(parents=True, exist_ok=True)
     lock_path = Path(lock) if lock is not None else dest.parent / f".{dest.name}.extract.lock"
+    # Watch the staging dirs (or dest) grow so waiters can tell the holder is still building
     if progress is None:
         progress = f"{dest.parent}/.{dest.name}.stage.*" if stage else str(dest)
     with file_lock(lock_path, progress=progress):
+        # Re-check under the lock, since another caller may have finished building meanwhile
         missing = missing_recorded_files(dest, marker=marker)
         if not force and missing == []:
             return dest
+        # Record an unmarked copy that passes the older check instead of building it again
         if not force and missing is None and adopt is not None and dest.is_dir() and adopt(dest):
             adopted = _files_to_record(dest, record)
             if adopted:
@@ -196,21 +200,26 @@ def ensure_complete(
                 return dest
         if missing:
             logger.warning("%s lost %d file(s) (e.g. %s); building it again", dest, len(missing), missing[0])
+        # Build into a staging dir beside dest, record it, then swap it into place
         if stage:
             staging = Path(tempfile.mkdtemp(prefix=f".{dest.name}.stage.", dir=dest.parent))
             try:
                 build(staging)
                 record_files(staging, _built_files(staging, record, dest), marker=marker)
+                # Replace any old dest with the finished staging dir
                 _remove(dest)
                 os.replace(staging, dest)
             finally:
+                # Clean up the staging dir if the build or swap failed
                 shutil.rmtree(staging, ignore_errors=True)
         else:
+            # Otherwise build in place: clear a partial copy unless resuming, and always drop the old marker
             if reset:
                 _remove(dest)
             (dest / marker).unlink(missing_ok=True)
             # Not created here: some builds (boltz, git clone) act only when dest does not exist
             build(dest)
+            # Confirm the build created dest, then record the files it left
             if not dest.is_dir():
                 raise RuntimeError(f"building {dest} did not create it")
             record_files(dest, _built_files(dest, record, dest), marker=marker)
