@@ -312,7 +312,11 @@ def test_opendde_imports_upstream_only_after_resolving_its_root(tmp_path, monkey
     monkeypatch.syspath_prepend(str(fake.parent))
     for name in ("runner", "runner.batch_inference", "runner.inference"):
         monkeypatch.delitem(sys.modules, name, raising=False)
-    monkeypatch.delenv("OPENDDE_ROOT_DIR", raising=False)
+    # load() sets OPENDDE_ROOT_DIR in this process. Setting it first records an undo, so teardown removes
+    # it; delenv of an unset variable records none, and the leaked root would send every later OpenDDE
+    # worker to this tmp dir's empty checkpoint, which upstream then downloads again.
+    monkeypatch.setenv("OPENDDE_ROOT_DIR", "")
+    monkeypatch.delenv("OPENDDE_ROOT_DIR")
     mod = _load_standalone_inference()
     helpers = sys.modules["standalone_helpers"]
     monkeypatch.setattr(helpers, "resolve_weights_dir", lambda toolkit: str(root), raising=False)
