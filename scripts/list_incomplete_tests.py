@@ -92,8 +92,12 @@ def collect_runnable_node_ids(pytest_args: list[str]) -> set[str]:
     ``uses_gpu`` / ``skip_ci`` / etc. have been translated into skip
     markers), evaluates skip markers, and prints ``RUNNABLE: <nodeid>``
     for every survivor before clearing ``items`` so nothing executes.
+    Collection runs under this script's interpreter, so the node IDs
+    match the ones the same environment's pytest will accept.
     """
     cmd = [
+        sys.executable,
+        "-m",
         "pytest",
         # Clear project addopts (which forces -v / coverage / etc.) so
         # output stays minimal and our RUNNABLE: lines are easy to grep.
