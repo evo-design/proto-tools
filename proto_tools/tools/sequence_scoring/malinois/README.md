@@ -57,7 +57,7 @@ Use this tool inside gradient-based DNA design loops to maximize activity in an 
 These apply to every Malinois tool in this toolkit (`malinois-score`, `malinois-gradient`).
 
 - **Requires a GPU.** Both tools load a PyTorch Malinois checkpoint and run most practically on CUDA.
-- **Weights are provisioned automatically.** By default, the standalone worker downloads the CODA Zenodo artifact into the managed model cache and verifies its MD5 checksum.
+- **Weights are provisioned automatically.** By default, the standalone worker downloads the published CODA artifact into the managed model cache and verifies its MD5 checksum. It tries the Tewhey Lab's public bucket first and the Zenodo record second; both are upstream sources recorded in `links.yaml`, and the one MD5 pin covers either, so a host that is refusing requests does not block the download.
 - **The gradient tool is a single evaluation.** It returns each requested cell's raw activity and optional gradient for the provided logits; run it from an optimizer for iterative design.
 
 ## References
