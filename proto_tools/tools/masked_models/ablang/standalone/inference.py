@@ -34,11 +34,9 @@ _ABLANG_MODEL_INFO: dict[str, tuple[str, str]] = {
     "ablang2-paired": ("https://zenodo.org/records/10185169/files/ablang2-weights.tar.gz", "model.pt"),
 }
 
-# AbLang2's weights exist upstream on Zenodo alone -- it is the URL ablang2/load_model.py itself
-# uses -- and Zenodo refuses whole networks it reads as noisy with HTTP 403. The mirror holds that
-# tarball's two extracted files, each pinned by its own SHA-256, which is a stricter check than the
-# archive ever had: upstream publishes no digest for it. Zenodo above stays as the fallback, so
-# the original source is still used whenever it will serve us. setup.sh carries the same table.
+# Mirror of the Zenodo archive's two extracted files, tried first because Zenodo answers some
+# networks with HTTP 403. Upstream publishes no digest, so each file carries its own SHA-256.
+# setup.sh carries the same table.
 _ABLANG2_MIRROR_URL = "https://huggingface.co/bviggiano/AbLang2/resolve/main"
 _ABLANG2_MIRROR_FILES: dict[str, str] = {
     "model.pt": "56d6f07862a6f824f88c8707bbc03e4026c9db762be2d3041e9767e2e6f86386",
@@ -49,9 +47,8 @@ _ABLANG2_MIRROR_FILES: dict[str, str] = {
 def _mirror_ablang2_weights(target: Path) -> bool:
     """Fetch AbLang2's weights from the mirror into ``target``, or report that it could not.
 
-    Each file is checked against its own SHA-256, so a truncated or substituted copy counts as a
-    miss and the caller falls back to the Zenodo archive rather than staging unverified weights. A
-    partial set left behind is harmless, since ``download_archive`` empties the directory first.
+    A digest miss counts as a miss, so the caller falls back to Zenodo rather than staging
+    unverified weights. A partial set is harmless: ``download_archive`` empties the directory.
 
     Args:
         target (Path): The ``model-weights-ablang2-paired`` cache directory.
