@@ -192,10 +192,11 @@ if [ "$USE_SIF" -eq 0 ]; then
   fi
 
   echo "Installing AlphaFold3 from local clone..."
-  # Point g++ at the tool env's include / lib paths so cifpp's #include <zlib.h>
-  # resolves to the conda-installed zlib (its CMake find_package only wires up
-  # the library, not the include dir, for this particular compile). Mirrors the
-  # system deps DeepMind's Dockerfile installs (zlib1g-dev, zstd).
+  # Resolve cifpp's zlib to the conda-installed copy in the tool env, standing in
+  # for the zlib1g-dev + zstd system deps DeepMind's Dockerfile installs.
+  # CMAKE_PREFIX_PATH lets find_package(ZLIB) locate it on hosts without system
+  # zlib headers; the compiler paths cover the #include <zlib.h> in its compile.
+  export CMAKE_PREFIX_PATH="$VENV_PATH${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
   export CPLUS_INCLUDE_PATH="$VENV_PATH/include:${CPLUS_INCLUDE_PATH:-}"
   export C_INCLUDE_PATH="$VENV_PATH/include:${C_INCLUDE_PATH:-}"
   export LIBRARY_PATH="$VENV_PATH/lib:${LIBRARY_PATH:-}"
