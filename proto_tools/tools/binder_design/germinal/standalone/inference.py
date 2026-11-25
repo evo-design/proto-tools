@@ -27,6 +27,18 @@ _ABLANG_ARCHIVES: dict[str, tuple[str, str]] = {
     "ablang2-paired": ("https://zenodo.org/records/10185169/files/ablang2-weights.tar.gz", "model.pt"),
 }
 
+# AbLang2's weights exist upstream on Zenodo alone (it is the URL ablang2/load_model.py itself
+# uses), and Zenodo refuses whole networks it reads as noisy with HTTP 403, which took out every
+# ablang test in a cold run and a Modal redeploy alike. This mirror holds that tarball's two
+# extracted files, each pinned by its own SHA-256 -- a stricter check than the archive ever had,
+# since upstream publishes no digest for it. The Zenodo archive above stays as the fallback, so the
+# original source is still used whenever it will serve us.
+_ABLANG2_MIRROR_URL = "https://huggingface.co/bviggiano/AbLang2/resolve/main"
+_ABLANG2_MIRROR_FILES: dict[str, str] = {
+    "model.pt": "56d6f07862a6f824f88c8707bbc03e4026c9db762be2d3041e9767e2e6f86386",
+    "hparams.json": "33474b76d78e01beb24b3621cd44d42b0813333d21e5b806168580bd836c5c8d",
+}
+
 _TYPED_FILTER_KEY_MAP: dict[str, str] = {
     "plddt_threshold": "external_plddt",
     "iptm_threshold": "external_iptm",
@@ -105,7 +117,10 @@ class GerminalRunner:
         ):
             logger.update_status("Downloading AbLang weights")
         for model, (url, marker) in _ABLANG_ARCHIVES.items():
-            cached = download_archive(url, ablang_cache / f"model-weights-{model}", marker=marker)
+            target = ablang_cache / f"model-weights-{model}"
+            cached = target if model == "ablang2-paired" and self._mirror_ablang2(target) else None
+            if cached is None:
+                cached = download_archive(url, target, marker=marker)
             link_to_cache(ablang_pkg / f"model-weights-{model}", cached)
 
         # setup.sh links the built DAlphaBall into the repo; repoint it if the cache moved
@@ -120,6 +135,31 @@ class GerminalRunner:
             self.weights_dir,
             self.af_params_dir,
         )
+
+    @staticmethod
+    def _mirror_ablang2(target: Path) -> bool:
+        """Fetch AbLang2's weights from the mirror into ``target``, or report that it could not.
+
+        Each file is checked against its own SHA-256, so a truncated or substituted copy counts as
+        a miss and the caller falls back to Zenodo rather than linking unverified weights into the
+        ablang2 package. A partial set left behind is harmless: ``download_archive`` empties the
+        directory before unpacking.
+
+        Args:
+            target (Path): The ``model-weights-ablang2-paired`` cache directory.
+
+        Returns:
+            bool: Whether every mirrored file is now present and verified.
+        """
+        from standalone_helpers import download_weights
+
+        try:
+            for name, digest in _ABLANG2_MIRROR_FILES.items():
+                download_weights(f"{_ABLANG2_MIRROR_URL}/{name}", target / name, sha256=digest)
+        except (OSError, RuntimeError) as err:
+            logger.warning("AbLang2 mirror unavailable (%s); falling back to the Zenodo archive", err)
+            return False
+        return True
 
     def __call__(self, input_dict: dict[str, Any]) -> dict[str, Any]:
         """Run one Germinal campaign end-to-end and return parsed outputs."""
