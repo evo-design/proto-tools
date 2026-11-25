@@ -28,9 +28,14 @@ logger = get_logger(__name__)
 CELL_TYPE_INDEX = {"K562": 0, "HepG2": 1, "SKNSH": 2}
 DNA_VOCAB = list(DNA_NUCLEOTIDES)
 # The published Malinois artifact (Gosai et al., 2024), pinned by MD5: one tarball holding the
-# model checkpoint and its metadata.
-ARTIFACT_URL = (
-    "https://zenodo.org/records/10698014/files/MODELS-malinois_artifacts__20211113_021200__287348.tar.gz?download=1"
+# model checkpoint and its metadata. Both URLs are upstream's own and links.yaml records both; the
+# Tewhey Lab's public bucket is tried first because Zenodo refuses whole networks it reads as noisy
+# ("unusual traffic from your network", HTTP 403), which blocked this download from the cluster and
+# from Modal alike. ARTIFACT_MD5 covers either source, and the bucket copy matches it, so trying a
+# second host trades nothing for staying up while Zenodo is unreachable.
+ARTIFACT_URLS = (
+    "https://storage.googleapis.com/tewhey-public-data/CODA_resources/malinois_artifacts__20211113_021200__287348.tar.gz",
+    "https://zenodo.org/records/10698014/files/MODELS-malinois_artifacts__20211113_021200__287348.tar.gz?download=1",
 )
 ARTIFACT_FILENAME = "MODELS-malinois_artifacts__20211113_021200__287348.tar.gz"
 ARTIFACT_MD5 = "375142a714e7df73c463b46113a65210"
@@ -40,7 +45,19 @@ def _download_artifact(cache_dir: Path) -> Path:
     target = cache_dir / ARTIFACT_FILENAME
     if not target.is_file():
         logger.update_status("Downloading Malinois weights")
-    return Path(download_weights(ARTIFACT_URL, target, md5=ARTIFACT_MD5))
+    last_error: Exception | None = None
+    for url in ARTIFACT_URLS:
+        try:
+            return Path(download_weights(url, target, md5=ARTIFACT_MD5))
+        except (OSError, RuntimeError) as err:  # noqa: PERF203 -- fallback loop over two hosts
+            # A refusal, a cut transfer and a checksum mismatch all say this host cannot serve the
+            # artifact now; the next URL is a different host, so it can still succeed. URLError and
+            # TimeoutError are OSError subclasses, and download_weights raises RuntimeError for a
+            # checksum mismatch, so both the "wrong bytes" and "no bytes" cases fall through here.
+            logger.warning("Malinois weights unavailable from %s (%s); trying the next source", url, err)
+            last_error = err
+    msg = f"could not download the Malinois artifact from any of {len(ARTIFACT_URLS)} sources"
+    raise RuntimeError(msg) from last_error
 
 
 def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:

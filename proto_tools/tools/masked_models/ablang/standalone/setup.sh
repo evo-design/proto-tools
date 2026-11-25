@@ -51,8 +51,43 @@ prefetch_ablang_model() {
     echo "ablang ${model_name}: linked ${pkg_link} -> ${cache_dir}"
 }
 
+# AbLang2's weights exist upstream on Zenodo alone -- it is the URL ablang2/load_model.py itself
+# uses -- and Zenodo refuses whole networks it reads as noisy with HTTP 403, which cost every
+# ablang test in a cold run here and broke a Modal redeploy. The mirror holds that tarball's two
+# extracted files, each pinned by its own SHA-256: a stricter check than the archive ever had,
+# since upstream publishes no digest for it. Zenodo stays as the fallback, so the original source
+# is still used whenever it will serve us.
+ABLANG2_CACHE_DIR="${WEIGHTS_DIR}/model-weights-ablang2-paired"
+ABLANG2_MIRROR_URL="https://huggingface.co/bviggiano/AbLang2/resolve/main"
+ABLANG2_ZENODO_URL="https://zenodo.org/records/10185169/files/ablang2-weights.tar.gz"
+
+prefetch_ablang2_paired() {
+    local pkg_link="${ABLANG_PKG_DIR}/model-weights-ablang2-paired"
+
+    if proto_download_verified "${ABLANG2_MIRROR_URL}/model.pt" "${ABLANG2_CACHE_DIR}/model.pt" \
+        "56d6f07862a6f824f88c8707bbc03e4026c9db762be2d3041e9767e2e6f86386" \
+        && proto_download_verified "${ABLANG2_MIRROR_URL}/hparams.json" "${ABLANG2_CACHE_DIR}/hparams.json" \
+            "33474b76d78e01beb24b3621cd44d42b0813333d21e5b806168580bd836c5c8d"; then
+        echo "ablang ablang2-paired staged at ${ABLANG2_CACHE_DIR}"
+    else
+        # A partial set here is harmless: proto_download_archive empties the directory first.
+        echo "ablang2-paired mirror unavailable; falling back to the Zenodo archive" >&2
+        proto_download_archive "$ABLANG2_ZENODO_URL" "$ABLANG2_CACHE_DIR" -z
+        if [ ! -f "${ABLANG2_CACHE_DIR}/model.pt" ]; then
+            echo "ERROR: extracted ablang2-paired missing expected weight file model.pt" >&2
+            exit 1
+        fi
+    fi
+
+    # (Re-)create the symlink so ablang2.load_model.download_model finds the cached weights at its
+    # hardcoded $(dirname ablang2.__file__)/model-weights-<name> path.
+    rm -rf "${pkg_link}"
+    ln -s "${ABLANG2_CACHE_DIR}" "${pkg_link}"
+    echo "ablang ablang2-paired: linked ${pkg_link} -> ${ABLANG2_CACHE_DIR}"
+}
+
 prefetch_ablang_model "ablang1-heavy"  "https://opig.stats.ox.ac.uk/data/downloads/ablang-heavy.tar.gz"   "amodel.pt"
 prefetch_ablang_model "ablang1-light"  "https://opig.stats.ox.ac.uk/data/downloads/ablang-light.tar.gz"   "amodel.pt"
-prefetch_ablang_model "ablang2-paired" "https://zenodo.org/records/10185169/files/ablang2-weights.tar.gz" "model.pt"
+prefetch_ablang2_paired
 
 echo "AbLang setup complete!"
