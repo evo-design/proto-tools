@@ -51,12 +51,8 @@ prefetch_ablang_model() {
     echo "ablang ${model_name}: linked ${pkg_link} -> ${cache_dir}"
 }
 
-# AbLang2's weights exist upstream on Zenodo alone -- it is the URL ablang2/load_model.py itself
-# uses -- and Zenodo refuses whole networks it reads as noisy with HTTP 403, which cost every
-# ablang test in a cold run here and broke a Modal redeploy. The mirror holds that tarball's two
-# extracted files, each pinned by its own SHA-256: a stricter check than the archive ever had,
-# since upstream publishes no digest for it. Zenodo stays as the fallback, so the original source
-# is still used whenever it will serve us.
+# Mirror of the Zenodo archive's two extracted files, tried first because Zenodo answers some
+# networks with HTTP 403. Upstream publishes no digest, so each file carries its own SHA-256.
 ABLANG2_CACHE_DIR="${WEIGHTS_DIR}/model-weights-ablang2-paired"
 ABLANG2_MIRROR_URL="https://huggingface.co/bviggiano/AbLang2/resolve/main"
 ABLANG2_ZENODO_URL="https://zenodo.org/records/10185169/files/ablang2-weights.tar.gz"
