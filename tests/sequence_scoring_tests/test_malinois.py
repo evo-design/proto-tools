@@ -17,14 +17,12 @@ def _skip_if_no_malinois_gpu() -> None:
         pytest.skip("Malinois GPU test requires a visible CUDA GPU")
 
 
-def test_malinois_worker_downloads_the_pinned_artifact(monkeypatch, tmp_path) -> None:
-    """The worker fetches the published artifact under its upstream name, checked against its pinned MD5."""
+def _load_malinois_worker(monkeypatch):
+    """Import the standalone worker from its real path, without the heavy deps it only needs to score."""
     import importlib.util
-    import re
     import sys
     import types
     from pathlib import Path
-    from urllib.parse import urlparse
 
     root = Path(__file__).parents[2]
     for heavy in ("malinois_scoring", "torch"):  # the worker only touches these when scoring
@@ -35,14 +33,60 @@ def test_malinois_worker_downloads_the_pinned_artifact(monkeypatch, tmp_path) ->
     assert spec is not None and spec.loader is not None
     worker = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(worker)
+    return worker
 
-    calls: list[tuple[str, Path, str | None]] = []
+
+def test_malinois_worker_downloads_the_pinned_artifact(monkeypatch, tmp_path) -> None:
+    """The worker fetches the first published source, caching it under one pinned name and MD5."""
+    import re
+
+    worker = _load_malinois_worker(monkeypatch)
+
+    calls: list[tuple[str, object, str | None]] = []
     monkeypatch.setattr(worker, "download_weights", lambda url, dest, md5=None: calls.append((url, dest, md5)) or dest)
-    worker._download_artifact(tmp_path)
+    result = worker._download_artifact(tmp_path)
 
-    ((url, dest, md5),) = calls
-    assert dest.name == Path(urlparse(url).path).name, "cached under its upstream name"
+    ((url, dest, md5),) = calls  # the first source answers, so no fallback is attempted
+    assert url == worker.ARTIFACT_URLS[0]
+    # One cache name for every source, not each URL's own basename: the sources publish the same
+    # artifact under different filenames, and a per-URL name would re-download it after a fallback
+    # instead of finding it cached.
+    assert dest == tmp_path / worker.ARTIFACT_FILENAME
+    assert result == dest
     assert md5 is not None and re.fullmatch("[0-9a-f]{32}", md5)
+
+
+def test_malinois_worker_falls_back_to_the_next_source(monkeypatch, tmp_path) -> None:
+    """A host that refuses or serves the wrong bytes sends the worker to the next source, then gives up."""
+    worker = _load_malinois_worker(monkeypatch)
+    assert len(worker.ARTIFACT_URLS) > 1, "the fallback only means something with a second source"
+
+    attempted: list[str] = []
+
+    def refuse_all(url, dest, md5=None):
+        attempted.append(url)
+        # The two failure modes the loop must treat alike: no bytes, and the wrong bytes.
+        if len(attempted) == 1:
+            raise OSError("refused")
+        raise RuntimeError("md5 mismatch")
+
+    monkeypatch.setattr(worker, "download_weights", refuse_all)
+    with pytest.raises(RuntimeError, match="could not download the Malinois artifact"):
+        worker._download_artifact(tmp_path)
+    assert attempted == list(worker.ARTIFACT_URLS), "every source is tried before failing"
+
+    # And a later source succeeding is enough: the first one refusing is not fatal.
+    attempted.clear()
+
+    def refuse_first(url, dest, md5=None):
+        attempted.append(url)
+        if url == worker.ARTIFACT_URLS[0]:
+            raise OSError("refused")
+        return dest
+
+    monkeypatch.setattr(worker, "download_weights", refuse_first)
+    assert worker._download_artifact(tmp_path) == tmp_path / worker.ARTIFACT_FILENAME
+    assert attempted == list(worker.ARTIFACT_URLS[:2])
 
 
 def test_malinois_input_normalizes_and_validates_dna() -> None:
