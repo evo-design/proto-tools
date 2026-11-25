@@ -12,6 +12,7 @@ from typing import Any
 from standalone_helpers import (
     StatusCounter,
     download_archive,
+    download_weights,
     get_logger,
     link_to_cache,
     log_likelihood_metrics,
@@ -33,6 +34,39 @@ _ABLANG_MODEL_INFO: dict[str, tuple[str, str]] = {
     "ablang2-paired": ("https://zenodo.org/records/10185169/files/ablang2-weights.tar.gz", "model.pt"),
 }
 
+# AbLang2's weights exist upstream on Zenodo alone -- it is the URL ablang2/load_model.py itself
+# uses -- and Zenodo refuses whole networks it reads as noisy with HTTP 403. The mirror holds that
+# tarball's two extracted files, each pinned by its own SHA-256, which is a stricter check than the
+# archive ever had: upstream publishes no digest for it. Zenodo above stays as the fallback, so
+# the original source is still used whenever it will serve us. setup.sh carries the same table.
+_ABLANG2_MIRROR_URL = "https://huggingface.co/bviggiano/AbLang2/resolve/main"
+_ABLANG2_MIRROR_FILES: dict[str, str] = {
+    "model.pt": "56d6f07862a6f824f88c8707bbc03e4026c9db762be2d3041e9767e2e6f86386",
+    "hparams.json": "33474b76d78e01beb24b3621cd44d42b0813333d21e5b806168580bd836c5c8d",
+}
+
+
+def _mirror_ablang2_weights(target: Path) -> bool:
+    """Fetch AbLang2's weights from the mirror into ``target``, or report that it could not.
+
+    Each file is checked against its own SHA-256, so a truncated or substituted copy counts as a
+    miss and the caller falls back to the Zenodo archive rather than staging unverified weights. A
+    partial set left behind is harmless, since ``download_archive`` empties the directory first.
+
+    Args:
+        target (Path): The ``model-weights-ablang2-paired`` cache directory.
+
+    Returns:
+        bool: Whether every mirrored file is now present and verified.
+    """
+    try:
+        for name, digest in _ABLANG2_MIRROR_FILES.items():
+            download_weights(f"{_ABLANG2_MIRROR_URL}/{name}", target / name, sha256=digest)
+    except (OSError, RuntimeError) as err:
+        logger.warning("AbLang2 mirror unavailable (%s); falling back to the Zenodo archive", err)
+        return False
+    return True
+
 
 def _stage_ablang_weights(model_choice: str) -> Path:
     """Ensure the weights are in the managed cache and ablang2's package path points at them.
@@ -50,9 +84,11 @@ def _stage_ablang_weights(model_choice: str) -> Path:
     import ablang2
 
     url, weight_file = _ABLANG_MODEL_INFO[model_choice]
-    cache_dir = Path(
-        download_archive(url, Path(require_weights_dir("ablang")) / f"model-weights-{model_choice}", marker=weight_file)
-    )
+    target = Path(require_weights_dir("ablang")) / f"model-weights-{model_choice}"
+    if model_choice == "ablang2-paired" and _mirror_ablang2_weights(target):
+        cache_dir = target
+    else:
+        cache_dir = Path(download_archive(url, target, marker=weight_file))
     link_to_cache(Path(os.path.dirname(ablang2.__file__)) / f"model-weights-{model_choice}", cache_dir)
     return cache_dir
 
