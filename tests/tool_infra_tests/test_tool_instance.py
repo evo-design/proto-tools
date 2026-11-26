@@ -1168,6 +1168,54 @@ def test_failure_writes_status_and_raises(tmp_path: Path):
     assert f"uv={UV_VERSION}" in commands[0], "every setup.sh relies on the env being created with pinned uv"
 
 
+def _rebuild_case(tmp_path: Path, setup_returncode: int) -> ToolInstance:
+    """Rebuild a working env whose setup files changed, with setup.sh exiting ``setup_returncode``."""
+    inst = ToolInstance.__new__(ToolInstance)
+    inst.toolkit = "fake_tool"
+    inst.device = "cpu"
+    inst.env_path = tmp_path / "fake_env"
+    inst.setup_script = tmp_path / "setup.sh"
+    inst.setup_script.write_text("#!/bin/bash\n")
+    (tmp_path / "python_version.txt").write_text("default: 3.12\n")
+    inst._tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": []}
+    inst.env_path.mkdir()
+    (inst.env_path / "STATUS.txt").write_text("SUCCESS\nSetup hash: old\n")
+    (inst.env_path / "marker").write_text("working env")
+
+    with (
+        patch.object(inst, "_is_env_ok", return_value=False),
+        patch.object(inst, "_ensure_micromamba", return_value=Path("/fake/micromamba")),
+        patch.object(inst, "_ensure_foundation_env", return_value=Path("/fake/foundation_env")),
+        patch(
+            "proto_tools.utils.tool_instance.subprocess.run",
+            side_effect=lambda *a, **k: inst.env_path.mkdir(parents=True, exist_ok=True),
+        ),
+        patch("proto_tools.utils.tool_instance._run_setup_script", return_value=(setup_returncode, "setup output")),
+    ):
+        if setup_returncode:
+            with pytest.raises(RuntimeError, match=r"setup\.sh failed"):
+                inst._create_env()
+        else:
+            inst._create_env()
+    return inst
+
+
+def test_failed_rebuild_restores_previous_env(tmp_path: Path):
+    """A rebuild that fails puts the previously working env back instead of leaving it deleted."""
+    inst = _rebuild_case(tmp_path, setup_returncode=1)
+    assert (inst.env_path / "marker").read_text() == "working env"
+    assert (inst.env_path / "STATUS.txt").read_text().startswith("SUCCESS")
+    assert not (tmp_path / "fake_env.previous").exists()
+
+
+def test_successful_rebuild_discards_previous_env(tmp_path: Path):
+    """After a rebuild succeeds, the moved-aside env is deleted and the new env is in place."""
+    inst = _rebuild_case(tmp_path, setup_returncode=0)
+    assert not (inst.env_path / "marker").exists()
+    assert "Setup hash: old" not in (inst.env_path / "STATUS.txt").read_text()
+    assert not (tmp_path / "fake_env.previous").exists()
+
+
 def test_called_process_detail_decodes_stderr_then_stdout():
     """Captured bytes are decoded; stderr wins, stdout is the fallback."""
     e_stderr = subprocess.CalledProcessError(1, "x", stderr=b"boom on stderr\n")

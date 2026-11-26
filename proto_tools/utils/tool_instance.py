@@ -2714,16 +2714,37 @@ class ToolInstance:
     def _create_env(self) -> None:
         """Create (or rebuild) the tool's isolated environment.
 
-        Removes a broken existing env, creates a fresh one via
-        ``micromamba create``, runs ``standalone/setup.sh`` with the tool
+        A previously working env (STATUS ``SUCCESS``) is moved aside while the new one builds and is
+        restored if the build fails, so a failed rebuild never destroys the last working env. Any
+        other existing env is removed.
+        """
+        previous = self.env_path.with_name(f"{self.env_path.name}.previous")
+        if self.env_path.exists() and not self._is_env_ok():
+            status_file = self.env_path / "STATUS.txt"
+            if status_file.exists() and status_file.read_text().startswith("SUCCESS"):
+                logger.info("Moving environment at %s aside to %s while it rebuilds", self.env_path, previous)
+                shutil.rmtree(previous, ignore_errors=True)
+                self.env_path.rename(previous)
+            else:
+                logger.info("Removing environment at %s", self.env_path)
+                shutil.rmtree(self.env_path)
+        try:
+            self._build_env()
+        except BaseException:
+            if previous.exists():
+                logger.warning("Rebuild of %s failed; restoring the previous environment", self.toolkit)
+                shutil.rmtree(self.env_path, ignore_errors=True)
+                previous.rename(self.env_path)
+            raise
+        shutil.rmtree(previous, ignore_errors=True)
+
+    def _build_env(self) -> None:
+        """Build the tool's environment at ``env_path``.
+
+        Creates a fresh env via ``micromamba create``, runs ``standalone/setup.sh`` with the tool
         env on PATH, and writes STATUS.txt to record success or failure.
         """
         status_file = self.env_path / "STATUS.txt"
-
-        # Remove env if setup files changed
-        if self.env_path.exists() and not self._is_env_ok():
-            logger.info("Removing environment at %s", self.env_path)
-            shutil.rmtree(self.env_path)
 
         # Ensure micromamba is available
         mamba_bin = self._ensure_micromamba()
