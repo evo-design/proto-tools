@@ -509,13 +509,16 @@ def _create_input_json_from_complex(
         sequence = chain.sequence
 
         if mol_type == "dna" or mol_type == "rna":
-            # Ignore MSA fields for DNA and RNA.
+            # Ignore MSA fields for DNA and RNA. RNA still needs unpairedMsa="" (MSA-free) with
+            # --norun_data_pipeline, or AF3 featurisation rejects the chain.
             sequence_entry = {
                 mol_type: {
                     "id": chain_ids[idx],
                     "sequence": sequence,
                 }
             }
+            if mol_type == "rna":
+                sequence_entry[mol_type]["unpairedMsa"] = ""
 
         else:
             # templates=[] is required with --norun_data_pipeline: AF3 featurisation requires every

@@ -87,6 +87,7 @@ def test_af3_ligand_and_nucleic_acids(mock_af3_inference):
 
     assert sequences[1]["dna"]["id"] == "B"
     assert sequences[1]["dna"]["sequence"] == "ACGT"
+    assert "unpairedMsa" not in sequences[1]["dna"]
 
     assert sequences[2]["ligand"]["id"] == "C"
     assert sequences[2]["ligand"]["ccdCodes"] == ["EOH"]
@@ -174,6 +175,9 @@ def test_af3_rna_entity(mock_af3_inference):
     assert len(sequences) == 1
     assert sequences[0]["rna"]["id"] == "A"
     assert sequences[0]["rna"]["sequence"] == "AUGC"
+    assert sequences[0]["rna"]["unpairedMsa"] == "", (
+        "AF3 rejects RNA chains without unpairedMsa under --norun_data_pipeline"
+    )
 
 
 def test_af3_protein_modifications_in_json(mock_af3_inference):
