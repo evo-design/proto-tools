@@ -1,6 +1,8 @@
 name: Checks
 
 on:
+  push:
+    branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
@@ -10,7 +12,7 @@ concurrency:
 
 jobs:
   lint:
-    if: github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Ruff Lint
     runs-on: ubuntu-latest
     steps:
@@ -22,7 +24,7 @@ jobs:
     - run: ruff format --check
 
   typecheck:
-    if: github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Mypy Type Check
     runs-on: ubuntu-latest
     steps:
