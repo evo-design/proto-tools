@@ -7,7 +7,7 @@ echo "Setting up IPSAE standalone environment..."
 uv pip install numpy
 
 # Download ipsae.py from DunbrackLab, pinned to a specific commit for reproducibility.
-# Install into the venv so the script shares the environment's lifecycle: a rebuilt env
+# Install into the venv so rebuilding the environment also reinstalls the script. A rebuilt env
 # re-downloads it, and a checkout that did not run setup.sh cannot appear already set up.
 IPSAE_COMMIT="${IPSAE_COMMIT:-6174cf9e71cb1bd660cc805856a18c4871a6dec3}"
 IPSAE_SHA256="${IPSAE_SHA256:-10cf9b08c68c91e06cb28526cf2026f47a3980c9048fd3226d13e3304eaf1c27}"

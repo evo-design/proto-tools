@@ -1,21 +1,21 @@
-"""Protein structure prediction using AlphaFold2 via ColabDesign.
-
-This module provides standardized interfaces for protein structure prediction
-using the original AlphaFold2 model through the ColabDesign JAX wrapper.
-"""
+"""Predict protein structures with AlphaFold2 through the ColabDesign JAX wrapper."""
 
 import logging
 from typing import Any, ClassVar
 
 from pydantic import field_validator, model_validator
 
+from proto_tools.entities.structures.msa_conditioning import MSASubsampling
 from proto_tools.entities.structures.structure import BFactorType, Structure
+from proto_tools.tools.structure_prediction.msa_plan import SentMSA
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Complex,
+    ComplexMSAs,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
+    resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 class AlphaFold2Input(StructurePredictionInput):
     """Input object for AlphaFold2 structure prediction.
 
-    This class defines the input parameters for predicting 3D structures of proteins
-    using AlphaFold2 via the ColabDesign JAX wrapper.
+    Provide proteins for 3D structure prediction with AlphaFold2 through the
+    ColabDesign JAX wrapper.
 
     Inherits from ``StructurePredictionInput``.
 
@@ -89,7 +89,8 @@ class AlphaFold2Input(StructurePredictionInput):
         """Prepare complexes for AlphaFold2 inference.
 
         Returns:
-            list[dict[str, Any]]: List of dicts with keys: complex_idx, chains, seq_lengths, num_chains, total_residues
+            list[dict[str, Any]]: List of dicts with keys: complex_idx, chains, chain_ids, seq_lengths,
+                num_chains, total_residues
         """
         prepared_complexes = []
         for comp_idx, comp in enumerate(self.complexes):
@@ -99,6 +100,7 @@ class AlphaFold2Input(StructurePredictionInput):
                 {
                     "complex_idx": comp_idx,
                     "chains": chain_sequences,
+                    "chain_ids": resolve_chain_ids(comp.chains),
                     "seq_lengths": seq_lengths,
                     "num_chains": comp.num_chains(),
                     "total_residues": comp.sum_of_chain_lengths(),
@@ -157,15 +159,14 @@ class AlphaFold2Output(StructurePredictionOutput):
 class AlphaFold2Config(MSAStructurePredictionConfig):
     """Configuration object for AlphaFold2 structure prediction.
 
-    This class defines configuration parameters for running AlphaFold2 via
-    the ColabDesign JAX wrapper.
+    Configure AlphaFold2 prediction through the ColabDesign JAX wrapper.
 
     Inherits from ``MSAStructurePredictionConfig``.
 
     Attributes:
         num_recycles (int): Number of recycling iterations through the model.
             Higher values can improve accuracy at the cost of computation time.
-            Range: 0-48. Default: 3.
+            Range: 0 or greater. Default: 3.
 
         model_num (int): Which AlphaFold2 model parameter set to use (1-5).
             AF2 ships 5 independently trained parameter sets. Different sets can
@@ -240,6 +241,46 @@ class AlphaFold2Config(MSAStructurePredictionConfig):
 def example_input() -> Any:
     """Minimal valid input for testing and examples."""
     return AlphaFold2Input(complexes=["MKTL"])  # type: ignore[list-item]
+
+
+def _alphafold2_sent_msas(
+    complex_msas: ComplexMSAs | None,
+    num_chains: int,
+    per_chain_msas_a3m: list[str | None] | None,
+    unpaired_per_chain_msas_a3m: list[str | None] | None,
+) -> dict[int, SentMSA]:
+    """The rows ColabDesign receives per chain from this request's payload.
+
+    Heteromers send each chain's own A3M; the standalone stacks the deep unpaired rows beneath
+    them only for paired MSAs. Monomers and homo-oligomers send chain 0's alignment, which
+    ColabDesign tiles across every copy.
+    """
+    if complex_msas is None:
+        return {}
+    with_rows = set(complex_msas.per_chain) | set(complex_msas.unpaired_per_chain or {})
+    if per_chain_msas_a3m is not None:
+        primary, unpaired = complex_msas.per_chain, complex_msas.unpaired_per_chain or {}
+        unpaired_sent = unpaired_per_chain_msas_a3m or [None] * num_chains
+        stacks_unpaired = complex_msas.paired and any(per_chain_msas_a3m)
+        sent = {
+            i: SentMSA(
+                rows=len(primary[i]) if a3m else 0,
+                # The standalone appends each chain's unpaired rows below its query, not the query itself.
+                unpaired_rows=len(unpaired[i]) - 1 if stacks_unpaired and unpaired_sent[i] else 0,
+                paired=complex_msas.paired and bool(a3m),
+            )
+            for i, a3m in enumerate(per_chain_msas_a3m)
+        }
+        reason = "AlphaFold2 adds a heteromer's unpaired rows only beneath paired primary alignments"
+        for i in with_rows:
+            if not (sent[i].rows or sent[i].unpaired_rows):
+                sent[i] = SentMSA(ignored_reason=reason)
+        return sent
+    chain0 = complex_msas.per_chain.get(0)
+    if chain0 is None:
+        reason = "AlphaFold2 folds monomers and homo-oligomers from chain 0's alignment; chain 0 had none"
+        return {i: SentMSA(ignored_reason=reason) for i in with_rows}
+    return {i: SentMSA(rows=len(chain0)) for i in range(num_chains)}
 
 
 @tool(
@@ -319,9 +360,13 @@ def run_alphafold2(
         unpaired_per_chain_msas_a3m: list[str | None] | None = None
         is_paired = False
         if inputs.msas:
-            from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
-
-            per_chain, unpaired_per_chain, is_paired = unwrap_complex_msas(inputs.msas[complex_data["complex_idx"]])
+            complex_msas = inputs.msas[complex_data["complex_idx"]]
+            per_chain, unpaired_per_chain, is_paired = (
+                complex_msas.per_chain,
+                complex_msas.unpaired_per_chain,
+                complex_msas.paired,
+            )
+            # Treat a complex of identical chains as a homo-oligomer that shares one MSA
             num_chains = complex_data["num_chains"]
             is_homooligomer = num_chains > 1 and len(set(complex_data["chains"])) == 1
 
@@ -332,6 +377,7 @@ def run_alphafold2(
                     if config.verbose:
                         logger.info(f"Loaded MSA for complex {complex_data['complex_idx']} ({len(msa)} sequences)")
             else:
+                # Serialize each chain's MSA, using None for chains without one
                 per_chain_msas_a3m = [
                     per_chain[i].to_a3m_string() if i in per_chain else None for i in range(num_chains)
                 ]
@@ -382,6 +428,7 @@ def run_alphafold2(
             pae=output_data.get("pae"),
         )
 
+        # Build the Structure from the predicted PDB
         comp = inputs.complexes[complex_data["complex_idx"]]
         structure = Structure(
             structure=output_data["pdb"],
@@ -390,7 +437,21 @@ def run_alphafold2(
             metrics=metrics,
             source="alphafold2-prediction",
         )
-        structure_outputs.append(normalize_output_chain_ids(structure, comp.chains))
+        # Align output chains with the input complex and report the MSA rows ColabDesign received
+        complex_msas = inputs.msas[complex_data["complex_idx"]] if inputs.msas else None
+        msa_sent = _alphafold2_sent_msas(
+            complex_msas, complex_data["num_chains"], per_chain_msas_a3m, unpaired_per_chain_msas_a3m
+        )
+        structure_outputs.append(
+            align_with_input(
+                structure,
+                comp.chains,
+                complex_msas=complex_msas,
+                report_msa=True,
+                msa_sent=msa_sent,
+                msa_subsampling=MSASubsampling(mode="stochastic", max_rows=512, max_extra_rows=1024),
+            )
+        )
 
     return AlphaFold2Output(
         structures=structure_outputs,

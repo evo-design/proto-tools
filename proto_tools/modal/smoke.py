@@ -34,12 +34,12 @@ def run_tool(service_class: str, tool_key: str, method_name: str) -> tuple[bool,
     config_model = ToolRegistry.get(tool_key).config_model
     if not issubclass(config_model, BaseConfig):
         return False, f"config model is {config_model.__name__}, not a BaseConfig"
-    # ``minimal()`` rather than the bare defaults: it is the constructor that supplies whatever a
-    # tool needs to run at all (miranda's microRNA queries) and reduces the work to the cheapest
-    # path through it, which is what keeps a design pipeline's smoke test from billing a full run.
+    # Use the minimal config to supply required values, such as miranda's microRNA queries,
+    # and keep the smoke test from paying for a full design run.
     config = config_model.minimal()
     config.device = physical_device_for_service(service_class)
 
+    # Resolve the deployed method and time the example call.
     app_name = get_app_name_for_service(service_class)
     started = time.perf_counter()
     Service = modal.Cls.from_name(app_name, service_class)
@@ -50,6 +50,7 @@ def run_tool(service_class: str, tool_key: str, method_name: str) -> tuple[bool,
     )
     elapsed = time.perf_counter() - started
 
+    # Check the returned payload as well as whether the remote call raised.
     if not isinstance(result, dict):
         return False, f"expected a dict result, got {type(result).__name__}"
     if result.get("success") is False:

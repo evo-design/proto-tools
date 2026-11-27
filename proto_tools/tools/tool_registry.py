@@ -18,7 +18,8 @@ import re
 import time
 import traceback
 import warnings
-from collections.abc import Callable, MutableMapping
+from collections.abc import Callable, Iterator, MutableMapping
+from contextvars import ContextVar
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -32,6 +33,10 @@ if TYPE_CHECKING:
     from proto_tools.utils.tool_docs import ModelDoc, ReadmeSections, ToolReadmeEntry
 
 logger = logging.getLogger(__name__)
+
+# Open ``ToolRegistry.record_calls`` blocks, outermost first. A ContextVar keeps concurrent callers
+# (threads, asyncio tasks) apart; only work run in a copy of the context (``ToolPool``) inherits it.
+_tool_call_records: ContextVar[tuple[dict[str, str | None], ...]] = ContextVar("_tool_call_records", default=())
 
 # Path to tools directory for citation file discovery
 TOOLS_DIR = Path(__file__).parent
@@ -53,6 +58,34 @@ RETRY_DELAY = 2.0  # Base delay in seconds (exponential backoff: 2s, 4s, 8s)
 # requests.exceptions.ConnectionError does not subclass the builtin one (its MRO is
 # RequestException -> OSError), so a tool raising it via `requests` was never retried here.
 _RETRYABLE_EXCEPTIONS = (ConnectionError, requests.exceptions.ConnectionError)
+
+
+def _batch_timeout(spec: ToolSpec | None, inputs: BaseToolInput, config: BaseConfig) -> int | None:
+    """Return the call's timeout: ``effective_timeout()``, times the item count for a batch."""
+    effective = config.effective_timeout()
+    if effective is None or spec is None or spec.iterable_input_fields is None:
+        return effective
+    items = getattr(inputs, spec.iterable_input_fields[0], None)
+    return effective * max(len(items) if items is not None else 1, 1)
+
+
+def _wait_to_retry(delay: float, key: str) -> bool:
+    """Wait ``delay`` before retrying; return False once the call's timeout elapses during the wait."""
+    try:
+        sleep_within_deadline(delay, f"retrying {key}")
+    except DeadlineExceededError:
+        return False
+    return True
+
+
+def _retry_deadline_error(key: str, attempts: int, cause: BaseException) -> DeadlineExceededError:
+    """Build the error for a transient failure the timeout left no time to retry."""
+    error = DeadlineExceededError(
+        f"Tool {key}: timeout elapsed after {attempts} attempt(s); last error: {type(cause).__name__}: {cause}"
+    )
+    error.__cause__ = cause
+    return error
+
 
 # Set PROTO_CAPTURE_ERRORS=1 to capture tool exceptions into success=False outputs instead of raising.
 _CAPTURE_ERRORS_ENV_VAR = "PROTO_CAPTURE_ERRORS"
@@ -78,6 +111,7 @@ def _should_capture_errors() -> bool:
 
 from proto_tools.utils import BaseConfig, run_preprocess
 from proto_tools.utils.base_config import RANDOM_SEED_UPPER_BOUND
+from proto_tools.utils.deadlines import DeadlineExceededError, deadline, sleep_within_deadline
 from proto_tools.utils.device import (
     is_remote_device,
     parse_device_string,
@@ -109,6 +143,7 @@ from proto_tools.utils.tool_cache import (
 )
 from proto_tools.utils.tool_instance import ToolInstance
 from proto_tools.utils.tool_io import BaseToolInput, BaseToolOutput, Metrics, MissingAssetError
+from proto_tools.utils.tool_versions import load_versions, toolkit_version
 
 ToolDispatchBackend = Callable[[str, BaseToolInput, BaseConfig], BaseToolOutput | None]
 
@@ -691,7 +726,7 @@ class ToolSpec(BaseModel):
         post_process_iterable (Callable[[list[Any]], None] | None): Optional in-place
             hook invoked on the stitched ``iterable_output_field`` list after cache
             reconciliation and dedup expansion. Use for batch-level post-processing
-            (e.g. UMAP projection of an embedding batch) that must see the full
+            (a batch-wide dimensionality reduction, say) that must see the full
             request, not the per-item cached subset visible inside the tool function.
         outages (list[Outage]): Declared upstream outages. A call matching one is refused before
             dispatch with ``OutageError``. Serialized, so catalogues can show them.
@@ -716,8 +751,9 @@ class ToolSpec(BaseModel):
         description=(
             "Pin the worker's CUDA_VISIBLE_DEVICES to its assigned physical GPU(s); "
             "the worker addresses them as local cuda:0..N-1 and respawns on a "
-            "physical-device change. For JAX tools, whose runtime spans every "
-            "visible GPU. Implies uses_gpu=True."
+            "physical-device change. For tools whose runtime picks a GPU itself "
+            "and cannot be routed to the leased device (JAX, TensorFlow). Every "
+            "GPU tool is pinned on Exclusive_Process hosts regardless. Implies uses_gpu=True."
         ),
     )
     device_count: str = Field(
@@ -805,7 +841,7 @@ class ToolSpec(BaseModel):
         description=(
             "Optional in-place hook invoked on the stitched ``iterable_output_field`` after "
             "cache reconciliation and dedup expansion. Use for batch-level post-processing "
-            "(e.g. UMAP projection of an embedding batch) that must see the full request — "
+            "(a batch-wide dimensionality reduction, say) that must see the full request — "
             "not the per-item cached subset visible inside the tool function."
         ),
     )
@@ -928,6 +964,33 @@ class ToolRegistry:
         return cls._dispatch_backend is not None
 
     @classmethod
+    @contextlib.contextmanager
+    def record_calls(cls) -> Iterator[dict[str, str | None]]:
+        """Record every registered tool called inside the block, with the version its outputs carry.
+
+        The yielded dict maps each called tool key to its ``tool_version`` (``None`` for a toolkit
+        without ``versions.yaml``), filled as calls start. A call counts whether it runs, is served
+        from cache, is routed to a dispatch backend such as Modal, or fails, and a tool called by
+        another tool counts too. Blocks nest: a call is recorded in every open block. Calls are seen
+        from this context and from work run in a copy of it (``ToolPool``'s worker threads); a thread
+        started without one, such as a plain ``threading.Thread``, records nothing.
+
+        Yields:
+            dict[str, str | None]: Tool key to ``tool_version``, in first-call order.
+
+        Examples:
+            >>> with ToolRegistry.record_calls() as calls:
+            ...     run_random_nucleotide_sample(RandomNucleotideSampleInput(sequences=["ATGC"]))
+            >>> calls  # {"random-nucleotide-sample": "1.0.0"}
+        """
+        calls: dict[str, str | None] = {}
+        token = _tool_call_records.set((*_tool_call_records.get(), calls))
+        try:
+            yield calls
+        finally:
+            _tool_call_records.reset(token)
+
+    @classmethod
     def register(
         cls,
         key: str,
@@ -959,7 +1022,7 @@ class ToolRegistry:
         1. Registers the tool in the registry with its metadata
         2. Wraps the function to automatically track execution time
         3. Handles errors and returns standardized output with success/failure status
-        4. Populates metadata fields (tool_id, execution_time, success, timestamp)
+        4. Populates metadata fields (tool_id, tool_version, execution_time, success, timestamp)
         5. Validates device allocation against tool requirements
 
         Args:
@@ -979,8 +1042,10 @@ class ToolRegistry:
             pin_visible_devices (bool): Pin the worker's ``CUDA_VISIBLE_DEVICES``
                 to its assigned physical GPU(s); the worker sees them as local
                 ``cuda:0..N-1`` and respawns on a physical-device change instead
-                of moving in-process. For JAX tools, whose runtime initializes a
-                context on every visible GPU. Implies ``uses_gpu=True``.
+                of moving in-process. For tools whose runtime picks a GPU itself
+                and cannot be routed to the leased device (JAX, TensorFlow). Every
+                GPU tool is pinned on Exclusive_Process hosts regardless
+                (``DeviceManager.pins_gpu_workers``). Implies ``uses_gpu=True``.
             device_count (str): Expected device count (e.g., "1", "1-2", ">=1", "<=2").
                 Validates allocation: errors on under-allocation, warns on over-allocation.
             example_input (Callable[[], BaseToolInput] | None): Factory returning a minimal valid
@@ -1024,7 +1089,7 @@ class ToolRegistry:
             post_process_iterable (Callable[[list[Any]], None] | None): Optional
                 in-place hook invoked on the stitched ``iterable_output_field``
                 list after cache reconciliation. Required when a derived field
-                (e.g. UMAP projection) is meaningful only across the full request
+                is meaningful only across the full request
                 — running it inside the tool function would only see the uncached
                 subset and produce incoherent results once stitched against
                 cached items.
@@ -1103,6 +1168,9 @@ class ToolRegistry:
                 ``ToolInstance.persist()`` context (which authorizes auto-creation
                 under the given name).
                 """
+                for calls in _tool_call_records.get():
+                    if key not in calls:
+                        calls[key] = _tool_version(key)
                 _func_token = set_current_tool_function(func.__name__)
                 try:
                     return _wrapper_body(inputs, config, instance)
@@ -1139,6 +1207,13 @@ class ToolRegistry:
                 cache_enabled = spec.cacheable if spec is not None else cacheable
                 gpu_only_flag = spec.gpu_only if spec is not None else gpu_only
                 pin_visible_devices_flag = spec.pin_visible_devices if spec is not None else pin_visible_devices
+                # Read by ToolInstance (dispatch, one-shot, persistent) to place and pin this tool's worker.
+                invocation = {
+                    "key": key,
+                    "gpu_only": gpu_only_flag,
+                    "pin_visible_devices": pin_visible_devices_flag,
+                    "uses_gpu": spec.uses_gpu if spec is not None else uses_gpu,
+                }
                 stochastic_tool = spec.stochastic if spec is not None else stochastic
                 # Unseeded calls to stochastic tools skip cache so repeat dispatches advance RNG.
                 runtime_cacheable = cache_enabled and (not stochastic_tool or config.seed is not None)
@@ -1156,6 +1231,7 @@ class ToolRegistry:
 
                 def _finish_dispatched(dispatched: BaseToolOutput, *, partial_result: bool = False) -> BaseToolOutput:
                     dispatched.tool_id = key
+                    dispatched.tool_version = _tool_version(key)
                     if dispatched.success is None:
                         dispatched.success = True
                     dispatched.execution_time = time.time() - start_time
@@ -1255,20 +1331,13 @@ class ToolRegistry:
                                 if (reason := config.remote_unsupported_reason(device_str)) is not None:
                                     raise ValueError(f"{key}: {reason}")
 
-                                # --- Proto endpoint ---
-                                if device_str == "proto":
-                                    from proto_tools.proto import dispatch_batch_to_proto, dispatch_to_proto
-
-                                    remote_dispatch = functools.partial(dispatch_to_proto, key)
-                                    remote_dispatch_many = functools.partial(dispatch_batch_to_proto, key)
                                 # --- Modal endpoint ---
-                                else:
-                                    # Imported here rather than at module scope to keep the Modal SDK
-                                    # off the import path of callers who never dispatch to it.
-                                    from proto_tools.modal import dispatch_batch_to_modal, dispatch_to_modal
+                                # Imported here rather than at module scope to keep the Modal SDK
+                                # off the import path of callers who never dispatch to it.
+                                from proto_tools.modal import dispatch_batch_to_modal, dispatch_to_modal
 
-                                    remote_dispatch = functools.partial(dispatch_to_modal, key)
-                                    remote_dispatch_many = functools.partial(dispatch_batch_to_modal, key)
+                                remote_dispatch = functools.partial(dispatch_to_modal, key)
+                                remote_dispatch_many = functools.partial(dispatch_batch_to_modal, key)
 
                     # --- Local hardware ---
                     # A remote endpoint allocates its own, so this validates only local devices.
@@ -1326,6 +1395,7 @@ class ToolRegistry:
                             spec.post_process_iterable(payloads)
                         cache_kwargs: dict[str, Any] = {
                             "tool_id": key,
+                            "tool_version": _tool_version(key),
                             "execution_time": 0.0,
                             "success": True,
                             "timestamp": datetime.now(),
@@ -1433,145 +1503,154 @@ class ToolRegistry:
                         is_pool_executing,
                     )
 
-                    pool = get_active_pool()
-                    if pool is not None and not is_pool_executing() and spec and spec.iterable_input_fields is not None:
-                        pooled = pool._parallel_dispatch(key, func, inputs, config)
-                        return _finish_dispatched(pooled, partial_result=_holds_failed_items(pooled, spec))
+                    # A batch gets effective_timeout() per item.
+                    budget = _batch_timeout(spec, inputs, config)
+                    # A tool without a standalone env runs here, in the caller's process, where no
+                    # ToolInstance enforces its timeout; the deadline does. Partitions and retries
+                    # share it. Tools with a ToolInstance keep their own timeout handling.
+                    in_process_deadline = None if has_standalone_env else budget
 
-                    # Scale effective_timeout() by the iterable batch size.
-                    if spec is not None and spec.iterable_input_fields is not None:
-                        effective = config.effective_timeout()
-                        if effective is not None:
-                            items = getattr(inputs, spec.iterable_input_fields[0], None)
-                            n_items = len(items) if items is not None else 1
-                            if n_items > 1:
-                                config = config.model_copy(update={"timeout": effective * n_items})
-
-                    # Carry per-invocation flags (key, gpu_only, pin_visible_devices) to ToolInstance for eviction/dispatch.
+                    # Carry per-invocation flags (key, gpu_only, pin_visible_devices, uses_gpu) to ToolInstance.
                     from proto_tools.utils.tool_instance import _current_tool_invocation
 
-                    for attempt in range(1 + MAX_RETRIES):
+                    pool = get_active_pool()
+                    if pool is not None and not is_pool_executing() and spec and spec.iterable_input_fields is not None:
+                        # Partitions run in copies of this context, so they place their workers by the same flags.
+                        _pool_token = _current_tool_invocation.set(invocation)
                         try:
-                            if attempt == 0:
-                                logger.debug(f"Tool {key}: starting execution")
+                            with deadline(in_process_deadline):
+                                pooled = pool._parallel_dispatch(key, func, inputs, config)
+                        finally:
+                            _current_tool_invocation.reset(_pool_token)
+                        return _finish_dispatched(pooled, partial_result=_holds_failed_items(pooled, spec))
 
-                            # Capture warnings during execution
-                            with warnings.catch_warnings(record=True) as warning_list:
-                                # Ensure all warnings are captured
-                                warnings.simplefilter("always")
+                    if budget != config.effective_timeout():
+                        config = config.model_copy(update={"timeout": budget})
 
-                                # Execute the tool function (ContextVar is read by
-                                # ``ToolInstance.dispatch`` / ``_run_persistent``).
-                                _inv_token = _current_tool_invocation.set(
-                                    {
-                                        "key": key,
-                                        "gpu_only": gpu_only_flag,
-                                        "pin_visible_devices": pin_visible_devices_flag,
-                                    }
-                                )
-                                try:
-                                    result = func(inputs, config, instance)
-                                finally:
-                                    _current_tool_invocation.reset(_inv_token)
+                    with deadline(in_process_deadline):
+                        for attempt in range(1 + MAX_RETRIES):
+                            try:
+                                if attempt == 0:
+                                    logger.debug(f"Tool {key}: starting execution")
 
-                                # Populate metadata fields
-                                result.tool_id = key
-                                result.execution_time = time.time() - start_time
-                                if result.success is None:
-                                    result.success = True
+                                # Capture warnings during execution
+                                with warnings.catch_warnings(record=True) as warning_list:
+                                    # Ensure all warnings are captured
+                                    warnings.simplefilter("always")
 
-                                # Add captured warnings to the result (filtered)
-                                if warning_list:
-                                    # Filter out ignored warnings
-                                    filtered_warnings = [
-                                        w
-                                        for w in warning_list
-                                        if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
-                                    ]
+                                    # Execute the tool function (ContextVar is read by
+                                    # ``ToolInstance.dispatch`` / ``_run_persistent``).
+                                    _inv_token = _current_tool_invocation.set(invocation)
+                                    try:
+                                        result = func(inputs, config, instance)
+                                    finally:
+                                        _current_tool_invocation.reset(_inv_token)
 
-                                    if filtered_warnings:
-                                        captured_warnings = [str(w.message) for w in filtered_warnings]
-                                        result.warnings = result.warnings + captured_warnings
-                                        for w in captured_warnings:
-                                            logger.warning(f"Tool {key}: {w}")
+                                    # Populate metadata fields
+                                    result.tool_id = key
+                                    result.tool_version = _tool_version(key)
+                                    result.execution_time = time.time() - start_time
+                                    if result.success is None:
+                                        result.success = True
 
-                                        # Re-emit warnings so they still get logged/printed
-                                        _re_emit_warnings(filtered_warnings)
+                                    # Add captured warnings to the result (filtered)
+                                    if warning_list:
+                                        # Filter out ignored warnings
+                                        filtered_warnings = [
+                                            w
+                                            for w in warning_list
+                                            if not any(
+                                                ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS
+                                            )
+                                        ]
 
-                                # Post-dispatch: cache store, stitch, dedup expand
-                                result = _post_dispatch_cache_and_expand(
-                                    key,
-                                    spec,
-                                    runtime_cacheable,
-                                    stochastic_tool,
-                                    result,
-                                    strip,
-                                    deduped,
-                                    original_items,
-                                    whole_cache_key,
-                                    template_cache_key,
-                                )
+                                        if filtered_warnings:
+                                            captured_warnings = [str(w.message) for w in filtered_warnings]
+                                            result.warnings = result.warnings + captured_warnings
+                                            for w in captured_warnings:
+                                                logger.warning(f"Tool {key}: {w}")
 
-                                logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
-                                return result
+                                            # Re-emit warnings so they still get logged/printed
+                                            _re_emit_warnings(filtered_warnings)
 
-                        except (  # noqa: PERF203 -- retry loop
-                            _RETRYABLE_EXCEPTIONS
-                        ) as e:
-                            last_exception = e
-                            last_traceback = traceback.format_exc()
-                            if attempt < MAX_RETRIES:
-                                delay = RETRY_DELAY * (2**attempt)
-                                logger.warning(
-                                    f"Tool {key}: transient {type(e).__name__} on attempt "
-                                    f"{attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
-                                )
-                                time.sleep(delay)
+                                    # Post-dispatch: cache store, stitch, dedup expand
+                                    result = _post_dispatch_cache_and_expand(
+                                        key,
+                                        spec,
+                                        runtime_cacheable,
+                                        stochastic_tool,
+                                        result,
+                                        strip,
+                                        deduped,
+                                        original_items,
+                                        whole_cache_key,
+                                        template_cache_key,
+                                    )
 
-                        except Exception as e:
-                            if attempt < MAX_RETRIES and _is_transient_gpu_acquisition_error(e):
+                                    logger.debug(f"Tool {key}: completed in {result.execution_time:.2f}s")
+                                    return result
+
+                            except (  # noqa: PERF203 -- retry loop
+                                _RETRYABLE_EXCEPTIONS
+                            ) as e:
                                 last_exception = e
                                 last_traceback = traceback.format_exc()
-                                delay = RETRY_DELAY * (2**attempt)
-                                logger.warning(
-                                    f"Tool {key}: transient GPU acquisition failure (Exclusive_Process) on "
-                                    f"attempt {attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
+                                if attempt < MAX_RETRIES:
+                                    delay = RETRY_DELAY * (2**attempt)
+                                    logger.warning(
+                                        f"Tool {key}: transient {type(e).__name__} on attempt "
+                                        f"{attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
+                                    )
+                                    if has_standalone_env:
+                                        time.sleep(delay)
+                                    elif not _wait_to_retry(delay, key):
+                                        last_exception = _retry_deadline_error(key, attempt + 1, e)
+                                        break
+
+                            except Exception as e:
+                                if attempt < MAX_RETRIES and _is_transient_gpu_acquisition_error(e):
+                                    last_exception = e
+                                    last_traceback = traceback.format_exc()
+                                    delay = RETRY_DELAY * (2**attempt)
+                                    logger.warning(
+                                        f"Tool {key}: transient GPU acquisition failure (Exclusive_Process) on "
+                                        f"attempt {attempt + 1}/{1 + MAX_RETRIES}, retrying in {delay:.1f}s: {e}"
+                                    )
+                                    time.sleep(delay)
+                                    continue
+
+                                # Non-retryable error; raise (or capture per policy)
+                                filtered_warnings = [
+                                    w
+                                    for w in warning_list
+                                    if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
+                                ]
+                                captured_warnings = [str(w.message) for w in filtered_warnings]
+                                _re_emit_warnings(filtered_warnings)
+
+                                logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
+                                return _make_error_output_or_raise(
+                                    output_class,
+                                    key,
+                                    start_time,
+                                    e,
+                                    traceback.format_exc(),
+                                    captured_warnings,
                                 )
-                                time.sleep(delay)
-                                continue
 
-                            # Non-retryable error; raise (or capture per policy)
-                            filtered_warnings = [
-                                w
-                                for w in warning_list
-                                if not any(ignored in str(w.message) for ignored in IGNORED_WARNING_SUBSTRINGS)
-                            ]
-                            captured_warnings = [str(w.message) for w in filtered_warnings]
-                            _re_emit_warnings(filtered_warnings)
-
-                            logger.error(f"Tool {key}: failed with {type(e).__name__}: {e}")
-                            return _make_error_output_or_raise(
-                                output_class,
-                                key,
-                                start_time,
-                                e,
-                                traceback.format_exc(),
-                                captured_warnings,
-                            )
-
-                    # All retries exhausted for a retryable exception
-                    assert last_exception is not None  # set on first retry iteration
-                    logger.error(
-                        f"Tool {key}: failed after {1 + MAX_RETRIES} attempts with "
-                        f"{type(last_exception).__name__}: {last_exception}"
-                    )
-                    return _make_error_output_or_raise(
-                        output_class,
-                        key,
-                        start_time,
-                        last_exception,
-                        last_traceback,
-                    )
+                        # Retries exhausted, or the timeout elapsed before the next attempt
+                        assert last_exception is not None  # set on first retry iteration
+                        logger.error(
+                            f"Tool {key}: failed after {attempt + 1} attempts with "
+                            f"{type(last_exception).__name__}: {last_exception}"
+                        )
+                        return _make_error_output_or_raise(
+                            output_class,
+                            key,
+                            start_time,
+                            last_exception,
+                            last_traceback,
+                        )
 
             # Register the tool spec with the captured source file
             cls._registry[key] = ToolSpec(
@@ -1979,6 +2058,23 @@ class ToolRegistry:
             return data
 
     @classmethod
+    def get_version(cls, key: str) -> str | None:
+        """Get the current version of a tool's toolkit from its versions.yaml.
+
+        Args:
+            key (str): Tool identifier (e.g., 'evo2-sample', 'blast-search')
+
+        Returns:
+            str | None: Newest version in the toolkit's versions.yaml, or None if the
+                toolkit has none. See ``notes/versioning.md``.
+
+        Raises:
+            ValueError: If tool key is not found in registry
+        """
+        versions = load_versions(cls.get(key).toolkit_dir)
+        return next(iter(versions), None)
+
+    @classmethod
     def get_license(cls, key: str) -> dict[str, Any] | None:
         """Get license.yaml metadata for a tool.
 
@@ -2275,6 +2371,11 @@ def _restore_model_runtime_state(source: Any, target: Any) -> Any:
     return target
 
 
+def _tool_version(key: str) -> str | None:
+    """Return the version every output of ``key`` carries. See ``notes/versioning.md``."""
+    return toolkit_version(ToolRegistry._registry[key].toolkit_dir)
+
+
 def _make_error_output(
     output_class: type[BaseToolOutput],
     key: str,
@@ -2286,6 +2387,7 @@ def _make_error_output(
     """Construct a structured error output for a failed tool execution."""
     return output_class.model_construct(
         tool_id=key,
+        tool_version=_tool_version(key),
         execution_time=time.time() - start_time,
         success=False,
         timestamp=datetime.now(),

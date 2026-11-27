@@ -1,7 +1,6 @@
-"""proto_tools/utils/persistent_worker.py.
+"""Keep a tool subprocess alive between calls so its model can be reused.
 
-Manages a subprocess that stays alive between calls, communicating via
-stdin/stdout JSON-line protocol. This avoids reloading models on every call.
+The parent and worker exchange JSON-line messages over stdin and stdout.
 """
 
 import collections
@@ -18,9 +17,18 @@ import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import IO, Any
+
+from proto_tools.utils.download_progress import DownloadWatch, ProgressDeadline
+from proto_tools.utils.weights_layout import (
+    COMPILE_CACHE_VARS,
+    GENERAL_COMPILE_CACHE_VARS,
+    compile_cache_env,
+    toolkit_cache_env,
+    weights_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +46,9 @@ _BODY_GRACE_SECONDS = 30
 
 # Heartbeat: while a single worker request is in flight longer than this, log a WARNING so a
 # hung inference / model load is visible live (prod surfaces only proto_tools WARNING+). 0 disables.
-# Override via PROTO_WORKER_HEARTBEAT_SECONDS.
-_DEFAULT_HEARTBEAT_SECONDS = 120.0
+# Override via PROTO_WORKER_HEARTBEAT_SECONDS. Set well above healthy first loads, which can spend
+# minutes downloading weights or JIT-compiling kernels (Evo 2 Flash takes ~10 min on a fresh cache).
+_DEFAULT_HEARTBEAT_SECONDS = 900.0
 
 
 def _verbose_to_log_level(verbose: int) -> int:
@@ -61,10 +70,10 @@ def _verbose_to_log_level(verbose: int) -> int:
 def _apply_verbose_to_console_handlers(verbose: int) -> None:
     """Set every console ``StreamHandler`` reachable from ``proto_tools`` to the verbose-mapped level.
 
-    Filters live on the *handlers*, not on the originating logger, so file
-    handlers and :class:`SpinnerFromLogsHandler` continue to receive records at
-    every level. Walks ``proto_tools`` and ``root`` since ``setup_logging``
-    attaches its console handler to root.
+    Change console handlers without filtering the originating logger, so file
+    handlers and :class:`SpinnerFromLogsHandler` still receive every level.
+    Check both ``proto_tools`` and ``root`` because ``setup_logging`` attaches
+    its console handler to the root logger.
     """
     target_level = _verbose_to_log_level(verbose)
     for logger_name in ("proto_tools", ""):
@@ -131,10 +140,10 @@ def _reemit_tagged_line(
 ) -> None:
     r"""Parse one ``\x00LOG\x00<json>\n`` line and re-emit it on the parent logger.
 
-    On JSON parse failure, the line is treated as untagged via
-    :func:`_handle_raw_stderr_line` with ``raw_tee=False`` (defensive fallback;
-    a malformed tag is almost certainly noise that happened to start with the
-    sentinel — don't show it to the user even at verbose level 2).
+    If JSON parsing fails, pass the line to :func:`_handle_raw_stderr_line`
+    as untagged output with ``raw_tee=False``. It may be ordinary output
+    that happens to start with the sentinel. Retain it in the diagnostic
+    buffer without displaying it, including at verbosity level 2.
 
     Args:
         parent_logger (logging.Logger): Logger under which to re-emit
@@ -159,8 +168,11 @@ def _reemit_tagged_line(
     level_attr = getattr(logging, level_name, None)
     level = level_attr if isinstance(level_attr, int) else logging.INFO
     msg: str = payload.get("msg", "")
-    update_status = bool(payload.get("update_status", False))
-    target.log(level, "%s", msg, extra={"update_status": update_status})
+    if payload.get("update_status", False) and hasattr(target, "update_status"):
+        # A status reaches the spinner at any level; its level only decides which handlers log it.
+        target.update_status("%s", msg, level=level)
+    else:
+        target.log(level, "%s", msg, extra={"update_status": bool(payload.get("update_status", False))})
 
 
 def _drain_subprocess_stderr(
@@ -228,9 +240,13 @@ _BASE_PASSTHROUGH = {
     # Model weights management
     "PROTO_HOME",
     "PROTO_MODEL_CACHE",
-    # uv/pip package caches: let user-set values override our defaults
+    # Shared-download lock waits in standalone_helpers.sh (proto_with_lock)
+    "PROTO_LOCK_POLL_SECONDS",
+    "PROTO_LOCK_STALL_SECONDS",
+    "PROTO_LOCK_TIMEOUT_SECONDS",
+    "PROTO_DOWNLOAD_STALL_SECONDS",
+    # uv package cache: a user-set value overrides our default
     "UV_CACHE_DIR",
-    "PIP_CACHE_DIR",
     # JAX compilation cache: a user-set value overrides the model-cache default
     "JAX_COMPILATION_CACHE_DIR",
     # Network proxy: tools download model weights and need proxy config
@@ -240,6 +256,13 @@ _BASE_PASSTHROUGH = {
     "http_proxy",
     "https_proxy",
     "no_proxy",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+    "GIT_SSL_CAINFO",
+    "GIT_SSL_CAPATH",
+    "PIP_CERT",
 }
 
 # Standard system binary dirs, always present in reconstructed PATH
@@ -411,7 +434,61 @@ def _jax_compilation_cache_dir(toolkit: str, cache_mode: str, tool_env_path: Pat
         return None
     if cache_mode == "IN_ENV":
         return str(Path(tool_env_path) / "jax_cache") if tool_env_path else None
-    return str(Path(cache_mode) / "jax_cache" / toolkit)
+    return str(Path(cache_mode) / weights_key(toolkit) / "jax_cache")
+
+
+def _compile_cache_dir(toolkit: str, cache_mode: str, tool_env_path: Path | str | None) -> Path | None:
+    """Return the folder for ``toolkit``'s JIT and compile caches, or ``None`` to leave them alone.
+
+    Follows ``PROTO_MODEL_CACHE`` like the JAX cache: ``{cache}/{weights_key}/compile_cache`` in path
+    mode, ``{venv}/compile_cache`` in ``IN_ENV`` mode, and nothing in ``NONE`` mode, where the
+    libraries keep their own defaults.
+
+    Args:
+        toolkit (str): Toolkit name.
+        cache_mode (str): Resolved ``PROTO_MODEL_CACHE`` value: a directory, ``"IN_ENV"``, or ``"NONE"``.
+        tool_env_path (Path | str | None): The tool's venv, used by ``IN_ENV`` mode.
+
+    Returns:
+        Path | None: The compile-cache folder, or ``None``.
+    """
+    if cache_mode == "NONE":
+        return None
+    if cache_mode == "IN_ENV":
+        return Path(tool_env_path) / "compile_cache" if tool_env_path else None
+    return Path(cache_mode) / weights_key(toolkit) / "compile_cache"
+
+
+def _download_dirs(toolkit: str | None, env: Mapping[str, str], tool_env_path: Path | str | None) -> list[Path]:
+    """Return the folders a worker downloads weights into, for ``ProgressDeadline`` to watch.
+
+    These are ``HF_HOME``, ``TORCH_HOME``, and the toolkit's weights directory, resolved as
+    ``resolve_weights_dir`` resolves it in the worker. Compile caches are left out so JIT compile
+    time stays charged to the timeout.
+
+    Args:
+        toolkit (str | None): Toolkit name, or None for a subprocess not tied to one.
+        env (Mapping[str, str]): The subprocess environment from ``_build_subprocess_env``.
+        tool_env_path (Path | str | None): The tool's venv.
+
+    Returns:
+        list[Path]: The download folders. Some may not exist yet.
+    """
+    dirs = [Path(env[var]) for var in ("HF_HOME", "TORCH_HOME") if env.get(var)]
+    if toolkit is None:
+        return dirs
+    from proto_tools.utils.proto_home import get_proto_home
+
+    override = env.get(f"PROTO_{toolkit.upper()}_WEIGHTS_DIR")
+    cache_mode = env.get("PROTO_MODEL_CACHE") or str(get_proto_home() / "proto_model_cache")
+    if override:
+        dirs.append(Path(override))
+    elif cache_mode in ("IN_ENV", "NONE"):
+        if tool_env_path:
+            dirs.append(Path(tool_env_path) / ("model_weight_cache" if cache_mode == "IN_ENV" else "weights"))
+    else:
+        dirs.append(Path(cache_mode) / toolkit / "weights")
+    return dirs
 
 
 def _build_subprocess_env(
@@ -424,10 +501,9 @@ def _build_subprocess_env(
 ) -> dict[str, str]:
     """Build a clean env dict for subprocess execution.
 
-    Uses a **whitelist** approach: starts with an empty dict and only
-    copies explicitly allowed variables from the parent environment.
-    This prevents conda, jupyter, mamba, and other host-specific vars
-    from leaking into isolated tool venvs.
+    Start with an empty dictionary and copy only allowed variables from the
+    parent. This keeps host-specific conda, Jupyter, and mamba settings out
+    of isolated tool environments.
 
     Args:
         device (str): Target device (``"cpu"``, ``"cuda"``, ``"cuda:0"``, etc.).
@@ -440,9 +516,11 @@ def _build_subprocess_env(
             ``OMP_NUM_THREADS`` / ``MKL_NUM_THREADS`` / etc., but available to
             any caller that needs to override a specific variable for one
             worker subprocess.
-        pin_visible_devices (bool): Restrict ``CUDA_VISIBLE_DEVICES`` to ``device``'s physical GPU(s) (local cuda:0..N-1) instead of the parent's value. For JAX tools.
-        toolkit (str | None): Toolkit the subprocess runs, which names its JAX compilation cache directory. ``None`` leaves the cache off.
+        pin_visible_devices (bool): Restrict ``CUDA_VISIBLE_DEVICES`` to ``device``'s physical GPU(s) (local cuda:0..N-1) instead of the parent's value. For tools whose runtime picks a GPU itself.
+        toolkit (str | None): Name of the toolkit running in the subprocess, used to choose its
+            JAX compilation cache directory. If ``None``, leave the cache disabled.
     """
+    from proto_tools.utils.foundation_env import active_foundation_bin
     from proto_tools.utils.system_info import capture_subprocess_env
 
     env: dict[str, str] = {}
@@ -458,11 +536,9 @@ def _build_subprocess_env(
         if val is not None:
             env[var] = val
 
-    # Isolate the venv from the host user-site (~/.local/lib/pythonX/site-packages), which the
-    # interpreter adds to sys.path by DEFAULT even inside a venv — the whitelist above can't stop
-    # it because it's interpreter behavior, not an inherited env var. A polluted user-site (e.g. a
-    # broken `transformers` missing `huggingface_hub`) otherwise shadows the venv's own packages
-    # and breaks the isolated tool. This is the env-var equivalent of `python -s`.
+    # Disable user-site packages explicitly. Python can add them to sys.path even inside
+    # the venv, allowing incompatible host packages to shadow the tool's dependencies.
+    # Filtering inherited variables alone does not prevent this. This matches python -s.
     env["PYTHONNOUSERSITE"] = "1"
 
     # Ensure HF_TOKEN is explicitly set even if the token was stored
@@ -481,7 +557,7 @@ def _build_subprocess_env(
         {var: val for var, val in os.environ.items() if var.startswith("PROTO_") and var.endswith("_WEIGHTS_DIR")}
     )
 
-    # Reconstruct PATH: venv/bin > cuda/bin (GPU) > parent PATH > system dirs
+    # Reconstruct PATH: venv/bin > cuda/bin (GPU) > parent PATH > system dirs > foundation_env/bin.
     path_parts: list[str] = []
     if tool_env_path:
         path_parts.append(str(Path(tool_env_path) / "bin"))
@@ -493,9 +569,16 @@ def _build_subprocess_env(
     for d in _SYSTEM_PATH_DIRS:
         if d not in path_parts:
             path_parts.append(d)
+    # Last, so it only fills gaps: Triton and torch inductor call gcc at run time, and a host that
+    # needed the foundation env may have no compiler at all. Ahead of the host it would shadow a
+    # working host gcc/curl/binutils with conda-forge builds (glibc 2.34 sysroot, gcc newer than
+    # nvcc accepts, conda's CA bundle). setup.sh still gets it first (ToolInstance setup).
+    foundation_bin = active_foundation_bin()
+    if foundation_bin is not None and str(foundation_bin) not in path_parts:
+        path_parts.append(str(foundation_bin))
     env["PATH"] = ":".join(path_parts)
 
-    # CUDA_VISIBLE_DEVICES: pinned workers (JAX) see only their physical GPU(s) as local cuda:0..N-1; else pass parent's through.
+    # CUDA_VISIBLE_DEVICES: pinned workers see only their physical GPU(s) as local cuda:0..N-1; else pass parent's through.
     if pin_visible_devices:
         from proto_tools.utils.device import determine_visible_devices
 
@@ -511,14 +594,13 @@ def _build_subprocess_env(
     env.setdefault("UV_HTTP_TIMEOUT", "300")
     env.setdefault("PIP_DEFAULT_TIMEOUT", "300")
 
-    # Route uv/pip caches under PROTO_HOME so all proto-tools disk usage
-    # is consolidated and cleanable atomically. Respects user overrides
-    # (UV_CACHE_DIR / PIP_CACHE_DIR are copied in from _BASE_PASSTHROUGH
-    # above; setdefault only fills when unset).
+    # uv's cache lives under PROTO_HOME (a UV_CACHE_DIR from _BASE_PASSTHROUGH wins). Envs hardlink
+    # their packages from it, so it is pruned, never deleted. pip copies rather than links, so its
+    # cache would only spare a re-download, and it is off.
     from proto_tools.utils.proto_home import get_proto_home
 
     env.setdefault("UV_CACHE_DIR", str(get_proto_home() / "uv_cache"))
-    env.setdefault("PIP_CACHE_DIR", str(get_proto_home() / "pip_cache"))
+    env.setdefault("PIP_NO_CACHE_DIR", "1")
 
     # Prevent JAX from preallocating GPU memory at import time (harmless for PyTorch)
     env["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
@@ -542,14 +624,31 @@ def _build_subprocess_env(
     else:
         # Absolute or relative path → shared directory
         cache_path = Path(cache_mode)
-        env["HF_HOME"] = str(cache_path / "huggingface")
-        if tool_env_path:
-            env["TORCH_HOME"] = str(cache_path / "torch")
+        if toolkit:
+            # Per-toolkit layout: every framework cache lives under {cache}/{weights_key}/
+            env.update(toolkit_cache_env(toolkit, cache_path))
+        else:
+            # A subprocess not tied to a toolkit gets a shared cache at the root
+            env["HF_HOME"] = str(cache_path / "huggingface")
+            if tool_env_path:
+                env["TORCH_HOME"] = str(cache_path / "torch")
 
     if toolkit and "JAX_COMPILATION_CACHE_DIR" not in env:
         jax_cache = _jax_compilation_cache_dir(toolkit, cache_mode, tool_env_path)
         if jax_cache:
             env["JAX_COMPILATION_CACHE_DIR"] = jax_cache
+
+    # JIT/compile caches go under PROTO_HOME rather than ~ or /tmp: toolkit-specific ones in the
+    # toolkit's folder, general ones (CUDA driver JIT) in one per-user folder. A value the user set
+    # in their shell still wins; NONE mode leaves the library defaults.
+    compile_dir = _compile_cache_dir(toolkit, cache_mode, tool_env_path) if toolkit else None
+    defaults = compile_cache_env(compile_dir) if compile_dir is not None else {}
+    if cache_mode != "NONE":
+        defaults |= compile_cache_env(get_proto_home() / "compile_cache", GENERAL_COMPILE_CACHE_VARS)
+    for var in (*COMPILE_CACHE_VARS, *GENERAL_COMPILE_CACHE_VARS):
+        value = os.environ.get(var) or defaults.get(var)
+        if value:
+            env[var] = value
 
     # Inject compute environment detection (hardware-aware PyTorch/JAX specs)
     from proto_tools.utils.compute_deps import detect_compute_environment
@@ -653,9 +752,9 @@ def _build_subprocess_env(
 
 
 class PersistentWorker:
-    """A long-running subprocess that accepts JSON requests on stdin and.
+    """Keep a tool subprocess alive to exchange JSON requests and responses.
 
-    returns JSON responses on stdout.
+    Requests arrive on stdin and responses return on stdout.
 
     The subprocess runs ``_worker_bootstrap.py`` inside a tool's venv,
     which discovers and imports the tool's standalone script module. The
@@ -677,14 +776,14 @@ class PersistentWorker:
         Effective verbosity on the 0-3 scale (already merged with
         ``PROTO_WORKER_VERBOSE`` by the caller). Drives both the parent-side
         log level on ``proto_tools.worker.{toolkit}`` and whether untagged
-        subprocess stderr is teed to the parent's ``sys.stderr``. Latched at
-        construction time so the drain thread never races a mid-run env-var
-        toggle.
+        subprocess stderr is also written to the parent's ``sys.stderr``. Read
+        this once at construction so changes to environment variables cannot
+        alter the drain thread's setting during a run.
     env_overrides : dict | None
         Caller-supplied env vars applied as the final layer when the worker
         subprocess is spawned. Used by ToolPool's CPU fan-out path to pin
-        per-worker thread budgets (``OMP_NUM_THREADS`` etc.); harmless to
-        any other caller.
+        per-worker thread budgets such as ``OMP_NUM_THREADS``. Other callers
+        can use it to override individual variables too.
     """
 
     def __init__(
@@ -713,6 +812,9 @@ class PersistentWorker:
         self._stderr_thread: threading.Thread | None = None
         # Bounded ring buffer for crash context; size from PROTO_WORKER_STDERR_BUFFER_LINES (default 20).
         self._stderr_lines: collections.deque[str] = collections.deque(maxlen=_stderr_buffer_lines())
+        # Folders the worker downloads weights into, and the deadline of the request in flight.
+        self._download_dirs: list[Path] = []
+        self._deadline: ProgressDeadline | None = None
 
     @property
     def alive(self) -> bool:
@@ -758,6 +860,7 @@ class PersistentWorker:
             toolkit=self.toolkit,
         )
         env["TOOL_VENV_PATH"] = str(self.env_path)
+        self._download_dirs = _download_dirs(self.toolkit, env, self.env_path)
 
         logger.debug(
             "Starting persistent worker for %s (script=%s, device=%s)",
@@ -793,7 +896,8 @@ class PersistentWorker:
 
         Args:
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
-            timeout (int | None): Maximum seconds to wait for a response. None means
+            timeout (int | None): Maximum seconds to wait for a response, not counting time in
+                which the worker's weight downloads grew (see ``ProgressDeadline``). None means
                 block indefinitely. On timeout the worker is killed and TimeoutError is raised.
 
         Returns:
@@ -826,8 +930,9 @@ class PersistentWorker:
             # process group and survives parent-side cancellation by the host platform;
             # without this, the worker's late response sits in the pipe and corrupts the next send.
             response_matched = False
+            self._deadline = None
             try:
-                with self._request_heartbeat(request_id):
+                with self._request_heartbeat(request_id, watch_downloads=timeout is None):
                     response = self._read_response(request_id, timeout)
 
                 if response.get("id") != request_id:
@@ -863,10 +968,10 @@ class PersistentWorker:
         return self._read_response_deadline(request_id, timeout)
 
     def _read_response_blocking(self, request_id: str) -> dict[str, Any]:
-        """Legacy buffered read path (unbounded); used only when no timeout is set."""
+        """Read a buffered response without a deadline when no timeout is set."""
         assert self._process is not None and self._process.stdout is not None
         # Header is PROTO_LENGTH:<n> (pipe payload) or PROTO_FILE:<path> (temp-file payload).
-        # proto_tools own logs route to stderr; anything else on stdout is third-party noise we skip.
+        # Proto-tools logs go to stderr. Skip unrelated stdout until a response header arrives.
         while True:
             header_line = self._process.stdout.readline()
             if not header_line:
@@ -898,18 +1003,19 @@ class PersistentWorker:
         return self._decode_body(request_id, response_bytes)
 
     def _read_response_deadline(self, request_id: str, timeout: int) -> dict[str, Any]:
-        """Deadline-bounded raw-fd read: the entire wait for a response is capped at *timeout*.
+        """Read a response from stdout while enforcing the request deadline.
 
-        Reads raw bytes off the stdout fd (not the buffered text stream, which is select-unsafe)
-        and frames the protocol itself, so a worker that emits native fd-1 noise and then stalls
-        still trips the timeout instead of blocking forever in readline().
+        Read raw bytes and identify response headers directly. Using ``select``
+        with the buffered text stream could block inside ``readline()`` after
+        partial third-party output, preventing the timeout from taking effect.
         """
         assert self._process is not None and self._process.stdout is not None
         fd = self._process.stdout.fileno()
         buf = bytearray()
 
-        # Phase 1: wait for the PROTO_* header, skipping noise lines. Compute happens here.
-        deadline = time.monotonic() + timeout
+        # Wait for the response header while computation or initial downloads run.
+        # Skip unrelated lines and pause the execution deadline while downloads progress.
+        deadline = self._deadline = ProgressDeadline(timeout, self._download_dirs, label=self.toolkit)
         header_line = None
         while header_line is None:
             nl = buf.find(b"\n")
@@ -918,12 +1024,15 @@ class PersistentWorker:
                 del buf[: nl + 1]
                 if line.startswith(("PROTO_LENGTH:", "PROTO_FILE:")):
                     header_line = line
-                continue  # noise line, or already-buffered bytes still to scan
-            remaining = deadline - time.monotonic()
-            if remaining <= 0 or not select.select([fd], [], [], remaining)[0]:
+                continue  # Scan the remaining buffered bytes before waiting for more.
+            deadline.tick()
+            if deadline.expired():
                 raise TimeoutError(
-                    f"{self.toolkit} worker timed out waiting for response to request {request_id} after {timeout}s"
+                    f"{self.toolkit} worker timed out waiting for response to request {request_id} "
+                    f"after {timeout}s{deadline.timeout_note()}"
                 )
+            if not select.select([fd], [], [], deadline.wait_slice())[0]:
+                continue
             chunk = os.read(fd, _READ_CHUNK)
             if not chunk:
                 raise RuntimeError(
@@ -943,8 +1052,8 @@ class PersistentWorker:
                 f"for request {request_id} ({self._crash_context()})"
             ) from exc
 
-        # Phase 2: drain the body. Compute is done, so a fresh short grace window bounds the
-        # transfer without risking killing a finished worker that produced a large result.
+        # Computation is finished. Allow a separate short window to transfer the response body,
+        # including large results that arrive just before the execution deadline.
         body_deadline = time.monotonic() + _BODY_GRACE_SECONDS
         while len(buf) < json_length:
             remaining = body_deadline - time.monotonic()
@@ -996,13 +1105,17 @@ class PersistentWorker:
             os.killpg(self._process.pid, sig)
 
     @contextlib.contextmanager
-    def _request_heartbeat(self, request_id: str) -> Iterator[None]:
+    def _request_heartbeat(self, request_id: str, *, watch_downloads: bool = False) -> Iterator[None]:
         """Log a WARNING for as long as a request stays in flight past the heartbeat interval.
 
-        A background daemon thread wakes every ``interval`` seconds and, while the request is
-        still pending, emits a WARNING with elapsed time. This is the only live signal a wedged
-        inference / model load produces in prod, where proto_tools INFO/DEBUG are dropped and the
-        worker itself is silent. Disabled when the interval is <= 0.
+        A daemon thread reports elapsed time every ``interval`` seconds until
+        the request finishes. This keeps long or stalled model loads and
+        inference visible when INFO and DEBUG logs are hidden.
+
+        Report active weight downloads separately, using the request deadline
+        to track them. When no timeout is set, ``watch_downloads`` checks the
+        download directories instead. An interval of 0 or less disables the
+        heartbeat.
         """
         interval = _heartbeat_interval_seconds()
         if interval <= 0:
@@ -1012,7 +1125,28 @@ class PersistentWorker:
         start = time.monotonic()
 
         def _beat() -> None:
+            watch = DownloadWatch(self._download_dirs) if watch_downloads else None
+            if watch is not None:
+                watch.grew()  # baseline
             while not done.wait(interval):
+                deadline = self._deadline
+                if deadline is not None and deadline.downloading:
+                    logger.warning(
+                        "Downloading weights for %s: %.0fs elapsed (request %s, %.0fs downloading).",
+                        self.toolkit,
+                        time.monotonic() - start,
+                        request_id,
+                        deadline.download_seconds,
+                    )
+                    continue
+                if watch is not None and watch.grew():
+                    logger.warning(
+                        "Downloading weights for %s: %.0fs elapsed (request %s).",
+                        self.toolkit,
+                        time.monotonic() - start,
+                        request_id,
+                    )
+                    continue
                 logger.warning(
                     "Worker for %s still running after %.0fs (request %s, no response yet); worker may be wedged.",
                     self.toolkit,
@@ -1031,12 +1165,11 @@ class PersistentWorker:
     def stop(self) -> None:
         """Terminate the worker and all of its child processes.
 
-        Never raises. A worker that ignores SIGTERM then SIGKILL is stuck in an
-        uninterruptible kernel sleep (D-state) — typically a wedged GPU/CUDA driver
-        call — and cannot be reaped from the parent; the OS reaps it once the syscall
-        returns or the container exits. Propagating the reap ``TimeoutExpired`` would
-        mask the caller's real error and abort the run, so the
-        unreapable process is logged and abandoned instead.
+        Never raise during cleanup. A worker that remains after SIGTERM and
+        SIGKILL is in uninterruptible kernel sleep, often inside a GPU driver
+        call. The parent cannot reap it until the system call returns or the
+        container exits. Log that condition rather than letting cleanup
+        ``TimeoutExpired`` replace the caller's original error.
         """
         if self._process is not None:
             t0 = time.monotonic()

@@ -25,9 +25,9 @@
 >
 > [Contact us](https://forms.gle/8PiYPDiuf3YfNxxH8) and let us know how we can help!
 
-Welcome! This repository contains the open-source implementation of `proto-tools`, a Python package containing a large suite of computational biology and biological AI tools, all accessible through a single, consistent Python interface. Language models, structure predictors, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more are all available through a single `pip install` command.
+`proto-tools` is an open-source Python package that gives computational biology and biological AI tools a common interface. It includes language models, structure prediction, inverse folding, sequence analysis, gene annotation, conformational dynamics, genomic scoring, and more, all available through a single `pip install` command.
 
-Every tool runs in its own automatically managed isolated environment, so all dependency wrangling is handled for you. In addition, `proto-tools` implements extensive infrastructure for features such as device management and GPU fan-out, making it easy to call tools in quick succession. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or from an AI assistant through our [hosted MCP server](https://proto.evodesign.org/docs/mcp/installation). Tools can run on local compute or on Modal.
+Tool environments are isolated and managed automatically, so you can use tools with conflicting dependencies together. Device management and GPU fan-out support repeated calls and parallel workloads. You can use it as a standalone Python library, as part of the broader [proto-language](https://github.com/evo-design/proto-language) optimization system, or from an AI assistant through our [hosted MCP server](https://proto.evodesign.org/docs/mcp/installation). Tools can run on local compute or on Modal.
 
 Proto-tools is open source under an MIT license. Contributions are welcome!
 
@@ -57,7 +57,7 @@ To use these tools from Claude, ChatGPT, or another AI assistant, connect our MC
 
 All persistent data (model weights and tool environments) is cached under the `PROTO_HOME` directory on first use (defaults to `~/.proto/`).
 
-To customize the storage location, you can specify a path via the following environment variable:
+To choose another storage location, set this environment variable.
 
 ```bash
 # Add to your shell profile:
@@ -68,15 +68,13 @@ For shared filesystems, model weights can be reused to avoid downloading duplica
 
 ### Step 3: Gated model access (optional)
 
-A few tools use gated models or software that require accepting a license / terms-of-use first (e.g. ESM3, AlphaGenome, X3DNA). See [notes/gated-models.md](notes/gated-models.md) for the full list and per-model access steps.
+A few tools use gated models or software that require accepting a license / terms-of-use first (e.g. AlphaGenome, SpliceAI2, X3DNA). See [notes/gated-models.md](notes/gated-models.md) for the full list and per-model access steps.
 
 ### Step 4: Remote compute (optional) <a href="https://modal.com"><img src="guides/assets/modal/modal-logo.png" alt="Modal" height="20" align="absmiddle"></a>
 
-`proto-tools` enables users to scale their tool use beyond their local machine through an
-integration with [Modal](https://modal.com), a serverless compute platform that
-allows users to execute models and tools in remote containers. To learn more about
-setting up Modal, see [proto_tools/modal/README.md](proto_tools/modal/README.md)
-for instructions related to account setup, deploying a tool, and costs, or the [Cloud Inference guide](guides/cloud_inference.ipynb) for a runnable walkthrough.
+Run tools remotely with [Modal](https://modal.com), a serverless compute platform.
+See [proto_tools/modal/README.md](proto_tools/modal/README.md) for account setup,
+deployment, and costs, or work through the [Cloud Inference guide](guides/cloud_inference.ipynb).
 
 > [!TIP]
 > **You're all set up!** Start with the [quickstart](guides/quickstart.ipynb), then check out the rest of the [guides](guides/) — short notebooks covering tool environments, persistent execution, device management, parallel multi-GPU runs, and remote execution.
@@ -97,18 +95,25 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 <a href="proto_tools/tools/database_retrieval/">database_retrieval/</a>             # Sequence and structure database access
 ├── <a href="proto_tools/tools/database_retrieval/alphafold_db/">alphafold_db/</a>
 ├── <a href="proto_tools/tools/database_retrieval/alphamissense_db/">alphamissense_db/</a>
+├── <a href="proto_tools/tools/database_retrieval/arxiv/">arxiv/</a>
+├── <a href="proto_tools/tools/database_retrieval/biorxiv/">biorxiv/</a>
 ├── <a href="proto_tools/tools/database_retrieval/ccd_lookup/">ccd_lookup/</a>
+├── <a href="proto_tools/tools/database_retrieval/encode/">encode/</a>
 ├── <a href="proto_tools/tools/database_retrieval/ensembl/">ensembl/</a>
+├── <a href="proto_tools/tools/database_retrieval/europepmc/">europepmc/</a>
 ├── <a href="proto_tools/tools/database_retrieval/interproscan/">interproscan/</a>
 ├── <a href="proto_tools/tools/database_retrieval/ncbi/">ncbi/</a>
+├── <a href="proto_tools/tools/database_retrieval/paperclip/">paperclip/</a>
 ├── <a href="proto_tools/tools/database_retrieval/pdb/">pdb/</a>
 ├── <a href="proto_tools/tools/database_retrieval/pubchem/">pubchem/</a>
 ├── <a href="proto_tools/tools/database_retrieval/rfam/">rfam/</a>
 ├── <a href="proto_tools/tools/database_retrieval/sequence_fetch/">sequence_fetch/</a>
+├── <a href="proto_tools/tools/database_retrieval/synbiohub/">synbiohub/</a>
 └── <a href="proto_tools/tools/database_retrieval/uniprot/">uniprot/</a>
 <a href="proto_tools/tools/epitope_prediction/">epitope_prediction/</a>             # MHC binding and T-cell epitope prediction
 └── <a href="proto_tools/tools/epitope_prediction/netmhcpan/">netmhcpan/</a>
 <a href="proto_tools/tools/gene_annotation/">gene_annotation/</a>                # Sequence annotation
+├── <a href="proto_tools/tools/gene_annotation/crispr_guides/">crispr_guides/</a>
 ├── <a href="proto_tools/tools/gene_annotation/crispr_tracr_rna/">crispr_tracr_rna/</a>
 ├── <a href="proto_tools/tools/gene_annotation/meme/">meme/</a>
 ├── <a href="proto_tools/tools/gene_annotation/minced/">minced/</a>
@@ -144,6 +149,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 └── <a href="proto_tools/tools/rna_splicing/spliceai2/">spliceai2/</a>
 <a href="proto_tools/tools/sequence_alignment/">sequence_alignment/</a>             # Sequence search and multiple sequence alignment
 ├── <a href="proto_tools/tools/sequence_alignment/blast/">blast/</a>
+├── <a href="proto_tools/tools/sequence_alignment/crispritz/">crispritz/</a>
 ├── <a href="proto_tools/tools/sequence_alignment/mafft/">mafft/</a>
 └── <a href="proto_tools/tools/sequence_alignment/mmseqs2/">mmseqs2/</a>
 <a href="proto_tools/tools/sequence_scoring/">sequence_scoring/</a>               # Genomic and regulatory scoring
@@ -158,6 +164,7 @@ for instructions related to account setup, deploying a tool, and costs, or the [
 ├── <a href="proto_tools/tools/sequence_scoring/parade/">parade/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/primer3/">primer3/</a>
 ├── <a href="proto_tools/tools/sequence_scoring/puffin/">puffin/</a>
+├── <a href="proto_tools/tools/sequence_scoring/rs3/">rs3/</a>
 └── <a href="proto_tools/tools/sequence_scoring/segmasker/">segmasker/</a>
 <a href="proto_tools/tools/structure_alignment/">structure_alignment/</a>            # Structure comparison
 ├── <a href="proto_tools/tools/structure_alignment/foldmason/">foldmason/</a>
@@ -225,7 +232,7 @@ Each specific tool also ships a minimal `examples/example.ipynb` under `proto_to
 
 Our hosted MCP server lets Claude, ChatGPT, and other AI assistants find and run these tools for you. To set up, follow our [MCP installation guide here](https://proto.evodesign.org/docs/mcp/installation).
 
-## Development & Contributing
+## Development and Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full developer setup, storage
 configuration, PR format, code style, and testing conventions.

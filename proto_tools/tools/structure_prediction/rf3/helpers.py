@@ -8,18 +8,18 @@ files where RF3 can read them.
 import hashlib
 import json
 import os
-import warnings
+import re
 from logging import getLogger
 from typing import Any
 
-from proto_tools.entities.complex import chain_label
 from proto_tools.entities.ligands import Fragment
+from proto_tools.entities.msa import MSA
+from proto_tools.tools.structure_prediction.msa_plan import SentMSA, protein_chain_msas
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Chain,
     Complex,
     ComplexMSAs,
     resolve_chain_ids,
-    unwrap_complex_msas,
 )
 
 logger = getLogger(__name__)
@@ -30,8 +30,8 @@ def build_chain_a3m_paths(
     complex_msas: "ComplexMSAs | None",
     temp_dir: str,
     verbose: int = 0,
-) -> dict[str, str]:
-    """Map each protein chain ID to an ``.a3m`` file written for RF3.
+) -> tuple[dict[str, str], dict[int, SentMSA]]:
+    """Map each protein chain ID to an ``.a3m`` file written for RF3, and record what was sent.
 
     RF3's ``rf3 fold`` input schema expects each protein component's ``msa_path``
     to point to an A3M-format multiple sequence alignment (one of the standard
@@ -46,47 +46,47 @@ def build_chain_a3m_paths(
         verbose (int): Non-zero enables INFO log lines per chain.
 
     Returns:
-        dict[str, str]: Mapping from chain ID (``"A"``, ``"B"``, …) to the
-            ``.a3m`` file path on disk. Protein chains with no MSA are omitted
-            and a UserWarning is emitted (RF3 falls back to single-sequence
-            mode for those chains).
+        tuple[dict[str, str], dict[int, SentMSA]]: Chain ID (``"A"``, ``"B"``, …) to the
+            ``.a3m`` file path on disk, and the rows written per protein chain index. Protein
+            chains with no alignment are omitted and an INFO message identifies query-only
+            input for those chains.
     """
-    per_chain_msas, unpaired_per_chain, _is_paired = unwrap_complex_msas(complex_msas)
     chain_a3m_paths: dict[str, str] = {}
-    if per_chain_msas:
-        msa_dir = os.path.join(temp_dir, "msas")
-        os.makedirs(msa_dir, exist_ok=True)
-        seq_to_a3m: dict[str, str] = {}
-        for ch_idx, chain in enumerate(sp_complex.chains):
-            if not (isinstance(chain, Chain) and chain.entity_type == "protein"):
-                continue
-            msa = per_chain_msas.get(ch_idx)
-            if msa is None:
-                continue
-            # RF3 pairs by tax_id parsed from the a3m headers, so feed the deep
-            # per-chain unpaired MSA when present: it carries full per-chain depth
-            # plus the UniRef TaxID= headers RF3 uses to re-pair across chains.
-            a3m_msa = (unpaired_per_chain or {}).get(ch_idx) or msa
-            chain_id = chain.id if chain.id is not None else chain_label(ch_idx)
-            seq = chain.sequence
-            a3m_path = seq_to_a3m.get(seq)
-            if a3m_path is None:
-                a3m_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.a3m")
-                a3m_msa.to_a3m_file(a3m_path)
-                seq_to_a3m[seq] = a3m_path
-            chain_a3m_paths[chain_id] = a3m_path
-            if verbose:
-                logger.info("Assigned MSA to chain %s (%d sequences)", chain_id, len(a3m_msa))
-
-    _, protein_chain_ids = sp_complex.extract_protein_chains()
-    for chain_id in protein_chain_ids:
-        if chain_id not in chain_a3m_paths:
-            warnings.warn(
-                f"No homologs found for chain {chain_id} - rf3 will fall back to single-sequence mode.",
-                UserWarning,
-                stacklevel=2,
+    written: dict[str, tuple[str, MSA]] = {}
+    sent_msas: dict[int, MSA] = {}
+    sent: dict[int, SentMSA] = {}
+    if complex_msas is None:
+        return chain_a3m_paths, sent
+    sequences: dict[int, str] = {}
+    for chain in protein_chain_msas(sp_complex.chains, complex_msas):
+        msa = chain.unpaired or chain.primary
+        if msa is None:
+            logger.info(
+                "Chain %s has no supplied homolog alignment; using query-only input for this chain. "
+                "Other chains may still use MSAs; inspect structure.msa_conditioning.",
+                chain.chain_id,
             )
-    return chain_a3m_paths
+            continue
+        # Feed the deep per-chain unpaired MSA when present for full per-chain depth. RF3
+        # re-pairs across chains only by TaxID= in the a3m headers, which ColabFold rows lack.
+        seq = sequences[chain.index] = chain.chain.sequence
+        if seq not in written:
+            msa_dir = os.path.join(temp_dir, "msas")
+            os.makedirs(msa_dir, exist_ok=True)
+            a3m_path = os.path.join(msa_dir, f"{hashlib.sha256(seq.encode()).hexdigest()}.a3m")
+            msa.to_a3m_file(a3m_path)
+            written[seq] = (a3m_path, msa)
+        chain_a3m_paths[chain.chain_id], sent_msas[chain.index] = written[seq]
+        if verbose:
+            logger.info("Assigned MSA to chain %s (%d sequences)", chain.chain_id, len(sent_msas[chain.index]))
+    # RF3 (atomworks) pairs rows across distinct chain sequences that share a TaxID= value;
+    # identical chains are a homomer, which it leaves unpaired.
+    tax_ids = {sequences[i]: _tax_ids(msa) for i, msa in sent_msas.items()}
+    for index, msa in sent_msas.items():
+        own = tax_ids[sequences[index]]
+        shared = any(own & ids for seq, ids in tax_ids.items() if seq != sequences[index])
+        sent[index] = SentMSA(rows=len(msa), paired=shared)
+    return chain_a3m_paths, sent
 
 
 def complex_to_rf3_json(
@@ -144,3 +144,9 @@ def complex_to_rf3_json(
             components.append(entry)
 
     return json.dumps([{"name": name, "components": components}], indent=2)
+
+
+def _tax_ids(msa: MSA) -> set[str]:
+    """The ``TaxID=`` values RF3 (atomworks) pairs non-query rows on: the first one in each header."""
+    matches = (re.search(r"TaxID=(\d+)", sequence_id) for sequence_id in msa.sequence_ids[1:])
+    return {match.group(1) for match in matches if match}

@@ -4,22 +4,21 @@ Tiny DB (~10 MB FASTA). Curated noncoding RNA families; high-precision
 seed alignments. Source from the AF3 mirror.
 """
 
+from proto_tools.databases.mmseqs2 import MMseqs2DatabaseEntry, MMseqs2SearchFlags
 from proto_tools.databases.registry import (
-    DatasetEntry,
+    BuildRecipe,
+    BuildStep,
     DatasetRegistry,
     DownloadSpec,
-    IndexRecipe,
-    IndexStep,
-    MmseqsFlags,
 )
 
-ENTRY = DatasetEntry(
+ENTRY = MMseqs2DatabaseEntry(
     name="rfam-14-9-90-80",
     molecule_type="rna",
     display_name="Rfam 14.9 (clustered 90/80)",
     description="Rfam 14.9 curated RNA families clustered at 90/80 — AF3 RNA component.",
     citation_doi="10.1093/nar/gkaa1047",  # Rfam — Kalvari et al. 2021
-    urls=[
+    downloads=[
         DownloadSpec(
             url="https://storage.googleapis.com/alphafold-databases/v3.0/rfam_14_9_clust_seq_id_90_cov_80_rep_seq.fasta.zst",
             filename="rfam_14_9_clust_seq_id_90_cov_80_rep_seq.fasta.zst",
@@ -27,13 +26,13 @@ ENTRY = DatasetEntry(
     ],
     total_download_bytes=15_000_000,
     total_disk_bytes=20_000_000,
-    index_recipe=IndexRecipe(
+    build=BuildRecipe(
         steps=[
-            IndexStep(
+            BuildStep(
                 command=["zstd", "-d", "--rm", "rfam_14_9_clust_seq_id_90_cov_80_rep_seq.fasta.zst"],
                 description="Decompress source FASTA",
             ),
-            IndexStep(
+            BuildStep(
                 command=[
                     "mmseqs",
                     "createdb",
@@ -42,7 +41,7 @@ ENTRY = DatasetEntry(
                 ],
                 description="Build MMseqs2 nucleotide DB from FASTA",
             ),
-            IndexStep(
+            BuildStep(
                 command=[
                     "mmseqs",
                     "createindex",
@@ -63,10 +62,8 @@ ENTRY = DatasetEntry(
             "rfam.index",
         ],
     ),
-    mmseqs_flags=MmseqsFlags(sensitivity=7.0, prefilter_mode=0, max_seqs=300),
+    search_flags=MMseqs2SearchFlags(sensitivity=7.0, prefilter_mode=0, max_seqs=300),
     db_prefix="rfam",
-    supports_gpu=False,
-    min_gpu_memory_gb=None,
     a3m_adapter="rna",
 )
 

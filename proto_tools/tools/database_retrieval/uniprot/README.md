@@ -9,13 +9,13 @@
 
 ## Overview
 
-UniProt (the Universal Protein Resource) is the reference database of protein sequences and their functional annotation, maintained by the UniProt consortium. The `uniprot-fetch` tool retrieves a UniProtKB entry over the UniProt REST API, either directly by accession or through a ranked gene- or protein-name and organism search, returning the sequence, gene names, review status, linked PDB structures, and the full JSON record. It runs on CPU and requires only network access.
+UniProt (the Universal Protein Resource) is the reference database of protein sequences and their functional annotation, maintained by the UniProt consortium. The `uniprot-fetch` tool retrieves a UniProtKB entry over the UniProt REST API, either directly by accession or through a ranked gene- or protein-name and organism search, returning the sequence, gene names, review status, linked PDB structures, and the full JSON record. `uniprot-search` returns ranked candidate entries for free-text or query-syntax searches. Both run on CPU and require only network access.
 
 ## Background
 
-UniProt ([The UniProt Consortium, 2025](https://doi.org/10.1093/nar/gkae1010)) is the central, freely accessible resource for protein sequence and functional annotation, maintained by [SIB](https://www.sib.swiss/), [EMBL-EBI](https://www.ebi.ac.uk/), and [PIR](https://proteininformationresource.org/). Its core database, UniProtKB, has two sections: [Swiss-Prot](https://en.wikipedia.org/wiki/UniProt#UniProtKB/Swiss-Prot), whose entries are manually reviewed and curated from the literature, and [TrEMBL](https://en.wikipedia.org/wiki/UniProt#UniProtKB/TrEMBL), whose entries are automatically annotated. As of release 2026_01 (January 2026), Swiss-Prot contains 574,627 reviewed entries, alongside hundreds of millions of unreviewed TrEMBL entries; current counts are published on the [UniProt statistics page](https://www.uniprot.org/uniprotkb/statistics).
+UniProt ([The UniProt Consortium, 2025](https://doi.org/10.1093/nar/gkae1010)) is the central, freely accessible resource for protein sequence and functional annotation, maintained by [SIB](https://www.sib.swiss/), [EMBL-EBI](https://www.ebi.ac.uk/), and [PIR](https://proteininformationresource.org/). Its core database, UniProtKB, has two sections: [Swiss-Prot](https://en.wikipedia.org/wiki/UniProt#UniProtKB/Swiss-Prot), whose entries are manually reviewed and curated from the literature, and [TrEMBL](https://en.wikipedia.org/wiki/UniProt#UniProtKB/TrEMBL), whose entries are automatically annotated. As of release 2026_01 (January 2026), Swiss-Prot contains 574,627 reviewed entries, alongside hundreds of millions of unreviewed TrEMBL entries. Current counts are published on the [UniProt statistics page](https://www.uniprot.org/uniprotkb/statistics).
 
-Internally, the tool calls the UniProt REST API at `rest.uniprot.org`. Given an accession it fetches that UniProtKB entry directly; given a protein or gene name and an organism it runs a UniProt search and selects one entry deterministically, preferring an exact gene-name match, then optionally entries with linked PDB structures, then reviewed Swiss-Prot status. It extracts the sequence, length, review status, gene symbols, and PDB cross-references, and also returns the complete entry JSON; the `fields` option narrows the API response. Results reflect the live database at query time rather than a fixed release snapshot.
+Internally, the tool calls the UniProt REST API at `rest.uniprot.org`. Given an accession it fetches that UniProtKB entry directly. Given a protein or gene name and an organism it runs a UniProt search and selects one entry deterministically, preferring an exact gene-name match, then optionally entries with linked PDB structures, then reviewed Swiss-Prot status. It extracts the sequence, length, review status, gene symbols, and PDB cross-references, and also returns the complete entry JSON. The `fields` option narrows the API response. Results reflect the live database at query time rather than a fixed release snapshot.
 
 Records and their provenance come directly from UniProt's official REST API, maintained by the UniProt consortium.
 
@@ -36,17 +36,34 @@ Use this to pull a reference protein sequence and its annotation into a pipeline
 
 #### Usage Tips
 
-- **Provide either `uniprot_id` or both `target_name` and `organism`.** An accession does a direct lookup; a name requires the organism to disambiguate, and the search returns the single best-ranked entry, not a list.
-- **`prefer_pdb_crossref` only affects search ranking.** It biases the name-and-organism search toward entries with linked PDB structures; it has no effect on a direct accession lookup and never filters out entries that lack structures.
+- **Provide either `uniprot_id` or both `target_name` and `organism`.** An accession does a direct lookup. A name requires the organism to disambiguate, and the search returns the single best-ranked entry, not a list.
+- **`prefer_pdb_crossref` only affects search ranking.** It biases the name-and-organism search toward entries with linked PDB structures. It has no effect on a direct accession lookup and never filters out entries that lack structures.
 - **`fields` narrows the response but can blank typed outputs.** Restricting `fields` shrinks large entries substantially, but the typed outputs are only populated when their source fields are kept, so include `accession`, `sequence`, `reviewed`, `gene_names`, and `xref_pdb` if you read those.
-- **Results track the live database.** The same call can return updated annotation as UniProt releases change; it is not pinned to a fixed release.
+- **Results track the live database.** The same call can return updated annotation as UniProt releases change. It is not pinned to a fixed release.
+
+### UniProt Search (`uniprot-search`)
+
+Runs one or more UniProtKB searches, written as free text (`"thermostable DNA polymerase Thermus aquaticus"`) or UniProt query syntax (`'protein_name:"programmed cell death protein 1"'`), and returns a ranked list of candidate entries per query: accession, entry name, protein name, gene names and synonyms, organism and taxon, length, review status, annotation score, and optionally the sequence.
+
+#### Applications
+
+Use this to resolve a description to a protein when the gene symbol or accession is unknown, such as a function plus a source organism, a common name, or a drug target, and then fetch the chosen entry with `uniprot-fetch`. It also collects candidate sets: orthologs across a taxon, reviewed members of a protein family, or all reviewed entries carrying a given gene name.
+
+#### Usage Tips
+
+- **Read past the first hit.** Results follow UniProt's relevance ranking, which does not always put the intended entry first. "firefly luciferase", for example, returns the *Luciola mingrelica* enzyme before the common eastern firefly's (P08659). Check organism and protein name before choosing.
+- **`reviewed_only` defaults to True.** Reviewed Swiss-Prot entries are curated and far fewer. Set it to False to include unreviewed TrEMBL entries, for example for poorly studied organisms.
+- **`taxon_id` includes descendant taxa. `organism` matches by name.** Use `taxon_id=40674` for all mammals or `taxon_id=9606` for human. Both filters are combined with the query using AND. Double quotes in `organism` are stripped, because the name is sent inside quotes.
+- **Query syntax errors raise.** Field queries follow [UniProt's query syntax](https://www.uniprot.org/help/query-fields). An invalid query raises an HTTP 400 error with UniProt's message.
+- **`gene_names` holds primary symbols. `gene_synonyms` holds the rest.** Check `gene_synonyms` when a paper uses an older or alternative symbol, or search it directly with `gene:<symbol>`. Ordered locus and ORF names (e.g. `b3295`) are not included in either.
+- **Sequences are off by default** to keep responses small. Set `include_sequence=True` to export hits as FASTA.
 
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every UniProt tool in this toolkit (`uniprot-fetch`).
+These apply to every UniProt tool in this toolkit (`uniprot-fetch`, `uniprot-search`).
 
-- **Requires network access.** The tool calls the live UniProt REST API; it does not run offline and keeps no local copy of the database.
-- **Subject to UniProt rate limits.** Large or rapid batches may be throttled by the UniProt API; space out high-volume requests.
-- **Runs on CPU.** There is no model and no GPU; latency is dominated by the network round-trip.
+- **Requires network access.** The tool calls the live UniProt REST API. It does not run offline and keeps no local copy of the database.
+- **Subject to UniProt rate limits.** Large or rapid batches may be throttled by the UniProt API. Space out high-volume requests.
+- **Runs on CPU.** There is no model and no GPU. Latency is dominated by the network round-trip.

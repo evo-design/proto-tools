@@ -1,11 +1,13 @@
 """Borzoi standalone inference implementation for venv execution."""
 
 import json
+import logging
 import sys
 from typing import Any, cast
 
 import torch
-from standalone_helpers import get_logger, serialize_output, set_torch_seed
+from standalone_helpers import StatusCounter, get_logger, serialize_output, set_torch_seed
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 
 logger = get_logger(__name__)
 
@@ -54,6 +56,9 @@ class BorzoiModel:
         """Load Borzoi model to device."""
         from borzoi_pytorch import Borzoi
 
+        logger.update_status(
+            f"Loading {'Flashzoi' if self.use_flash_attn else 'Borzoi'} replicate {self.replicate} weights"
+        )
         if verbose:
             logger.info(f"Loading Borzoi model: {self.model_name} on {device}")
 
@@ -77,7 +82,7 @@ class BorzoiModel:
             torch.cuda.empty_cache()
 
     def _reload_to_device(self, model: Any, old_device: str, new_device: str) -> Any:  # noqa: ARG002 — required by device transition callback signature
-        """Custom move function: reload the model onto the target GPU.
+        """Reload the model onto the target GPU when moving it.
 
         Borzoi uses flash-attn/Triton kernels that cannot run on CPU, so
         CPU→GPU transitions require a full reload rather than a simple .to().
@@ -178,6 +183,115 @@ class BorzoiModel:
 
         return cast(torch.Tensor, prediction)
 
+    def compute_gradient(
+        self,
+        sequence: str,
+        positions: list[int],
+        logits_list: list[list[float]],
+        *,
+        gradient_terms: list[dict[str, Any]],
+        temperature: float | None = None,
+        soft: float = 1.0,
+        hard: float = 0.0,
+        backprop: bool = True,
+        device: str = "cuda",
+        verbose: bool = False,
+    ) -> dict[str, Any]:
+        """Per-term track-and-bin activity gradients for relaxed positions in a Borzoi context.
+
+        The context is one-hot encoded, the relaxed distribution is written into the designed
+        positions, and each term's mean track activity over its bin span is differentiated
+        separately. Only the designed positions carry gradients. The rest of the context is fixed.
+
+        Args:
+            sequence: Full ``BORZOI_CONTEXT`` bp context window.
+            positions: 1-indexed inclusive context positions the relaxed rows map to.
+            logits_list: Relaxed state, shape ``(len(positions), 4)`` in ``A,C,G,T`` order.
+            gradient_terms: Quantities to differentiate, each with track, bin_start, bin_end.
+            temperature: Optional softmax temperature; ``None`` uses the rows as probabilities.
+            soft: Blend from the raw input matrix (0) to softmax probabilities (1).
+            hard: Straight-through coefficient; 1 forwards a hard one-hot.
+            backprop: If False, skip backward and return ``gradient=None``.
+            device: Device to run on.
+            verbose: Whether to log status messages.
+
+        Returns:
+            dict[str, Any]: One entry per requested quantity with its raw mean activity and
+                gradient (or ``None``), plus per-candidate metrics and the vocab.
+
+        Raises:
+            ValueError: If the context length, positions, or rows do not line up.
+            RuntimeError: If an expected gradient is missing after the backward pass.
+        """
+        if len(sequence) != BORZOI_CONTEXT:
+            raise ValueError(f"borzoi: compute_gradient expects a {BORZOI_CONTEXT} bp context, got {len(sequence)}")
+        if len(positions) != len(logits_list):
+            raise ValueError("borzoi: compute_gradient needs one relaxed row per designed position")
+        if any(len(row) != 4 for row in logits_list):
+            raise ValueError("borzoi: compute_gradient expects L x 4 logits in A,C,G,T order")
+
+        # Load the model, or move it if it already sits on another device.
+        if not self._loaded:
+            self.load(device, verbose=verbose)
+        elif self.device != device:
+            self.to_device(device)
+
+        mapping = {"A": 0, "C": 1, "G": 2, "T": 3}
+        with torch.set_grad_enabled(backprop):
+            # Wrap the input logits as the leaf tensor the gradient is taken against.
+            seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
+            relaxed = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
+
+            # One-hot encode the fixed context, skipping any non-ACGT base.
+            onehot = torch.zeros(1, 4, BORZOI_CONTEXT, device=self.device)
+            fixed_positions = [index for index, char in enumerate(sequence) if char in mapping]
+            if fixed_positions:
+                onehot[
+                    0,
+                    torch.tensor([mapping[sequence[i]] for i in fixed_positions], dtype=torch.long, device=self.device),
+                    torch.tensor(fixed_positions, dtype=torch.long, device=self.device),
+                ] = 1.0
+
+            # Designed columns are replaced wholesale, so any placeholder base there is discarded.
+            designed = torch.tensor([p - 1 for p in positions], dtype=torch.long, device=self.device)
+            onehot = onehot.index_copy(2, designed, relaxed.t().unsqueeze(0))
+
+            # Keep autograd enabled here so the model can differentiate the relaxed sequence.
+            with torch.autocast(device_type=torch.device(self.device).type):
+                output = self.model(onehot, is_human=(self.species == "human"))
+
+            # One backward per track, sharing one forward graph retained until the last.
+            terms: list[dict[str, Any]] = []
+            for position, term in enumerate(gradient_terms):
+                track = int(term["track"])
+                start = int(term["bin_start"]) - 1
+                end = int(term["bin_end"])
+                if track >= output.shape[1]:
+                    raise ValueError(f"borzoi: track {track} is out of range for {output.shape[1]} output tracks")
+                # Average the track over its 1-indexed inclusive bin span.
+                activity = output[0, track, start:end].float().mean()
+
+                # Differentiate this term's activity back to the relaxed input rows.
+                gradient_value: list[list[float]] | None = None
+                if backprop:
+                    retain = position < len(gradient_terms) - 1
+                    grad = torch.autograd.grad(activity, seq_dist, retain_graph=retain, allow_unused=False)[0]
+                    gradient_value = grad.detach().cpu().tolist()
+
+                terms.append(
+                    {
+                        "term": {"track": track, "bin_start": int(term["bin_start"]), "bin_end": int(term["bin_end"])},
+                        "value": float(activity.item()),
+                        "gradient": gradient_value,
+                    }
+                )
+
+        return {
+            "terms": terms,
+            "metrics": {"designed_positions": len(positions)},
+            "vocab": ["A", "C", "G", "T"],
+        }
+
 
 # ============================================================================
 # Dispatch
@@ -221,12 +335,22 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
 
     operation = input_dict["operation"]
+    if operation == "predict" and input_dict["sequences"] and not _model._loaded:
+        # Load before the progress statuses below, so the loading status doesn't replace them mid-run.
+        _model.load(input_dict["device"], verbose=input_dict["verbose"])
     if operation == "predict":
         sequences = input_dict["sequences"]
         batch_size = max(1, int(input_dict.get("batch_size", len(sequences))))
         predictions = []
-        for start in range(0, len(sequences), batch_size):
-            chunk = sequences[start : start + batch_size]
+        chunks = [sequences[start : start + batch_size] for start in range(0, len(sequences), batch_size)]
+        if len(chunks) == 1:
+            logger.update_status(
+                f"Predicting {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+            )
+        counter = StatusCounter(logger, "Predicting batch %d/%d", total=len(chunks))
+        for number, chunk in enumerate(chunks, start=1):
+            if len(chunks) > 1:
+                counter(number)
             predictions.append(
                 _model._predict_sequences(
                     sequences=chunk,
@@ -243,7 +367,29 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "applied_species": _model.species,
             "applied_replicate": _model.replicate,
         }
-    raise ValueError(f"borzoi: unknown operation {operation!r}; valid: ['predict']")
+    if operation == "compute_gradient":
+        # Load the weights once, then evaluate each independent candidate in this chunk.
+        results = [
+            _model.compute_gradient(
+                sequence=item["sequence"],
+                positions=item["positions"],
+                logits_list=item["logits"],
+                gradient_terms=input_dict["gradient_terms"],
+                temperature=resolve_temperature(input_dict["temperature"]),
+                soft=float(input_dict.get("soft", 1.0)),
+                hard=float(input_dict.get("hard", 0.0)),
+                backprop=input_dict.get("compute_gradient", True),
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
+            )
+            for item in input_dict["items"]
+        ]
+        return {
+            "results": [{key: result[key] for key in ("terms", "metrics")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
+
+    raise ValueError(f"borzoi: unknown operation {operation!r}; valid: ['predict', 'compute_gradient']")
 
 
 def to_device(device: str) -> dict[str, Any]:

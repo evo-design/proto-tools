@@ -8,6 +8,7 @@ Usage (called by ToolInstance, not directly):
 """
 
 import json
+import logging
 import re
 import subprocess
 import sys
@@ -42,7 +43,7 @@ def _run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:  
 
 
 def _write_pdbs(structures: list[str], pdb_dir: Path, ids: list[str] | None = None) -> list[Path]:
-    """Write each PDB-text string to a file in pdb_dir; return file paths in input order."""
+    """Write each PDB-text string to a file in pdb_dir and return file paths in input order."""
     assigned = ids or [f"structure_{i}" for i in range(len(structures))]
     paths: list[Path] = []
     for sid, text in zip(assigned, structures, strict=True):
@@ -90,10 +91,12 @@ def run_easy_msa(input_data: dict[str, Any]) -> dict[str, Any]:
             tree_path = tmp_path / "guide.nw"
             tree_path.write_text(guide_tree)
             cmd += ["--guide-tree", str(tree_path)]
+        count = len(pdb_paths)
+        logger.update_status("Aligning %d %s", count, "structure" if count == 1 else "structures", level=logging.DEBUG)
         _run_cmd(cmd, "easy-msa")
 
-        # foldmason skips writing prefix.nw when --guide-tree is supplied;
-        # echo the user's tree back so the output schema is uniform.
+        # foldmason skips writing prefix.nw when --guide-tree is supplied.
+        # Return the user's tree so both modes provide the same output fields.
         nw_path = prefix.with_name(prefix.name + ".nw")
         newick = nw_path.read_text() if nw_path.exists() else (guide_tree or "")
         return {

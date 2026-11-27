@@ -1,4 +1,4 @@
-"""Shared molecular-chain primitives reusable across tool categories."""
+"""Molecular chains and complexes shared by tools across categories."""
 
 import string
 from collections.abc import Iterator
@@ -21,11 +21,10 @@ CHAIN_IDS: Final[list[str]] = list(string.ascii_uppercase)
 
 
 def chain_label(i: int) -> str:
-    """Deterministic positional chain ID for the i-th chain: A..Z, AA..ZZ, AAA..., spreadsheet-style.
+    """Return a positional chain label using A..Z, AA..ZZ, AAA..., like spreadsheet columns.
 
-    Used by every consumer that needs a fallback chain ID when the entity's own ``id`` is None.
-    Unbounded so complexes with more than 26 chains roll over to two-letter labels rather than
-    crashing with ``IndexError``.
+    Use this when an entity has no explicit ``id``. Labels can grow beyond one letter,
+    so complexes with more than 26 chains still receive unique positional labels.
 
     Args:
         i (int): Non-negative chain index.
@@ -40,6 +39,7 @@ def chain_label(i: int) -> str:
         raise ValueError(f"chain index must be non-negative, got {i}")
     label = ""
     n = i
+    # Build the label from right to left, carrying into another letter after Z.
     while True:
         label = string.ascii_uppercase[n % 26] + label
         n = n // 26 - 1
@@ -53,8 +53,7 @@ class ChainModification(BaseModel):
     Modifications are specified using Chemical Component Dictionary (CCD) codes
     from the wwPDB.
 
-    IMPORTANT NOTE: THE MODIFICATION POSITIONS USE 1-BASED INDEXING, WHICH
-    FOLLOWS THE STANDARD BIOLOGICAL CONVENTIONS.
+    Positions are 1-indexed, so the first residue or base is position 1.
 
     Attributes:
         position (int): 1-based position in the sequence where the modification occurs.
@@ -108,10 +107,9 @@ class ChainModification(BaseModel):
 class Chain(BaseModel):
     """Represents a single molecular chain with optional modifications.
 
-    A chain consists of a sequence (protein, DNA, RNA, or ligand) along with
-    its entity type and any chemical modifications. This class supports both
-    simple use cases (just a sequence) and complex cases with post-translational
-    modifications or nucleotide modifications.
+    Store a protein, DNA, RNA, or ligand sequence with its entity type and any
+    chemical modifications. A sequence alone is enough. Post-translational and
+    nucleotide modifications are optional.
 
     Attributes:
         id (str | None): Optional chain identifier. ``None`` when the
@@ -496,32 +494,37 @@ class Complex(BaseModel):
         return out
 
     @classmethod
-    def from_structure(cls, structure: "Structure") -> "Complex":
+    def from_structure(cls, structure: "Structure", include_ligands: bool = True) -> "Complex":
         """Build a faithful Complex from a Structure: all polymer chains and ligand residues in input order.
 
-        Polymer chains become ``Chain`` (entity_type auto-inferred from sequence:
-        protein, DNA, or RNA). Ligand HETATM residues become ``Fragment`` entries
-        keyed by their CCD-code residue names. Order follows the input file's
-        chain order; ligand residues within a polymer chain are emitted after
-        that chain in their seqid order. Each entity's ``id`` is set from the
-        structure's chain identifier.
+        Polymer chains come from ``Structure.get_chain``: observed residues only, the
+        entity type gemmi assigns the chain, and modified residues as ``ChainModification``
+        entries. Ligand HETATM residues become ``Fragment`` entries keyed by their CCD-code
+        residue names. Order follows the input file's chain order; ligand residues within a
+        polymer chain are emitted after that chain in their seqid order. Each entity's
+        ``id`` is set from the structure's chain identifier.
 
         Args:
             structure (Structure): Input structure to enumerate.
+            include_ligands (bool): Whether to emit ligand residues as ``Fragment`` entries.
 
         Returns:
             Complex: A complex whose chains reproduce the input structure's
                 entities. Use ``DesignedComplex`` for inverse-folding outputs.
+
+        Raises:
+            ValueError: If a polymer chain is of a type a ``Chain`` cannot carry, such as a
+                DNA/RNA hybrid.
         """
         entries: list[Chain | Fragment] = []
-        chain_types = structure.get_chain_types()
-        for chain_id, chain_type in chain_types.items():
-            if chain_type == "polymer":
-                sequence = structure.get_chain_sequence(chain_id)
-                if sequence:
-                    entries.append(Chain(id=chain_id, sequence=sequence))
-            for resname, _seqid in structure.get_chain_ligands(chain_id):
-                entries.append(Fragment(id=chain_id, ccd_code=resname))
+        for chain_id, chain_type in structure.get_chain_types().items():
+            if chain_type not in ("ligand", "water"):
+                # Raises for a polymer type no Chain can carry, rather than dropping the chain.
+                entries.append(structure.get_chain(chain_id))
+            if include_ligands:
+                entries.extend(
+                    Fragment(id=chain_id, ccd_code=resname) for resname, _ in structure.get_chain_ligands(chain_id)
+                )
         return cls(chains=entries)
 
     def extract_protein_chains(self) -> tuple[list[str], list[str]]:

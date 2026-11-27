@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
-from standalone_helpers import get_logger, serialize_output
+from standalone_helpers import StatusCounter, get_logger, serialize_output
 
 logger = get_logger(__name__)
 
@@ -33,7 +33,7 @@ def _configure_tf_once() -> None:
     """Enable GPU memory growth once, before any GPU is initialized (for co-tenancy).
 
     GPU visibility is controlled by CUDA_VISIBLE_DEVICES, which the worker framework
-    sets per allocated device; the standalone does not hide/unhide GPUs — TF's
+    sets per allocated device. The standalone does not hide/unhide GPUs — TF's
     set_visible_devices is process-sticky and cannot be undone after init.
     """
     global _tf_configured
@@ -50,7 +50,7 @@ def _configure_tf_once() -> None:
 
 
 def _one_hot_encode(seq: str) -> np.ndarray:
-    """One-hot encode a DNA sequence to shape (len, 4); unknown bases map to N."""
+    """One-hot encode a DNA sequence to shape (len, 4). Unknown bases map to N."""
     seq = (
         seq.upper()
         .replace("A", "1")
@@ -83,7 +83,7 @@ def _ensure_models(device: str) -> list[Any]:
     from keras.models import load_model
 
     models_dir = _spliceai_models_dir()
-    logger.update_status("Loading SpliceAI ensemble (5 models)")
+    logger.update_status("Loading SpliceAI weights")
     _models = [load_model(os.path.join(models_dir, f"spliceai{i}.h5")) for i in range(1, 6)]
     _models_device = device
     logger.debug("spliceai: loaded 5 models on %s", device)
@@ -100,7 +100,7 @@ def _ensure_annotator(reference_fasta: str, annotation: str, device: str) -> Any
     _configure_tf_once()
     from spliceai.utils import Annotator
 
-    logger.update_status("Building SpliceAI annotator")
+    logger.update_status("Loading SpliceAI weights and annotation")
     _annotator = Annotator(reference_fasta, annotation)
     _annotator_key = key
     logger.debug("spliceai: built annotator for %s / %s on %s", reference_fasta, annotation, device)
@@ -109,7 +109,7 @@ def _ensure_annotator(reference_fasta: str, annotation: str, device: str) -> Any
 
 # ── Operations ───────────────────────────────────────────────────────────────
 def _parse_delta_score(record: str) -> dict[str, Any]:
-    """Parse a SpliceAI ``ALLELE|SYMBOL|DS_*x4|DP_*x4`` string; ``.`` (complex MNV) maps to None."""
+    """Parse a SpliceAI ``ALLELE|SYMBOL|DS_*x4|DP_*x4`` string. ``.`` (complex MNV) maps to None."""
     allele, symbol, *fields = record.split("|")
     return {
         "allele": allele,
@@ -126,7 +126,7 @@ def _parse_delta_score(record: str) -> dict[str, Any]:
 
 
 def score(input_dict: dict[str, Any]) -> dict[str, Any]:
-    """Score variants for splice-altering effects; returns per-variant gene records."""
+    """Score variants for splice-altering effects and return per-variant gene records."""
     from spliceai.utils import get_delta_scores
 
     annotator = _ensure_annotator(input_dict["reference_fasta"], input_dict["annotation"], input_dict["device"])
@@ -134,7 +134,7 @@ def score(input_dict: dict[str, Any]) -> dict[str, Any]:
     mask = input_dict["mask"]
 
     results: list[list[dict[str, Any]]] = []
-    for variant in input_dict["variants"]:
+    for variant in StatusCounter(logger, "Scoring variant %d/%d", input_dict["variants"]):
         record = SimpleNamespace(
             chrom=variant["chromosome"],
             pos=variant["position"],
@@ -152,7 +152,8 @@ def predict(input_dict: dict[str, Any]) -> dict[str, Any]:
     models = _ensure_models(input_dict["device"])
 
     predictions: list[list[list[float]]] = []
-    for seq in input_dict["sequences"]:
+    for seq in StatusCounter(logger, "Predicting sequence %d/%d", input_dict["sequences"]):
+        # Supply the flanking context expected by the model before averaging ensemble predictions.
         encoded = _one_hot_encode("N" * _CONTEXT_PAD + seq + "N" * _CONTEXT_PAD)[None, :]
         averaged = np.mean([model.predict(encoded, verbose=0) for model in models], axis=0)
         predictions.append(averaged[0].tolist())
@@ -174,22 +175,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 # ── Device management protocol ───────────────────────────────────────────────
-def to_device(device: str) -> dict[str, Any]:
-    """Move SpliceAI to a device (called by DeviceManager).
-
-    Keras models can't be relocated in place, so a CPU move drops the loaded
-    models and clears the TF session; the next dispatch reloads on ``device``.
-    """
-    global _models, _models_device, _annotator, _annotator_key
-    if device == "cpu" and (_models is not None or _annotator is not None):
-        _models = _models_device = _annotator = _annotator_key = None
-        import keras
-
-        keras.backend.clear_session()
-        return {"success": True, "device": device, "note": "models unloaded for CPU"}
-    return {"success": True, "device": device}
-
-
 def get_memory_stats() -> dict[str, Any]:
     """Report memory usage (called by DeviceManager). TF stats are not tracked."""
     return {"available": False, "framework": "tensorflow", "reason": "TensorFlow memory stats not tracked"}

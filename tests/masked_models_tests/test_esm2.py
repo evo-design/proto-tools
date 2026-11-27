@@ -25,7 +25,7 @@ from proto_tools.tools.masked_models.esm2 import (
 )
 from proto_tools.tools.masked_models.esm2.esm2_gradient import ESM2GradientOutput
 from proto_tools.utils import one_hot_protein_logits
-from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import AMINO_ACIDS_LIST
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.vocabulary import AMINO_ACIDS_LIST
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -37,19 +37,20 @@ _persistent_tool = make_persistent_fixture("esm2")
 
 
 def test_esm2_gradient_input_validation():
-    inp = ESM2GradientInput(logits=[[0.0] * 20, [1.0] * 20])
-    assert inp.logits == [[0.0] * 20, [1.0] * 20]
-    assert inp.temperature is None
+    inp = ESM2GradientInput(inputs=[[0.0] * 20, [1.0] * 20])
+    assert len(inp.inputs) == 1, "one matrix normalizes to a single item"
+    assert inp.inputs[0] == [[0.0] * 20, [1.0] * 20]
+    assert inp.temperature == 1.0
 
-    inp_with_temp = ESM2GradientInput(logits=[[0.0] * 20], temperature=0.6)
+    inp_with_temp = ESM2GradientInput(inputs=[[0.0] * 20], temperature=0.6)
     assert inp_with_temp.temperature == 0.6
 
     with pytest.raises(ValidationError):
-        ESM2GradientInput(logits=[[0.0] * 20], temperature=-0.5)
+        ESM2GradientInput(inputs=[[0.0] * 20], temperature=-0.5)
     with pytest.raises(ValidationError):
-        ESM2GradientInput(logits=[[0.0] * 20], temperature=0.0)
+        ESM2GradientInput(inputs=[[0.0] * 20], temperature=0.0)
     with pytest.raises(ValidationError, match="20 columns"):
-        ESM2GradientInput(logits=[[0.0] * 19])
+        ESM2GradientInput(inputs=[[0.0] * 19])
 
 
 def test_esm2_gradient_dispatch_contract(monkeypatch):
@@ -58,11 +59,16 @@ def test_esm2_gradient_dispatch_contract(monkeypatch):
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["toolkit"] = toolkit
         captured["payload"] = payload
-        n = len(payload.get("logits", []))
+        items = payload["items"]
         return {
-            "gradient": [[0.0] * 20] * n,
-            "loss": 0.5,
-            "metrics": {"log_likelihood": -1.0, "avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
+            "results": [
+                {
+                    "gradient": [[0.0] * 20] * len(item),
+                    "loss": 0.5,
+                    "metrics": {"log_likelihood": -1.0, "avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
+                }
+                for item in items
+            ],
             "vocab": AMINO_ACIDS_LIST,
         }
 
@@ -72,15 +78,16 @@ def test_esm2_gradient_dispatch_contract(monkeypatch):
     )
 
     run_esm2_gradient(
-        ESM2GradientInput(logits=[[0.0] * 20] * 3, temperature=0.6),
-        ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", use_ste=True, batch_size=2, device="cpu"),
+        ESM2GradientInput(inputs=[[0.0] * 20] * 3, temperature=0.6),
+        ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", hard=1.0, batch_size=2, device="cpu"),
     )
 
     assert captured["toolkit"] == "esm2"
     assert captured["payload"]["operation"] == "compute_gradient"
-    assert captured["payload"]["logits"] == [[0.0] * 20] * 3
+    assert captured["payload"]["items"] == [[[0.0] * 20] * 3]
     assert captured["payload"]["temperature"] == 0.6
-    assert captured["payload"]["use_ste"] is True
+    assert captured["payload"]["soft"] == 1.0
+    assert captured["payload"]["hard"] == 1.0
     assert captured["payload"]["compute_gradient"] is True
     assert captured["payload"]["batch_size"] == 2
     assert captured["payload"]["model_checkpoint"] == "esm2_t6_8M_UR50D"
@@ -93,9 +100,14 @@ def test_esm2_gradient_forward_mode_dispatch_contract(monkeypatch):
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured.update(payload=payload)
         return {
-            "gradient": None,
-            "loss": 0.5,
-            "metrics": {"log_likelihood": -1.0, "avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
+            "results": [
+                {
+                    "gradient": None,
+                    "loss": 0.5,
+                    "metrics": {"log_likelihood": -1.0, "avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
+                }
+                for _ in payload["items"]
+            ],
             "vocab": AMINO_ACIDS_LIST,
         }
 
@@ -105,14 +117,77 @@ def test_esm2_gradient_forward_mode_dispatch_contract(monkeypatch):
     )
 
     result = run_esm2_gradient(
-        ESM2GradientInput(logits=[[0.0] * 20] * 3),
+        ESM2GradientInput(inputs=[[0.0] * 20] * 3),
         ESM2GradientConfig(compute_gradient=False, device="cpu"),
     )
 
     assert captured["payload"]["compute_gradient"] is False
-    assert result.gradient is None
-    assert result.loss == 0.5
-    assert result.metrics["avg_log_likelihood"] == -0.5
+    assert result.results[0].terms[0].gradient is None
+    assert result.results[0].terms[0].term_value == 0.5
+    assert result.results[0].metrics["avg_log_likelihood"] == -0.5
+
+    # Forward-only keeps the term's value and drops only its derivative
+    (term,) = result.results[0].terms
+    assert term.term_value == 0.5
+    assert term.gradient is None
+    assert term.grad_l2_norm is None
+
+
+def test_esm2_gradient_exposes_one_intrinsic_term(monkeypatch):
+    """ESM2 differentiates a single quantity, so it reports exactly one self-describing term."""
+    gradient = [[0.3] * 20, [-0.4] * 20]
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        return {
+            "results": [{"gradient": gradient, "loss": 0.5, "metrics": {}} for _ in payload["items"]],
+            "vocab": AMINO_ACIDS_LIST,
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.masked_models.esm2.esm2_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    result = run_esm2_gradient(
+        ESM2GradientInput(inputs=[[0.0] * 20] * 2),
+        ESM2GradientConfig(device="cpu"),
+    )
+    (term,) = result.results[0].terms
+
+    assert term.term.id == "masked_pll"
+    assert term.metadata.suggested_optimization_direction == "lower", "a mean NLL is better smaller"
+    assert term.term_value == 0.5, "the term's value is the masked PLL the worker reported"
+    assert term.gradient == gradient, "the term carries the raw gradient, unweighted and unsigned"
+    assert term.grad_l2_norm == pytest.approx(math.sqrt(20 * (0.3**2 + 0.4**2)))
+
+    # The advisory direction resolves a goal on its own, so composing needs no arguments
+    composed = result.results[0].compose()
+    assert composed.objective_loss == pytest.approx(0.5)
+    assert composed.gradient == gradient
+    assert composed.contributions[0].dloss_dvalue == 1.0, "the advisory 'lower' resolved to minimize"
+
+
+def test_esm2_gradient_term_survives_serialization(monkeypatch):
+    """The term identifier and direction round-trip, so an exported result stays interpretable."""
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        return {
+            "results": [{"gradient": [[0.1] * 20], "loss": 0.5, "metrics": {}} for _ in payload["items"]],
+            "vocab": AMINO_ACIDS_LIST,
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.masked_models.esm2.esm2_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    result = run_esm2_gradient(ESM2GradientInput(inputs=[[0.0] * 20]), ESM2GradientConfig(device="cpu"))
+    restored = ESM2GradientOutput.model_validate(result.model_dump())
+    (term,) = restored.results[0].terms
+
+    assert term.term.id == "masked_pll"
+    assert term.metadata.suggested_optimization_direction == "lower"
+    assert term.term_value == 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -127,27 +202,71 @@ def test_esm2_gradient_single_sequence():
     """Test ESM2 gradient shape, finiteness, and metric consistency."""
     seq_len = 4
     result = run_esm2_gradient(
-        ESM2GradientInput(logits=[[0.0] * 20] * seq_len, temperature=0.6),
+        ESM2GradientInput(inputs=[[0.0] * 20] * seq_len, temperature=0.6),
         ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", batch_size=2),
     )
     validate_output(result)
 
     assert result.tool_id == "esm2-gradient"
-    assert result.gradient is not None
-    assert len(result.gradient) == seq_len
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert any(v != 0.0 for row in result.gradient for v in row)
-    assert result.loss > 0
-    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
-    assert result.metrics["perplexity"] == pytest.approx(math.exp(result.loss), rel=1e-6)
+    assert result.results[0].terms[0].gradient is not None
+    assert len(result.results[0].terms[0].gradient) == seq_len
+    assert all(len(row) == 20 for row in result.results[0].terms[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].terms[0].gradient for v in row)
+    assert any(v != 0.0 for row in result.results[0].terms[0].gradient for v in row)
+    assert result.results[0].terms[0].term_value > 0
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(
+        -result.results[0].terms[0].term_value, rel=1e-6
+    )
+    assert result.results[0].metrics["perplexity"] == pytest.approx(
+        math.exp(result.results[0].terms[0].term_value), rel=1e-6
+    )
     assert result.vocab == AMINO_ACIDS_LIST
+
+    # The real model produces one term describing the state it was differentiated at
+    (term,) = result.results[0].terms
+    assert term.term.id == "masked_pll"
+    assert term.metadata is not None
+    assert term.metadata.coordinate_space == "logits", "temperature=0.6 differentiates logits"
+    assert term.metadata.length == seq_len
+
+
+@pytest.mark.uses_gpu
+def test_esm2_gradient_probability_mode_matches_logit_mode():
+    """temperature=None on softmax(L) must reproduce temperature=1.0 on L, in both coordinates.
+
+    The two modes evaluate the same relaxed sequence, so the losses agree exactly and the
+    gradients are related by the softmax Jacobian:
+    ``g_logit[i] = p[i] * (g_prob[i] - sum_j p[j] * g_prob[j])``.
+    """
+    logits = one_hot_protein_logits("MKTL", sharpness=2.0)
+    probabilities = [[math.exp(v) / sum(math.exp(u) for u in row) for v in row] for row in logits]
+    config = ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", batch_size=2, seed=42)
+
+    logit_mode = run_esm2_gradient(ESM2GradientInput(inputs=logits, temperature=1.0), config)
+    probability_mode = run_esm2_gradient(ESM2GradientInput(inputs=probabilities, temperature=None), config)
+
+    assert probability_mode.results[0].terms[0].term_value == pytest.approx(
+        logit_mode.results[0].terms[0].term_value, rel=1e-5
+    )
+    assert (
+        logit_mode.results[0].terms[0].gradient is not None
+        and probability_mode.results[0].terms[0].gradient is not None
+    )
+    for probs, g_prob, g_logit in zip(
+        probabilities,
+        probability_mode.results[0].terms[0].gradient,
+        logit_mode.results[0].terms[0].gradient,
+        strict=True,
+    ):
+        weighted = sum(p * g for p, g in zip(probs, g_prob, strict=True))
+        expected = [p * (g - weighted) for p, g in zip(probs, g_prob, strict=True)]
+        assert g_logit == pytest.approx(expected, rel=1e-3, abs=1e-6)
 
 
 @pytest.mark.uses_gpu
 def test_esm2_gradient_forward_mode_matches_backward_loss():
     """compute_gradient=False should keep the scalar objective identical."""
-    inputs = ESM2GradientInput(logits=[[0.0] * 20] * 4, temperature=0.6)
+    inputs = ESM2GradientInput(inputs=[[0.0] * 20] * 4, temperature=0.6)
     backward = run_esm2_gradient(
         inputs,
         ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", batch_size=2, seed=42),
@@ -157,10 +276,12 @@ def test_esm2_gradient_forward_mode_matches_backward_loss():
         ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", batch_size=2, seed=42, compute_gradient=False),
     )
 
-    assert backward.gradient is not None
-    assert forward.gradient is None
-    assert forward.loss == pytest.approx(backward.loss, rel=1e-6)
-    assert forward.metrics["avg_log_likelihood"] == pytest.approx(backward.metrics["avg_log_likelihood"], rel=1e-6)
+    assert backward.results[0].terms[0].gradient is not None
+    assert forward.results[0].terms[0].gradient is None
+    assert forward.results[0].terms[0].term_value == pytest.approx(backward.results[0].terms[0].term_value, rel=1e-6)
+    assert forward.results[0].metrics["avg_log_likelihood"] == pytest.approx(
+        backward.results[0].metrics["avg_log_likelihood"], rel=1e-6
+    )
 
 
 @pytest.mark.uses_gpu
@@ -174,11 +295,13 @@ def test_esm2_score_and_gradient_agree_on_pll():
         ESM2ScoringConfig(model_checkpoint="esm2_t6_8M_UR50D", batch_size=2),
     )
     grad_result = run_esm2_gradient(
-        ESM2GradientInput(logits=one_hot, temperature=0.6),
-        ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", use_ste=True, batch_size=2, compute_gradient=False),
+        ESM2GradientInput(inputs=one_hot, temperature=0.6),
+        ESM2GradientConfig(model_checkpoint="esm2_t6_8M_UR50D", hard=1.0, batch_size=2, compute_gradient=False),
     )
 
-    assert -grad_result.loss == pytest.approx(score_result.scores[0].avg_log_likelihood, rel=1e-5)
+    assert -grad_result.results[0].terms[0].term_value == pytest.approx(
+        score_result.scores[0].avg_log_likelihood, rel=1e-5
+    )
 
 
 def test_esm2_scoring_input_normalizes_single_string():
@@ -213,7 +336,7 @@ def test_esm2_score_single_sequence():
 def test_esm2_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark esm2-gradient: 20 backward passes over a length-500 logits matrix (cold + warm)."""
     sequence = random_protein_sequences(n=1, length=500, seed=3)[0]
-    inputs = ESM2GradientInput(logits=one_hot_protein_logits(sequence, sharpness=2.0), temperature=0.6)
+    inputs = ESM2GradientInput(inputs=one_hot_protein_logits(sequence, sharpness=2.0), temperature=0.6)
     config = ESM2GradientConfig(model_checkpoint="esm2_t33_650M_UR50D", batch_size=32)
 
     def run() -> ESM2GradientOutput:
@@ -227,10 +350,11 @@ def test_esm2_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     validate_output(result)
 
     assert result.tool_id == "esm2-gradient"
-    assert result.gradient is not None
-    assert len(result.gradient) == 500
-    assert all(len(row) == 20 for row in result.gradient)
-    assert result.loss > 0
+    (item,) = result.results
+    assert item.terms[0].gradient is not None
+    assert len(item.terms[0].gradient) == 500
+    assert all(len(row) == 20 for row in item.terms[0].gradient)
+    assert item.terms[0].term_value > 0
 
 
 # ── Embedding tests ───────────────────────────────────────────────────────────

@@ -4,8 +4,10 @@ Tests for ToolInstance.
 """
 
 import contextlib
+import errno
 import hashlib
 import logging
+import os
 import signal
 import subprocess
 import sys
@@ -15,10 +17,16 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from proto_tools.tools.structure_prediction.esmfold2.esmfold2 import ESMFold2Config
+from proto_tools.tools.structure_prediction.esmfold2.esmfold2_inversion_gradient import (
+    ESMFold2InversionGradientConfig,
+)
+from proto_tools.utils import download_progress, tool_instance
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT
 from proto_tools.utils.tool_instance import (
     UV_VERSION,
@@ -26,6 +34,7 @@ from proto_tools.utils.tool_instance import (
     _active_cache,
     _instances,
     _persist_mode,
+    _reload_changes,
     _run_setup_script,
     _scope_override,
 )
@@ -67,11 +76,13 @@ def _make_fake_instance(
     inst._env_overrides = None
     inst._env_ready = True
     inst._cache_keys = set()
+    inst._dm_name = None
     inst._instance_lock = threading.Lock()
     inst._worker = None
     inst._reload_params = {}
     inst._gpu_only = False
     inst._pin_visible_devices = False
+    inst._worker_pinned = False
 
     # Pre-mark default config as warmed up unless testing warmup behavior
     if not needs_warmup:
@@ -788,6 +799,198 @@ def test_persistent_worker_no_restart_when_reload_on_unspecified():
     assert result == {"result": "ok"}
 
 
+def _count_spawns(calls: list[tuple[dict[str, Any], set[str] | None]], toolkit: str = "esmfold2") -> int:
+    """Run ``(payload, reload_on)`` calls through one fake instance and return how many workers it spawned."""
+    inst = _make_fake_instance(toolkit=toolkit, device="cpu")
+    spawned: list[MagicMock] = []
+
+    def spawn(*_args: Any, **_kwargs: Any) -> MagicMock:
+        worker = MagicMock()
+        worker.script_path = inst.script_path
+        worker.send.return_value = {"result": "ok"}
+        spawned.append(worker)
+        return worker
+
+    with patch("proto_tools.utils.tool_instance.PersistentWorker", side_effect=spawn):
+        for payload, reload_on in calls:
+            inst._run_persistent({"device": "cpu", **payload}, reload_on=reload_on)
+    return len(spawned)
+
+
+def test_shared_worker_reused_across_tools_that_declare_different_reload_fields():
+    """ESMFold2 prediction and inversion share one worker; alternating them on one model must not restart it.
+
+    Prediction declares ``model_checkpoint``; inversion also declares ``lm_dropout``. Comparing the two
+    declared sets as whole dicts restarted the worker on every switch (~30 s each on an H100).
+    """
+    pred_fields, inv_fields = ESMFold2Config.reload_fields(), ESMFold2InversionGradientConfig.reload_fields()
+    assert pred_fields is not None and inv_fields is not None
+    assert pred_fields < inv_fields, "the scenario needs prediction to declare a strict subset"
+    pred = ({"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0}, pred_fields)
+    inv = ({"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0}, inv_fields)
+
+    assert _count_spawns([inv, pred, inv, pred, inv]) == 1
+    # A prediction-spawned worker never recorded lm_dropout, so the first inversion cannot prove the
+    # model equivalent and restarts once; the inversion-spawned worker then serves both.
+    assert _count_spawns([pred, inv, pred, inv, pred]) == 2
+
+
+@pytest.mark.parametrize(
+    "calls",
+    [
+        [
+            ({"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0}, {"model_checkpoint", "lm_dropout"}),
+            ({"model_checkpoint": "esmfold2"}, {"model_checkpoint"}),
+        ],
+        [
+            ({"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0}, {"model_checkpoint", "lm_dropout"}),
+            ({"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.1}, {"model_checkpoint", "lm_dropout"}),
+        ],
+    ],
+    ids=["checkpoint-across-tools", "dropout-same-tool"],
+)
+def test_shared_worker_restarts_when_a_declared_field_differs(calls: list[tuple[dict[str, Any], set[str]]]):
+    """Reuse across tools is allowed only for an equivalent model: a declared field that differs restarts."""
+    assert _count_spawns(calls) == 2
+
+
+def test_an_opted_in_field_sent_but_not_declared_must_still_match():
+    """Opting a field in excuses declaring it, not contradicting it.
+
+    ESMFold2 prediction does not declare ``lm_dropout`` but sends the 0.0 it folds with, so a worker an
+    inversion tool spawned with dropout on is replaced here rather than rebuilt inside the live process.
+    Evo2 ICL is the same shape — it pins ``model_checkpoint="evo2_7b"`` and declares nothing — but Evo2
+    has opted no field in, so it replaces the worker either way.
+    """
+    inversion_dropout_on = ({"model_checkpoint": "m", "lm_dropout": 0.3}, {"model_checkpoint", "lm_dropout"})
+    inversion_default = ({"model_checkpoint": "m", "lm_dropout": 0.0}, {"model_checkpoint", "lm_dropout"})
+    prediction = ({"model_checkpoint": "m", "lm_dropout": 0.0}, {"model_checkpoint"})
+
+    assert _count_spawns([inversion_dropout_on, prediction]) == 2
+    assert _count_spawns([inversion_default, prediction, inversion_default]) == 1
+
+
+def test_untracked_spawn_leaves_reload_state_unknown():
+    """A worker spawned by a ``reload_on=None`` dispatch records nothing, so the next tracked call restarts it."""
+    untracked = ({"operation": "release_kv_caches"}, None)
+    tracked = ({"model_checkpoint": "a"}, {"model_checkpoint"})
+    assert _count_spawns([untracked, tracked]) == 2
+
+
+def test_reload_changes_reports_unknown_and_contradicting_fields():
+    """The restart log names each blocking field with its recorded and requested value."""
+    changes = _reload_changes(
+        {"model_checkpoint": "esmfold2-fast", "seed_model": 1},
+        {"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0},
+        {"model_checkpoint": "esmfold2-fast", "lm_dropout": 0.0, "seed_model": 2},
+        shared_fields=frozenset({"seed_model"}),
+    )
+    assert changes == {"lm_dropout": ("<unset>", 0.0), "seed_model": (1, 2)}
+
+
+def test_micromamba_appears_only_once_it_can_be_run(tmp_path: Path, monkeypatch):
+    """A download that dies mid-extraction must leave nothing at the final path.
+
+    ``bin/micromamba`` is the readiness signal for the unlocked fast path in ``_ensure_micromamba``:
+    a process that finds it there runs it. Extracting straight to that path published the binary
+    while it was still being written, and running one an extraction still holds open fails with
+    ``ETXTBSY`` — which is how three test shards against a fresh PROTO_HOME lost a toolkit's whole
+    env to "Text file busy". Driven through ``_ensure_micromamba`` so that extracting to the final
+    directory again would fail here, not just a change to the staging helper.
+    """
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    final = tmp_path / ".micromamba" / "bin" / "micromamba"
+
+    # A SIGKILL between the staging directory and the rename skips the cleanup, so this stands in
+    # for one a dead process left behind: the next bootstrap sweeps it under the lock.
+    stale = tmp_path / ".micromamba" / ".staging.dead"
+    (stale / "bin").mkdir(parents=True)
+    (stale / "bin" / "micromamba").write_bytes(b"half a bina")
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> Any:
+        if cmd and cmd[0] == "curl":
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"archive", stderr=b"")
+        # tar: write a partial binary where it was told to extract, then fail
+        target = Path(cmd[cmd.index("-C") + 1]) / "bin"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "micromamba").write_bytes(b"half a bina")
+        raise subprocess.CalledProcessError(2, cmd, stderr=b"interrupted")
+
+    def fail_urlopen(*_args: Any, **_kwargs: Any) -> Any:
+        raise OSError("no network for the fallback either")
+
+    with (
+        patch("proto_tools.utils.tool_instance.subprocess.run", side_effect=fake_run),
+        patch("urllib.request.urlopen", side_effect=fail_urlopen),
+        pytest.raises(RuntimeError, match="Failed to download/extract micromamba"),
+    ):
+        ToolInstance._ensure_micromamba()
+
+    assert not final.exists(), "a failed extraction published a partial binary at the final path"
+    assert not list((tmp_path / ".micromamba").glob(".staging.*")), "staging was left behind"
+    assert not stale.exists(), "a staging directory from a killed process was never swept"
+
+
+def test_micromamba_is_published_executable(tmp_path: Path):
+    """A finished extraction is renamed into place, executable, leaving no staging behind."""
+    mamba_root = tmp_path / ".micromamba"
+    mamba_root.mkdir()
+    with ToolInstance._staged_micromamba(mamba_root) as staged:
+        (staged / "bin").mkdir(parents=True)
+        (staged / "bin" / "micromamba").write_bytes(b"#!/bin/sh\nexit 0\n")
+
+    published = mamba_root / "bin" / "micromamba"
+    assert published.is_file() and os.access(published, os.X_OK)
+    assert not list(mamba_root.glob(".staging.*"))
+
+
+def test_a_transient_os_error_does_not_poison_the_toolkit(monkeypatch, tmp_path: Path):
+    """A build that fails on a busy machine is retried, not remembered.
+
+    ``_build_failures`` makes every later call in the process fail without retrying. That is right for
+    a build that will fail the same way again, and wrong for ``ETXTBSY``: one such error turned into
+    ten failures when a toolkit's remaining tests all raised "previously failed setup".
+    """
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))  # _ensure_env writes a first-run sentinel
+    inst = _make_fake_instance(toolkit="esm2")
+    inst._env_ready = False  # the fake is built ready; this test needs the build path
+    monkeypatch.setattr(inst, "_purge_legacy_helper_copies", lambda: None)
+    monkeypatch.setattr(ToolInstance, "_build_failures", {}, raising=False)
+
+    for error, remembered in (
+        (OSError(errno.ETXTBSY, "Text file busy"), False),
+        (RuntimeError("setup.sh failed: missing dependency"), True),
+    ):
+        ToolInstance._build_failures.clear()
+        with patch.object(inst, "_create_env", side_effect=error), pytest.raises(type(error)):
+            inst._ensure_env()
+        assert (inst.toolkit in ToolInstance._build_failures) is remembered, (
+            f"{type(error).__name__} should {'be' if remembered else 'not be'} recorded"
+        )
+
+
+def test_leaving_a_reload_field_undeclared_is_opt_in_per_field():
+    """Only a field opted in for its toolkit may be left undeclared; every other one restarts.
+
+    Reuse is sound only when the worker holds the model the call asks for, which this layer cannot
+    see, so each field earns it individually (``_SHARED_RELOAD_FIELDS``).
+    """
+    wide = ({"model_checkpoint": "m", "lm_dropout": 0.0}, {"model_checkpoint", "lm_dropout"})
+    narrow = ({"model_checkpoint": "m"}, {"model_checkpoint"})
+    extra = (
+        {"model_checkpoint": "m", "lm_dropout": 0.0, "adapter": "a"},
+        {"model_checkpoint", "lm_dropout", "adapter"},
+    )
+
+    assert tool_instance._SHARED_RELOAD_FIELDS["esmfold2"] == frozenset({"lm_dropout"})
+    assert _count_spawns([wide, narrow, wide]) == 1
+    # A toolkit that has opted no field in replaces the worker on each switch.
+    assert "esm2" not in tool_instance._SHARED_RELOAD_FIELDS
+    assert _count_spawns([wide, narrow, wide], toolkit="esm2") == 3
+    # An opt-in names one field, so a second undeclared field added later still restarts.
+    assert _count_spawns([extra, narrow]) == 2
+
+
 @patch.object(ToolInstance, "__init__", return_value=None)
 def test_dispatch_derives_reload_on_from_config(mock_init: MagicMock):
     """dispatch() should derive reload_on from config's reload_fields()."""
@@ -909,6 +1112,22 @@ def test_reload_fields_excludes_non_reload():
 
 # ── Timeout tests ──────────────────────────────────────────────────────────
 
+# One-shot script that appends to a file in its HF cache for 5s, then writes its output.
+_GROWING_DOWNLOAD_SCRIPT = """\
+import json, os, pathlib, sys, time
+
+blob = pathlib.Path(os.environ["HF_HOME"]) / "hub" / "blob.incomplete"
+blob.parent.mkdir(parents=True, exist_ok=True)
+end = time.monotonic() + 5
+with open(blob, "ab") as f:
+    while time.monotonic() < end:
+        f.write(b"x" * 1024)
+        f.flush()
+        time.sleep(0.05)
+with open(sys.argv[2], "w") as out:
+    json.dump({"ok": True}, out)
+"""
+
 
 def test_oneshot_timeout_raises():
     """_run_oneshot() should SIGTERM/SIGKILL the process group and raise TimeoutError."""
@@ -918,23 +1137,43 @@ def test_oneshot_timeout_raises():
     fake_proc.pid = 12345
     fake_proc.stderr = MagicMock()
     fake_proc.stderr.__iter__ = lambda self: iter([])  # drain thread sees EOF immediately
-    fake_proc.wait.side_effect = subprocess.TimeoutExpired(cmd="x", timeout=10)
+
+    def _never_exits(timeout: float | None = None) -> int:
+        time.sleep(min(timeout or 0, 0.05))
+        raise subprocess.TimeoutExpired(cmd="x", timeout=timeout)
+
+    fake_proc.wait.side_effect = _never_exits
 
     with (
         patch("proto_tools.utils.tool_instance.subprocess.Popen", return_value=fake_proc),
         patch("proto_tools.utils.tool_instance.os.killpg") as mock_killpg,
-        pytest.raises(TimeoutError, match="timed out after 10s"),
+        pytest.raises(TimeoutError, match="timed out after 1s"),
     ):
         inst._run_oneshot(
             {"op": "score"},
             script_path=Path("/fake/inference.py"),
-            timeout=10,
+            timeout=1,
         )
 
     # SIGTERM first, then SIGKILL escalation when the SIGTERM wait also times out.
     sent_signals = [call.args[1] for call in mock_killpg.call_args_list]
     assert sent_signals == [signal.SIGTERM, signal.SIGKILL]
     assert all(call.args[0] == 12345 for call in mock_killpg.call_args_list)
+
+
+def test_oneshot_download_progress_is_not_charged_to_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A one-shot run that keeps growing its HF cache past ``timeout`` still completes."""
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("PROTO_DOWNLOAD_POLL_SECONDS", "0.2")
+    monkeypatch.setattr(download_progress, "_MIN_GROWTH_BYTES", 1)
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "python").symlink_to(sys.executable)
+    script = tmp_path / "download.py"
+    script.write_text(_GROWING_DOWNLOAD_SCRIPT)
+    inst = _make_fake_instance(toolkit="test_tool", _tmp_dir=venv)
+
+    assert inst._run_oneshot({}, script_path=script, timeout=2) == {"ok": True}
 
 
 @patch.object(ToolInstance, "_oneshot")
@@ -1318,6 +1557,34 @@ def test_changed_setup_hash_logs_info_and_retries(tmp_path: Path, caplog):
     assert "Setup files changed" in caplog.text
 
 
+def test_purged_weights_rebuild_the_env(tmp_path: Path, monkeypatch, caplog):
+    """A built env whose weights were deleted since (e.g. by a scratch purge) is set up again, saying why."""
+    from proto_tools.utils.weights_manifest import RECORD_NAME, write_manifest
+
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "cache"))
+    weights = tmp_path / "cache" / "esm2" / "weights" / "model.pt"
+    weights.parent.mkdir(parents=True)
+    weights.write_bytes(b"w")
+    inst = _make_fake_instance()
+    inst._env_ready = False
+    inst.env_path = tmp_path / "fake_env"
+    (inst.env_path / "bin").mkdir(parents=True)
+    (inst.env_path / RECORD_NAME).write_text(f"esm2\t{weights.parent}\n")
+    (inst.env_path / "bin" / "python").symlink_to(sys.executable)
+    (inst.env_path / "STATUS.txt").write_text("SUCCESS\nSetup hash: abc\n")
+    write_manifest(inst.env_path, "esm2")
+
+    with patch.object(ToolInstance, "_setup_hash", return_value="abc"):
+        assert inst._is_env_ok()
+        weights.unlink()
+        assert not inst._is_env_ok()
+        with patch.object(ToolInstance, "_create_env") as mock_create, caplog.at_level(logging.INFO):
+            inst._ensure_env()
+
+    mock_create.assert_called_once()
+    assert "Setting up esm2 again to download its weights: 1 weight file(s) are missing" in caplog.text
+
+
 def test_success_status_with_stale_hash_rebuilds(tmp_path: Path, caplog):
     """A SUCCESS STATUS.txt with a stale hash triggers a rebuild."""
     inst = _make_fake_instance()
@@ -1383,8 +1650,11 @@ def test_returns_false_when_hash_mismatches(tmp_path: Path):
         assert inst._is_env_ok() is False
 
 
-def test_returns_true_when_hash_matches(tmp_path: Path):
-    """_is_env_ok() should return True when hash matches and python works."""
+def test_returns_true_when_hash_matches(tmp_path: Path, monkeypatch):
+    """_is_env_ok() should return True when hash matches, python works, and the weights are recorded."""
+    from proto_tools.utils.weights_manifest import write_manifest
+
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "cache"))
     inst = ToolInstance.__new__(ToolInstance)
     inst.env_path = tmp_path / "fake_env"
     inst.env_path.mkdir()
@@ -1394,6 +1664,7 @@ def test_returns_true_when_hash_matches(tmp_path: Path):
     current_hash = inst._setup_hash()
     status_file = inst.env_path / "STATUS.txt"
     status_file.write_text(f"SUCCESS\nSetup hash: {current_hash}\n")
+    write_manifest(inst.env_path, "esm2")
 
     bin_dir = inst.env_path / "bin"
     bin_dir.mkdir()
@@ -1406,6 +1677,72 @@ def test_returns_true_when_hash_matches(tmp_path: Path):
         return_value=MagicMock(returncode=0),
     ):
         assert inst._is_env_ok() is True
+
+
+def _built_env(tmp_path: Path, monkeypatch, *, platform_line: str = "", torch_build: str = "") -> ToolInstance:
+    """An env that passes every other ``_is_env_ok`` check, recorded with ``platform_line``."""
+    from proto_tools.utils.weights_manifest import write_manifest
+
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "cache"))
+    inst = ToolInstance.__new__(ToolInstance)
+    inst.env_path = tmp_path / "fake_env"
+    (inst.env_path / "bin").mkdir(parents=True)
+    (inst.env_path / "bin" / "python").write_text("")
+    inst.setup_script = tmp_path / "setup.sh"
+    inst.setup_script.write_text("#!/bin/bash\necho hi\n")
+    (inst.env_path / "STATUS.txt").write_text(f"SUCCESS\nSetup hash: {inst._setup_hash()}\n{platform_line}")
+    write_manifest(inst.env_path, "esm2")
+    if torch_build:
+        (inst.env_path / f"lib/python3.12/site-packages/torch-2.5.1{torch_build}.dist-info").mkdir(parents=True)
+    return inst
+
+
+@pytest.mark.parametrize(
+    ("built", "now", "ok"),
+    [
+        ({"platform_line": "Compute platform: cpu\n"}, "cuda", False),
+        ({"platform_line": "Compute platform: cpu\n"}, "cpu", True),
+        ({"platform_line": "Compute platform: cuda\n"}, "cpu", True),
+        ({"platform_line": "Compute platform: cuda\n"}, "cuda", True),
+        # Envs built before the platform was recorded: judged by the torch they hold
+        ({"torch_build": "+cpu"}, "cuda", False),
+        ({"torch_build": "+cpu"}, "cpu", True),
+        ({"torch_build": "+cu126"}, "cuda", True),
+        ({}, "cuda", True),
+    ],
+)
+def test_an_env_built_without_a_gpu_is_rebuilt_once_one_is_visible(tmp_path: Path, monkeypatch, built, now, ok):
+    """A CPU-only build is rebuilt where a GPU is visible; a GPU build is kept everywhere."""
+    inst = _built_env(tmp_path, monkeypatch, **built)
+    monkeypatch.setattr(
+        "proto_tools.utils.compute_deps.detect_compute_environment", lambda: {"DETECTED_COMPUTE_PLATFORM": now}
+    )
+
+    with patch("proto_tools.utils.tool_instance.subprocess.run", return_value=MagicMock(returncode=0)):
+        assert inst._is_env_ok() is ok
+
+
+def test_rebuilding_a_cpu_build_for_the_gpu_says_why_once(tmp_path: Path, monkeypatch, caplog):
+    """The rebuild reports its reason exactly once, though the check runs at several steps."""
+    built = _built_env(tmp_path, monkeypatch, platform_line="Compute platform: cpu\n")
+    inst = _make_fake_instance(_tmp_dir=tmp_path)
+    inst.env_path, inst.setup_script, inst._env_ready = built.env_path, built.setup_script, False
+    monkeypatch.setattr(
+        "proto_tools.utils.compute_deps.detect_compute_environment", lambda: {"DETECTED_COMPUTE_PLATFORM": "cuda"}
+    )
+
+    with (
+        patch("proto_tools.utils.tool_instance.subprocess.run", return_value=MagicMock(returncode=0)),
+        patch.object(ToolInstance, "_ensure_micromamba", side_effect=RuntimeError("stop after the removal")),
+        caplog.at_level(logging.INFO, logger="proto_tools.utils.tool_instance"),
+        pytest.raises(RuntimeError, match="stop after the removal"),
+    ):
+        inst._ensure_env()
+
+    assert [r.getMessage() for r in caplog.records].count(
+        f"Rebuilding {inst.toolkit} for the GPU: it was built where no GPU was visible, so it has CPU-only packages"
+    ) == 1
+    assert not inst.env_path.exists()
 
 
 # ── _run_oneshot() output tests ──────────────────────────────────────────
@@ -1913,6 +2250,7 @@ def _all_foundation_tools_present() -> dict[str, str]:
         "make": "/usr/bin/make",
         "cmake": "/usr/bin/cmake",
         "pkg-config": "/usr/bin/pkg-config",
+        "ar": "/usr/bin/ar",
         "gcc": "/usr/bin/gcc",
         "g++": "/usr/bin/g++",
     }
@@ -1969,12 +2307,13 @@ def test_host_probe_falls_through_when_gcc_too_old(monkeypatch, tmp_path):
     assert result == foundation_path
 
 
-def test_host_probe_falls_through_when_binary_missing(monkeypatch):
-    """Missing g++ → probe returns False even if gcc is present and modern."""
+@pytest.mark.parametrize("missing_tool", ["git", "curl", "make", "cmake", "pkg-config", "ar", "gcc", "g++"])
+def test_host_probe_falls_through_when_binary_missing(monkeypatch, missing_tool):
+    """Any one missing binary → probe returns False, so the foundation env is used."""
     from proto_tools.utils.foundation_env import MIN_FOUNDATION_GCC, host_has_foundation_tools
 
     monkeypatch.delenv("PROTO_USE_FOUNDATION_ENV", raising=False)
-    present = {**_all_foundation_tools_present(), "g++": None}
+    present = {**_all_foundation_tools_present(), missing_tool: None}
     with (
         patch("proto_tools.utils.foundation_env.shutil.which", side_effect=_fake_which(present)),
         patch("subprocess.run", side_effect=_fake_compiler_version(MIN_FOUNDATION_GCC)),
@@ -2014,6 +2353,79 @@ def test_use_env_var_one_forces_install_even_when_host_modern(monkeypatch, tmp_p
 
     assert install_called, "PROTO_USE_FOUNDATION_ENV=1 should force install"
     assert result == foundation_path
+
+
+def _ready_foundation_env(tmp_path, monkeypatch, tools):
+    """Build a fake ready foundation env under tmp_path whose bin/ holds ``tools``."""
+    monkeypatch.setenv("PROTO_USE_FOUNDATION_ENV", "1")
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    foundation_path = ToolInstance._get_foundation_env_path()
+    (foundation_path / "bin").mkdir(parents=True)
+    for tool in tools:
+        (foundation_path / "bin" / tool).touch()
+    (foundation_path / ".ready").touch()
+    return foundation_path
+
+
+def test_ready_foundation_env_missing_ar_installs_binutils(monkeypatch, tmp_path):
+    """A ready env built before ar joined the contract gets binutils installed, not recreated."""
+    foundation_path = _ready_foundation_env(tmp_path, monkeypatch, ["git", "curl", "make", "cmake", "pkg-config"])
+    commands = []
+
+    def _fake_run(cmd, *args, **kwargs):
+        commands.append(cmd)
+        return MagicMock(returncode=0)
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        patch.object(ToolInstance, "_ensure_micromamba", return_value=Path("/fake/mamba")),
+    ):
+        result = ToolInstance._ensure_foundation_env()
+
+    assert result == foundation_path
+    assert len(commands) == 1
+    assert commands[0][:5] == ["/fake/mamba", "install", "-y", "-p", str(foundation_path)]
+    assert "binutils" in commands[0]
+
+
+def test_ready_foundation_env_with_every_tool_runs_nothing(monkeypatch, tmp_path):
+    """A ready env that already has every foundation tool is returned without calling micromamba."""
+    from proto_tools.utils.foundation_env import FOUNDATION_TOOLS
+
+    foundation_path = _ready_foundation_env(tmp_path, monkeypatch, FOUNDATION_TOOLS)
+    with patch("subprocess.run") as mock_run:
+        assert ToolInstance._ensure_foundation_env() == foundation_path
+        mock_run.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("built", "override", "host_has_tools", "uses_foundation"),
+    [
+        (False, None, False, False),  # not built yet: nothing to put on PATH
+        (True, None, False, True),  # built because the host lacks tools
+        (True, None, True, False),  # host satisfies the contract itself
+        (True, "1", True, True),  # forced on
+        (True, "0", False, False),  # forced off
+    ],
+)
+def test_active_foundation_bin_matches_foundation_env_decision(
+    monkeypatch, tmp_path, built, override, host_has_tools, uses_foundation
+):
+    """Tool subprocesses get the foundation env's bin/ exactly when setup would use the env."""
+    from proto_tools.utils import foundation_env
+
+    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
+    if override is None:
+        monkeypatch.delenv("PROTO_USE_FOUNDATION_ENV", raising=False)
+    else:
+        monkeypatch.setenv("PROTO_USE_FOUNDATION_ENV", override)
+    root = foundation_env.foundation_env_path()
+    if built:
+        root.mkdir(parents=True)
+        (root / ".ready").touch()
+    with patch.object(foundation_env, "_host_has_foundation_tools_cached", return_value=host_has_tools):
+        result = foundation_env.active_foundation_bin()
+    assert result == (root / "bin" if uses_foundation else None)
 
 
 # ── Tool-env path guard (conda binary-relocation safety) ─────────────────────
@@ -2240,6 +2652,7 @@ print(json.dumps({
     "tool_envs": str(ToolInstance._get_tool_envs_root()),
     "micromamba": str(ToolInstance._get_micromamba_root()),
     "hf_home": _build_subprocess_env(device="cpu").get("HF_HOME"),
+    "toolkit_hf_home": _build_subprocess_env(device="cpu", toolkit="test_tool").get("HF_HOME"),
     "weights": resolve_weights_dir("test_tool"),
 }))
 """
@@ -2278,7 +2691,8 @@ def test_non_editable_install_resolves_proto_home_paths(tmp_path, has_model_cach
     assert paths["tool_envs"] == str(proto_home / "proto_tool_envs")
     assert paths["micromamba"] == str(proto_home / ".micromamba")
     assert paths["hf_home"] == str(cache_root / "huggingface")
-    assert paths["weights"] == str(cache_root / "test_tool")
+    assert paths["toolkit_hf_home"] == str(cache_root / "test_tool" / "huggingface")
+    assert paths["weights"] == str(cache_root / "test_tool" / "weights")
 
 
 # ── Concurrent env-build serialization ───────────────────────────────────────

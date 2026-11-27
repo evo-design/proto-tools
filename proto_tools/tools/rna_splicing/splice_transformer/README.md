@@ -9,7 +9,7 @@
 
 ## Overview
 
-[SpliceTransformer](https://github.com/ShenLab-Genomics/SpliceTransformer) (SpTransformer) is a deep learning model from the Shen Lab that predicts [pre-mRNA splice sites](https://en.wikipedia.org/wiki/RNA_splicing) directly from genomic sequence with tissue-specific resolution. For each position in a target sequence it reports the probability of an acceptor (3' splice site) or donor (5' splice site) along with the predicted usage of that site across fifteen human tissues. This toolkit runs SpliceTransformer through a single registered tool that returns per-position probabilities for the three splice-site classes and the fifteen tissues.
+[SpliceTransformer](https://github.com/ShenLab-Genomics/SpliceTransformer) (SpTransformer) is a deep learning model from the Shen Lab that predicts [pre-mRNA splice sites](https://en.wikipedia.org/wiki/RNA_splicing) directly from genomic sequence with tissue-specific resolution. For each position in a target sequence it reports the probability of an acceptor (3' splice site) or donor (5' splice site) along with the predicted usage of that site across fifteen human tissues. This toolkit runs SpliceTransformer through two registered tools: a prediction tool returning per-position probabilities for the three splice-site classes and fifteen tissues, and a gradient tool adding their derivatives.
 
 ## Background
 
@@ -40,11 +40,27 @@ This tool is appropriate for any analysis that begins with a genomic locus and a
 - **Tissue channels report usage rather than the presence of a splice site.** A position can carry a high acceptor or donor probability while showing strong usage in only a few tissues, so differential analysis across the tissue channels is the basis for identifying tissue-specific splicing.
 - **The model was trained on human sequence and is intended for human loci.** Predictions on sequences from other species are not supported by the training data and should not be interpreted as reliable.
 
+### SpliceTransformer Gradient (`splice-transformer-gradient`)
+
+Reports SpliceTransformer's predicted splice-channel probabilities and their derivatives with respect to a relaxed distribution over the target region, one quantity at a time. Each requested term names an output channel (a splice class or a tissue) plus a span of target positions, and comes back with its own mean probability and its own raw gradient.
+
+#### Applications
+
+This is the differentiable form of SpliceTransformer prediction, intended as an objective inside a splice-engineering loop. An optimizer holds a relaxed distribution over the 1,000 bp target region, asks for the gradients, and combines them into whatever objective it wants (strengthening or weakening a splice site, or shifting tissue-specific usage), then steps the sequence accordingly. Setting `compute_gradient=False` turns it into a forward-only probability score for ranking candidates.
+
+#### Usage Tips
+
+- **Only the target region is relaxed.** A candidate bundles the two fixed 4,000 bp flanking contexts with a `(1000, 4)` relaxed target matrix, so the returned gradient covers the target positions alone while both contexts still reach the model. The flanks shape the prediction but are not design variables.
+- **Channels are named, not indexed.** `NEITHER`/`ACCEPTOR`/`DONOR` are the three splice classes (softmaxed across each other), and the fifteen tissue names select sigmoid-activated channels. The names resolve to the same indices the prediction tool reports.
+- **Position spans are 1-indexed, inclusive, and relative to the target region.** Leaving `position_start`/`position_end` unset covers the whole region, and the term that comes back names the span actually averaged rather than the `None` that was asked for. A narrow span around a candidate splice site is usually what you want.
+- **Gradients run through the whole model.** Upstream freezes the conv encoders with `torch.no_grad()` for training. That is removed here, so the gradient includes the encoders' sequence sensitivity rather than only the shallow path beside them. Predicted probabilities are unchanged.
+- **Several channels share one forward pass.** Each requested quantity gets its own backward over that shared graph, so asking for K channels costs one forward and K backwards rather than K of each.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every SpliceTransformer tool in this toolkit (`splice-transformer-prediction`).
+These apply to every SpliceTransformer tool in this toolkit (`splice-transformer-prediction`, `splice-transformer-gradient`).
 
 - **The eighteen output channels follow a fixed order.** Channel 0 is the probability of neither site, channel 1 the acceptor probability, and channel 2 the donor probability, and these three form a softmax that sums to one. Channels 3 through 17 carry the per-tissue usage in the order adipose tissue, blood, blood vessel, brain, colon, heart, kidney, liver, lung, muscle, nerve, small intestine, skin, spleen, and stomach. The `SPLICE_TISSUE_CHANNEL_INDEX` mapping exported by the toolkit resolves a tissue name to its channel.
 - **The prediction is returned as a nested list and is most convenient to work with as an array.** The `prediction` field has shape `[batch, 1000, 18]` and can be converted with `numpy.array(...)` for slicing by position or channel. Results can be exported to NumPy `.npy` or JSON through the standard export method.

@@ -3,18 +3,23 @@
 import os
 import tempfile
 from logging import getLogger
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from pydantic import model_validator
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import BFactorType, SingleChainSelection, Structure
 from proto_tools.tools.structure_prediction.boltz2.boltz2 import Boltz2Config
-from proto_tools.tools.structure_prediction.boltz2.helpers import build_chain_msa_paths, complex_to_yaml
+from proto_tools.tools.structure_prediction.boltz2.helpers import (
+    BOLTZ2_SUBSAMPLED_ROWS,
+    boltz2_msa_subsampling,
+    build_chain_msa_paths,
+    complex_to_yaml,
+)
 from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
     resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
@@ -29,14 +34,17 @@ _AFFINITY_MAX_HEAVY_ATOMS = 128
 
 def _resolve_binder_chain_id(comp: Any, binder_chain: SingleChainSelection | None, index: int) -> str:
     """Resolve and validate one complex's binder ligand chain ID."""
+    # Resolve chain IDs and collect the ones that hold ligand fragments
     chain_ids = resolve_chain_ids(comp.chains)
     ligand_ids = [cid for cid, chain in zip(chain_ids, comp.chains, strict=True) if isinstance(chain, Fragment)]
+    # Ensure the complex has a protein chain to act as the affinity target
     if not any(not isinstance(chain, Fragment) and chain.entity_type == "protein" for chain in comp.chains):
         raise ValueError(
             f"Complex {index} must contain at least one protein chain (the affinity target); "
             f"got entity types {comp.entity_types}."
         )
 
+    # Auto-detect the sole ligand, or check the requested binder is a ligand chain
     if binder_chain is None:
         if len(ligand_ids) != 1:
             raise ValueError(
@@ -54,6 +62,7 @@ def _resolve_binder_chain_id(comp: Any, binder_chain: SingleChainSelection | Non
                 f"affinity is supported only for small-molecule ligand binders."
             )
 
+    # Check the binder ligand is small enough for Boltz-2 affinity
     binder = comp.chains[chain_ids.index(binder_id)]
     assert isinstance(binder, Fragment)  # noqa: S101 -- narrowed by the ligand-id check above
     if binder.heavy_atom_count > _AFFINITY_MAX_HEAVY_ATOMS:
@@ -214,6 +223,23 @@ class Boltz2AffinityConfig(Boltz2Config):
         reload_on_change=True,
     )
 
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "Boltz2AffinityConfig":
+        """Boltz2Config.minimal() plus one affinity sample over 20 steps (defaults: 5, 200).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            Boltz2AffinityConfig: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("sampling_steps_affinity", 20)
+        kwargs.setdefault("diffusion_samples_affinity", 1)
+        return cast("Boltz2AffinityConfig", super().minimal(**kwargs))
+
 
 # ============================================================================
 # Tool Implementation
@@ -293,9 +319,7 @@ def run_boltz2_affinity_on_complex(
 
         # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied
         # by the caller (always respected regardless of use_msa).
-        chain_msa_paths: dict[str, str] | None = None
-        if complex_msas is not None:
-            chain_msa_paths = build_chain_msa_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
+        chain_msa_paths, msa_sent = build_chain_msa_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
 
         yaml_content = complex_to_yaml(
             sp_complex.chains,
@@ -317,6 +341,7 @@ def run_boltz2_affinity_on_complex(
             "step_scale": config.step_scale,
             "max_msa_seqs": config.max_msa_seqs,
             "subsample_msa": config.subsample_msa,
+            "num_subsampled_msa": BOLTZ2_SUBSAMPLED_ROWS,
             "num_workers": config.num_workers,
             "device": config.device,
             "verbose": config.verbose,
@@ -339,4 +364,11 @@ def run_boltz2_affinity_on_complex(
         metrics=Boltz2AffinityMetrics(**metrics_dict),
         source="boltz2-affinity",
     )
-    return normalize_output_chain_ids(structure, sp_complex.chains)
+    return align_with_input(
+        structure,
+        sp_complex.chains,
+        complex_msas=complex_msas,
+        report_msa=True,
+        msa_sent=msa_sent,
+        msa_subsampling=boltz2_msa_subsampling(max_msa_seqs=config.max_msa_seqs, subsample_msa=config.subsample_msa),
+    )

@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger
+from standalone_helpers import StatusCounter, get_logger
 
 logger = get_logger(__name__)
 
@@ -70,12 +70,11 @@ def _secondary_structure_percentages(pdb_content: str, chain_id: str, dssp_binar
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for persistent-worker execution."""
     dssp_binary = _find_dssp_binary()
-    return {
-        "results": [
-            _secondary_structure_percentages(pdb_content, chain_id, dssp_binary)
-            for pdb_content, chain_id in zip(input_dict["pdb_contents"], input_dict["chain_ids"], strict=True)
-        ]
-    }
+    pairs = list(zip(input_dict["pdb_contents"], input_dict["chain_ids"], strict=True))
+    results = []
+    for pdb_content, chain_id in StatusCounter(logger, "Assigning secondary structure %d/%d", pairs):
+        results.append(_secondary_structure_percentages(pdb_content, chain_id, dssp_binary))
+    return {"results": results}
 
 
 def to_device(device: str) -> dict[str, Any]:

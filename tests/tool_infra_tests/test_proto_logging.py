@@ -225,3 +225,70 @@ def test_drop_update_status_filter_is_bar_aware():
     with patch("proto_tools.utils.progress.has_active_progress_bar", return_value=False):
         assert _drop_update_status_records(flagged) is True
         assert _drop_update_status_records(plain) is True
+
+
+def test_status_counter_reports_the_first_then_throttles_and_always_the_last(monkeypatch) -> None:
+    """A fast loop reads at human pace: item 1 at once, then one per interval, and the last item always."""
+    from proto_tools.utils.standalone_helpers_source.standalone_helpers import proto_logging
+
+    sent: list[str] = []
+
+    class _Logger:
+        def update_status(self, template: str, *args: object, level: int) -> None:
+            assert level == logging.DEBUG, "a count is routine progress, logged at DEBUG by default"
+            sent.append(template % args)
+
+    clock = iter([0.0, 1.0, 2.0, 6.0, 7.0, 8.0])
+    monkeypatch.setattr(proto_logging.time, "monotonic", lambda: next(clock))
+    counter = proto_logging.StatusCounter(_Logger(), "Folding structure %d/%d", total=6, interval=5.0)
+    for number in range(1, 7):
+        counter(number)
+    assert sent == ["Folding structure 1/6", "Folding structure 4/6", "Folding structure 6/6"]
+
+
+def test_get_logger_can_send_a_status_before_the_bridge_is_installed():
+    # A setup script imports standalone_helpers without TOOL_VENV_PATH, so install() never runs.
+    logging.setLoggerClass(logging.Logger)
+
+    logger = get_logger("test_status_before_install")
+
+    assert isinstance(logger, ProtoLogger)
+    assert logging.getLoggerClass() is logging.Logger
+
+
+def test_a_debug_status_is_still_emitted_from_a_logger_at_info():
+    """The status line needs the record whatever the logger's level; its level is how it is logged."""
+    records: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    # The standalone class itself: in this process get_logger would hand back proto-tools' own ProtoLogger.
+    logger = ProtoLogger("worker.test_debug_status", level=logging.INFO)
+    logger.addHandler(_Capture())
+
+    logger.update_status("Scoring batch %d/%d", 1, 4, level=logging.DEBUG)
+    logger.debug("debug detail")
+
+    assert [(r.levelno, r.getMessage(), getattr(r, "update_status", False)) for r in records] == [
+        (logging.DEBUG, "Scoring batch 1/4", True)
+    ]
+
+
+def test_status_counter_wraps_an_iterable_like_tqdm(monkeypatch) -> None:
+    """Iterating the counter hands out every item and reports each one, throttled the same way."""
+    from proto_tools.utils.standalone_helpers_source.standalone_helpers import proto_logging
+
+    sent: list[str] = []
+
+    class _Logger:
+        def update_status(self, template: str, *args: object, level: int) -> None:
+            sent.append(template % args)
+
+    clock = iter([0.0, 1.0, 6.0])
+    monkeypatch.setattr(proto_logging.time, "monotonic", lambda: next(clock))
+    items = list(proto_logging.StatusCounter(_Logger(), "Fetching article %d/%d", ["a", "b", "c"]))
+
+    assert items == ["a", "b", "c"]
+    assert sent == ["Fetching article 1/3", "Fetching article 3/3"]

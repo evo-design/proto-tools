@@ -16,12 +16,12 @@ def test_local_is_resolved_and_is_not_remote() -> None:
     """The server can be pointed at this machine, and the rest of the code can tell."""
     assert resolve_device("local") == "local"
     assert not is_remote("local")
-    assert is_remote("modal") and is_remote("proto")
+    assert is_remote("modal")
 
 
-def test_an_unknown_device_names_all_three() -> None:
+def test_an_unknown_device_names_both() -> None:
     """The error is the only place a caller learns what the choices are."""
-    with pytest.raises(DeviceUnavailableError, match="'modal', 'proto', or 'local'"):
+    with pytest.raises(DeviceUnavailableError, match="'modal' or 'local'"):
         resolve_device("laptop")
 
 
@@ -64,7 +64,7 @@ def test_a_local_only_tool_runs_here_rather_than_asking_for_a_deployment(monkeyp
     example = ToolRegistry.get_example_input(_LOCAL_ONLY_TOOL)
     result = impl.run_tool(_LOCAL_ONLY_TOOL, inputs=example.model_dump(mode="json"), device="modal")
 
-    assert called["device"] == "cpu", "the tool must be told it is running locally"
+    assert not is_remote(called["device"]), "the tool must be told it is running locally"
     assert result["ok"] is False
     assert "ran in-process" in result["error"], "the tool ran; it did not report a missing deployment"
     assert "needs_human" not in result, "nothing here needs a human to deploy anything"
@@ -106,3 +106,49 @@ def test_an_undeployed_local_cpu_tool_is_flagged_as_running_here() -> None:
     from proto_tools.mcp.tools import runs_in_process
 
     assert runs_in_process("pdb-fetch-entry")
+
+
+# ── Which torch device a call answered here gets (#342) ────────────────────────
+
+_GPU_TOOL = "progen3-score"  # GPU-only in practice; its config defaults to cuda
+_LOCAL_ONLY_GPU_TOOL = "deeppbs-specificity"
+
+
+def _run_locally(monkeypatch, tool_key: str, *, gpus: int, device: str = "local", config: dict | None = None):
+    """Run ``tool_key``'s example through run_tool with ``gpus`` visible; return the device it got."""
+    from proto_tools.mcp import tools as impl
+    from proto_tools.utils import device as device_utils
+
+    monkeypatch.setattr(device_utils, "number_of_visible_gpus", lambda: gpus)
+    called: dict[str, object] = {}
+
+    def fake_function(payload, cfg):
+        called["device"] = cfg.device
+        raise RuntimeError("ran in-process")
+
+    monkeypatch.setattr(ToolRegistry.get(tool_key), "function", fake_function)
+    example = ToolRegistry.get_example_input(tool_key)
+    impl.run_tool(tool_key, inputs=example.model_dump(mode="json"), device=device, config=config)
+    return called["device"]
+
+
+def test_a_gpu_tool_keeps_its_default_device_when_this_machine_has_a_gpu(monkeypatch) -> None:
+    """A local run on a GPU machine uses the GPU, instead of forcing every tool onto the CPU."""
+    assert _run_locally(monkeypatch, _GPU_TOOL, gpus=1) == "cuda"
+
+
+def test_a_gpu_tool_runs_on_cpu_when_this_machine_has_no_gpu(monkeypatch) -> None:
+    """With no GPU, a cuda default could only fail, so the call runs on the CPU."""
+    assert _run_locally(monkeypatch, _GPU_TOOL, gpus=0) == "cpu"
+
+
+@pytest.mark.parametrize(("gpus", "chosen"), [(1, "cpu"), (0, "cuda:1"), (2, "cuda:1")])
+def test_a_device_the_caller_chose_wins(monkeypatch, gpus: int, chosen: str) -> None:
+    """A device in the caller's config is used as given, whatever this machine has."""
+    assert _run_locally(monkeypatch, _GPU_TOOL, gpus=gpus, config={"device": chosen}) == chosen
+
+
+def test_a_local_only_gpu_tool_answered_here_uses_this_machines_gpu(monkeypatch) -> None:
+    """A remote session's call that has to run here gets this machine's GPU, not the CPU."""
+    assert _run_locally(monkeypatch, _LOCAL_ONLY_GPU_TOOL, gpus=1, device="modal") == "cuda"
+    assert _run_locally(monkeypatch, _LOCAL_ONLY_GPU_TOOL, gpus=0, device="modal") == "cpu"

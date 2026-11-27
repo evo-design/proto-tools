@@ -10,15 +10,15 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
-from proto_tools.entities.complex import Chain
-from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import ResidueSelection, Structure
+from proto_tools.tools.inverse_folding.fampnn._readable import fampnn_readable_positions
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
     InverseFoldingConfig,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    preserved_positions,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -74,6 +74,47 @@ class FAMPNNSampleInput(BaseToolInput):
         title="Structure Inputs",
         description="List of structure inputs for sequence design.",
     )
+
+
+def _psce_per_design_residue(
+    chain_ids: list[str],
+    chain_seqs: list[str],
+    psce: list[float],
+    readable: dict[str, list[int]],
+    structure: Any,
+) -> list[float | None]:
+    """Spread FAMPNN's per-read-residue pSCE over every residue of the design.
+
+    FAMPNN reports one value per residue its parser read, while the design carries every
+    polymer residue, so the two lists diverge after the first skipped residue and a consumer
+    indexing pSCE by chain position would read its neighbour's value. Skipped residues get
+    ``None``: the model did not pack them, so there is no error to report.
+
+    Args:
+        chain_ids (list[str]): The protein chain IDs handed to the model, in its order.
+        chain_seqs (list[str]): The model's sequence per chain, covering read residues only.
+        psce (list[float]): Per-read-residue pSCE, concatenated in chain order.
+        readable (dict[str, list[int]]): Positions the model reads, per chain ID.
+        structure (Any): The input structure, for each chain's full length.
+
+    Returns:
+        list[float | None]: One entry per design residue, concatenated in chain order.
+    """
+    chunks: dict[str, list[float]] = {}
+    offset = 0
+    for chain_id, sequence in zip(chain_ids, chain_seqs, strict=True):
+        chunks[chain_id] = psce[offset : offset + len(sequence)]
+        offset += len(sequence)
+
+    # Walk the design's own chains, not the model's: FAMPNN is handed protein chains only,
+    # while the design carries every polymer chain, so a nucleic chain holds its own places.
+    spread: list[float | None] = []
+    for chain_id, residues in structure.get_chain_residue_atoms().items():
+        per_chain: list[float | None] = [None] * len(residues)
+        for value, position in zip(chunks.get(chain_id, []), readable.get(chain_id, []), strict=True):
+            per_chain[position - 1] = value
+        spread.extend(per_chain)
+    return spread
 
 
 class FAMPNNSampleConfig(InverseFoldingConfig):
@@ -147,6 +188,17 @@ class FAMPNNSampleConfig(InverseFoldingConfig):
         description="Step scale (eta) for sidechain diffusion",
     )
 
+    def readable_positions(self, inp: Any) -> dict[str, list[int]]:
+        """Positions FAMPNN reads, which excludes HETATM residues outside its NCAA table.
+
+        Args:
+            inp (Any): One structure input.
+
+        Returns:
+            dict[str, list[int]]: Ascending readable positions per chain ID.
+        """
+        return fampnn_readable_positions(inp.structure)
+
 
 class FAMPNNDesignMetrics(Metrics):
     """Per-design full-atom sidechain confidence metrics for FAMPNN sampling.
@@ -157,9 +209,12 @@ class FAMPNNDesignMetrics(Metrics):
             more confident. Always present.
 
     Attributes:
-        psce (list[float]): Per-residue predicted sidechain error (mean over
+        psce (list[float | None]): Per-residue predicted sidechain error (mean over
             atoms) in Angstroms, concatenated across all chains in input chain
-            order.
+            order, one entry per residue of the design. ``None`` marks a residue
+            FAMPNN's parser did not read, which it therefore did not pack and has
+            no error for, so entry ``i`` always describes the design's residue
+            ``i + 1``.
     """
 
     metric_spec: ClassVar[dict[str, MetricSpec]] = {
@@ -171,10 +226,10 @@ class FAMPNNDesignMetrics(Metrics):
         description="Headline metric used to rank results.",
     )
 
-    psce: list[float] = Field(
+    psce: list[float | None] = Field(
         default_factory=list,
         title="pSCE",
-        description="Per-residue predicted sidechain error (Angstroms), concatenated in input chain order.",
+        description="Predicted sidechain error (A) per design residue; None where FAMPNN skipped it.",
     )
 
 
@@ -182,7 +237,7 @@ class FAMPNNDesign(DesignedComplex):
     """One FAMPNN-designed complex with full-atom sidechain confidence.
 
     Attributes:
-        chains (list[Chain | Fragment]): All protein chains of the design, in input
+        chains (list[Chain | Fragment]): All polymer chains of the design, in input
             structure chain order. Inherited from :class:`DesignedComplex`.
         structure (Structure): Designed full-atom structure with packed sidechain
             coordinates co-generated for this design.
@@ -292,20 +347,30 @@ def run_fampnn_sample(
         unit="structure",
         disable=not config.verbose,
     ):
-        chain_ids = inp.structure.get_chain_ids()
+        # FAMPNN reads protein chains only and redesigns every one of them, so context chains are
+        # held in place by fixing all of their positions.
+        chain_ids = [cid for cid, kind in inp.structure.get_chain_types().items() if kind == "protein"]
         redesign_set = set(inp.chain_ids_to_redesign)
+        # Staged files are numbered 1..N per chain, so a 1-indexed position is its residue number.
+        fixed_positions = {
+            cid: list(pos) for cid, pos in (inp.fixed_positions.chains if inp.fixed_positions else {}).items()
+        }
+        for cid in chain_ids:
+            if cid not in redesign_set:
+                fixed_positions[cid] = list(range(1, len(inp.structure.get_chain_positions(cid)) + 1))
         all_chain_seqs: list[list[str]] = []
         all_psce: list[list[float]] = []
         all_pdbs: list[str] = []
         remaining = config.num_sequences_per_structure
-        # Materialize the Structure to a tempfile once per input, reused across chunks.
-        with inp.structure.temp_file() as pdb_path:
+        # Staged once per input and reused across chunks, numbered 1..N per chain so FAMPNN,
+        # which addresses residues by number alone, sees every insertion-coded residue.
+        with inp.staged() as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 input_dict = {
                     "operation": "sample",
-                    "pdb_path": str(pdb_path),
-                    "chain_ids": inp.chain_ids_to_redesign,
+                    "pdb_path": str(staged.path),
+                    "chain_ids": staged.chains(inp.chain_ids_to_redesign),
                     "num_sequences": chunk,
                     "temperature": config.temperature,
                     "num_steps": config.num_steps,
@@ -318,16 +383,8 @@ def run_fampnn_sample(
                     "model_variant": config.model_variant,
                     "device": config.device,
                     "verbose": config.verbose,
-                    "fixed_positions": (
-                        inp.fixed_positions.to_residue_numbers(inp.structure)
-                        if inp.fixed_positions is not None
-                        else None
-                    ),
-                    "fixed_sidechain_positions": (
-                        inp.fixed_sidechain_positions.to_residue_numbers(inp.structure)
-                        if inp.fixed_sidechain_positions is not None
-                        else None
-                    ),
+                    "fixed_positions": ({staged.chains([cid])[0]: pos for cid, pos in fixed_positions.items()} or None),
+                    "fixed_sidechain_positions": staged.positions(inp.fixed_sidechain_positions),
                 }
                 result = ToolInstance.dispatch(
                     "fampnn",
@@ -341,30 +398,36 @@ def run_fampnn_sample(
                 dispatch_idx += 1
                 remaining -= chunk  # type: ignore[operator]
 
+        readable = config.readable_positions(inp)
+        preserved = preserved_positions(readable, inp.structure, inp.fixed_positions)
         complexes: list[FAMPNNDesign] = []
         for chain_seqs, psce, pdb in zip(all_chain_seqs, all_psce, all_pdbs, strict=True):
             if len(chain_seqs) != len(chain_ids):
                 raise ValueError(
                     f"fampnn-sample: model returned {len(chain_seqs)} chains but the input "
-                    f"structure has {len(chain_ids)} chains ({chain_ids})"
+                    f"structure has {len(chain_ids)} protein chains ({chain_ids})"
                 )
             if sum(len(s) for s in chain_seqs) != len(psce):
                 raise ValueError(
                     f"fampnn-sample: total designed length {sum(len(s) for s in chain_seqs)} "
                     f"does not match per-residue pSCE length {len(psce)}"
                 )
-            chains: list[Chain | Fragment] = [
-                Chain(id=cid, sequence=seq) for cid, seq in zip(chain_ids, chain_seqs, strict=True)
-            ]
-            designed: list[bool] = [cid in redesign_set for cid in chain_ids]
-            structure = Structure(structure=pdb, structure_format="pdb", source="fampnn-sample")
-            avg_psce = statistics.fmean(psce) if psce else 0.0
+            sequences = {cid: seq for cid, seq in zip(chain_ids, chain_seqs, strict=True) if cid in redesign_set}
+            structure = staged.restore(pdb, source="fampnn-sample", readable_positions=readable)
+            per_residue_psce = _psce_per_design_residue(chain_ids, chain_seqs, psce, readable, inp.structure)
+            scored = [value for value in per_residue_psce if value is not None]
+            avg_psce = statistics.fmean(scored) if scored else 0.0
             complexes.append(
-                FAMPNNDesign(
-                    chains=chains,
-                    designed=designed,
+                FAMPNNDesign.from_design(
+                    inp.structure,
+                    sequences,
+                    redesign_set,
+                    tool="fampnn-sample",
+                    include_ligands=False,
+                    readable_positions=readable,
+                    fixed_positions=preserved,
                     structure=structure,
-                    metrics=FAMPNNDesignMetrics(avg_psce=avg_psce, psce=psce),
+                    metrics=FAMPNNDesignMetrics(avg_psce=avg_psce, psce=per_residue_psce),
                 )
             )
 

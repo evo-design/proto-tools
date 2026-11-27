@@ -1,27 +1,29 @@
 # Structures
 
 ## Overview
-This module provides the `Structure` class - a unified representation for protein 3D structures. It handles loading from PDB/CIF files, format conversions, sequence extraction, chain manipulation, and visualization. The class serves as the standard structure representation throughout the proto-tools library, bridging the gap between structure prediction outputs and downstream analysis.
+The `Structure` class represents macromolecular 3D structures, including proteins,
+nucleic acids, and ligands. Use it to load PDB/CIF files, convert formats, extract
+sequences, manipulate chains, and visualize structures. Tools throughout
+proto-tools use this class to pass predicted structures to downstream analyses.
 
-## When to Use This Tool
+## When to use this module
 
-**Primary use cases:**
+Use this module for the following tasks.
 - Loading and parsing protein structures (PDB/CIF files or strings)
 - Extracting sequences from structural data
 - Converting between PDB and mmCIF formats
 - Visualizing structures with confidence coloring (pLDDT)
 - Preparing structures for inverse folding or scoring tools
 
-**When NOT to use this tool:**
+Use other tools for the following tasks.
 - For sequence-only analysis: Use sequence tools directly
 - For molecular dynamics: Use MDAnalysis, MDTraj, or OpenMM
 - For small molecule structures: Use the `ligands` module
-- For nucleic acid structures: This module is protein-focused
 
 ## Biological Background
 
-**What is a protein structure?**
-A protein's 3D structure determines its function. Structures are represented as atomic coordinates, typically including:
+A protein's 3D structure determines its function. Structure files represent atomic
+coordinates and typically include the following information.
 - **Backbone atoms**: N, Cα, C, O for each residue
 - **Side chain atoms**: Variable per amino acid type
 - **B-factors**: Temperature factors or prediction confidence (pLDDT)
@@ -33,8 +35,8 @@ A protein's 3D structure determines its function. Structures are represented as 
 | **PDB** | `.pdb` | Legacy format, human-readable, limited to 99,999 atoms |
 | **mmCIF** | `.cif` | Modern format, no size limits, machine-readable |
 
-**What is pLDDT?**
-Predicted Local Distance Difference Test (pLDDT) is a per-residue confidence metric from structure prediction tools (AlphaFold, ESMFold, Boltz2, etc.):
+Predicted Local Distance Difference Test (pLDDT) is a per-residue confidence metric
+reported by structure prediction tools such as AlphaFold, ESMFold, and Boltz2.
 - **90-100**: Very high confidence (well-ordered domains)
 - **70-89**: Confident prediction (most structured regions)
 - **50-69**: Low confidence (flexible loops, disordered)
@@ -73,8 +75,9 @@ pLDDT is often stored in the B-factor column of structure files.
 | `structure` | `str` | Structure content as PDB/CIF format string |
 | `structure_format` | `Literal["pdb", "cif"]` | Format of the structure (auto-detected if not provided) |
 | `b_factor_type` | `BFactorType` | What the B-factor column represents (default: `UNSPECIFIED`) |
-| `metrics` | `Dict[str, float] \| None` | Optional metrics dictionary (e.g., scores, confidence) |
+| `metrics` | `Metrics` | Optional metrics container (e.g., scores, confidence) |
 | `source` | `str \| None` | Optional source identifier |
+| `msa_conditioning` | `MSAConditioning \| None` | Set by MSA-capable predictors: per protein chain, the MSA rows sent to the model and whether they were used. `None` means no report was attached, not that no MSA was used. |
 
 **Loading from file:**
 
@@ -86,7 +89,7 @@ pLDDT is often stored in the B-factor column of structure files.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `style` | `str` | `"cartoon"` | Visualization style: `"cartoon"`, `"stick"`, `"sphere"` |
+| `style` | `str` | `"cartoon"` | Visualization style: `"cartoon"`, `"line"`, `"stick"`, `"sphere"`, `"licorice"` |
 
 ## Output Specification
 
@@ -99,9 +102,9 @@ pLDDT is often stored in the B-factor column of structure files.
 | `.structure_format` | `str` | Detected format: `"pdb"` or `"cif"` |
 | `.b_factor_type` | `BFactorType` | What B-factor column contains |
 | `.source` | `str \| None` | Source filepath or identifier |
-| `.num_chains` | `int` | Number of chains in structure |
-| `.num_residues` | `int` | Total number of residues |
-| `.metrics` | `Dict[str, float]` | User-defined metrics |
+| `.num_chains` | `int` | Number of polymer chains (ligand- and water-only chains excluded) |
+| `.num_residues` | `int` | Total number of polymer residues |
+| `.metrics` | `Metrics` | User-defined metrics |
 | `.gemmi_struct` | `gemmi.Structure` | Underlying Gemmi structure (lazy-loaded) |
 
 ### Methods
@@ -110,14 +113,14 @@ pLDDT is often stored in the B-factor column of structure files.
 |--------|---------|-------------|
 | `get_chain_sequence(chain_id)` | `str` | Amino acid sequence of specified chain |
 | `get_chain_sequences()` | `Dict[str, str]` | Dict mapping chain IDs to sequences |
-| `get_chain_ids()` | `List[str]` | List of all chain identifiers |
-| `get_residue_position_map()` | `Dict` | Mapping of chains to (residue, position) tuples |
+| `get_chain_ids()` | `List[str]` | IDs of the polymer chains (see `get_chain_types()` for every chain) |
+| `get_residue_position_map()` | `Dict` | Mapping of chains to (residue, position) tuples for polymer residues |
 | `write_pdb(filepath)` | `None` | Save structure as PDB file |
 | `write_cif(filepath)` | `None` | Save structure as CIF file |
 | `visualize(style)` | `None` | Render an interactive 3D view in the notebook |
-| `add_metric(name, value)` | `None` | Add a metric to the structure |
+| `add_metric(metric, value)` | `None` | Add a metric to the structure |
 
-## Best Practices & Gotchas
+## Practical notes
 
 **Loading structures:**
 

@@ -15,8 +15,8 @@ logger = get_logger(__name__)
 def _resolve_ipsae_script() -> str:
     """Return the path to ipsae.py, which setup.sh installs into the venv.
 
-    An override is honored first, then the venv location; the directory holding this
-    module is a last resort so an ejected standalone keeps working.
+    Check the override first, then the venv location. Finally, check beside
+    this module so an ejected standalone can still locate the script.
     """
     override = os.environ.get("IPSAE_SCRIPT_PATH")
     candidates = [
@@ -37,13 +37,15 @@ def _resolve_ipsae_script() -> str:
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Run IPSAE scoring on a cofolded complex.
 
-    Writes temporary PDB + PAE JSON files, invokes ipsae.py, parses the
-    tab-delimited output file, and returns per-chain-pair metrics.
+    Write temporary PDB and PAE JSON files, invoke ipsae.py, parse the
+    tab-delimited output file, and return metrics for each chain pair.
     """
+    # Ensure that the requested operation is supported
     operation = input_dict["operation"]
     if operation != "score":
         raise ValueError(f"ipsae: unknown operation {operation!r}; valid: ['score']")
 
+    # Unpack the structure, PAE matrix, pLDDT and cutoffs
     pdb_content: str = input_dict["pdb_content"]
     pae: list[list[float]] = input_dict["pae"]
     plddt: list[float] | None = input_dict.get("plddt")
@@ -53,6 +55,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     ipsae_script = _resolve_ipsae_script()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
+        # Write the PDB and the PAE (plus pLDDT) JSON that ipsae.py reads
         pdb_path = os.path.join(tmp_dir, "complex.pdb")
         pae_path = os.path.join(tmp_dir, "complex_scores.json")
 
@@ -65,6 +68,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         with open(pae_path, "w") as f:
             json.dump(pae_json, f)
 
+        # Run ipsae.py on the complex
         result = subprocess.run(
             [sys.executable, ipsae_script, pae_path, pdb_path, str(pae_cutoff), str(dist_cutoff)],
             capture_output=True,
@@ -77,6 +81,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             stderr_tail = " | ".join((result.stderr or "").strip().splitlines()) or "<no stderr>"
             raise RuntimeError(f"ipsae: ipsae.py failed (exit {result.returncode}); last stderr: {stderr_tail}")
 
+        # Locate the output file, which ipsae.py names after the two-digit cutoffs
         pae_str = f"{int(pae_cutoff):02d}"
         dist_str = f"{int(dist_cutoff):02d}"
         output_file = os.path.join(tmp_dir, f"complex_{pae_str}_{dist_str}.txt")
@@ -87,6 +92,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 f"ipsae: expected output file {output_file} not found; tmp_dir contents: {candidates}"
             )
 
+        # Parse the per-chain-pair rows from the output table
         chain_pair_results = _parse_output(output_file)
 
     return {"chain_pair_results": chain_pair_results}

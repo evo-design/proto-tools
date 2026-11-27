@@ -1,7 +1,4 @@
-"""proto_tools/tools/structure_dynamics/bioemu/bioemu_sample.py.
-
-BioEmu conformational ensemble sampling tool.
-"""
+"""Sample protein conformational ensembles with BioEmu."""
 
 import json
 import logging
@@ -152,8 +149,8 @@ class BioEmuConfig(StructurePredictionConfig):
 
     BioEmu always requires MSA-derived Evoformer embeddings. Unlike structure
     prediction tools (which have an optional ``use_msa`` toggle), this config
-    always runs MMseqs2 homology search during preprocessing to generate MSAs. If MSAs
-    are pre-supplied on the input, the search is skipped.
+    runs MMseqs2 homology search during preprocessing unless the input already
+    includes MSAs.
 
     Attributes:
         num_samples (int): Number of conformations to sample per input sequence.
@@ -166,9 +163,11 @@ class BioEmuConfig(StructurePredictionConfig):
             is 50 deterministic steps; ``heun`` is stochastic.
         denoiser_config (str | None): Path to a custom denoiser/steering YAML;
             overrides ``denoiser_type`` when set.
-        msa_host_url (str | None): Override the ColabFold MMseqs2 MSA server URL.
-        cache_embeds_dir (str | None): Directory to cache MSA embeddings across runs.
-        cache_so3_dir (str | None): Directory to cache SO3 precomputations across runs.
+        cache_embeds_dir (str | None): Directory to cache MSA embeddings across runs; each MSA
+            gets its own sub-directory, so a cached embedding is reused only for the same MSA.
+            Defaults to ``embeds_cache/`` in BioEmu's weights directory.
+        cache_so3_dir (str | None): Directory to cache SO3 precomputations across runs; defaults
+            to ``so3_cache/`` in BioEmu's weights directory.
         output_dir (str | None): Optional directory for raw BioEmu outputs.
         msa_search_config (Mmseqs2HomologySearchConfig | None): MMseqs2 homology
             search config (MSA generation). Defaults are used when ``None``.
@@ -212,21 +211,16 @@ class BioEmuConfig(StructurePredictionConfig):
         description="Path to a custom denoiser/steering YAML; overrides denoiser_type when set",
         examples=["physical_steering.yaml"],
     )
-    msa_host_url: str | None = ConfigField(
-        title="MSA Host URL",
-        default=None,
-        description="Override the ColabFold MMseqs2 MSA server URL",
-    )
     cache_embeds_dir: str | None = ConfigField(
         title="MSA Embeds Cache Dir",
         default=None,
-        description="Directory to cache MSA embeddings across runs",
+        description="Directory to cache MSA embeddings, one sub-directory per MSA (default: BioEmu's weights dir)",
         include_in_key=False,
     )
     cache_so3_dir: str | None = ConfigField(
         title="SO3 Cache Dir",
         default=None,
-        description="Directory to cache SO3 precomputations across runs",
+        description="Directory to cache SO3 precomputations (default: in BioEmu's weights dir)",
         include_in_key=False,
     )
     output_dir: str | None = ConfigField(
@@ -296,6 +290,7 @@ def example_input() -> Any:
     output_class=BioEmuOutput,
     description="Protein conformational ensemble sampling using BioEmu",
     uses_gpu=True,
+    pin_visible_devices=True,
     stochastic=True,
     example_input=example_input,
     iterable_input_fields=["complexes", "msas"],
@@ -306,20 +301,17 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
     """Generate protein conformational ensembles using BioEmu."""
     logger.debug("Using local venv for BioEmu conformational sampling")
 
-    from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
+    from proto_tools.tools.structure_prediction.msa_plan import protein_chain_msas
 
-    # BioEmu is single-chain, so always read chain index 0.
-    # Per-complex MSAs (index-aligned with complexes); keying by sequence would collide on duplicates.
-    msa_a3m_contents: list[str | None] = [None] * len(inputs.complexes)
-    if inputs.msas:
-        for cplx_idx, complex_ in enumerate(inputs.complexes):
-            seq = complex_.chain_sequences[0]
-            per_chain, _unpaired, _ = unwrap_complex_msas(inputs.msas[cplx_idx])
-            msa = per_chain.get(0)
-            if msa is not None:
-                msa_a3m_contents[cplx_idx] = msa.to_a3m_string()
-                if config.verbose:
-                    logger.info(f"Loaded MSA for sequence (length {len(seq)}): {len(msa)} homologs")
+    # Keep MSAs in complex order so repeated sequences can use different alignments.
+    msa_a3m_contents: list[str] = []
+    for cplx_idx, complex_ in enumerate(inputs.complexes):
+        seq = complex_.chain_sequences[0]
+        [chain] = protein_chain_msas(complex_.chains, inputs.msas[cplx_idx] if inputs.msas else None)
+        msa = chain.primary or chain.unpaired
+        msa_a3m_contents.append(msa.to_a3m_string() if msa is not None else f">query\n{seq}\n")
+        if config.verbose:
+            logger.info(f"Loaded MSA for sequence (length {len(seq)}): {len(msa) if msa is not None else 1} rows")
 
     output = ToolInstance.dispatch(
         "bioemu",
@@ -333,7 +325,6 @@ def run_bioemu(inputs: BioEmuInput, config: BioEmuConfig, instance: Any = None) 
             "batch_size": config.batch_size,
             "denoiser_type": config.denoiser_type,
             "denoiser_config": config.denoiser_config,
-            "msa_host_url": config.msa_host_url,
             "cache_embeds_dir": config.cache_embeds_dir,
             "cache_so3_dir": config.cache_so3_dir,
             "device": config.device,

@@ -8,6 +8,7 @@ from typing import Any, Literal
 import torch
 from standalone_helpers import (
     AMINO_ACIDS_LIST,
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     serialize_output,
@@ -26,7 +27,7 @@ ESM3_MODEL_CHECKPOINTS = Literal["esm3_sm_open_v1",]
 class ESM3Model:
     """ESM3 model for protein sequence embeddings, logits, and structure prediction.
 
-    Multi-modal protein language model from EvolutionaryScale.
+    Multi-modal protein language model from Biohub.
     """
 
     def __init__(self, model_checkpoint: ESM3_MODEL_CHECKPOINTS = "esm3_sm_open_v1"):
@@ -92,7 +93,12 @@ class ESM3Model:
         all_attention_masks = []
 
         # For each batch
-        for batch_sequences in tqdm(batches, desc="ESM3 inference", unit="batch", total=len(batches)):
+        for batch_sequences in StatusCounter(
+            logger,
+            "Embedding batch %d/%d",
+            tqdm(batches, desc="ESM3 inference", unit="batch", total=len(batches)),
+            total=len(batches),
+        ):
             # Tokenize the batch
             batch_inputs = self.tokenizer(
                 batch_sequences,
@@ -104,7 +110,7 @@ class ESM3Model:
             # Move the inputs to the correct device
             batch_inputs = {k: v.to(device) for k, v in batch_inputs.items()}
 
-            # Reset hook captures; sequence_id isolates pad tokens from attention.
+            # Clear the previous layer captures and isolate padding with sequence_id.
             self._captured_post_norm = None
             self._captured_hiddens = []
             with torch.inference_mode():
@@ -254,12 +260,14 @@ class ESM3Model:
         all_sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=len(batch_ranges))
         for start, end in tqdm(
             batch_ranges,
             desc="ESM3 sampling",
             unit="batch",
             disable=not verbose,
         ):
+            counter(start // batch_size + 1)
             batch_tok_seqs = tokenizer_sequences[start:end]
             batch_masks = mask_positions[start:end]
             batch_originals = sequences[start:end]
@@ -275,7 +283,7 @@ class ESM3Model:
             input_ids = batch_inputs["input_ids"].to(device_obj)
             attention_mask = batch_inputs["attention_mask"].to(device_obj)
 
-            # Forward pass; sequence_id isolates pad tokens from attention.
+            # Run the forward pass with padding isolated through sequence_id.
             with torch.inference_mode():
                 outputs = self.model(sequence_tokens=input_ids, sequence_id=attention_mask.long())
                 # AA logits: remove BOS/EOS, keep only standard amino acids
@@ -328,6 +336,7 @@ class ESM3Model:
         """
         from esm.sdk.api import ESMProtein, GenerationConfig
 
+        # Map excluded amino acids to the token ids the SDK must never sample.
         mask_token = self.tokenizer.mask_token
         vocab = self.tokenizer.get_vocab()
         invalid_ids = [vocab[aa] for aa in excluded_amino_acids or []]
@@ -345,9 +354,13 @@ class ESM3Model:
         sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
+        counter = StatusCounter(logger, "Sampling batch %d/%d", total=-(-len(sequences) // batch_size))
         for start in range(0, len(sequences), batch_size):
+            counter(start // batch_size + 1)
             batch_sequences = sequences[start : start + batch_size]
+            # Swap the user-facing "_" mask for ESM3's mask token.
             proteins = [ESMProtein(sequence=s.replace("_", mask_token)) for s in batch_sequences]
+            # Build one sequence-track generation config per protein in the chunk.
             configs = [
                 GenerationConfig(
                     track="sequence",
@@ -361,6 +374,7 @@ class ESM3Model:
                 )
                 for _ in batch_sequences
             ]
+            # Run the SDK's iterative unmasking loop over the chunk.
             results = self.model.batch_generate(inputs=proteins, configs=configs)
             batch_sampled = [r.sequence for r in results]
             sampled.extend(batch_sampled)
@@ -378,7 +392,9 @@ class ESM3Model:
                 attention_mask = batch_inputs["attention_mask"].to(device_obj)
                 with torch.inference_mode():
                     outputs = self.model(sequence_tokens=input_ids, sequence_id=attention_mask.long())
+                    # Drop the BOS and EOS tokens and keep only the 20 amino-acid columns.
                     aa_logits = outputs.sequence_logits[:, 1:-1, :][:, :, self.amino_acid_token_ids]  # (B, L, 20)
+                # Trim padding so each sequence keeps logits for its residues only.
                 for seq_idx, seq in enumerate(batch_sampled):
                     all_logits.append(aa_logits[seq_idx, : len(seq)])
 
@@ -450,7 +466,7 @@ class ESM3Model:
         total_variants = sum(seq_lens)
         max_len = all_input_ids.shape[1]
 
-        # Allocate the global pool: one row per (sequence, position) pair
+        # Allocate one masked variant for each sequence position.
         pooled_ids = torch.empty((total_variants, max_len), dtype=all_input_ids.dtype, device=self.device)
         pooled_attention_mask = torch.empty(
             (total_variants, max_len), dtype=all_attention_mask.dtype, device=self.device
@@ -458,7 +474,7 @@ class ESM3Model:
         seq_idx_per_variant = torch.empty(total_variants, dtype=torch.long, device=self.device)
         pos_idx_per_variant = torch.empty(total_variants, dtype=torch.long, device=self.device)
 
-        # Fill the pool: copy each sequence L times, mask one position per copy
+        # Copy each sequence once per residue and mask a different position in each copy.
         row = 0
         for i, length in enumerate(seq_lens):
             pooled_ids[row : row + length] = all_input_ids[i].unsqueeze(0).expand(length, -1).clone()
@@ -485,18 +501,20 @@ class ESM3Model:
         all_true_log_probs = torch.zeros(total_variants, device=self.device)
 
         # Run forward passes batched across the pooled variants
+        counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-total_variants // batch_size))
         for batch_start in tqdm(
             range(0, total_variants, batch_size),
             desc="ESM3 scoring",
             unit="batch",
             disable=not verbose,
         ):
+            counter(batch_start // batch_size + 1)
             # Slice this forward-pass batch out of the pool
             batch_end = min(batch_start + batch_size, total_variants)
             batch_ids = pooled_ids[batch_start:batch_end]
             batch_attention = pooled_attention_mask[batch_start:batch_end]
 
-            # Forward pass; sequence_id isolates pad tokens from attention
+            # Run the forward pass with padding isolated through sequence_id.
             with torch.inference_mode():
                 outputs = self.model(sequence_tokens=batch_ids, sequence_id=batch_attention.long())
 
@@ -547,8 +565,7 @@ class ESM3Model:
         from esm.models.esm3 import ESM3
         from esm.tokenization.sequence_tokenizer import EsmSequenceTokenizer
 
-        if verbose:
-            logger.info(f"Loading ESM3 model: {self.model_checkpoint} on {device}")
+        logger.update_status("Loading ESM3 weights")
 
         # Load model and tokenizer
         try:
@@ -585,7 +602,7 @@ class ESM3Model:
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)
+            self.amino_acid_token_ids = move_model_to_device(self.amino_acid_token_ids, self.device, device)
             self.device = device
 
     def unload(self, verbose: bool = False) -> None:

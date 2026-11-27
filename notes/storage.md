@@ -14,45 +14,51 @@ export PROTO_HOME=/path/to/your/proto_home
 
 ## Storage layout
 
-Everything lives under `PROTO_HOME` regardless of install mode:
+The default layout is the same for every install mode.
 
 ```
 PROTO_HOME/                   (default: ~/.proto/)
-├── proto_model_cache/        model weights (HF_HOME, TORCH_HOME, resolve_weights_dir)
-│   ├── databases/            provisioned MMseqs2 databases (override: PROTO_DATABASES_DIR)
-│   └── jax_cache/{toolkit}/  compiled JAX programs (JAX_COMPILATION_CACHE_DIR)
+├── proto_model_cache/        model weights, one folder per toolkit (override: PROTO_MODEL_CACHE)
+│   ├── {toolkit}/
+│   │   ├── huggingface/      HF_HOME for this toolkit
+│   │   ├── torch/            TORCH_HOME for this toolkit
+│   │   ├── jax_cache/        compiled JAX programs (JAX_COMPILATION_CACHE_DIR)
+│   │   ├── compile_cache/    the toolkit's Triton, TorchInductor, vLLM, ... kernels
+│   │   └── weights/          everything else the toolkit downloads (resolve_weights_dir)
+│   └── databases/            provisioned MMseqs2 databases (override: PROTO_DATABASES_DIR)
 ├── proto_tool_envs/          micromamba-managed tool venvs
+├── compile_cache/            driver-level caches shared by every tool (CUDA_CACHE_PATH, ...)
 ├── uv_cache/                 uv package download cache (UV_CACHE_DIR)
-├── pip_cache/                pip HTTP cache (PIP_CACHE_DIR)
+├── uv_cache.prune/           when the uv cache was last pruned, and the prune log
 └── .micromamba/              micromamba binary + package cache
 ```
 
+Each toolkit's folder holds every model file it downloads, whichever framework fetches it, so deleting `proto_model_cache/{toolkit}/` frees exactly that toolkit's weights. Subfolders appear only when the toolkit writes to them. Some toolkits share a folder instead of keeping separate copies. bindcraft, freebindcraft, and germinal use `alphafold2/`'s AF2 parameters, and germinal uses `chai1/`'s Chai-1 weights and `ablang/`'s AbLang weights.
+
 ## uv / pip package caches
 
-Tool env builds use `uv pip install` (and occasionally `pip install`) to fetch Python wheels. By default, proto-tools routes both caches under `PROTO_HOME` so all disk usage is consolidated and cleanable atomically.
+Tool env builds use `uv pip install` (and occasionally `pip install`) to fetch Python wheels.
 
-- `UV_CACHE_DIR` defaults to `PROTO_HOME/uv_cache/` (extracted archives + HTTP cache for `uv`)
-- `PIP_CACHE_DIR` defaults to `PROTO_HOME/pip_cache/` (HTTP + wheel cache for `pip`)
+- **uv:** `UV_CACHE_DIR` defaults to `PROTO_HOME/uv_cache/`. `persistent_worker._build_subprocess_env()` sets it with `setdefault`, so a value in your shell wins:
 
-Both are injected by `persistent_worker._build_subprocess_env()` via `setdefault`, so any value set in your shell overrides the default. To share the cache across projects, set them explicitly:
+  ```bash
+  export UV_CACHE_DIR=~/.cache/uv   # share the cache across projects
+  ```
 
-```bash
-export UV_CACHE_DIR=~/.cache/uv
-export PIP_CACHE_DIR=~/.cache/pip
-```
-
-The cache and tool envs share a filesystem by default, which lets `uv` hard-link from the cache into envs (saves bulk, because the extracted archive is not duplicated). Wiping `PROTO_HOME/proto_tool_envs/` preserves the cache, so the next rebuild is fast.
+  The cache and tool envs share a filesystem by default, so `uv` hardlinks each package from the cache into every env that uses it: one copy of torch serves every env on the same build. Wiping `PROTO_HOME/proto_tool_envs/` keeps the cache, so the next rebuild is fast. Never delete the cache itself, or later builds download and store their own copies.
+- **Pruning:** after a successful build, proto-tools starts `uv cache prune` in a detached, idle-priority process (`proto_tools/utils/uv_prune.py`), so the build doesn't wait. The prune removes only entries uv no longer references, so envs keep every file. It runs at most once a day and one at a time, and only for envs built with the default uv. A uv install that starts while it runs waits for it. Its stamp, lock, and log are in `{UV_CACHE_DIR}.prune/`, beside the cache, because `uv cache prune` deletes anything in the cache it doesn't recognize.
+- **pip:** pip copies files rather than linking them, so a cache would only spare a re-download. Builds set `PIP_NO_CACHE_DIR=1`, and the few `pip install` steps download fresh.
 
 ## JAX compilation cache
 
 The first time a JAX model runs, XLA compiles it for your GPU. For large models like AlphaFold3 and AlphaGenome that takes several minutes. proto-tools saves the compiled model to disk, so the next run with the same input size, GPU, and JAX version loads it in seconds instead of compiling again.
 
-This happens automatically for every JAX tool: `persistent_worker._build_subprocess_env()` sets `JAX_COMPILATION_CACHE_DIR` for each tool, and tools that don't use JAX ignore it. The cache is stored next to your model weights, so it survives env rebuilds, and on Modal it lives on the shared volume where every container can use it.
+This happens automatically for every JAX tool. `persistent_worker._build_subprocess_env()` sets `JAX_COMPILATION_CACHE_DIR` for each tool, and tools that don't use JAX ignore it. The cache is stored in the toolkit's model-cache folder, so it survives env rebuilds, and on Modal it lives on the shared volume where every container can use it.
 
 | `PROTO_MODEL_CACHE` | Cache location |
 |---|---|
-| *(unset, default)* | `{PROTO_HOME}/proto_model_cache/jax_cache/{toolkit}/` |
-| `/absolute/path` | `/absolute/path/jax_cache/{toolkit}/` |
+| *(unset, default)* | `{PROTO_HOME}/proto_model_cache/{toolkit}/jax_cache/` |
+| `/absolute/path` | `/absolute/path/{toolkit}/jax_cache/` |
 | `IN_ENV` | `{venv}/jax_cache/` |
 | `NONE` | Not set, unless you set `JAX_COMPILATION_CACHE_DIR` yourself |
 
@@ -72,18 +78,34 @@ JAX_COMPILATION_CACHE_DIR=
 
 Leave the value truly empty. JAX treats an empty value as "off", but a space makes it write cache files into the working directory.
 
-A cached model only matches the GPU type and JAX version that compiled it, so a mismatch just triggers a fresh compile, never a wrong result. That also makes the cache safe to share between users on the same model cache. It grows as you run new input sizes, GPUs, and JAX versions; you can delete `jax_cache/`, or one tool's folder inside it, at any time, and the next run recompiles.
+A cached model only matches the GPU type and JAX version that compiled it, so a mismatch just triggers a fresh compile, never a wrong result. That also makes the cache safe to share between users on the same model cache. It grows as you run new input sizes, GPUs, and JAX versions. You can delete any toolkit's `jax_cache/` at any time, and the next run recompiles.
+
+## Compile caches
+
+Libraries that compile kernels on first use keep a cache of the results, by default in your home directory or `/tmp`. proto-tools points each one under `PROTO_HOME` instead, so a tool's disk use stays where you can see and delete it:
+
+| Kind | Variables | Location |
+|---|---|---|
+| Built from one toolkit's model code, against its env's library versions | `TRITON_CACHE_DIR`, `TORCHINDUCTOR_CACHE_DIR`, `TORCH_EXTENSIONS_DIR`, `VLLM_CACHE_ROOT`, `HUMMING_CACHE_DIR`, `FLASHINFER_WORKSPACE_BASE`, `CUPY_CACHE_DIR`, `NUMBA_CACHE_DIR` | `proto_model_cache/{toolkit}/compile_cache/` |
+| General: the GPU driver's JIT cache and torch's generic kernels | `CUDA_CACHE_PATH`, `PYTORCH_KERNEL_CACHE_PATH` | `PROTO_HOME/compile_cache/` (per user) |
+
+Like the JAX cache, every entry is keyed on the GPU and library versions, so a mismatch recompiles rather than giving a wrong result, and any of these folders can be deleted at any time. A value you set for one of these variables in your shell is used as-is. `IN_ENV` mode keeps toolkit-specific caches in `{venv}/compile_cache/`.
+`NONE` mode leaves each library's default unchanged.
 
 ## Modes
 
 | Mode | HF_HOME | Non-HF weights | TORCH_HOME |
 |------|---------|----------------|------------|
-| *(unset, default)* | `{PROTO_HOME}/proto_model_cache/huggingface/` | `{PROTO_HOME}/proto_model_cache/{toolkit}/` | `{PROTO_HOME}/proto_model_cache/torch/` |
-| `/absolute/path` | `/absolute/path/huggingface/` | `/absolute/path/{toolkit}/` | `/absolute/path/torch/` |
+| *(unset, default)* | `{PROTO_HOME}/proto_model_cache/{toolkit}/huggingface/` | `{PROTO_HOME}/proto_model_cache/{toolkit}/weights/` | `{PROTO_HOME}/proto_model_cache/{toolkit}/torch/` |
+| `/absolute/path` | `/absolute/path/{toolkit}/huggingface/` | `/absolute/path/{toolkit}/weights/` | `/absolute/path/{toolkit}/torch/` |
 | `IN_ENV` | `{venv}/cache/huggingface/` | `{venv}/model_weight_cache/` | `{venv}/cache/torch/` |
 | `NONE` | Parent `HF_HOME` passthrough | `{venv}/weights/` | Parent `TORCH_HOME` passthrough |
 
-The default (`proto_model_cache/` under `PROTO_HOME`) keeps weights outside tool envs so they survive env rebuilds.
+The default (`proto_model_cache/` under `PROTO_HOME`) keeps weights outside tool envs so they survive env rebuilds. `IN_ENV` and `NONE` keep their per-venv and pass-through behavior and do not use per-toolkit folders.
+
+## Missing weights
+
+After setup, proto-tools records the files in each folder `setup.sh` resolved with `proto_resolve_weights_dir` (`weights_manifest.json` in the environment). If any go missing later, for example after a scratch filesystem purge, the environment is set up again and only the missing files are downloaded. Weights a worker downloads at run time are re-fetched by the worker itself.
 
 ## Shared weights for teams
 
@@ -94,10 +116,12 @@ For teams sharing weights across collaborators, set `PROTO_MODEL_CACHE` to a sha
 # as different users may have different CUDA versions, library paths, etc.)
 export PROTO_HOME=~/.proto
 
-# Shared with collaborators: just model weights (safe for concurrent access;
-# HuggingFace uses file locks internally to handle simultaneous downloads)
+# Shared with collaborators: just model weights (safe for concurrent access:
+# HuggingFace and the setup.sh download helpers lock simultaneous downloads)
 export PROTO_MODEL_CACHE=/shared/team/model_weights
 ```
+
+Concurrent setups that need the same file (two jobs, or two toolkits that share weights) take turns. The first downloads the file, and the rest wait and then find it verified. The `setup.sh` helpers use `flock`, which works across nodes on filesystems that support it. This was tested across nodes on Sherlock's Lustre `$SCRATCH`. Without `flock(1)`, as on macOS, downloads run unlocked.
 
 Do **not** share `PROTO_HOME` itself across users, because tool environments are user-specific and should remain per-user. Only model weights (`PROTO_MODEL_CACHE`) are safe to share.
 
@@ -120,7 +144,7 @@ python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases <dataset>
 
 ## Per-tool override
 
-`PROTO_{TOOL_NAME}_WEIGHTS_DIR` always wins, regardless of mode:
+`PROTO_{TOOL_NAME}_WEIGHTS_DIR` always wins, regardless of mode. It replaces the toolkit's `weights/` folder (it is used as given, with no `weights/` appended). Hugging Face, torch, and JAX caches stay in the toolkit's model-cache folder:
 
 ```bash
 export PROTO_FAMPNN_WEIGHTS_DIR=/custom/path/fampnn
@@ -130,7 +154,7 @@ export PROTO_PROTENIX_WEIGHTS_DIR=/custom/path/protenix
 <!-- docs:ignore start -->
 ## For tool authors
 
-Non-HF tools call `resolve_weights_dir(toolkit)` from the `standalone_helpers` package:
+Non-HF tools call `resolve_weights_dir(toolkit)` from the `standalone_helpers` package. It returns the toolkit's `weights/` folder:
 
 ```python
 from standalone_helpers import resolve_weights_dir
@@ -141,16 +165,47 @@ if weights_dir:
     ...
 ```
 
-HF-based tools need no code changes. `persistent_worker.py` sets `HF_HOME` automatically.
+HF-based tools need no code changes. `persistent_worker.py` points `HF_HOME`, `TORCH_HOME`, and `JAX_COMPILATION_CACHE_DIR` at the toolkit's folder automatically. A toolkit that should share another toolkit's Hugging Face and torch caches names that folder in `standalone/weights_key.txt`. A toolkit that loads only one of another toolkit's models passes `toolkit_hf_hub_cache("<owner>")` (from `proto_tools.utils.weights_layout`) to its worker and downloads that model with `cache_dir=` set to it, so both tools share one copy. The ESMFold2 experimental heads read `biohub/ESMC-6B` from the esmc toolkit's cache this way. Do not symlink repo folders between hubs because `huggingface_hub`'s Xet store
+does not work with those links.
 
-For `setup.sh` scripts that download weights during environment setup, use the shared helper from `standalone_helpers.sh` (resolved off `PATH`):
+Weight sources and checksums belong to the worker. Pin each checkpoint's URL (or repository and revision) and SHA-256, or the MD5 upstream publishes, in `standalone/inference.py` or `setup.sh`, beside the call that downloads and checks it, and have the tool send only the checkpoint name its config accepts (a `Literal` the host keeps for validation, schemas and docs). A test asserts the worker's table and the config's names match, so a checkpoint added on one side fails CI; `tests/masked_models_tests/test_codonfm.py` shows the pattern.
+
+Use the shared helpers rather than writing download or path code in a tool:
+
+- `require_weights_dir(name)`: like `resolve_weights_dir`, but raises instead of returning `None`. Use it instead of falling back to a temp directory.
+- `download_weights(url, dest, sha256=..., md5=...)`: downloads once under a file lock, verifies the checksum, and renames into place, so concurrent workers on a shared cache never see a partial file. It refuses non-HTTPS URLs and sends `HF_TOKEN` only to `huggingface.co`. It is the Python counterpart of `proto_download_verified`.
+- `export_weights_dir(env_var, name, prepend=False)`: points a library's own location variable (`FOUNDRY_CHECKPOINT_DIRS`, `CHAI_DOWNLOADS_DIR`, `PROTENIX_ROOT_DIR`) at the weights directory. `prepend=True` keeps an existing search path after it.
+
+When toolkits share weights, one `setup.sh` helper owns the download so every toolkit gets the same pinned files: `proto_ensure_af2_params` (alphafold2, bindcraft, freebindcraft, germinal, bioemu) and `proto_ensure_chai1_weights` (chai1, germinal). `tests/style_consistency_tests/test_shared_weights_pins.py` fails if toolkits sharing a folder pin different versions.
+
+```python
+from standalone_helpers import download_weights, export_weights_dir, require_weights_dir
+
+export_weights_dir("FOUNDRY_CHECKPOINT_DIRS", "rf3", prepend=True)
+ckpt = download_weights(URL, Path(require_weights_dir("my_tool")) / "model.pt", sha256=SHA256)
+```
+
+For `setup.sh` scripts that download weights during environment setup, use the shared helpers from `standalone_helpers.sh` (resolved off `PATH`):
 
 ```bash
 source standalone_helpers.sh
 proto_resolve_weights_dir my_tool
 # $WEIGHTS_DIR is now set and the directory created
-wget -q -O "$WEIGHTS_DIR/model.pt" "https://example.com/model.pt"
+proto_download_verified "https://example.com/model.pt" "$WEIGHTS_DIR/model.pt" "$MODEL_SHA256"
 ```
+
+Download setup-time weights into `$WEIGHTS_DIR` so they are tracked, and write files atomically (`proto_download`, `proto_download_verified`). Never rely on a bare completion marker: use `ensure_complete(dest, build)` from `standalone_helpers` (in `setup.sh`, `proto_record_files` / `proto_recorded_files_complete`), which records the files a step produced and rebuilds when any are missing. Its docstring lists the options.
+
+`proto_download_verified` (checksum known), `proto_download` (no checksum), and `proto_download_archive` (tar into a directory) each lock their target, download into a separate temp file, and move it into place only when complete, so concurrent setups sharing the cache never see or clobber a partial file. A file that is already present skips the lock, so read-only caches keep working. Wrap any other step that writes shared files in `proto_with_lock <lock_file> <command...>`. Name the lock `.<file>.download.lock` beside a file or `.<dir>.extract.lock` beside a directory, matching the Python helpers, so bash and Python callers for the same target wait for each other.
+
+A weights download is not cut off while it is receiving data. It fails only
+when it stalls. `proto_download` and `proto_download_archive` retry a failed transfer 5 times, so a flaky host does not fail the setup. In `setup.sh`, always download through these helpers: never call `curl` or `wget` directly, and never cap a transfer with `--max-time` (`tests/style_consistency_tests/test_setup_download_consistency.py` enforces both). In a worker, a request's `timeout` does not count time in which the toolkit's download folders grew (see [tool-persistence.md](tool-persistence.md#timeouts)).
+
+Waiting has no fixed deadline, so a large download on a slow link is waited out however long it takes:
+
+- `PROTO_LOCK_STALL_SECONDS` (default 600): a waiter gives up only when the holder's download (its temp file, or the directory being extracted) has not grown for this long. `proto_with_lock --progress <path>` gives custom steps the same behavior. Without `--progress`, a waiter waits until the lock is free.
+- `PROTO_DOWNLOAD_STALL_SECONDS` (default 300): the helpers' `curl` aborts a transfer that receives nothing for this long, which releases the lock before waiters give up, so a dead connection can't hold the cache. A slow transfer that is still receiving data is never aborted.
+- `PROTO_LOCK_TIMEOUT_SECONDS` (default 0, off): an optional hard cap on the total wait.
 
 ## Exceptions
 

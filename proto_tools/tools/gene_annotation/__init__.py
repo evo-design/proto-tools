@@ -1,5 +1,16 @@
 """Gene annotation and sequence search tools."""
 
+# CRISPR guide tools
+from proto_tools.tools.gene_annotation.crispr_guides import (
+    CRISPRGuideCandidate,
+    CRISPRGuideEnumerationConfig,
+    CRISPRGuideEnumerationInput,
+    CRISPRGuideEnumerationOutput,
+    CRISPRGuideRegion,
+    CRISPRGuideRegionResult,
+    run_crispr_guides_enumerate,
+)
+
 # CRISPRtracrRNA tools
 from proto_tools.tools.gene_annotation.crispr_tracr_rna import (
     CrisprTracrRNAConfig,
@@ -79,6 +90,14 @@ from proto_tools.tools.gene_annotation.pyhmmer import (
 )
 
 __all__ = [
+    # CRISPR tools
+    "CRISPRGuideCandidate",
+    "CRISPRGuideEnumerationConfig",
+    "CRISPRGuideEnumerationInput",
+    "CRISPRGuideEnumerationOutput",
+    "CRISPRGuideRegion",
+    "CRISPRGuideRegionResult",
+    "run_crispr_guides_enumerate",
     # PyHMMER
     "run_pyhmmer_hmmsearch",
     "run_pyhmmer_hmmscan",

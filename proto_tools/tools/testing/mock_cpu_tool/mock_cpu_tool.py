@@ -1,7 +1,7 @@
-"""proto_tools/tools/testing/mock_cpu_tool/mock_cpu_tool.py.
+"""Test CPU fan-out with a pure-stdlib mock tool.
 
 Pure-stdlib CPU-only mock tool used to integration-test ToolPool's CPU
-fan-out path. Each call reports per-item: the worker subprocess PID, the
+fan-out path. Each call reports, for each item, the worker subprocess PID, the
 ``OMP_NUM_THREADS`` env var the worker observed, and a per-worker stable
 id (``{pid}-{startup_uuid}``) that lets tests verify both that distinct
 subprocesses ran and that workers stayed warm across dispatches.
@@ -49,8 +49,7 @@ class MockCPUToolConfig(BaseConfig):
     """Config for mock CPU tool.
 
     Overrides ``cpus_per_instance`` to ``1`` so ToolPool fans this mock out
-    across its CPU budget — that's the whole point of the tool (testing
-    fan-out end-to-end). Tests that exercise the explicit short-circuit
+    across its CPU budget to test fan-out from dispatch to completion. Tests that exercise the explicit short-circuit
     override back to ``None`` in a subclass.
     """
 

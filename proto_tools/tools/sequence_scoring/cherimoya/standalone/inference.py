@@ -2,12 +2,14 @@
 
 import hashlib
 import json
+import logging
 import os
 import sys
 from collections import OrderedDict
 from typing import Any
 
-from standalone_helpers import get_logger, serialize_output
+from standalone_helpers import StatusCounter, get_logger, serialize_output
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 
 logger = get_logger(__name__)
 
@@ -31,7 +33,7 @@ def _sha256(path: str) -> str:
 
 
 def _one_hot(sequences: list[str], device: str) -> Any:
-    """Encode DNA as a ``(B, 4, L)`` float tensor in A,C,G,T order; N and other bases are all zeros."""
+    """Encode DNA as a ``(B, 4, L)`` float tensor in A,C,G,T order, with zeros for N and other bases."""
     import numpy
     import torch
 
@@ -44,19 +46,6 @@ def _one_hot(sequences: list[str], device: str) -> Any:
     rows, positions = numpy.nonzero(codes >= 0)
     encoded[rows, codes[rows, positions], positions] = 1.0
     return torch.from_numpy(encoded).to(device)
-
-
-def _relaxed_dna_probs(logits: Any, *, temperature: float, soft: float, hard: float) -> Any:
-    """Convert ``B x L x 4`` logits to relaxed probabilities, with an optional straight-through estimator."""
-    import torch.nn.functional as F
-
-    probs = F.softmax(logits / temperature, dim=-1)
-    hard_probs = F.one_hot(probs.argmax(dim=-1), num_classes=len(VOCAB)).to(probs.dtype)
-    relaxed = (1.0 - soft) * hard_probs + soft * probs
-    if hard > 0.0:
-        straight_through = hard_probs + probs - probs.detach()
-        relaxed = hard * straight_through + (1.0 - hard) * relaxed
-    return relaxed
 
 
 def _probabilities(profile: Any) -> Any:
@@ -102,7 +91,7 @@ def _aggregate(models: list[Any], X: Any, reverse_complement: bool) -> tuple[Any
 class CherimoyaWorker:
     """Holds loaded Cherimoya checkpoints and runs the toolkit's operations.
 
-    Checkpoints are swapped in-process: the selecting config fields are not
+    Checkpoints are swapped in-process. The selecting config fields are not
     ``reload_on_change``, so this worker is the only reloader. Each cached checkpoint keeps
     the source file and SHA-256 it was loaded from, and every call reports those for the
     wrapper to check against the request.
@@ -130,7 +119,6 @@ class CherimoyaWorker:
         else:
             from huggingface_hub import hf_hub_download
 
-            logger.update_status(f"Fetching {spec['filename']}")
             path = hf_hub_download(spec["repo_id"], spec["filename"], revision=spec["revision"])
             source = f"{spec['repo_id']}@{spec['revision']}:{spec['filename']}"
         if verbose:
@@ -156,13 +144,22 @@ class CherimoyaWorker:
             tuple: The models in spec order, and ``{"model", "fold", "source", "sha256"}``
                 per spec, where source and SHA-256 are those recorded when it was loaded.
         """
+        from standalone_helpers import set_current_cuda_device
+
+        # Cherimoya's Triton kernels launch on the current device, not the tensors' device.
+        set_current_cuda_device(device)
         self.to_device(device)
         models, applied = [], []
+        missing = len({self._key(spec) for spec in specs} - self._checkpoints.keys())
+        counter = StatusCounter(logger, "Loading Cherimoya checkpoint %d/%d", total=missing)
+        loaded_count = 0
         for spec in specs:
             key = self._key(spec)
             if key in self._checkpoints:
                 self._checkpoints.move_to_end(key)
             else:
+                loaded_count += 1
+                counter(loaded_count)
                 self._checkpoints[key] = self._load(spec, device, verbose)
                 while len(self._checkpoints) > MAX_CACHED_CHECKPOINTS:
                     self._checkpoints.popitem(last=False)
@@ -219,6 +216,9 @@ class CherimoyaWorker:
         batch_size, rc = int(input_dict["batch_size"]), bool(input_dict["reverse_complement_average"])
 
         rows: list[list[dict[str, Any]]] = [[] for _ in sequences]
+        logger.update_status(
+            f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
+        )
         with torch.no_grad():
             for start in range(0, len(sequences), batch_size):
                 X = _one_hot(sequences[start : start + batch_size], device)
@@ -254,6 +254,10 @@ class CherimoyaWorker:
         as_counts = input_dict["values"] == "expected_counts"
 
         rows: list[list[dict[str, Any]]] = [[] for _ in sequences]
+        logger.update_status(
+            f"Predicting profiles for {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}",
+            level=logging.DEBUG,
+        )
         with torch.no_grad():
             for start in range(0, len(sequences), batch_size):
                 X = _one_hot(sequences[start : start + batch_size], device)
@@ -268,7 +272,12 @@ class CherimoyaWorker:
         return {"profiles": rows, "applied": applied}
 
     def gradient(self, input_dict: dict[str, Any]) -> dict[str, Any]:
-        """Return the summed loss terms and their gradient with respect to the logits."""
+        """Return the summed loss terms and their gradient with respect to the relaxed state.
+
+        ``temperature`` sets the coordinate space. A positive value reads the state as logits
+        and returns logit-space gradients, ``None`` consumes probabilities directly and returns
+        probability-space gradients.
+        """
         import torch
 
         self.set_deterministic(bool(input_dict["deterministic"]))
@@ -277,13 +286,14 @@ class CherimoyaWorker:
         compute_gradient = bool(input_dict["compute_gradient"])
         rc = bool(input_dict["reverse_complement_average"])
         span = input_dict["target_span"]
+        temperature = resolve_temperature(input_dict["temperature"])
 
         with torch.set_grad_enabled(compute_gradient):
             logits = torch.tensor(
                 input_dict["logits"], device=device, dtype=torch.float32, requires_grad=compute_gradient
             )
-            relaxed = _relaxed_dna_probs(
-                logits, temperature=float(input_dict["temperature"]), soft=input_dict["soft"], hard=input_dict["hard"]
+            relaxed = relaxed_sequence(
+                logits, temperature=temperature, soft=input_dict["soft"], hard=input_dict["hard"]
             )
             batch = int(relaxed.shape[0])
             parts = [relaxed.transpose(1, 2)]
@@ -293,58 +303,42 @@ class CherimoyaWorker:
                 parts.append(_one_hot([input_dict["context_right"]], device).expand(batch, -1, -1))
             X = torch.cat(parts, dim=2)
 
-            sample_losses = torch.zeros(batch, device=device)
-            term_rows: list[list[dict[str, Any]]] = [[] for _ in range(batch)]
-            for term in input_dict["loss_terms"]:
+            # One backward per quantity, each reporting the derivative of that read count.
+            requested = input_dict["gradient_terms"]
+            terms: list[dict[str, Any]] = []
+            for position, term in enumerate(requested):
                 probs, counts, _ = _aggregate([loaded[i] for i in term["checkpoints"]], X, rc)
-                if term["quantity"] == "log_counts":
+                # Use the total count directly or apportion it to the selected output span.
+                if term["id"] == "log_counts":
                     value = counts
                 else:
                     value = torch.log1p(probs[:, span[0] : span[1]].sum(dim=-1) * torch.expm1(counts))
-                sigmoid = torch.sigmoid((value - term["sigmoid_center"]) / term["sigmoid_scale"])
-                score = 1.0 - sigmoid if term["direction"] == "max" else sigmoid
-                weighted = score * float(term["weight"])
-                sample_losses = sample_losses + weighted
-                for j, (v, s, w) in enumerate(
-                    zip(
-                        value.detach().cpu().tolist(),
-                        score.detach().cpu().tolist(),
-                        weighted.detach().cpu().tolist(),
-                        strict=True,
-                    )
-                ):
-                    term_rows[j].append(
-                        {
-                            "model": term["model"],
-                            "folds": term["folds"],
-                            "quantity": term["quantity"],
-                            "direction": term["direction"],
-                            "value": v,
-                            "sigmoid_center": term["sigmoid_center"],
-                            "sigmoid_scale": term["sigmoid_scale"],
-                            "score": s,
-                            "weight": term["weight"],
-                            "weighted_score": w,
-                        }
-                    )
 
-            total = sample_losses.sum()
-            gradient = None
-            if compute_gradient:
-                total.backward()
-                if logits.grad is None:
-                    raise RuntimeError("cherimoya: missing logits gradient")
-                gradient = logits.grad.detach().cpu().tolist()
+                entry: dict[str, Any] = {
+                    "id": term["id"],
+                    "model": term["model"],
+                    "folds": term["folds"],
+                    "values": [float(v) for v in value.detach().cpu().tolist()],
+                    "gradients": None,
+                }
 
-        losses = [float(value) for value in sample_losses.detach().cpu().tolist()]
+                if compute_gradient:
+                    # Sum independent samples to compute their gradients in one backward pass.
+                    (gradient,) = torch.autograd.grad(value.sum(), logits, retain_graph=(position < len(requested) - 1))
+                    if gradient is None:
+                        raise RuntimeError(f"cherimoya: missing gradient for term {term['id']!r} after backward")
+                    # Move this gradient to CPU before evaluating the next term to limit GPU memory use.
+                    entry["gradients"] = gradient.detach().cpu().tolist()
+                    del gradient
+
+                terms.append(entry)
+                del value, probs, counts
+
         return {
-            "gradient": gradient,
-            "loss": float(sum(losses)),
+            "terms": terms,
             "metrics": {
-                "losses": losses,
-                "loss_terms": term_rows,
                 "batch_size": batch,
-                "temperature": input_dict["temperature"],
+                "temperature": temperature,
                 "soft": input_dict["soft"],
                 "hard": input_dict["hard"],
                 "deterministic": bool(input_dict["deterministic"]),

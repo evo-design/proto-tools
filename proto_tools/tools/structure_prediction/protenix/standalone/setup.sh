@@ -93,10 +93,14 @@ uv pip install -r requirements.txt \
     --extra-index-url "${RECOMMENDED_TORCH_INDEX}" \
     --index-strategy unsafe-best-match
 
-echo "Upgrading triton..."
-# conda-forge Python ships triton 3.2.0 which causes "libcuda.so not found" runtime
-# failures. Upgrade AFTER all other installs to prevent uv from downgrading it back.
-uv pip install --upgrade triton
+# torch 2.6 pins triton 3.2.0, which breaks on conda-forge Python 3.12 (PY_SSIZE_T_CLEAN, and
+# "libcuda.so not found"), so that triton alone is replaced, after every other install so uv cannot
+# pull it back. Any other torch keeps the triton it pins: newer tritons build sm_90 kernels with a
+# CUDA 13 ptxas that CUDA 12 drivers refuse ("device kernel image is invalid").
+if python -c "import sys, triton; sys.exit(not triton.__version__.startswith('3.2.'))"; then
+    echo "Replacing triton 3.2..."
+    uv pip install "triton==3.3.1"
+fi
 
 # Locate site-packages for patching and sitecustomize.py
 SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
@@ -115,7 +119,7 @@ if [ -f "$COMPILE_PY" ] && [ -n "$GPU_ARCH" ]; then
     sed -i "s|os.environ\[\"TORCH_CUDA_ARCH_LIST\"\] = .*|os.environ[\"TORCH_CUDA_ARCH_LIST\"] = \"$GPU_ARCH\"|" "$COMPILE_PY"
     # Replace hardcoded -gencode flags with the detected arch
     python -c "
-import re
+import os, re
 
 with open('$COMPILE_PY', 'r') as f:
     content = f.read()
@@ -127,8 +131,11 @@ content = re.sub(
     content,
 )
 
-with open('$COMPILE_PY', 'w') as f:
+# Write a new file and swap it in: uv hardlinks installed files across envs, so an in-place write
+# would patch every env sharing this one
+with open('$COMPILE_PY.proto-patch', 'w') as f:
     f.write(content)
+os.replace('$COMPILE_PY.proto-patch', '$COMPILE_PY')
 "
     echo "Patched torch_ext_compile.py for $GPU_SM"
 fi

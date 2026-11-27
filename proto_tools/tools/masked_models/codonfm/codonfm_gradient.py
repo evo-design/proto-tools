@@ -1,107 +1,124 @@
 """CodonFM (Encodon) masked pseudo-log-likelihood gradient for relaxed coding sequences."""
 
 import math
-from typing import Any
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
+from typing_extensions import Self
 
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     CODONFM_CODON_VOCAB,
     CODONFM_MAX_NT,
     CODONFM_NUM_CODONS,
     CodonFMCheckpoint,
+    CodonSequenceLogits,
     one_hot_codon_logits,
-    resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseConfig, BaseToolInput, ConfigField, GradientOutput, ToolInstance
-from proto_tools.utils.tool_io import InputField
+from proto_tools.utils import (
+    ConfigField,
+    DifferentiableTerm,
+    GradientInput,
+    GradientOutput,
+    RelaxationConfig,
+    ToolInstance,
+    attach_intrinsic_term,
+    coerce_to_item_list,
+)
+from proto_tools.utils.tool_io import Directionality, InputField
 
 # Encodon caps sequences at (2048 - 2) codons (CLS/SEP); the differentiable state is per-codon.
 CODONFM_MAX_CODONS = CODONFM_MAX_NT // 3
 
 
-class CodonFMGradientInput(BaseToolInput):
+class CodonFMGradientInput(GradientInput):
     """Input for the CodonFM gradient tool.
 
     Attributes:
-        logits (list[list[float]]): Relaxed coding-sequence state with shape ``(L, 64)`` in
-            lexicographic DNA codon order (``AAA, AAC, AAG, AAT, ...``; see
-            :data:`CODONFM_CODON_VOCAB`). ``L`` must be ≤ 2046 (Encodon's positional cap minus
-            the CLS/SEP tokens); over-length inputs raise ``ValueError``. Each row's argmax codon
-            is used as that position's masked-language-model target.
-        temperature (float | None): Optional softmax temperature. When set, applies
-            ``softmax(input / temperature)`` before computing the gradient. When ``None``,
-            every input row must already be a probability distribution.
+        inputs (list[CodonSequenceLogits]): One relaxed coding-sequence state per candidate, each
+            ``(L, 64)`` in lexicographic DNA codon order (``AAA, AAC, AAG, AAT, ...``; see
+            :data:`CODONFM_CODON_VOCAB`). Every ``L`` must be ≤ 2046 (Encodon's positional cap
+            minus the CLS/SEP tokens); over-length inputs raise ``ValueError``. Each row's argmax
+            codon is that position's masked-language-model target.
+        temperature (float | None): Softmax temperature. The default ``1.0`` reads ``logits``
+            as unnormalized and applies ``softmax(logits / T)``, returning a logit-space
+            gradient; ``None`` reads them as probabilities and returns a probability-space
+            gradient.
     """
 
-    logits: list[list[float]] = InputField(
-        title="Logits",
-        description="Relaxed coding-sequence logits with shape (L, 64) in lexicographic DNA codon order.",
-        examples=[[[0.0] * CODONFM_NUM_CODONS, [0.0] * CODONFM_NUM_CODONS]],
+    inputs: list[CodonSequenceLogits] = InputField(
+        title="Relaxed Sequences",
+        description="One relaxed (L, 64) coding-sequence state per candidate, in lexicographic codon order",
+        examples=[[[[0.0] * CODONFM_NUM_CODONS, [0.0] * CODONFM_NUM_CODONS]]],
     )
 
-    temperature: float | None = InputField(
-        default=1.0,
-        title="Temperature",
-        description="Softmax temperature. Applies softmax(input / T) when set.",
-        gt=0.0,
-        allow_inf_nan=False,
-    )
-
-    @field_validator("logits")
+    @field_validator("inputs", mode="before")
     @classmethod
-    def validate_logits(cls, logits: list[list[float]]) -> list[list[float]]:
-        """Ensure logits are a non-empty rectangular ``L x 64`` matrix within the codon cap."""
-        if not logits:
-            raise ValueError("logits must contain at least one codon position")
-        if len(logits) > CODONFM_MAX_CODONS:
-            raise ValueError(
-                f"codonfm: supports sequences up to {CODONFM_MAX_CODONS} codons; input has length {len(logits)}."
-            )
-        for idx, row in enumerate(logits):
-            if len(row) != CODONFM_NUM_CODONS:
-                raise ValueError(f"logits row {idx} must have {CODONFM_NUM_CODONS} columns, got {len(row)}")
-            if not all(math.isfinite(value) for value in row):
-                raise ValueError(f"logits row {idx} must contain only finite numbers")
-        return logits
+    def normalize_items(cls, value: Any) -> Any:
+        """Accept one relaxed state as well as a list of them."""
+        return coerce_to_item_list(value)
 
     @model_validator(mode="after")
-    def validate_probabilities_without_temperature(self) -> "CodonFMGradientInput":
-        """Require probability-simplex rows when softmax is explicitly disabled."""
-        if self.temperature is None:
-            for idx, row in enumerate(self.logits):
-                if any(value < 0.0 for value in row) or not math.isclose(sum(row), 1.0, abs_tol=1e-6):
-                    raise ValueError(f"logits row {idx} must be a probability distribution when temperature is None")
+    def validate_codon_count(self) -> Self:
+        """Reject any item beyond Encodon's positional cap."""
+        for index, matrix in enumerate(self.inputs):
+            if len(matrix) > CODONFM_MAX_CODONS:
+                raise ValueError(
+                    f"codonfm: supports sequences up to {CODONFM_MAX_CODONS} codons; "
+                    f"inputs[{index}] has length {len(matrix)}."
+                )
         return self
 
 
-class CodonFMGradientOutput(GradientOutput):
-    """CodonFM masked-PLL output; gradient is optional in forward-only mode.
+class CodonFMMaskedPLLTerm(DifferentiableTerm):
+    """CodonFM's one differentiable quantity: the codon-level masked pseudo-log-likelihood.
+
+    The tool exposes a single scalar, so the term carries no selectors beyond the identifier
+    naming what it is.
 
     Attributes:
-        gradient (list[list[float]] | None): Gradient w.r.t. the input codon logits, or ``None``
-            when ``compute_gradient=False``.
-        loss (float): Mean masked negative log-likelihood over codon positions.
-        metrics (dict[str, Any]): Log-likelihood, perplexity, sequence length, and objective details.
-        vocab (list[str]): Codon column ordering for the input logits and returned gradient.
+        id (Literal["codon_masked_pll"]): Fixed identifier for this kind of quantity.
     """
 
-    gradient: list[list[float]] | None = Field(
-        default=None,
-        title="Gradient",
-        description="Gradient w.r.t. the input codon logits. None when compute_gradient=False.",
+    #: A mean negative log-likelihood is better the smaller it is.
+    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "lower"
+
+    #: Nats, averaged over the codon positions the mean is taken across.
+    UNITS: ClassVar[str] = "nats per codon"
+
+    #: What this quantity measures, copied into each gradient's metadata.
+    DESCRIPTION: ClassVar[str] = "Mean masked negative log-likelihood over codon positions"
+
+    id: Literal["codon_masked_pll"] = Field(
+        default="codon_masked_pll",
+        title="Term ID",
+        description="Identifies this quantity as CodonFM's codon-level masked pseudo-log-likelihood.",
     )
 
 
-class CodonFMGradientConfig(BaseConfig):
+class CodonFMGradientOutput(GradientOutput):
+    """CodonFM masked-PLL output. Gradients are omitted in forward-only mode.
+
+    Attributes:
+        results (list[GradientResult]): One per input item, in input order. Contains a single
+            masked-PLL term carrying that item's mean masked negative log-likelihood over codon
+            positions and its raw gradient w.r.t. its codon logits (``None`` in forward-only
+            mode), plus log-likelihood, perplexity, sequence length and objective details in
+            ``metrics``.
+        vocab (list[str]): Codon column ordering for the input logits and returned gradient.
+    """
+
+
+class CodonFMGradientConfig(RelaxationConfig):
     """Configuration for the CodonFM masked-PLL gradient tool.
 
     Attributes:
         model_checkpoint (CodonFMCheckpoint): Encodon weights variant.
-        use_ste (bool): Straight-Through Estimator: hard one-hot codons in the forward pass with
-            gradients flowing through soft probabilities. When ``False``, uses soft blended
-            codon embeddings directly.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
+            (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
+            and ColabDesign parity. See
+            :class:`~proto_tools.utils.gradient.models.RelaxationConfig`.
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Run backward pass and return gradient. Set ``False`` for
             forward-only masked-log-likelihood scoring.
         batch_size (int): Codon positions per forward pass for batched masked-PLL.
@@ -113,11 +130,6 @@ class CodonFMGradientConfig(BaseConfig):
         default="encodon_80m",
         description="Encodon checkpoint: encodon_80m | encodon_600m | encodon_1b | encodon_1b_cdwt.",
         reload_on_change=True,
-    )
-    use_ste: bool = ConfigField(
-        title="Straight-Through Estimator",
-        default=False,
-        description="Hard one-hot forward pass with soft-probability gradients.",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
@@ -141,7 +153,7 @@ class CodonFMGradientConfig(BaseConfig):
 
 def example_input() -> CodonFMGradientInput:
     """Minimal valid input for testing and examples."""
-    return CodonFMGradientInput(logits=one_hot_codon_logits("ATGGTGAGCAAG", sharpness=2.0))
+    return CodonFMGradientInput(inputs=[CodonSequenceLogits(one_hot_codon_logits("ATGGTGAGCAAG", sharpness=2.0))])
 
 
 @tool(
@@ -155,7 +167,9 @@ def example_input() -> CodonFMGradientInput:
     uses_gpu=True,
     example_input=example_input,
     cacheable=False,
-    stochastic=True,
+    iterable_input_fields=["inputs"],
+    iterable_output_field="results",
+    max_chunk_size=8,
 )
 def run_codonfm_gradient(
     inputs: CodonFMGradientInput,
@@ -172,20 +186,17 @@ def run_codonfm_gradient(
     Returns:
         CodonFMGradientOutput: Gradient (unless forward-only), mean-NLL loss, metrics, and codon vocab.
     """
-    safetensors_url, config_url, filename, subdir = resolve_checkpoint_source(config.model_checkpoint)
     result = ToolInstance.dispatch(
         "codonfm",
         {
             "operation": "gradient",
-            "logits": inputs.logits,
+            "items": [matrix.root for matrix in inputs.inputs],
             "temperature": inputs.temperature,
-            "use_ste": config.use_ste,
+            "soft": config.soft,
+            "hard": config.hard,
             "compute_gradient": config.compute_gradient,
             "batch_size": config.batch_size,
-            "safetensors_url": safetensors_url,
-            "config_url": config_url,
-            "safetensors_filename": filename,
-            "cache_subdir": subdir,
+            "model_checkpoint": config.model_checkpoint,
             "device": config.device,
             "seed": config.seed,
             "verbose": config.verbose,
@@ -193,20 +204,35 @@ def run_codonfm_gradient(
         instance=instance,
         config=config,
     )
-    loss = float(result["loss"])
-    if not math.isfinite(loss):
-        raise ValueError("CodonFM returned a non-finite gradient loss")
+    # Check the worker used the expected codon vocabulary and returned one result per item
     if result.get("vocab") != CODONFM_CODON_VOCAB:
         raise ValueError("CodonFM returned an unexpected codon vocabulary")
-    gradient = result.get("gradient")
-    if config.compute_gradient:
-        if not isinstance(gradient, list) or len(gradient) != len(inputs.logits):
-            raise ValueError("CodonFM returned a gradient with an unexpected length")
-        for idx, row in enumerate(gradient):
-            if len(row) != CODONFM_NUM_CODONS or not all(math.isfinite(float(value)) for value in row):
-                raise ValueError(f"CodonFM returned an invalid gradient row at index {idx}")
-    elif gradient is not None:
-        raise ValueError("CodonFM returned a gradient when compute_gradient=False")
-    result["loss"] = loss
+    items = result["results"]
+    if len(items) != len(inputs.inputs):
+        raise ValueError(f"CodonFM returned {len(items)} results for {len(inputs.inputs)} item(s)")
+    # Validate each item: a finite loss, plus a finite (L, 64) gradient only when requested
+    for index, (item, matrix) in enumerate(zip(items, inputs.inputs, strict=True)):
+        loss = float(item["loss"])
+        if not math.isfinite(loss):
+            raise ValueError(f"CodonFM returned a non-finite gradient loss for item {index}")
+        item["loss"] = loss
+        gradient = item.get("gradient")
+        if config.compute_gradient:
+            if not isinstance(gradient, list) or len(gradient) != len(matrix):
+                raise ValueError(f"CodonFM returned a gradient with an unexpected length for item {index}")
+            for row_index, row in enumerate(gradient):
+                if len(row) != CODONFM_NUM_CODONS or not all(math.isfinite(float(value)) for value in row):
+                    raise ValueError(f"CodonFM returned an invalid gradient row at item {index}, row {row_index}")
+        elif gradient is not None:
+            raise ValueError("CodonFM returned a gradient when compute_gradient=False")
+    # Record the checkpoint and report the loss and gradient as the masked-PLL term
     result["metadata"] = {"model_checkpoint": config.model_checkpoint}
+    attach_intrinsic_term(
+        result,
+        CodonFMMaskedPLLTerm(),
+        matrices=[matrix.root for matrix in inputs.inputs],
+        temperature=inputs.temperature,
+        soft=config.soft,
+        hard=config.hard,
+    )
     return CodonFMGradientOutput(**result)

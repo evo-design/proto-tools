@@ -9,6 +9,7 @@ from typing import ClassVar, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from proto_tools.utils import BaseConfig, ConfigField
+from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 # netMHCpan accepts only the unstarred allele spelling ("HLA-A02:01"); "HLA-A*02:01" and
@@ -29,7 +30,7 @@ MAX_PEPTIDE_LENGTH = 14
 
 # The 20 standard amino acids. netMHCpan silently rewrites any other residue to "X", which
 # would mean scoring a peptide the caller never asked about, so off-alphabet input is rejected.
-_STANDARD_AMINO_ACIDS = frozenset("ACDEFGHIKLMNPQRSTVWY")
+_STANDARD_AMINO_ACIDS = frozenset(PROTEIN_AMINO_ACIDS)
 
 # Steepness of the logistic used by ``binding_propensity``, applied in log-rank space so the
 # curve is centred on the weak-binder threshold and decreases smoothly with %rank. This is
@@ -46,7 +47,7 @@ def normalize_allele(allele: str) -> str:
     ``HLA-A*02:01``, ``A*02:01``, ``A02:01`` and ``HLA-A02:01`` all converge on
     ``HLA-A02:01``. Non-human prefixes are left untouched because MHC_pseudo.dat is
     case-sensitive. Whether the result actually exists is checked against the install's
-    allele list at run time, which fails loudly naming the offending allele.
+    allele list at run time, which raises an error naming the offending allele.
 
     Args:
         allele (str): Allele name in any of the common spellings.
@@ -150,7 +151,7 @@ def binding_propensity(rank: float, weak_rank: float) -> float:
 
     A binder count is piecewise-constant in the underlying sequence, which makes it
     uninformative to a sampler optimizing against immunogenicity. This is a logistic in
-    log-rank space: it equals 0.5 exactly at ``weak_rank``, approaches 1 for very strong
+    log-rank space. It equals 0.5 exactly at ``weak_rank``, approaches 1 for very strong
     binders and 0 for very weak ones, and is strictly decreasing in ``rank``.
 
     Args:
@@ -168,7 +169,7 @@ def binding_propensity(rank: float, weak_rank: float) -> float:
 class NetMHCpanBinding(BaseModel):
     """One netMHCpan prediction for a single peptide against a single allele.
 
-    ``rank_el`` is the quantity to compare across alleles: raw scores sit on different
+    ``rank_el`` is the quantity to compare across alleles. Raw scores sit on different
     per-allele background distributions, whereas %rank is a percentile against random
     peptides. The binding-affinity, pathogen and neoepitope fields are populated only when
     the matching config flag is set, because netMHCpan's ``-BA``, ``-pathogen`` and ``-neo``
@@ -316,13 +317,12 @@ _SHARED_METRIC_SPEC: dict[str, MetricSpec] = {
 class NetMHCpanMetrics(Metrics):
     """Summary binding metrics for one peptide or one protein.
 
-    Counts and the smooth propensity are reported together on purpose: counts are what
-    immunology reads, while ``binding_propensity`` is differentiable-in-practice and so is
-    the sensible objective for a sampler.
+    Counts support interpretation of the predictions. ``binding_propensity`` provides
+    a smooth objective for sampling, so both are reported.
 
     ``best_rank_ba`` and ``best_affinity_nm`` are present only when the run requested
     binding affinity, and ``best_rank_pathogen`` / ``best_rank_neo`` only when it requested
-    those heads; otherwise they are absent rather than zero.
+    those heads. Otherwise they are absent rather than zero.
 
     Attributes:
         primary_metric (str | None): Headline metric used to rank results.
@@ -360,7 +360,7 @@ class NetMHCpanProteinMetrics(NetMHCpanMetrics):
 def classify(rank: float, strong_rank: float, weak_rank: float) -> BinderClass:
     """Classify a peptide-allele pair from its EL %rank and the configured thresholds.
 
-    The ``BindLevel`` column netMHCpan prints is not used here: it is derived
+    The ``BindLevel`` column netMHCpan prints is not used here. It is derived
     from the eluted-ligand %rank even when ``-BA`` is requested, which makes it ambiguous
     about which quantity produced it. Classifying explicitly from ``rank_el`` keeps the
     reported class and the reported rank consistent by construction.

@@ -5,11 +5,12 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from proto_tools.entities.ligands import Fragment, Ligands
+from proto_tools.entities.ligands.ccd_utils import is_valid_ccd_code
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -39,19 +40,28 @@ def _silence_rdkit_logger() -> Iterator[None]:
 # Per-identifier result record (CCD-specific metadata that doesn't fit
 # on Fragment). Pairs 1:1 with the corresponding Fragment in `ligands`.
 # ============================================================================
+# Fields that only a matched CCD entry can fill in; a record carrying any of them matched an entry.
+_CCD_METADATA_FIELDS = ("formula", "formula_weight", "inchi", "inchikey", "release_status", "parent_ccd_code")
+
+
+def _matched_ccd_entry(record: dict[str, Any]) -> bool:
+    """Return whether a standalone record came from a CCD entry, rather than a failed lookup."""
+    return any(record.get(name) is not None for name in _CCD_METADATA_FIELDS)
+
+
 class CcdLookupResult(BaseModel):
     """One resolved ligand and its CCD-specific metadata.
 
     Carries the ``Fragment`` built for this identifier alongside the
     pdbeccdutils-derived fields that don't fit on ``Fragment`` (formula strings,
-    descriptors, release status, optional network data). When the input was a
-    SMILES with no CCD match, the fragment carries no ``ccd_code`` and the descriptive
-    fields are also None.
+    descriptors, release status, optional network data). ``status`` says which of three
+    outcomes the identifier had.
 
     Attributes:
-        fragment (Fragment): The ligand built for this identifier, carrying the CCD code
-            when one could be resolved to a usable structure. ``fragment.ccd_code`` is the
-            single source of truth for which CCD entry this is.
+        fragment (Fragment | None): The ligand built for this identifier. When resolved it
+            carries a CCD code, which can be another entry with the same structure
+            (``warnings`` says so). Otherwise it is the structure without a code, or None
+            when no structure could be built (``errors`` says why).
         formula (str | None): Chemical formula (e.g. ``"C10 H16 N5 O13 P3"``).
         formula_weight (float | None): Formula weight in Daltons.
         inchi (str | None): InChI string as recorded in the CCD.
@@ -67,18 +77,19 @@ class CcdLookupResult(BaseModel):
             Populated only when ``include_cross_references=True``; requires network.
         pdb_structures (list[str] | None): PDB IDs of structures containing this
             ligand. Populated only when ``include_pdb_usage=True``; requires network.
-        resolved_without_structure (bool): True when the identifier matched a CCD entry
-            whose structure could not be rebuilt. The CCD metadata below is populated,
-            but ``fragment.ccd_code`` is None and the entry counts as unresolved.
+        status (Literal["resolved", "no_ccd_code", "not_found"]): ``"resolved"`` when the
+            fragment carries a CCD code; ``"no_ccd_code"`` when the identifier matched a CCD
+            entry the fragment can't carry, with the CCD metadata kept and the reason in
+            ``errors``; ``"not_found"`` when it matched no entry.
         warnings (list[str]): Non-fatal warnings emitted while reading the entry.
         errors (list[str]): Errors that prevented full parsing.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    fragment: Fragment = Field(
-        title="Resolved Fragment",
-        description="The ligand built for this identifier",
+    fragment: Fragment | None = Field(
+        title="Fragment",
+        description="The ligand built for this identifier, or None when no structure could be built",
     )
 
     formula: str | None = Field(default=None, title="Formula", description="Chemical formula string")
@@ -107,44 +118,29 @@ class CcdLookupResult(BaseModel):
         title="PDB Structures",
         description="PDB IDs containing this ligand (network, opt-in)",
     )
-    resolved_without_structure: bool = Field(
-        default=False,
-        title="Resolved Without Structure",
-        description="CCD entry matched but its structure could not be rebuilt",
+    status: Literal["resolved", "no_ccd_code", "not_found"] = Field(
+        title="Status",
+        description="Whether the identifier matched a CCD entry, and whether the fragment carries its code",
     )
     warnings: list[str] = Field(default_factory=list, title="Warnings", description="Non-fatal parsing warnings")
     errors: list[str] = Field(default_factory=list, title="Errors", description="Parsing errors")
 
     @model_validator(mode="after")
-    def _check_unresolved_metadata_is_explained(self) -> "CcdLookupResult":
-        """CCD metadata without a resolved code must say why.
-
-        These fields can only come from a CCD record, so their presence beside a fragment
-        that carries no code is either a leak from another record or the narrow legitimate
-        case where the lookup resolved an entry whose structure could not be rebuilt. The
-        second is declared by ``resolved_without_structure``; the first is a bug and is
-        still caught. The flag is checked rather than the presence of a warning, since
-        unrelated warnings would otherwise disable the check.
-        """
-        if self.fragment.ccd_code is None and not self.resolved_without_structure:
-            stale = [
-                k
-                for k, v in (
-                    ("formula", self.formula),
-                    ("formula_weight", self.formula_weight),
-                    ("inchi", self.inchi),
-                    ("inchikey", self.inchikey),
-                    ("release_status", self.release_status),
-                    ("parent_ccd_code", self.parent_ccd_code),
-                )
-                if v is not None
-            ]
-            if stale:
-                raise ValueError(
-                    f"fragment carries no ccd_code but {stale} are set, and resolved_without_structure "
-                    "is False; a CcdLookupResult must be resolved, fully unresolved, or declare that its "
-                    "CCD entry matched without a rebuildable structure"
-                )
+    def _check_status_matches_contents(self) -> "CcdLookupResult":
+        """The fragment carries a code only when resolved, and CCD metadata comes only from a match."""
+        code = self.fragment.ccd_code if self.fragment is not None else None
+        if (code is not None) != (self.status == "resolved"):
+            raise ValueError(
+                f"status is {self.status!r} but the fragment's CCD code is {code!r}; "
+                "a resolved result carries a CCD code and no other result does"
+            )
+        metadata = [name for name in _CCD_METADATA_FIELDS if getattr(self, name) is not None]
+        if self.status == "not_found" and metadata:
+            raise ValueError(f"status is 'not_found' but CCD metadata {metadata} is set")
+        if self.status == "no_ccd_code" and not metadata:
+            raise ValueError(
+                "status is 'no_ccd_code' but no CCD metadata is set; a result without a match is not_found"
+            )
         return self
 
 
@@ -178,7 +174,7 @@ class CcdLookupInput(BaseToolInput):
 class CcdLookupConfig(BaseConfig):
     """Configuration for CCD result.
 
-    Network features are off by default; enable explicitly when needed. For
+    Enable network features explicitly when needed. They are off by default. For
     2D / 3D ligand visualization use
     :meth:`proto_tools.entities.ligands.Fragment.visualize` on the resolved
     ``result.ligands.fragments[i]`` instead.
@@ -190,6 +186,11 @@ class CcdLookupConfig(BaseConfig):
             from the RCSB search API. Requires network. Default: False.
         sanitize (bool): Sanitize the parsed RDKit molecule. Disable only for
             CCD entries with unusual valences. Default: True.
+        identifier_type (Literal["auto", "ccd_code", "smiles"]): How to read each identifier.
+            ``"auto"`` reads a 1- to 5-character alphanumeric string as a CCD code and anything
+            else as a SMILES, warning when a string reads both ways (``"CCO"`` is a CCD entry,
+            not ethanol). ``"ccd_code"`` and ``"smiles"`` read every identifier one way.
+            Default: ``"auto"``.
     """
 
     include_cross_references: bool = ConfigField(
@@ -201,6 +202,11 @@ class CcdLookupConfig(BaseConfig):
         description="Fetch PDB structures containing this ligand (network, opt-in)",
     )
     sanitize: bool = ConfigField(title="Sanitize", default=True, description="Sanitize the parsed RDKit molecule")
+    identifier_type: Literal["auto", "ccd_code", "smiles"] = ConfigField(
+        title="Identifier Type",
+        default="auto",
+        description="Read identifiers as CCD codes, as SMILES, or decide per identifier (auto)",
+    )
 
 
 class CcdLookupOutput(BaseToolOutput):
@@ -214,11 +220,10 @@ class CcdLookupOutput(BaseToolOutput):
         results (list[CcdLookupResult]): One entry per input identifier, in input
             order, each holding the resolved ``Fragment`` and its CCD-specific
             metadata (formula, descriptors, release status, optional network data).
-        ligands (Ligands): The resolved fragments gathered into a ``Ligands`` collection,
-            in input order. Derived from ``results``.
-        num_resolved (int): Count of identifiers that correspond to a known CCD component,
-            whether the lookup returned the code or the fragment matched one by structure.
-        num_unresolved (int): Count of identifiers with no usable CCD component.
+        ligands (Ligands): Every result's fragment gathered into a ``Ligands`` collection, in
+            input order. Raises when any result has no structure; not part of the export.
+        num_resolved (int): Count of results with status ``"resolved"``.
+        num_unresolved (int): Count of results with status ``"no_ccd_code"`` or ``"not_found"``.
     """
 
     results: list[CcdLookupResult] = Field(
@@ -227,28 +232,38 @@ class CcdLookupOutput(BaseToolOutput):
         description="Resolved ligand plus CCD metadata, one entry per input identifier",
     )
 
-    @computed_field  # type: ignore[prop-decorator]
     @property
     def ligands(self) -> Ligands:
-        """The resolved fragments as a ``Ligands`` collection, in input order."""
-        return Ligands(fragments=[result.fragment for result in self.results])
+        """Every result's fragment as a ``Ligands`` collection, in input order.
+
+        Raises rather than skip a result with no structure, so a complex can't be predicted with a
+        ligand missing. To go on without those inputs, use the ``results`` whose ``fragment`` is set.
+
+        Raises:
+            ValueError: If any result has no fragment.
+        """
+        missing = [i for i, result in enumerate(self.results) if result.fragment is None]
+        if missing:
+            reasons = "; ".join(
+                f"results[{i}]: {', '.join(self.results[i].errors) or 'no reason given'}" for i in missing
+            )
+            raise ValueError(
+                f"No structure could be built for {len(missing)} of {len(self.results)} identifiers ({reasons}). "
+                "To continue without them, build Ligands from the results whose fragment is set."
+            )
+        return Ligands(fragments=[result.fragment for result in self.results if result.fragment is not None])
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def num_resolved(self) -> int:
-        """Number of identifiers carrying a CCD code, by lookup or by structural match."""
-        return sum(1 for e in self.results if e.fragment.ccd_code is not None)
+        """Number of results whose fragment carries a CCD code."""
+        return sum(1 for e in self.results if e.status == "resolved")
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def num_unresolved(self) -> int:
-        """Number of identifiers with no usable CCD component.
-
-        Includes entries whose CCD code matched but whose structure could not be
-        rebuilt. Those carry ``resolved_without_structure=True`` and retain their
-        CCD metadata, so resolution here means a usable structure, not merely a match.
-        """
-        return sum(1 for e in self.results if e.fragment.ccd_code is None)
+        """Number of results with no CCD code on the fragment, whether matched or not."""
+        return sum(1 for e in self.results if e.status != "resolved")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -276,19 +291,76 @@ def example_input() -> CcdLookupInput:
     return CcdLookupInput(identifiers=["ATP"])
 
 
-def _build_fragment(record: dict[str, Any], original_identifier: str) -> Fragment:
+def _status(
+    fragment: Fragment | None, record: dict[str, Any], errors: list[str], warnings: list[str]
+) -> Literal["resolved", "no_ccd_code", "not_found"]:
+    """Classify a lookup, noting in ``errors`` or ``warnings`` where the fragment and the match disagree.
+
+    The standalone sets ``ccd_code`` for any identifier shaped like a code, found or not, so a match
+    is read from the CCD metadata only an entry can fill in.
+
+    Args:
+        fragment (Fragment | None): The fragment built for the identifier, if any.
+        record (dict[str, Any]): The standalone record for the identifier.
+        errors (list[str]): The result's errors, edited in place.
+        warnings (list[str]): The result's warnings, appended to in place.
+
+    Returns:
+        Literal["resolved", "no_ccd_code", "not_found"]: The result's status.
+    """
+    matched = _matched_ccd_entry(record)
+    code = record.get("ccd_code")
+    if fragment is not None and fragment.ccd_code is not None:
+        if not matched:
+            # The fragment resolved from proto-tools' own CCD table; the lookup's failures no longer apply
+            warnings.extend(errors)
+            errors.clear()
+        elif fragment.ccd_code != code:
+            warnings.append(
+                f"CCD entry {code!r} has the same structure as {fragment.ccd_code!r}, which the fragment carries"
+            )
+        return "resolved"
+    if not matched:
+        return "not_found"
+    if not code or not is_valid_ccd_code(code):
+        errors.append(f"CCD entry {code!r} is not in proto-tools' CCD table, so the fragment can't carry its code")
+    else:
+        errors.append(
+            f"proto-tools' CCD table has no SMILES RDKit can parse for {code!r}, so the fragment can't carry its code"
+        )
+    return "no_ccd_code"
+
+
+def _build_fragment(record: dict[str, Any], original_identifier: str, read_as_smiles: bool = True) -> Fragment | None:
     """Construct a Fragment from a standalone result record.
 
     Tries (smiles, ccd_code), then the code alone so a resolved entry survives a record
-    whose SMILES will not parse, then (smiles only), then (original_identifier as smiles),
-    in order of decreasing fidelity. Falls back to a wildcard-atom placeholder if none
-    parse; the result carries the failure reason in ``errors``.
+    whose SMILES will not parse, then (smiles only), in order of decreasing fidelity, and
+    last the identifier itself as a SMILES. That last step is skipped when the identifier
+    was looked up as the code of an entry that matched: read as a SMILES, a code names a
+    different molecule (``FCO``, an iron complex, would be fluoromethanol). Returns None when
+    nothing parses, rather than a stand-in molecule that a structure predictor would model
+    in the ligand's place.
+
+    Args:
+        record (dict[str, Any]): The standalone record for the identifier.
+        original_identifier (str): The identifier as the caller gave it.
+        read_as_smiles (bool): Whether the identifier may be read as a SMILES; False when the
+            caller said every identifier is a CCD code.
+
+    Returns:
+        Fragment | None: The built fragment, or None when no structure could be built.
     """
     smiles = record.get("smiles")
     ccd_code = record.get("ccd_code")
     name = record.get("name")
+    identifier = original_identifier.strip()
 
-    for s, c in ((smiles, ccd_code), (None, ccd_code), (smiles, None), (original_identifier, None)):
+    attempts: list[tuple[str | None, str | None]] = [(smiles, ccd_code), (None, ccd_code), (smiles, None)]
+    looked_up_as_matched_code = _matched_ccd_entry(record) and identifier.upper() == ccd_code
+    if read_as_smiles and identifier and not looked_up_as_matched_code:
+        attempts.append((identifier, None))
+    for s, c in attempts:
         if s is None and c is None:
             continue
         try:
@@ -296,10 +368,8 @@ def _build_fragment(record: dict[str, Any], original_identifier: str) -> Fragmen
         except ValueError:
             continue
 
-    # Placeholder: helium has no CCD entry, so ccd_code stays None across
-    # JSON round-trip ("[*]" would canonicalize to "*" → auto-resolve to "DUM").
-    logger.warning("Could not build Fragment for %r; using placeholder", original_identifier)
-    return Fragment(smiles="[He]", name=name or original_identifier)
+    logger.warning("Could not build a structure for %r", original_identifier)
+    return None
 
 
 @tool(
@@ -327,13 +397,13 @@ def run_ccd_lookup(
     config: CcdLookupConfig,
     instance: Any = None,
 ) -> CcdLookupOutput:
-    """Enrich CCD codes or SMILES with rich metadata via pdbeccdutils.
+    """Look up CCD codes or SMILES and return chemical metadata with pdbeccdutils.
 
-    Inputs may be a mix of 1- to 5-character CCD codes and SMILES strings; the
-    standalone auto-detects per identifier. Default operation is fully offline
+    Inputs may mix 1- to 5-character CCD codes and SMILES strings. The worker
+    detects the type of each identifier. Default operation is fully offline
     (uses bundled CCD mmCIF data). Network features (UniChem cross-references,
     PDB usage) are opt-in via config flags. See ``examples/example.ipynb`` and
-    ``README.md`` for usage patterns; for the microsecond-latency hot path see
+    ``README.md`` for usage. For lookups within the calling process, see
     :mod:`proto_tools.entities.ligands.ccd_utils`.
 
     Args:
@@ -356,6 +426,7 @@ def run_ccd_lookup(
                 "include_cross_references": config.include_cross_references,
                 "include_pdb_usage": config.include_pdb_usage,
                 "sanitize": config.sanitize,
+                "identifier_type": config.identifier_type,
             },
         },
         instance=instance,
@@ -368,15 +439,12 @@ def run_ccd_lookup(
     # stderr clean for unusual user-supplied SMILES.
     with _silence_rdkit_logger():
         for original, record in zip(inputs.identifiers, output_data["records"], strict=True):
-            fragment = _build_fragment(record, original)
+            fragment = _build_fragment(record, original, read_as_smiles=config.identifier_type != "ccd_code")
+            errors = list(record.get("errors") or [])
             warnings = list(record.get("warnings") or [])
-            # Resolved a code no molecule could be built for: say so rather than leaving it unexplained.
-            resolved_without_structure = fragment.ccd_code is None and bool(record.get("ccd_code"))
-            if resolved_without_structure:
-                warnings.append(
-                    f"CCD entry {record['ccd_code']!r} resolved, but no usable structure could be built "
-                    f"for it; the fragment carries no ccd_code and counts as unresolved."
-                )
+            status = _status(fragment, record, errors, warnings)
+            if fragment is None:
+                errors.append(f"No structure could be built for {original!r}")
             results.append(
                 CcdLookupResult(
                     fragment=fragment,
@@ -390,9 +458,9 @@ def run_ccd_lookup(
                     physchem_properties=record.get("physchem_properties") or {},
                     cross_references=record.get("cross_references"),
                     pdb_structures=record.get("pdb_structures"),
-                    resolved_without_structure=resolved_without_structure,
+                    status=status,
                     warnings=warnings,
-                    errors=list(record.get("errors") or []),
+                    errors=errors,
                 )
             )
 

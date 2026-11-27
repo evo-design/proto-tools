@@ -25,9 +25,8 @@ EXTRA_SOURCE_ENV = "PROTO_MODAL_EXTRA_SOURCE"
 # LOCAL_DIR_IGNORE, which also drops `tests` and `notes`: those name this repository's own layout,
 # and a directory of someone else's may be a package its code imports.
 #
-# `.git` is the load-bearing entry. A checkout is the obvious thing to point this at, and git
-# rewrites its index during ordinary work, so mounting it would change the layer hash between two
-# deploys of identical code and rebuild every image below it.
+# Exclude .git because ordinary Git operations rewrite its index. Mounting it would
+# change the layer hash between deploys of identical code and rebuild later image layers.
 EXTRA_SOURCE_IGNORE: list[str] = [
     ".git",
     "__pycache__",
@@ -72,12 +71,11 @@ def with_dependencies(image: modal.Image) -> modal.Image:
 
 
 # Benchmark results recorded beside each deployment. They describe what a service costs, which is
-# useful in the repository and useless inside the image: no container reads them, and rewriting one
+# useful in the repository, but no container reads them. Rewriting one
 # after a benchmark run would otherwise invalidate the mount layer and force every image to rebuild.
 #
-# Anything but the empty list here is load-bearing. The default for add_local_python_source keeps
-# only .py files, which would drop every setup.sh and requirements.txt a standalone environment
-# needs — hence an explicit list naming exactly the reports rather than a broader pattern.
+# Supply an explicit list so add_local_python_source includes non-Python files such
+# as setup.sh and requirements.txt. Exclude only the benchmark reports.
 #
 # Scoped to `*_deployment/` because that is the only place a report is written, and because
 # `proto_tools/modal/README.md` is the package's own setup documentation, which does ship.
@@ -158,7 +156,7 @@ def with_proto_tools(
     # Applied first, so editing proto-tools does not rebuild a deployment's own layers.
     image = _with_extras(image)
 
-    # ignore=[] is required: the default keeps only .py, dropping every setup.sh and
+    # Use ignore=[] because the default keeps only .py files, dropping setup.sh and
     # requirements.txt a standalone environment needs.
     override = os.environ.get(PATH_ENV)
     if override:

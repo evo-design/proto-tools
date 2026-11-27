@@ -17,16 +17,17 @@ Example:
 
 import json
 import logging
+import math
 import tempfile
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from proto_tools.entities.complex import Complex, chain_label
-from proto_tools.entities.structures import Structure
+from proto_tools.entities.structures import Structure, detect_structure_format
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -36,39 +37,139 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.file_inputs import STRUCTURE_FILES
 
 logger = logging.getLogger(__name__)
 
-_STRUCTURE_PATH_SUFFIXES = (".pdb", ".cif", ".pdb.gz", ".cif.gz")
 
-
-def _looks_like_structure_path(value: str) -> bool:
-    stripped = value.strip()
-    if not stripped or "\n" in stripped or "\r" in stripped:
-        return False
-    lower = stripped.lower()
-    return any(lower.endswith(suffix) for suffix in _STRUCTURE_PATH_SUFFIXES) or "/" in stripped or "\\" in stripped
-
-
-def _resolve_input_structure_path(value: str) -> str:
-    path = Path(value).expanduser()
+def _pdb_coordinate(line: str, start: int, end: int) -> float:
+    """Parse one fixed-width PDB coordinate, naming the record when it is not a number."""
+    field = line[start:end]
     try:
-        exists = path.exists()
-    except OSError as exc:
-        if not _looks_like_structure_path(value):
-            return value
-        raise FileNotFoundError(
-            f"RFdiffusion3 input_structure path could not be inspected: {value!r} (resolved from cwd {Path.cwd()})"
-        ) from exc
-    if exists:
-        if not path.is_file():
-            raise ValueError(f"RFdiffusion3 input_structure is not a file: {value!r}")
-        return str(path.resolve())
-    if _looks_like_structure_path(value):
-        raise FileNotFoundError(
-            f"RFdiffusion3 input_structure path does not exist: {value!r} (resolved from cwd {Path.cwd()})"
+        return float(field)
+    except ValueError as exc:
+        raise ValueError(f"rfdiffusion3: input PDB record has a non-numeric coordinate {field!r}: {line!r}") from exc
+
+
+def _drop_unresolved_pdb_atoms(content: str) -> tuple[str, dict[str, list[str]], int]:
+    """Remove ``ATOM``/``HETATM`` records (and their ``ANISOU``) whose coordinates are not finite.
+
+    Returns the text, the dropped atom names by residue, and the number of atom records kept.
+    """
+    kept: list[str] = []
+    dropped: dict[str, list[str]] = defaultdict(list)
+    n_kept = 0
+    skip_anisou = False
+    for line in content.splitlines(keepends=True):
+        record = line[:6]
+        if record in ("ATOM  ", "HETATM"):
+            skip_anisou = False
+            coords = (_pdb_coordinate(line, 30, 38), _pdb_coordinate(line, 38, 46), _pdb_coordinate(line, 46, 54))
+            if not all(math.isfinite(c) for c in coords):
+                residue = f"{line[21].strip()}{line[22:27].strip()} {line[17:20].strip()}"
+                dropped[residue].append(line[12:16].strip())
+                skip_anisou = True
+                continue
+            n_kept += 1
+        elif record == "ANISOU" and skip_anisou:
+            skip_anisou = False
+            continue
+        kept.append(line)
+    return "".join(kept), dict(dropped), n_kept
+
+
+def _drop_unresolved_cif_atoms(content: str) -> tuple[str, dict[str, list[str]], int]:
+    """Remove ``_atom_site`` rows whose ``Cartn_x/y/z`` are ``nan``, ``?`` or ``.``; keep every other row and column.
+
+    Returns the text, the dropped atom names by residue, and the number of atom rows kept.
+    """
+    import gemmi
+
+    doc = gemmi.cif.read_string(content)
+    dropped: dict[str, list[str]] = defaultdict(list)
+    n_kept = 0
+    for block in doc:
+        table = block.find(
+            "_atom_site.",
+            ["Cartn_x", "Cartn_y", "Cartn_z", "?auth_asym_id", "?auth_seq_id", "?label_comp_id", "?label_atom_id"],
         )
-    return value
+        unresolved = [
+            index
+            for index, row in enumerate(table)
+            if not all(math.isfinite(gemmi.cif.as_number(row[i])) for i in range(3))
+        ]
+        for index in unresolved:
+            row = table[index]
+            chain, seq, comp, atom = (gemmi.cif.as_string(row[i]) if row.has(i) else "?" for i in range(3, 7))
+            dropped[f"{chain}{seq} {comp}"].append(atom)
+        # Remove from the end so earlier indices stay valid.
+        for index in reversed(unresolved):
+            table.remove_row(index)
+        n_kept += len(table)
+    if not dropped:
+        return content, {}, n_kept
+    return doc.as_string(), dict(dropped), n_kept
+
+
+def _drop_unresolved_atoms(content: str, structure_format: str, label: str) -> str:
+    """Return ``content`` without atoms that have no coordinates, warning with the atoms dropped.
+
+    rfd3 reads every atom in its input as fixed context and, at inference, has no
+    representation for an unresolved one: its loader keeps an atom written with ``nan``
+    coordinates (``add_missing_atoms=False``), the transforms that place unresolved atoms
+    run only in training, and the NaN reaches the denoiser input, which fails with
+    ``Tensor contains NaNs!``. An atom absent from the file is what rfd3 expects for one
+    without coordinates, so those atoms are removed, as a PDB entry omits atoms it did
+    not resolve. Atom records with coordinates, and every other category, are kept.
+
+    Args:
+        content (str): PDB or CIF text.
+        structure_format (str): ``"pdb"`` or ``"cif"``.
+        label (str): Spec key the structure belongs to, named in the warning.
+
+    Returns:
+        str: ``content`` unchanged when every atom has coordinates, else the text without the
+            unresolved atoms.
+
+    Raises:
+        ValueError: If no atom in the structure has coordinates.
+    """
+    if structure_format == "cif":
+        cleaned, dropped, n_kept = _drop_unresolved_cif_atoms(content)
+    else:
+        cleaned, dropped, n_kept = _drop_unresolved_pdb_atoms(content)
+    if not dropped:
+        return content
+    if n_kept == 0:
+        raise ValueError(f"rfdiffusion3: {label}: no atom in the input structure has coordinates.")
+    count = sum(len(atoms) for atoms in dropped.values())
+    logger.warning(
+        "rfdiffusion3: %s: removing %d input atoms without coordinates, which rfd3 cannot "
+        "condition on (it reads every input atom as fixed context): %s",
+        label,
+        count,
+        "; ".join(f"{residue} {','.join(atoms)}" for residue, atoms in dropped.items()),
+    )
+    return cleaned
+
+
+def _stage_raw_json_input(value: str, label: str, stem: str, staging_dir: Callable[[], Path]) -> str:
+    """Return a ``raw_json`` ``"input"`` that names a structure file as an absolute path; leave content as is.
+
+    A file with atoms that have no coordinates is staged as ``{stem}_input.{ext}`` without
+    them (see ``_drop_unresolved_atoms``); the caller's file is never modified.
+    """
+    path = STRUCTURE_FILES.resolve(value)
+    if path is None:
+        return value
+    content = path.read_text()
+    structure_format = detect_structure_format(content)
+    cleaned = _drop_unresolved_atoms(content, structure_format, label)
+    if cleaned is content:
+        return str(path.resolve())
+    staged = staging_dir() / f"{stem}_input.{structure_format}"
+    staged.write_text(cleaned)
+    return str(staged)
 
 
 # ============================================================================
@@ -80,8 +181,8 @@ def _resolve_input_structure_path(value: str) -> str:
 class RFdiffusion3DesignSpec(BaseModel):
     r"""Single design specification for RFdiffusion3.
 
-    This class represents a single design task with its constraints. Multiple
-    design specs can be provided to generate designs under different conditions.
+    Specify a design task and its constraints. Provide multiple specifications
+    to generate designs under different conditions.
 
     For the full list of available InputSpecification fields, see:
     https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
@@ -89,6 +190,7 @@ class RFdiffusion3DesignSpec(BaseModel):
     Attributes:
         input_structure (Structure | None): Input structure (``Structure`` or PDB/CIF file path)
             for motif/binder design; written to a file before rfd3 (reads a path). Omit for de novo.
+            Atoms without coordinates are left out of that file, with a warning naming them.
 
         contig (str | None): Contig string specifying the design topology.
             Format: comma-separated segments with chain breaks as ``/0``. Examples:
@@ -159,9 +261,10 @@ class RFdiffusion3DesignSpec(BaseModel):
 
         ori_token (list[float] | None): ``[x, y, z]`` origin override (Angstroms).
 
-        partial_t (float | None): Noise level (in Angstroms) for partial diffusion.
-            Lower values preserve more of the input structure. Recommended values
-            are 5.0-15.0 Angstroms. Useful for refinement or local redesign tasks.
+        partial_t (float | None): Noise level (in Angstroms) for partial diffusion, which
+            resamples backbones near the input. Lower values preserve more of the input
+            structure. Recommended values are 5.0-15.0 Angstroms. Requires
+            ``select_fixed_atoms`` to unfix the atoms to re-noise.
 
         is_non_loopy (bool | None): If ``True``/``False``, produces output
             structures with fewer/more loops. ``None`` uses the model's
@@ -411,6 +514,12 @@ class RFdiffusion3DesignSpec(BaseModel):
                 "'length' must not be combined with 'partial_t': partial diffusion re-noises "
                 "'input_structure', so the design's extent comes from the input."
             )
+        if self.partial_t is not None and self.select_fixed_atoms in (None, True):
+            # Rule 5: upstream fixes every input atom by default, leaving nothing to re-noise.
+            raise ValueError(
+                "'partial_t' requires 'select_fixed_atoms' (the atoms to hold, e.g. a target chain, "
+                "or False to re-noise everything): with every input atom fixed, the input is returned unchanged."
+            )
         return self
 
     def to_dict(self) -> dict[str, Any]:
@@ -423,6 +532,8 @@ class RFdiffusion3DesignSpec(BaseModel):
         spec: dict[str, Any] = {}
 
         # input_structure is emitted by to_json_spec as a file path, not here.
+        # Emit only the fields that are set, so RFdiffusion3 keeps its defaults for the rest
+        # Copy the design topology: contig, length, ligand and unindexed residues
         if self.contig is not None:
             spec["contig"] = self.contig
         if self.length is not None:
@@ -431,6 +542,7 @@ class RFdiffusion3DesignSpec(BaseModel):
             spec["ligand"] = self.ligand
         if self.unindex is not None:
             spec["unindex"] = self.unindex
+        # Copy the fixed-atom, sequence, hotspot, symmetry, burial and H-bond conditioning
         if self.select_fixed_atoms is not None:
             spec["select_fixed_atoms"] = self.select_fixed_atoms
         if self.select_unfixed_sequence is not None:
@@ -449,6 +561,7 @@ class RFdiffusion3DesignSpec(BaseModel):
             spec["select_hbond_donor"] = self.select_hbond_donor
         if self.select_hbond_acceptor is not None:
             spec["select_hbond_acceptor"] = self.select_hbond_acceptor
+        # Copy the remaining design options
         if self.redesign_motif_sidechains is not None:
             spec["redesign_motif_sidechains"] = self.redesign_motif_sidechains
         if self.plddt_enhanced is not None:
@@ -468,9 +581,8 @@ class RFdiffusion3DesignSpec(BaseModel):
 class RFdiffusion3Input(BaseToolInput):
     """Input for RFdiffusion3 structure design.
 
-    This class provides a flexible interface for specifying one or more design
-    tasks for RFdiffusion3. Supports both structured Pydantic models for common
-    use cases and raw JSON passthrough for advanced users.
+    Specify one or more RFdiffusion3 design tasks using structured Pydantic models
+    for common use cases or raw JSON for options beyond those models.
 
     Attributes:
         design_specs (list[RFdiffusion3DesignSpec]): List of design specifications. Each
@@ -479,7 +591,8 @@ class RFdiffusion3Input(BaseToolInput):
 
         raw_json (str | None): Raw JSON string for advanced users who need
             full RFdiffusion3 flexibility. If provided, ``design_specs`` will be ignored
-            and this JSON will be passed directly to RFdiffusion3.
+            and this JSON will be passed directly to RFdiffusion3. An ``"input"`` file with
+            atoms that have no coordinates is staged as a copy without them.
 
     Examples:
         >>> # Simple unconditional design
@@ -519,26 +632,31 @@ class RFdiffusion3Input(BaseToolInput):
 
     def to_json_spec(self, input_dir: Path | None = None) -> str:
         """Convert input to RFdiffusion3 JSON spec, materializing any ``input_structure`` to a file path."""
+        dest: Path | None = None  # created only when a structure must be materialized
+
+        def staging_dir() -> Path:
+            nonlocal dest
+            if dest is None:
+                dest = Path(input_dir) if input_dir is not None else Path(tempfile.mkdtemp(prefix="rfd3_input_"))
+                dest.mkdir(parents=True, exist_ok=True)
+            return dest
+
         if self.raw_json:
-            spec = json.loads(self.raw_json)
-            for item in spec.values() if isinstance(spec, dict) else []:
+            raw_spec = json.loads(self.raw_json)
+            for i, (key, item) in enumerate(raw_spec.items() if isinstance(raw_spec, dict) else []):
                 if isinstance(item, dict) and isinstance(item.get("input"), str):
-                    item["input"] = _resolve_input_structure_path(item["input"])
-            return json.dumps(spec, indent=2)
+                    item["input"] = _stage_raw_json_input(item["input"], str(key), f"raw-{i}", staging_dir)
+            return json.dumps(raw_spec, indent=2)
 
         spec_dict: dict[str, Any] = {}
-        dest: Path | None = None  # created only when a structure must be materialized
         for i, spec in enumerate(self.design_specs):
             spec_key = f"spec-{i}"
             spec_dict[spec_key] = spec.to_dict()
             if spec.input_structure is not None:
-                if dest is None:
-                    dest = Path(input_dir) if input_dir is not None else Path(tempfile.mkdtemp(prefix="rfd3_input_"))
-                    dest.mkdir(parents=True, exist_ok=True)
                 # rfd3 needs a path: write the structure to a file, set "input" to it.
                 ext = spec.input_structure.structure_format or "pdb"
-                structure_path = dest / f"{spec_key}_input.{ext}"
-                structure_path.write_text(spec.input_structure.structure)
+                structure_path = staging_dir() / f"{spec_key}_input.{ext}"
+                structure_path.write_text(_drop_unresolved_atoms(spec.input_structure.structure, ext, spec_key))
                 spec_dict[spec_key]["input"] = str(structure_path)
 
         return json.dumps(spec_dict, indent=2)
@@ -563,7 +681,7 @@ class RFdiffusion3SamplerTuning(BaseModel):
     The settings below are the commonly tuned sampler parameters; each is validated,
     defaults to ``None``, and is forwarded to ``inference_sampler.<name>`` only
     when set, otherwise inheriting the checkpoint's upstream default. Any other
-    valid ``inference_sampler`` field (e.g. ``cfg_t_max``, ``s_min``, ``s_max``)
+    valid ``inference_sampler`` field (e.g. ``s_min`` or ``s_max``)
     may be passed as an extra keyword and is forwarded verbatim. See
     https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
 
@@ -631,15 +749,15 @@ class RFdiffusion3SamplerTuning(BaseModel):
 class RFdiffusion3Config(BaseConfig):
     """Configuration for RFdiffusion3 structure design.
 
-    This class defines configuration parameters for running RFdiffusion3,
-    controlling the number of designs generated, diffusion parameters,
-    and execution options.
+    Choose the number of designs, diffusion parameters, and execution settings.
 
     Attributes:
         n_batches (int): Independent batches per spec
             (total designs = ``n_batches * diffusion_batch_size * num_specs``).
         diffusion_batch_size (int): Designs sampled in parallel per batch.
-        num_timesteps (int): Diffusion timesteps; more = slower, generally higher quality.
+        num_timesteps (int): Diffusion timesteps; at least two are required to
+            define one denoising transition, and more are slower but generally
+            higher quality.
         step_scale (float): Step size scale; higher = less diverse, more designable.
         sampler_kind (Literal['default', 'symmetry']): Sampler kind;
             ``'symmetry'`` for homo-oligomer design (paired with ``DesignSpec.symmetry``).
@@ -648,6 +766,11 @@ class RFdiffusion3Config(BaseConfig):
             ``diffuse`` (diffused region only).
         use_classifier_free_guidance (bool): Enable CFG sampling.
         cfg_scale (float): CFG scale factor (typical 1.0-3.0); no-op when CFG is off.
+        cfg_t_max (float | None): Noise level below which CFG stops being applied.
+            Compared against the sampler's noise schedule, not a normalized time:
+            with upstream defaults that schedule runs from about 2560 down to
+            0.0064, so a small value such as ``0.5`` leaves CFG on for nearly the
+            whole rollout. ``None`` (the default) applies CFG at every step.
         gamma_0 (float): Sampler stochasticity; lower = more designable,
             less diverse; ``0.0`` = deterministic ODE. Must be ``> 0.5``
             when ``sampler_kind="symmetry"``.
@@ -665,8 +788,8 @@ class RFdiffusion3Config(BaseConfig):
         device (str): ``"cuda"`` or ``"cpu"``.
 
     Note:
-        Headline sampler controls (``sampler_kind``, ``cfg_scale``, ``gamma_0``,
-        ``center_option``, ``use_classifier_free_guidance``) are top-level fields.
+        Headline sampler controls (``sampler_kind``, ``cfg_scale``, ``cfg_t_max``,
+        ``gamma_0``, ``center_option``, ``use_classifier_free_guidance``) are top-level fields.
         Finer ``inference_sampler`` settings live under ``sampler_tuning`` (a typed
         :class:`RFdiffusion3SamplerTuning`), e.g.
         ``RFdiffusion3Config(sampler_tuning={"noise_scale": 1.003})``. See
@@ -688,8 +811,8 @@ class RFdiffusion3Config(BaseConfig):
     num_timesteps: int = ConfigField(
         title="Number of Timesteps",
         default=200,
-        ge=1,
-        description="Diffusion timesteps for sampling (more = slower, generally higher quality)",
+        ge=2,
+        description="Diffusion steps (minimum 2; more is slower and generally higher quality)",
     )
     step_scale: float = ConfigField(
         title="Step Scale",
@@ -718,6 +841,12 @@ class RFdiffusion3Config(BaseConfig):
         default=1.5,
         ge=0.0,
         description="CFG scale (typical: 1.0-3.0); requires use_classifier_free_guidance=True",
+    )
+    cfg_t_max: float | None = ConfigField(
+        title="CFG Noise Level Floor",
+        default=None,
+        ge=0.0,
+        description="Noise level below which CFG stops being applied; None applies it throughout",
     )
     gamma_0: float = ConfigField(
         title="Gamma 0",
@@ -811,6 +940,8 @@ class RFdiffusion3Config(BaseConfig):
                 "inference_sampler.gamma_0": self.gamma_0,
             }
         )
+        if self.cfg_t_max is not None:
+            cli_kwargs["inference_sampler.cfg_t_max"] = self.cfg_t_max
         return cli_kwargs
 
 
@@ -987,6 +1118,44 @@ def _canonicalize_design_chain_ids(structure: Structure) -> Structure:
     return structure.with_renamed_chains(dict(zip(observed, target, strict=True)))
 
 
+# Spec fields that feed the three upstream ``cfg_features`` tensors: select_hbond_donor and
+# select_hbond_acceptor set ``active_donor``/``active_acceptor``, and the three RASA selectors
+# set ``rasa_bin``, which becomes ``ref_atomwise_rasa``. select_hotspots is not among them --
+# it sets ``is_atom_level_hotspot``, which CFG never strips.
+_CFG_FEATURE_FIELDS = (
+    "select_buried",
+    "select_partially_buried",
+    "select_exposed",
+    "select_hbond_donor",
+    "select_hbond_acceptor",
+)
+
+# ``unindex`` carries no CFG feature tensor, but upstream ``strip_f`` crops unindexed-motif atoms
+# out of the reference pass regardless of ``cfg_features``, so CFG still guides away from that
+# conditioning and is not a no-op for such a spec.
+_CFG_CONDITIONING_FIELDS = (*_CFG_FEATURE_FIELDS, "unindex")
+
+
+def _unguided_cfg_specs(inputs: RFdiffusion3Input) -> list[str]:
+    """Return every spec key for which classifier-free guidance would be a no-op."""
+    specs: Iterable[tuple[str, Any]]
+    if inputs.raw_json:
+        payload = json.loads(inputs.raw_json)
+        if not isinstance(payload, dict):
+            raise ValueError("RFdiffusion3 raw_json must contain a top-level object of named design specs")
+        specs = ((str(key), value) for key, value in payload.items())
+    else:
+        specs = ((f"spec-{index}", spec.to_dict()) for index, spec in enumerate(inputs.design_specs))
+
+    unguided: list[str] = []
+    for spec_key, spec in specs:
+        # A falsy selector carries no conditioning: ``None`` and empty str/list/dict leave the
+        # feature unset, and an explicit ``False`` switches it off, so neither enables CFG.
+        if not isinstance(spec, dict) or not any(spec.get(field) for field in _CFG_CONDITIONING_FIELDS):
+            unguided.append(str(spec_key))
+    return unguided
+
+
 @tool(
     key="rfdiffusion3-design",
     label="RFdiffusion3 Structure Design",
@@ -1006,9 +1175,8 @@ def _canonicalize_design_chain_ids(structure: Structure) -> Structure:
 def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, instance: Any = None) -> RFdiffusion3Output:
     """Design protein structures using RFdiffusion3.
 
-    Uses RFdiffusion3, a diffusion-based generative model, to design novel
-    protein structures under specified constraints. Unlike structure prediction,
-    RFdiffusion3 generates both structure AND sequence, making it suitable for:
+    RFdiffusion3 generates protein structures and sequences under the supplied
+    constraints. It supports the following design tasks.
 
     - De novo protein design (unconditional generation)
     - Motif scaffolding (design around fixed structural motifs)
@@ -1016,7 +1184,7 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
     - Enzyme design (scaffold around catalytic sites)
     - Symmetric protein design (design homo-oligomers)
 
-    Runs via local GPU execution in isolated Python environments.
+    Run the model on a local GPU in an isolated Python environment.
 
     Args:
         inputs (RFdiffusion3Input): Validated input containing one or more design
@@ -1050,10 +1218,22 @@ def run_rfdiffusion3(inputs: RFdiffusion3Input, config: RFdiffusion3Config, inst
         >>> print(f"First sequence (chain A): {bundle[0].complex.chains[0].sequence}")
 
     Note:
-        - RFdiffusion3 generates both structure AND sequence
+        - Each design includes a structure and sequence.
         - Memory usage scales with batch size and protein length
         - Dependency isolation is handled automatically via venv subprocess
     """
+    if config.use_classifier_free_guidance:
+        unguided_cfg_specs = _unguided_cfg_specs(inputs)
+        if unguided_cfg_specs:
+            logger.warning(
+                "use_classifier_free_guidance=True, but specs %s set no native CFG feature "
+                "(select_buried/select_partially_buried/select_exposed/select_hbond_*) and no "
+                "'unindex'. Hotspot controls are distinct from CFG features, so guidance cancels "
+                "to an identical prediction for these specs while doubling the forward passes. "
+                "Set a feature selector, or disable CFG for unconditional and hotspot-only generation.",
+                unguided_cfg_specs,
+            )
+
     logger.debug("Using local GPU for RFdiffusion3 structure design...")
 
     with tempfile.TemporaryDirectory() as temp_dir_str:

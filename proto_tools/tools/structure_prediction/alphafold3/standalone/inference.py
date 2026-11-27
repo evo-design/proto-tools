@@ -2,8 +2,8 @@
 
 Two execution paths, selected at runtime based on what setup.sh provisioned:
 
-1. Sif path (preferred): runs ``run_alphafold.py`` inside a pre-built AlphaFold3
-   container image via ``apptainer exec <sif>``. Robust across systems.
+1. Sif path (preferred): invokes ``apptainer exec`` or ``singularity exec``
+   against a pre-built AlphaFold3 container image. Robust across systems.
 2. Env path (fallback): invokes ``python run_alphafold.py`` directly from a
    source clone of AlphaFold3 installed into the tool's micromamba venv.
 
@@ -17,13 +17,19 @@ Worker protocol implementation for ToolInstance integration.
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 import numpy as np
-from Bio import PDB
 
 # Import from the published standalone_helpers
-from standalone_helpers import get_logger, get_subprocess_device_env, resolve_weights_dir
+from standalone_helpers import (
+    ContainerRuntime,
+    get_logger,
+    get_subprocess_device_env,
+    resolve_container_runtime,
+    resolve_weights_dir,
+)
 
 logger = get_logger(__name__)
 
@@ -61,9 +67,9 @@ def _resolve_sif_path(override: str | None = None) -> str | None:
     if override:
         if not os.path.exists(override):
             raise FileNotFoundError(f"alphafold3: config sif_path does not exist: {override}")
-        return override
+        return os.path.abspath(override)
     default = os.path.join(_venv_path(), "alphafold3.sif")
-    return default if os.path.exists(default) else None
+    return os.path.abspath(default) if os.path.exists(default) else None
 
 
 def _resolve_repo_path() -> str:
@@ -101,18 +107,11 @@ def _extract_structure_and_scores(
         include_pae_matrix (bool): Attach the full per-residue PAE matrix.
 
     Returns:
-        tuple[str, dict[str, Any]]: Tuple of (pdb_path, scores_dict).
+        tuple[str, dict[str, Any]]: Tuple of (path to AlphaFold3's own mmCIF, scores_dict). The
+            mmCIF is returned as AlphaFold3 wrote it, entity records included.
     """
     alphafold3_results_folder = os.path.join(output_dir, name)
-    alphafold3_structure = os.path.join(alphafold3_results_folder, f"{name}_model.cif")
-
-    # Convert mmCIF structure file to PDB format.
-    pdb_path = os.path.join(output_dir, f"{name}_af3.pdb")
-    parser = PDB.MMCIFParser(QUIET=True)  # type: ignore[attr-defined, no-untyped-call]
-    io = PDB.PDBIO()  # type: ignore[attr-defined, no-untyped-call]
-    structure = parser.get_structure("structure", alphafold3_structure)  # type: ignore[no-untyped-call]
-    io.set_structure(structure)  # type: ignore[no-untyped-call]
-    io.save(pdb_path)  # type: ignore[no-untyped-call]
+    cif_path = os.path.join(alphafold3_results_folder, f"{name}_model.cif")
 
     # Extract confidence scores from AlphaFold3 JSON output files.
     summary_confidences_path = os.path.join(alphafold3_results_folder, f"{name}_summary_confidences.json")
@@ -136,7 +135,7 @@ def _extract_structure_and_scores(
     with open(f"{output_dir}/metadata.json", "w") as f:
         json.dump(alphafold3_scores, f, indent=2)
 
-    return pdb_path, alphafold3_scores
+    return cif_path, alphafold3_scores
 
 
 # ============================================================================
@@ -153,6 +152,7 @@ class AlphaFold3Model:
         self.sif_path: str | None = None  # set when running via apptainer
         self.repo_path: str | None = None  # set when running via env
         self.model_dir: str | None = None
+        self.container_runtime: ContainerRuntime | None = None
 
     def load(self, sif_path: str | None = None) -> None:
         """Resolve execution-path + weights paths and verify they exist.
@@ -169,6 +169,25 @@ class AlphaFold3Model:
         resolved_sif = _resolve_sif_path(sif_path)
         if resolved_sif:
             self.sif_path = resolved_sif
+            venv_path = os.environ.get("VIRTUAL_ENV") or os.environ.get("TOOL_VENV_PATH") or os.environ.get("VENV_PATH")
+            configured_executables: tuple[Path, ...] = ()
+            if venv_path:
+                venv_bin = Path(venv_path) / "bin"
+                configured_executables = (
+                    venv_bin / "apptainer",
+                    venv_bin / "singularity",
+                )
+            try:
+                self.container_runtime = resolve_container_runtime(
+                    resolved_sif,
+                    configured_executables=configured_executables,
+                )
+            except FileNotFoundError as exc:
+                raise FileNotFoundError(
+                    "alphafold3: a sif image is configured but no Apptainer or "
+                    "Singularity executable is available in the tool environment "
+                    "or on PATH"
+                ) from exc
             logger.debug("AlphaFold3: using sif path %s", self.sif_path)
         else:
             self.repo_path = _resolve_repo_path()
@@ -181,7 +200,7 @@ class AlphaFold3Model:
                 "alphafold3: unable to resolve weights directory; "
                 "set PROTO_ALPHAFOLD3_WEIGHTS_DIR or configure PROTO_MODEL_CACHE"
             )
-        self.model_dir = weights_dir
+        self.model_dir = os.path.abspath(weights_dir)
 
         has_weights = any(
             f.endswith((".bin", ".bin.zst"))
@@ -209,10 +228,18 @@ class AlphaFold3Model:
         """Build the AlphaFold3 subprocess argv for whichever path is active."""
         assert self.model_dir is not None  # set by load()
 
+        # Apptainer requires an absolute destination for every bind.  Tool callers
+        # are allowed to pass relative artifact paths, so normalize every path that
+        # crosses the nested-container boundary here rather than imposing an
+        # undocumented restriction on the public API.
+        input_json_path = os.path.abspath(input_json_path)
+        output_dir = os.path.abspath(output_dir)
+        model_dir = os.path.abspath(self.model_dir)
+
         common_args = [
             f"--json_path={input_json_path}",
             f"--output_dir={output_dir}",
-            f"--model_dir={self.model_dir}",
+            f"--model_dir={model_dir}",
             f"--num_recycles={num_recycles}",
             f"--num_diffusion_samples={num_diffusion_samples}",
             "--norun_data_pipeline",
@@ -224,32 +251,29 @@ class AlphaFold3Model:
             # The lab BYO image stores AF3 at /app/alphafold; the proto-built
             # image stores it at /opt/alphafold3.
             input_dir = os.path.dirname(input_json_path)
-            apptainer_bin = os.path.join(_venv_path(), "bin", "apptainer")
-            return [
-                apptainer_bin,
-                "exec",
-                "--nv",
-                "--env",
-                "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu",
-                "--bind",
-                f"{input_dir}:{input_dir}",
-                "--bind",
-                f"{output_dir}:{output_dir}",
-                "--bind",
-                f"{self.model_dir}:{self.model_dir}",
-                self.sif_path,
-                "sh",
-                "-lc",
-                (
+            if self.container_runtime is None:
+                raise RuntimeError("alphafold3: container runtime was not resolved during load")
+            command: list[str] = self.container_runtime.build_exec_command(
+                arguments=common_args,
+                binds=[
+                    (input_dir, input_dir),
+                    (output_dir, output_dir),
+                    (model_dir, model_dir),
+                ],
+                entrypoint=[
+                    "sh",
+                    "-lc",
                     "if [ -f /app/alphafold/run_alphafold.py ]; then "
                     'exec python3 /app/alphafold/run_alphafold.py "$@"; '
                     "elif [ -f /opt/alphafold3/run_alphafold.py ]; then "
                     'exec python /opt/alphafold3/run_alphafold.py "$@"; '
-                    'else exec python3 run_alphafold.py "$@"; fi'
-                ),
-                "alphafold3",
-                *common_args,
-            ]
+                    'else exec python3 run_alphafold.py "$@"; fi',
+                    "alphafold3",
+                ],
+                environment={"LD_LIBRARY_PATH": "/usr/lib/x86_64-linux-gnu"},
+                gpu=True,
+            )
+            return command
 
         # Env path: direct python subprocess against the cloned repo.
         assert self.repo_path is not None
@@ -287,7 +311,7 @@ class AlphaFold3Model:
             num_diffusion_samples (int): Diffusion samples per seed (AF3 --num_diffusion_samples, default 5).
 
         Returns:
-            dict[str, Any]: Dict with ``structure_pdb`` (path to generated PDB) and
+            dict[str, Any]: Dict with ``structure_cif`` (path to AlphaFold3's mmCIF) and
                 ``metrics`` (confidence scores).
 
         Raises:
@@ -295,6 +319,9 @@ class AlphaFold3Model:
         """
         if not self._loaded:
             self.load(sif_path=sif_path)
+
+        input_json_path = os.path.abspath(input_json_path)
+        output_dir = os.path.abspath(output_dir)
 
         # Load input JSON (MSAs already generated by main process)
         with open(input_json_path) as f:
@@ -336,7 +363,7 @@ class AlphaFold3Model:
 
         logger.debug("AlphaFold3 execution completed successfully.")
 
-        pdb_path, alphafold3_scores = _extract_structure_and_scores(
+        cif_path, alphafold3_scores = _extract_structure_and_scores(
             output_dir,
             input_json["name"],
             verbose=verbose,
@@ -344,7 +371,7 @@ class AlphaFold3Model:
         )
 
         return {
-            "structure_pdb": pdb_path,
+            "structure_cif": cif_path,
             "metrics": alphafold3_scores,
         }
 
@@ -365,7 +392,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         input_dict (dict[str, Any]): Input parameters from ToolInstance.dispatch().
 
     Returns:
-        dict[str, Any]: Dict with structure_pdb and metrics.
+        dict[str, Any]: Dict with structure_cif and metrics.
     """
     global _model
 

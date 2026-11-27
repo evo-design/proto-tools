@@ -5,16 +5,11 @@ import math
 from typing import Any, ClassVar, Literal, cast
 
 from pydantic import field_validator, model_validator
-from standalone_helpers.mixed_sequence import (
-    AMBIGUOUS_PROTEIN_TOKENS,
-    DNA_TOKENS,
-    PROTEIN_TOKENS,
-    STRAND_TOKENS,
-    tokenize_mixed_sequence,
-)
+from standalone_helpers.mixed_sequence import STRAND_TOKENS, tokenize_mixed_sequence
+from standalone_helpers.vocabulary import AMBIGUOUS_PROTEIN_TOKENS, DNA_TOKENS, PROTEIN_TOKENS
 
 from proto_tools.transforms.masking import MaskingInput, MaskingStrategy
-from proto_tools.utils import AminoAcid, BaseConfig, ConfigField
+from proto_tools.utils import AminoAcid, BaseConfig, ConfigField, RelaxationConfig
 from proto_tools.utils.base_config import _marked_preprocessed
 from proto_tools.utils.sequence import normalize_excluded_amino_acids
 
@@ -25,7 +20,7 @@ PROTECTED_TOKENS = frozenset(STRAND_TOKENS + AMBIGUOUS_PROTEIN_TOKENS)
 
 
 class MixedModelConfig(BaseConfig):
-    """Shared execution configuration; registered tools specialize checkpoint choices.
+    """Shared execution settings with checkpoint choices supplied by each registered tool.
 
     Attributes:
         model_checkpoint (str): Public Hugging Face checkpoint.
@@ -51,7 +46,10 @@ class MixedModelConfig(BaseConfig):
 
     def preprocess(self, inputs: Any) -> Any:
         """Check context limits before loading weights and warn on a missing leading strand marker."""
-        sequences = inputs.sequences if hasattr(inputs, "sequences") else [inputs.sequence]
+        # Read templates from the sequence list or from each gradient candidate.
+        sequences = (
+            list(inputs.sequences) if hasattr(inputs, "sequences") else [item.sequence for item in inputs.inputs]
+        )
         limit = self.context_limits[self.model_checkpoint]
         for index, sequence in enumerate(sequences):
             tokens = tokenize_mixed_sequence(sequence, allow_masks=True)
@@ -195,7 +193,8 @@ class MixedSampleConfig(MixedModelConfig):
                     "Remove '_' tokens to use the strategy, or omit masking_strategy to silence this warning."
                 )
             return inputs
-        # One-character tokens make string indices token positions; strand markers stay fixed.
+        # Each token is one character, so string indices also identify token positions.
+        # Strand markers remain fixed.
         sequences = ["".join(tokenize_mixed_sequence(sequence)) for sequence in inputs.sequences]
         position_score_fn = None
         if self.masking_strategy.method != "random":
@@ -245,19 +244,18 @@ class MixedSampleConfig(MixedModelConfig):
         return inputs.model_copy(update={"sequences": masked, "mask_modalities": modalities})
 
 
-class MixedGradientConfig(MixedModelConfig):
+class MixedGradientConfig(MixedModelConfig, RelaxationConfig):
     """Differentiable masked pseudo-log-likelihood options.
 
     Attributes:
-        use_ste (bool): Use hard forward tokens with a soft backward derivative.
+        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
+            (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
+            and ColabDesign parity. See
+            :class:`~proto_tools.utils.gradient.models.RelaxationConfig`.
+        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
         compute_gradient (bool): Compute a backward pass, or return only the objective.
     """
 
-    use_ste: bool = ConfigField(
-        default=False,
-        title="Straight-Through Estimator",
-        description="Use hard one-hot forward tokens with soft-probability gradients",
-    )
     compute_gradient: bool = ConfigField(
         default=True,
         title="Compute Gradient",

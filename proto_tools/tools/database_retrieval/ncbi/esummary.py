@@ -161,7 +161,7 @@ def run_ncbi_esummary(
         inputs (NCBIEsummaryInput): Database and identifier to summarize.
         config (NCBIFetchConfig): NCBI API key and email settings.
 
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         NCBIEsummaryOutput: Record summary and the sanitized request URL.

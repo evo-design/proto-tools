@@ -159,6 +159,7 @@ def run_cherimoya_score(
         CherimoyaScoreOutput: Per-sequence log counts (and target counts when a
             ``target_range`` is set) for every requested model.
     """
+    # Cut each input to a model window and express any target range relative to the output span
     windows = inputs.prepared_windows()
     target_spans = None
     if windows[0].target_start is not None:
@@ -166,6 +167,7 @@ def run_cherimoya_score(
         for window in windows:
             assert window.target_start is not None and window.target_end is not None  # noqa: S101 -- all-or-none
             target_spans.append((window.target_start - window.output_start, window.target_end - window.output_start))
+    # Expand the requested models into one checkpoint spec per (model, fold)
     specs = checkpoint_specs(config.models, config.folds, config.collection)
 
     logger.debug("Using local venv for Cherimoya scoring")
@@ -185,12 +187,14 @@ def run_cherimoya_score(
         instance=instance,
         config=config,
     )
+    # Check the worker ran the requested checkpoints and returned one row per window and model
     infos = model_infos(config.models, config.collection, specs, result["applied"])
     rows = result["scores"]
     if len(rows) != len(windows):
         raise ValueError(f"Expected {len(windows)} Cherimoya score rows, got {len(rows)}")
     check_row_models(rows, config.models)
 
+    # Pair each input sequence with its window coordinates and per-model scores
     results = []
     for raw, window, row in zip(inputs.sequences, windows, rows, strict=True):
         scores = [

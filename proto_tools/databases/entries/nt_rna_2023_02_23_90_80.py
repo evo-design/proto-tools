@@ -4,22 +4,21 @@ RNA-only filtered subset of NCBI nt, clustered. Used as a deeper fallback
 when RNAcentral + Rfam don't produce enough homologs. ~30 GB FASTA.
 """
 
+from proto_tools.databases.mmseqs2 import MMseqs2DatabaseEntry, MMseqs2SearchFlags
 from proto_tools.databases.registry import (
-    DatasetEntry,
+    BuildRecipe,
+    BuildStep,
     DatasetRegistry,
     DownloadSpec,
-    IndexRecipe,
-    IndexStep,
-    MmseqsFlags,
 )
 
-ENTRY = DatasetEntry(
+ENTRY = MMseqs2DatabaseEntry(
     name="nt-rna-2023-02-23-90-80",
     molecule_type="rna",
     display_name="NCBI nt-rna (2023_02_23, clustered 90/80)",
     description="RNA-filtered NCBI nt subset, clustered — AF3 RNA fallback DB.",
     citation_doi="10.1093/nar/gkr1184",  # NCBI nt — Sayers et al.
-    urls=[
+    downloads=[
         DownloadSpec(
             url="https://storage.googleapis.com/alphafold-databases/v3.0/nt_rna_2023_02_23_clust_seq_id_90_cov_80_rep_seq.fasta.zst",
             filename="nt_rna_2023_02_23_clust_seq_id_90_cov_80_rep_seq.fasta.zst",
@@ -27,13 +26,13 @@ ENTRY = DatasetEntry(
     ],
     total_download_bytes=30_000_000_000,
     total_disk_bytes=30_000_000_000,
-    index_recipe=IndexRecipe(
+    build=BuildRecipe(
         steps=[
-            IndexStep(
+            BuildStep(
                 command=["zstd", "-d", "--rm", "nt_rna_2023_02_23_clust_seq_id_90_cov_80_rep_seq.fasta.zst"],
                 description="Decompress source FASTA",
             ),
-            IndexStep(
+            BuildStep(
                 command=[
                     "mmseqs",
                     "createdb",
@@ -42,7 +41,7 @@ ENTRY = DatasetEntry(
                 ],
                 description="Build MMseqs2 nucleotide DB from FASTA",
             ),
-            IndexStep(
+            BuildStep(
                 command=[
                     "mmseqs",
                     "createindex",
@@ -63,10 +62,8 @@ ENTRY = DatasetEntry(
             "nt_rna.index",
         ],
     ),
-    mmseqs_flags=MmseqsFlags(sensitivity=7.0, prefilter_mode=0, max_seqs=300),
+    search_flags=MMseqs2SearchFlags(sensitivity=7.0, prefilter_mode=0, max_seqs=300),
     db_prefix="nt_rna",
-    supports_gpu=False,
-    min_gpu_memory_gb=None,
     a3m_adapter="rna",
 )
 

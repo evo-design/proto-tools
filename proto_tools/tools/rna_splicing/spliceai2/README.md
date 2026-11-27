@@ -23,7 +23,7 @@ Internally, a stack of dilated convolutional blocks reads the sequence at progre
 
 To score a variant, SpliceAI2 compares predictions for the reference and alternate alleles and reports the ten largest gains and losses in donor, acceptor, and junction usage, plus a single `summary_score` in [0, 1]. In Illumina's benchmarks it outperformed SpliceAI, Pangolin, and AlphaGenome, most clearly on cryptic splice variants deep in introns (auPRC 0.77 versus 0.66 for SpliceAI on GTEx). Eight of its output fields map one-to-one onto SpliceAI's delta scores and positions (`DS_DG`, `DS_DL`, `DS_AG`, `DS_AL`, `DP_*`), so existing SpliceAI pipelines translate directly.
 
-This toolkit runs the released multispecies ensemble; the tissue-specific and disease-state models described in the manuscript are not publicly released.
+This toolkit runs the released multispecies ensemble. The tissue-specific and disease-state models described in the manuscript are not publicly released.
 
 ### Learning Resources
 
@@ -44,9 +44,9 @@ Use this to triage candidate variants from a sequencing study for splicing impac
 #### Usage Tips
 
 - **`strand` is required for every variant.** It is the strand of the gene the variant is scored against. When it is unknown, score the variant on both strands as two separate entries and aggregate the predictions (as the upstream README recommends).
-- **Filter on `summary_score` with the upstream thresholds.** 0.1 for high recall, 0.25 to balance precision and recall, 0.5 for high precision (the SpliceAI equivalents are 0.2 / 0.5 / 0.8). The summary score is the maximum of the strongest donor gain, donor loss, acceptor gain, and acceptor loss delta scores; junction effects are reported but excluded from it.
+- **Filter on `summary_score` with the upstream thresholds.** 0.1 for high recall, 0.25 to balance precision and recall, 0.5 for high precision (the SpliceAI equivalents are 0.2 / 0.5 / 0.8). The summary score is the maximum of the strongest donor gain, donor loss, acceptor gain, and acceptor loss delta scores. Junction effects are reported but excluded from it.
 - **`reference_fasta` is required.** Pass `'grch38'` (or `'grch37'`; `'hg38'`/`'hg19'` also work), which is downloaded on first use, or a path to a local FASTA. A `chr` prefix on `chromosome` is added or dropped to match the FASTA (`'chr1'` and `'1'` both work), and `ref` must match the genome at `position`.
-- **Keep `assembly='GRCh38'` for any human variant, including GRCh37 coordinates.** `assembly` selects the species channel the model is conditioned on, not the coordinate system; set it to another training assembly only for non-human sequence.
+- **Keep `assembly='GRCh38'` for any human variant, including GRCh37 coordinates.** `assembly` selects the species channel the model is conditioned on, not the coordinate system. Set it to another training assembly only for non-human sequence.
 - **The scoring geometry is fixed.** Each allele is scored in a 196,608 bp window centered on the variant, changes are reported within ±32,768 bp, both alleles share 1,024 candidate splice sites, and predictions average the two-model ensemble. These are the values the model was trained and evaluated with, so they are not configurable. Positions beyond a chromosome end are padded with all-zero (unknown) input.
 
 ### SpliceAI2 Splice and Transcript Prediction (`spliceai2-predict`)
@@ -60,8 +60,8 @@ Use this to map the splice-usage landscape of a gene or locus, to see which junc
 #### Usage Tips
 
 - **Embed short constructs in genomic context where possible.** Every input is padded with 65,536 bp of unknown (all-zero) context per side, so predictions cover every input position at any length. Isolated short sequences fall outside what the model was evaluated on (it always saw real flanking genome), so prefer including the surrounding genomic sequence and reading predictions over the region of interest.
-- **Coordinates are 1-based and intron-anchored.** Donor usage is scored at the intron's first base and acceptor usage at its last base; each junction's `donor` and `acceptor` are those intron boundary positions. Transcript `exons` are 1-based inclusive intervals.
-- **Transcript ends are not predicted.** The first and last exon of every decoded transcript extend to the start and end of the input sequence, because SpliceAI2 does not model transcription start or end sites. `num_transcripts` (default 3) sets how many top-scoring paths are decoded; duplicates are dropped, so fewer may be returned, and none are returned when fewer than two candidate sites clear 0.01 usage.
+- **Coordinates are 1-based and intron-anchored.** Donor usage is scored at the intron's first base and acceptor usage at its last base. Each junction's `donor` and `acceptor` are those intron boundary positions. Transcript `exons` are 1-based inclusive intervals.
+- **Transcript ends are not predicted.** The first and last exon of every decoded transcript extend to the start and end of the input sequence, because SpliceAI2 does not model transcription start or end sites. `num_transcripts` (default 3) sets how many top-scoring paths are decoded. Duplicates are dropped, so fewer may be returned, and none are returned when fewer than two candidate sites clear 0.01 usage.
 - **Junctions are reported at usage >= 0.01** between candidate sites (positions whose donor or acceptor usage exceeds 0.01), ordered by donor then acceptor.
 - **`N` bases are encoded as `A`, matching upstream.** Ambiguous bases are read as adenine rather than as missing sequence, so avoid `N` runs in regions you care about; only the padding outside the input is all-zero.
 - **Use `assembly='GRCh38'` for any human sequence.** It selects the species channel the model is conditioned on; choose another training assembly only for non-human sequence.
@@ -74,6 +74,6 @@ Use this to map the splice-usage landscape of a gene or locus, to see which junc
 These apply to both SpliceAI2 tools in this toolkit (`spliceai2-score`, `spliceai2-predict`).
 
 - **CUDA GPU required.** SpliceAI2 runs only on GPU (default `device="cuda"`). As upstream does, `spliceai2-score` runs under 16-bit mixed precision and `spliceai2-predict` in full precision.
-- **Gated weights.** The two ensemble checkpoints are gated on HuggingFace. Accept the terms at [illumina-ai/SpliceAI2](https://huggingface.co/illumina-ai/SpliceAI2) and set `HF_TOKEN` (or run `hf auth login`); the standalone environment then downloads both checkpoints automatically.
+- **Gated weights.** The two ensemble checkpoints are gated on HuggingFace. Accept the terms at [illumina-ai/SpliceAI2](https://huggingface.co/illumina-ai/SpliceAI2) and set `HF_TOKEN` (or run `hf auth login`). The standalone environment then downloads both checkpoints automatically.
 - **Run it yourself.** The license prohibits hosting and third-party access, so run SpliceAI2 locally on your own GPU, or deploy it on your own Modal account and use `device='modal'`.
 - **Scope of the release.** This toolkit runs the released multispecies ensemble. Illumina's tissue-specific fine-tuned models are not publicly released, and the precomputed genome-wide scores (HuggingFace dataset [illumina-ai/SpliceAI2-data](https://huggingface.co/datasets/illumina-ai/SpliceAI2-data)) are not part of this toolkit.

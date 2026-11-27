@@ -43,7 +43,7 @@ def test_energy_input_rejects_invalid_chain():
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_run_pyrosetta_energy_on_pdb():
     """Default path: no relax preprocess; score the input structure as-given."""
     structure = Structure(structure=TEST_PDB)
@@ -72,7 +72,7 @@ def test_run_pyrosetta_energy_on_pdb():
     assert residue.residue_index >= 1
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_run_pyrosetta_energy_chain_selection_filters_residues():
     """Chain A selection should return fewer residues than whole complex."""
     from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
@@ -97,7 +97,7 @@ def test_run_pyrosetta_energy_chain_selection_filters_residues():
     assert all(r.chain_id == "A" for r in chain_a_res.per_residue), "All residues should be from chain A"
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_run_pyrosetta_energy_with_pre_relax_preprocess():
     """Setting pre_relax_structures=True should run pyrosetta-relax before scoring.
 
@@ -129,14 +129,14 @@ def test_run_pyrosetta_energy_with_pre_relax_preprocess():
     )
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_ref2015_energy_matches_reference_rosetta_init():
     """ref2015 scores with REF2015's database parameters, untouched by the beta_nov16 corrections."""
     result = run_pyrosetta_energy(PyRosettaEnergyInput(inputs=[TEST_PDB]))
     assert result.results[0].total_energy == pytest.approx(REF2015_TOTAL, abs=0.01)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_persistent_worker_scores_each_scorefxn_with_matching_corrections():
     """One persistent worker serves beta_nov16, SAP, and ref2015 calls in any order with correct energies."""
     inputs = PyRosettaEnergyInput(inputs=[TEST_PDB])

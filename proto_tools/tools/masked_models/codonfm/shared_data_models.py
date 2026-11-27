@@ -6,17 +6,16 @@ The tools score coding sequences (CDS) at codon resolution: mutation effect
 log-likelihood), CLS embeddings, and a differentiable codon objective.
 """
 
-import hashlib
 import math
-import urllib.parse
 from itertools import product
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import field_validator
 
 from proto_tools.transforms.masking import MASK_TOKEN, validate_whole_token_masks
 from proto_tools.utils import BaseConfig, BaseToolInput, ConfigField, InputField
 from proto_tools.utils.sequence import return_invalid_nucleotide_chars
+from proto_tools.utils.sequence_logits import SequenceLogits
 
 # The four publicly released Encodon checkpoints (public HuggingFace repos under the NVIDIA Open
 # Model License, which governs use but does not gate download). Each repo ships
@@ -27,19 +26,6 @@ CodonFMCheckpoint = Literal[
     "encodon_1b",
     "encodon_1b_cdwt",
 ]
-
-CODONFM_CHECKPOINTS: dict[str, dict[str, str]] = {
-    "encodon_80m": {"repo": "nvidia/NV-CodonFM-Encodon-80M-v1", "safetensors": "NV-CodonFM-Encodon-80M-v1.safetensors"},
-    "encodon_600m": {
-        "repo": "nvidia/NV-CodonFM-Encodon-600M-v1",
-        "safetensors": "NV-CodonFM-Encodon-600M-v1.safetensors",
-    },
-    "encodon_1b": {"repo": "nvidia/NV-CodonFM-Encodon-1B-v1", "safetensors": "NV-CodonFM-Encodon-1B-v1.safetensors"},
-    "encodon_1b_cdwt": {
-        "repo": "nvidia/NV-CodonFM-Encodon-Cdwt-1B-v1",
-        "safetensors": "NV-CodonFM-Encodon-Cdwt-1B-v1.safetensors",
-    },
-}
 
 # Encodon's ``max_position_embeddings`` is 2048 tokens; two are the CLS/SEP specials, so a CDS is
 # capped at (2048 - 2) * 3 = 6138 nt (2046 codons). Longer inputs are out of the training regime.
@@ -56,6 +42,12 @@ CODONFM_MAX_NT = (CODONFM_MAX_TOKENS - 2) * 3
 # (CLS/SEP/UNK/PAD/MASK) are excluded — only concrete DNA codons are design variables.
 CODONFM_CODON_VOCAB: list[str] = ["".join(codon) for codon in product("ACGT", repeat=3)]
 CODONFM_NUM_CODONS = len(CODONFM_CODON_VOCAB)
+
+
+class CodonSequenceLogits(SequenceLogits):
+    """A relaxed ``(L, 64)`` coding-sequence state in lexicographic DNA codon order."""
+
+    VOCAB: ClassVar[tuple[str, ...]] = tuple(CODONFM_CODON_VOCAB)
 
 
 def one_hot_codon_logits(sequence: str, *, sharpness: float = 20.0) -> list[list[float]]:
@@ -221,22 +213,3 @@ class CodonFMConfig(BaseConfig):
         description="Number of sequences to score simultaneously on GPU.",
         include_in_key=False,
     )
-
-
-def resolve_checkpoint_source(model_checkpoint: str) -> tuple[str, str, str, str]:
-    """Resolve the HuggingFace download URLs + local cache names for an Encodon checkpoint.
-
-    ``EncodonInference`` requires the ``.safetensors`` file and ``config.json`` in the same
-    directory, so both are provisioned into one per-checkpoint cache subdir.
-
-    Args:
-        model_checkpoint (str): One of the ``CodonFMCheckpoint`` aliases.
-
-    Returns:
-        tuple[str, str, str, str]: ``(safetensors_url, config_url, safetensors_filename, cache_subdir)``.
-    """
-    entry = CODONFM_CHECKPOINTS[model_checkpoint]
-    repo, filename = entry["repo"], entry["safetensors"]
-    base = f"https://huggingface.co/{urllib.parse.quote(repo)}/resolve/main"
-    subdir = f"codonfm-{model_checkpoint}-{hashlib.sha256(repo.encode()).hexdigest()[:8]}"
-    return f"{base}/{urllib.parse.quote(filename)}", f"{base}/config.json", filename, subdir

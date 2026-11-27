@@ -88,7 +88,7 @@ def ipsae_result():
     return run_ipsae_scoring(example_input(), IPSAEScoringConfig())
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_run_ipsae_scoring_success(ipsae_result):
     """End-to-end run returns success with populated metrics."""
     assert ipsae_result.success
@@ -104,13 +104,13 @@ def test_run_ipsae_scoring_success(ipsae_result):
         assert pair.pair_type in ("asym", "max")
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_metrics_satisfy_spec(ipsae_result):
     """All emitted metrics must be within declared metric_spec bounds."""
     assert_metrics_in_spec(ipsae_result)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_export_json_round_trip(ipsae_result, tmp_path):
     """Exported JSON should round-trip all metric values."""
     ipsae_result.export(name="ipsae_result", export_path=str(tmp_path), file_format="json")

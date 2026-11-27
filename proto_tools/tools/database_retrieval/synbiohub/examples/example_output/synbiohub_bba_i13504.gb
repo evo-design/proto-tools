@@ -1,0 +1,34 @@
+LOCUS       BBa_I13504               875 bp    DNA              UNK 31-AUG-2015
+DEFINITION  Screening plasmid intermediate.
+ACCESSION   BBa_I13504
+VERSION     BBa_I13504
+KEYWORDS    .
+SOURCE      .
+  ORGANISM  .
+            .
+FEATURES             Location/Qualifiers
+     RBS             1..12
+                     /label="BBa_B0034"
+     CDS             19..738
+                     /label="BBa_E0040"
+     terminator      747..826
+                     /label="BBa_B0010"
+     terminator      835..875
+                     /label="BBa_B0012"
+ORIGIN
+        1 aaagaggaga aatactagat gcgtaaagga gaagaacttt tcactggagt tgtcccaatt
+       61 cttgttgaat tagatggtga tgttaatggg cacaaatttt ctgtcagtgg agagggtgaa
+      121 ggtgatgcaa catacggaaa acttaccctt aaatttattt gcactactgg aaaactacct
+      181 gttccatggc caacacttgt cactactttc ggttatggtg ttcaatgctt tgcgagatac
+      241 ccagatcata tgaaacagca tgactttttc aagagtgcca tgcccgaagg ttatgtacag
+      301 gaaagaacta tatttttcaa agatgacggg aactacaaga cacgtgctga agtcaagttt
+      361 gaaggtgata cccttgttaa tagaatcgag ttaaaaggta ttgattttaa agaagatgga
+      421 aacattcttg gacacaaatt ggaatacaac tataactcac acaatgtata catcatggca
+      481 gacaaacaaa agaatggaat caaagttaac ttcaaaatta gacacaacat tgaagatgga
+      541 agcgttcaac tagcagacca ttatcaacaa aatactccaa ttggcgatgg ccctgtcctt
+      601 ttaccagaca accattacct gtccacacaa tctgcccttt cgaaagatcc caacgaaaag
+      661 agagaccaca tggtccttct tgagtttgta acagctgctg ggattacaca tggcatggat
+      721 gaactataca aataataata ctagagccag gcatcaaata aaacgaaagg ctcagtcgaa
+      781 agactgggcc tttcgtttta tctgttgttt gtcggtgaac gctctctact agagtcacac
+      841 tggctcacct tcgggtgggc ctttctgcgt ttata
+//

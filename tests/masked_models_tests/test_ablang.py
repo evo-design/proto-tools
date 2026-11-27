@@ -5,6 +5,8 @@ import random
 import re
 import sys
 import types
+from collections import Counter
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -57,17 +59,17 @@ VL_SEQ = "SYELTQPPSVSVSPGQTARITCSANALPNQYAYWYQQKPGRAPVMVIYKDTQRPSGIPQRFSSSTSGTTV
 
 
 def test_ablang_gradient_input_validation():
-    inp = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20, [1.0] * 20]))
-    assert inp.antibody.heavy_chain == [[0.0] * 20, [1.0] * 20]
-    assert inp.temperature is None
+    inp = AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=[[0.0] * 20, [1.0] * 20]))
+    assert inp.inputs[0].heavy_chain == [[0.0] * 20, [1.0] * 20]
+    assert inp.temperature == 1.0
 
-    inp_with_temp = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20]), temperature=0.6)
+    inp_with_temp = AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=[[0.0] * 20]), temperature=0.6)
     assert inp_with_temp.temperature == 0.6
 
     with pytest.raises(ValidationError):
-        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20]), temperature=-0.5)
+        AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=[[0.0] * 20]), temperature=-0.5)
     with pytest.raises(ValidationError):
-        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20]), temperature=0.0)
+        AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=[[0.0] * 20]), temperature=0.0)
 
     with pytest.raises(ValidationError, match="20 columns"):
         AntibodyLogits(heavy_chain=[[0.0] * 19])
@@ -86,16 +88,20 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["payload"] = payload
-        n = len(payload.get("logits", []))
         return {
-            "gradient": [[0.0] * 20] * n,
-            "loss": 0.5,
-            "metrics": {
-                "log_likelihood": -0.5 * n,
-                "avg_log_likelihood": -0.5,
-                "perplexity": math.exp(0.5),
-                "model_choice": payload.get("model_choice"),
-            },
+            "results": [
+                {
+                    "gradient": [[0.0] * 20] * len(item["logits"]),
+                    "loss": 0.5,
+                    "metrics": {
+                        "log_likelihood": -0.5 * len(item["logits"]),
+                        "avg_log_likelihood": -0.5,
+                        "perplexity": math.exp(0.5),
+                        "model_choice": payload.get("model_choice"),
+                    },
+                }
+                for item in payload["items"]
+            ],
             "vocab": list(PROTEIN_AMINO_ACIDS),
         }
 
@@ -107,27 +113,28 @@ def test_ablang_gradient_dispatch_contract(monkeypatch):
     heavy, light = [[0.0] * 20], [[1.0] * 20]
 
     # Paired: chains concatenated, model auto-selected
-    run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy, light_chain=light)))
-    assert captured["payload"]["logits"] == heavy + light
-    assert captured["payload"]["chain_break_position"] == 1
-    assert captured["payload"]["model_choice"] == "ablang2-paired"
-    assert captured["payload"]["temperature"] is None
-    assert captured["payload"]["use_ste"] is False
+    run_ablang_gradient(AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=heavy, light_chain=light)))
+    assert captured["payload"]["items"] == [
+        {"logits": heavy + light, "chain_break_position": len(heavy), "model_choice": "ablang2-paired"}
+    ]
+    assert captured["payload"]["temperature"] == 1.0  # shared default
+    assert captured["payload"]["soft"] == 1.0
+    assert captured["payload"]["hard"] == 0.0
     assert captured["payload"]["compute_gradient"] is True  # default
     assert captured["payload"]["batch_size"] is None  # default auto
 
     # Heavy only, with temperature
-    run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy), temperature=0.6))
-    assert captured["payload"]["logits"] == heavy
-    assert captured["payload"]["chain_break_position"] is None
-    assert captured["payload"]["model_choice"] == "ablang1-heavy"
+    run_ablang_gradient(AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=heavy), temperature=0.6))
+    assert captured["payload"]["items"] == [
+        {"logits": heavy, "chain_break_position": None, "model_choice": "ablang1-heavy"}
+    ]
     assert captured["payload"]["temperature"] == 0.6
 
     # Light only
-    run_ablang_gradient(AbLangGradientInput(antibody=AntibodyLogits(light_chain=light)))
-    assert captured["payload"]["logits"] == light
-    assert captured["payload"]["chain_break_position"] is None
-    assert captured["payload"]["model_choice"] == "ablang1-light"
+    run_ablang_gradient(AbLangGradientInput(inputs=AntibodyLogits(light_chain=light)))
+    assert captured["payload"]["items"] == [
+        {"logits": light, "chain_break_position": None, "model_choice": "ablang1-light"}
+    ]
 
 
 def test_ablang_forward_mode_dispatch_contract(monkeypatch):
@@ -136,16 +143,20 @@ def test_ablang_forward_mode_dispatch_contract(monkeypatch):
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured.update(payload=payload)
-        n = len(payload.get("logits", []))
         return {
-            "gradient": None,
-            "loss": 0.5,
-            "metrics": {
-                "log_likelihood": -0.5 * n,
-                "avg_log_likelihood": -0.5,
-                "perplexity": math.exp(0.5),
-                "sequence_length": n,
-            },
+            "results": [
+                {
+                    "gradient": None,
+                    "loss": 0.5,
+                    "metrics": {
+                        "log_likelihood": -0.5 * len(item["logits"]),
+                        "avg_log_likelihood": -0.5,
+                        "perplexity": math.exp(0.5),
+                        "sequence_length": len(item["logits"]),
+                    },
+                }
+                for item in payload["items"]
+            ],
             "vocab": list(PROTEIN_AMINO_ACIDS),
         }
 
@@ -155,14 +166,14 @@ def test_ablang_forward_mode_dispatch_contract(monkeypatch):
     )
 
     result = run_ablang_gradient(
-        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20] * 3)),
+        AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=[[0.0] * 20] * 3)),
         AbLangGradientConfig(compute_gradient=False),
     )
 
     assert captured["payload"]["compute_gradient"] is False
-    assert result.gradient is None
-    assert result.loss == 0.5
-    assert result.metrics["avg_log_likelihood"] == -0.5
+    assert result.results[0].terms[0].gradient is None
+    assert result.results[0].terms[0].term_value == 0.5
+    assert result.results[0].metrics["avg_log_likelihood"] == -0.5
 
 
 # ── Gradient dispatch tests (subprocess venv, GPU-only) ──────────────────────
@@ -183,7 +194,7 @@ _UNIT_LOGITS = [
 @pytest.mark.parametrize("paired", [True, False], ids=["paired", "single"])
 def test_compute_gradient_dispatch(paired: bool) -> None:
     """Validate compute_gradient with temperature and STE on both chain modes via real dispatch."""
-    temperature, use_ste = 0.6, True
+    temperature, hard = 0.6, 1.0
     if paired:
         antibody = AntibodyLogits(heavy_chain=_UNIT_LOGITS[:2], light_chain=_UNIT_LOGITS[2:])
         expected_len = len(_UNIT_LOGITS)
@@ -192,70 +203,345 @@ def test_compute_gradient_dispatch(paired: bool) -> None:
         expected_len = len(_UNIT_LOGITS)
 
     result = run_ablang_gradient(
-        AbLangGradientInput(antibody=antibody, temperature=temperature),
-        AbLangGradientConfig(use_ste=use_ste),
+        AbLangGradientInput(inputs=antibody, temperature=temperature),
+        AbLangGradientConfig(hard=hard),
     )
     validate_output(result)
 
-    assert result.gradient is not None
-    assert len(result.gradient) == expected_len
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert result.loss > 0
-    assert math.isfinite(result.loss)
-    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
-    assert result.metrics["log_likelihood"] == pytest.approx(-result.loss * expected_len, rel=1e-6)
-    assert result.metrics["perplexity"] == pytest.approx(math.exp(result.loss), rel=1e-6)
-    assert result.metrics["sequence_length"] == expected_len
+    assert result.results[0].terms[0].gradient is not None
+    assert len(result.results[0].terms[0].gradient) == expected_len
+    assert all(len(row) == 20 for row in result.results[0].terms[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].terms[0].gradient for v in row)
+    assert result.results[0].terms[0].term_value > 0
+    assert math.isfinite(result.results[0].terms[0].term_value)
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(
+        -result.results[0].terms[0].term_value, rel=1e-6
+    )
+    assert result.results[0].metrics["log_likelihood"] == pytest.approx(
+        -result.results[0].terms[0].term_value * expected_len, rel=1e-6
+    )
+    assert result.results[0].metrics["perplexity"] == pytest.approx(
+        math.exp(result.results[0].terms[0].term_value), rel=1e-6
+    )
+    assert result.results[0].metrics["sequence_length"] == expected_len
     assert result.vocab == _CANONICAL_VOCAB
 
 
-@pytest.mark.parametrize(
-    ("model_choice", "expected_model_choice"),
-    [("ablang1-heavy", "ablang1-heavy"), ("ablang2-paired", "ablang2-paired")],
-)
-def test_dispatch_routes_gradient_to_expected_checkpoint(
-    monkeypatch: pytest.MonkeyPatch,
-    model_choice: str,
-    expected_model_choice: str,
-) -> None:
-    """Dispatch should instantiate the requested model variant."""
-    created_model_choices: list[str] = []
+# ── Mixed chain configurations ───────────────────────────────────────────────
 
-    class _FakeDispatchedModel:
+
+def _recording_model_class(events: list[tuple[str, str]]) -> type:
+    """Build a stand-in AbLangModel that records checkpoint loads and unloads in order.
+
+    Selecting the right checkpoint is not the same as managing memory: a worker that loads a
+    second variant without releasing the first would still produce correct numbers. Recording
+    both lets a test assert that only one checkpoint is ever resident.
+
+    Args:
+        events (list[tuple[str, str]]): Collects ``("load", choice)`` and ``("unload", choice)``
+            in the order the worker performs them.
+
+    Returns:
+        type: A class matching the slice of ``AbLangModel`` the dispatch path uses.
+    """
+
+    class _RecordingModel:
         def __init__(self, model_choice: str) -> None:
-            created_model_choices.append(model_choice)
+            events.append(("load", model_choice))
             self.model_choice = model_choice
+            self._loaded = True
+
+        def unload(self) -> None:
+            events.append(("unload", self.model_choice))
             self._loaded = False
 
-        def compute_gradient(self, **_kwargs):
+        def compute_gradient(self, *, logits_list, chain_break_position, **_kwargs):
+            # The loss identifies the item, so a reordered reassembly is visible.
             return {
-                "gradient": [[0.0] * 20],
-                "loss": 0.0,
-                "metrics": {"model_choice": self.model_choice},
+                "gradient": [[float(len(logits_list))] * 20],
+                "loss": float(logits_list[0][0]),
+                "metrics": {"model_choice": self.model_choice, "chain_break_position": chain_break_position},
                 "vocab": list(PROTEIN_AMINO_ACIDS),
             }
 
-    ablang_inference = _import_ablang_inference()
-    monkeypatch.setattr(ablang_inference, "AbLangModel", _FakeDispatchedModel)
-    monkeypatch.setattr(ablang_inference, "_model", None)
+    return _RecordingModel
 
-    result = ablang_inference.dispatch(
+
+def _mixed_items() -> list[dict[str, Any]]:
+    """Return heavy, light, paired, heavy, paired items, interleaved on purpose."""
+    plans = [
+        ("ablang1-heavy", None),
+        ("ablang1-light", None),
+        ("ablang2-paired", 2),
+        ("ablang1-heavy", None),
+        ("ablang2-paired", 3),
+    ]
+    return [
+        {
+            "logits": [[float(index)] * 20] * (index + 2),
+            "chain_break_position": break_position,
+            "model_choice": model_choice,
+        }
+        for index, (model_choice, break_position) in enumerate(plans)
+    ]
+
+
+def _dispatch_mixed(ablang_inference: Any, items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Run one gradient dispatch over the given items."""
+    return ablang_inference.dispatch(
         {
             "operation": "compute_gradient",
-            "logits": [[0.0] * 20],
-            "temperature": None,
-            "use_ste": False,
-            "model_choice": model_choice,
-            "chain_break_position": 1 if model_choice == "ablang2-paired" else None,
+            "items": items,
+            "temperature": 1.0,
+            "soft": 1.0,
+            "hard": 0.0,
             "seed": None,
             "device": "cpu",
             "verbose": False,
         }
     )
 
-    assert created_model_choices == [expected_model_choice]
-    assert result["metrics"]["model_choice"] == expected_model_choice
+
+def test_gradient_tags_each_antibody_with_its_own_checkpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The payload names a checkpoint per antibody, chosen from the chains it carries."""
+    captured: dict[str, Any] = {}
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        captured["payload"] = payload
+        return {
+            "results": [{"gradient": None, "loss": 0.0, "metrics": {}} for _ in payload["items"]],
+            "vocab": list(PROTEIN_AMINO_ACIDS),
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.masked_models.ablang.ablang_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+
+    run_ablang_gradient(
+        AbLangGradientInput(
+            inputs=[
+                AntibodyLogits(heavy_chain=[[0.0] * 20] * 3),
+                AntibodyLogits(light_chain=[[0.0] * 20] * 4),
+                AntibodyLogits(heavy_chain=[[0.0] * 20] * 3, light_chain=[[0.0] * 20] * 4),
+            ]
+        ),
+        AbLangGradientConfig(compute_gradient=False, device="cpu"),
+    )
+
+    payload = captured["payload"]
+    assert [item["model_choice"] for item in payload["items"]] == [
+        "ablang1-heavy",
+        "ablang1-light",
+        "ablang2-paired",
+    ]
+    assert "model_choice" not in payload, "the checkpoint is per item, not per call"
+    # The paired antibody is the only one that carries a split point.
+    assert [item["chain_break_position"] for item in payload["items"]] == [None, None, 3]
+
+
+def test_worker_loads_each_checkpoint_once_and_keeps_input_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A mixed chunk groups by checkpoint, loads each once, and still replies in input order.
+
+    The contract is that each required checkpoint is loaded once and results keep input order —
+    not that the groups run in any particular sequence, so the order they are visited in is
+    deliberately not asserted. A future pass that started with the resident checkpoint to save a
+    reload would still satisfy this.
+    """
+    events: list[tuple[str, str]] = []
+    ablang_inference = _import_ablang_inference()
+    monkeypatch.setattr(ablang_inference, "AbLangModel", _recording_model_class(events))
+    monkeypatch.setattr(ablang_inference, "_model", None)
+
+    items = _mixed_items()
+    result = _dispatch_mixed(ablang_inference, items)
+
+    loaded = Counter(choice for event, choice in events if event == "load")
+    assert loaded == Counter({"ablang1-heavy": 1, "ablang1-light": 1, "ablang2-paired": 1}), (
+        f"each distinct checkpoint must load exactly once, in any order; got {events}"
+    )
+    assert [item["model_choice"] for item in items] == [
+        entry["metrics"]["model_choice"] for entry in result["results"]
+    ], "results must line up with the items that produced them"
+    # The loss carries the item's index, so a reordered reassembly fails here.
+    assert [entry["loss"] for entry in result["results"]] == [0.0, 1.0, 2.0, 3.0, 4.0]
+    # Only one checkpoint is resident: every load but the first follows an unload.
+    assert [event for event, _ in events] == ["load", "unload", "load", "unload", "load"], (
+        f"a checkpoint must be released before the next is loaded; got {events}"
+    )
+
+
+def test_persistent_worker_reuses_then_switches_checkpoints(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Across calls the worker keeps a resident checkpoint and only swaps when the need changes."""
+    events: list[tuple[str, str]] = []
+    ablang_inference = _import_ablang_inference()
+    monkeypatch.setattr(ablang_inference, "AbLangModel", _recording_model_class(events))
+    monkeypatch.setattr(ablang_inference, "_model", None)
+
+    heavy_item = {"logits": [[0.0] * 20] * 3, "chain_break_position": None, "model_choice": "ablang1-heavy"}
+    paired_item = {"logits": [[1.0] * 20] * 5, "chain_break_position": 2, "model_choice": "ablang2-paired"}
+
+    _dispatch_mixed(ablang_inference, [heavy_item])
+    _dispatch_mixed(ablang_inference, [heavy_item])
+    assert events == [("load", "ablang1-heavy")], f"a repeat call reuses the resident checkpoint; got {events}"
+
+    _dispatch_mixed(ablang_inference, [paired_item])
+    assert events == [
+        ("load", "ablang1-heavy"),
+        ("unload", "ablang1-heavy"),
+        ("load", "ablang2-paired"),
+    ], f"a new configuration releases the old checkpoint before loading; got {events}"
+
+    _dispatch_mixed(ablang_inference, [heavy_item])
+    assert events[-2:] == [("unload", "ablang2-paired"), ("load", "ablang1-heavy")], (
+        f"swapping back releases and reloads, since only one stays resident; got {events}"
+    )
+
+
+def test_mixed_batch_gives_the_same_results_on_one_worker_and_two(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A mixed batch is valid on any number of workers and returns identical ordered results.
+
+    This is the regression the per-item checkpoint fixes. Previously the checkpoint was resolved
+    for the whole batch inside the tool function, which runs *after* ToolPool has partitioned:
+    a heavy-only and a light-only candidate were rejected when one worker received both and
+    accepted when two workers each received one, so validity depended on device assignment.
+    """
+    from proto_tools.utils.device_manager import DeviceManager
+    from proto_tools.utils.tool_instance import ToolInstance as _ToolInstance
+    from proto_tools.utils.tool_pool import ToolPool
+
+    # The worker call is faked, so the GPU slots only have to exist on paper.
+    monkeypatch.setattr("proto_tools.utils.tool_pool.number_of_visible_gpus", lambda: 2)
+
+    partition_sizes: list[int] = []
+
+    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
+        partition_sizes.append(len(payload["items"]))
+        return {
+            "results": [
+                {
+                    "gradient": None,
+                    "loss": float(item["logits"][0][0]),
+                    "metrics": {"model_choice": item["model_choice"]},
+                }
+                for item in payload["items"]
+            ],
+            "vocab": list(PROTEIN_AMINO_ACIDS),
+        }
+
+    monkeypatch.setattr(
+        "proto_tools.tools.masked_models.ablang.ablang_gradient.ToolInstance.dispatch",
+        fake_dispatch,
+    )
+    antibodies = [
+        AntibodyLogits(heavy_chain=[[0.0] * 20] * 3),
+        AntibodyLogits(light_chain=[[1.0] * 20] * 4),
+        AntibodyLogits(heavy_chain=[[2.0] * 20] * 3, light_chain=[[2.0] * 20] * 4),
+        AntibodyLogits(heavy_chain=[[3.0] * 20] * 3),
+    ]
+    expected_losses = [0.0, 1.0, 2.0, 3.0]
+    expected_choices = ["ablang1-heavy", "ablang1-light", "ablang2-paired", "ablang1-heavy"]
+
+    def run_with(slots: int) -> tuple[list[float], list[str]]:
+        """Run the same mixed batch under a given number of pool slots."""
+        DeviceManager.reset_instance()
+        _ToolInstance.clear_all()
+        try:
+            with ToolPool(gpus=slots):
+                output = run_ablang_gradient(
+                    AbLangGradientInput(inputs=antibodies),
+                    AbLangGradientConfig(compute_gradient=False, device="cuda"),
+                )
+        finally:
+            DeviceManager.reset_instance()
+            _ToolInstance.clear_all()
+        return (
+            [result.terms[0].term_value for result in output.results],
+            [result.metrics["model_choice"] for result in output.results],
+        )
+
+    partition_sizes.clear()
+    one_worker = run_with(1)
+    assert partition_sizes == [4], f"one slot should see the whole batch; got {partition_sizes}"
+
+    partition_sizes.clear()
+    two_workers = run_with(2)
+    assert len(partition_sizes) > 1, f"two slots should split the batch; got {partition_sizes}"
+    assert sum(partition_sizes) == len(antibodies)
+
+    assert one_worker == (expected_losses, expected_choices)
+    assert two_workers == one_worker, "results must not depend on how many workers ran the batch"
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_gradient_matches_finite_difference() -> None:
+    """The returned gradient must be the derivative of the loss the tool reports.
+
+    A consistency test between batched and singleton runs cannot see a uniform scale error,
+    because it is present in both. Only a derivative check can: the objective is the *mean*
+    negative log-likelihood over masked positions, so differentiating the sum instead would
+    inflate every gradient by the number of positions.
+    """
+    sequence = VH_SEQ[:12]
+    base = one_hot_protein_logits(sequence, sharpness=2.0)
+    row, column, epsilon = 3, 7, 0.05
+
+    def evaluate(matrix: list[list[float]], *, with_gradient: bool) -> tuple[float, list[list[float]] | None]:
+        output = run_ablang_gradient(
+            AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=matrix)),
+            AbLangGradientConfig(compute_gradient=with_gradient),
+        )
+        return output.results[0].terms[0].term_value, output.results[0].terms[0].gradient
+
+    _, gradient = evaluate(base, with_gradient=True)
+    plus = [list(matrix_row) for matrix_row in base]
+    plus[row][column] += epsilon
+    minus = [list(matrix_row) for matrix_row in base]
+    minus[row][column] -= epsilon
+    loss_plus, _ = evaluate(plus, with_gradient=False)
+    loss_minus, _ = evaluate(minus, with_gradient=False)
+
+    central_difference = (loss_plus - loss_minus) / (2 * epsilon)
+    assert gradient is not None
+    assert gradient[row][column] == pytest.approx(central_difference, rel=0.02, abs=1e-5), (
+        f"gradient {gradient[row][column]:.6e} does not match d(loss)/d(logit) "
+        f"{central_difference:.6e}; a ratio near {len(sequence)} means the summed loss was "
+        "differentiated while the mean was reported"
+    )
+
+
+@pytest.mark.uses_gpu
+@pytest.mark.slow
+def test_mixed_batch_matches_individual_evaluations() -> None:
+    """A mixed batch must give each antibody the same result as evaluating it alone.
+
+    This is what makes grouping by checkpoint safe: the items are independent, so the loss and
+    gradient an antibody receives must not depend on which other configurations travelled with
+    it, nor on the order the worker loaded the checkpoints in.
+    """
+    antibodies = [
+        AntibodyLogits(heavy_chain=one_hot_protein_logits(VH_SEQ[:30], sharpness=2.0)),
+        AntibodyLogits(light_chain=one_hot_protein_logits(VL_SEQ[:28], sharpness=2.0)),
+        AntibodyLogits(
+            heavy_chain=one_hot_protein_logits(VH_SEQ[:30], sharpness=2.0),
+            light_chain=one_hot_protein_logits(VL_SEQ[:28], sharpness=2.0),
+        ),
+        AntibodyLogits(heavy_chain=one_hot_protein_logits(VH_SEQ[:30], sharpness=1.0)),
+    ]
+    config = AbLangGradientConfig()
+
+    mixed = run_ablang_gradient(AbLangGradientInput(inputs=antibodies), config)
+    singles = [run_ablang_gradient(AbLangGradientInput(inputs=antibody), config) for antibody in antibodies]
+
+    assert len(mixed.results) == len(antibodies)
+    for index, (batched, single) in enumerate(zip(mixed.results, singles, strict=True)):
+        assert batched.terms[0].term_value == pytest.approx(
+            single.results[0].terms[0].term_value, rel=1e-5, abs=1e-6
+        ), f"item {index} scored differently in a mixed batch"
+        assert batched.terms[0].gradient is not None and single.results[0].terms[0].gradient is not None
+        for row, expected_row in zip(batched.terms[0].gradient, single.results[0].terms[0].gradient, strict=True):
+            assert row == pytest.approx(expected_row, rel=1e-4, abs=1e-6), f"item {index} gradient differs"
 
 
 # ── Embedding tests ──────────────────────────────────────────────────────────
@@ -333,10 +619,10 @@ def test_ablang_score_and_gradient_agree_on_pll():
 
     one_hot = [[10.0 if aa_order[j] == aa else 0.0 for j in range(20)] for aa in sequence]
     grad_result = run_ablang_gradient(
-        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=one_hot), temperature=0.6),
-        AbLangGradientConfig(use_ste=True, compute_gradient=False),
+        AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=one_hot), temperature=0.6),
+        AbLangGradientConfig(hard=1.0, compute_gradient=False),
     )
-    grad_pll = grad_result.metrics["avg_log_likelihood"]
+    grad_pll = grad_result.results[0].metrics["avg_log_likelihood"]
 
     assert score_pll == pytest.approx(grad_pll, rel=1e-3)
 
@@ -559,21 +845,23 @@ def test_ablang_gradient_single_chain():
     """Test single-chain gradient: shape, finiteness, and metric consistency."""
     seq_len = 10
     result = run_ablang_gradient(
-        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=[[0.0] * 20] * seq_len), temperature=0.6),
+        AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=[[0.0] * 20] * seq_len), temperature=0.6),
     )
     validate_output(result)
 
     assert result.tool_id == "ablang-gradient"
-    assert len(result.gradient) == seq_len
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert any(v != 0.0 for row in result.gradient for v in row)
-    assert math.isfinite(result.loss) and result.loss > 0
+    assert len(result.results[0].terms[0].gradient) == seq_len
+    assert all(len(row) == 20 for row in result.results[0].terms[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].terms[0].gradient for v in row)
+    assert any(v != 0.0 for row in result.results[0].terms[0].gradient for v in row)
+    assert math.isfinite(result.results[0].terms[0].term_value) and result.results[0].terms[0].term_value > 0
     assert result.vocab == _CANONICAL_VOCAB
-    assert result.metrics["sequence_length"] == seq_len
-    assert result.metrics["model_choice"] == "ablang1-heavy"
-    assert result.metrics["objective"] == "masked_pll"
-    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
+    assert result.results[0].metrics["sequence_length"] == seq_len
+    assert result.results[0].metrics["model_choice"] == "ablang1-heavy"
+    assert result.results[0].metrics["objective"] == "masked_pll"
+    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(
+        -result.results[0].terms[0].term_value, rel=1e-6
+    )
 
 
 @pytest.mark.uses_gpu
@@ -584,21 +872,21 @@ def test_ablang_gradient_paired_chains():
 
     result = run_ablang_gradient(
         AbLangGradientInput(
-            antibody=AntibodyLogits(heavy_chain=[[0.0] * 20] * heavy_len, light_chain=[[0.0] * 20] * light_len),
+            inputs=AntibodyLogits(heavy_chain=[[0.0] * 20] * heavy_len, light_chain=[[0.0] * 20] * light_len),
             temperature=0.6,
         ),
     )
     validate_output(result)
 
     assert result.tool_id == "ablang-gradient"
-    assert len(result.gradient) == heavy_len + light_len
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert any(v != 0.0 for row in result.gradient for v in row)
+    assert len(result.results[0].terms[0].gradient) == heavy_len + light_len
+    assert all(len(row) == 20 for row in result.results[0].terms[0].gradient)
+    assert all(math.isfinite(v) for row in result.results[0].terms[0].gradient for v in row)
+    assert any(v != 0.0 for row in result.results[0].terms[0].gradient for v in row)
     assert result.vocab == _CANONICAL_VOCAB
-    assert result.metrics["sequence_length"] == heavy_len + light_len
-    assert result.metrics["model_choice"] == "ablang2-paired"
-    assert result.metrics["objective"] == "masked_pll"
+    assert result.results[0].metrics["sequence_length"] == heavy_len + light_len
+    assert result.results[0].metrics["model_choice"] == "ablang2-paired"
+    assert result.results[0].metrics["objective"] == "masked_pll"
 
 
 @pytest.mark.uses_gpu
@@ -609,21 +897,23 @@ def test_ablang_gradient_forward_mode_matches_backward_loss():
     ab = AntibodyLogits(heavy_chain=logits)
 
     backward = run_ablang_gradient(
-        AbLangGradientInput(antibody=ab, temperature=0.6),
+        AbLangGradientInput(inputs=ab, temperature=0.6),
         AbLangGradientConfig(seed=42),
     )
     forward = run_ablang_gradient(
-        AbLangGradientInput(antibody=ab, temperature=0.6),
+        AbLangGradientInput(inputs=ab, temperature=0.6),
         AbLangGradientConfig(seed=42, compute_gradient=False),
     )
     validate_output(backward)
     validate_output(forward)
 
-    assert backward.gradient is not None
-    assert forward.gradient is None
-    assert forward.loss == pytest.approx(backward.loss, rel=1e-5)
-    assert forward.metrics["log_likelihood"] == pytest.approx(backward.metrics["log_likelihood"], rel=1e-5)
-    assert forward.metrics["sequence_length"] == backward.metrics["sequence_length"]
+    assert backward.results[0].terms[0].gradient is not None
+    assert forward.results[0].terms[0].gradient is None
+    assert forward.results[0].terms[0].term_value == pytest.approx(backward.results[0].terms[0].term_value, rel=1e-5)
+    assert forward.results[0].metrics["log_likelihood"] == pytest.approx(
+        backward.results[0].metrics["log_likelihood"], rel=1e-5
+    )
+    assert forward.results[0].metrics["sequence_length"] == backward.results[0].metrics["sequence_length"]
 
 
 @pytest.mark.uses_gpu
@@ -633,19 +923,22 @@ def test_ablang_gradient_descent_reduces_loss():
     initial_logits = [[0.0] * 20] * seq_len
 
     result_0 = run_ablang_gradient(
-        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=initial_logits), temperature=0.7),
+        AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=initial_logits), temperature=0.7),
         AbLangGradientConfig(seed=42),
     )
 
     lr = 10.0
-    stepped_logits = [[initial_logits[i][j] - lr * result_0.gradient[i][j] for j in range(20)] for i in range(seq_len)]
+    stepped_logits = [
+        [initial_logits[i][j] - lr * result_0.results[0].terms[0].gradient[i][j] for j in range(20)]
+        for i in range(seq_len)
+    ]
 
     result_1 = run_ablang_gradient(
-        AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=stepped_logits), temperature=0.7),
+        AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=stepped_logits), temperature=0.7),
         AbLangGradientConfig(seed=42),
     )
 
-    assert result_1.loss < result_0.loss
+    assert result_1.results[0].terms[0].term_value < result_0.results[0].terms[0].term_value
 
 
 @pytest.mark.uses_gpu
@@ -656,16 +949,18 @@ def test_ablang_gradient_batch_size_equivalence(batch_size: int) -> None:
     ab = AntibodyLogits(heavy_chain=logits)
 
     ref = run_ablang_gradient(
-        AbLangGradientInput(antibody=ab, temperature=0.6),
+        AbLangGradientInput(inputs=ab, temperature=0.6),
         AbLangGradientConfig(seed=42, batch_size=None),
     )
     result = run_ablang_gradient(
-        AbLangGradientInput(antibody=ab, temperature=0.6),
+        AbLangGradientInput(inputs=ab, temperature=0.6),
         AbLangGradientConfig(seed=42, batch_size=batch_size),
     )
 
-    assert result.loss == pytest.approx(ref.loss, rel=1e-4, abs=1e-6)
-    for row_r, row_ref in zip(result.gradient, ref.gradient, strict=True):
+    assert result.results[0].terms[0].term_value == pytest.approx(
+        ref.results[0].terms[0].term_value, rel=1e-4, abs=1e-6
+    )
+    for row_r, row_ref in zip(result.results[0].terms[0].gradient, ref.results[0].terms[0].gradient, strict=True):
         for v_r, v_ref in zip(row_r, row_ref, strict=True):
             assert v_r == pytest.approx(v_ref, rel=1e-4, abs=1e-6)
 
@@ -829,16 +1124,17 @@ def test_ablang_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     heavy_logits = one_hot_protein_logits(_diversify_cdr3(rng.choice(_VH_TEMPLATES), rng))
     light_logits = one_hot_protein_logits(rng.choice(_VL_TEMPLATES))
     total_len = len(heavy_logits) + len(light_logits)
-    inputs = AbLangGradientInput(antibody=AntibodyLogits(heavy_chain=heavy_logits, light_chain=light_logits))
+    inputs = AbLangGradientInput(inputs=AntibodyLogits(heavy_chain=heavy_logits, light_chain=light_logits))
     config = AbLangGradientConfig()
 
     result = benchmark_twice(request, "ablang", lambda: run_ablang_gradient(inputs=inputs, config=config))
 
     assert result.tool_id == "ablang-gradient"
-    # Output gradient is a flat (Lh + Ll, 20) matrix — chains concatenated.
-    assert result.gradient is not None
-    assert len(result.gradient) == total_len
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert result.metrics["sequence_length"] == total_len
-    assert result.metrics["model_choice"] == "ablang2-paired"
+    (item,) = result.results
+    # Each item's gradient is a flat (Lh + Ll, 20) matrix — chains concatenated.
+    assert item.terms[0].gradient is not None
+    assert len(item.terms[0].gradient) == total_len
+    assert all(len(row) == 20 for row in item.terms[0].gradient)
+    assert all(math.isfinite(v) for row in item.terms[0].gradient for v in row)
+    assert item.metrics["sequence_length"] == total_len
+    assert item.metrics["model_choice"] == "ablang2-paired"

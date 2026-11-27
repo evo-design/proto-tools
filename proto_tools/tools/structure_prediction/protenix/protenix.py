@@ -13,29 +13,39 @@ import json
 import os
 import tempfile
 from logging import getLogger
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import model_validator
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import BFactorType, Structure
+from proto_tools.entities.structures.msa_conditioning import MSASubsampling
+from proto_tools.tools.structure_prediction.msa_plan import (
+    SentMSA,
+    af3_style_pairing,
+    protein_chain_msas,
+    short_chain_reason,
+)
 from proto_tools.tools.structure_prediction.shared_data_models import (
     Complex,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
+    align_with_input,
     chain_label,
     count_structure_tokens,
-    normalize_output_chain_ids,
-    unwrap_complex_msas,
+    resolve_chain_ids,
     write_paired_a3m_with_uniprot_headers,
+    write_query_only_a3m,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
-from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
+
+# MSA rows Protenix keeps (data_configs["msa"]["max_size"]); it draws a random row count from them per pass.
+PROTENIX_MSA_MAX_ROWS = 16384
 
 ProtenixModelName = Literal[
     "protenix_base_default_v1.0.0",
@@ -62,8 +72,8 @@ _PROTENIX_V2_MAX_TOKENS = 2560
 class ProtenixInput(StructurePredictionInput):
     """Input object for Protenix structure prediction.
 
-    This class defines the input parameters for predicting 3D structures of proteins,
-    DNA, RNA, and ligands using Protenix, an open-source reimplementation of AlphaFold3.
+    Provide proteins, DNA, RNA, and ligands for 3D structure prediction with Protenix,
+    an open-source reimplementation of AlphaFold3.
 
     Inherits from ``StructurePredictionInput``.
 
@@ -101,6 +111,7 @@ class ProtenixInput(StructurePredictionInput):
         comp = self.complexes[complex_idx]
         sequences = []
 
+        # Build one Protenix sequence entry per chain
         for chain in comp.chains:
             entry: dict[str, Any]
             if isinstance(chain, Fragment):
@@ -114,6 +125,7 @@ class ProtenixInput(StructurePredictionInput):
             e_type = chain.entity_type
             seq = chain.sequence
 
+            # Map protein PTMs to CCD-coded ptmType entries
             if e_type == "protein":
                 entry = {"proteinChain": {"sequence": seq, "count": 1}}
                 if chain.modifications:
@@ -125,6 +137,7 @@ class ProtenixInput(StructurePredictionInput):
                         for mod in chain.modifications
                     ]
 
+            # Map DNA and RNA modifications the same way, with nucleotide field names
             elif e_type == "dna":
                 entry = {"dnaSequence": {"sequence": seq, "count": 1}}
                 if chain.modifications:
@@ -235,9 +248,8 @@ class ProtenixOutput(StructurePredictionOutput):
 class ProtenixConfig(MSAStructurePredictionConfig):
     """Configuration object for Protenix structure prediction.
 
-    This class defines configuration parameters for running Protenix, an open-source
-    reimplementation of AlphaFold3 by ByteDance Research. Protenix is a multi-modal
-    structure prediction model supporting proteins, DNA, RNA, and ligands.
+    Configure Protenix, ByteDance Research's open-source reimplementation of
+    AlphaFold3 for proteins, DNA, RNA, and ligands.
 
     Inherits from ``MSAStructurePredictionConfig``.
 
@@ -381,15 +393,17 @@ class ProtenixConfig(MSAStructurePredictionConfig):
             self.num_diffusion_steps = steps
         return self
 
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """``protenix-v2`` is ByteDance-gated, so Proto cannot host it; self-hosting is unaffected."""
-        if device == "proto" and self.model_name == _PROTENIX_V2_MODEL:
-            return (
-                "The 'protenix-v2' checkpoint is gated by ByteDance and is not hosted on "
-                "device='proto'. Choose a different model_name, run locally (device='cpu' or "
-                "'cuda'), or deploy it yourself with device='modal'."
-            )
-        return None
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "ProtenixConfig":
+        """Smallest checkpoint and one diffusion sample, so smoke and device tests run in seconds.
+
+        ``protenix_tiny_default_v0.5.0`` is an MSA model (the ``mini_esm``/``mini_ism`` variants are
+        the MSA-free ones), so ``minimal(use_msa=True)`` keeps it. Its schedule fills in 4 cycles
+        and 5 diffusion steps.
+        """
+        kwargs.setdefault("model_name", "protenix_tiny_default_v0.5.0")
+        kwargs.setdefault("num_diffusion_samples", 1)
+        return cast("ProtenixConfig", super().minimal(**kwargs))
 
 
 # ============================================================================
@@ -492,9 +506,8 @@ def run_protenix(
         for i in range(len(inputs.complexes)):
             batch_json.extend(inputs.to_json(i, name=f"protenix_job_{i}"))
 
-        # Write pre-computed MSAs and inject paths into the batch JSON
-        if inputs.msas:
-            _write_msas_to_batch_json(batch_json, inputs, config, temp_dir)
+        # Write pre-computed MSAs and inject paths into the batch JSON (one job per complex)
+        msa_sent_by_job = _write_msas_to_batch_json(batch_json, inputs, config, temp_dir)
 
         # Write the batch input JSON
         input_json_path = os.path.join(temp_dir, "protenix_input.json")
@@ -518,6 +531,9 @@ def run_protenix(
             "num_pairformer_cycles": config.num_pairformer_cycles,
             "use_msa": config.use_msa,
             "include_pae_matrix": config.include_pae_matrix,
+            "chain_ids": {
+                f"protenix_job_{i}": resolve_chain_ids(complex_.chains) for i, complex_ in enumerate(inputs.complexes)
+            },
         }
 
         # Call the inference script (single batched call)
@@ -534,7 +550,7 @@ def run_protenix(
 
     # Parse results for each complex
     results = []
-    for comp, job_result in zip(inputs.complexes, output_data["results"], strict=True):
+    for dispatch_idx, (comp, job_result) in enumerate(zip(inputs.complexes, output_data["results"], strict=True)):
         raw_metrics = job_result.get("metrics", {})
 
         def _maybe_float(key: str, scale: float = 1.0, raw: dict[str, Any] = raw_metrics) -> float | None:
@@ -566,7 +582,17 @@ def run_protenix(
             metrics=metrics,
             source="protenix-prediction",
         )
-        results.append(normalize_output_chain_ids(structure, comp.chains))
+        msa_sent = msa_sent_by_job[dispatch_idx]
+        results.append(
+            align_with_input(
+                structure,
+                comp.chains,
+                complex_msas=inputs.msas[dispatch_idx] if inputs.msas else None,
+                report_msa=True,
+                msa_sent=msa_sent,
+                msa_subsampling=MSASubsampling(mode="stochastic", max_rows=PROTENIX_MSA_MAX_ROWS),
+            )
+        )
 
     return ProtenixOutput(structures=results)
 
@@ -592,8 +618,8 @@ def _write_msas_to_batch_json(
     inputs: ProtenixInput,
     config: ProtenixConfig,
     temp_dir: str,
-) -> None:
-    """Write per-complex MSAs to A3M files and inject paths into batch JSON.
+) -> list[dict[int, SentMSA]]:
+    """Write per-complex MSAs to A3M files, inject paths into batch JSON, and return what was sent.
 
     For complexes with multiple protein chains the per-chain MSAs are also
     written as the ``pairedMsaPath`` (rows are taxonomy-aligned by position
@@ -604,48 +630,71 @@ def _write_msas_to_batch_json(
         inputs (ProtenixInput): ProtenixInput with the original complexes and pre-computed MSAs.
         config (ProtenixConfig): ProtenixConfig with verbose setting.
         temp_dir (str): Directory for writing A3M files.
+
+    Returns:
+        list[dict[int, SentMSA]]: Per job, the rows written per protein chain index.
     """
+    sent_by_job: list[dict[int, SentMSA]] = [{} for _ in batch_json]
     if inputs.msas is None:
-        return
+        return sent_by_job
 
     msa_dir = os.path.join(temp_dir, "msas")
     os.makedirs(msa_dir, exist_ok=True)
 
     for job_idx, job in enumerate(batch_json):
         sp_complex = inputs.complexes[job_idx]
-        per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(inputs.msas[job_idx])
-
-        protein_chain_indices = [
-            i for i, ch in enumerate(sp_complex.chains) if hasattr(ch, "entity_type") and ch.entity_type == "protein"
-        ]
-        if not protein_chain_indices:
+        complex_msas = inputs.msas[job_idx]
+        is_paired = complex_msas.paired
+        chains = protein_chain_msas(sp_complex.chains, complex_msas)
+        if not chains:
             continue
+        # Protenix merges every paired MSA into the unpaired one (msa_pair_as_unpair, on by default),
+        # so the paired rows are always sent; they pair across chains only as af3_style_pairing says.
+        pairs = af3_style_pairing(
+            (chain.chain.sequence for chain in chains), sum(chain.primary is not None for chain in chains), is_paired
+        )
+        protein_chain_indices = [chain.index for chain in chains]
         n_protein_chains = len(protein_chain_indices)
 
         # Map chain_idx -> a3m path written for that chain.
         chain_idx_to_path: dict[int, str] = {}
         chain_idx_to_paired_path: dict[int, str] = {}
-        for chain_idx in protein_chain_indices:
-            msa = per_chain_msas.get(chain_idx)
-            if msa is None:
-                continue
-            chain_id = (
-                sp_complex.chains[chain_idx].id
-                if getattr(sp_complex.chains[chain_idx], "id", None)
-                else chain_label(chain_idx)
-            )
-            # unpairedMsaPath gets each chain's deep unpaired MSA when available, else the
-            # primary MSA; Protenix block-diagonalizes the unpaired rows itself (AF3-style).
-            unpaired_msa = (unpaired_per_chain or {}).get(chain_idx)
-            if unpaired_msa is None:
-                unpaired_msa = msa
+        for chain in chains:
+            chain_idx, msa = chain.index, chain.primary
+            chain_id = chain.chain.id if chain.chain.id is not None else chain_label(chain_idx)
             a3m_path = os.path.join(msa_dir, f"job_{job_idx}_chain_{chain_id}_{chain_idx}.a3m")
-            unpaired_msa.to_a3m_file(a3m_path, query_index=0)
             chain_idx_to_path[chain_idx] = a3m_path
+            short = short_chain_reason(chain.chain, "Protenix")
+            if msa is None:
+                # Every protein chain needs a path: Protenix treats any chain without one as a
+                # request to search its own MSA server for the whole complex, overwriting the
+                # MSAs we supply. Send the chain's unpaired rows when it has them, else its query.
+                if chain.unpaired is not None:
+                    chain.unpaired.to_a3m_file(a3m_path, query_index=0)
+                else:
+                    write_query_only_a3m(chain.chain.sequence, a3m_path)
+                rows = len(chain.unpaired) if chain.unpaired is not None else 1
+                sent_by_job[job_idx][chain_idx] = SentMSA(rows=rows, ignored_reason=short)
+                if config.verbose:
+                    logger.info(
+                        f"Assigned {'unpaired-only' if chain.unpaired else 'query-only'} MSA to chain {chain_id}"
+                    )
+                continue
+            # unpairedMsaPath gets each chain's deep unpaired MSA when available, else the
+            # primary MSA; Protenix stacks every chain's unpaired rows itself (AF3-style).
+            unpaired_msa = chain.unpaired or msa
+            unpaired_msa.to_a3m_file(a3m_path, query_index=0)
             if is_paired:
                 paired_a3m_path = os.path.join(msa_dir, f"job_{job_idx}_chain_{chain_id}_{chain_idx}.paired.a3m")
                 write_paired_a3m_with_uniprot_headers(msa, paired_a3m_path)
                 chain_idx_to_paired_path[chain_idx] = paired_a3m_path
+            sent_by_job[job_idx][chain_idx] = SentMSA(
+                rows=len(msa) if is_paired else len(unpaired_msa),
+                # Without a deep unpaired MSA the unpaired file repeats the paired rows: no extra depth.
+                unpaired_rows=len(unpaired_msa) - 1 if is_paired and chain.unpaired is not None else 0,
+                paired=pairs,
+                ignored_reason=short,
+            )
 
             if config.verbose:
                 logger.info(
@@ -663,5 +712,7 @@ def _write_msas_to_batch_json(
             if path is None:
                 continue
             seq_entry["proteinChain"]["unpairedMsaPath"] = path
-            if is_paired:
-                seq_entry["proteinChain"]["pairedMsaPath"] = chain_idx_to_paired_path[chain_idx]
+            paired_path = chain_idx_to_paired_path.get(chain_idx)
+            if is_paired and paired_path is not None:
+                seq_entry["proteinChain"]["pairedMsaPath"] = paired_path
+    return sent_by_job

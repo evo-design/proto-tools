@@ -132,21 +132,21 @@ def resolve_via_shell(toolkit: str, env: dict[str, str]) -> str:
 
 @pytest.mark.parametrize("toolkit", ["rf3", "fampnn", "esm2"])
 def test_shell_resolver_targets_the_volume(toolkit, tmp_path):
-    """An absolute PROTO_MODEL_CACHE must resolve to <mount>/<toolkit>.
+    """An absolute PROTO_MODEL_CACHE must resolve to <mount>/<toolkit>/weights.
 
     Uses a temp dir as the mount because the helper mkdir -p's the target,
     and the test cannot create /weights locally.
     """
     mount = str(tmp_path / "weights")
     env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "PROTO_MODEL_CACHE": mount}
-    assert resolve_via_shell(toolkit, env) == f"{mount}/{toolkit}"
+    assert resolve_via_shell(toolkit, env) == f"{mount}/{toolkit}/weights"
 
 
 def test_shell_resolver_falls_back_without_the_variable(tmp_path):
     """Absent PROTO_MODEL_CACHE, weights land under PROTO_HOME — off the volume."""
     env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "PROTO_HOME": str(tmp_path / "proto")}
     got = resolve_via_shell("rf3", env)
-    assert got == str(tmp_path / "proto" / "proto_model_cache" / "rf3")
+    assert got == str(tmp_path / "proto" / "proto_model_cache" / "rf3" / "weights")
 
 
 def test_per_tool_override_beats_the_volume(tmp_path):

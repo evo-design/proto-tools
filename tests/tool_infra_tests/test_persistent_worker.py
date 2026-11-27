@@ -3,6 +3,7 @@
 Tests for PersistentWorker and _worker_bootstrap.
 """
 
+import collections
 import json
 import logging
 import os
@@ -10,17 +11,21 @@ import signal
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from proto_tools.utils import download_progress
+from proto_tools.utils.logging_config import _TAG_PREFIX
 from proto_tools.utils.persistent_worker import (
     PersistentWorker,
     _build_subprocess_env,
     _handle_raw_stderr_line,
     _parse_env_vars_file,
+    _reemit_tagged_line,
 )
 
 _STANDALONE_HELPERS_SOURCE = (
@@ -241,6 +246,65 @@ def test_noise_line_before_real_header_still_returns_result(noise_then_result_sc
     worker = _make_worker(noise_then_result_script)
     try:
         assert worker.send({"v": 7}, timeout=10) == {"echo": {"v": 7}}
+    finally:
+        worker.stop()
+
+
+# ── Download-aware deadline ─────────────────────────────────────────────────
+
+
+def _download_script(tmp_path: Path, grow_seconds: float, then_sleep: float) -> Path:
+    """A standalone whose dispatch() grows a file in its HF cache, then sleeps, then returns."""
+    script = tmp_path / "download_script.py"
+    script.write_text(
+        textwrap.dedent(f"""\
+        import os, pathlib, time
+
+        def dispatch(input_dict):
+            blob = pathlib.Path(os.environ["HF_HOME"]) / "hub" / "blob.incomplete"
+            blob.parent.mkdir(parents=True, exist_ok=True)
+            end = time.monotonic() + {grow_seconds}
+            with open(blob, "ab") as f:
+                while time.monotonic() < end:
+                    f.write(b"x" * 1024)
+                    f.flush()
+                    time.sleep(0.05)
+            time.sleep({then_sleep})
+            return {{"ok": True}}
+        """)
+    )
+    return script
+
+
+@pytest.fixture
+def fast_download_polls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the model cache at ``tmp_path`` and check download progress every 0.2s."""
+    monkeypatch.setenv("PROTO_MODEL_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("PROTO_DOWNLOAD_POLL_SECONDS", "0.2")
+    # The scripts write KBs, not real downloads; count any growth so the tests stay small.
+    monkeypatch.setattr(download_progress, "_MIN_GROWTH_BYTES", 1)
+
+
+@pytest.mark.usefixtures("fast_download_polls")
+def test_send_does_not_charge_a_progressing_download(tmp_path: Path):
+    """A request whose weights download keeps growing past ``timeout`` still returns."""
+    worker = _make_worker(_download_script(tmp_path, grow_seconds=5, then_sleep=0))
+    try:
+        assert worker.send({}, timeout=2) == {"ok": True}
+    finally:
+        worker.stop()
+
+
+@pytest.mark.usefixtures("fast_download_polls")
+def test_send_times_out_once_the_download_stalls(tmp_path: Path):
+    """After the download stops growing the clock runs again, and the error reports the excluded time."""
+    worker = _make_worker(_download_script(tmp_path, grow_seconds=3, then_sleep=20))
+    start = time.monotonic()
+    try:
+        with pytest.raises(TimeoutError, match=r"after 2s \(excluding \d+s spent downloading weights\)"):
+            worker.send({}, timeout=2)
+        assert time.monotonic() - start < 12
+        assert not worker.alive
     finally:
         worker.stop()
 
@@ -494,6 +558,29 @@ def test_request_heartbeat_warns_while_request_in_flight(monkeypatch, caplog):
 
     beats = [r for r in caplog.records if "still running" in r.message]
     assert len(beats) >= 1
+
+
+def test_request_heartbeat_reports_a_download_without_a_timeout(tmp_path: Path, monkeypatch, caplog):
+    """With no timeout there is no deadline measuring downloads, so the heartbeat watches the folders."""
+    monkeypatch.setenv("PROTO_WORKER_HEARTBEAT_SECONDS", "0.1")
+    worker = PersistentWorker(toolkit="bindcraft", env_path=Path("/x"), script_path=Path("/y"))
+    worker._download_dirs = [tmp_path]
+    stop = threading.Event()
+
+    def download() -> None:
+        with open(tmp_path / "blob.incomplete", "ab") as f:
+            while not stop.wait(0.01):
+                f.write(b"x" * download_progress._MIN_GROWTH_BYTES)
+
+    writer = threading.Thread(target=download)
+    with caplog.at_level(logging.WARNING), worker._request_heartbeat("req123", watch_downloads=True):
+        writer.start()
+        time.sleep(0.35)
+        stop.set()
+    writer.join()
+
+    assert any("Downloading weights" in r.message for r in caplog.records)
+    assert not any("may be wedged" in r.message for r in caplog.records)
 
 
 def test_request_heartbeat_silent_for_fast_request(monkeypatch, caplog):
@@ -758,6 +845,44 @@ def test_non_whitelisted_vars_are_absent(monkeypatch):
         assert var not in env, f"{var} leaked into subprocess env"
 
 
+@pytest.mark.parametrize("device", ["cpu", "cuda:0"])
+def test_foundation_bin_follows_host_path_on_worker_path(tmp_path: Path, device: str, monkeypatch):
+    """Workers get the foundation env's bin/ after the host PATH and system dirs, so host tools still win."""
+    host_bin = tmp_path / "host_bin"
+    monkeypatch.setenv("PATH", f"{host_bin}:/usr/bin:/bin")
+    venv = tmp_path / "tool_env"
+    foundation_bin = tmp_path / ".foundation_env" / "bin"
+    with patch("proto_tools.utils.foundation_env.active_foundation_bin", return_value=foundation_bin):
+        path = _build_subprocess_env(device=device, tool_env_path=venv)["PATH"].split(":")
+    assert path[0] == str(venv / "bin")
+    foundation_index = path.index(str(foundation_bin))
+    assert all(path.index(entry) < foundation_index for entry in (str(host_bin), "/usr/bin", "/bin"))
+
+
+def test_worker_path_omits_foundation_bin_when_unused(tmp_path: Path, monkeypatch):
+    """Hosts that satisfy the foundation contract keep their PATH unchanged."""
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    venv = tmp_path / "tool_env"
+    with patch("proto_tools.utils.foundation_env.active_foundation_bin", return_value=None):
+        path = _build_subprocess_env(device="cpu", tool_env_path=venv)["PATH"].split(":")
+    assert not any(part.endswith(".foundation_env/bin") for part in path)
+
+
+@pytest.mark.parametrize(
+    "var",
+    [
+        "PROTO_LOCK_POLL_SECONDS",
+        "PROTO_LOCK_STALL_SECONDS",
+        "PROTO_LOCK_TIMEOUT_SECONDS",
+        "PROTO_DOWNLOAD_STALL_SECONDS",
+    ],
+)
+def test_download_lock_settings_reach_setup_scripts(monkeypatch, var):
+    """The shared-download wait settings a user exports reach setup.sh and workers."""
+    monkeypatch.setenv(var, "1234")
+    assert _build_subprocess_env(device="cpu").get(var) == "1234"
+
+
 def test_base_whitelist_vars_present(monkeypatch):
     """Whitelisted vars should be passed through when set."""
     monkeypatch.setenv("HOME", "/home/test")
@@ -782,35 +907,26 @@ def test_missing_whitelist_vars_not_added(monkeypatch):
     assert "HTTPS_PROXY" not in env
 
 
-def test_uv_pip_cache_defaults_under_proto_home(monkeypatch, tmp_path: Path):
-    """UV_CACHE_DIR and PIP_CACHE_DIR default to PROTO_HOME/{uv,pip}_cache."""
+@pytest.mark.parametrize("user_uv_cache", [None, "/custom/uv"])
+def test_uv_cache_under_proto_home_and_no_pip_cache(monkeypatch, tmp_path: Path, user_uv_cache: str | None):
+    """The uv cache sits under PROTO_HOME unless the user set UV_CACHE_DIR; pip, which copies, keeps no cache."""
     monkeypatch.setenv("PROTO_HOME", str(tmp_path))
-    monkeypatch.delenv("UV_CACHE_DIR", raising=False)
-    monkeypatch.delenv("PIP_CACHE_DIR", raising=False)
+    if user_uv_cache:
+        monkeypatch.setenv("UV_CACHE_DIR", user_uv_cache)
+    else:
+        monkeypatch.delenv("UV_CACHE_DIR", raising=False)
 
     env = _build_subprocess_env(device="cpu")
 
-    assert env["UV_CACHE_DIR"] == str(tmp_path / "uv_cache")
-    assert env["PIP_CACHE_DIR"] == str(tmp_path / "pip_cache")
-
-
-def test_uv_pip_cache_user_override_preserved(monkeypatch, tmp_path: Path):
-    """User-set UV_CACHE_DIR / PIP_CACHE_DIR win over the PROTO_HOME default."""
-    monkeypatch.setenv("PROTO_HOME", str(tmp_path))
-    monkeypatch.setenv("UV_CACHE_DIR", "/custom/uv")
-    monkeypatch.setenv("PIP_CACHE_DIR", "/custom/pip")
-
-    env = _build_subprocess_env(device="cpu")
-
-    assert env["UV_CACHE_DIR"] == "/custom/uv"
-    assert env["PIP_CACHE_DIR"] == "/custom/pip"
+    assert env["UV_CACHE_DIR"] == (user_uv_cache or str(tmp_path / "uv_cache"))
+    assert env["PIP_NO_CACHE_DIR"] == "1"
 
 
 @pytest.mark.parametrize(
     "model_cache, expected",
     [
-        (None, "{home}/proto_model_cache/jax_cache/mocktool"),
-        ("{tmp}/shared", "{tmp}/shared/jax_cache/mocktool"),
+        (None, "{home}/proto_model_cache/mocktool/jax_cache"),
+        ("{tmp}/shared", "{tmp}/shared/mocktool/jax_cache"),
         ("IN_ENV", "{tmp}/venv/jax_cache"),
         ("NONE", None),
     ],
@@ -1008,11 +1124,24 @@ def test_ld_library_path_includes_tool_env_lib(monkeypatch, tmp_path: Path):
     assert ld_parts.index(tool_env_lib) < ld_parts.index("/opt/conda/lib")
 
 
-def test_ld_library_path_tool_env_lib_present_under_no_passthrough(monkeypatch, tmp_path: Path):
-    """[no_passthrough] strips host LD libs but keeps the tool env's own /lib."""
+@pytest.fixture
+def fresh_driver_lookup():
+    """Clear the cached libcuda lookup before and after a test that fakes the host's library path.
+
+    ``_find_driver_lib_dir`` is cached for the session. A test that runs it under a fake
+    ``LD_LIBRARY_PATH`` caches "no driver" for every worker started after it, so it must not
+    leave its answer behind: later [no_passthrough] workers (AlphaFold2/3, Evo 2, ProteinMPNN)
+    would start without the CUDA driver.
+    """
     from proto_tools.utils.persistent_worker import _find_driver_lib_dir
 
     _find_driver_lib_dir.cache_clear()
+    yield
+    _find_driver_lib_dir.cache_clear()
+
+
+def test_ld_library_path_tool_env_lib_present_under_no_passthrough(monkeypatch, tmp_path: Path, fresh_driver_lookup):
+    """[no_passthrough] strips host LD libs but keeps the tool env's own /lib."""
     monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64")
     monkeypatch.delenv("CONDA_PREFIX", raising=False)
     tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": ["LD_LIBRARY_PATH"]}
@@ -1034,11 +1163,8 @@ def test_no_passthrough_blocks_whitelisted_var(monkeypatch):
     assert "HTTP_PROXY" not in env
 
 
-def test_no_passthrough_blocks_parent_ld_library_path(monkeypatch, tmp_path: Path):
+def test_no_passthrough_blocks_parent_ld_library_path(monkeypatch, tmp_path: Path, fresh_driver_lookup):
     """[no_passthrough] LD_LIBRARY_PATH must not let parent's value leak into the subprocess."""
-    from proto_tools.utils.persistent_worker import _find_driver_lib_dir
-
-    _find_driver_lib_dir.cache_clear()
     monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64:/opt/nvidia/lib64")
     monkeypatch.delenv("CONDA_PREFIX", raising=False)
     tool_env_vars = {"passthrough": [], "set": [], "no_passthrough": ["LD_LIBRARY_PATH"]}
@@ -1676,3 +1802,28 @@ def test_worker_is_replaced_after_a_poisoned_cuda_context(tmp_path: Path):
         assert worker.alive
     finally:
         worker.stop()
+
+
+def test_a_debug_status_from_a_worker_reaches_the_spinner_while_proto_tools_logs_at_info():
+    """The status line always updates; a status's level only decides which handlers log it."""
+    seen: list[tuple[int, str, bool]] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            seen.append((record.levelno, record.getMessage(), getattr(record, "update_status", False)))
+
+    proto_tools_logger = logging.getLogger("proto_tools")
+    prior_level = proto_tools_logger.level
+    capture = _Capture()
+    proto_tools_logger.addHandler(capture)
+    proto_tools_logger.setLevel(logging.INFO)
+    try:
+        parent = logging.getLogger("proto_tools.worker.test_status_level")
+        for msg, update_status in (("Scoring batch 1/4", True), ("debug detail", False)):
+            payload = {"level": "DEBUG", "name": "worker.inference", "msg": msg, "update_status": update_status}
+            _reemit_tagged_line(parent, _TAG_PREFIX + json.dumps(payload), collections.deque())
+    finally:
+        proto_tools_logger.removeHandler(capture)
+        proto_tools_logger.setLevel(prior_level)
+
+    assert seen == [(logging.DEBUG, "Scoring batch 1/4", True)]

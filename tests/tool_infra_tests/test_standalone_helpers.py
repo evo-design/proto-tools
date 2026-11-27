@@ -217,7 +217,7 @@ from proto_tools.utils.standalone_helpers_source.standalone_helpers import (  # 
 
 
 def test_resolve_weights_dir_default_uses_proto_home(monkeypatch, tmp_path):
-    """Default mode (no PROTO_MODEL_CACHE) returns {PROTO_HOME}/proto_model_cache/{tool}."""
+    """Default mode (no PROTO_MODEL_CACHE) returns {PROTO_HOME}/proto_model_cache/{tool}/weights."""
     proto_home = tmp_path / ".proto"
     monkeypatch.setenv("PROTO_HOME", str(proto_home))
     monkeypatch.delenv("PROTO_MODEL_CACHE", raising=False)
@@ -225,7 +225,7 @@ def test_resolve_weights_dir_default_uses_proto_home(monkeypatch, tmp_path):
 
     result = resolve_weights_dir("fampnn")
 
-    assert result == str(proto_home / "proto_model_cache" / "fampnn")
+    assert result == str(proto_home / "proto_model_cache" / "fampnn" / "weights")
     assert os.path.isdir(result)
 
 
@@ -241,7 +241,7 @@ def test_resolve_weights_dir_in_env_explicit(monkeypatch, tmp_path):
 
 
 def test_resolve_weights_dir_shared_path_mode(monkeypatch, tmp_path):
-    """Absolute path mode returns /path/{toolkit}/."""
+    """Absolute path mode returns /path/{toolkit}/weights/."""
     shared = tmp_path / "shared_weights"
     shared.mkdir()
     monkeypatch.setenv("PROTO_MODEL_CACHE", str(shared))
@@ -249,7 +249,7 @@ def test_resolve_weights_dir_shared_path_mode(monkeypatch, tmp_path):
 
     result = resolve_weights_dir("protenix")
 
-    assert result == str(shared / "protenix")
+    assert result == str(shared / "protenix" / "weights")
     assert os.path.isdir(result)
 
 
@@ -361,7 +361,7 @@ def test_resolve_weights_dir_no_proto_home_falls_back_to_default(monkeypatch, tm
     result = resolve_weights_dir("fampnn")
 
     home = os.path.expanduser("~")
-    assert result == os.path.join(home, ".proto", "proto_model_cache", "fampnn")
+    assert result == os.path.join(home, ".proto", "proto_model_cache", "fampnn", "weights")
 
 
 def test_parse_cuda_indices_invalid():
@@ -415,3 +415,20 @@ def test_get_jax_memory_stats_reports_untracked_allocator(monkeypatch):
     device = SimpleNamespace(memory_stats=lambda: None, device_kind="gpu")
     monkeypatch.setitem(sys.modules, "jax", SimpleNamespace(devices=lambda: [device]))
     assert get_jax_memory_stats(0) == {"available": False, "framework": "jax", "reason": JAX_UNTRACKED_MEMORY_REASON}
+
+
+def test_msa_rows_report_warns_only_when_a_sent_alignment_never_loads(caplog):
+    """A chain sent rows but loaded only its query warns; query-only chains and partial loads do not."""
+    import logging
+
+    from proto_tools.utils.standalone_helpers_source.standalone_helpers.msa_usage import (
+        count_a3m_rows,
+        report_msa_rows_loaded,
+    )
+
+    assert count_a3m_rows(">q\nMKT\n>h1\nMKA\n") == 2
+    assert count_a3m_rows(None) == 0
+    with caplog.at_level(logging.INFO):
+        report_msa_rows_loaded("tool", loaded={"A": 1, "B": 1, "C": 40}, sent={"A": 120, "B": 1, "C": 120})
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings == ["tool: supplied MSA did not reach the model for chain(s) A; it loaded only the query"]

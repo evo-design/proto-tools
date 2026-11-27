@@ -17,9 +17,9 @@ from proto_tools.modal.progress import open_progress_queue, stream_modal_progres
 from proto_tools.utils.logging_config import verbose_level_from_env
 from proto_tools.utils.progress import (
     has_active_progress_bar,
-    remote_connecting_status,
     remote_progress,
     set_substatus,
+    starting_container_status,
 )
 
 if TYPE_CHECKING:
@@ -91,9 +91,9 @@ class ToolNotDeployedError(ModalDispatchError):
 class ModalEnvironmentNotFoundError(ModalDispatchError):
     """Raised when the Modal environment a call names has not been created.
 
-    Modal reports a missing environment and a missing app identically, so without this a
-    workspace that never ran the one-time setup is told its tools are undeployed, and sent to
-    deploy things that cannot land anywhere.
+    Modal uses the same error for a missing environment and a missing app.
+    Distinguish them so callers can create the environment before trying to
+    deploy tools into it.
     """
 
     def __init__(self, environment: str, available: list[str] | None = None) -> None:
@@ -164,7 +164,7 @@ def _require_modal_credentials(client: Any | None = None) -> None:
 def _resolve_device(config: BaseConfig | None, service_class: str) -> BaseConfig | None:
     """Replace a logical device with the physical device of the target container.
 
-    proto-tools' ``BaseConfig`` defaults to ``device="cpu"``, and ``"proto"``
+    proto-tools' ``BaseConfig`` defaults to ``device="cpu"``, and ``"modal"``
     is not a device any container can bind. Either would run a GPU model on
     the CPU of a GPU container, so the caller's intent is translated here
     rather than silently honoured.
@@ -303,8 +303,9 @@ def _raise_if_asset_missing(tool_key: str, result: dict[str, Any]) -> None:
     is what lets a caller tell "this machine was never given the weights" from a genuine failure —
     the distinction the type exists for, and the one the test layer turns into a skip.
 
-    Left to validation, the signal is destroyed: the payload has no item field, so the caller is
-    told its result schema is malformed and the real cause survives only inside a discarded string.
+    Check before validating the result model. A missing-asset payload has no
+    item field, so validation would report a schema error and obscure the
+    original cause.
 
     Args:
         tool_key (str): Registry key, used to name the toolkit when the container did not.
@@ -354,11 +355,11 @@ def _live_progress(
     Stamps every config with a fresh queue partition, starts a daemon that tails it, and replays
     each record through the local logger, which drives the spinner exactly as a local run does.
 
-    Entirely best-effort and additive. Streaming is off unless the caller is watching (a spinner is
-    active) or has asked for verbose output, the queue is created before the workers start so a
-    write never races its creation, and any failure here leaves the dispatch untouched. The tailer
-    stops on the end sentinels or when this block exits, whichever comes first, which is what keeps
-    a deployment too old to emit anything from leaving a thread polling.
+    Enable streaming when a spinner is active or verbose output is requested.
+    Create the queue before starting workers so they can write immediately.
+    A streaming failure does not affect dispatch. Stop the tailer on end
+    sentinels or block exit, whichever happens first, so older deployments
+    that emit no progress cannot leave it polling indefinitely.
 
     Args:
         configs (list[BaseConfig | None]): Configs about to be dispatched, stamped in place.
@@ -388,15 +389,14 @@ def _live_progress(
 
     # Said before anything is dispatched, because the container reports nothing until it has
     # started, and on a cold start that is several seconds of a motionless spinner.
-    set_substatus(remote_connecting_status("modal"))
+    set_substatus(starting_container_status())
     # A consumer replacing the local replay never sees that substatus, and the cold start is the
     # longest silence there is, so hand it the same phase as a record of its own.
     if on_record is not None:
         with contextlib.suppress(Exception):
-            on_record({"m": remote_connecting_status("modal"), "l": logging.INFO})
+            on_record({"m": starting_container_status(), "l": logging.INFO})
 
-    # A caller that needs to recognise its own records supplies the partition; anyone else gets
-    # a fresh one and never has to know it exists.
+    # Use the caller's partition when it needs to identify its records, or create a fresh one.
     partition = partition or uuid.uuid4().hex
     try:
         open_progress_queue(create=True, environment=environment, client=client)
@@ -446,7 +446,7 @@ def dispatch_to_modal(
         key (str): Registry key (e.g. ``"esm2-embedding"``).
         inputs (BaseToolInput): Tool input payload.
         config (BaseConfig | None): Tool configuration. A logical
-            ``device`` (``"proto"``/``"modal"``) or the ``"cpu"`` default is
+            ``device`` (``"modal"``) or the ``"cpu"`` default is
             replaced with the physical device of the target container.
         environment (str | None): Modal environment. Defaults to ``MODAL_ENVIRONMENT``
             when set, otherwise to ``proto-env``.

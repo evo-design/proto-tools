@@ -1,6 +1,6 @@
 # Finding Tools
 
-This note covers how to discover, inspect, and call every registered tool through `ToolRegistry` and the `proto-tools` CLI, namely discovery, prose documentation, Pydantic schemas, example inputs, citations, links, license and access metadata, and run functions. The same API supports in-process Python callers, scripts, notebooks, MCP/wire consumers, and the `proto-tools` CLI.
+This note covers how to discover, inspect, and call every registered tool through `ToolRegistry` and the `proto-tools` CLI, including discovery, prose documentation, Pydantic schemas, example inputs, citations, links, license and access metadata, and run functions. The same API supports in-process Python callers, scripts, notebooks, MCP/wire consumers, and the `proto-tools` CLI.
 
 ## Python Entry Point
 
@@ -25,7 +25,10 @@ proto-tools run esm2-embedding --inputs @inputs.json --config '{"model_checkpoin
 proto-tools workspace --device modal
 ```
 
-Mirrored verbs answer for this machine unless given `--device modal` or `--device proto`. `list` and `search` print text unless given `--json`; the others print the MCP payload as JSON and exit 1 when it reports `"ok": false`, including an unknown key, which comes back with `did_you_mean` suggestions.
+These commands report on this machine unless given `--device modal`. `list`
+and `search` print text unless given `--json`. The other commands print the MCP
+payload as JSON and exit with code 1 when it reports `"ok": false`. An unknown
+key also returns `did_you_mean` suggestions.
 
 `python -m proto_tools` is equivalent when the `proto-tools` executable is shadowed.
 
@@ -71,7 +74,7 @@ ToolRegistry.list_local_cpu_tools()
 
 `ToolRegistry.list_all()` and related list methods return `ToolSpec` objects, not string keys. To test membership or build a set of tool names, use `{spec.key for spec in ToolRegistry.list_all()}`, and do not call `set(ToolRegistry.list_all())`, because `ToolSpec` objects are Pydantic models and are not hashable.
 
-Each `ToolSpec` carries structured metadata: registry key, label, category, description, device requirements, Pydantic input/config/output model classes, run function, iterable fields, cache behavior, and source path. `spec.toolkit_dir` is the directory of the defining file. `spec.is_external` is true when that file is outside `proto_tools/tools/` (a downstream package, a test file, or a notebook). External tools are registered when their module is imported, so they appear in `list_all()` only after that import; see `external-toolkits.md`.
+Each `ToolSpec` carries structured metadata including registry key, label, category, description, device requirements, Pydantic input/config/output model classes, run function, iterable fields, cache behavior, and source path. `spec.toolkit_dir` is the directory of the defining file. `spec.is_external` is true when that file is outside `proto_tools/tools/` (a downstream package, a test file, or a notebook). External tools are registered when their module is imported, so they appear in `list_all()` only after that import. See `external-toolkits.md`.
 
 ## Documentation Extraction
 
@@ -100,9 +103,13 @@ ToolRegistry.get_example_input("esm2-embedding")
 ToolRegistry.get_example_config("miranda-scan")
 ```
 
-`example_input()` values are minimal valid `Input` objects, useful for smoke tests, notebooks, and script templates. They carry real payloads, so for structure tools and model-context-length sequence tools they run to hundreds of KB; that size is inherent (`BorzoiInput` requires exactly 524,288 bp), not a fixture that could be trimmed. When you only need the symbol names and required field names, use `proto-tools signature <tool>`, which renders a fixed few hundred bytes for every tool.
+`example_input()` values are minimal valid `Input` objects, useful for smoke tests, notebooks, and script templates. They contain real inputs, which can reach hundreds of KB for structure tools
+and tools that require sequences of a fixed context length. Those inputs
+cannot simply be shortened. For example, `BorzoiInput` requires exactly
+524,288 bp. When you only need the symbol names and required field names, use `proto-tools signature <tool>`, which renders a fixed few hundred bytes for every tool.
 
-A few examples cannot run on a default config, because the tool takes part of its request on the config: miranda's microRNA queries, or the reference genome a variant scorer reads. Those tools declare `example_config=`, a factory returning the config values the example needs. `get_example_config()` returns them, or `{}` for every other tool. `run_tool(use_example=True)` merges them under whatever config the caller passes, field by field.
+A few examples cannot run on a default config, because part of the request belongs in the config, such as miranda's microRNA
+queries or the reference genome a variant scorer reads. Those tools declare `example_config=`, a factory returning the config values the example needs. `get_example_config()` returns them, or `{}` for every other tool. `run_tool(use_example=True)` merges them under whatever config the caller passes, field by field.
 
 ## Citation, Links, License, and Access
 
@@ -111,6 +118,7 @@ ToolRegistry.get_citation("esm2-embedding")
 ToolRegistry.get_doi("esm2-embedding")
 ToolRegistry.get_links("esm2-embedding")
 ToolRegistry.get_license("esm2-embedding")
+ToolRegistry.get_version("esm2-embedding")
 ToolRegistry.get_weights_access("esm3-embedding")
 ToolRegistry.get_docs_url("esm2-embedding")
 ToolRegistry.get_example_notebook_path("esm2-embedding")
@@ -123,6 +131,8 @@ ToolRegistry.get_example_notebook_path("esm2-embedding")
 - `"request"`: weights must be obtained from the provider out of band.
 
 Check access before dispatching tools that load model weights.
+
+`get_version()` returns the toolkit's current version from its `versions.yaml` (see `versioning.md`).
 
 `"open"` describes how the weights are *obtained*, not how they may be *used*.
 A tool can download its weights with no gate and still carry restrictive terms —
@@ -138,8 +148,8 @@ license bars commercial use and redistribution. For usage rights read
 It is serialized, so `catalog --json` carries it. On the agent surface, `get_tool_schema` and
 `get_tool_info` always include `outages`, and `list_tools`/`search_tools` entries include it
 (plus an `Outage:` line in `note`) when any is declared. The CLI marks such tools `(OFFLINE)` or
-`(DEGRADED: <affects>)`. A call that reaches an outage raises `OutageError` before dispatch;
-see `notes/error-handling.md`.
+`(DEGRADED: <affects>)`. A call that reaches an outage raises `OutageError` before dispatch.
+See `notes/error-handling.md`.
 
 ## Calling a Tool
 
@@ -171,13 +181,18 @@ run_tool = spec.function
 result = run_tool(Input(sequences=["MKTLIIA..."]), Config())
 ```
 
-`Config` is optional at the public call site, since the decorator supplies defaults. Output models inherit standard metadata (`tool_id`, `execution_time`, `success`, `errors`) plus tool-specific payload fields.
+`Config` is optional at the public call site, since the decorator supplies defaults. Output models inherit standard metadata (`tool_id`, `tool_version`, `execution_time`, `success`, `errors`) plus tool-specific payload fields. `tool_version` is covered in `versioning.md`.
 
 ## Persistence and Devices
 
 Tool calls dispatch into isolated environments by default when a toolkit has a `standalone/` directory. For repeated or batched calls, use persistence or tool pools so models and environments stay warm. See `notes/tool-environments.md` for environment setup and device movement, and the guides for runtime examples.
 
 GPU tools default to `device="cuda"` when their config supports device selection. Before dispatch, inspect `ToolSpec.uses_gpu`, list CPU/GPU subsets through the registry, and check storage and access requirements.
+
+The CLI and MCP server use the same device selection for calls on this machine
+(`proto-tools run`, `device="local"`, or a tool that must run here). An explicit
+`device` in the config takes precedence. Otherwise the tool keeps its default
+(`cuda` for GPU tools) when a GPU is visible and uses `cpu` when none is. A tool that cannot run on CPU (such as `progen3-*`) then fails with an error saying it needs a GPU.
 
 ## JSON and Wire Consumers
 

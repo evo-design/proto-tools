@@ -39,6 +39,7 @@ echo "Setting up AlphaFold3 standalone environment..."
 # neither commercial use nor redistribution, hence the terms notice below.
 proto_resolve_weights_dir alphafold3
 AF3_WEIGHTS_URL="https://storage.googleapis.com/alphafold3/af3.bin.zst"
+AF3_WEIGHTS_SHA256="74d0258616917cd122f5eab6d076afe4a8930e96823851e65e4f777dfb1f33ff"
 if compgen -G "$WEIGHTS_DIR/*.bin*" >/dev/null; then
   echo "[af3] Model parameters already present in $WEIGHTS_DIR — skipping download"
 else
@@ -46,19 +47,16 @@ else
   echo "[af3] Subject to DeepMind's AlphaFold 3 Model Parameters Terms of Use"
   echo "[af3] (non-commercial organizations only; redistribution prohibited):"
   echo "[af3]   https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md"
-  # Stage under a dot-prefixed name so an interrupted transfer cannot leave a
-  # truncated af3.bin.zst that the *.bin* checks here and in inference.py would
-  # both read as provisioned.
-  AF3_WEIGHTS_TMP="${WEIGHTS_DIR}/.af3.bin.zst.partial"
-  rm -f "$AF3_WEIGHTS_TMP"
-  if ! curl -fsSL --retry 3 --retry-delay 5 -o "$AF3_WEIGHTS_TMP" "$AF3_WEIGHTS_URL"; then
-    rm -f "$AF3_WEIGHTS_TMP"
+  # proto_download_verified stages under a dot-prefixed temp name and checks the
+  # SHA-256 before moving it into place, so neither an interrupted transfer nor a
+  # bad download can leave an af3.bin.zst that the *.bin* checks here and in
+  # inference.py would both read as provisioned.
+  if ! proto_download_verified "$AF3_WEIGHTS_URL" "${WEIGHTS_DIR}/af3.bin.zst" "$AF3_WEIGHTS_SHA256"; then
     echo "[af3] ERROR: failed to download AlphaFold3 parameters from $AF3_WEIGHTS_URL" >&2
     echo "[af3] Place af3.bin / af3.bin.zst in $WEIGHTS_DIR yourself, or point" >&2
     echo "[af3] PROTO_ALPHAFOLD3_WEIGHTS_DIR at an existing copy." >&2
     exit 1
   fi
-  mv "$AF3_WEIGHTS_TMP" "${WEIGHTS_DIR}/af3.bin.zst"
   echo "[af3] Model parameters downloaded to ${WEIGHTS_DIR}/af3.bin.zst"
 fi
 
@@ -194,10 +192,11 @@ if [ "$USE_SIF" -eq 0 ]; then
   fi
 
   echo "Installing AlphaFold3 from local clone..."
-  # Point g++ at the tool env's include / lib paths so cifpp's #include <zlib.h>
-  # resolves to the conda-installed zlib (its CMake find_package only wires up
-  # the library, not the include dir, for this particular compile). Mirrors the
-  # system deps DeepMind's Dockerfile installs (zlib1g-dev, zstd).
+  # Resolve cifpp's zlib to the conda-installed copy in the tool env, standing in
+  # for the zlib1g-dev + zstd system deps DeepMind's Dockerfile installs.
+  # CMAKE_PREFIX_PATH lets find_package(ZLIB) locate it on hosts without system
+  # zlib headers; the compiler paths cover the #include <zlib.h> in its compile.
+  export CMAKE_PREFIX_PATH="$VENV_PATH${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
   export CPLUS_INCLUDE_PATH="$VENV_PATH/include:${CPLUS_INCLUDE_PATH:-}"
   export C_INCLUDE_PATH="$VENV_PATH/include:${C_INCLUDE_PATH:-}"
   export LIBRARY_PATH="$VENV_PATH/lib:${LIBRARY_PATH:-}"

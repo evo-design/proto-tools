@@ -413,7 +413,7 @@ def run_ensembl_vep(
     Args:
         inputs (EnsemblVEPInput): HGVS notation (genomic / coding / protein).
         config (EnsemblVEPConfig): Species + assembly.
-        instance (Any): Optional ToolInstance; unused for HTTP-only tools.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         EnsemblVEPOutput: One ``EnsemblVEPConsequence`` per record returned
@@ -443,6 +443,7 @@ def run_ensembl_vep(
             ) from exc
         if not isinstance(payload, list):
             raise ValueError(f"Ensembl VEP returned non-list payload: {type(payload).__name__}")
+        # Validate each consequence while preserving the full API response.
         consequences: list[EnsemblVEPConsequence] = []
         for i, c in enumerate(payload):
             if not isinstance(c, dict):
@@ -463,7 +464,7 @@ def run_ensembl_vep(
 
 
 def _build_vep_params(config: EnsemblVEPConfig) -> dict[str, str]:
-    """Translate set flags into VEP query params (bool→"1"; str/int→str; None omitted)."""
+    """Convert enabled config fields to VEP parameters, omitting unset values."""
     params: dict[str, str] = {}
     for source, mapping in (
         (config, _VEP_ROOT_PARAM_MAP),

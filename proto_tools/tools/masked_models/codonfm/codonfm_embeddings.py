@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     CodonFMConfig,
     CodonSequenceInput,
-    resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolOutput, ToolInstance
@@ -119,17 +118,12 @@ def run_codonfm_embeddings(
     Returns:
         CodonFMEmbeddingsOutput: Per-sequence CLS embedding vectors.
     """
-    safetensors_url, config_url, filename, subdir = resolve_checkpoint_source(config.model_checkpoint)
-
     output_data = ToolInstance.dispatch(
         "codonfm",
         {
             "operation": "embeddings",
             "sequences": inputs.sequences,
-            "safetensors_url": safetensors_url,
-            "config_url": config_url,
-            "safetensors_filename": filename,
-            "cache_subdir": subdir,
+            "model_checkpoint": config.model_checkpoint,
             "batch_size": config.batch_size,
             "device": config.device,
             "verbose": config.verbose,

@@ -1,5 +1,16 @@
 """Enformer genomic sequence-to-function prediction."""
 
+from proto_tools.tools.sequence_scoring.enformer.enformer_gradient import (
+    EnformerActivityTerm,
+    EnformerGradientCandidate,
+    EnformerGradientConfig,
+    EnformerGradientInput,
+    EnformerGradientOutput,
+    EnformerGradientResult,
+    EnformerGradientSampleMetrics,
+    EnformerTermGradient,
+    run_enformer_gradient,
+)
 from proto_tools.tools.sequence_scoring.enformer.enformer_prediction import (
     ENFORMER_CONTEXT,
     ENFORMER_OUTPUT,
@@ -15,6 +26,15 @@ from proto_tools.tools.sequence_scoring.enformer.enformer_prediction import (
 from proto_tools.tools.sequence_scoring.shared_data_models import SequenceTargetRange, SequenceWindow
 
 __all__ = [
+    "EnformerGradientCandidate",
+    "EnformerGradientConfig",
+    "EnformerGradientInput",
+    "EnformerActivityTerm",
+    "EnformerGradientResult",
+    "EnformerTermGradient",
+    "EnformerGradientOutput",
+    "EnformerGradientSampleMetrics",
+    "run_enformer_gradient",
     "SequenceTargetRange",
     "SequenceWindow",
     "EnformerInput",

@@ -146,6 +146,7 @@ def run_evo1_score(
     """
     logger.debug(f"Using local venv for Evo1 scoring: {config.model_name}")
 
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "evo1",
         {

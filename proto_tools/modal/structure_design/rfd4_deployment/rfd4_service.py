@@ -23,13 +23,13 @@ from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_
 
 
 def _warmup() -> None:
-    """Deploy-time: build the env and warm the default checkpoint.
+    """Build the environment and warm the default checkpoint at deploy time.
 
-    Deliberately the cheap sampling path rather than the production default: this shares
-    ``run_function``'s one-hour timeout with a micromamba CUDA toolkit install, the
-    ``rfd4-proteina[all-cuda12]`` wheels, and a ~2.8 GB weight download, and the point here
-    is to populate the env and the HuggingFace cache, not to produce a usable design. Both
-    registered tools resolve the same toolkit and checkpoint bundle, so one warmup covers them.
+    Use a short sampling run to populate the environment and Hugging Face cache.
+    The one-hour ``run_function`` timeout also covers the CUDA toolkit install,
+    ``rfd4-proteina[all-cuda12]`` wheels, and roughly 2.8 GB of weights. The
+    warm-up output is not a usable design. Both registered tools use the same
+    environment and checkpoint bundle, so one warm-up covers them.
     """
     from proto_tools.tools.structure_design.rfd4.rfd4_design import (
         RFD4DesignConfig,

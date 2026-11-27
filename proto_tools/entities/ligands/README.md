@@ -1,17 +1,20 @@
 # Ligands
 
 ## Overview
-This module provides classes and utilities for representing **small molecule ligands** - molecules that bind to proteins through non-covalent interactions (hydrogen bonds, van der Waals, hydrophobic, ionic). It provides a unified interface for loading ligands from SMILES strings, SDF files, or RDKit Mol objects, generating 3D conformers, and visualizing molecular structures.
+This module represents **small molecule ligands** that bind to proteins through
+non-covalent interactions, including hydrogen bonds, van der Waals forces,
+hydrophobic interactions, and ionic interactions. Load ligands from SMILES strings,
+SDF files, or RDKit Mol objects, then generate 3D conformers and visualize them.
 
-## When to Use This Tool
+## When to use this module
 
-**Primary use cases:**
+Use this module for the following tasks.
 - Representing small molecules for structure prediction inputs (e.g., Boltz2, Chai1, AlphaFold3)
 - Loading ligand libraries from SDF or SMILES files
 - Generating 3D conformers for docking or visualization
 - Converting between molecular representations (SMILES ↔ SDF ↔ RDKit Mol)
 
-**When NOT to use this tool:**
+Use other tools for the following tasks.
 - For peptide ligands > ~50 residues: Use protein sequence tools instead
 - For covalent binders: This module assumes non-covalent interactions
 - For virtual screening campaigns: Use specialized docking software (AutoDock, Glide)
@@ -19,15 +22,14 @@ This module provides classes and utilities for representing **small molecule lig
 
 ## Biological Background
 
-**What are ligands?**
-In structural biology, a **ligand** is any molecule that binds to a protein target. This includes:
+In structural biology, a **ligand** is a molecule that binds to a protein target.
+Examples include the following.
 - **Drug molecules**: Small organic compounds (~150-900 Da)
 - **Cofactors**: NAD+, FAD, ATP, heme
 - **Metal ions**: Zn²⁺, Mg²⁺, Ca²⁺
 - **Natural substrates**: Metabolites, signaling molecules
 
-**Why is this important?**
-Understanding protein-ligand interactions is central to:
+Protein-ligand interactions matter in several areas.
 - **Drug discovery**: Designing molecules that bind to disease targets
 - **Enzymology**: Understanding how enzymes bind and transform substrates
 - **Signaling**: How hormones and neurotransmitters trigger cellular responses
@@ -42,14 +44,14 @@ SMILES (Simplified Molecular-Input Line-Entry System) is a line notation for des
 
 ## How It Works
 
-**Class hierarchy:**
+The two classes represent individual molecules and collections.
 
 | Class | Description | Use Case |
 |-------|-------------|----------|
 | `Fragment` | Single connected molecule | One drug, one cofactor |
 | `Ligands` | Collection of fragments | Multi-ligand systems, libraries |
 
-**Key operations:**
+The module supports the following operations.
 
 1. **Loading**: From SMILES strings, `.smi` files, `.sdf` files, or RDKit Mol objects
 2. **Validation**: Ensures SMILES are valid, molecules have atoms
@@ -117,7 +119,7 @@ Use the factories `Ligands.from_smiles(...)`, `Ligands.from_ccd_codes([...])`, `
 | `.smiles` | `str` | Dot-separated SMILES of all fragments |
 | `len(ligands)` | `int` | Number of fragments |
 
-## Best Practices & Gotchas
+## Practical notes
 
 **Loading molecules:**
 

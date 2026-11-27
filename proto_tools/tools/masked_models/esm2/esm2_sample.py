@@ -4,7 +4,7 @@ ESM2 sampling tool.
 """
 
 import logging
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 from pydantic import field_validator
 
@@ -25,7 +25,6 @@ from proto_tools.utils import (
     ConfigField,
     ToolInstance,
 )
-from proto_tools.utils.device import RemoteDevice
 
 logger = logging.getLogger(__name__)
 
@@ -159,21 +158,18 @@ class ESM2SampleConfig(MaskedModelSampleConfig):
         description="Include per-position logits in the output (large; disable to save memory)",
     )
 
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """The 15B variant is too large for Proto to host; other remotes are unaffected."""
-        if device == "proto" and self.model_checkpoint == "esm2_t48_15B_UR50D":
-            return (
-                "The 15B variant (esm2_t48_15B_UR50D) is not hosted on device='proto'. Choose a "
-                "smaller variant, run locally, or deploy it yourself with device='modal'."
-            )
-        return None
-
     def preprocess(self, inputs: Any) -> Any:
         """Apply masking strategy unless sequences are already pre-masked."""
         position_score_fn = build_position_score_fn(
             "esm2", self.masking_strategy, self.device, sampling_checkpoint=self.model_checkpoint
         )
         return apply_masking_strategy(self, inputs, position_score_fn=position_score_fn)
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "ESM2SampleConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "esm2_t6_8M_UR50D")
+        return cast("ESM2SampleConfig", super().minimal(**kwargs))
 
 
 # ============================================================================
@@ -220,6 +216,7 @@ def run_esm2_sample(
         ESM2SampleOutput: ESM2SampleOutput with sampled sequences and optional logits.
     """
     logger.debug(f"Using local for ESM2 sampling: {config.model_checkpoint}")
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "esm2",
         {

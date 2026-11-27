@@ -56,7 +56,7 @@ def _parse_device_pair(device_str: str) -> tuple[str, str]:
         "cuda:0,1"        -> ("cuda:0", "cuda:1")
         "cpu"             -> ("cpu", "cpu")
 
-    Note: In practice, DeviceManager resolves "cudax2" to specific indices
+    DeviceManager resolves "cudax2" to specific indices
     before it reaches the worker subprocess. This function handles the
     resolved format.
     """

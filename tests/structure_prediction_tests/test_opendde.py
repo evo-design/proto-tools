@@ -3,7 +3,9 @@
 Tests for OpenDDE all-atom structure prediction (``opendde-prediction``).
 """
 
+import contextlib
 import importlib.util
+import json
 import logging
 import re
 import sys
@@ -14,7 +16,7 @@ import pytest
 
 from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.msa import MSA
-from proto_tools.entities.structures import is_valid_structure
+from proto_tools.entities.structures import BFactorType, is_valid_structure
 from proto_tools.tools import (
     Chain,
     OpenDDEConfig,
@@ -24,9 +26,11 @@ from proto_tools.tools import (
 from proto_tools.tools.structure_prediction import Complex, ComplexMSAs
 from proto_tools.tools.structure_prediction.opendde.helpers import build_chain_msa_paths, complex_to_opendde_json
 from tests._structure_fixtures import synthetic_cif
-from tests.conftest import benchmark_twice
+from tests.conftest import benchmark_twice, make_persistent_fixture
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
+
+_persistent_tool = make_persistent_fixture("opendde")
 
 # Cro repressor from bacteriophage lambda — short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
@@ -136,7 +140,7 @@ def test_opendde_build_chain_msa_paths_emits_species_paired_headers(tmp_path):
     }
     complex_msas = ComplexMSAs(per_chain=paired, paired=True)
 
-    unpaired_paths, paired_paths = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
+    unpaired_paths, paired_paths, _sent = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
 
     # Both chains get an unpaired AND a paired A3M.
     assert set(unpaired_paths) == {"A", "B"}
@@ -157,6 +161,37 @@ def test_opendde_build_chain_msa_paths_emits_species_paired_headers(tmp_path):
     # Same species token at each row index across chains -> OpenDDE pairs those rows.
     assert species_a == species_b
     assert len(set(species_a)) == len(species_a)  # distinct per row (row-index encoded)
+
+
+def test_opendde_partial_supplied_bundle_gives_every_chain_an_msa_path(tmp_path):
+    """A chain without a path makes OpenDDE search its own server and overwrite the supplied MSAs."""
+    target, binder = "MKTAYIAKQR", "GSHMLEDPVD"
+    cx = Complex(chains=[Chain(sequence=target, entity_type="protein"), Chain(sequence=binder, entity_type="protein")])
+    msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[target, "MKTAYIAKQA", "MKTAYIAKQE"])})
+
+    unpaired_paths, _paired, _sent = build_chain_msa_paths(cx, msas, str(tmp_path))
+
+    assert {chain_id: Path(path).read_text().count(">") for chain_id, path in unpaired_paths.items()} == {
+        "A": 3,
+        "B": 1,
+    }
+    assert Path(unpaired_paths["B"]).read_text() == f">query\n{binder}\n"
+
+
+@pytest.mark.uses_env
+def test_opendde_does_not_search_for_a_partial_supplied_bundle(tmp_path):
+    """OpenDDE's own need_msa_search stays False on the JSON we write for a target-only MSA."""
+    from proto_tools.utils import run_in_env
+
+    target, binder = "MKTAYIAKQR", "GSHMLEDPVD"
+    cx = Complex(chains=[Chain(sequence=target, entity_type="protein"), Chain(sequence=binder, entity_type="protein")])
+    msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[target, "MKTAYIAKQA"])})
+    unpaired_paths, paired_paths, _sent = build_chain_msa_paths(cx, msas, str(tmp_path))
+    job_path = tmp_path / "job.json"
+    job_path.write_text(json.dumps(complex_to_opendde_json(cx.chains, "job", [0], unpaired_paths, paired_paths)))
+
+    code = "import json, sys\nfrom runner.msa_search import need_msa_search\nprint(need_msa_search(json.load(open(sys.argv[1]))))"
+    assert run_in_env("opendde", code=code, args=[str(job_path)], timeout=1800).strip().splitlines()[-1] == "False"
 
 
 def test_opendde_protein_modifications_prefixed_ptm():
@@ -197,17 +232,12 @@ def _load_standalone_inference():
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    # The console script only exists inside the tool venv; argv assembly is what is under test.
-    module._resolve_opendde_bin = lambda: "/venv/bin/opendde"
     return module
 
 
-def _build_cmd(model, **overrides):
-    """Call ``OpenDDEModel._build_cmd`` with defaults for the args under test."""
+def _runner_kwargs(model, **overrides):
+    """Call ``OpenDDEModel._runner_kwargs`` with defaults for the args under test."""
     kwargs = {
-        "input_json_path": "input.json",
-        "output_dir": "output",
-        "job_name": "job",
         "model_checkpoint": "opendde_v1",
         "num_samples": 1,
         "num_steps": 200,
@@ -215,29 +245,25 @@ def _build_cmd(model, **overrides):
         "use_msa": False,
         "use_template": False,
         "use_rna_msa": False,
-        "seed": 0,
         "device": "cuda",
-        "include_pae_matrix": False,
     }
     kwargs.update(overrides)
-    return model._build_cmd(**kwargs)
+    return model._runner_kwargs(**kwargs)
 
 
-def test_opendde_need_atom_confidence_tracks_include_pae_matrix(tmp_path):
-    """--need_atom_confidence is 'true' only when the PAE matrix is requested."""
+def test_opendde_requests_atom_confidence_by_default(tmp_path):
+    """need_atom_confidence is on by default: without it OpenDDE writes zero B-factors instead of pLDDT."""
     mod = _load_standalone_inference()
     model = mod.OpenDDEModel()
     model.root_dir = str(tmp_path)
     model._loaded = True
 
-    off = _build_cmd(model, include_pae_matrix=False)
-    on = _build_cmd(model, include_pae_matrix=True)
-    assert off[off.index("--need_atom_confidence") + 1] == "false"
-    assert on[on.index("--need_atom_confidence") + 1] == "true"
+    assert _runner_kwargs(model)["need_atom_confidence"] is True
+    assert _runner_kwargs(model, need_atom_confidence=False)["need_atom_confidence"] is False
 
 
 def test_opendde_bundled_abag_routes_via_checkpoint_path(tmp_path):
-    """The ``opendde_abag`` name routes to its bundled checkpoint via --load_checkpoint_path (-n stays opendde_v1)."""
+    """The ``opendde_abag`` name routes to its bundled checkpoint via load_checkpoint_path (model_name stays opendde_v1)."""
     mod = _load_standalone_inference()
     model = mod.OpenDDEModel()
     model.root_dir = str(tmp_path)
@@ -246,24 +272,77 @@ def test_opendde_bundled_abag_routes_via_checkpoint_path(tmp_path):
     ckpt_dir.mkdir()
     (ckpt_dir / "opendde_abag.pt").write_bytes(b"")
 
-    cmd = _build_cmd(model, model_checkpoint="opendde_abag")
+    kwargs = _runner_kwargs(model, model_checkpoint="opendde_abag")
 
-    assert cmd[cmd.index("-n") + 1] == "opendde_v1"
-    assert cmd[cmd.index("--load_checkpoint_path") + 1] == str(ckpt_dir / "opendde_abag.pt")
+    assert kwargs["model_name"] == "opendde_v1"
+    assert kwargs["load_checkpoint_path"] == str(ckpt_dir / "opendde_abag.pt")
 
 
 def test_opendde_default_model_sends_no_checkpoint_override(tmp_path):
-    """``opendde_v1`` lets OpenDDE load its own default weights (no --load_checkpoint_path)."""
+    """``opendde_v1`` lets OpenDDE load its own default weights (no checkpoint override)."""
     mod = _load_standalone_inference()
     model = mod.OpenDDEModel()
     model.root_dir = str(tmp_path)
     model._loaded = True
 
-    assert "--load_checkpoint_path" not in _build_cmd(model, model_checkpoint="opendde_v1")
+    assert _runner_kwargs(model, model_checkpoint="opendde_v1")["load_checkpoint_path"] == ""
+
+
+def test_opendde_imports_upstream_only_after_resolving_its_root(tmp_path, monkeypatch):
+    """OpenDDE reads OPENDDE_ROOT_DIR into module constants at import, so the root must be set first.
+
+    With the managed weights cache (no OPENDDE_ROOT_DIR in the worker env), importing OpenDDE before
+    ``load()`` binds its own fallback root, where it would download the checkpoint again.
+    """
+    root = tmp_path / "weights"
+    (root / "checkpoint").mkdir(parents=True)
+    (root / "checkpoint" / "opendde.pt").write_bytes(b"")
+    fake = tmp_path / "fake_upstream" / "runner"
+    fake.mkdir(parents=True)
+    (fake / "__init__.py").write_text("")
+    (fake / "inference.py").write_text("def infer_predict(runner, configs):\n    pass\n")
+    (fake / "batch_inference.py").write_text(
+        "import os\n"
+        "ROOT_AT_IMPORT = os.environ.get('OPENDDE_ROOT_DIR')\n"
+        "def get_default_runner(**kwargs):\n"
+        "    raise RuntimeError('stop after import')\n"
+        "def preprocess_input(*args, **kwargs):\n"
+        "    raise AssertionError('not reached')\n"
+    )
+    monkeypatch.syspath_prepend(str(fake.parent))
+    for name in ("runner", "runner.batch_inference", "runner.inference"):
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    # load() sets OPENDDE_ROOT_DIR in this process. Setting it first records an undo, so teardown removes
+    # it; delenv of an unset variable records none, and the leaked root would send every later OpenDDE
+    # worker to this tmp dir's empty checkpoint, which upstream then downloads again.
+    monkeypatch.setenv("OPENDDE_ROOT_DIR", "")
+    monkeypatch.delenv("OPENDDE_ROOT_DIR")
+    mod = _load_standalone_inference()
+    helpers = sys.modules["standalone_helpers"]
+    monkeypatch.setattr(helpers, "resolve_weights_dir", lambda toolkit: str(root), raising=False)
+    monkeypatch.setattr(helpers, "oom_guard", lambda *args, **kwargs: contextlib.nullcontext(), raising=False)
+
+    with pytest.raises(RuntimeError, match="stop after import"):
+        mod.OpenDDEModel()(
+            input_json_path=str(tmp_path / "in.json"),
+            output_dir=str(tmp_path / "out"),
+            job_name="j",
+            model_checkpoint="opendde_v1",
+            num_samples=1,
+            num_steps=1,
+            num_cycles=1,
+            use_msa=False,
+            use_template=False,
+            use_rna_msa=False,
+            seed=0,
+            device="cpu",
+        )
+
+    assert str(root) == sys.modules["runner.batch_inference"].ROOT_AT_IMPORT
 
 
 def test_opendde_missing_bundled_checkpoint_fails_before_dispatch(tmp_path):
-    """A bundled checkpoint that hasn't been downloaded fails here, not inside the CLI."""
+    """A bundled checkpoint that hasn't been downloaded fails before the model is built."""
     mod = _load_standalone_inference()
     model = mod.OpenDDEModel()
     model.root_dir = str(tmp_path)
@@ -271,7 +350,7 @@ def test_opendde_missing_bundled_checkpoint_fails_before_dispatch(tmp_path):
     (tmp_path / "checkpoint").mkdir()
 
     with pytest.raises(FileNotFoundError, match="checkpoint not found"):
-        _build_cmd(model, model_checkpoint="opendde_abag")
+        _runner_kwargs(model, model_checkpoint="opendde_abag")
 
 
 def test_opendde_explicit_checkpoint_path_is_passed_through(tmp_path):
@@ -283,9 +362,7 @@ def test_opendde_explicit_checkpoint_path_is_passed_through(tmp_path):
     custom = tmp_path / "custom.pt"
     custom.write_bytes(b"")
 
-    cmd = _build_cmd(model, model_checkpoint=str(custom))
-
-    assert cmd[cmd.index("--load_checkpoint_path") + 1] == str(custom)
+    assert _runner_kwargs(model, model_checkpoint=str(custom))["load_checkpoint_path"] == str(custom)
 
 
 def test_opendde_unknown_checkpoint_value_raises(tmp_path):
@@ -296,7 +373,7 @@ def test_opendde_unknown_checkpoint_value_raises(tmp_path):
     model._loaded = True
 
     with pytest.raises(FileNotFoundError, match="checkpoint not found"):
-        _build_cmd(model, model_checkpoint="opendde_v2")
+        _runner_kwargs(model, model_checkpoint="opendde_v2")
 
 
 def test_opendde_bundled_checkpoints_are_downloaded_by_setup():
@@ -313,12 +390,13 @@ def test_opendde_bundled_checkpoints_are_downloaded_by_setup():
 # ── Config: cloud support gate ───────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("device", ["proto", "modal"])
-def test_opendde_local_checkpoint_is_unavailable_on_any_remote(device):
+def test_opendde_local_checkpoint_is_unavailable_on_any_remote():
     """A local file exists only on this machine, so no remote worker can read it."""
-    assert OpenDDEConfig(use_msa=False).remote_unsupported_reason(device) is None
-    assert OpenDDEConfig(use_msa=False, model_checkpoint="opendde_abag").remote_unsupported_reason(device) is None
-    assert OpenDDEConfig(use_msa=False, model_checkpoint="/local/ckpt.pt").remote_unsupported_reason(device) is not None
+    assert OpenDDEConfig(use_msa=False).remote_unsupported_reason("modal") is None
+    assert OpenDDEConfig(use_msa=False, model_checkpoint="opendde_abag").remote_unsupported_reason("modal") is None
+    assert (
+        OpenDDEConfig(use_msa=False, model_checkpoint="/local/ckpt.pt").remote_unsupported_reason("modal") is not None
+    )
 
 
 # ── Dispatch / metric assembly (mocked worker) ───────────────────────────────
@@ -409,6 +487,32 @@ def test_opendde_iptm_surfaced_when_present(monkeypatch):
     result = run_opendde(OpenDDEInput(complexes=[_CRO_SEQUENCE]), OpenDDEConfig(use_msa=False))
 
     assert result.structures[0].metrics["iptm"] == pytest.approx(0.62)
+    # Runs emit full confidence data by default, so B-factors carry pLDDT even without the PAE matrix.
+    assert captured["input_data"][0]["atom_confidence"] is True
+    assert result.structures[0].b_factor_type == BFactorType.PLDDT
+
+
+@pytest.mark.parametrize(
+    ("include_pae_matrix", "b_factor_type"), [(False, BFactorType.UNKNOWN), (True, BFactorType.PLDDT)]
+)
+def test_opendde_atom_confidence_opt_out(monkeypatch, include_pae_matrix, b_factor_type):
+    """atom_confidence=False skips per-atom pLDDT (zero B-factors, UNKNOWN) unless the PAE matrix needs it."""
+    captured: dict = {}
+    metrics = {"avg_plddt": 80.0, "ptm": 0.7, "iptm": 0.0, "gpde": 2.0, "ranking_score": 0.5, "has_clash": False}
+    if include_pae_matrix:
+        metrics.update(avg_pae=0.75, pae=[[0.0, 1.5], [1.5, 0.0]])
+    monkeypatch.setattr(
+        "proto_tools.tools.structure_prediction.opendde.opendde.ToolInstance.dispatch",
+        _fake_dispatch_factory(captured, metrics=metrics),
+    )
+
+    result = run_opendde(
+        OpenDDEInput(complexes=[_CRO_SEQUENCE]),
+        OpenDDEConfig(use_msa=False, atom_confidence=False, include_pae_matrix=include_pae_matrix),
+    )
+
+    assert captured["input_data"][0]["atom_confidence"] is False
+    assert result.structures[0].b_factor_type == b_factor_type
 
 
 def test_opendde_pae_attached_when_requested(monkeypatch):
@@ -439,6 +543,8 @@ def test_opendde_pae_attached_when_requested(monkeypatch):
     m = result.structures[0].metrics
     assert m["avg_pae"] == pytest.approx(0.75)
     assert m["pae"] == pae
+    # The full-confidence run writes per-atom pLDDT as B-factors.
+    assert result.structures[0].b_factor_type == BFactorType.PLDDT
     assert_metrics_in_spec(result)
 
 
@@ -524,6 +630,21 @@ def test_opendde_no_msa_single_sequence_sets_use_msa_false(monkeypatch):
 
 
 @pytest.mark.uses_gpu
+def test_opendde_default_run_carries_per_residue_plddt():
+    """Without the PAE matrix, B-factors still carry pLDDT matching the summary's avg_plddt."""
+    result = run_opendde(
+        OpenDDEInput(complexes=[_TINY_PEPTIDE]),
+        OpenDDEConfig(use_msa=False, num_samples=1, num_steps=50, num_cycles=3, seed=42),
+    )
+    assert result.success
+    s = result.structures[0]
+    assert "pae" not in s.metrics
+    per_residue = s.per_residue_plddt
+    assert per_residue is not None
+    assert sum(per_residue) / len(per_residue) == pytest.approx(s.metrics["avg_plddt"] / 100.0, abs=0.05)
+
+
+@pytest.mark.uses_gpu
 def test_opendde_pae_matrix_end_to_end():
     """Fold a tiny peptide end-to-end; include_pae_matrix=True yields a square per-token PAE matrix + avg_pae in Å."""
     result = run_opendde(
@@ -540,6 +661,10 @@ def test_opendde_pae_matrix_end_to_end():
     assert isinstance(pae, list) and len(pae) > 0
     assert all(len(row) == len(pae) for row in pae), "PAE matrix must be square (n_token x n_token)"
     assert 0.0 <= m["avg_pae"] <= 32.0
+    # B-factors carry the same pLDDT the summary reports (0-100 there, normalized here).
+    per_residue = result.structures[0].per_residue_plddt
+    assert per_residue is not None
+    assert sum(per_residue) / len(per_residue) == pytest.approx(m["avg_plddt"] / 100.0, abs=0.05)
     assert_metrics_in_spec(result)
 
 
@@ -567,3 +692,12 @@ def test_opendde_benchmark(request):
     assert len(result.structures) == 1
     assert is_valid_structure(result.structures[0].structure_cif)
     assert_metrics_in_spec(result)
+
+
+@pytest.mark.uses_env
+def test_opendde_reported_msa_depth_matches_data_config():
+    from proto_tools.tools.structure_prediction.opendde.opendde import OPENDDE_MSA_DEPTH
+    from proto_tools.utils import run_in_env
+
+    code = "from opendde.config.data import data_configs\nprint(data_configs['msa']['msa_depth'])"
+    assert int(run_in_env("opendde", code=code, timeout=1800).strip().splitlines()[-1]) == OPENDDE_MSA_DEPTH

@@ -35,8 +35,8 @@ Use this when the question is "which proteins belong to family X." Build or down
 
 #### Usage Tips
 
-- **`bit_cutoffs="gathering"` activates the Pfam-curated thresholds and replaces the E-value filter.** Each Pfam HMM ships a hand-curated gathering (`--cut_ga`) cutoff that defines family membership, together with the auto-derived noise (`--cut_nc`) and trusted (`--cut_tc`) cutoffs that bracket the curated set. Use `"gathering"` for routine Pfam annotation; ad-hoc HMMs without stored cutoffs raise `MissingCutoffs`.
-- **The default `evalue_threshold=10.0` is intentionally permissive.** Tighten to `0.001` for confident annotation or `1e-10` for stringent homology detection; loose thresholds are useful only when you plan to post-filter on `included` or `domain_included`.
+- **`bit_cutoffs="gathering"` activates the Pfam-curated thresholds and replaces the E-value filter.** Each Pfam HMM ships a hand-curated gathering (`--cut_ga`) cutoff that defines family membership, together with the auto-derived noise (`--cut_nc`) and trusted (`--cut_tc`) cutoffs that bracket the curated set. Use `"gathering"` for routine Pfam annotation. Ad-hoc HMMs without stored cutoffs raise `MissingCutoffs`.
+- **The default `evalue_threshold=10.0` is intentionally permissive.** Tighten to `0.001` for confident annotation or `1e-10` for stringent homology detection. Loose thresholds are useful only when you plan to post-filter on `included` or `domain_included`.
 
 ### PyHMMER HMM Scan (`pyhmmer-hmmscan`)
 
@@ -48,7 +48,7 @@ Use this when the question is "what does this protein contain." Run a query prot
 
 #### Usage Tips
 
-- **Pick `hmmscan` versus `hmmsearch` by what you are querying with.** `hmmscan` takes sequences as queries and a database of HMMs as the target; `hmmsearch` is the reverse. For one or a few queries against Pfam, `hmmscan` is the natural choice; for one HMM against a large sequence database, `hmmsearch` is much faster.
+- **Pick `hmmscan` versus `hmmsearch` by what you are querying with.** `hmmscan` takes sequences as queries and a database of HMMs as the target. `hmmsearch` is the reverse. For one or a few queries against Pfam, `hmmscan` is the natural choice. For one HMM against a large sequence database, `hmmsearch` is much faster.
 - **`bit_cutoffs="gathering"` applies here too and is the recommended Pfam annotation default.** As with `hmmsearch`, the cutoff is read from the HMM file and ad-hoc HMMs without stored cutoffs will fail with `MissingCutoffs`.
 
 ### PyHMMER Single-Sequence Protein Search (`pyhmmer-phmmer`)
@@ -61,7 +61,7 @@ Use this for HMM-grade sensitivity when no pre-built profile is available. Typic
 
 #### Usage Tips
 
-- **A single-query, single-target search will not converge.** `phmmer` builds the HMM from the query against the target database's residue statistics; a database of one sequence has no background to estimate against. Use `phmmer` with a real target proteome, not a synthetic pair.
+- **A single-query, single-target search will not converge.** `phmmer` builds the HMM from the query against the target database's residue statistics. A database of one sequence has no background to estimate against. Use `phmmer` with a real target proteome, not a synthetic pair.
 
 ### PyHMMER Nucleotide Search (`pyhmmer-nhmmer`)
 
@@ -85,7 +85,7 @@ Use this when you need to reach divergent family members that a single-pass `phm
 
 #### Usage Tips
 
-- **`inclusion_evalue_threshold` is the lever that controls iterative drift.** Each iteration rebuilds the HMM from hits that pass the inclusion thresholds (`--incE` / `--incdomE`, defaults `0.01`). A looser inclusion threshold pulls in more sequences per round and increases the risk of pulling in unrelated families; tighten it when iterations start drifting.
+- **`inclusion_evalue_threshold` is the lever that controls iterative drift.** Each iteration rebuilds the HMM from hits that pass the inclusion thresholds (`--incE` / `--incdomE`, defaults `0.01`). A looser inclusion threshold pulls in more sequences per round and increases the risk of pulling in unrelated families. Tighten it when iterations start drifting.
 - **`max_iterations` defaults to 5 and the search exits early on convergence.** Raising it rarely helps if the search has already converged on a stable set, and a higher cap multiplies runtime on long-running jobs.
 
 ## Toolkit Notes
@@ -95,6 +95,6 @@ Use this when you need to reach divergent family members that a single-pass `phm
 These apply to every PyHMMER tool in this toolkit (`pyhmmer-hmmsearch`, `pyhmmer-hmmscan`, `pyhmmer-phmmer`, `pyhmmer-nhmmer`, `pyhmmer-jackhmmer`).
 
 - **Runs on CPU with SIMD acceleration.** The HMMER3 filter cascade is SIMD-vectorised on x86 platforms. pyhmmer compiles HMMER from source at install time and inherits whatever instruction sets the build host exposes, with no GPU acceleration to enable.
-- **Self-contained after install.** The HMMER C library is compiled into the PyHMMER wheel, so no separate HMMER install or PATH lookup is needed; HMM databases such as Pfam-A still have to be downloaded separately.
-- **`num_threads` parallelises within a single search.** Default `0` auto-detects the available cores. Memory scales with HMM database size; Pfam-A (around 20,000 HMMs) needs roughly 2 GB of RAM held resident.
+- **Self-contained after install.** The HMMER C library is compiled into the PyHMMER wheel, so no separate HMMER install or PATH lookup is needed. HMM databases such as Pfam-A still have to be downloaded separately.
+- **`num_threads` parallelises within a single search.** Default `0` auto-detects the available cores. Memory scales with HMM database size. Pfam-A (around 20,000 HMMs) needs roughly 2 GB of RAM held resident.
 - **Reporting versus inclusion thresholds are independent filters.** `evalue_threshold` / `score_threshold` (and their `domain_*` siblings) control what appears in the output, while `inclusion_evalue_threshold` marks the stricter "trusted" subset via the `included` and `domain_included` flags. `jackhmmer` seeds the next iteration's HMM from the included set, so the inclusion threshold drives iterative behaviour while reporting only affects what is returned.

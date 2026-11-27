@@ -13,9 +13,9 @@ import json
 import os
 import tempfile
 from logging import getLogger
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
-from proto_tools.entities.structures import BFactorType, Structure
+from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
 from proto_tools.tools.structure_prediction.opendde.helpers import (
     build_chain_msa_paths,
     complex_to_opendde_json,
@@ -26,7 +26,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
@@ -35,6 +35,9 @@ from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
+
+# MSA rows OpenDDE keeps from its reshuffled pool on every pass (data_configs["msa"]["msa_depth"]).
+OPENDDE_MSA_DEPTH = 1280
 
 # Bundled model names auto-downloaded by setup.sh; other model_checkpoint values are user paths.
 _BUNDLED_MODELS: frozenset[str] = frozenset({"opendde_v1", "opendde_abag"})
@@ -47,8 +50,8 @@ _BUNDLED_MODELS: frozenset[str] = frozenset({"opendde_v1", "opendde_abag"})
 class OpenDDEInput(StructurePredictionInput):
     """Input object for OpenDDE structure prediction.
 
-    This class defines the input parameters for predicting 3D structures of proteins,
-    DNA, RNA, and ligands using OpenDDE, an all-atom co-folding model.
+    Provide proteins, DNA, RNA, and ligands for all-atom structure prediction
+    with OpenDDE.
 
     Inherits from ``StructurePredictionInput``.
 
@@ -144,8 +147,8 @@ class OpenDDEOutput(StructurePredictionOutput):
 class OpenDDEConfig(MSAStructurePredictionConfig):
     """Configuration object for OpenDDE structure prediction.
 
-    This class defines configuration parameters for running OpenDDE, an all-atom
-    co-folding model supporting proteins, DNA, RNA, and ligands. Fields map to the
+    Configure OpenDDE all-atom structure prediction for proteins, DNA, RNA,
+    and ligands. Fields map to the
     ``opendde pred`` CLI (``--sample``, ``--step``, ``--cycle``, ``--use_template``,
     ``--use_rna_msa``, ``-n``).
 
@@ -183,10 +186,16 @@ class OpenDDEConfig(MSAStructurePredictionConfig):
         msa_search_config (Mmseqs2HomologySearchConfig | None): MMseqs2 search config;
             only used when ``use_msa=True``. Inherited. Default: None.
 
-        include_pae_matrix (bool): Inherited. When True, OpenDDE is run with
-            ``--need_atom_confidence`` and the per-token PAE matrix (``pae``) plus a
-            derived ``avg_pae`` scalar are attached to the metrics. Off by default —
-            the matrix is O(n_token^2) to compute and serialize. Default: False.
+        include_pae_matrix (bool): Inherited. When True, the per-token PAE matrix (``pae``)
+            plus a derived ``avg_pae`` scalar are attached to the metrics; it reads OpenDDE's
+            full confidence data, so it forces ``atom_confidence`` on. Off by default — the
+            matrix is O(n_token^2) to serialize. Default: False.
+
+        atom_confidence (bool): Run OpenDDE with ``--need_atom_confidence`` so the structure's
+            B-factors carry per-atom pLDDT (0-100) and ``per_residue_plddt`` works, like other
+            predictors (about +2% time on a 1,010-token complex). Set False to skip writing the
+            full confidence output; B-factors are then all 0 and tagged ``UNKNOWN`` unless
+            ``include_pae_matrix`` is set. Default: True.
 
         device (str): Device to run on (``"cuda"``, ``"cpu"``). Inherited. Default: ``"cuda"``.
 
@@ -226,6 +235,11 @@ class OpenDDEConfig(MSAStructurePredictionConfig):
         default=False,
         description="Enable OpenDDE's RNA MSA pipeline (--use_rna_msa).",
     )
+    atom_confidence: bool = ConfigField(
+        title="Per-Atom Confidence",
+        default=True,
+        description="Write per-atom pLDDT into B-factors (--need_atom_confidence); include_pae_matrix forces it.",
+    )
     timeout: int | None = ConfigField(
         title="Timeout",
         default=1200,
@@ -243,6 +257,24 @@ class OpenDDEConfig(MSAStructurePredictionConfig):
                 "device='cuda' or device='cpu'."
             )
         return None
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "OpenDDEConfig":
+        """One sample over 20 diffusion steps and one recycle (defaults: 1, 200, 10).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            OpenDDEConfig: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("num_samples", 1)
+        kwargs.setdefault("num_steps", 20)
+        kwargs.setdefault("num_cycles", 1)
+        return cast("OpenDDEConfig", super().minimal(**kwargs))
 
 
 # ============================================================================
@@ -263,6 +295,9 @@ def example_input() -> Any:
     metrics_class=OpenDDEMetrics,
     description="All-atom biomolecular structure prediction using OpenDDE",
     uses_gpu=True,
+    # The worker holds OpenDDE's runner in-process, and OpenDDE resolves "cuda" to cuda:0 of the
+    # visible GPUs, so the worker must see only the GPU(s) it was leased.
+    pin_visible_devices=True,
     device_count="1-2",
     example_input=example_input,
     iterable_input_fields=["complexes", "msas"],
@@ -358,7 +393,7 @@ def run_opendde_on_complex(
         os.makedirs(output_dir)
 
         # Use supplied/auto-generated MSAs when present (unpaired + paired MsaPath); else single-sequence.
-        chain_msa_paths, chain_paired_msa_paths = build_chain_msa_paths(
+        chain_msa_paths, chain_paired_msa_paths, msa_sent = build_chain_msa_paths(
             sp_complex, complex_msas, temp_dir, verbose=config.verbose
         )
         input_json = complex_to_opendde_json(
@@ -373,8 +408,9 @@ def run_opendde_on_complex(
         with open(input_json_path, "w") as f:
             json.dump([input_json], f, indent=2)
 
-        # --use_msa must be true whenever MSAs exist; OpenDDE skips its featurizer (ignoring supplied paths) when false.
-        opendde_use_msa = bool(chain_msa_paths or chain_paired_msa_paths) or config.use_msa
+        # --use_msa must be true whenever MSAs exist (OpenDDE skips its featurizer when false), and only
+        # then: with it true, OpenDDE searches its own server unless every protein chain has a path.
+        opendde_use_msa = bool(chain_msa_paths or chain_paired_msa_paths)
 
         input_data = {
             "operation": "predict",
@@ -392,6 +428,7 @@ def run_opendde_on_complex(
             "device": config.device,
             "verbose": config.verbose,
             "include_pae_matrix": config.include_pae_matrix,
+            "atom_confidence": config.atom_confidence,
         }
 
         output_data = ToolInstance.dispatch("opendde", input_data, instance=instance, config=config)
@@ -407,15 +444,26 @@ def run_opendde_on_complex(
         "ranking_score": float(formatted_metrics["ranking_score"]),
         "has_clash": bool(formatted_metrics["has_clash"]),
     }
-    # PAE is only present when include_pae_matrix requested it (--need_atom_confidence).
+    # PAE is only returned when include_pae_matrix asked for it.
     if "pae" in formatted_metrics:
         metrics_dict["avg_pae"] = float(formatted_metrics["avg_pae"])
         metrics_dict["pae"] = formatted_metrics["pae"]
 
     structure = Structure(
         structure=cif_output,
-        b_factor_type=BFactorType.PLDDT,
+        # With full confidence data (atom_confidence, or include_pae_matrix) OpenDDE writes per-atom
+        # pLDDT (0-100) as B-factors; without it every B-factor is 0, so they carry no pLDDT.
+        b_factor_type=(
+            BFactorType.PLDDT if config.atom_confidence or config.include_pae_matrix else BFactorType.UNKNOWN
+        ),
         metrics=OpenDDEMetrics(**metrics_dict),
         source="opendde-prediction",
     )
-    return normalize_output_chain_ids(structure, sp_complex.chains)
+    return align_with_input(
+        structure,
+        sp_complex.chains,
+        complex_msas=complex_msas,
+        report_msa=True,
+        msa_sent=msa_sent,
+        msa_subsampling=MSASubsampling(mode="stochastic", max_rows=OPENDDE_MSA_DEPTH),
+    )

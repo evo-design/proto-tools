@@ -1,9 +1,11 @@
 """Tests for `proto_tools.utils.polling.poll_until_complete`."""
 
+import time
 from unittest.mock import MagicMock
 
 import pytest
 
+from proto_tools.utils.deadlines import deadline
 from proto_tools.utils.polling import extract_text_status, poll_until_complete
 
 
@@ -189,3 +191,22 @@ def test_poll_until_complete_fails_loud_on_empty_text_status(monkeypatch):
     with pytest.raises(ValueError, match="Empty plain-text status body"):
         poll_until_complete(session, "https://example/iprscan5/status/abc", status_extractor=extract_text_status)
     assert session.get.call_count == 1
+
+
+def test_poll_until_complete_returns_a_result_found_on_the_poll_after_its_cap():
+    """Its own cap is checked after each poll, so a job that finishes just past it is still returned."""
+    session = _mock_session([{"status": "PENDING"}, {"status": "PENDING"}, {"status": "COMPLETE"}])
+
+    result = poll_until_complete(session, "https://example/ticket/abc", poll_interval_seconds=0.3, timeout_seconds=0.5)
+
+    assert result == {"status": "COMPLETE"}
+
+
+def test_poll_until_complete_stops_at_an_earlier_tool_deadline():
+    """Inside an in-process tool whose deadline comes first, the poll ends at that deadline."""
+    session = _mock_session([{"status": "PENDING"}] * 50)
+
+    started = time.monotonic()
+    with deadline(0.5), pytest.raises(TimeoutError):
+        poll_until_complete(session, "https://example/ticket/abc", poll_interval_seconds=0.2, timeout_seconds=600)
+    assert 0.45 <= time.monotonic() - started < 0.8

@@ -37,7 +37,7 @@ Use this to design or redesign binding sites, enzyme active sites, nucleic-acid-
 
 - **Keep `use_atom_context` enabled.** It defaults to `True` and is the whole point of LigandMPNN: it encodes the surrounding ligand, nucleotide, and metal atoms. Turning it off makes the model effectively ligand-blind, close to plain ProteinMPNN.
 - **Set `use_side_chain_context` to `True` to honor a fixed motif.** It conditions on the sidechain atoms of fixed residues, which helps when redesigning around a preserved catalytic or binding motif. It defaults to `False`.
-- **Set `model_type="original"` when you need packed full-atom outputs.** The default `ligand_mpnn` uses the Foundry implementation and emits redesigned-backbone structures. `original` instead runs the original LigandMPNN code and weights, so sampling returns sequence-consistent full-atom (packed) structures. The code and weights are auto-provisioned into the model cache on first use, so no manual setup is needed; advanced users can override the sequence checkpoint with `checkpoint_path`.
+- **Pick the code with `implementation` and the weights with `model_checkpoint`; any combination works.** The default `implementation="foundry"` runs Foundry's LigandMPNN and emits redesigned-backbone structures. `implementation="original"` runs the upstream LigandMPNN code (fetched on first use), which matches the reference repository and returns packed full-atom structures when sampling. The two prepare the structure differently, so sequences and scores differ between them even with the same weights. `model_checkpoint` picks the published weights trained with 0.10 Å (`"ligandmpnn_v_32_010_25"`, the default) or 0.20 Å (`"ligandmpnn_v_32_020_25"`) backbone noise, or takes a path to your own `.pt` checkpoint.
 - **`fixed_positions` is counted from 1, not 0**, to match biological residue selection conventions. Listed positions keep their input residue, and chains or atoms you do not redesign still act as context rather than being removed.
 
 ### LigandMPNN Scoring (`ligandmpnn-score`)
@@ -51,8 +51,8 @@ Use this to rank designs or assess mutations near ligands, nucleic acids, or met
 #### Usage Tips
 
 - **`scoring_mode` changes what the score means.** `single_aa` (the default) scores each position from its own conditional probability and is order-independent, which is what you usually want for ranking. `autoregressive` scores along one seed-determined decoding order, so it depends on the seed.
-- **`fixed_positions` excludes residues from the aggregate score.** Set it per (sequence, structure) input pair as a `{chain: [positions]}` selection counted from 1, not 0, to match biological residue selection conventions, so the score reflects only the residues you care about.
-- **`return_logits` (default `False`) has a size trade-off.** Enabling it adds a per-position logit array per sequence for residue-level analysis, which dominates output size and memory for long sequences, so leave it off unless you need it.
+- **`excluded_positions` leaves residues out of the aggregate score.** Set it per (sequence, structure) input pair as a `{chain: [positions]}` selection counted from 1, not 0, to match biological residue selection conventions, so the score reflects only the residues you care about. The sampling tool uses `fixed_positions`, which holds a residue's identity rather than omitting it from a metric.
+- **`return_logits` (default `False`) has a size trade-off.** Enabling it adds a per-position `(sequence length x 20)` logit array per sequence, in the shared amino-acid order `ACDEFGHIKLMNPQRSTVWY` reported as `vocab`. The model scores in its own token order, which is mapped internally. That array dominates output size and memory for long sequences, so leave it off unless you need it.
 
 ## Toolkit Notes
 
@@ -60,5 +60,9 @@ Use this to rank designs or assess mutations near ligands, nucleic acids, or met
 
 These apply to every LigandMPNN tool in this toolkit (`ligandmpnn-sample`, `ligandmpnn-score`).
 
+- **Only standard residues hold a design position; everything else is ligand context.** AtomWorks moves each `HETATM` residue into a non-polymer chain, where LigandMPNN reads its atoms as context but designs nothing there. The design still covers the whole chain, with those residues at their input identity and recorded in `chains[].modifications`.
+- **Selenomethionine is the exception, and is designed as methionine.** `ligandmpnn-sample` stages `MSE` as an `ATOM` record so AtomWorks' own `MSE`-to-`MET` conversion applies; left as `HETATM` the residue is lost to the chain split before that conversion runs.
+- **`fixed_positions` keeps the structure's numbering.** The model matches a fixed position by residue number, so no renumbering is needed. A position naming a residue read only as context is dropped with a warning rather than failing the run, since the model never redesigns it.
+
 - **A GPU is recommended.** LigandMPNN is a small message-passing model that also runs on CPU, but a GPU is much faster when designing or scoring many sequences.
-- **The non-protein context must be in the input structure.** LigandMPNN only conditions on ligands, nucleotides, or metals that are present in the supplied structure; if they are absent, it behaves like backbone-only ProteinMPNN.
+- **The non-protein context must be in the input structure.** LigandMPNN only conditions on ligands, nucleotides, or metals that are present in the supplied structure. If they are absent, it behaves like backbone-only ProteinMPNN.

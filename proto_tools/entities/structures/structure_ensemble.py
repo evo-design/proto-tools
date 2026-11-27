@@ -1,7 +1,4 @@
-"""proto_tools/entities/structures/structure_ensemble.py.
-
-Contains base class for representing a protein structure ensemble.
-"""
+"""Represent sampled protein conformations as a structure ensemble."""
 
 from pydantic import BaseModel, Field
 
@@ -11,8 +8,7 @@ from proto_tools.entities.structures.structure import Structure
 class StructureEnsemble(BaseModel):
     """Container for a conformational ensemble of structures.
 
-    This class represents an ensemble of sampled conformations for a single
-    input sequence, with each conformation stored as a Structure.
+    Each ``Structure`` holds one sampled conformation of the same input sequence.
 
     Attributes:
         structures (list[Structure]): List of sampled conformational
@@ -49,5 +45,6 @@ class StructureEnsemble(BaseModel):
             raise AssertionError(f"Ensemble sequences differ: {self.sequence!r} != {other.sequence!r}")
         if len(self.structures) != len(other.structures):
             raise AssertionError(f"Ensemble structure count differs: {len(self.structures)} != {len(other.structures)}")
+        # Compare corresponding conformations using the requested coordinate tolerances.
         for s, o in zip(self.structures, other.structures, strict=True):
             s.approx_equal(o, rtol=rtol, atol=atol)

@@ -12,10 +12,12 @@ Example:
 import os
 import tempfile
 from logging import getLogger
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.boltz2.helpers import (
+    BOLTZ2_SUBSAMPLED_ROWS,
+    boltz2_msa_subsampling,
     build_chain_msa_paths,
     complex_to_yaml,
 )
@@ -23,7 +25,7 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
@@ -40,8 +42,7 @@ logger = getLogger(__name__)
 class Boltz2Input(StructurePredictionInput):
     """Input object for Boltz2 structure prediction.
 
-    This class defines the input parameters for predicting 3D structures of proteins,
-    DNA, RNA, and ligands using Boltz2, a multi-modal structure prediction model.
+    Provide proteins, DNA, RNA, and ligands for 3D structure prediction with Boltz2.
 
     Inherits from ``StructurePredictionInput``.
 
@@ -176,8 +177,7 @@ class Boltz2Output(StructurePredictionOutput):
 class Boltz2Config(MSAStructurePredictionConfig):
     """Configuration object for Boltz2 structure prediction.
 
-    This class defines configuration parameters for running Boltz2, a multi-modal
-    structure prediction model supporting proteins, DNA, RNA, and ligands.
+    Configure Boltz2 prediction for proteins, DNA, RNA, and ligands.
 
     Inherits from ``MSAStructurePredictionConfig``.
 
@@ -281,6 +281,24 @@ class Boltz2Config(MSAStructurePredictionConfig):
         description="Maximum execution time in seconds.",
         include_in_key=False,
     )
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "Boltz2Config":
+        """One diffusion sample over 20 steps and one recycle (defaults: 1, 200, 3).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            Boltz2Config: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("recycling_steps", 1)
+        kwargs.setdefault("sampling_steps", 20)
+        kwargs.setdefault("diffusion_samples", 1)
+        return cast("Boltz2Config", super().minimal(**kwargs))
 
 
 # ============================================================================
@@ -427,9 +445,9 @@ def run_boltz2_on_complex(
     instance: Any = None,
     seed: int | None = None,
 ) -> Structure:
-    """Run Boltz2 structure prediction on a single complex. This function is wrapped.
+    """Run Boltz2 structure prediction on a single complex.
 
-    by ``run_boltz2`` to sequentially predict all complexes in the input.
+    ``run_boltz2`` calls this function sequentially for each input complex.
 
     Args:
         config (Boltz2Config): Boltz2 configuration
@@ -452,9 +470,7 @@ def run_boltz2_on_complex(
 
         # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied
         # by the caller (always respected regardless of use_msa).
-        chain_msa_paths: dict[str, str] | None = None
-        if complex_msas is not None:
-            chain_msa_paths = build_chain_msa_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
+        chain_msa_paths, msa_sent = build_chain_msa_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
 
         yaml_content = complex_to_yaml(sp_complex.chains, chain_msa_paths=chain_msa_paths)
 
@@ -473,6 +489,7 @@ def run_boltz2_on_complex(
             "step_scale": config.step_scale,
             "max_msa_seqs": config.max_msa_seqs,
             "subsample_msa": config.subsample_msa,
+            "num_subsampled_msa": BOLTZ2_SUBSAMPLED_ROWS,
             "num_workers": config.num_workers,
             "device": config.device,
             "verbose": config.verbose,
@@ -511,4 +528,11 @@ def run_boltz2_on_complex(
         metrics=Boltz2Metrics(**metrics_dict),
         source="boltz2-prediction",
     )
-    return normalize_output_chain_ids(structure, sp_complex.chains)
+    return align_with_input(
+        structure,
+        sp_complex.chains,
+        complex_msas=complex_msas,
+        report_msa=True,
+        msa_sent=msa_sent,
+        msa_subsampling=boltz2_msa_subsampling(max_msa_seqs=config.max_msa_seqs, subsample_msa=config.subsample_msa),
+    )

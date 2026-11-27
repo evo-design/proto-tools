@@ -1,6 +1,7 @@
 """NA-MPNN specificity standalone runner for ToolInstance venv execution."""
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -145,12 +146,19 @@ def _canonicalize_npz(raw_npz_path: str, canonical_npz_path: str) -> dict[str, A
     }
 
 
-def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) -> dict[str, Any]:
-    """Run NA-MPNN specificity for one structure and return canonical output."""
+def _run_one_structure(
+    pdb_path: str, config: dict[str, Any], output_root: str, progress: str = "1/1"
+) -> dict[str, Any]:
+    """Run NA-MPNN specificity for one structure and return canonical output.
+
+    ``progress`` is this structure's ``<n>/<total>`` for the status message.
+    """
+    # Ensure the input PDB exists
     pdb_path = os.path.abspath(pdb_path)
     if not os.path.exists(pdb_path):
         raise FileNotFoundError(f"PDB path does not exist: {pdb_path}")
 
+    # Locate the NA-MPNN checkout, checkpoint and inference script
     repo_path = _resolve_na_mpnn_repo()
     checkpoint_path = _resolve_checkpoint()
 
@@ -158,10 +166,12 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
     if not os.path.exists(run_script):
         raise FileNotFoundError(f"NA-MPNN run script not found: {run_script}")
 
+    # Make a per-structure folder for the raw NA-MPNN outputs
     input_name = Path(pdb_path).stem
     raw_dir = os.path.join(output_root, "na_mpnn_raw", input_name)
     os.makedirs(raw_dir, exist_ok=True)
 
+    # Build the NA-MPNN CLI call so it writes only the specificity NPZ
     command = [
         sys.executable,
         run_script,
@@ -195,63 +205,70 @@ def _run_one_structure(pdb_path: str, config: dict[str, Any], output_root: str) 
         "0",
     ]
 
-    logger.update_status(f"Running NA-MPNN on {input_name}")
-    # Propagate the assigned device (CUDA_VISIBLE_DEVICES etc.) to the upstream
-    # NA-MPNN CLI subprocess via the DeviceManager-aware helper.
-    sub_env = {**get_subprocess_device_env(config.get("device", "cuda")), "PYTHONNOUSERSITE": "1"}
-    verbose = bool(config.get("verbose", False))
-    if verbose:
-        subprocess.run(
-            command,
-            cwd=repo_path,
-            env=sub_env,
-            check=True,
-        )
-    else:
-        proc = subprocess.run(
-            command,
-            cwd=repo_path,
-            env=sub_env,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if proc.returncode != 0:
-            stderr_tail = (proc.stderr or "").strip().splitlines()[-30:]
-            stdout_tail = (proc.stdout or "").strip().splitlines()[-30:]
-            combined_tail = "\n".join(["[stderr]", *stderr_tail, "", "[stdout]", *stdout_tail]).strip()
-            raise RuntimeError(f"NA-MPNN inference failed for {pdb_path} (exit {proc.returncode}).\n{combined_tail}")
+    try:
+        logger.update_status(f"Predicting specificity for structure {progress}", level=logging.DEBUG)
+        # Propagate the assigned device (CUDA_VISIBLE_DEVICES etc.) to the upstream
+        # NA-MPNN CLI subprocess via the DeviceManager-aware helper.
+        sub_env = {**get_subprocess_device_env(config.get("device", "cuda")), "PYTHONNOUSERSITE": "1"}
+        # Stream subprocess output when verbose, otherwise capture it for the error message
+        verbose = bool(config.get("verbose", False))
+        if verbose:
+            subprocess.run(
+                command,
+                cwd=repo_path,
+                env=sub_env,
+                check=True,
+            )
+        else:
+            proc = subprocess.run(
+                command,
+                cwd=repo_path,
+                env=sub_env,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            # Raise with the last 30 lines of stderr and stdout on failure
+            if proc.returncode != 0:
+                stderr_tail = (proc.stderr or "").strip().splitlines()[-30:]
+                stdout_tail = (proc.stdout or "").strip().splitlines()[-30:]
+                combined_tail = "\n".join(["[stderr]", *stderr_tail, "", "[stdout]", *stdout_tail]).strip()
+                raise RuntimeError(
+                    f"NA-MPNN inference failed for {pdb_path} (exit {proc.returncode}).\n{combined_tail}"
+                )
 
-    raw_npz = os.path.join(raw_dir, "specificity", f"{input_name}.npz")
-    if not os.path.exists(raw_npz):
-        raise FileNotFoundError(f"NA-MPNN specificity output not found: {raw_npz}")
+        # Check NA-MPNN wrote the specificity NPZ for this structure
+        raw_npz = os.path.join(raw_dir, "specificity", f"{input_name}.npz")
+        if not os.path.exists(raw_npz):
+            raise FileNotFoundError(f"NA-MPNN specificity output not found: {raw_npz}")
 
-    canonical_dir = os.path.join(output_root, "canonical_npz")
-    os.makedirs(canonical_dir, exist_ok=True)
-    canonical_npz = os.path.join(canonical_dir, f"{input_name}.npz")
+        # Convert the raw NPZ into the canonical DNA-only (A, C, G, T) NPZ
+        canonical_dir = os.path.join(output_root, "canonical_npz")
+        os.makedirs(canonical_dir, exist_ok=True)
+        canonical_npz = os.path.join(canonical_dir, f"{input_name}.npz")
 
-    canonical = _canonicalize_npz(raw_npz, canonical_npz)
-
-    if not bool(config.get("keep_intermediate", False)):
-        shutil.rmtree(raw_dir, ignore_errors=True)
-
-    return {
-        "input_name": input_name,
-        "source_method": "na_mpnn",
-        "output_npz_path": canonical_npz,
-        **canonical,
-    }
+        canonical = _canonicalize_npz(raw_npz, canonical_npz)
+        return {
+            "input_name": input_name,
+            "source_method": "na_mpnn",
+            "output_npz_path": canonical_npz,
+            **canonical,
+        }
+    finally:
+        # Delete the raw outputs unless keep_intermediate is set
+        if not bool(config.get("keep_intermediate", False)):
+            shutil.rmtree(raw_dir, ignore_errors=True)
 
 
 def run_na_mpnn_specificity(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Run NA-MPNN specificity across all input PDB paths."""
-    output_directory = input_data.get("output_directory")
-    if output_directory is None:
-        output_root = tempfile.mkdtemp(prefix="na_mpnn_specificity_")
-    else:
-        output_root = os.path.abspath(output_directory)
-        os.makedirs(output_root, exist_ok=True)
+    """Run NA-MPNN specificity across all input PDB paths.
 
+    Files are kept only under ``output_directory``. Without it, raw and canonical NPZ files are
+    written to a temporary directory that is removed before returning, and each result's
+    ``output_npz_path`` is ``None``. Its arrays already carry the NPZ's contents.
+    """
+    output_directory = input_data.get("output_directory")
+    # Normalize the request into typed NA-MPNN settings
     config = {
         "batch_size": int(input_data.get("batch_size", 1)),
         "number_of_batches": int(input_data.get("number_of_batches", 1)),
@@ -263,9 +280,27 @@ def run_na_mpnn_specificity(input_data: dict[str, Any]) -> dict[str, Any]:
         "verbose": bool(input_data.get("verbose", False)),
     }
 
-    results = [_run_one_structure(pdb_path, config, output_root) for pdb_path in input_data["pdb_paths"]]
+    # Write outputs under output_directory and keep the NPZ paths
+    if output_directory is not None:
+        output_root = os.path.abspath(output_directory)
+        os.makedirs(output_root, exist_ok=True)
+        return {
+            "results": [
+                _run_one_structure(path, config, output_root, f"{number}/{len(input_data['pdb_paths'])}")
+                for number, path in enumerate(input_data["pdb_paths"], start=1)
+            ]
+        }
 
-    return {"results": results}
+    # Refuse keep_intermediate when there is nowhere to keep the files
+    if config["keep_intermediate"]:
+        raise ValueError("na_mpnn_specificity: keep_intermediate needs output_directory to keep the files in")
+    # Run in a temporary directory, then drop the NPZ paths since the files are deleted
+    with tempfile.TemporaryDirectory(prefix="na_mpnn_specificity_") as output_root:
+        results = [
+            _run_one_structure(path, config, output_root, f"{number}/{len(input_data['pdb_paths'])}")
+            for number, path in enumerate(input_data["pdb_paths"], start=1)
+        ]
+    return {"results": [{**result, "output_npz_path": None} for result in results]}
 
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
@@ -277,16 +312,14 @@ def to_device(device: str) -> dict[str, Any]:
     """Move model to specified device (called by DeviceManager).
 
     NA-MPNN runs as a per-call subprocess of the upstream CLI, so there is no
-    persistent in-process model to move; the device is honored on the next call.
+    persistent in-process model to move. The device is honored on the next call.
     """
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """Report GPU memory usage (called by DeviceManager for monitoring)."""
-    from standalone_helpers import get_pytorch_memory_stats
-
-    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
+    """CLI tool, no persistent GPU state to report."""
+    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
 
 
 if __name__ == "__main__":

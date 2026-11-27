@@ -305,7 +305,7 @@ def test_input_rejects_unsafe_structure_ids(bad_id):
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.skip_ci  # downloads foldmason binary from mmseqs.com; upstream is flaky in GH Actions
 def test_foldmason_msa_local_with_real_fixtures():
     """Local end-to-end: align 3 real PDBs via the foldmason binary, verify MSA shape + Newick leaves."""
@@ -331,7 +331,8 @@ def test_foldmason_msa_local_with_real_fixtures():
         assert sid in output.newick_tree
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_foldmason_msa_remote_with_real_fixtures():
     """Remote end-to-end: 3 PDBs → live foldmason server → schema-validated MSA.
 

@@ -10,6 +10,7 @@ import sys
 from typing import Any, Literal
 
 from standalone_helpers import (
+    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -78,8 +79,7 @@ class ProGen2Model:
 
     def load(self, device: str, verbose: bool = False) -> None:
         """Load ProGen2 model and tokenizer to device."""
-        if verbose:
-            logger.info(f"Loading ProGen2 model: {self.model_checkpoint} on {device}")
+        logger.update_status("Loading ProGen2 weights")
 
         from tokenizers import Tokenizer
         from transformers import AutoModelForCausalLM
@@ -244,13 +244,18 @@ class ProGen2Model:
         # Prepend the '1' start token so raw residue prompts condition on a sequence start.
         prompts = self._prepend_start_token(prompts)
 
-        # Batch processing logic
+        # Group prompts into batches for generation.
         all_sequences: list[str] = []
         all_logits: list[Any | None] = []
         batches = [prompts[i : i + batch_size] for i in range(0, len(prompts), batch_size)]
 
         with torch.no_grad():
-            for batch_prompts in tqdm(batches, desc="ProGen2 Sequence Generation", unit="batch", disable=not verbose):
+            for batch_prompts in StatusCounter(
+                logger,
+                "Sampling batch %d/%d",
+                tqdm(batches, desc="ProGen2 Sequence Generation", unit="batch", disable=not verbose),
+                total=len(batches),
+            ):
                 # Left-pad for generation
                 input_ids, attention_mask, _ = self._prepare_batch(batch_prompts, pad_left=True)
 
@@ -345,16 +350,18 @@ class ProGen2Model:
         # Ensure sequences have start token
         normalized_seqs = self._prepend_start_token(sequences)
 
-        # Batch processing logic
+        # Group sequences into batches for scoring.
         all_logits: list[Any] = []
         all_metrics: list[dict[str, float]] = []
         batches = [normalized_seqs[i : i + batch_size] for i in range(0, len(normalized_seqs), batch_size)]
 
         # Run inference
+        counter = StatusCounter(logger, "Scoring batch %d/%d", total=len(batches))
         with torch.inference_mode():
             for batch_idx, batch_sequences in enumerate(
                 tqdm(batches, desc="ProGen2 Sequence Scoring", unit="batch", total=len(batches))
             ):
+                counter(batch_idx + 1)
                 if verbose:
                     logger.info(f"Processing batch {batch_idx + 1}/{len(batches)} ({len(batch_sequences)} sequences)")
 
@@ -384,7 +391,7 @@ class ProGen2Model:
 
                     all_metrics.append(log_likelihood_metrics(seq_log_probs.mean().item(), seq_log_probs.shape[0]))
                     # Return unpadded logits (full vocabulary)
-                    # Note: model outputs 32 logits but tokenizer has 30 tokens
+                    # The model outputs 32 logits, while the tokenizer defines 30 tokens.
                     all_logits.append(logits[i, :length, : len(PROGEN2_VOCAB)].cpu())
 
         return {

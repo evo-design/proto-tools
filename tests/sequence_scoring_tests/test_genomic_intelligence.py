@@ -2,14 +2,13 @@
 
 The parse helpers are exercised against pinned payload literals so a change in
 the service's response shape surfaces here without a network call. Tests that
-reach the live API carry ``@pytest.mark.integration`` and are skipped by default.
+reach the live API carry ``@pytest.mark.network`` and are skipped by default.
 """
 
 from __future__ import annotations
 
 import copy
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -377,6 +376,20 @@ def test_null_string_fields_are_empty_not_none() -> None:
     assert (site.name, site.site_type) == ("", "")
     assert (transcript.name, transcript.strand) == ("", "")
     assert (prediction.gene_name, prediction.strand) == ("", "")
+
+
+# ============================================================================
+# Timeout
+# ============================================================================
+
+
+def test_async_wait_longer_than_timeout_stretches_the_call_timeout() -> None:
+    """Raising timeout_seconds alone must not leave the async poll cut off at the default timeout."""
+    long_wait = GIConfig(respond_async=True, timeout_seconds=7200, timeout=3600)
+    assert long_wait.effective_timeout() == 7200 + 2 * 300
+    assert GIConfig(respond_async=True, timeout_seconds=60, timeout=3600).effective_timeout() == 3600
+    assert GIConfig(respond_async=False, timeout_seconds=7200, timeout=3600).effective_timeout() == 3600
+    assert GIConfig(respond_async=True, timeout=None).effective_timeout() is None
 
 
 # ============================================================================
@@ -940,21 +953,21 @@ def test_every_annotation_config_option_maps_to_a_key_the_api_accepts(monkeypatc
 
 
 # ============================================================================
-# Integration — live API, skipped unless pytest runs with --integration
+# Live API, skipped unless pytest runs with --network
 # ============================================================================
 #
 # The `run-integration` label starts Integration Tests, which runs pytest with
-# --integration, so these two cases are selected there. They still skip: that
+# --network, so these two cases are selected there. They still skip: that
 # workflow sets no GI_API_KEY, and a pull request from a fork is not given
 # repository secrets in any case. Running them for real means a local run with
 # a key in the environment.
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
+@pytest.mark.network
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_live_promoter_scores_a_sequence() -> None:
     """A promoter call returns per-window scores and provenance."""
-    if not os.environ.get("GI_API_KEY"):
-        pytest.skip("GI_API_KEY not set")
     sequence = "ATGCGCGCTATAAAAGGCGCG" * 30
     output = run_gi_promoter(GIPromoterInput(sequences=sequence), GIPromoterConfig())
     result = output.results[0]
@@ -963,7 +976,9 @@ def test_live_promoter_scores_a_sequence() -> None:
     assert result.meta.request_id
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
+@pytest.mark.network
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_live_splice_is_strand_dependent() -> None:
     """The reverse complement is scored as a different sequence.
 
@@ -972,8 +987,6 @@ def test_live_splice_is_strand_dependent() -> None:
     where. Submitting the wrong strand is therefore a silent error, since a
     result read on its own carries no sign that the orientation was wrong.
     """
-    if not os.environ.get("GI_API_KEY"):
-        pytest.skip("GI_API_KEY not set")
     sequence = "ATGCGCGCTATAAAAGGCGCGGTAAGTCCCC" * 20
     complement = str.maketrans("ACGT", "TGCA")
     reverse = sequence.translate(complement)[::-1]
@@ -1031,17 +1044,11 @@ def _bench_windows() -> list[dict[str, str]]:
     ]
 
 
-def _require_live_key() -> None:
-    """Skip when no key is configured; a hosted-API benchmark cannot run without one."""
-    if not os.environ.get("GI_API_KEY"):
-        pytest.skip("GI_API_KEY not set")
-
-
 @pytest.mark.benchmark("gi-promoter")
 @pytest.mark.slow
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_promoter_benchmark() -> None:
     """Benchmark gi-promoter: 3 x 5,000 bp HBB windows."""
-    _require_live_key()
     output = run_gi_promoter(GIPromoterInput(sequences=_bench_windows()), GIPromoterConfig())
     validate_output(output)
 
@@ -1054,9 +1061,9 @@ def test_gi_promoter_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-splice")
 @pytest.mark.slow
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_splice_benchmark() -> None:
     """Benchmark gi-splice: 3 x 5,000 bp HBB windows, gene-sense strand."""
-    _require_live_key()
     output = run_gi_splice(GISpliceInput(sequences=_bench_windows()), GISpliceConfig())
     validate_output(output)
 
@@ -1069,9 +1076,9 @@ def test_gi_splice_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-enhancer")
 @pytest.mark.slow
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_enhancer_benchmark() -> None:
     """Benchmark gi-enhancer: 3 x 5,000 bp HBB windows."""
-    _require_live_key()
     output = run_gi_enhancer(GIEnhancerInput(sequences=_bench_windows()), GIEnhancerConfig())
     validate_output(output)
 
@@ -1084,9 +1091,9 @@ def test_gi_enhancer_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-chromatin")
 @pytest.mark.slow
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_chromatin_benchmark() -> None:
     """Benchmark gi-chromatin: 3 x 5,000 bp HBB windows."""
-    _require_live_key()
     output = run_gi_chromatin(GIChromatinInput(sequences=_bench_windows()), GIChromatinConfig())
     validate_output(output)
 
@@ -1099,9 +1106,9 @@ def test_gi_chromatin_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-annotation")
 @pytest.mark.slow
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_annotation_benchmark() -> None:
     """Benchmark gi-annotation: the whole 25,000 bp HBB locus."""
-    _require_live_key()
     locus = _hbb_locus()
     output = run_gi_annotation(
         GIAnnotationInput(sequences=[{"sequence": locus, "name": "HBB"}]),
@@ -1118,9 +1125,9 @@ def test_gi_annotation_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-expression")
 @pytest.mark.slow
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_expression_benchmark() -> None:
     """Benchmark gi-expression: the 25,000 bp HBB locus cut to one window around its midpoint."""
-    _require_live_key()
     locus = _hbb_locus()
     # Anything other than exactly 9,198 bp needs the TSS offset. The midpoint
     # keeps the required flank on both sides without depending on an
@@ -1155,9 +1162,9 @@ def test_gi_expression_benchmark() -> None:
 
 @pytest.mark.benchmark("gi-find-genes-and-predict-expression")
 @pytest.mark.slow
+@pytest.mark.requires_credential("GI_API_KEY")
 def test_gi_find_genes_and_predict_expression_benchmark() -> None:
     """Benchmark the workflow: annotation plus per-gene expression over the 25,000 bp HBB locus."""
-    _require_live_key()
     locus = _hbb_locus()
     output = run_gi_find_genes_and_predict_expression(
         GIFindGenesInput(sequences=[{"sequence": locus, "name": "HBB"}]),

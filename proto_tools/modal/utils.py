@@ -30,20 +30,16 @@ _GPU_READY_POLL_MAX_S = 5.0
 def ensure_gpu_ready(toolkit: str, *, timeout_s: float = _GPU_READY_TIMEOUT_S) -> int:
     """Block until the container's GPU is visible. Call first in a GPU service's startup hook.
 
-    A freshly-scheduled GPU container can report 0 GPUs for a few seconds before
-    the driver attaches; waiting once at startup keeps that race off the
-    per-request path. Polls nvidia-smi with backoff until a GPU appears. Fast
-    paths leave CPU containers unaffected: returns at once when a GPU is already
-    visible, and raises at once when nvidia-smi is absent (no GPU to wait for).
-    Only GPU services should call this.
+    A new GPU container can report no GPUs for a few seconds while the driver
+    attaches. Poll nvidia-smi with backoff at startup so individual requests
+    do not need to wait. Return immediately if a GPU is already visible, and
+    raise immediately if nvidia-smi is absent. Only GPU services should call this.
 
-    Relation to proto-tools: ``DeviceManager`` already retries this same race
-    (~2.5s) the first time a tool requests a device (``_resolve_gpu_devices``).
-    This gate is the earlier, longer backstop — it runs *before* ``persist_tool``
-    loads the model onto CUDA and waits up to ``timeout_s``, where the 2.5s
-    budget proved too short under cold starts. Do not call it from a
-    ``@modal.enter(snap=True)`` snapshot hook: that runs on CPU during snapshot
-    creation, so the gate would always time out.
+    ``DeviceManager._resolve_gpu_devices`` also retries GPU detection for about
+    2.5 seconds when a tool first requests a device. Cold starts can take longer,
+    so this check waits up to ``timeout_s`` before ``persist_tool`` loads the
+    model onto CUDA. Do not call it from a ``@modal.enter(snap=True)`` snapshot
+    hook, which runs on CPU and would always time out.
 
     Args:
         toolkit (str): Tool name, for log/error lines.
@@ -220,7 +216,7 @@ RESULT_FORMAT = 2
 # wire. ``metadata`` is kept: it's tool-specific payload and the only place that
 # telemetry survives into the result. success/errors/warnings also stay — on a
 # caught exception they're all that carries the traceback.
-_BASE_OUTPUT_FIELDS = frozenset({"tool_id", "execution_time", "timestamp"})
+_BASE_OUTPUT_FIELDS = frozenset({"tool_id", "tool_version", "execution_time", "timestamp"})
 
 
 def strip_base_fields(output_dict: dict[str, Any]) -> dict[str, Any]:

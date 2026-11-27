@@ -23,6 +23,7 @@ def flash(monkeypatch):
             "log_likelihood": mean * count,
             "perplexity": math.exp(-mean),
         },
+        retry_on_checkpoint_corruption=lambda load, **_: load(),
         serialize_output=lambda value: value,
     )
     monkeypatch.setitem(sys.modules, "standalone_helpers", helpers)
@@ -168,7 +169,32 @@ def test_flash_cache_handles_require_persistent_worker(flash, monkeypatch):
 def test_flash_device_changes_require_a_new_worker(flash, device):
     """The engine cannot migrate CUDA state in process; Proto's pinned workers restart instead."""
     _, model, _ = flash
-    model._ready("cuda", False)
+    model._ready("cuda")
     assert model.device == "cuda"
     with pytest.raises(ValueError, match=r"NVIDIA GPU|new worker to change devices"):
-        model._ready(device, False)
+        model._ready(device)
+
+
+@pytest.mark.parametrize("deleted", ["model.safetensors", "metadata/fp8.safetensors"])
+def test_converted_checkpoint_missing_a_file_is_converted_again(flash, tmp_path, deleted):
+    """evo2_flash trusts a converted directory by its config.json, so one a purge gutted is removed."""
+    import json
+
+    module, _, _ = flash
+    converted = tmp_path / "evo2_40b_hf"
+    (converted / "metadata").mkdir(parents=True)
+    (converted / "config.json").write_text(
+        json.dumps({"hyena_in_proj_fp8": {"metadata_file": "metadata/fp8.safetensors"}})
+    )
+    (converted / "model.safetensors").write_bytes(b"w")
+    (converted / "metadata" / "fp8.safetensors").write_bytes(b"m")
+    intact = tmp_path / "evo2_7b_hf"
+    intact.mkdir()
+    (intact / "config.json").write_text("{}")
+    (intact / "model.safetensors").write_bytes(b"w")
+
+    (converted / deleted).unlink()
+    module._drop_incomplete_conversions(tmp_path)
+
+    assert not converted.exists()
+    assert intact.exists()

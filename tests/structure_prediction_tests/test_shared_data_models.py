@@ -22,7 +22,6 @@ from proto_tools.tools.structure_prediction.shared_data_models import (
     StructurePredictionInput,
     _row_to_base36_5,
     count_structure_tokens,
-    unwrap_complex_msas,
     write_paired_a3m_with_uniprot_headers,
 )
 from proto_tools.utils import run_preprocess
@@ -78,32 +77,6 @@ def _stub_mmseqs2_search(monkeypatch):
     return captured
 
 
-# ── unwrap_complex_msas ───────────────────────────────────────────────────────
-
-
-def test_unwrap_complex_msas_none():
-    assert unwrap_complex_msas(None) == ({}, None, False)
-
-
-def test_unwrap_complex_msas_unpaired():
-    msa = MSA(aligned_sequences=["AA", "AA"])
-    per_chain, unpaired, is_paired = unwrap_complex_msas(ComplexMSAs(per_chain={0: msa}, paired=False))
-    assert per_chain == {0: msa}
-    assert unpaired is None
-    assert is_paired is False
-
-
-def test_unwrap_complex_msas_paired():
-    msa = MSA(aligned_sequences=["AA", "AA"])
-    deep = MSA(aligned_sequences=["AA", "AA", "AA"])
-    per_chain, unpaired, is_paired = unwrap_complex_msas(
-        ComplexMSAs(per_chain={0: msa, 1: msa}, paired=True, unpaired_per_chain={0: deep, 1: deep})
-    )
-    assert set(per_chain) == {0, 1}
-    assert unpaired is not None and {m.num_sequences for m in unpaired.values()} == {3}
-    assert is_paired is True
-
-
 # ── Synthesized paired-MSA headers ────────────────────────────────────────────
 
 
@@ -151,12 +124,20 @@ def test_write_paired_a3m_species_tokens_align_across_chains(tmp_path):
 # ── MSA preprocessing orchestration ───────────────────────────────────────────
 
 
-def test_preprocess_single_chain_is_unpaired(monkeypatch):
-    """A single protein chain issues one unpaired query and yields a plain per-chain dict."""
+@pytest.mark.parametrize(
+    ("search_mode", "expected_source"),
+    [("remote", "colabfold_server"), ("local", "local_mmseqs2"), (None, "colabfold_server")],
+)
+def test_preprocess_single_chain_is_unpaired(monkeypatch, search_mode, expected_source):
+    """A single protein chain issues one unpaired query, tagged with the search that produced it.
+
+    ``None`` is every predictor's default ``msa_search_config``: the search tool's defaults apply.
+    """
     captured = _stub_mmseqs2_search(monkeypatch)
     inputs = _SPInput(complexes=[_protein_complex(_SEQ_A)])
+    config = Mmseqs2HomologySearchConfig(search_mode=search_mode) if search_mode else None
 
-    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
+    out = sdm._preprocess_structure_prediction_msas(inputs, config, verbose=0)
 
     assert len(captured["queries"]) == 1
     assert not isinstance(captured["queries"][0], list)  # singleton group
@@ -164,6 +145,37 @@ def test_preprocess_single_chain_is_unpaired(monkeypatch):
     assert isinstance(entry, ComplexMSAs)
     assert not entry.paired
     assert set(entry.per_chain) == {0}
+    assert entry.source == expected_source
+    assert entry.requested_chain_indices == [0]
+
+
+def test_preprocess_preserves_completed_search_with_no_hits(monkeypatch):
+    """A no-hit search remains explicit so backends cannot mistake it for no request."""
+
+    def fake(search_input, config):
+        return hs.Mmseqs2HomologySearchOutput(
+            results=[
+                hs.Mmseqs2HomologySearchResult(
+                    sequence_ids=[query.sequence_id],
+                    msas=[None],
+                    paired_msas=[None],
+                    datasets_searched=["stub"],
+                    num_homologs_found=[0],
+                )
+                for query in search_input.queries
+            ]
+        )
+
+    monkeypatch.setattr(hs, "run_mmseqs2_homology_search", fake)
+    inputs = _SPInput(complexes=[_protein_complex(_SEQ_A)])
+
+    out = sdm._preprocess_structure_prediction_msas(inputs, Mmseqs2HomologySearchConfig(), verbose=0)
+
+    assert out.msas is not None
+    assert len(out.msas) == 1
+    assert out.msas[0].per_chain == {}
+    assert out.msas[0].source == "colabfold_server"
+    assert out.msas[0].requested_chain_indices == [0]
 
 
 def test_preprocess_homomultimer_broadcasts_single_msa(monkeypatch):
@@ -280,10 +292,11 @@ def test_preprocess_heterocomplex_unpaired_none_when_search_omits_it(monkeypatch
     assert out.msas[0].unpaired_per_chain is None
 
 
-def test_validate_complex_msas_rejects_wrong_query_row():
-    """A pre-supplied MSA whose query row is not the chain sequence is rejected."""
+@pytest.mark.parametrize("field", ["per_chain", "unpaired_per_chain"])
+def test_validate_complex_msas_rejects_wrong_query_row(field):
+    """A pre-supplied MSA, primary or deep unpaired, whose query row is not its chain is rejected."""
     complexes = [_protein_complex(_SEQ_A)]
-    msas = [ComplexMSAs(per_chain={0: MSA(aligned_sequences=[_SEQ_B, _SEQ_B])})]
+    msas = [ComplexMSAs(**{"per_chain": {}, field: {0: MSA(aligned_sequences=[_SEQ_B, _SEQ_B])}})]
 
     with pytest.raises(ValueError, match="has query row"):
         sdm._validate_complex_msas_match_chains(complexes, msas)

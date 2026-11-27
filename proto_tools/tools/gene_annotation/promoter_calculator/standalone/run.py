@@ -8,7 +8,7 @@ import json
 import sys
 from typing import Any
 
-from standalone_helpers import get_logger
+from standalone_helpers import StatusCounter, get_logger
 
 logger = get_logger(__name__)
 
@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 # =============================================================================
 def _get(prediction: Any, name: str) -> Any:
     # Upstream returns each promoter as a dict in some paths and as an object in
-    # others; read both transparently.
+    # others. Read both forms.
     if isinstance(prediction, dict):
         return prediction[name]
     return getattr(prediction, name)
@@ -53,7 +53,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     circular = bool(config["circular"])
 
     results = []
-    for seq, seq_id in zip(sequences, sequence_ids, strict=True):
+    for seq, seq_id in StatusCounter(
+        logger, "Scanning sequence %d/%d", zip(sequences, sequence_ids, strict=True), total=len(sequences)
+    ):
         # verbosity=0 pinned: any non-zero level prints progress to stdout, which
         # corrupts the subprocess JSON contract.
         predictions = promoter_calculator(seq, threads=threads, verbosity=0, circular=circular)

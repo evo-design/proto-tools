@@ -1,6 +1,8 @@
 <a href="https://bio-pro.mintlify.app/tools/sequence-scoring/na-mpnn-specificity"><img align="right" src="https://img.shields.io/badge/View_Docs-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="View Docs"></a><a href="examples/example.ipynb"><img align="right" src="https://img.shields.io/badge/Example_Notebook-2e7d32?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yIDNoNmE0IDQgMCAwIDEgNCA0djE0YTMgMyAwIDAgMC0zLTNIMnoiLz48cGF0aCBkPSJNMjIgM2gtNmE0IDQgMCAwIDAtNCA0djE0YTMgMyAwIDAgMSAzLTNoN3oiLz48L3N2Zz4=" alt="Example Notebook"></a>
 # NA-MPNN
 
+![NA-MPNN](https://proto-bio.github.io/proto-assets/images/tool/na_mpnn_specificity/hero.png)
+
 > [!NOTE]
 > **License:** NA-MPNN uses MIT for code and BSD-3-Clause for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/baker-laboratory/NA-MPNN/blob/main/LICENSE) and [model weights license](https://github.com/baker-laboratory/NA-MPNN/blob/main/LICENSE) for full terms.
 
@@ -22,7 +24,7 @@ NA-MPNN ([Kubaney et al., 2025](https://www.biorxiv.org/content/10.1101/2025.10.
 
 ### NA-MPNN Specificity (`na-mpnn-specificity`)
 
-Predicts the DNA base preference of a bound protein from one or more protein–DNA complex structures. For each input PDB, the tool runs NA-MPNN specificity inference, restricts the output to valid DNA positions, and returns a canonical PPM (`L x 4`, `A,C,G,T` order), the recovered true DNA sequence (indices `0..3`), per-row masks, and chain labels. Each result is also written to a canonical `.npz` file whose path is returned in `output_npz_path`.
+Predicts the DNA base preference of a bound protein from one or more protein–DNA complex structures. For each input PDB, the tool runs NA-MPNN specificity inference, restricts the output to valid DNA positions, and returns a canonical PPM (`L x 4`, `A,C,G,T` order), the recovered true DNA sequence (indices `0..3`), per-row masks, and chain labels. When `output_directory` is set, each result is also written to a canonical `.npz` file whose path is returned in `output_npz_path`.
 
 #### Applications
 
@@ -33,7 +35,7 @@ This tool is appropriate for scoring and ranking candidate protein–DNA binder 
 - **The NA-MPNN checkout and checkpoint are provisioned for you.** The standalone setup clones a pinned revision of the repository (which ships the specificity checkpoint in-tree) into the managed weights cache, so no repository or checkpoint path is configured. Point `PROTO_NA_MPNN_SPECIFICITY_WEIGHTS_DIR` at an existing checkout to reuse it.
 - **`predicted_ppm` rows are DNA-only and renormalized.** Only positions that are both valid and DNA are kept, and each row is renormalized over `A,C,G,T`, so the returned matrix already excludes protein and masked positions.
 - **`temperature` controls sampling sharpness.** Lower values (default `0.1`) concentrate probability on the most-preferred base; raise it to soften the distribution.
-- **`output_directory` and `keep_intermediate` control artifacts.** Leave `output_directory` unset to write canonical `.npz` files to a temporary directory, or set it to persist them. Set `keep_intermediate=True` to retain the raw NA-MPNN output for debugging.
+- **Files are kept only under `output_directory`.** Leave it unset and nothing is written to disk for you: scratch files go in a temporary directory that is removed, each result's `output_npz_path` is `None`, and the result's arrays hold the same data. Set it to keep the canonical `.npz` files there. `keep_intermediate=True` also keeps the raw NA-MPNN output under `output_directory/na_mpnn_raw/`, and requires `output_directory`.
 
 ## Toolkit Notes
 

@@ -73,16 +73,18 @@ Use this tool to see where accessibility or a factor's binding falls within an e
 
 ### Cherimoya Gradient (`cherimoya-gradient`)
 
-Computes a weighted differentiable accessibility or binding objective over one or more models and, by default, returns its gradient with respect to batched relaxed DNA logits.
+Reports Cherimoya's predicted read counts for one or more models and, by default, each one's own gradient with respect to batched relaxed DNA logits. Two quantities are available: `log_counts` over the full output window and `log_target_counts` inside the configured target span.
 
 #### Applications
 
-Use this tool inside gradient-based DNA design loops, for example to raise accessibility in one biosample while lowering it in others, or to add or remove a transcription factor's predicted binding. It is designed for optimizer calls rather than final biological validation.
+Use this tool inside gradient-based DNA design loops, for example to raise accessibility in one biosample while lowering it in others, or to add or remove a transcription factor's predicted binding (BATv1): request a term per model, then compose a goal per term. It is designed for optimizer calls rather than final biological validation.
 
 #### Usage Tips
 
 - **Context fills the window.** `context_left`, the designed logits, and `context_right` must total 2,114 bp; only the designed segment receives a gradient.
-- **Set the sigmoid per model.** Both quantities are ln(reads + 1), `log_counts` over the output window and `log_target_counts` over `target_start`..`target_end`, and both depend on each experiment's depth; the default `sigmoid_center` of 4.5 is the median `log_counts` of the default model over hg38 cCREs. BATv1 models predict on a lower scale with their all-zero control, so center their terms on a `cherimoya-score` value of the starting sequence.
+- **The value is the raw log count, not a bounded transform of it.** Both quantities are ln(reads + 1), `log_counts` over the output window and `log_target_counts` over `target_start`..`target_end`. The gradient beside each is that count's own derivative. The saturating objective this tool used to compute internally is now a goal: `SigmoidGoal(direction="maximize", center=..., scale=...)` reproduces the former `direction="max"`, and a weight on the goal balances models against each other.
+- **Pick the goal's centre per model.** Read counts depend on each experiment's sequencing depth, so a centre that saturates sensibly for one model will not for another. For the default model over hg38 cCREs the median `log_counts` is 4.5, which was the old `sigmoid_center` default; a target span shorter than 1,000 bp holds fewer reads. BATv1 models predict on a lower scale with their all-zero control, so center their goals on a `cherimoya-score` value of the starting sequence.
+- **Each requested quantity is its own forward and backward.** Terms naming different models or folds load and run their own checkpoints, so asking for K terms costs K evaluations; terms are not fused into one objective.
 - **Use `deterministic=True` for reproducible gradients.** The default Triton kernels are faster but do not repeat bit-for-bit on GPU.
 
 ## Toolkit Notes
@@ -91,7 +93,7 @@ Use this tool inside gradient-based DNA design loops, for example to raise acces
 
 These apply to every Cherimoya tool in this toolkit (`cherimoya-catalog`, `cherimoya-score`, `cherimoya-predict`, `cherimoya-gradient`).
 
-- **Models are named by ENCODE experiment accession.** `models` (and each gradient loss term's `model`) takes accessions such as `ENCSR000EOT` (K562 DNase-seq), validated against the bundled catalog of the configured `collection`. The default `collection` is `catv1`; set `collection="batv1"` and name the models (for example `ENCSR000EGM`, K562 CTCF) for ChIP-seq, since the default model belongs to CATv1.
+- **Models are named by ENCODE experiment accession.** `models` (and each gradient term's `model`) takes accessions such as `ENCSR000EOT` (K562 DNase-seq), validated against the bundled catalog of the configured `collection`. The default `collection` is `catv1`; set `collection="batv1"` and name the models (for example `ENCSR000EGM`, K562 CTCF) for ChIP-seq, since the default model belongs to CATv1.
 - **BATv1 runs without a control track.** The ChIP-seq models were trained with the experiment's control signal as a second input, which these tools cannot take, so they receive an all-zero control: predictions are the sequence's own contribution, as the BATv1 release recommends, not a reconstruction of the observed track with its control biases.
 - **Your own checkpoints work locally.** A path to a Cherimoya `.torch` file with the same 2,114 bp in, 1,000 bp out geometry can stand in for an accession; control tracks are zero-filled and output channels summed, as for BATv1. Remote devices reject paths.
 - **Weights download on first use.** Each fold checkpoint (about 2.5 MB for CATv1, 0.2 MB for BATv1) is fetched from Hugging Face at a pinned revision into the managed model cache, and loaded checkpoints stay in the worker between calls.

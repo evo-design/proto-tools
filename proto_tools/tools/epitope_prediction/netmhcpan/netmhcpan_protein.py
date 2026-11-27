@@ -245,9 +245,8 @@ def run_netmhcpan_protein(
     """Scan proteins for MHC class I binding peptides, windowing k-mers internally.
 
     Every ``peptide_lengths`` window of every sequence is scored against every configured
-    allele in a single netMHCpan invocation. Doing the windowing inside the tool is the
-    point: it is the common case for screening a design, and ``position`` is reported
-    1-indexed against the supplied sequence.
+    allele in a single netMHCpan invocation. The tool enumerates windows for screening
+    whole designs, and ``position`` is reported 1-indexed against the supplied sequence.
 
     ``rank_el`` is the quantity to threshold on and to compare across alleles. Alongside
     the strong/weak counts, ``binding_propensity`` gives a smooth 0-1 summary suitable as
@@ -297,7 +296,7 @@ def run_netmhcpan_protein(
     output_data = ToolInstance.dispatch("netmhcpan", input_data, instance=instance, config=config)
 
     # Group by the FASTA id the standalone wrote, which it returns one per input sequence.
-    # Row order is not assumed: netMHCpan groups its output by peptide length and allele.
+    # netMHCpan groups rows by peptide length and allele, so match them by identity.
     grouped: dict[str, list[NetMHCpanBinding]] = {}
     for record in output_data["records"]:
         grouped.setdefault(record["Identity"], []).append(

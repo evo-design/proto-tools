@@ -21,6 +21,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 )
 
 TEST_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "renin_af3.pdb"
+MODIFIED_GAPPED_PDB_FILE = Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb"
 
 
 @pytest.fixture(scope="module")
@@ -270,44 +271,44 @@ def test_proteinmpnn_sample_input_roundtrip():
 
 
 def test_sequence_structure_pair_roundtrip():
-    """Native Pydantic coercion + fixed_positions survive a JSON round-trip."""
+    """Native Pydantic coercion + excluded_positions survive a JSON round-trip."""
     original = SequenceStructurePair(
         sequence="MVLSP",
         structure=Structure.from_file(TEST_PDB_FILE),
-        fixed_positions={"A": [1, 2, 3]},
+        excluded_positions={"A": [1, 2, 3]},
     )
     restored = SequenceStructurePair(**original.model_dump(mode="json"))
     assert restored.sequence == "MVLSP"
     assert restored.structure.structure == original.structure.structure
-    assert restored.fixed_positions is not None
-    assert restored.fixed_positions.chains == {"A": [1, 2, 3]}
+    assert restored.excluded_positions is not None
+    assert restored.excluded_positions.chains == {"A": [1, 2, 3]}
 
 
-def test_sequence_structure_pair_rejects_invalid_fixed_chain():
+def test_sequence_structure_pair_rejects_invalid_excluded_chain():
     with pytest.raises(ValueError, match="not in structure"):
         SequenceStructurePair(
             sequence="MVLSP",
             structure=Structure.from_file(TEST_PDB_FILE),
-            fixed_positions={"Z": [1]},
+            excluded_positions={"Z": [1]},
         )
 
 
-def test_sequence_structure_pair_rejects_invalid_fixed_residues():
+def test_sequence_structure_pair_rejects_invalid_excluded_residues():
     with pytest.raises(ValueError, match="invalid positions"):
         SequenceStructurePair(
             sequence="MVLSP",
             structure=Structure.from_file(TEST_PDB_FILE),
-            fixed_positions={"A": [99999]},
+            excluded_positions={"A": [99999]},
         )
 
 
-def test_sequence_structure_pair_fixed_positions_distinguishes_cache_key():
-    """Per-pair fixed_positions enters the per-item cache key, preventing collisions."""
+def test_sequence_structure_pair_excluded_positions_distinguishes_cache_key():
+    """Per-pair excluded_positions enters the per-item cache key, preventing collisions."""
     from proto_tools.utils.tool_cache import _serialize_for_cache_key
 
     structure = Structure.from_file(TEST_PDB_FILE)
     base = SequenceStructurePair(sequence="MVLSP", structure=structure)
-    fixed = SequenceStructurePair(sequence="MVLSP", structure=structure, fixed_positions={"A": [1, 2, 3]})
+    fixed = SequenceStructurePair(sequence="MVLSP", structure=structure, excluded_positions={"A": [1, 2, 3]})
     assert _serialize_for_cache_key(base) != _serialize_for_cache_key(fixed)
 
 
@@ -362,3 +363,131 @@ def test_designed_complex_feeds_structure_predictor():
     inp = ESMFoldInput(complexes=[designed])
     assert inp.complexes[0] is designed
     assert inp.complexes[0].chain_sequences == designed.chain_sequences
+
+
+# ── DesignedComplex.from_design ──────────────────────────────────────────
+
+
+class _MetricDesign(DesignedComplex):
+    """Subclass standing in for a model's design type."""
+
+
+@pytest.fixture(scope="module")
+def modified_gapped() -> Structure:
+    return Structure.from_file(MODIFIED_GAPPED_PDB_FILE)
+
+
+def test_from_design_substitutes_designed_chains_over_structure_chains(modified_gapped):
+    """Designed chains take the model sequence unmodified; context chains are the structure's own."""
+    design = _MetricDesign.from_design(
+        modified_gapped, {"A": "MKTAYIAK"}, {"A"}, tool="test-sample", include_ligands=False
+    )
+    assert isinstance(design, _MetricDesign)
+    assert design.chains == [
+        Chain(id="A", sequence="MKTAYIAK", entity_type="protein"),
+        modified_gapped.get_chain("B"),
+    ]
+    assert design.designed == [True, False]
+
+
+def test_from_design_keeps_ligands_as_undesigned_context(modified_gapped):
+    """Ligand-conditioned models carry the input's ligands, never flagged as designed."""
+    design = _MetricDesign.from_design(
+        modified_gapped, {"A": "MKTAYIAK"}, {"A"}, tool="test-sample", include_ligands=True
+    )
+    assert [(type(e).__name__, e.id) for e in design.chains] == [
+        ("Chain", "A"),
+        ("Fragment", "A"),
+        ("Chain", "B"),
+        ("Fragment", "L"),
+    ]
+    assert design.designed == [True, False, False, False]
+
+
+def test_from_design_context_chain_keeps_modifications(modified_gapped):
+    """A chain the model did not design passes through with its modified residues intact."""
+    design = _MetricDesign.from_design(modified_gapped, {"B": "AGC"}, set(), tool="test-sample", include_ligands=False)
+    assert design.chains[0] == modified_gapped.get_chain("A")
+    assert design.designed == [False, False]
+
+
+@pytest.mark.parametrize(
+    ("sequences", "designed", "match"),
+    [
+        (
+            {"A": "MKTAYIA"},
+            {"A"},
+            r"test-sample: the model returned 7 residues for chain A, but that chain has 8",
+        ),
+        ({"Z": "MKT"}, {"Z"}, r"designed chain\(s\) \['Z'\] are not polymer chains"),
+        ({}, {"A"}, r"no sequence for designed chain\(s\) \['A'\]"),
+    ],
+    ids=["length-mismatch", "unknown-chain", "missing-sequence"],
+)
+def test_from_design_rejects_sequences_that_do_not_map_onto_the_structure(modified_gapped, sequences, designed, match):
+    """A design that cannot be laid over the input's observed residues fails, naming the tool."""
+    with pytest.raises(ValueError, match=match):
+        _MetricDesign.from_design(modified_gapped, sequences, designed, tool="test-sample", include_ligands=False)
+
+
+def test_from_design_splices_a_short_design_onto_the_positions_the_model_read(modified_gapped):
+    """A model that skips a residue returns one residue per *readable* position.
+
+    The design belongs at those positions; the skipped residue keeps its input identity,
+    because dropping or shifting it would misalign everything after the first skip.
+    """
+    native = modified_gapped.get_chain("A").sequence
+    readable = [1, 2, 3, 4, 5, 6, 8]  # position 7 unreadable
+
+    design = _MetricDesign.from_design(
+        modified_gapped,
+        {"A": "MKTAYIK"},
+        {"A"},
+        tool="test-sample",
+        include_ligands=False,
+        readable_positions={"A": readable},
+    )
+
+    spliced = design.chains[0].sequence
+    assert len(spliced) == len(native), "the design must cover the whole chain"
+    assert spliced[6] == native[6], "the skipped residue keeps its input identity"
+    assert "".join(spliced[p - 1] for p in readable) == "MKTAYIK"
+
+
+def test_from_design_without_readable_positions_keeps_the_strict_contract(modified_gapped):
+    """Callers that declare no rule are unaffected, so un-migrated toolkits keep behaving."""
+    with pytest.raises(ValueError, match="returned 7 residues for chain A"):
+        _MetricDesign.from_design(modified_gapped, {"A": "MKTAYIA"}, {"A"}, tool="test-sample", include_ligands=False)
+
+
+def test_from_design_requires_the_design_to_match_a_declared_rule_exactly(modified_gapped):
+    """A declared rule is authoritative, so any other length is an error, not a fallback.
+
+    A full-length design is rejected too: if the rule says the model reads 7 of 8 residues and
+    8 come back, the rule no longer matches the model, and guessing which 8 positions the
+    design covers is how a misaligned sequence gets through looking plausible.
+    """
+    with pytest.raises(ValueError, match="rule says it reads 7 of that chain's 8 residues"):
+        _MetricDesign.from_design(
+            modified_gapped,
+            {"A": "MKT"},
+            {"A"},
+            tool="test-sample",
+            include_ligands=False,
+            readable_positions={"A": [1, 2, 3, 4, 5, 6, 8]},
+        )
+
+    with pytest.raises(ValueError, match="rule says it reads 7 of that chain's 8 residues"):
+        _MetricDesign.from_design(
+            modified_gapped,
+            {"A": "MKTAYIAK"},  # full chain length, but the rule says 7 are readable
+            {"A"},
+            tool="test-sample",
+            include_ligands=False,
+            readable_positions={"A": [1, 2, 3, 4, 5, 6, 8]},
+        )
+
+
+def test_default_redesign_set_is_protein_chains(modified_gapped):
+    """Nucleic acid chains are context by default; no inverse folding model designs them."""
+    assert InverseFoldingStructureInput(structure=modified_gapped).chain_ids_to_redesign == ["A"]

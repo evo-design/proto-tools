@@ -20,7 +20,7 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# Codon & Translation Table Types
+# Codon and Translation Table Types
 # ============================================================================
 StartCodon = Literal["ATG", "GTG", "TTG", "CTG"]
 StopCodon = Literal["TAA", "TAG", "TGA"]
@@ -51,10 +51,10 @@ OrfipyTranslationTable = Literal[
     "peritrich_nuclear",
 ]
 
-# NOTE: Values are orfipy's internal sequential keys (1-23), NOT NCBI transl_table
+# These values are orfipy's internal sequential keys (1-23), not NCBI transl_table
 # numbers. Orfipy's translation_tables_dict uses contiguous numbering that diverges
 # from NCBI starting at key 7 (NCBI skips tables 7, 8, 15, 17-20, but orfipy
-# numbers them sequentially). See: orfipy/translation_tables.py
+# numbers them sequentially). See orfipy/translation_tables.py.
 ORFIPY_TRANSLATION_TABLE_MAP: dict[str, int] = {
     "standard": 1,
     "vertebrate_mitochondrial": 2,
@@ -88,8 +88,7 @@ ORFIPY_TRANSLATION_TABLE_MAP: dict[str, int] = {
 class OrfipyInput(BaseToolInput):
     """Input object for Orfipy ORF (Open Reading Frame) prediction.
 
-    This class defines the input parameters for predicting open reading frames
-    in DNA sequences using Orfipy, a fast ORF prediction tool.
+    Provide DNA sequences for open reading frame prediction with Orfipy.
 
     Attributes:
         sequences (list[str]): DNA sequence(s) to analyze for open
@@ -101,7 +100,7 @@ class OrfipyInput(BaseToolInput):
             Sequences are automatically normalized to uppercase and filtered to
             contain only valid DNA nucleotides (A, T, C, G). Each sequence is
             labeled positionally (``seq_0``, ``seq_1``, ...) as ``parent_id`` in
-            the output ORFs; results are returned in input order.
+            the output ORFs. Results are returned in input order.
     """
 
     sequences: list[str] = InputField(
@@ -121,9 +120,8 @@ class OrfipyInput(BaseToolInput):
 class OrfipyConfig(BaseConfig):
     """Configuration object for Orfipy ORF prediction.
 
-    This class defines all configuration parameters for running Orfipy to predict
-    open reading frames in DNA sequences. Orfipy identifies potential coding
-    regions based on start/stop codons and length filters.
+    Orfipy identifies potential coding regions using start and stop codons and
+    length filters. These settings control which regions are reported.
 
     Attributes:
         threads (int): Number of CPU threads to use for processing each sequence.
@@ -168,7 +166,8 @@ class OrfipyConfig(BaseConfig):
             Must be at least 0. Default: 0.
 
         max_len (int): Maximum ORF length in nucleotides. ORFs longer than this are silently filtered
-            out by orfipy; raise (e.g. ``1_000_000_000``) for genome-scale inputs. Default: 10000.
+            out by orfipy. Raise the limit (e.g. ``1_000_000_000``) for genome-scale inputs.
+            Defaults to 10000.
 
         include_stop (bool): Whether to include the stop codon in the reported
             ORF nucleotide sequence. If ``True``, the stop codon is included in
@@ -278,8 +277,7 @@ class OrfipyConfig(BaseConfig):
 class OrfipyOutput(BaseToolOutput):
     """Output from Orfipy ORF prediction.
 
-    This class encapsulates the results of Orfipy ORF prediction as in-memory
-    objects for downstream analysis.
+    Contains predicted ORFs as in-memory objects for downstream analysis.
 
     Attributes:
         results (list[OrfPredictionResult]): One entry per input sequence, in input
@@ -446,7 +444,7 @@ def run_orfipy_prediction(inputs: OrfipyInput, config: OrfipyConfig, instance: A
         config=config,
     )
 
-    # Reconstruct ORF objects from returned dicts
+    # Rebuild the predicted ORFs, keeping each input sequence's results together.
     predicted_orfs = []
     for seq_orfs in output_data["predicted_orfs"]:
         orfs = [ORF(**orf_dict) for orf_dict in seq_orfs]

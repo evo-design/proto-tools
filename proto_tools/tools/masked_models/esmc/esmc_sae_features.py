@@ -412,6 +412,7 @@ def run_esmc_sae_features(
         f"Using local for ESM C SAE features: {config.model_checkpoint} @ {config.sae_repo} "
         f"(~{estimated_gb:.2f} GB for layers {config.resolved_layers})"
     )
+    # Run inference in the toolkit's isolated environment.
     outputs = ToolInstance.dispatch(
         "esmc",
         {

@@ -4,6 +4,7 @@ Tests for the Foldseek server-search wrapper.
 """
 
 import io
+import subprocess
 import tarfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -27,6 +28,7 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
     FoldseekHit,
     _parse_m8_archive,
     _parse_m8_text,
+    _remote_row_to_m8,
     _submit,
 )
 from tests.conftest import benchmark_twice
@@ -59,8 +61,65 @@ def test_parse_m8_text_skips_malformed_rows():
     non_numeric = "q\t1abc_B\tNOTNUM\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0"
     inverted = "q\t1abc_C\t55.0\t120\t10\t2\t120\t1\t5\t125\t1e-30\t150.0"
     zero_coord = "q\t1abc_D\t55.0\t120\t10\t2\t0\t120\t5\t125\t1e-30\t150.0"
-    hits = _parse_m8_text("\n".join([good, non_numeric, inverted, zero_coord]), "testdb")
+    hits = _parse_m8_text("\n".join([good, non_numeric, inverted, zero_coord]), "testdb", FoldseekHit)
     assert [h.target_id for h in hits] == ["1abc_A"]
+
+
+def test_parse_m8_text_preserves_local_tm_scores():
+    """Extended local rows expose the score used by Foldseek's threshold mode."""
+    row = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0\t0.47\t0.61\t0.29"
+    hit = _parse_m8_text(row, "testdb", FoldseekHit)[0]
+    assert hit.metrics is not None
+    assert hit.metrics.alignment_tm_score == pytest.approx(0.47)
+    assert hit.metrics.query_tm_score == pytest.approx(0.61)
+    assert hit.metrics.target_tm_score == pytest.approx(0.29)
+
+
+def test_parse_m8_text_keeps_a_hit_whose_tm_score_is_out_of_range():
+    """A TM-score outside [0, 1] must not discard the hit; every other field is still usable."""
+    row = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0\t-1.0\t0.61\t0.29"
+
+    [hit] = _parse_m8_text(row, "testdb", FoldseekHit)
+
+    assert hit.target_id == "1abc_A"
+    assert hit.bit_score == pytest.approx(150.0)
+    assert hit.metrics is not None
+    assert hit.metrics.alignment_tm_score == pytest.approx(-1.0)
+
+
+def test_parse_m8_text_fills_the_metric_columns_a_short_row_reaches():
+    """A row that stops part-way through the metric columns keeps the ones it carries."""
+    row = "q\t1abc_A\t55.0\t120\t10\t2\t1\t120\t5\t125\t1e-30\t150.0\t0.47"
+
+    [hit] = _parse_m8_text(row, "testdb", FoldseekHit)
+
+    assert hit.metrics is not None
+    assert hit.metrics.alignment_tm_score == pytest.approx(0.47)
+    assert "query_tm_score" not in hit.metrics
+
+
+def test_a_real_search_foldseek_com_row_parses_into_the_right_fields():
+    """A real search.foldseek.com row (TP53 vs pdb100) reads the same fields as the local M8 row built from it.
+
+    The server writes ``prob`` before ``evalue`` and a ``theader`` with the target's description,
+    so reading its rows as M8 would put prob in ``evalue``, the e-value in ``bit_score``, and
+    bits/qlen/tlen in the TM-score metrics.
+    """
+    server = (Path(__file__).parent.parent / "dummy_data" / "foldseek_remote_tp53_pdb100_row.m8").read_text().strip()
+    columns = server.split("\t")
+    local = "\t".join([columns[0], columns[1].split()[0], *columns[2:10], *columns[11:13], "0.47", "0.61", "0.29"])
+
+    remote_hit = _parse_m8_text(server, "pdb100", FoldseekHit, _remote_row_to_m8)[0]
+    local_hit = _parse_m8_text(local, "pdb100", FoldseekHit)[0]
+
+    assert (remote_hit.target_id, remote_hit.evalue, remote_hit.bit_score) == (
+        "2pcx-assembly1.cif.gz_A",
+        8.981e-41,
+        1615.0,
+    )
+    assert (remote_hit.alignment_length, remote_hit.query_start, remote_hit.query_end) == (199, 93, 291)
+    assert remote_hit.model_dump(exclude={"metrics"}) == local_hit.model_dump(exclude={"metrics"})
+    assert remote_hit.metrics is None
 
 
 def test_foldseek_hit_rejects_invalid_coordinates():
@@ -98,7 +157,7 @@ def test_parse_m8_archive_extracts_hits_per_database():
         }
     )
 
-    hits = _parse_m8_archive(archive)
+    hits = _parse_m8_archive(archive, FoldseekHit)
 
     assert len(hits) == 2
     by_db = {h.database: h for h in hits}
@@ -119,14 +178,14 @@ def test_parse_m8_archive_extracts_hits_per_database():
 def test_parse_m8_archive_filters_to_m8_files(extra_files, expected_count):
     """Only `.m8` archive entries are parsed; other files are silently ignored."""
     archive = _make_archive({"config.json": '{"version": 1}', **extra_files})
-    assert len(_parse_m8_archive(archive)) == expected_count
+    assert len(_parse_m8_archive(archive, FoldseekHit)) == expected_count
 
 
 def test_parse_m8_archive_raises_on_non_tarball_bytes():
     """An HTML error page from the server raises a clear ValueError, not an opaque TarError."""
     html = b"<html><body>503 Service Unavailable</body></html>"
     with pytest.raises(ValueError, match=r"not a valid tar\.gz archive"):
-        _parse_m8_archive(html)
+        _parse_m8_archive(html, FoldseekHit)
 
 
 # ── _submit ───────────────────────────────────────────────────────────────────
@@ -206,13 +265,20 @@ def test_local_mode_dispatches_easy_search():
     config = FoldseekSearchConfig(search_mode="local", local_db="/path/to/db", num_threads=8)
 
     with patch("proto_tools.tools.structure_alignment.foldseek.foldseek_search.ToolInstance.dispatch") as mock_dispatch:
-        mock_dispatch.return_value = {"stdout": "query\t1abc_A\t50.0\t100\t5\t1\t1\t100\t10\t110\t1e-30\t150.0\n"}
+        mock_dispatch.return_value = {
+            "stdout": "query\t1abc_A\t50.0\t100\t5\t1\t1\t100\t10\t110\t1e-30\t150.0\t0.48\t0.62\t0.31\n"
+        }
         output = run_foldseek_search(inputs, config)
 
     assert output.success
     assert output.ticket_id == ""  # local mode doesn't issue a ticket
     assert output.num_hits == 1
     assert output.hits[0].target_id == "1abc_A"
+    metrics = output.hits[0].metrics
+    assert metrics is not None
+    assert metrics.alignment_tm_score == pytest.approx(0.48)
+    assert metrics.query_tm_score == pytest.approx(0.62)
+    assert metrics.target_tm_score == pytest.approx(0.31)
     assert output.databases_queried == ["/path/to/db"]
 
     payload = mock_dispatch.call_args.args[1]
@@ -261,10 +327,99 @@ def test_submit_raises_on_invalid_id(payload, error_pattern):
         _submit("PDB...", ["pdb100"], "3diaa", session)
 
 
+# ── ProstT5 weights cache ────────────────────────────────────────────────────
+
+
+def _write_prostt5_model(weights: Path, size: int) -> None:
+    """Write a sparse stand-in for the ProstT5 model of ``size`` bytes."""
+    from proto_tools.tools.structure_alignment.foldseek.standalone import run
+
+    weights.mkdir(parents=True, exist_ok=True)
+    with (weights / run._PROSTT5_MODEL).open("wb") as f:
+        f.truncate(size)
+
+
+@pytest.fixture
+def prostt5_downloads(tmp_path: Path, monkeypatch):
+    """Point foldseek's weights at ``tmp_path`` and stand in for ``foldseek databases ProstT5``.
+
+    Each download writes the full model unless the test queues other outcomes in ``outcomes``:
+    ``"empty"`` leaves an empty weights directory, ``"truncated"`` a tiny model.
+    """
+    from proto_tools.tools.structure_alignment.foldseek.standalone import run
+
+    monkeypatch.setenv("PROTO_FOLDSEEK_WEIGHTS_DIR", str(tmp_path))
+    monkeypatch.setattr(run, "_find_binary", lambda: "foldseek")
+    downloads: list[str] = []
+    outcomes: list[str] = []
+
+    def fake_run_cmd(cmd: list[str], description: str) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
+        weights = Path(cmd[3])
+        weights.mkdir(parents=True)
+        outcome = outcomes.pop(0) if outcomes else "full"
+        if outcome != "empty":
+            _write_prostt5_model(weights, run._PROSTT5_MIN_BYTES if outcome == "full" else 1)
+        downloads.append(description)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(run, "_run_cmd", fake_run_cmd)
+    return run, tmp_path / "prostt5", downloads, outcomes
+
+
+def test_prostt5_weights_download_once(prostt5_downloads):
+    run, _, downloads, _ = prostt5_downloads
+
+    assert run._ensure_prostt5_weights(None) == run._ensure_prostt5_weights(None)
+    assert downloads == ["databases ProstT5"]
+
+
+@pytest.mark.parametrize("purge", ["weights", "weights_from_a_cache_marked_ready_before"])
+def test_prostt5_weights_download_again_when_purged(prostt5_downloads, purge: str):
+    """Weights a purge deleted are downloaded again, also under the bare marker older runs wrote."""
+    run, cache, downloads, _ = prostt5_downloads
+    run._ensure_prostt5_weights(None)
+
+    (cache / "weights" / "prostt5-f16.gguf").unlink()
+    if purge == "weights_from_a_cache_marked_ready_before":
+        (cache / ".proto_complete").unlink()
+        (cache / ".proto-ready").touch()
+    run._ensure_prostt5_weights(None)
+
+    assert (cache / "weights" / "prostt5-f16.gguf").exists()
+    assert len(downloads) == 2
+
+
+def test_prostt5_cache_from_before_records_is_kept(prostt5_downloads):
+    """A finished download marked the old way is recorded as it is, not downloaded again."""
+    run, cache, downloads, _ = prostt5_downloads
+    _write_prostt5_model(cache / "weights", run._PROSTT5_MIN_BYTES)
+    (cache / ".proto-ready").touch()
+
+    run._ensure_prostt5_weights(None)
+
+    assert downloads == []
+
+
+@pytest.mark.parametrize("outcome", ["empty", "truncated"])
+def test_prostt5_download_without_the_model_raises_and_caches_nothing(prostt5_downloads, outcome: str):
+    """A download that exits cleanly without the full model is retried once, then raises with no marker."""
+    run, cache, downloads, outcomes = prostt5_downloads
+    outcomes += [outcome, outcome]
+
+    with pytest.raises(RuntimeError, match=r"did not download prostt5-f16\.gguf"):
+        run._ensure_prostt5_weights(None)
+
+    assert len(downloads) == 2
+    assert not (cache / ".proto_complete").exists()
+    assert run._ensure_prostt5_weights(None) == str(cache / "weights"), "the next call downloads again"
+    assert len(downloads) == 3
+
+
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_foldseek_search_end_to_end_with_tp53():
     """End-to-end: TP53 from AFDB → Foldseek pdb100 → schema-validated structural hits.
 
@@ -308,7 +463,7 @@ def test_foldseek_search_end_to_end_with_tp53():
     )
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_foldseek_search_local_mode_with_directory_db(tmp_path):
     """Local end-to-end: search the renin fixture against a tmp directory of PDB targets (self-match guaranteed)."""
     fixtures = Path(__file__).parent.parent / "dummy_data"

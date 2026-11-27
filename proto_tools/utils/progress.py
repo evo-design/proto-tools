@@ -1,11 +1,10 @@
 """Animated progress bars and status indicators for long-running operations.
 
-Provides ``progress_bar()`` as a drop-in ``tqdm`` replacement that shows an
-animated dots spinner in the description prefix.  Infrastructure code calls
-``set_substatus()`` to update the description as phases change (env setup →
-subprocess launch → inference).  A process-wide active-bar stack connects
-the two without any direct coupling, and stays visible across thread
-boundaries (worker drain threads call ``set_substatus`` too).
+Use ``progress_bar()`` in place of ``tqdm`` to add an animated spinner to the
+description. Infrastructure code calls ``set_substatus()`` as work moves
+through environment setup, subprocess launch, and inference. A process-wide
+stack tracks the active bar so status updates also work from worker drain
+threads.
 
 Styles are registered in ``SPINNER_STYLES`` — add new entries there
 to create new animation patterns.
@@ -355,9 +354,8 @@ class _NotebookProgressBar(tqdm_auto):  # type: ignore[type-arg]
             icon = "\u2714" if completed else "\u2718"
             self.set_description(_compose_desc(self._prefix, icon, self._base_desc), refresh=True)
         else:
-            # Draw the substatus one last time. Only the animation thread renders, and it has
-            # just been stopped, so without this the frame left on screen is whatever phase it
-            # happened to stop on rather than the final one the caller set.
+            # Draw the latest substatus after stopping the animation thread. Otherwise,
+            # the display may retain an earlier phase instead of the caller's final status.
             self.set_description(_compose_desc(self._prefix, "", self._base_desc), refresh=True)
         _pop_active_bar(self)
         super().close()
@@ -568,9 +566,8 @@ def progress_bar(  # noqa: D417
     """
     if kwargs.get("disable"):
         return tqdm(*args, **kwargs)
-    # Tested before interactivity, not after. A Jupyter kernel's stderr is a ZMQ stream rather
-    # than a tty, so an ``isatty`` gate placed first makes this branch unreachable -- which is
-    # exactly backwards, since this renderer exists because notebooks are not ttys.
+    # Check for notebooks before terminal interactivity. Jupyter stderr is a ZMQ stream,
+    # so checking isatty first would prevent the notebook renderer from being selected.
     in_notebook = _in_notebook()
     stream = kwargs.get("file")
     if stream is None:
@@ -601,7 +598,7 @@ def remote_spinner_style(device: str) -> tuple[str, str | None]:
     encode it falls back to the dotted spinner with a badge naming the device.
 
     Args:
-        device (str): The remote device, ``"proto"`` or ``"modal"``.
+        device (str): The remote device, ``"modal"``.
 
     Returns:
         tuple[str, str | None]: The style name and an optional static prefix.
@@ -616,23 +613,21 @@ def remote_spinner_style(device: str) -> tuple[str, str | None]:
 def remote_progress(device: str) -> Generator[None, None, None]:
     """Hold a status-only spinner for the round trip to a remote worker.
 
-    Both remote devices use this, so a call reads the same however it was dispatched. Nothing
-    else opens a bar on either path: the tool wrapper's bar belongs to local subprocess
-    execution, and a tool's own bar runs inside the remote container. Without this a remote call
-    shows nothing at all, and the machinery that streams a worker's log output finds no active
-    bar to write into.
+    The wrapper opens a bar for local subprocess execution, and a remote tool
+    opens a separate bar inside the container. This spinner gives streamed remote
+    logs an active bar to update on the caller's machine.
 
     A bar already open is left alone rather than nested, which is what happens under
     ``ToolPool`` or inside a tool that opened its own.
 
     Args:
-        device (str): The remote device, used for the opening status and the fallback badge.
+        device (str): The remote device, used for the fallback badge.
     """
     if has_active_progress_bar():
         yield
         return
     style, prefix = remote_spinner_style(device)
-    with progress_bar(desc=remote_connecting_status(device), prefix=prefix, spinner_style=style, show_bar=False):
+    with progress_bar(desc=starting_container_status(), prefix=prefix, spinner_style=style, show_bar=False):
         yield
         # Only on the way out of a clean run. The bar's last frame is what stays on screen, so
         # leaving it mid-phase reads as though the call stopped there. An exception skips this
@@ -644,20 +639,17 @@ def remote_progress(device: str) -> Generator[None, None, None]:
         update_active_substatus(f"{COMPLETE_MARK} Complete")
 
 
-def remote_connecting_status(device: str) -> str:
+def starting_container_status() -> str:
     """Spinner text for the wait between dispatching a call and the worker's first report.
 
-    A remote worker reports nothing while its container is scheduled and started, which on a cold
-    start is several seconds of an otherwise motionless spinner. Naming the backend says which
-    machine is being waited on.
-
-    Args:
-        device (str): The remote device, ``"proto"`` or ``"modal"``.
+    A remote worker reports nothing while its container is scheduled and started, which on a cold start is
+    several seconds of an otherwise motionless spinner. The hosted service uses the same wording for the same
+    moment.
 
     Returns:
         str: The status line.
     """
-    return f"Connecting to {device} container"
+    return "Starting container"
 
 
 def set_substatus(message: str, style: str | None = None) -> None:

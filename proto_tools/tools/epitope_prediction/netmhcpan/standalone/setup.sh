@@ -7,7 +7,7 @@
 # archive is never vendored into this repository or baked into an image.
 #
 # Install it once and either set NETMHCPAN_HOME (or NMHOME) to the netMHCpan-4.2
-# root, or point PROTO_NETMHCPAN_WEIGHTS_DIR (or PROTO_MODEL_CACHE/netmhcpan) at it.
+# root, or point PROTO_NETMHCPAN_WEIGHTS_DIR (or PROTO_MODEL_CACHE/netmhcpan/weights) at it.
 set -euo pipefail
 source standalone_helpers.sh
 
@@ -53,7 +53,7 @@ elif [ -n "$netmhcpan_missing_data" ]; then
     exit 1
 elif [ -n "$netmhcpan_configured" ]; then
     echo "ERROR: a netMHCpan path is set but ${BIN_RELPATH} was not found there." >&2
-    echo "Checked NETMHCPAN_HOME / NMHOME / PROTO_NETMHCPAN_WEIGHTS_DIR / PROTO_MODEL_CACHE/netmhcpan;" >&2
+    echo "Checked NETMHCPAN_HOME / NMHOME / PROTO_NETMHCPAN_WEIGHTS_DIR / PROTO_MODEL_CACHE/netmhcpan/weights;" >&2
     echo "fix the path to a netMHCpan-4.2 root holding ${BIN_RELPATH}." >&2
     exit 1
 else

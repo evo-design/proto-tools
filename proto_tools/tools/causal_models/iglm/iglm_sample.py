@@ -139,6 +139,7 @@ def run_iglm_sample(
           small a budget surfaces as a "yielded only N of M" error.
     """
     logger.debug("Using local venv for IgLM generation: %s", config.model_checkpoint)
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "iglm",
         {

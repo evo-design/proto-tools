@@ -1,7 +1,4 @@
-"""proto_tools/entities/structures/utils.py.
-
-Utility functions for working with protein structures.
-"""
+"""Load, identify, and convert protein structure formats."""
 
 from __future__ import annotations
 
@@ -11,6 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal, TypeGuard
 
 import numpy as np
+
+from proto_tools.utils.file_inputs import STRUCTURE_FILES, read_text_file
 
 if TYPE_CHECKING:
     import gemmi
@@ -30,48 +29,9 @@ _PDB_MAX_RESIDUES_PER_CHAIN = 9_999
 # Non-crystallographic symmetry operators are rare and genuinely unrepresentable.
 _CIF_ONLY_METADATA_MARKERS = ("_struct_ncs_oper",)
 
-# Upper bound for treating a string as a possible filesystem path. Structure content
-# strings are routinely 5-50 KB; any string longer than this is definitely content,
-# not a path, and we skip the filesystem probe to avoid pointless work.
-_MAX_PATH_STRING_LEN = 4096
-
 # ===============================
 # I/O
 # ===============================
-SUPPORTED_EXTENSIONS = ("pdb", "cif", "mmcif")
-
-
-def looks_like_structure_path(value: object) -> bool:
-    """Return True if ``value`` is a filesystem path to an existing structure file.
-
-    Used by ``Structure._handle_construction`` so that ``Structure(structure="foo.pdb")``
-    transparently loads from disk (restoring the old plain-class ergonomics) while
-    content strings pass straight through.
-
-    Args:
-        value (object): Value to probe — a ``Path`` or a string that may be either a
-            filesystem path or raw PDB/CIF content.
-
-    Returns:
-        bool: True if ``value`` points to an existing file with a supported extension.
-    """
-    if isinstance(value, Path):
-        try:
-            return value.is_file()
-        except OSError:
-            return False
-    if isinstance(value, str):
-        # Content strings are multi-line and/or long; only probe the filesystem for
-        # short single-line strings whose suffix matches a structure extension.
-        if "\n" in value or len(value) > _MAX_PATH_STRING_LEN:
-            return False
-        if not value.lower().endswith(SUPPORTED_EXTENSIONS):
-            return False
-        try:
-            return Path(value).is_file()
-        except OSError:
-            return False
-    return False
 
 
 def looks_like_url(value: object) -> TypeGuard[str]:
@@ -91,33 +51,27 @@ def looks_like_url(value: object) -> TypeGuard[str]:
 
 
 def load_structure_file(filepath: Path | str) -> str:
-    """Loads the contents of a structure file (PDB or CIF) and returns it as a string.
+    """Load the text of a structure file (PDB or mmCIF, optionally gzipped).
 
     Args:
-        filepath (Path | str): Path to the structure file (PDB or CIF).
+        filepath (Path | str): Path to a ``.pdb``, ``.cif`` or ``.mmcif`` file, optionally ``.gz``.
 
     Returns:
-        str: String of content from the structure file.
+        str: The file's content.
 
     Raises:
-        FileNotFoundError: If the file does not exist
-        ValueError: If the file extension is not .pdb, .cif, or .mmcif
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the file extension is not a structure extension.
     """
-    filepath = Path(filepath)
-
-    if not filepath.exists():
-        raise FileNotFoundError(f"File not found: {filepath}")
-
-    # Normalize extension check
-    suffix_lower = filepath.suffix.lower()
-    if not suffix_lower.endswith(SUPPORTED_EXTENSIONS):
+    if not STRUCTURE_FILES.has_extension(filepath):
         raise ValueError(
-            f"Invalid structure file extension: {filepath.suffix}. "
-            f"Must one of the following extensions: {', '.join(SUPPORTED_EXTENSIONS)}"
+            f"Invalid structure file extension: {Path(filepath).name!r}. "
+            f"Must end in one of {', '.join(STRUCTURE_FILES.extensions)}, optionally followed by .gz"
         )
-
-    # Read the structure file
-    return filepath.read_text(encoding="utf-8")
+    path = Path(filepath)
+    if not path.is_file():
+        raise FileNotFoundError(f"File not found: {path}")
+    return read_text_file(path)
 
 
 def detect_structure_format(structure_content: str) -> str:
@@ -185,22 +139,24 @@ def is_valid_structure(structure_filepath_or_content: str | Path) -> bool:
     Returns:
         bool: True if the structure content string/file has valid PDB or CIF format, False otherwise
     """
+    try:
+        file_text = STRUCTURE_FILES.read(structure_filepath_or_content)
+        input_str = file_text if file_text is not None else str(structure_filepath_or_content)
+        return _parses_with_atoms(input_str, detect_structure_format(input_str))
+    except Exception:
+        return False
+
+
+def _parses_with_atoms(input_str: str, struct_format: str) -> bool:
+    """Whether PDB or mmCIF content in ``struct_format`` parses into a structure with at least one atom."""
     import gemmi
 
     try:
-        # Determine if input is a file path or content string
-        input_str = str(structure_filepath_or_content)
-
-        if input_str.lower().endswith(SUPPORTED_EXTENSIONS):
-            # It's a file path - read directly
-            structure = gemmi.read_structure(input_str)
-        else:
-            struct_format = detect_structure_format(input_str)
-            if struct_format == "cif":
-                doc = gemmi.cif.read_string(input_str)
-                structure = gemmi.make_structure_from_block(doc[0])
-            elif struct_format == "pdb":
-                structure = gemmi.read_pdb_string(input_str)
+        if struct_format == "cif":
+            doc = gemmi.cif.read_string(input_str)
+            structure = gemmi.make_structure_from_block(doc[0])
+        elif struct_format == "pdb":
+            structure = gemmi.read_pdb_string(input_str)
 
     except Exception:
         # If parsing fails for any reason, return False
@@ -244,9 +200,22 @@ def _is_Nx3(array: np.ndarray) -> bool:
     return len(array.shape) == 2 and array.shape[1] == 3
 
 
+def _validate_coordinate_matrix(coordinates: np.ndarray) -> None:
+    """Require an ``(N, 3)`` coordinate matrix.
+
+    These helpers are public API callers reach with their own arrays, so the check
+    raises instead of asserting: ``python -O`` strips assertions, and a wrongly
+    shaped array then broadcasts into silently meaningless distances.
+    """
+    if not isinstance(coordinates, np.ndarray):
+        raise TypeError(f"coordinates must be a numpy.ndarray, got {type(coordinates).__name__}")
+    if not _is_Nx3(coordinates):
+        raise ValueError(f"coordinates must have shape (N, 3), got {coordinates.shape}")
+
+
 def pairwise_distances(coordinates: np.ndarray) -> np.ndarray:
     """Calculate pairwise distances between all coordinates."""
-    assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
+    _validate_coordinate_matrix(coordinates)
     m = coordinates[:, np.newaxis, :] - coordinates[np.newaxis, :, :]
     distance_matrix = np.linalg.norm(m, axis=-1)
     return distance_matrix[np.triu_indices(distance_matrix.shape[0], k=1)]  # type: ignore[no-any-return]
@@ -254,14 +223,14 @@ def pairwise_distances(coordinates: np.ndarray) -> np.ndarray:
 
 def adjacent_distances(coordinates: np.ndarray) -> np.ndarray:
     """Calculate distances between adjacent coordinates."""
-    assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
+    _validate_coordinate_matrix(coordinates)
     m = coordinates - np.roll(coordinates, shift=1, axis=0)
     return np.linalg.norm(m, axis=-1)  # type: ignore[no-any-return]
 
 
 def get_centroid(coordinates: np.ndarray) -> np.ndarray:
     """Calculate the centroid of coordinates."""
-    assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
+    _validate_coordinate_matrix(coordinates)
     return coordinates.mean(axis=0).reshape(1, 3)
 
 
@@ -270,7 +239,7 @@ def distances_to_centroid(coordinates: np.ndarray) -> np.ndarray:
 
     centroid of all coordinates.
     """
-    assert _is_Nx3(coordinates), "Coordinates must be Nx3."  # noqa: S101
+    _validate_coordinate_matrix(coordinates)
     centroid = get_centroid(coordinates)
     m = coordinates - centroid
     return np.linalg.norm(m, axis=-1)  # type: ignore[no-any-return]
@@ -369,6 +338,7 @@ def _warn_cif_to_pdb_lossy(structure: gemmi.Structure, cif_content: str) -> None
     total_atoms = 0
     chains_over_residue_cap: set[str] = set()
 
+    # Scan every chain, residue, and atom for names and counts PDB cannot hold
     for model in structure:
         for chain in model:
             if len(chain.name) > _PDB_MAX_CHAIN_ID_LEN:
@@ -382,9 +352,11 @@ def _warn_cif_to_pdb_lossy(structure: gemmi.Structure, cif_content: str) -> None
                     total_atoms += 1
                     if len(atom.name) > _PDB_MAX_ATOM_NAME_LEN:
                         long_atom_names.add(atom.name)
+            # Check the chain's residue count once its residues are counted
             if residue_count > _PDB_MAX_RESIDUES_PER_CHAIN:
                 chains_over_residue_cap.add(chain.name)
 
+    # Warn once for each kind of overflow found
     if long_chain_ids:
         warnings.warn(
             f"CIF→PDB conversion: {len(long_chain_ids)} chain ID(s) exceed PDB's "
@@ -419,6 +391,7 @@ def _warn_cif_to_pdb_lossy(structure: gemmi.Structure, cif_content: str) -> None
             f"(e.g., {sorted(long_residue_names)[:3]}).",
             stacklevel=4,
         )
+    # Warn about CIF-only metadata categories that have no PDB equivalent
     if any(marker in cif_content for marker in _CIF_ONLY_METADATA_MARKERS):
         warnings.warn(
             "CIF→PDB conversion: source CIF contains extension metadata (assemblies, "

@@ -84,7 +84,7 @@ def test_env_hash_is_independent_of_tree_location(tmp_path, monkeypatch):
 
 def test_code_hash_finds_shared_bases_without_being_told():
     """A shared base can change behaviour without altering the emitted schema."""
-    files = {p.name for p in fp._defining_files("esmfold-prediction")}
+    files = {p.name for p in fp.defining_files("esmfold-prediction")}
 
     assert "esmfold.py" in files
     assert "shared_data_models.py" in files, "an inherited base was missed, so edits to it are invisible"
@@ -93,7 +93,7 @@ def test_code_hash_finds_shared_bases_without_being_told():
 def test_code_hash_excludes_framework_modules():
     """Including them would move every tool's fingerprint on one framework edit."""
     for key in (TOOL, "esmfold-prediction", "tmalign-alignment"):
-        rels = [p.relative_to(fp._PACKAGE_ROOT).as_posix() for p in fp._defining_files(key)]
+        rels = [p.relative_to(fp.PACKAGE_ROOT).as_posix() for p in fp.defining_files(key)]
         assert not [r for r in rels if r.startswith(("proto_tools/utils/", "proto_tools/tools/tool_registry.py"))]
 
 
@@ -101,8 +101,8 @@ def test_code_hash_moves_when_a_defining_file_changes(tmp_path, monkeypatch):
     """The point of the hash: logic edited in place, schema and env untouched."""
     source = tmp_path / "tool.py"
     source.write_text("def run(): return 1\n")
-    monkeypatch.setattr(fp, "_PACKAGE_ROOT", tmp_path)
-    monkeypatch.setattr(fp, "_defining_files", lambda _k: [source])
+    monkeypatch.setattr(fp, "PACKAGE_ROOT", tmp_path)
+    monkeypatch.setattr(fp, "defining_files", lambda _k: [source])
 
     before = fp.code_hash("anything")
     source.write_text("def run(): return 2\n")

@@ -1,6 +1,4 @@
-r"""proto_tools/utils/logging_config.py.
-
-Parent-side logging setup for proto_tools.
+r"""Configure logging and spinner updates in the parent process.
 
 - **Library auto-configure**: adds a stderr console handler if none exists,
   silences noisy third-party loggers.
@@ -107,14 +105,12 @@ def _auto_configure_logging() -> None:
 
 
 def _drop_update_status_records(record: logging.LogRecord) -> bool:
-    """Filter for console handlers: drop ``update_status`` records only while a bar shows them.
+    """Hide status records from the console while a progress bar displays them.
 
-    These records are spinner-subtitle updates; while a progress bar is active it
-    renders them (and SpinnerFromLogsHandler routes them there), so echoing them to
-    the console would just duplicate the bar. With no active bar there's nothing
-    displaying them, so keep them visible — this is the no-bar ``set_substatus``
-    fallback path, and dropping it would silently swallow phase messages locally.
-    File handlers don't install this filter, so they capture everything as an audit trail.
+    SpinnerFromLogsHandler sends these records to the active bar's subtitle.
+    Printing them separately would duplicate that display. Without an active
+    bar, keep them in the console so phase messages remain visible. File
+    handlers do not use this filter and retain all records.
     """
     if not getattr(record, "update_status", False):
         return True
@@ -423,18 +419,27 @@ class ProtoLogger(logging.Logger):
             stacklevel=stacklevel,
         )
 
-    def update_status(self, msg: object, *args: Any) -> None:
-        """Emit a status record that updates the spinner subtitle and is captured by file handlers but never shown on console.
+    def update_status(self, msg: object, *args: Any, level: int = logging.INFO) -> None:
+        """Update the status line (the spinner subtitle, or a hosted run's subtitle) and log it at ``level``.
 
-        Use this for phase-transition messages inside long-running tools
-        ("Loading weights", "Moving to GPU", "Folding 1 complex"). The console
-        StreamHandler installs a Filter that drops these records, so they never
-        clutter terminal output regardless of verbose level. File handlers
-        (configured via ``setup_logging(log_to_file=True)``) still capture
-        them as a complete audit trail.
+        Use this for phase messages such as "Loading ESMFold weights" or
+        "Folding structure 3/8". It already creates a log record, so a matching
+        ``info`` call would duplicate the message.
+
+        The status line updates regardless of the logger's level. ``level``
+        controls ordinary logging only. File handlers retain the record at
+        that level, and console handlers show it when no progress bar is
+        active and their level allows it. Use ``logging.DEBUG`` for routine
+        steps and the default ``INFO`` for weight loading, downloads, and
+        remote job phases.
+
+        Args:
+            msg (object): Message, %-formatted with ``args``.
+            args (Any): Arguments for ``msg``.
+            level (int): Level the record is logged at.
         """
-        if self.isEnabledFor(logging.INFO):
-            self._log(logging.INFO, msg, args, update_status=True)
+        # Not gated on isEnabledFor: a DEBUG status still has to reach the status line.
+        self._log(level, msg, args, update_status=True)
 
 
 class SpinnerFromLogsHandler(logging.Handler):
