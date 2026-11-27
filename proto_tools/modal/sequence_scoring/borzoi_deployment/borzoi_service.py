@@ -52,7 +52,13 @@ app = get_app_for_service("BorzoiService")
     retries=SERVICE_RETRIES,
     secrets=[HF_TOKEN_SECRET],
 )
-@register_tools({"borzoi-prediction": "predict", "borzoi-ensemble": "predict_ensemble"})
+@register_tools(
+    {
+        "borzoi-ensemble": "predict_ensemble",
+        "borzoi-gradient": "gradient",
+        "borzoi-prediction": "predict",
+    }
+)
 class BorzoiService:
     """Modal service for Borzoi sequence scoring inference."""
 
@@ -108,4 +114,30 @@ class BorzoiService:
 
         return run_tool_call(
             run_borzoi_ensemble, BorzoiInput, BorzoiEnsembleConfig, input_dict, config_dict, instance=self.instance
+        )
+
+    @modal.method()
+    def gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate Borzoi track activity with respect to the relaxed input logits.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-position gradients and term values for each scored region.
+        """
+        from proto_tools.tools.sequence_scoring.borzoi.borzoi_gradient import (
+            BorzoiGradientConfig,
+            BorzoiGradientInput,
+            run_borzoi_gradient,
+        )
+
+        return run_tool_call(
+            run_borzoi_gradient,
+            BorzoiGradientInput,
+            BorzoiGradientConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
         )

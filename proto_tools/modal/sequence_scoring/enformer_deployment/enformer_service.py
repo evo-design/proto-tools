@@ -52,7 +52,7 @@ app = get_app_for_service("EnformerService")
     retries=SERVICE_RETRIES,
     secrets=[HF_TOKEN_SECRET],
 )
-@register_tools({"enformer-prediction": "predict"})
+@register_tools({"enformer-gradient": "gradient", "enformer-prediction": "predict"})
 class EnformerService:
     """Modal service for Enformer regulatory sequence scoring."""
 
@@ -89,4 +89,30 @@ class EnformerService:
 
         return run_tool_call(
             run_enformer, EnformerInput, EnformerConfig, input_dict, config_dict, instance=self.instance
+        )
+
+    @modal.method()
+    def gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate Enformer track activity with respect to the relaxed input logits.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-position gradients and term values for each scored region.
+        """
+        from proto_tools.tools.sequence_scoring.enformer.enformer_gradient import (
+            EnformerGradientConfig,
+            EnformerGradientInput,
+            run_enformer_gradient,
+        )
+
+        return run_tool_call(
+            run_enformer_gradient,
+            EnformerGradientInput,
+            EnformerGradientConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
         )

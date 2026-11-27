@@ -51,7 +51,7 @@ app = get_app_for_service("SpliceTransformerService")
     retries=SERVICE_RETRIES,
     secrets=[HF_TOKEN_SECRET],
 )
-@register_tools({"splice-transformer-prediction": "run"})
+@register_tools({"splice-transformer-gradient": "gradient", "splice-transformer-prediction": "run"})
 class SpliceTransformerService:
     """Modal service for SpliceTransformer RNA splicing inference."""
 
@@ -90,6 +90,32 @@ class SpliceTransformerService:
             run_splice_transformer,
             SpliceTransformerInput,
             SpliceTransformerConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
+
+    @modal.method()
+    def gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate SpliceTransformer site probabilities against the relaxed input logits.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-position gradients and term values for each target region.
+        """
+        from proto_tools.tools.rna_splicing.splice_transformer.splice_transformer_gradient import (
+            SpliceTransformerGradientConfig,
+            SpliceTransformerGradientInput,
+            run_splice_transformer_gradient,
+        )
+
+        return run_tool_call(
+            run_splice_transformer_gradient,
+            SpliceTransformerGradientInput,
+            SpliceTransformerGradientConfig,
             input_dict,
             config_dict,
             instance=self.instance,

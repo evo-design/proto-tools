@@ -61,7 +61,15 @@ app = get_app_for_service("AlphaFold2Service")
     retries=SERVICE_RETRIES,
     secrets=[HF_TOKEN_SECRET],
 )
-@register_tools({"alphafold2-prediction": "predict"})
+@register_tools(
+    {
+        "alphafold2-binder-gradient": "binder_gradient",
+        "alphafold2-binder-redesign-gradient": "binder_redesign_gradient",
+        "alphafold2-fixbb-gradient": "fixbb_gradient",
+        "alphafold2-hallucination-gradient": "hallucination_gradient",
+        "alphafold2-prediction": "predict",
+    }
+)
 class AlphaFold2Service:
     """Modal service for AlphaFold2 structure prediction and binder design."""
 
@@ -98,4 +106,108 @@ class AlphaFold2Service:
 
         return run_tool_call(
             run_alphafold2, AlphaFold2Input, AlphaFold2Config, input_dict, config_dict, instance=self.instance
+        )
+
+    @modal.method()
+    def fixbb_gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate AlphaFold2 quantities for sequences scored against a reference backbone.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-position gradients and term values for each scored sequence.
+        """
+        from proto_tools.tools.structure_prediction.alphafold2.alphafold2_fixbb_gradient import (
+            AlphaFold2FixBBGradientConfig,
+            AlphaFold2FixBBGradientInput,
+            run_alphafold2_fixbb_gradient,
+        )
+
+        return run_tool_call(
+            run_alphafold2_fixbb_gradient,
+            AlphaFold2FixBBGradientInput,
+            AlphaFold2FixBBGradientConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
+
+    @modal.method()
+    def hallucination_gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate AlphaFold2 confidence quantities for free hallucination.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-position gradients and term values for each hallucinated sequence.
+        """
+        from proto_tools.tools.structure_prediction.alphafold2.alphafold2_hallucination_gradient import (
+            AlphaFold2HallucinationGradientConfig,
+            AlphaFold2HallucinationGradientInput,
+            run_alphafold2_hallucination_gradient,
+        )
+
+        return run_tool_call(
+            run_alphafold2_hallucination_gradient,
+            AlphaFold2HallucinationGradientInput,
+            AlphaFold2HallucinationGradientConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
+
+    @modal.method()
+    def binder_gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate AlphaFold2 quantities for a binder against its target.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-position gradients and term values for each binder candidate.
+        """
+        from proto_tools.tools.structure_prediction.alphafold2.alphafold2_binder_gradient import (
+            AlphaFold2BinderGradientConfig,
+            AlphaFold2BinderGradientInput,
+            run_alphafold2_binder_gradient,
+        )
+
+        return run_tool_call(
+            run_alphafold2_binder_gradient,
+            AlphaFold2BinderGradientInput,
+            AlphaFold2BinderGradientConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
+
+    @modal.method()
+    def binder_redesign_gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate AlphaFold2 quantities for a redesigned binder against its target.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-position gradients and term values for each redesigned binder candidate.
+        """
+        from proto_tools.tools.structure_prediction.alphafold2.alphafold2_binder_redesign_gradient import (
+            AlphaFold2BinderRedesignGradientConfig,
+            AlphaFold2BinderRedesignGradientInput,
+            run_alphafold2_binder_redesign_gradient,
+        )
+
+        return run_tool_call(
+            run_alphafold2_binder_redesign_gradient,
+            AlphaFold2BinderRedesignGradientInput,
+            AlphaFold2BinderRedesignGradientConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
         )

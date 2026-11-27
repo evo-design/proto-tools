@@ -77,6 +77,7 @@ APP_BUCKETS: dict[str, list[str]] = {
     "proto-tools-tmalign": ["TMalignService"],
     "proto-tools-usalign": ["USalignService"],
     "proto-tools-viennarna": ["ViennaRNAService"],
+    "proto-tools-vina": ["VinaService"],
 }
 
 
@@ -159,6 +160,9 @@ SERVICE_TIERS: dict[str, str] = {
     "MincedService": "medium",
     "MinervaService": "long",
     "MirandaService": "medium",
+    # Vina's wall scales with exhaustiveness and the ligands in a chunk, like PyRosetta's with
+    # its protocols; both sit on the same tier.
+    "VinaService": "long",
     "Mol1Service": "long",
     "OpenDDEService": "long",
     "OrfipyService": "fast",
@@ -351,6 +355,7 @@ SERVICE_TO_MODULE: dict[str, str] = {
     "MirandaService": "proto_tools.modal.gene_annotation.miranda_deployment.miranda_service",
     "OrfipyService": "proto_tools.modal.orf_prediction.orf_deployment.orf_service",
     "PDockQ2Service": "proto_tools.modal.structure_scoring.pdockq2_deployment.pdockq2_service",
+    "VinaService": "proto_tools.modal.molecular_docking.vina_deployment.vina_service",
     "PangolinService": "proto_tools.modal.rna_splicing.pangolin_deployment.pangolin_service",
     "ParadeService": "proto_tools.modal.sequence_scoring.parade_deployment.parade_service",
     "Primer3Service": "proto_tools.modal.sequence_scoring.primer3_deployment.primer3_service",
