@@ -1,9 +1,11 @@
 """ProteinMPNN backbone-conditioned sequence design."""
 
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient import (
+    ProteinMPNNGradientCandidate,
     ProteinMPNNGradientConfig,
     ProteinMPNNGradientInput,
     ProteinMPNNGradientOutput,
+    ProteinMPNNNLLTerm,
     run_proteinmpnn_gradient,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
@@ -15,6 +17,12 @@ from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample import (
     ProteinMPNNSampleOutput,
     run_proteinmpnn_sample,
 )
+from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample_homooligomer import (
+    ProteinMPNNHomooligomerSampleConfig,
+    ProteinMPNNHomooligomerSampleInput,
+    ProteinMPNNHomooligomerStructureInput,
+    run_proteinmpnn_sample_homooligomer,
+)
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_score import (
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
@@ -22,20 +30,25 @@ from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_score import (
     run_proteinmpnn_score,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
-    ALPHAFOLD_VOCAB,
+    PROTEINMPNN_AMINO_ACIDS_WITH_X,
 )
 from proto_tools.tools.inverse_folding.shared_data_models import (
     SequenceStructurePair,
 )
 
 __all__ = [
-    "ALPHAFOLD_VOCAB",
+    "PROTEINMPNN_AMINO_ACIDS_WITH_X",
     "ProteinMPNNDesign",
     "ProteinMPNNDesignMetrics",
     "ProteinMPNNDesignSet",
     "ProteinMPNNGradientConfig",
     "ProteinMPNNGradientInput",
+    "ProteinMPNNGradientCandidate",
     "ProteinMPNNGradientOutput",
+    "ProteinMPNNHomooligomerSampleConfig",
+    "ProteinMPNNHomooligomerSampleInput",
+    "ProteinMPNNHomooligomerStructureInput",
+    "ProteinMPNNNLLTerm",
     "ProteinMPNNSampleConfig",
     "ProteinMPNNSampleInput",
     "ProteinMPNNSampleOutput",
@@ -45,5 +58,6 @@ __all__ = [
     "SequenceStructurePair",
     "run_proteinmpnn_gradient",
     "run_proteinmpnn_sample",
+    "run_proteinmpnn_sample_homooligomer",
     "run_proteinmpnn_score",
 ]

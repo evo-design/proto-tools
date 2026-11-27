@@ -6,7 +6,8 @@ Protein structure prediction using Chai1.
 import logging
 import os
 import tempfile
-from typing import Any, ClassVar
+from dataclasses import replace
+from typing import Any, ClassVar, cast
 
 from pydantic import field_validator
 
@@ -14,6 +15,12 @@ from proto_tools.utils.progress import progress_bar
 
 logger = logging.getLogger(__name__)
 
+# chai-lab's per-recycle subsample size (subsample_and_reorder_msa_feats_n_mask select_n_rows).
+CHAI1_RECYCLE_SUBSAMPLE_ROWS = 4096
+# chai-lab's row quota for the uniref90 source every written MSA row is tagged with.
+CHAI1_UNIREF90_QUOTA_ROWS = 10_000
+
+from proto_tools.entities.structures import MSASubsampling
 from proto_tools.entities.structures.structure import BFactorType, Structure
 from proto_tools.tools.structure_prediction.chai1.helpers import (
     complex_to_fasta,
@@ -23,13 +30,20 @@ from proto_tools.tools.structure_prediction.chai1.helpers import (
 from proto_tools.tools.structure_prediction.chai1.helpers import (
     hash_sequence as _hash_sequence,
 )
+from proto_tools.tools.structure_prediction.msa_plan import (
+    SentMSA,
+    chain_base_rows,
+    has_homolog_rows,
+    protein_chain_msas,
+    unpaired_depth_rows,
+)
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    Chain,
     Complex,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
+    resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
@@ -43,8 +57,7 @@ from proto_tools.utils.tool_io import Metrics, MetricSpec
 class Chai1Input(StructurePredictionInput):
     """Input object for Chai1 structure prediction.
 
-    This class defines the input parameters for predicting 3D structures of proteins,
-    ligands, and glycans using Chai1, a multi-modal structure prediction model.
+    Provide proteins, ligands, and glycans for 3D structure prediction with Chai1.
 
     Inherits from ``StructurePredictionInput``.
 
@@ -129,8 +142,7 @@ class Chai1Output(StructurePredictionOutput):
 class Chai1Config(MSAStructurePredictionConfig):
     """Configuration object for Chai1 structure prediction.
 
-    This class defines configuration parameters for running Chai1, a multi-modal
-    structure prediction model supporting proteins, ligands, and glycans.
+    Configure Chai1 prediction for protein, ligand, and glycan complexes.
 
     Inherits from ``MSAStructurePredictionConfig``.
 
@@ -163,8 +175,9 @@ class Chai1Config(MSAStructurePredictionConfig):
         low_memory (bool): Stream MSA + template features per sample to reduce
             peak GPU memory at the cost of speed. Default: True.
 
-        recycle_msa_subsample (int): Stochastically subsample MSA across recycles
-            for diversity. 0 disables (default).
+        recycle_msa_subsample (int): Any positive value turns on chai-lab's random
+            4096-row MSA subsample on every recycle, for diversity; the value itself
+            sets no depth. 0 disables (default).
 
         use_msa (bool): Whether to generate and use Multiple Sequence Alignments (MSAs)
             for protein chains using MMseqs2 homology search. Supplied MSAs are always
@@ -235,7 +248,7 @@ class Chai1Config(MSAStructurePredictionConfig):
         title="Recycle MSA Subsample",
         default=0,
         ge=0,
-        description="Randomly subsample the MSA across recycles for diversity. 0 disables.",
+        description="Positive enables chai-lab's random 4096-row MSA subsample per recycle; 0 disables.",
     )
     timeout: int | None = ConfigField(
         title="Timeout",
@@ -244,6 +257,24 @@ class Chai1Config(MSAStructurePredictionConfig):
         description="Maximum execution time in seconds",
         include_in_key=False,
     )
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "Chai1Config":
+        """One diffusion sample over 20 timesteps and one trunk recycle (defaults: 5, 200, 3).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            Chai1Config: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("num_trunk_recycles", 1)
+        kwargs.setdefault("num_diffn_timesteps", 20)
+        kwargs.setdefault("num_diffn_samples", 1)
+        return cast("Chai1Config", super().minimal(**kwargs))
 
 
 # ============================================================================
@@ -362,42 +393,30 @@ def _msa_to_pqt_file(
     source_database: str = "uniref90",
     paired: bool = False,
     unpaired_msa: Any = None,
-) -> None:
-    """Write an MSA object to Chai1's .aligned.pqt Parquet format.
+) -> SentMSA:
+    """Write an MSA object to Chai1's .aligned.pqt Parquet format and return the rows written.
 
-    When ``paired=True``, each non-query paired row receives a pairing_key equal to
-    its row index so chai_lab matches rows across chains by index (proto-tools'
+    When ``paired=True``, each paired row (the query's included, as chai_lab's own
+    pipeline writes them) receives a pairing_key equal to its row index so chai_lab
+    matches rows across chains by index (proto-tools'
     paired MSA is taxonomy-aligned, so equal indices share a taxon). When
     ``unpaired_msa`` is supplied, its non-query rows are appended with empty pairing
     keys (``NO_PAIRING_KEY`` in chai_lab), giving full per-chain unpaired depth
     alongside the paired rows in one pqt.
     """
     sequences, seq_ids = extract_msa_sequences(msa, query_index)
-    pairing_keys = None
-    if paired:
-        # Row 0 is the query; chai_lab pairs rows whose pairing_key is non-empty and equal.
-        pairing_keys = [""] + [str(i) for i in range(1, len(sequences))]
-    if unpaired_msa is not None:
-        # Append the deep unpaired rows for per-chain depth, skipping the query and
-        # any sequence already present among the paired rows. Empty pairing_key marks
-        # them as unpaired (not matched across chains).
-        u_seqs, u_ids = extract_msa_sequences(unpaired_msa, 0)
-        seen = set(sequences)
-        for u_seq, u_id in zip(u_seqs[1:], u_ids[1:], strict=True):
-            if u_seq in seen:
-                continue
-            seen.add(u_seq)
-            sequences.append(u_seq)
-            seq_ids.append(u_id)
-            if pairing_keys is not None:
-                pairing_keys.append("")
+    # Row i's pairing_key is i, the query's included, as chai-lab's own ColabFold pipeline writes them.
+    pairing_keys = [str(i) for i in range(len(sequences))] if paired else None
+    # The deep unpaired rows append with an empty pairing_key (NO_PAIRING_KEY): depth, not matched.
+    depth = unpaired_depth_rows(sequences, unpaired_msa)
     write_msa_pqt(
-        sequences,
+        sequences + [row for row, _id in depth],
         pqt_path,
         source_database=source_database,
-        comments=seq_ids,
-        pairing_keys=pairing_keys,
+        comments=seq_ids + [row_id for _row, row_id in depth],
+        pairing_keys=pairing_keys + [""] * len(depth) if pairing_keys is not None else None,
     )
+    return SentMSA(rows=len(sequences), unpaired_rows=len(depth), paired=paired)
 
 
 def _generate_fasta_content(comp: Complex) -> str:
@@ -412,9 +431,9 @@ def run_chai1_on_complex(
     instance: Any = None,
     seed: int | None = None,
 ) -> Structure:
-    """Run Chai1 structure prediction on a single complex. This function is wrapped.
+    """Run Chai1 structure prediction on a single complex.
 
-    by ``run_chai1`` to sequentially predict all complexes in the input.
+    ``run_chai1`` calls this function sequentially for each input complex.
 
     Args:
         comp (Complex): The complex to fold.
@@ -443,36 +462,53 @@ def run_chai1_on_complex(
         output_dir = os.path.join(temp_dir, "output")
         os.makedirs(output_dir, exist_ok=True)
 
-        from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
-
-        per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(complex_msas)
-
         # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied
         # by the caller (always respected regardless of use_msa).
-        msa_directory = None
-        if per_chain_msas:
-            pqt_dir = os.path.join(temp_dir, "msa_pqt")
-            os.makedirs(pqt_dir, exist_ok=True)
-            for ch_idx, chain in enumerate(comp.chains):
-                if not isinstance(chain, Chain) or chain.entity_type != "protein":
-                    continue
-                msa = per_chain_msas.get(ch_idx)
-                if msa is None:
-                    continue
-                seq_hash = _hash_sequence(chain.sequence.upper())
-                pqt_path = os.path.join(pqt_dir, f"{seq_hash}.aligned.pqt")
-                # Pair row-aligned rows across chains; append the deep unpaired MSA for depth.
-                _msa_to_pqt_file(
-                    msa=msa,
-                    pqt_path=pqt_path,
-                    query_index=0,
-                    paired=is_paired,
-                    unpaired_msa=(unpaired_per_chain or {}).get(ch_idx),
+        bundle_paired = complex_msas is not None and complex_msas.paired
+        pqt_dir = os.path.join(temp_dir, "msa_pqt")
+        os.makedirs(pqt_dir, exist_ok=True)
+        # Identical chains share one pqt, so the last chain written for a sequence wins.
+        written: dict[str, SentMSA] = {}
+        chain_hashes: dict[int, str] = {}
+        for chain in protein_chain_msas(comp.chains, complex_msas):
+            base, unpaired, pairs = chain_base_rows(chain, bundle_paired)
+            if base is None:
+                continue
+            seq_hash = chain_hashes[chain.index] = _hash_sequence(chain.chain.sequence.upper())
+            # Pair row-aligned rows across chains; append the deep unpaired MSA for depth.
+            written[seq_hash] = _msa_to_pqt_file(
+                msa=base,
+                pqt_path=os.path.join(pqt_dir, f"{seq_hash}.aligned.pqt"),
+                query_index=0,
+                paired=pairs,
+                unpaired_msa=unpaired,
+            )
+            if config.verbose:
+                logger.info(f"Assigned MSA to protein chain {chain.index} ({len(base)} sequences)")
+        msa_sent = {index: written[seq_hash] for index, seq_hash in chain_hashes.items()}
+        # chai-lab pairs a key only when every chain with an MSA has it, so a chain sent rows
+        # without pairing keys (only unpaired rows) leaves its key step pairing nothing. The
+        # keyed chains' rows still sit in file order, so they may line up by position anyway;
+        # the report calls them unpaired because no row is matched across chains.
+        unpaired_only = [index for index, record in msa_sent.items() if has_homolog_rows(record) and not record.paired]
+        if unpaired_only:
+            paired = [index for index, record in msa_sent.items() if record.paired]
+            if paired:
+                chain_ids = resolve_chain_ids(comp.chains)
+                kept = ", ".join(chain_ids[index] for index in paired)
+                blocking = ", ".join(chain_ids[index] for index in unpaired_only)
+                has = "chain {} has" if len(unpaired_only) == 1 else "chains {} have"
+                logger.warning(
+                    "Chai-1 will not pair MSA rows across chains %s: %s only unpaired MSA rows, and Chai-1 "
+                    "pairs rows only when every chain with an MSA has paired rows. To keep %s paired, give %s "
+                    "a paired alignment or no MSA.",
+                    kept,
+                    has.format(blocking),
+                    kept,
+                    blocking,
                 )
-                if config.verbose:
-                    logger.info(f"Assigned MSA to protein chain {ch_idx} ({len(msa)} sequences)")
-            if os.listdir(pqt_dir):
-                msa_directory = pqt_dir
+            msa_sent = {index: replace(record, paired=False) for index, record in msa_sent.items()}
+        msa_directory = pqt_dir if written else None
 
         # Prepare input data for inference script
         input_data = {
@@ -509,4 +545,17 @@ def run_chai1_on_complex(
         metrics=Chai1Metrics(**result["metrics"]),
         source="chai1-prediction",
     )
-    return normalize_output_chain_ids(structure, comp.chains)
+    return align_with_input(
+        structure,
+        comp.chains,
+        complex_msas=complex_msas,
+        report_msa=True,
+        msa_sent=msa_sent,
+        msa_subsampling=(
+            # chai-lab treats any positive value as a switch for its fixed 4096-row per-recycle draw.
+            MSASubsampling(mode="stochastic", max_rows=CHAI1_RECYCLE_SUBSAMPLE_ROWS)
+            if config.recycle_msa_subsample > 0
+            # Every row is tagged uniref90, whose chai-lab quota keeps the first 10,000.
+            else MSASubsampling(mode="deterministic", max_rows=CHAI1_UNIREF90_QUOTA_ROWS)
+        ),
+    )

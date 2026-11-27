@@ -1,0 +1,14 @@
+code:
+  spdx: MIT
+  url: https://github.com/evo-design/proto-tools
+data:
+  name: arXiv descriptive metadata
+  spdx: CC0-1.0
+  url: https://info.arxiv.org/help/api/tou.html
+  attribution_required: false
+commercial_use: 'yes'
+redistribution: true
+attribution_required: false
+proto_tools_original: true
+notes: proto-tools original client code (MIT) calling the legacy arXiv API. Descriptive metadata (titles, abstracts, authors, identifiers, categories) is CC0 under the arXiv API Terms of Use; e-print full text stays under each submission's license. The API terms limit clients to one request every three seconds.
+last_updated: '2026-11-06'

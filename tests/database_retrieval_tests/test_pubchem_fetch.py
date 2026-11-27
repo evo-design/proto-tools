@@ -130,7 +130,8 @@ def test_fetch_synonyms_404_returns_empty_list():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_pubchem_fetch_full_property_bundle_aspirin():
     """The default property bundle must populate every typed field for a real compound."""
     output = run_pubchem_fetch(PubChemFetchInput(name="aspirin"), PubChemFetchConfig())
@@ -157,7 +158,8 @@ def test_pubchem_fetch_full_property_bundle_aspirin():
     assert output.bioassay_ids == []
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_pubchem_fetch_smiles_canonicalization_roundtrip():
     """A non-canonical SMILES must still resolve to the canonical CID."""
     non_canonical = "OC(=O)c1ccccc1OC(C)=O"  # aspirin written backwards
@@ -169,8 +171,9 @@ def test_pubchem_fetch_smiles_canonicalization_roundtrip():
     assert output.smiles != non_canonical
 
 
+@pytest.mark.network
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_pubchem_fetch_with_synonyms():
     """Enabling synonyms triggers the second HTTP call and returns up to 50 synonyms."""
     output = run_pubchem_fetch(
@@ -182,7 +185,8 @@ def test_pubchem_fetch_with_synonyms():
     assert "aspirin" in [s.lower() for s in output.synonyms]
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_pubchem_fetch_custom_property_subset_leaves_other_fields_unset():
     """Asking for only two properties must leave all other typed fields as None."""
     output = run_pubchem_fetch(
@@ -197,7 +201,8 @@ def test_pubchem_fetch_custom_property_subset_leaves_other_fields_unset():
     assert output.tpsa is None
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_workflow_name_to_smiles_to_inchikey_roundtrip_converges():
     """Chained workflow: name -> CID, then SMILES -> CID, then InChIKey -> CID.
 
@@ -225,7 +230,8 @@ def test_workflow_name_to_smiles_to_inchikey_roundtrip_converges():
     assert by_inchikey.smiles == by_name.smiles
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_pubchem_fetch_unknown_name_returns_failure():
     """An unresolvable name raises with a descriptive error message identifying the input."""
     with pytest.raises(
@@ -235,7 +241,8 @@ def test_pubchem_fetch_unknown_name_returns_failure():
         run_pubchem_fetch(PubChemFetchInput(name="notacompoundxyz123def"), PubChemFetchConfig())
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_pubchem_fetch_include_description():
     """Setting `include_description=True` populates `descriptions` with at least one entry."""
     output = run_pubchem_fetch(
@@ -249,7 +256,8 @@ def test_pubchem_fetch_include_description():
     assert "aspirin" in combined or "salicyl" in combined
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_pubchem_fetch_include_aids_returns_assay_ids():
     """Setting `include_aids=True` returns a list of integer assay IDs."""
     output = run_pubchem_fetch(

@@ -1,11 +1,11 @@
 """Shared client and models for the Genomic Intelligence hosted ``/v1`` API.
 
 Every tool in this toolkit is a thin wrapper over one hosted endpoint. There is
-no local model, no weights, and no ``standalone/`` environment: the tools issue
+no local model, no weights, and no ``standalone/`` environment. The tools issue
 HTTPS requests to https://api.genomicintelligence.ai and shape the response.
 
 Delivery mode is a per-request choice, not a property of a task. Omitting the
-``Prefer`` header returns the result synchronously with ``200``; sending
+``Prefer`` header returns the result synchronously with ``200``. Sending
 ``Prefer: respond-async`` returns ``202`` plus a job id to poll from
 ``GET /v1/tasks/jobs/{job_id}``. Every endpoint accepts both.
 
@@ -19,6 +19,7 @@ https://genomicintelligence.ai.
 
 from __future__ import annotations
 
+import math
 import os
 from typing import Any, Literal
 
@@ -77,7 +78,7 @@ class GIAPIError(RuntimeError):
     The API returns a uniform ``{"error": {"code", "message", "request_id",
     "details"}}`` envelope on every failure. ``code`` is drawn from a closed
     enum published in the OpenAPI document, so branch on it rather than on the
-    HTTP status; ``details`` varies by code and is carried verbatim for display.
+    HTTP status. ``details`` varies by code and is carried verbatim for display.
 
     Attributes:
         status (int): HTTP status code.
@@ -130,14 +131,10 @@ def as_object(value: Any, field: str) -> dict[str, Any]:
     and becomes ``{}``. A field that is *present with the wrong type* is a
     malformed response and is reported as one.
 
-    Two failure modes pull in opposite directions here. The ``x or {}`` idiom
-    this replaces handled null and absent but not a truthy wrong type: a
-    ``summary`` arriving as a string passed ``or {}`` untouched and then raised
-    ``AttributeError`` on ``.get``, which reads as a client bug. Substituting
-    ``{}`` for it instead trades that traceback for something worse, a result
-    object of zeros returned to the caller as a successful prediction and
-    indistinguishable from a real prediction of nothing. Raising a typed error
-    is neither.
+    A truthy value of the wrong type, such as a string-valued ``summary``, must
+    raise a typed error. Passing it through would fail later on ``.get``.
+    Replacing it with ``{}`` would instead produce a result of zeros that
+    looks like a successful prediction.
 
     Args:
         value (Any): Raw field value from the response.
@@ -159,10 +156,9 @@ def as_object(value: Any, field: str) -> dict[str, Any]:
 def as_object_list(value: Any, field: str) -> list[dict[str, Any]]:
     """Same as :func:`as_object`, for a field documented as an array of objects.
 
-    A truthy non-list (a bare string) is iterable, so ``or []`` let it through
-    and the row comprehension iterated its characters; non-object elements fail
-    the same way. Neither is dropped silently, because a result missing rows it
-    should have had is exactly the quiet wrong answer this is here to prevent.
+    Reject non-list values and non-object elements rather than dropping them.
+    Otherwise a malformed response could appear to be a successful result with
+    missing rows.
 
     Args:
         value (Any): Raw field value from the response.
@@ -203,7 +199,8 @@ class GIConfig(BaseConfig):
         respond_async (bool): Request ``202`` + polling instead of a
             synchronous ``200``. A per-request delivery choice available on
             every endpoint; useful for long inputs.
-        timeout_seconds (float): Wall-clock cap on the async wait.
+        timeout_seconds (float): Wall-clock cap on the async wait. The call's own timeout
+            stretches to cover it, so raising this alone is enough for a long job.
     """
 
     gi_api_key: str | None = ConfigField(
@@ -229,6 +226,16 @@ class GIConfig(BaseConfig):
         description="Maximum wall-clock time to wait for an async job",
         include_in_key=False,
     )
+
+    def effective_timeout(self) -> int | None:
+        """Return ``timeout``, raised to fit an async wait of ``timeout_seconds`` plus submit and fetch.
+
+        Returns:
+            int | None: Effective timeout in seconds, or None for no cap.
+        """
+        if self.timeout is None or not self.respond_async:
+            return self.timeout
+        return max(self.timeout, math.ceil(self.timeout_seconds) + 2 * _REQUEST_TIMEOUT_SECONDS)
 
 
 # ============================================================================
@@ -294,7 +301,7 @@ class GISequence(BaseToolInput):
 
     The label and the sequence are bundled rather than kept in parallel lists
     because the framework slices only the iterable input field when partitioning
-    across workers; a separate ``names`` list would desync from the sequences it
+    across workers. A separate ``names`` list would desync from the sequences it
     describes.
 
     Attributes:
@@ -372,8 +379,8 @@ def validate_gi_sequence(sequence: str, *, min_bp: int, task: str) -> str:
     # reports it as an invalid nucleotide character and refuses a sequence the
     # service would have scored.
     cleaned = validate_dna_sequence("".join(sequence.split()))
-    # The shared validator allows RNA, so it accepts U. The published request
-    # schemas do not: every predict operation carries
+    # The shared validator accepts RNA U, but the published request schemas do not.
+    # Every predict operation carries
     # ^\s*(?:[ACGNTacgnt]\s*)+$, and the service rejects a U with a 422 naming
     # the character. Narrow the shared result to the alphabet this API accepts
     # so the refusal is local rather than a round trip.
@@ -473,7 +480,7 @@ def _parse_json_body(response: requests.Response) -> Any:
     """Parse a 2xx body, reporting a non-JSON one as a named API error.
 
     ``response.json()`` raises ``requests.exceptions.JSONDecodeError``, which is
-    a ``RequestException``; on the polling path ``poll_until_complete`` treats
+    a ``RequestException``. On the polling path ``poll_until_complete`` treats
     that as transient and retries it to the wall-clock deadline, so a 200 that
     is not JSON becomes a half-hour wait ending in ``TimeoutError``. Raising
     :class:`GIAPIError` instead stops immediately and names the body.
@@ -503,13 +510,13 @@ def require_envelope(response: requests.Response) -> dict[str, Any]:
     """Parse a 2xx body and require the documented ``{data, meta}`` envelope.
 
     Every predict endpoint, the workflow endpoint and the job-result endpoint
-    return content inside ``data``: a prediction payload, a ``job_id``, or a
+    return content inside ``data``, which holds a prediction payload, a ``job_id``, or a
     finished job's result. ``data`` must therefore be a non-empty object for all
     of them, and ``{"data": {}}`` is malformed for every one. Accepting it
     produced a result object of zeros with real-looking provenance beside it,
     which the caller cannot tell from a prediction of nothing.
 
-    Not every endpoint is enveloped: ``GET /v1/tasks/{task}/models`` and
+    Not every endpoint uses an envelope. ``GET /v1/tasks/{task}/models`` and
     ``/health`` are deliberately bare, so this is applied at the three call
     sites that read out of ``data`` rather than in :func:`raise_for_gi_error`.
     A ``202`` poll of a *running* job is not one of them -- its ``data`` carries
@@ -553,7 +560,7 @@ def require_envelope(response: requests.Response) -> dict[str, Any]:
 def _job_status(response: requests.Response) -> tuple[str, Any]:
     """Map a job-poll response to a polling state.
 
-    The job endpoint uses the HTTP status as the discriminator: ``202`` while
+    The job endpoint uses the HTTP status to report progress, with ``202`` while
     the job is running, ``200`` once the result is ready. Errors surface as the
     standard envelope and are raised rather than polled through.
 
@@ -568,8 +575,8 @@ def _job_status(response: requests.Response) -> tuple[str, Any]:
             whose payload is not a ``{data, meta}`` envelope.
     """
     if response.status_code == 202:
-        # A running job is not enveloped: its ``data`` is legitimately empty
-        # until there is a result. ``progress`` is advisory, logged only, and
+        # A running job is not enveloped. Its ``data`` is legitimately empty
+        # until its result is ready. ``progress`` is advisory, logged only, and
         # read defensively so a surprise there cannot fail the job.
         payload = _parse_json_body(response)
         data = payload.get("data") if isinstance(payload, dict) else None
@@ -584,8 +591,8 @@ def _job_status(response: requests.Response) -> tuple[str, Any]:
 def resolve_base_url() -> str:
     """Return the API root, from ``GI_BASE_URL`` when set.
 
-    Not a config field: production is the only root end users target, and an
-    alternate deployment is an environment concern rather than a per-call one.
+    The root is set by the deployment environment rather than by per-call config.
+    End users normally target the production service.
     """
     return os.environ.get("GI_BASE_URL", GI_BASE_URL).rstrip("/")
 
@@ -593,8 +600,8 @@ def resolve_base_url() -> str:
 def resolve_poll_interval() -> float:
     """Return the delay between job polls, from ``GI_POLL_INTERVAL_SECONDS`` when set.
 
-    Not a config field: how often to poll is a property of the deployment rather
-    than of the prediction being requested.
+    Polling frequency is set by the deployment environment rather than by the
+    prediction config.
 
     Raises:
         ValueError: If the variable is set to something that is not a positive
@@ -624,7 +631,7 @@ def _post(
         GIAPIError: On a non-2xx response, or on a 2xx that is not a
             ``{data, meta}`` envelope. Both the synchronous result and the
             ``202`` acceptance read content out of ``data``, so both are
-            enveloped here; the polls in between are enveloped by
+            enveloped here. The polls in between are enveloped by
             :func:`_job_status` when the job completes.
     """
     headers = {"Prefer": "respond-async"} if config.respond_async else {}
@@ -640,9 +647,11 @@ def _post(
     )
     raise_for_gi_error(response)
     payload: dict[str, Any] = require_envelope(response)
+    # Synchronous requests already contain the finished result.
     if response.status_code != 202:
         return payload
 
+    # Asynchronous requests return a job ID that must be polled for the result.
     job_id = payload["data"].get("job_id")
     if not job_id:
         raise GIAPIError(response.status_code, "unknown", "202 response carried no job_id", None, payload)
@@ -671,7 +680,7 @@ def call_predict(
 
     Each task is its own published operation with its own request schema and its
     own closed ``options`` object, so option keys are never interchangeable
-    between tasks: an unrecognised key is a ``422``, not a silent no-op.
+    between tasks. An unrecognised key is a ``422``, not a silent no-op.
 
     Args:
         config (GIConfig): Shared configuration.
@@ -717,7 +726,7 @@ def call_workflow(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Call ``POST /v1/workflows/find-genes-and-predict-expression``.
 
-    Unlike the predict endpoints this one has a hard delivery rule: a
+    Unlike the predict endpoints this one has a hard delivery rule. A
     synchronous request above 50,000 bp is refused with ``413 sync_too_large``,
     so the caller must opt into async for long inputs. It is also JSON-only,
     declaring no ``format`` parameter.

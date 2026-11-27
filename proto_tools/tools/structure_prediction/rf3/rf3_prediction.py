@@ -6,17 +6,20 @@ All-atom structure prediction with RoseTTAFold3 (RF3).
 import os
 import tempfile
 from logging import getLogger
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from pydantic import model_validator
 
-from proto_tools.entities.structures import BFactorType, Structure
-from proto_tools.tools.structure_prediction.rf3.helpers import build_chain_a3m_paths, complex_to_rf3_json
+from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
+from proto_tools.tools.structure_prediction.rf3.helpers import (
+    build_chain_a3m_paths,
+    complex_to_rf3_json,
+)
 from proto_tools.tools.structure_prediction.shared_data_models import (
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    normalize_output_chain_ids,
+    align_with_input,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField, ToolInstance
@@ -24,6 +27,10 @@ from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
+
+# MSA rows RF3 randomly keeps per recycle: n_msa in the checkpoint's first validation transform,
+# which foundry builds the inference pipeline from.
+RF3_N_MSA = 1024
 
 
 # ============================================================================
@@ -262,6 +269,24 @@ class RF3Config(MSAStructurePredictionConfig):
             )
         return self
 
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "RF3Config":
+        """One diffusion sample over 20 steps and one recycle (defaults: 5, 50, 10).
+
+        The device, seed and placement tests only need the model to load and run, so one
+        sample through a short diffusion schedule tests the same thing as the full one.
+
+        Args:
+            **kwargs (Any): Field values passed to the config constructor; they take precedence.
+
+        Returns:
+            RF3Config: Config with cheap-mode sampling applied.
+        """
+        kwargs.setdefault("n_recycles", 1)
+        kwargs.setdefault("diffusion_batch_size", 1)
+        kwargs.setdefault("num_steps", 20)
+        return cast("RF3Config", super().minimal(**kwargs))
+
 
 # ============================================================================
 # Tool Implementation
@@ -370,9 +395,7 @@ def run_rf3_prediction_on_complex(
         os.makedirs(output_dir)
 
         # Honor MSAs whenever present: auto-generated when use_msa=True, or supplied by the caller (always respected regardless of use_msa).
-        chain_msa_paths: dict[str, str] | None = None
-        if complex_msas is not None:
-            chain_msa_paths = build_chain_a3m_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
+        chain_msa_paths, msa_sent = build_chain_a3m_paths(sp_complex, complex_msas, temp_dir, verbose=config.verbose)
 
         json_payload = complex_to_rf3_json(
             sp_complex.chains,
@@ -426,8 +449,16 @@ def run_rf3_prediction_on_complex(
 
     structure = Structure(
         structure=cif_output,
-        b_factor_type=BFactorType.PLDDT,
+        # annotate_b_factor_with_plddt writes pLDDT on 0-1 (like avg_plddt), not 0-100.
+        b_factor_type=BFactorType.NORMALIZED_PLDDT,
         metrics=RF3Metrics(**metrics_kwargs),
         source="rf3-prediction",
     )
-    return normalize_output_chain_ids(structure, sp_complex.chains)
+    return align_with_input(
+        structure,
+        sp_complex.chains,
+        complex_msas=complex_msas,
+        report_msa=True,
+        msa_sent=msa_sent,
+        msa_subsampling=MSASubsampling(mode="stochastic", max_rows=RF3_N_MSA),
+    )

@@ -1,21 +1,19 @@
-"""proto_tools/utils/proto_home.py.
+"""Find the storage directory for model weights, tool environments, and micromamba.
 
-Unified PROTO_HOME resolution for all persistent data.
-
-Provides a single function to determine where model weights, tool
-environments, and micromamba live.  Lightweight: only ``os``, ``sys``,
-and ``pathlib`` are imported so it can be used anywhere without side effects.
-
-``PROTO_HOME`` is the single source of truth for all install modes.
+All install modes use ``PROTO_HOME`` to locate persistent data. This module
+imports only ``os``, ``sys``, and ``pathlib``, so importing it does not load
+tool dependencies or set up storage.
 
 Layout under PROTO_HOME::
 
     PROTO_HOME/                   (default: ~/.proto/)
-    ├── proto_model_cache/        model weights (HF_HOME, TORCH_HOME, resolve_weights_dir)
-    │   └── jax_cache/{toolkit}/  compiled JAX programs (JAX_COMPILATION_CACHE_DIR)
+    ├── proto_model_cache/        model weights, one folder per toolkit
+    │   ├── {toolkit}/            huggingface/ (HF_HOME), torch/ (TORCH_HOME),
+    │   │                         jax_cache/ (JAX), weights/ (resolve_weights_dir)
+    │   └── databases/            provisioned MMseqs2 databases
     ├── proto_tool_envs/          micromamba-managed tool venvs
     ├── uv_cache/                 uv package download cache (UV_CACHE_DIR)
-    ├── pip_cache/                pip HTTP cache (PIP_CACHE_DIR)
+    ├── uv_cache.prune/           uv cache prune stamp, lock, and log
     └── .micromamba/              micromamba binary + package cache
 """
 
@@ -25,22 +23,23 @@ from pathlib import Path
 
 
 def get_proto_home() -> Path:
-    """Return the PROTO_HOME root directory.
+    """Return the directory where proto-tools stores persistent data.
 
-    Resolution:
+    Use the first available location below.
 
     1. ``PROTO_HOME`` environment variable (if set).
     2. ``~/.proto/`` (default for all install modes).
 
     The default is the same for editable and non-editable installs.
-    This keeps data separate from source code and gives every user
-    a consistent, predictable location.  To use a custom location
-    (e.g. on HPC), set ``PROTO_HOME`` in your shell profile.
+    Data stays separate from the source checkout. To choose another location,
+    such as storage on an HPC cluster, set ``PROTO_HOME`` in your shell profile.
     """
+    # Expand and resolve a custom path before returning it.
     env_val = os.environ.get("PROTO_HOME")
     if env_val:
         return Path(env_val).expanduser().resolve()
 
+    # Use the same default for every install mode.
     return Path.home() / ".proto"
 
 
@@ -48,11 +47,10 @@ _DOCS_URL = "https://github.com/evo-design/proto-tools/blob/main/notes/storage.m
 
 
 def show_first_run_notice() -> None:
-    """Print a one-time notice when using default storage locations.
+    """Show the storage locations once when either location uses its default.
 
-    Shows a notice to stderr if either ``PROTO_HOME`` or
-    ``PROTO_MODEL_CACHE`` is not explicitly set, so the user knows
-    where data is being stored and how to customize it.
+    Write a notice to stderr if either ``PROTO_HOME`` or ``PROTO_MODEL_CACHE``
+    is unset. The notice shows where data is stored and how to change it.
 
     The notice is shown once per ``PROTO_HOME`` location (a
     ``.initialized`` sentinel file is created after the first notice).
@@ -60,6 +58,7 @@ def show_first_run_notice() -> None:
     proto_home = get_proto_home()
     sentinel = proto_home / ".initialized"
 
+    # Skip the notice if this storage directory has already been initialized.
     if sentinel.exists():
         return
 
@@ -67,18 +66,18 @@ def show_first_run_notice() -> None:
     model_cache_set = bool(os.environ.get("PROTO_MODEL_CACHE"))
 
     if proto_home_set and model_cache_set:
-        # User configured everything; create sentinel silently
+        # Both locations are configured, so mark initialization without showing a notice.
         proto_home.mkdir(parents=True, exist_ok=True)
         sentinel.touch()
         return
 
-    # At least one default location in use, show notice
+    # Create the storage directory before showing the default locations.
     proto_home.mkdir(parents=True, exist_ok=True)
 
     tool_envs_path = str(proto_home / "proto_tool_envs")
     weights_path = os.environ["PROTO_MODEL_CACHE"] if model_cache_set else str(proto_home / "proto_model_cache")
 
-    # Collect content lines first, then size the box to fit
+    # Build the notice and include instructions for each location that uses its default.
     content = []
     content.append("  Tool environments: " + tool_envs_path)
     content.append("  Model weights:     " + weights_path)
@@ -91,6 +90,7 @@ def show_first_run_notice() -> None:
     content.append("")
     content.append("  Docs: " + _DOCS_URL)
 
+    # Size the box to fit the title and the longest line.
     title = "proto-tools: first-run setup"
     w = max(len(title) + 4, max(len(line) for line in content) + 2)
 
@@ -107,4 +107,5 @@ def show_first_run_notice() -> None:
 
     print("\n".join(lines), file=sys.stderr)
 
+    # Record that the notice was shown for this storage directory.
     sentinel.touch()

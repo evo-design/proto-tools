@@ -1,6 +1,5 @@
 """Tests for AlphaFold2 prediction and gradient tools."""
 
-import json
 import math
 import sys
 import types
@@ -9,23 +8,17 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from proto_tools.entities.structures import BFactorType, Structure, is_valid_structure
+from proto_tools.entities.structures import MSASubsampling, is_valid_structure
 from proto_tools.tools.structure_prediction import (
     AlphaFold2Config,
-    AlphaFold2GradientConfig,
-    AlphaFold2GradientInput,
-    AlphaFold2GradientOutput,
     AlphaFold2Input,
     Complex,
     run_alphafold2,
-    run_alphafold2_gradient,
 )
-from proto_tools.utils import one_hot_protein_logits
 from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
 from proto_tools.utils.tool_instance import ToolInstance
 from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
-from tests.tool_infra_tests.test_export_functionality import validate_output
 
 # Mock standalone_helpers so we can import standalone inference utilities without
 # the full ColabDesign/JAX environment that only exists inside the tool venv.
@@ -76,21 +69,15 @@ def test_config_rejects_model_num_and_ensemble_together():
         AlphaFold2Config(model_num=2, num_ensemble_models=3)
 
 
-def test_gradient_input_requires_20_columns():
-    AlphaFold2GradientInput(logits=[[0.0] * 20, [1.0] * 20], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, temperature=0.75)
-    with pytest.raises(ValidationError, match="20 columns"):
-        AlphaFold2GradientInput(logits=[[0.0] * 19], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, temperature=1.0)
-
-
-def test_gradient_config_rejects_bad_loss_weights():
-    AlphaFold2GradientConfig(loss_weights={"helix": -0.3})
-    with pytest.raises(ValidationError, match="Unknown loss_weights"):
-        AlphaFold2GradientConfig(loss_weights={"pldd": 1.0})
-
-
-def test_gradient_input_requires_target_pdb():
-    with pytest.raises(ValidationError, match="target_pdb"):
-        AlphaFold2GradientInput(logits=[[0.0] * 20], temperature=1.0)
+def _softmax_rows(logits):
+    """Softmax each row of a logits matrix."""
+    rows = []
+    for row in logits:
+        peak = max(row)
+        exponentiated = [math.exp(value - peak) for value in row]
+        total = sum(exponentiated)
+        rows.append([value / total for value in exponentiated])
+    return rows
 
 
 def _load_af2_standalone():
@@ -110,200 +97,7 @@ def _load_af2_standalone():
     return module
 
 
-def test_binder_input_allows_denovo_none_binder_chain():
-    """binder_chain=None is accepted, signalling de-novo design (no template)."""
-    inp = AlphaFold2GradientInput(
-        logits=[[0.0] * 20, [1.0] * 20], target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain=None
-    )
-    assert inp.binder_chain is None
-
-
-def test_binder_chain_absent_from_target_raises():
-    """Absent binder_chain fails fast with a clear error, not ColabDesign's 'Found 0 models'."""
-    with pytest.raises(ValidationError, match=r"binder_chain='H' is not a polymer chain"):
-        AlphaFold2GradientInput(logits=[[0.0] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, binder_chain="H")
-
-
-def test_target_chain_absent_from_target_raises():
-    """target_chain absent from target_pdb fails fast with an actionable error."""
-    with pytest.raises(ValidationError, match=r"target_chain='Z' is not a polymer chain"):
-        AlphaFold2GradientInput(logits=[[0.0] * 20] * 2, target_pdb=_GRADIENT_EXAMPLE_PDB_PATH, target_chain="Z")
-
-
-def test_binder_template_prep_kwargs_denovo_vs_redesign():
-    """De-novo (None) returns no override; a set chain returns template-redesign kwargs."""
-    si = _load_af2_standalone()
-    assert si._binder_template_prep_kwargs(None) == {}
-    assert si._binder_template_prep_kwargs("H") == {
-        "binder_chain": "H",
-        "rm_binder": False,
-        "rm_binder_seq": True,
-        "rm_binder_sc": True,
-    }
-
-
-def test_germinal_backend_rejects_denovo_binder_chain():
-    """backend='germinal' with binder_chain=None fails fast (template redesign needs a chain)."""
-    si = _load_af2_standalone()
-    with pytest.raises(ValueError, match="backend='germinal' requires binder_chain"):
-        si.AlphaFold2Model().compute_binder_gradient(
-            logits=[[0.0] * 20] * 2,
-            target_pdb="dummy.pdb",
-            binder_chain=None,
-            backend="germinal",
-        )
-
-
 # -- Dispatch contracts --------------------------------------------------------
-
-
-def test_gradient_dispatch_contract(monkeypatch):
-    captured: dict[str, object] = {}
-
-    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
-        captured.update(toolkit=toolkit, payload=payload)
-        # target_pdb is a tempfile that the wrapper cleans up after dispatch returns;
-        # snapshot its content here while it still exists.
-        captured["target_pdb_content"] = Path(payload["target_pdb"]).read_text()
-        return {
-            "gradient": [[0.1] * 20] * 2,
-            "loss": 1.25,
-            "metrics": {"avg_plddt": 0.8, "ptm": 0.7, "iptm": 0.5, "avg_pae": 1.5, "pae": None},
-            "vocab": _CANONICAL_VOCAB,
-            "pdb": _EXAMPLE_PDB,
-        }
-
-    monkeypatch.setattr(
-        "proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient.ToolInstance.dispatch",
-        fake_dispatch,
-    )
-
-    inputs = AlphaFold2GradientInput(
-        logits=[[0.0] * 20, [1.0] * 20],
-        temperature=0.8,
-        target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
-        target_chain="A",
-        binder_chain="B",
-        design_positions=[0, 1],
-    )
-    config = AlphaFold2GradientConfig(
-        loss_weights={"plddt": 1.0},
-        device="cpu",
-    )
-    result = run_alphafold2_gradient(inputs=inputs, config=config)
-
-    validate_output(result)
-    assert captured["toolkit"] == "alphafold2"
-    payload = captured["payload"]
-    assert payload["operation"] == "compute_gradient"
-    assert payload["temperature"] == 0.8
-    # target_pdb is materialized to a tempfile (path is local-to-runtime, not the
-    # caller's input path). The dispatch sees a real PDB-shaped file at that path.
-    assert payload["target_pdb"].endswith(".pdb")
-    assert captured["target_pdb_content"].strip().startswith(("ATOM", "HEADER"))
-    assert payload["backend"] == "base"
-    assert payload["soft"] == 1.0
-    assert payload["recycle_mode"] == "last"
-    assert payload["starting_binder_seq"] is None
-    assert result.gradient == [[0.1] * 20] * 2
-    assert result.loss == 1.25
-    assert result.structure.source == "alphafold2-gradient"
-    assert result.structure.b_factor_type.value == "pLDDT"
-    assert is_valid_structure(result.structure.structure)
-    # per_residue_plddt must be normalized to [0, 1] for downstream consumers
-    # (proto-language's pLDDT-weighted semigreedy uses `1 - plddt` for sampling).
-    plddt = result.structure.per_residue_plddt
-    assert plddt is not None
-    assert all(0.0 <= v <= 1.0 for v in plddt)
-
-
-@pytest.mark.parametrize("name", ["step", "step_v1.5"])
-def test_gradient_export_writes_pdb_sidecar(tmp_path, name):
-    AlphaFold2GradientOutput(
-        gradient=[[0.1] * 20] * 2,
-        loss=1.25,
-        metrics={"avg_plddt": 0.8},
-        vocab=_CANONICAL_VOCAB,
-        structure=Structure(structure=_EXAMPLE_PDB, b_factor_type=BFactorType.PLDDT),
-    ).export(name, export_path=tmp_path)
-
-    payload = json.loads((tmp_path / f"{name}.json").read_text())
-    assert payload["structure_pdb"] == f"{name}.pdb"
-    assert is_valid_structure((tmp_path / f"{name}.pdb").read_text())
-
-
-def test_gradient_dispatch_forwards_recycle_mode_and_starting_seq(monkeypatch):
-    captured: dict[str, object] = {}
-
-    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
-        captured.update(payload=payload)
-        return {
-            "gradient": [[0.0] * 20] * 3,
-            "loss": 0.0,
-            "metrics": {"avg_plddt": 0.5, "ptm": 0.5, "avg_pae": 1.0, "pae": None},
-            "vocab": _CANONICAL_VOCAB,
-            "pdb": _EXAMPLE_PDB,
-        }
-
-    monkeypatch.setattr(
-        "proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient.ToolInstance.dispatch",
-        fake_dispatch,
-    )
-
-    run_alphafold2_gradient(
-        AlphaFold2GradientInput(
-            logits=[[0.0] * 20] * 3,
-            temperature=1.0,
-            target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
-            binder_chain="B",
-        ),
-        AlphaFold2GradientConfig(
-            recycle_mode="average",
-            starting_binder_seq="EVQ",
-            backend="germinal",
-            device="cpu",
-        ),
-    )
-    assert captured["payload"]["recycle_mode"] == "average"
-    assert captured["payload"]["starting_binder_seq"] == "EVQ"
-    assert captured["payload"]["backend"] == "germinal"
-    assert captured["payload"]["compute_gradient"] is True
-
-
-def test_forward_mode_dispatch_contract(monkeypatch):
-    """compute_gradient=False forwards the flag and returns gradient=None."""
-    captured: dict[str, object] = {}
-
-    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
-        captured.update(payload=payload)
-        return {
-            "gradient": None,
-            "loss": 0.75,
-            "metrics": {"avg_plddt": 0.82, "ptm": 0.65, "iptm": 0.55, "avg_pae": 2.1, "pae": None},
-            "vocab": _CANONICAL_VOCAB,
-            "pdb": _EXAMPLE_PDB,
-        }
-
-    monkeypatch.setattr(
-        "proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient.ToolInstance.dispatch",
-        fake_dispatch,
-    )
-
-    result = run_alphafold2_gradient(
-        AlphaFold2GradientInput(
-            logits=[[0.0] * 20] * 2,
-            target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
-            binder_chain="B",
-        ),
-        AlphaFold2GradientConfig(compute_gradient=False, hard=1.0, device="cpu"),
-    )
-
-    assert captured["payload"]["compute_gradient"] is False
-    assert captured["payload"]["hard"] == 1.0
-    assert result.gradient is None
-    assert result.loss == 0.75
-    assert result.structure.source == "alphafold2-gradient"
-    assert result.structure.per_residue_plddt is not None
 
 
 def test_prediction_dispatch_contract(monkeypatch):
@@ -328,6 +122,8 @@ def test_prediction_dispatch_contract(monkeypatch):
     # Structure.per_residue_plddt must normalize 0-100 B-factors to [0, 1].
     plddt = structure.per_residue_plddt
     assert plddt is not None and all(0.0 <= v <= 1.0 for v in plddt)
+    assert structure.msa_conditioning.chains[0].status == "not_requested"
+    assert structure.msa_conditioning.subsampling.mode == "none"
 
 
 def test_heteromultimer_msa_dispatch_payload(monkeypatch):
@@ -351,7 +147,7 @@ def test_heteromultimer_msa_dispatch_payload(monkeypatch):
     msa_b = MSA.from_fasta_string(">qB\nGARYTW\n>hB1\nGARYTM\n")
     complex_msas = ComplexMSAs(per_chain={0: msa_a, 1: msa_b}, paired=True)
 
-    run_alphafold2(
+    result = run_alphafold2(
         AlphaFold2Input(complexes=[["MKTLAV", "GARYTW"]], msas=[complex_msas]),
         AlphaFold2Config(use_msa=False, device="cpu"),
     )
@@ -365,6 +161,10 @@ def test_heteromultimer_msa_dispatch_payload(monkeypatch):
     assert per_chain_a3m is not None and len(per_chain_a3m) == 2, "two-chain complex → two A3Ms"
     assert per_chain_a3m[0] is not None and "MKTLAV" in per_chain_a3m[0]
     assert per_chain_a3m[1] is not None and "GARYTW" in per_chain_a3m[1]
+    report = result.structures[0].msa_conditioning
+    assert [chain.status for chain in report.chains] == ["consumed", "consumed"]
+    assert report.pairing_mode == "paired"
+    assert report.subsampling == MSASubsampling(mode="stochastic", max_rows=512, max_extra_rows=1024)
 
 
 def test_heteromultimer_paired_dispatch_carries_deep_unpaired_a3m(monkeypatch):
@@ -442,94 +242,6 @@ def test_homooligomer_uses_single_a3m_dispatch_path(monkeypatch):
 
 
 @pytest.mark.uses_gpu
-def test_forward_vs_gradient_consistency():
-    """Gradient mode returns a well-formed output; compute_gradient=False produces loss/metrics close to it.
-
-    XLA compiles ``fn`` and ``value_and_grad(fn)`` separately; FP reductions
-    across dropout-enabled Evoformer layers drift a few percent even with
-    the same seed, so the tolerance is generous rather than bit-exact.
-    """
-    target_kwargs = {
-        "target_pdb": str(_GRADIENT_EXAMPLE_PDB_PATH),
-        "target_chain": "A",
-        "binder_chain": "B",
-    }
-    inputs = AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0, **target_kwargs)
-    grad = run_alphafold2_gradient(
-        inputs, AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}, seed=42)
-    )
-    fwd = run_alphafold2_gradient(
-        inputs,
-        AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}, seed=42, compute_gradient=False),
-    )
-    validate_output(grad)
-    assert grad.tool_id == "alphafold2-gradient"
-    assert len(grad.gradient) == 5
-    assert all(len(row) == 20 for row in grad.gradient)
-    assert all(math.isfinite(v) for row in grad.gradient for v in row)
-    assert any(v != 0.0 for row in grad.gradient for v in row)
-    assert math.isfinite(grad.loss) and grad.loss != 0.0
-    assert grad.vocab == _CANONICAL_VOCAB
-    assert 0 <= grad.metrics["avg_plddt"] <= 1.0
-    # Structure must be populated with per-residue pLDDT normalized to [0, 1]
-    # for proto-language's pLDDT-weighted semigreedy (1 - plddt sampling).
-    assert grad.structure.source == "alphafold2-gradient"
-    assert is_valid_structure(grad.structure.structure)
-    plddt = grad.structure.per_residue_plddt
-    assert plddt is not None and all(0.0 <= v <= 1.0 for v in plddt)
-
-    assert fwd.gradient is None
-    assert math.isclose(grad.loss, fwd.loss, rel_tol=0.1)
-    assert math.isclose(grad.metrics["avg_plddt"], fwd.metrics["avg_plddt"], rel_tol=0.1)
-    assert math.isclose(grad.metrics["ptm"], fwd.metrics["ptm"], rel_tol=0.1)
-
-
-@pytest.mark.uses_gpu
-def test_gradient_recycle_mode_threads_through():
-    """Non-default recycle_mode must reach ``_get_model`` without tripping the cache."""
-    target_kwargs = {
-        "target_pdb": str(_GRADIENT_EXAMPLE_PDB_PATH),
-        "target_chain": "A",
-        "binder_chain": "B",
-    }
-    result = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=[[0.0] * 20] * 5, temperature=1.0, **target_kwargs),
-        AlphaFold2GradientConfig(num_recycles=2, recycle_mode="first", loss_weights={"plddt": 1.0}),
-    )
-    validate_output(result)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-
-
-@pytest.mark.uses_gpu
-def test_gradient_responds_to_loss_weights_and_logits():
-    """Loss weights and input logits both reach the AF2 loss (not silently ignored)."""
-    logits = [[0.1 * i + 0.05 * j for j in range(20)] for i in range(5)]
-    target_kwargs = {
-        "target_pdb": str(_GRADIENT_EXAMPLE_PDB_PATH),
-        "target_chain": "A",
-        "binder_chain": "B",
-    }
-    r_plddt = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=logits, temperature=1.0, **target_kwargs),
-        AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
-    )
-    r_con = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=logits, temperature=1.0, **target_kwargs),
-        AlphaFold2GradientConfig(num_recycles=1, loss_weights={"con": 1.0}),
-    )
-    r_shifted = run_alphafold2_gradient(
-        AlphaFold2GradientInput(logits=[[5.0] + [0.0] * 19] * 5, temperature=1.0, **target_kwargs),
-        AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}),
-    )
-    # Different loss weights change the gradient; different logits change loss and gradient.
-    assert r_plddt.gradient != r_con.gradient
-    assert r_plddt.loss != r_shifted.loss
-    assert r_plddt.gradient != r_shifted.gradient
-    assert all(math.isfinite(v) for row in r_plddt.gradient for v in row)
-    assert all(math.isfinite(v) for row in r_con.gradient for v in row)
-
-
-@pytest.mark.uses_gpu
 def test_homooligomer():
     output = run_alphafold2(
         AlphaFold2Input(complexes=[Complex(chains=[_HOMOOLIGOMER_SEQ, _HOMOOLIGOMER_SEQ])]),
@@ -563,36 +275,3 @@ def test_alphafold2_benchmark(request):
     assert result.success, "AlphaFold2 benchmark run failed"
     assert len(result.structures) == 1
     assert is_valid_structure(result.structures[0].structure_cif)
-
-
-@pytest.mark.benchmark("alphafold2-gradient")
-@pytest.mark.slow
-@pytest.mark.uses_gpu
-def test_alphafold2_gradient_benchmark(request: pytest.FixtureRequest) -> None:
-    """Benchmark alphafold2-gradient: 5 repeated redesign passes of the PD-L1 nanobody (chain B, 118 aa) vs the target (cold + warm)."""
-    binder_seq = Structure.from_file(_GRADIENT_EXAMPLE_PDB_PATH).get_chain_sequence("B")
-    inputs = AlphaFold2GradientInput(
-        logits=one_hot_protein_logits(binder_seq, sharpness=2.0),
-        temperature=1.0,
-        target_pdb=str(_GRADIENT_EXAMPLE_PDB_PATH),
-        target_chain="A",
-        binder_chain="B",
-    )
-    config = AlphaFold2GradientConfig(num_recycles=1, loss_weights={"plddt": 1.0}, seed=0)
-
-    def run_steps():
-        last = None
-        for _ in range(5):
-            last = run_alphafold2_gradient(inputs, config)
-        return last
-
-    result = benchmark_twice(request, "alphafold2", run_steps)
-
-    validate_output(result)
-    assert result.tool_id == "alphafold2-gradient"
-    assert len(result.gradient) == len(binder_seq)
-    assert all(len(row) == 20 for row in result.gradient)
-    assert all(math.isfinite(v) for row in result.gradient for v in row)
-    assert math.isfinite(result.loss)
-    assert result.structure.source == "alphafold2-gradient"
-    assert is_valid_structure(result.structure.structure)

@@ -173,7 +173,7 @@ def is_checkpoint_path(model: str) -> bool:
 
 
 def validate_model_reference(model: str, collection: str) -> str:
-    """Validate one ``models`` entry: an accession in the collection or a ``.torch`` file.
+    """Validate a ``models`` entry as a catalog accession or a ``.torch`` file.
 
     Args:
         model (str): ENCODE experiment accession or local checkpoint path.

@@ -4,18 +4,23 @@ This note covers how `proto_tools` captures and filters logs from tool subproces
 
 ## Why this exists
 
-Each tool's heavy work runs in an isolated subprocess (a micromamba env with the tool's deps). Subprocess stderr is the only diagnostic channel back to the parent. By default, third-party libraries (HuggingFace, JAX, PyRosetta, etc.) flood that channel with progress bars, compile messages, deprecation warnings, and C/C++ output. Without structure, "verbose mode" is unusable. Without any visibility, silent worker hangs are undebuggable.
+Each tool's heavy work runs in an isolated subprocess with the tool's dependencies.
+Subprocess stderr carries diagnostics back to the parent. Third-party libraries
+such as Hugging Face, JAX, and PyRosetta can fill it with progress bars, compile
+messages, deprecation warnings, and C/C++ output. Filtering makes those logs
+easier to read while keeping enough detail to investigate an unresponsive worker.
 
-This system splits subprocess stderr into two streams and lets standard Python `logging` filter the high-signal one.
+Subprocess stderr is split into two streams. Standard Python `logging` filters
+the structured worker logs.
 
 ## The two streams
 
-Subprocess stderr carries two kinds of output:
+Subprocess stderr carries two kinds of output.
 
 - **Tagged worker logs.** Records emitted through `standalone_helpers.get_logger` (under the `worker.*` namespace) are serialized by `_BridgeHandler` into tagged JSON lines.
 - **Untagged output.** Everything else reaches the same stderr pipe untagged, including third-party Python loggers, direct `print()`, and C/C++ writes such as PyRosetta `std::cout`, JAX XLA compile output, and tqdm progress bars.
 
-On the parent side, the drain thread demultiplexes by tag:
+The parent's drain thread separates the output by tag.
 
 - **Tagged records** have their `worker.` prefix stripped and are re-emitted on `proto_tools.worker.{toolkit}.{name}`, where the standard handlers fire, including `SpinnerFromLogsHandler` for records flagged `update_status=True`.
 - **Untagged bytes** always go to a ring buffer (consulted by `_crash_context()`) and are teed to the parent's `sys.stderr` only when the verbose level is 3 or higher.
@@ -41,6 +46,81 @@ The `update_status=True` kwarg is provided by `ProtoLogger`, a `logging.Logger` 
 
 The convention is enforced by `tests/style_consistency_tests/test_standalone_logger_consistency.py`. Any module-level `logger = X(__name__)` in a standalone must use `get_logger`, and `logging.getLogger(__name__)` / `getLogger(__name__)` are forbidden (their loggers fall outside the `worker.*` namespace and would never reach the bridge).
 
+## Status messages
+
+A status message is a single line showing what a tool is doing now. It appears
+as the local spinner's subtitle or the live subtitle of a hosted run or a run
+on your Modal account. One `update_status` call reaches all three. Only the
+latest message is shown, so each one replaces the last.
+
+```python
+logger.update_status("Loading ESMFold weights")                 # in a standalone, or a tool in the caller's process
+logger.update_status("Scoring 8 sequences", level=logging.DEBUG)
+for sequence in StatusCounter(logger, "Folding structure %d/%d", sequences):
+    fold(sequence)                                              # reports the first, then one every 5 s, and the last
+```
+
+`StatusCounter` wraps an iterable like tqdm (`total` defaults to its length). When a loop isn't one item per step,
+such as batches, call it with each item's number instead: `counter = StatusCounter(logger, "Scoring batch %d/%d",
+total=num_batches)`, then `counter(batch_number)`.
+
+A status is already a log record, so do not add a `logger.info` call that
+repeats it. Extra details such as a checkpoint, device, or path do not need
+another line either. The status line always updates, regardless of the logger
+level. The `level` argument controls how the record is logged.
+
+- **`INFO` (the default)** for phases worth a line in the log: loading weights, downloads, database builds, and
+  submitting, waiting on and fetching a remote job.
+- **`logging.DEBUG`** for the tool's routine work, which runs on every call and often in a loop: scoring,
+  predicting, sampling, folding, designing, aligning, searching. `StatusCounter` logs at DEBUG by default.
+
+While a progress bar is visible, a status replaces its subtitle in place, so
+a long run leaves one changing line rather than repeated console messages. With no bar up, it prints as an ordinary record if the console's level admits it.
+File handlers keep every status at its level.
+
+`StatusCounter` is in `standalone_helpers` (`from standalone_helpers import StatusCounter` in a standalone). A tool
+that runs in the caller's process imports it from
+`proto_tools.utils.standalone_helpers_source.standalone_helpers` and passes its module logger. Proto-tools'
+loggers have `update_status` too.
+
+### When to send one
+
+Send a status at phase boundaries that help someone follow the run.
+
+- **Loading large weights** (a cold start that otherwise looks hung): `Loading ESMFold weights`.
+- **Each stage of a multi-stage pipeline**: `Searching MSA`, `Folding structure`, `Relaxing structure`.
+- **Progress through a known number of items**, with `StatusCounter`: `Folding structure 3/8`.
+- **A slow step that isn't obvious**: `Downloading UniRef30`, `Minimizing energy`.
+
+Not on every iteration of a loop (`StatusCounter` throttles for you), and not for a step that takes well under a
+second. A quick lookup or a single fast call needs none. The framework already shows `Running <tool>`.
+
+When the caller already loops over items with `progress_bar` and dispatches one worker call per item (most folding
+and inverse-folding tools), that bar owns the count. A worker status sent on every call would overwrite it, so send
+only what the bar can't show, such as a cold `Loading ... weights`, and then one line to replace it once loading is
+done.
+The same applies to gradient operations. The optimizer calls them every step
+and reports progress, so they send only a cold-load status.
+
+`get_logger` from `standalone_helpers` always returns a logger with `update_status`, even outside a worker (a
+setup script, say), where the status is just a log record.
+
+### House style
+
+- **A present participle and its object, in sentence case, with no trailing period**: `Loading ESMFold weights`,
+  `Searching MSA`, `Scoring variant 3/8`.
+- **Counts as `<item> <n>/<total>`**, the item singular: `Folding structure 3/8`, `Sampling sequence 12/64`. A single
+  step over a batch names its size with a real plural: `Scoring 8 sequences`, `Scoring 1 sequence` (never `(s)`).
+- **Name the model as its docs do** (`ESMFold`, `AlphaFold3`, `Boltz-2`). An official checkpoint name is fine
+  (`Loading ESM2 650M weights`). A device is not needed.
+- **Written for someone waiting**, not someone debugging: `Refining backbone`, not `entering refinement loop (iter=0)`.
+- **Nothing from the input or the machine**: no sequences, file names, paths, IDs a user passed in, URLs or hostnames.
+  Status messages cross process and account boundaries and land in log streams.
+
+Before a remote container is up, the dispatching side shows `Starting container`
+(`proto_tools.utils.progress.starting_container_status`). A tool cannot send
+this status because it is not running yet.
+
 ## Why the bridge ships in `standalone_helpers/`
 
 Tool subprocesses run in isolated micromamba venvs that don't have `proto_tools` (or `pydantic`, etc.) installed. The bridge implementation lives at `proto_tools/utils/standalone_helpers_source/standalone_helpers/proto_logging.py`, which `_build_subprocess_env()` publishes to the subprocess on `PYTHONPATH`. The bootstrap then triggers `install()` via `import standalone_helpers` (gated on `TOOL_VENV_PATH` in the package `__init__`), so the bridge is in place before the standalone module's body runs.
@@ -55,7 +135,7 @@ This avoids any cross-venv `proto_tools` import. The producer side of the archit
 
 | Level | proto_tools logs in console | Spinner | Untagged subprocess stderr |
 |---|---|---|---|
-| **0** (quiet, default) | WARNING+ | active; subtitle takes over from records flagged with `update_status=True` | hidden (ring buffer only) |
+| **0** (quiet, default) | WARNING+ | active, with subtitle updates from records flagged with `update_status=True` | hidden (ring buffer only) |
 | **1** (info) | INFO+ | active | hidden |
 | **2** (debug) | DEBUG+ | active | hidden |
 | **3** (raw) | DEBUG+ | active | teed to parent stderr |
@@ -68,7 +148,8 @@ The level → log-level mapping (0→WARNING, 1→INFO, 2→DEBUG, 3→DEBUG) is
 
 A tqdm progress bar (as used by HuggingFace, transformers, and datasets) writes `\r`-separated frames ending in a newline. These arrive on untagged stderr and pass through `_drain_subprocess_stderr` into `_handle_raw_stderr_line`. At levels 0 through 2 the line is not teed. It lands in the ring buffer as the final frame only. At level 3, `line.rsplit("\r", 1)[-1]` keeps only the final frame and then tees it.
 
-The net behavior is that at level 3, you see the start banner and "100% complete" of each progress bar, and intermediate frames are dropped. Newline-separated progress libraries (rich, alive-progress) are not filtered and produce one line per frame at level 3. This is acceptable noise since the user opted in.
+At level 3, you see the start banner and the final "100% complete" frame of
+each progress bar. Intermediate frames are dropped. Newline-separated progress libraries (rich, alive-progress) are not filtered and produce one line per frame at level 3. Level 3 includes this output because the caller requested raw logs.
 
 ## Filtering recipes
 
@@ -94,32 +175,32 @@ Standard Python logging hierarchy applies to records re-emitted by the drain thr
 
 | Component | Location | Role |
 |---|---|---|
-| `ProtoLogger` (subprocess) | `standalone_helpers/proto_logging.py` | Logger subclass; adds `update_status` kwarg |
+| `ProtoLogger` (subprocess) | `standalone_helpers/proto_logging.py` | Logger subclass adding `update_status` kwarg |
 | `_BridgeHandler` | `standalone_helpers/proto_logging.py` | Subprocess-side: serializes records as tagged JSON on stderr |
-| `install` | `standalone_helpers/proto_logging.py` | Attaches `_BridgeHandler` at the `worker` logger; idempotent |
+| `install` | `standalone_helpers/proto_logging.py` | Attaches `_BridgeHandler` at the `worker` logger, once |
 | `get_logger(name)` | `standalone_helpers/proto_logging.py` | Producer convention: returns `logging.getLogger(f"worker.{name}")` |
 | `standalone_helpers/__init__.py` | same dir | Calls `install()` once when `TOOL_VENV_PATH` is set |
 | `ProtoLogger` (parent) | `proto_tools/utils/logging_config.py` | Logger subclass for parent-side `update_status` kwarg |
 | `SpinnerFromLogsHandler` | `proto_tools/utils/logging_config.py` | Parent-side: routes flagged records to the active bar via `update_active_substatus(...)` |
-| `install_logger_class` | `proto_tools/utils/logging_config.py` | Sets `ProtoLogger` as default class; called from `proto_tools/__init__.py` |
+| `install_logger_class` | `proto_tools/utils/logging_config.py` | Sets `ProtoLogger` as default class, called from `proto_tools/__init__.py` |
 | `install_spinner_handler` | `proto_tools/utils/logging_config.py` | Attaches spinner handler to `proto_tools` logger |
 | `_HostedProgressBar` | `proto_tools/utils/progress.py` | Hosted worker: a disabled bar that reports its count as throttled `update_status` records |
 | `verbose_level_from_env` | `proto_tools/utils/logging_config.py` | Parses `PROTO_WORKER_VERBOSE` as int 0..3 |
-| `_TAG_PREFIX` | `proto_tools/utils/logging_config.py` (parent) and `standalone_helpers/proto_logging.py` (subprocess) | Wire-format constant; **must match** on both sides |
-| `_drain_subprocess_stderr` / `_handle_raw_stderr_line` / `_reemit_tagged_line` | `proto_tools/utils/persistent_worker.py` | Drain thread; demuxes tagged lines, ring-buffers / tees untagged |
+| `_TAG_PREFIX` | `proto_tools/utils/logging_config.py` (parent) and `standalone_helpers/proto_logging.py` (subprocess) | Wire-format constant that **must match** on both sides |
+| `_drain_subprocess_stderr` / `_handle_raw_stderr_line` / `_reemit_tagged_line` | `proto_tools/utils/persistent_worker.py` | Drain thread separating tagged records from raw output and buffering or forwarding raw lines |
 | `BaseConfig.verbose` | `proto_tools/utils/base_config.py` | User-facing int setting (0/1/2/3) |
 | `_run_oneshot` / `_run_persistent` | `proto_tools/utils/tool_instance.py` | Honor `effective = max(verbose, env)` and pass `raw_tee` to the drain |
 | `_install_subprocess_logging_bridge` | `proto_tools/utils/_worker_bootstrap.py` | Imports `standalone_helpers` to trigger `install()` before the standalone loads |
 
-## Tunable: stderr ring buffer size
+## Stderr ring buffer size
 
 `PersistentWorker` keeps the last N untagged stderr lines per worker as a bounded `collections.deque`, surfaced by `_crash_context()` for error messages. Default is 20. Override globally with `PROTO_WORKER_STDERR_BUFFER_LINES=N` (e.g. `100` when triaging a hard-to-reproduce hang). The deque is bounded so long-running workers don't accumulate stderr indefinitely.
 
-## Subtleties to know about
+## Implementation details
 
 - The producer side has **zero `proto_tools` imports**. The full bridge implementation ships via `standalone_helpers/proto_logging.py` (stdlib-only). It must be stdlib-only because a `from proto_tools.utils.logging_config import ...` path would fail silently in every tool venv. `proto_tools` (and `pydantic`) are not installed inside the venv.
 - `install()` attaches the bridge at the **`worker` logger**, not at root and not at `proto_tools`. Third-party loggers (`transformers`, `urllib3`, etc.) sit on root. They reach untagged stderr through their own handlers (or get dropped) but **never become tagged JSON**. This is the namespace-isolation guarantee.
 - `install()` sets `propagate=False` on the `worker` logger so records don't double-emit through any host-configured root handler.
 - The parent re-emits each tagged record under `proto_tools.worker.{toolkit}.{name}`. This is also where `SpinnerFromLogsHandler` (attached at `proto_tools`) sees flagged records via standard logging propagation.
 - stdout is **never written by the logging system**. It's reserved for the JSON-line request/response protocol between parent and worker.
-- `proto_tools/__init__.py` adds `proto_tools/utils/standalone_helpers_source/` to `sys.path` so any parent-side code that imports a standalone module (e.g. `proteinmpnn/__init__.py` re-exporting `ALPHAFOLD_VOCAB`) can resolve `from standalone_helpers import X`. Inside a tool subprocess the same directory arrives via `PYTHONPATH`, and the bootstrap promotes it to `sys.path[0]` so the installed package outranks any `standalone_helpers/` copy an older proto-tools left in the tool's `standalone/` dir.
+- `proto_tools/__init__.py` adds `proto_tools/utils/standalone_helpers_source/` to `sys.path` so any parent-side code that imports a standalone module (e.g. `proteinmpnn/__init__.py` re-exporting `PROTEINMPNN_AMINO_ACIDS_WITH_X`) can resolve `from standalone_helpers import X`. Inside a tool subprocess the same directory arrives via `PYTHONPATH`, and the bootstrap promotes it to `sys.path[0]` so the installed package outranks any `standalone_helpers/` copy an older proto-tools left in the tool's `standalone/` dir.

@@ -1,6 +1,4 @@
-"""proto_tools/utils/device.py.
-
-GPU detection and device visibility.
+"""Detect GPUs and resolve which devices a tool can use.
 
 GPU detection uses nvidia-smi rather than torch.cuda so that the
 orchestrator package works with a CPU-only PyTorch install (or no
@@ -37,7 +35,7 @@ class DeviceSpec:
     """Structured result from :func:`parse_device_string`.
 
     Attributes:
-        kind (str): ``"cpu"``, ``"cuda"``, ``"proto"``, or ``"modal"``.
+        kind (str): ``"cpu"``, ``"cuda"``, or ``"modal"``.
         devices (list[str] | None): Explicit device IDs when provided (e.g. ``["cuda:0"]``),
             ``None`` for auto-allocate CUDA.
         count (int): Number of CUDA devices requested (always 1 for cpu and remote devices).
@@ -79,10 +77,9 @@ _GPU_ACQUISITION_ERROR_SIGNATURES = ("no visible gpu devices", "failed call to c
 # XLA is matched by driver enum rather than by a "cuda_error_" prefix, so that CUDA_ERROR_NO_DEVICE
 # (an acquisition failure) and CUDA_ERROR_OUT_OF_MEMORY are not swept in.
 #
-# Known hole: torch's caching allocator reports a recoverable exhaustion as "CUDA out of memory",
-# which correctly does not match, but a raw-runtime exhaustion can surface as "CUDA error: out of
-# memory", which does. That path retires a worker it did not need to, costing a warm model rather
-# than correctness, and is rare enough to be worth less than the precision it would take to exclude.
+# A recoverable torch allocator error uses "CUDA out of memory" and does not match.
+# A raw-runtime error may instead say "CUDA error: out of memory" and match this set.
+# In that rare case the worker restarts unnecessarily, but results remain correct.
 _POISONED_CUDA_CONTEXT_SIGNATURES = (
     "cuda error:",
     "cuda_error_illegal_address",
@@ -261,10 +258,10 @@ def nvidia_smi_present() -> bool:
 def get_gpu_memory_used_physical(physical_device_id: int) -> int:
     """Get GPU memory used in bytes via nvidia-smi using physical device ID.
 
-    IMPORTANT: This function uses PHYSICAL device IDs (0-indexed), which are the
-    actual hardware GPU indices reported by nvidia-smi. These are NOT affected by
-    CUDA_VISIBLE_DEVICES. For example, if CUDA_VISIBLE_DEVICES="3,5,7", physical
-    device ID 3 refers to the actual GPU 3, not logical cuda:0.
+    Use the 0-indexed physical GPU IDs reported by nvidia-smi. These IDs are
+    unaffected by ``CUDA_VISIBLE_DEVICES``. For example, with
+    ``CUDA_VISIBLE_DEVICES="3,5,7"``, physical device 3 still refers to hardware
+    GPU 3, even though CUDA exposes it as logical ``cuda:0``.
 
     For logical device ID handling (e.g., "cuda:0"), use the DeviceManager wrapper
     method get_gpu_memory_used() which handles the mapping.
@@ -343,13 +340,11 @@ def _validate_cuda_index(idx_str: str, device: str) -> int:
 
 
 # Device strings that dispatch the tool somewhere else instead of running it
-# locally. "proto" is Proto's hosted service; "modal" is the caller's own
-# Modal deployment. What each can run differs, so availability is decided per
-# device rather than shared.
+# locally. "modal" is the caller's own Modal deployment.
 #
 # This is only the remote set. Local device strings ("cpu", "cuda", "cuda:0",
 # "cudax4", ...) are unconstrained and validated by parse_device_string.
-RemoteDevice = Literal["proto", "modal"]
+RemoteDevice = Literal["modal"]
 
 # Derived, so the type and the runtime set cannot drift apart.
 _REMOTE_DEVICES: frozenset[str] = frozenset(get_args(RemoteDevice))
@@ -360,8 +355,8 @@ def is_remote_device(device: str) -> TypeGuard[RemoteDevice]:
 
     Narrows to :data:`RemoteDevice`, so a caller inside the guard may pass ``device`` where a
     remote device is required without asserting the type by hand. The comparison is exact for
-    that reason: accepting ``" proto"`` would narrow a value that no later comparison against
-    ``"proto"`` will match. Normalize before calling.
+    that reason: accepting ``" modal"`` would narrow a value that no later comparison against
+    ``"modal"`` will match. Normalize before calling.
 
     Args:
         device (str): Device string to classify, already stripped.
@@ -376,9 +371,8 @@ def parse_device_string(device: str) -> DeviceSpec:
     """Parse a device string into a structured :class:`DeviceSpec`.
 
     Supports CPU, CUDA (single/multi, auto/explicit), and the remote device
-    strings ``"proto"`` and ``"modal"``. ``"proto"`` runs the tool on Proto's
-    hosted service (see :mod:`proto_tools.proto`); ``"modal"`` runs it on the
-    caller's own Modal deployment. Both always have ``count`` 1.
+    string ``"modal"``, which runs the tool on the caller's own Modal
+    deployment and always has ``count`` 1.
 
     Args:
         device (str): Device string to parse.
@@ -389,8 +383,6 @@ def parse_device_string(device: str) -> DeviceSpec:
     Examples:
         >>> parse_device_string("cpu")
         DeviceSpec(kind='cpu', devices=['cpu'], count=1)
-        >>> parse_device_string("proto")
-        DeviceSpec(kind='proto', devices=['proto'], count=1)
         >>> parse_device_string("modal")
         DeviceSpec(kind='modal', devices=['modal'], count=1)
         >>> parse_device_string("cuda")
@@ -486,9 +478,11 @@ def _validate_and_map_cuda_indices(
     if min(cuda_indices) < 0:
         raise ValueError(f"CUDA indices must be non-negative; got {cuda_indices}")
 
+    # Count GPUs from the parent CUDA_VISIBLE_DEVICES when set, else query the visible GPUs
     num_gpus = len(parent_device_list) if parent_device_list else number_of_visible_gpus()
     max_idx = max(cuda_indices)
 
+    # Name CUDA_VISIBLE_DEVICES in errors, since it often explains a missing or out-of-range GPU
     cvd = os.environ.get("CUDA_VISIBLE_DEVICES", "(unset)")
     if num_gpus == 0:
         raise ValueError(
@@ -505,6 +499,7 @@ def _validate_and_map_cuda_indices(
             f"(CUDA_VISIBLE_DEVICES={cvd}; requested {cuda_indices})"
         )
 
+    # Map logical indices to physical ones through the parent list, dropping duplicates
     seen: set[str] = set()
     physical: list[str] = []
     for idx in cuda_indices:
@@ -516,9 +511,7 @@ def _validate_and_map_cuda_indices(
 
 
 def determine_visible_devices(device: int | str | list[int | str]) -> str:
-    """Returns a string corresponding to the CUDA_VISIBLE_DEVICES environment variable.
-
-    for a given device or devices.
+    """Return the ``CUDA_VISIBLE_DEVICES`` value for the requested devices.
 
     Supports single and multi-GPU device strings and correctly handles the case where
     the parent process has CUDA_VISIBLE_DEVICES set, mapping logical indices to
@@ -921,7 +914,7 @@ def display_gpu_memory_usage(
     """Display GPU memory usage with horizontal bar chart visualization.
 
     Compact, fixed-width display of GPU memory usage with optional process details.
-    Gracefully handles systems without GPUs by returning silently.
+    Return without printing when no GPUs are available.
 
     Args:
         bar_width (int): Width of the progress bar in characters (default: 40)

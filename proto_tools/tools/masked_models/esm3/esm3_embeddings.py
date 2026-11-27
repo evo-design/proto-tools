@@ -6,7 +6,6 @@ ESM3 embeddings tool.
 import logging
 from typing import Any, Literal
 
-from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelEmbeddingsConfig,
     MaskedModelEmbeddingsOutput,
@@ -31,9 +30,8 @@ ESM3EmbeddingsInput = MaskedModelInput
 class ESM3EmbeddingsOutput(MaskedModelEmbeddingsOutput):
     """Output from ESM3 protein language model embeddings/logits extraction.
 
-    This class encapsulates the results of ESM3 inference, providing sequence
-    embeddings, per-position logits, and attention masks for downstream analysis
-    and visualization.
+    Contains sequence embeddings, per-position logits, and attention masks for
+    downstream analysis and visualization.
 
     Inherits from ``MaskedModelEmbeddingsOutput``.
 
@@ -55,7 +53,7 @@ class ESM3EmbeddingsOutput(MaskedModelEmbeddingsOutput):
 class ESM3EmbeddingsConfig(MaskedModelEmbeddingsConfig):
     """Configuration for ESM3 protein language model embedding extraction.
 
-    ESM3 is a generative protein language model from EvolutionaryScale; this tool uses
+    ESM3 is a generative protein language model from Biohub; this tool uses
     it to extract mean-pooled embeddings and optional per-position logits.
 
     Inherits from ``MaskedModelEmbeddingsConfig``.
@@ -66,7 +64,7 @@ class ESM3EmbeddingsConfig(MaskedModelEmbeddingsConfig):
         batch_size (int): Number of sequences to process in parallel. Larger batches
             improve throughput but require more GPU memory.
         device (str): Device to run the model on.
-        verbose (bool): Print status messages during model execution.
+        verbose (int): Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess stderr).
         return_logits (bool): Include per-position logits in the output (large; disable
             to save memory).
         repr_layer (int): Transformer layer index for embeddings. ``-1`` returns the
@@ -116,14 +114,13 @@ def example_input() -> Any:
     iterable_output_field="results",
     max_chunk_size=32,
     cacheable=True,
-    post_process_iterable=attach_projections,
 )
 def run_esm3_embeddings(
     inputs: ESM3EmbeddingsInput, config: ESM3EmbeddingsConfig, instance: Any = None
 ) -> ESM3EmbeddingsOutput:
     """Extract protein sequence embeddings and logits using ESM3.
 
-    Uses ESM3 open model from EvolutionaryScale to extract contextualized embeddings
+    Uses ESM3 open model from Biohub to extract contextualized embeddings
     and per-position logits for protein sequences. The model is automatically
     loaded on-demand. Supports local GPU execution via isolated Python
     environments.
@@ -142,7 +139,7 @@ def run_esm3_embeddings(
             and optional per-position ``logits``; run metadata is in ``metadata``.
 
     See Also:
-        - ESM3 GitHub Repository: https://github.com/evolutionaryscale/esm
+        - ESM3 GitHub Repository: https://github.com/Biohub/esm
 
     Examples:
         >>> # Basic embedding extraction
@@ -164,6 +161,7 @@ def run_esm3_embeddings(
     """
     # Local execution
     logger.debug(f"Using local for ESM3 inference: {config.model_checkpoint}")
+    # Run inference in the toolkit's isolated environment.
     outputs = ToolInstance.dispatch(
         "esm3",
         {

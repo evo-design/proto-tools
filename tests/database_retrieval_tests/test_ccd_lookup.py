@@ -12,7 +12,7 @@ from proto_tools.tools.database_retrieval import (
     CcdLookupResult,
     run_ccd_lookup,
 )
-from proto_tools.tools.database_retrieval.ccd_lookup.ccd_lookup import _build_fragment
+from proto_tools.tools.database_retrieval.ccd_lookup.ccd_lookup import _build_fragment, _status
 from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
@@ -28,52 +28,105 @@ def test_input_normalizes_single_string_to_list():
     assert CcdLookupInput(identifiers="ATP").identifiers == ["ATP"]
 
 
+# A real molecule the CCD has no entry for, so its fragment carries no code
+_NO_CCD_SMILES = "CC(C)(C)c1ccc(cc1)C(=O)NCC#N"
+
+
 def _unresolvable_fragment() -> Fragment:
-    """A fragment that carries no CCD code, via the tool's own placeholder path."""
-    return _build_fragment({"smiles": None, "ccd_code": None, "name": None}, "NOTACCDORSMILES")
+    """A fragment that carries no CCD code."""
+    fragment = Fragment(smiles=_NO_CCD_SMILES)
+    assert fragment.ccd_code is None
+    return fragment
 
 
 def test_output_computed_counts_split_resolved_and_unresolved():
-    """num_resolved / num_unresolved partition entries by whether the fragment carries a code."""
+    """num_resolved counts resolved results; num_unresolved counts both other statuses."""
     output = CcdLookupOutput(
         tool_id="ccd-lookup",
         execution_time=0.0,
         success=True,
         results=[
-            CcdLookupResult(fragment=Fragment(ccd_code="ATP")),
-            CcdLookupResult(fragment=Fragment(ccd_code="HEM")),
-            CcdLookupResult(fragment=_unresolvable_fragment()),
+            CcdLookupResult(fragment=Fragment(ccd_code="ATP"), status="resolved"),
+            CcdLookupResult(fragment=Fragment(ccd_code="HEM"), status="resolved"),
+            CcdLookupResult(fragment=_unresolvable_fragment(), formula="C2 H6 O", status="no_ccd_code"),
+            CcdLookupResult(fragment=_unresolvable_fragment(), status="not_found"),
         ],
     )
-    assert (output.num_resolved, output.num_unresolved) == (2, 1)
+    assert (output.num_resolved, output.num_unresolved) == (2, 2)
 
 
-def test_result_rejects_unexplained_metadata_without_a_code():
-    """CCD metadata beside a code-less fragment is a leak unless the row declares why."""
-    with pytest.raises(ValueError, match="resolved_without_structure"):
-        CcdLookupResult(fragment=_unresolvable_fragment(), formula="C2 H6 O")
+def test_result_rejects_metadata_when_nothing_matched():
+    """CCD metadata on a not_found result can only have leaked from another record."""
+    with pytest.raises(ValueError, match="not_found"):
+        CcdLookupResult(fragment=_unresolvable_fragment(), formula="C2 H6 O", status="not_found")
 
 
-def test_result_allows_metadata_without_a_code_when_declared():
-    """A resolved entry whose structure could not be rebuilt is a legitimate degraded row."""
-    result = CcdLookupResult(
-        fragment=_unresolvable_fragment(),
-        formula="C2 H6 O",
-        resolved_without_structure=True,
-    )
+def test_result_keeps_metadata_for_a_match_without_a_code():
+    """A matched entry the fragment can't carry keeps its CCD metadata."""
+    result = CcdLookupResult(fragment=_unresolvable_fragment(), formula="C2 H6 O", status="no_ccd_code")
 
     assert result.fragment.ccd_code is None
     assert result.formula == "C2 H6 O"
 
 
-def test_an_unrelated_warning_does_not_excuse_leaked_metadata():
-    """Only the declared flag opens the escape hatch, so incidental warnings cannot widen it."""
-    with pytest.raises(ValueError, match="resolved_without_structure"):
-        CcdLookupResult(
-            fragment=_unresolvable_fragment(),
-            formula="C2 H6 O",
-            warnings=["Physchem properties failed: something unrelated"],
-        )
+def test_result_needs_metadata_to_be_a_match_without_a_code():
+    """A no_ccd_code result with no CCD metadata has nothing showing it matched, so it is not_found."""
+    with pytest.raises(ValueError, match="no CCD metadata is set"):
+        CcdLookupResult(fragment=_unresolvable_fragment(), status="no_ccd_code")
+
+
+@pytest.mark.parametrize(
+    ("fragment", "status"),
+    [
+        (lambda: Fragment(ccd_code="ATP"), "no_ccd_code"),
+        (lambda: Fragment(ccd_code="ATP"), "not_found"),
+        (_unresolvable_fragment, "resolved"),
+    ],
+)
+def test_status_must_match_whether_the_fragment_carries_a_code(fragment, status: str):
+    """Only a resolved result carries a CCD code, and every resolved result does."""
+    with pytest.raises(ValueError, match="a resolved result carries a CCD code and no other result does"):
+        CcdLookupResult(fragment=fragment(), status=status)
+
+
+_ENTRY = {"formula": "C2 H6 O", "release_status": "REL"}
+
+
+@pytest.mark.parametrize(
+    ("fragment", "record", "status", "error"),
+    [
+        (lambda: Fragment(ccd_code="ATP"), {"ccd_code": "ATP", **_ENTRY}, "resolved", None),
+        (_unresolvable_fragment, {"ccd_code": None}, "not_found", None),
+        # The standalone sets ccd_code for any code-shaped identifier, so a missing entry is still not_found
+        (_unresolvable_fragment, {"ccd_code": "ZZZZZ"}, "not_found", None),
+        (_unresolvable_fragment, {"ccd_code": "ZZZZZ", **_ENTRY}, "no_ccd_code", "not in proto-tools' CCD table"),
+        (_unresolvable_fragment, {"ccd_code": "ATP", **_ENTRY}, "no_ccd_code", "no SMILES RDKit can parse for 'ATP'"),
+    ],
+)
+def test_status_classifies_each_outcome_and_explains_a_missing_code(fragment, record, status: str, error):
+    """A matched entry the fragment lacks gets an error naming why; other outcomes add none."""
+    errors: list[str] = []
+    assert _status(fragment(), record, errors, []) == status
+    if error is None:
+        assert errors == []
+    else:
+        assert len(errors) == 1
+        assert error in errors[0]
+
+
+def test_status_warns_when_the_fragment_carries_another_entry_with_the_same_structure():
+    """Two entries can share a structure, and the fragment then carries the code proto-tools maps it to."""
+    warnings: list[str] = []
+    assert _status(Fragment(ccd_code="HEM"), {"ccd_code": "ATP", **_ENTRY}, [], warnings) == "resolved"
+    assert warnings == ["CCD entry 'ATP' has the same structure as 'HEM', which the fragment carries"]
+
+
+def test_status_moves_the_lookups_failure_to_warnings_when_the_fragment_resolved_anyway():
+    """A code missing from the lookup's CCD but known to proto-tools resolves, so its error becomes a warning."""
+    errors, warnings = ["CCD code 'CCCCO' not found in components.cif"], []
+    assert _status(Fragment(ccd_code="1BO"), {"ccd_code": "CCCCO"}, errors, warnings) == "resolved"
+    assert errors == []
+    assert warnings == ["CCD code 'CCCCO' not found in components.cif"]
 
 
 def test_build_fragment_keeps_a_resolved_code_when_the_record_smiles_is_unusable():
@@ -83,17 +136,82 @@ def test_build_fragment_keeps_a_resolved_code_when_the_record_smiles_is_unusable
     assert fragment.ccd_code == "ATP"
 
 
-def test_build_fragment_placeholder_keeps_ccd_code_none_through_json_roundtrip():
-    """Unparseable input falls back to a placeholder whose ccd_code stays None after re-validation."""
-    record = {"smiles": None, "ccd_code": None, "name": None}
-    frag = _build_fragment(record, original_identifier="NOTACCDORSMILES")
-    assert frag.ccd_code is None
-    roundtripped = type(frag).model_validate_json(frag.model_dump_json())
-    assert roundtripped.ccd_code is None
+def test_build_fragment_never_reads_a_matched_code_as_smiles():
+    """A matched entry whose structure can't be built gets no fragment, not its code parsed as SMILES."""
+    # FCO is an iron complex; read as a SMILES it would be fluoromethanol
+    with pytest.raises(ValueError):
+        Fragment(ccd_code="FCO")  # precondition: proto-tools' CCD table has no parseable SMILES for FCO
+    record = {"ccd_code": "FCO", "smiles": "unparseable", "name": "IRON COMPLEX", "formula": "C3 Fe N2 O"}
+    assert _build_fragment(record, "FCO") is None
 
 
-def test_output_export_json_writes_ligands_and_results(tmp_path):
-    """JSON export round-trips both fragments and result records."""
+def test_build_fragment_reads_an_unmatched_identifier_as_smiles():
+    """With no CCD entry, a code-shaped identifier may still be the SMILES the caller meant."""
+    fragment = _build_fragment({"ccd_code": "CCCCO", "smiles": None, "name": None}, "CCCCO")
+
+    assert fragment.smiles == "CCCCO"
+
+
+def test_build_fragment_keeps_a_smiles_input_matched_to_an_unbuildable_entry():
+    """A SMILES that matched an entry is the caller's own molecule, so it is kept when the entry can't be built."""
+    record = {"ccd_code": "FCO", "smiles": "unparseable", "name": "MATCHED ENTRY", "formula": "C8 H10 B O3"}
+    fragment = _build_fragment(record, "O[B-]1([OH+])OCCc2ccccc21")
+
+    assert fragment.smiles == Fragment(smiles="O[B-]1([OH+])OCCc2ccccc21").smiles
+    assert fragment.ccd_code is None
+
+
+def test_build_fragment_gives_a_blank_identifier_no_fragment():
+    """A blank identifier isn't read as an empty SMILES, which would be a zero-atom fragment."""
+    for blank in ("", "  "):
+        assert _build_fragment({"ccd_code": None, "smiles": None, "name": None}, blank) is None
+
+
+def test_build_fragment_never_reads_the_identifier_as_smiles_when_told_it_is_a_code():
+    """With identifier_type='ccd_code', an unknown code gets no fragment rather than a SMILES reading."""
+    assert _build_fragment({"ccd_code": "CCCCO", "smiles": None, "name": None}, "CCCCO", read_as_smiles=False) is None
+
+
+def test_build_fragment_returns_none_rather_than_a_stand_in_molecule():
+    """With nothing to build, there is no fragment, so no stand-in can be modeled in the ligand's place."""
+    assert _build_fragment({"smiles": None, "ccd_code": None, "name": None}, "NOTACCDORSMILES") is None
+
+
+def test_a_result_without_a_structure_round_trips_through_json():
+    """A result whose fragment is None survives export and re-validation."""
+    result = CcdLookupResult(fragment=None, status="not_found", errors=["No structure could be built for 'X'"])
+    assert CcdLookupResult.model_validate_json(result.model_dump_json()) == result
+
+
+def _output(*results: CcdLookupResult) -> CcdLookupOutput:
+    return CcdLookupOutput(tool_id="ccd-lookup", execution_time=0.0, success=True, results=list(results))
+
+
+def test_ligands_refuses_a_batch_with_a_missing_structure():
+    """A complex built from ligands must not silently lack one, so ligands raises and names the missing input."""
+    output = _output(
+        CcdLookupResult(fragment=Fragment(ccd_code="ATP"), status="resolved"),
+        CcdLookupResult(fragment=None, formula="C3 Fe N2 O", status="no_ccd_code", errors=["no SMILES for 'FCO'"]),
+    )
+    with pytest.raises(ValueError, match=r"1 of 2 identifiers \(results\[1\]: no SMILES for 'FCO'\)"):
+        _ = output.ligands
+    assert [r.fragment.ccd_code for r in output.results if r.fragment is not None] == ["ATP"]
+
+
+def test_ligands_keeps_input_order_when_every_input_has_a_structure():
+    """With a structure for every input, ligands is every fragment, in input order."""
+    output = _output(
+        CcdLookupResult(fragment=Fragment(ccd_code="ATP"), status="resolved"),
+        CcdLookupResult(fragment=_unresolvable_fragment(), status="not_found"),
+    )
+    assert [f.smiles for f in output.ligands.fragments] == [
+        Fragment(ccd_code="ATP").smiles,
+        _unresolvable_fragment().smiles,
+    ]
+
+
+def test_output_export_json_writes_the_results(tmp_path):
+    """JSON export carries each result with its fragment."""
     output = CcdLookupOutput(
         tool_id="ccd-lookup",
         execution_time=0.0,
@@ -103,6 +221,7 @@ def test_output_export_json_writes_ligands_and_results(tmp_path):
                 fragment=Fragment(ccd_code="ATP"),
                 formula="C10 H16 N5 O13 P3",
                 formula_weight=507.181,
+                status="resolved",
             )
         ],
     )
@@ -110,7 +229,8 @@ def test_output_export_json_writes_ligands_and_results(tmp_path):
     payload = json.loads((tmp_path / "out.json").read_text())
     assert payload["results"][0]["fragment"]["ccd_code"] == "ATP"
     assert payload["results"][0]["formula"] == "C10 H16 N5 O13 P3"
-    assert payload["ligands"]["fragments"][0]["ccd_code"] == "ATP"
+    assert payload["results"][0]["status"] == "resolved"
+    assert "ligands" not in payload  # ligands can raise, so the export carries the fragments in results
 
 
 # ── Integration tests (require pdbeccdutils env + components.cif) ───────────
@@ -118,7 +238,7 @@ def test_output_export_json_writes_ligands_and_results(tmp_path):
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_ccd_lookup_offline_full_pass():
     """One batch covers the offline CCD-code path: metadata, parent codes, order, and enrichment defaults."""
     result = run_ccd_lookup(CcdLookupInput(identifiers=["ATP", "SEP", "MSE"]), CcdLookupConfig())
@@ -144,10 +264,24 @@ def test_ccd_lookup_offline_full_pass():
 
     assert all(e.cross_references is None for e in result.results)
     assert all(e.pdb_structures is None for e in result.results)
+    assert [e.status for e in result.results] == ["resolved", "resolved", "resolved"]
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
+def test_ccd_lookup_reports_each_status_on_real_lookups():
+    """A known code resolves, a SMILES with no CCD entry is not_found, and both count as expected."""
+    result = run_ccd_lookup(CcdLookupInput(identifiers=["ATP", "CC(C)(C)c1ccc(cc1)C(=O)NCC#N"]), CcdLookupConfig())
+    assert [e.status for e in result.results] == ["resolved", "not_found"]
+    assert (result.num_resolved, result.num_unresolved) == (1, 1)
+    assert result.results[1].formula is None
+    # A SMILES with no CCD entry is a usable ligand, so the miss is a warning rather than an error
+    assert result.results[1].errors == []
+    assert result.results[1].warnings == ["No CCD match for SMILES"]
+
+
+@pytest.mark.skip_ci
+@pytest.mark.uses_env
 def test_ccd_lookup_returns_metadata_for_entries_rdkit_cannot_sanitize():
     """C8L (cucurbit[8]uril) overflows RDKit's CIP labeler, yet still returns its CCD metadata.
 
@@ -165,7 +299,7 @@ def test_ccd_lookup_returns_metadata_for_entries_rdkit_cannot_sanitize():
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_ccd_lookup_computes_descriptors_without_sanitization():
     """sanitize=False still yields formula_weight and RDKit physchem descriptors."""
     result = run_ccd_lookup(CcdLookupInput(identifiers=["ATP"]), CcdLookupConfig(sanitize=False))
@@ -178,7 +312,55 @@ def test_ccd_lookup_computes_descriptors_without_sanitization():
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
+def test_ccd_lookup_keeps_a_code_rdkit_cannot_parse_off_a_different_molecule():
+    """FCO's SMILES doesn't parse, and its code read as a SMILES is fluoromethanol, so it gets no fragment."""
+    result = run_ccd_lookup(CcdLookupInput(identifiers=["FCO"]), CcdLookupConfig()).results[0]
+
+    assert result.status == "no_ccd_code"
+    assert result.formula is not None and "Fe" in result.formula
+    assert result.fragment is None
+
+
+@pytest.mark.skip_ci
+@pytest.mark.uses_env
+def test_identifier_type_decides_how_an_ambiguous_string_is_read():
+    """CCO is a CCD entry and also ethanol: auto reads the code and warns, smiles reads ethanol."""
+    auto = run_ccd_lookup(CcdLookupInput(identifiers=["CCO"]), CcdLookupConfig()).results[0]
+    as_smiles = run_ccd_lookup(CcdLookupInput(identifiers=["CCO"]), CcdLookupConfig(identifier_type="smiles")).results[
+        0
+    ]
+
+    assert auto.fragment.ccd_code == "CCO"
+    assert any("identifier_type='smiles'" in w for w in auto.warnings)
+    assert as_smiles.fragment.smiles == "CCO"
+    assert as_smiles.fragment.ccd_code != "CCO"
+    assert not any("identifier_type" in w for w in as_smiles.warnings)
+
+
+@pytest.mark.skip_ci
+@pytest.mark.uses_env
+def test_identifier_type_ccd_code_never_falls_back_to_a_smiles_reading():
+    """An unknown code stays not_found under identifier_type='ccd_code', instead of resolving as a SMILES."""
+    as_code = run_ccd_lookup(CcdLookupInput(identifiers=["CCCCO"]), CcdLookupConfig(identifier_type="ccd_code"))
+    result = as_code.results[0]
+
+    assert result.status == "not_found"
+    assert result.fragment is None
+
+
+@pytest.mark.skip_ci
+@pytest.mark.uses_env
+def test_identifier_type_auto_does_not_warn_for_an_unambiguous_code():
+    """ATP isn't a valid SMILES, so reading it as a code needs no warning."""
+    result = run_ccd_lookup(CcdLookupInput(identifiers=["ATP"]), CcdLookupConfig()).results[0]
+
+    assert result.status == "resolved"
+    assert not any("identifier_type" in w for w in result.warnings)
+
+
+@pytest.mark.skip_ci
+@pytest.mark.uses_env
 def test_ccd_lookup_network_enrichment():
     """UniChem maps ATP to canonical external compound IDs; RCSB lists HEM in thousands of PDB entries."""
     result = run_ccd_lookup(

@@ -171,7 +171,7 @@ def run_ensembl_xrefs(
     Args:
         inputs (EnsemblXrefsInput): Ensembl ID.
         config (EnsemblXrefsConfig): Assembly.
-        instance (Any): Optional ToolInstance; unused for HTTP-only tools.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         EnsemblXrefsOutput: List of ``EnsemblXref`` records.

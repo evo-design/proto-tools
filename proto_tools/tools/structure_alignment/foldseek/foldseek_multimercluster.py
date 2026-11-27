@@ -1,7 +1,7 @@
 """Wraps `foldseek easy-multimercluster` for structural clustering of multi-chain assemblies.
 
-Local-only — no remote analog. The public Foldseek server only does query-vs-DB
-search; clustering an arbitrary user set of multimers requires the local CLI.
+Runs locally because there is no corresponding remote endpoint. The public Foldseek server only does query-vs-DB
+search. Clustering an arbitrary user set of multimers requires the local CLI.
 """
 
 import json
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 class FoldseekMultimerClusterInput(BaseToolInput):
     """Input for Foldseek multimer (complex) structural clustering.
 
-    IDs must not contain ``_``: Foldseek emits cluster member IDs as
+    IDs must not contain ``_`` because Foldseek emits cluster member IDs as
     ``{multimer_id}_{chain}``, so silent ID mangling is rejected up front
     (whether user-supplied or filename-derived).
 

@@ -1,4 +1,4 @@
-"""Resolution of the proto-tools source tree that images are built from."""
+"""Find the proto-tools source tree used to build Modal images."""
 
 from __future__ import annotations
 
@@ -31,8 +31,8 @@ def _is_checkout(path: Path) -> bool:
 def checkout_or_none() -> Path | None:
     """Return the source checkout to build from, or ``None`` for an installed package.
 
-    This is what picks the image recipe: a checkout supplies both the source and
-    ``pyproject.toml``; an installed package supplies source plus dependency metadata.
+    The image recipe depends on the install. A checkout supplies source and
+    ``pyproject.toml``, while an installed package supplies source and distribution metadata.
 
     Returns:
         Path | None: The checkout root, or ``None`` when running from an install.
@@ -77,10 +77,9 @@ def resolve_proto_tools() -> Path:
 
 
 def _announce(message: str) -> None:
-    """Report the resolved source once, so a build is never ambiguous about it.
+    """Report the source location once so developers can see which tree a build uses.
 
-    Written to stderr: a developer must be able to see which tree a build used,
-    but stdout carries the MCP server's protocol.
+    Write to stderr because stdout carries the MCP server's protocol.
     """
     if getattr(_announce, "_said", None) == message:
         return

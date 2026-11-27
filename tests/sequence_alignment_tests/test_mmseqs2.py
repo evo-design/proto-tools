@@ -284,6 +284,22 @@ def test_standalone_dispatch_rejects_unknown_operation():
         standalone.dispatch({"operation": "bogus"})
 
 
+def test_backfill_empty_a3ms_handles_partial_hit_batch(tmp_path):
+    """Successful mixed batches retain hits and materialize every no-hit query."""
+    from proto_tools.tools.sequence_alignment.mmseqs2.standalone.run import _backfill_empty_a3ms
+
+    query_fasta = tmp_path / "queries.fasta"
+    query_fasta.write_text(">__q0\nMKTAYIAK\n>__q1\nMEISEEEK\n")
+    existing = tmp_path / "__q0.a3m"
+    existing_text = ">__q0\nMKTAYIAK\n>hit\nMKTAYIAK\n"
+    existing.write_text(existing_text)
+
+    _backfill_empty_a3ms(query_fasta, tmp_path)
+
+    assert existing.read_text() == existing_text
+    assert (tmp_path / "__q1.a3m").read_text() == ">__q1\nMEISEEEK\n"
+
+
 def test_genome_search_thread_fallback_retries_on_world_size_error(monkeypatch, tmp_path):
     """A split-index 'World Size > dbSize' abort retries once with --threads clamped to the reported dbSize."""
     from proto_tools.tools.sequence_alignment.mmseqs2.standalone import run as standalone
@@ -532,7 +548,7 @@ def test_search_proteins_registered_dataset_missing_gives_setup_hint(monkeypatch
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mmseqs_search_proteins_execution(tmp_path):
     """End-to-end protein search with default ``threads=0`` (auto-detect).
 
@@ -559,7 +575,7 @@ def test_mmseqs_search_proteins_execution(tmp_path):
     assert result[1].num_hits >= 1
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mmseqs_search_proteins_no_hits(tmp_path):
     db_file = tmp_path / "database.faa"
     db_file.write_text(">db1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n")
@@ -574,7 +590,7 @@ def test_mmseqs_search_proteins_no_hits(tmp_path):
     assert result[0].num_hits == 0
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mmseqs_clustering_execution():
     sequences = [
         "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT",
@@ -597,7 +613,7 @@ def test_mmseqs_clustering_execution():
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_mmseqs_search_genomes_execution():
     query_seqs = [
         "ATGGTGCTGTCTCCTGCCGACAAGACCAACGTCAAGGCCGCCTGGGGTAAGGTCATGGTGCTGTCTCCTGCCGACAAGACCAACGTCAAGGCCGCCTGGGGTAAGGTC",
@@ -618,7 +634,7 @@ def test_mmseqs_search_genomes_execution():
     assert len(result) == 2
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_search_proteins_inline_target_sequences_execution():
     """End-to-end: target_sequences (inline) routed via easy-search yields hits."""
     inputs = Mmseqs2SearchProteinsInput(query_sequences=["MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"])
@@ -630,7 +646,7 @@ def test_search_proteins_inline_target_sequences_execution():
     assert result.success and result[0].num_hits >= 1
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_clustering_mmseqs_db_fasta_path_execution(tmp_path):
     """End-to-end: mmseqs_db pointing at a FASTA file → sniff routes to createdb → cluster."""
     fasta = tmp_path / "input.faa"
@@ -647,7 +663,7 @@ def test_clustering_mmseqs_db_fasta_path_execution(tmp_path):
 
 
 @pytest.mark.skip_ci
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_search_genomes_target_db_fasta_path_execution(tmp_path):
     """End-to-end: target_db pointing at a FASTA file → sniff routes to createdb → search."""
     target = tmp_path / "target.fna"

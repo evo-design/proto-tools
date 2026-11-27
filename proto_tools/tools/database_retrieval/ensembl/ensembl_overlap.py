@@ -185,7 +185,7 @@ def run_ensembl_overlap(
     Args:
         inputs (EnsemblOverlapInput): Ensembl ID whose region to query.
         config (EnsemblOverlapConfig): Feature class + assembly.
-        instance (Any): Optional ToolInstance; unused for HTTP-only tools.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         EnsemblOverlapOutput: List of typed records + raw upstream dicts.

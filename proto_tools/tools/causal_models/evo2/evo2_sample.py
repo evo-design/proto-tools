@@ -4,7 +4,7 @@ Evo 2 sampling tool.
 """
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -222,6 +222,12 @@ class Evo2SampleConfig(CausalModelSampleConfig):
             return f"local_path points to a local weights directory not available on device='{device}'. Unset it, or run on a local NVIDIA GPU."
         return None
 
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "Evo2SampleConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "evo2_1b_base")
+        return cast("Evo2SampleConfig", super().minimal(**kwargs))
+
 
 # ============================================================================
 # Tool Implementation
@@ -270,9 +276,9 @@ def run_evo2_sample(
 
     Returns:
         Evo2SampleOutput: Structured output containing:
+            - ``results``: One ``Evo2Sample`` per prompt with ``sequence``, optional ``logits``,
+              and an optional worker-local ``kv_cache`` handle
             - ``sequences``: List of generated DNA sequences
-            - ``logits``: Optional per-position logits for each sequence
-            - ``kv_caches``: Optional worker-local KV cache handles for continuing generation
             - Metadata about generation parameters and execution mode
 
     Examples:
@@ -292,6 +298,7 @@ def run_evo2_sample(
     # Local GPU - use standalone venv
     logger.debug(f"Using local venv for Evo 2 sampling: {config.model_checkpoint}")
 
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "evo2",
         {

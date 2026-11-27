@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gc
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -18,7 +19,7 @@ from moleculekit.molecule import Molecule  # type: ignore[import-not-found]
 from moleculekit.tools.voxeldescriptors import getVoxelDescriptors  # type: ignore[import-not-found]
 from scipy.spatial import KDTree
 from sklearn.cluster import AgglomerativeClustering  # type: ignore[import-untyped]
-from standalone_helpers import get_logger, get_pytorch_memory_stats
+from standalone_helpers import StatusCounter, get_logger, get_pytorch_memory_stats, move_model_to_device
 from standalone_helpers.weights import resolve_weights_dir
 
 logger = get_logger(__name__)
@@ -49,9 +50,9 @@ METAL_BINDING_RESNAMES = "HIS HID HIE HIP CYS CYX GLU GLH GLN ASP ASH ASN MET"
 class Model(nn.Module):  # type: ignore[misc, unused-ignore]
     """Metal3D 3D-convolutional network.
 
-    ``kernel_size`` selects the architecture variant: 3 for the original Metal3D
-    weights, 4 for dEVA's retrained cat/clean checkpoints. conv5 always uses a
-    large filter to aggregate features over the whole box.
+    Use ``kernel_size=3`` for the original Metal3D weights or 4 for dEVA's
+    retrained cat/clean checkpoints. ``conv5`` always uses a large filter to aggregate
+    features over the whole box.
     """
 
     def __init__(self, kernel_size: int) -> None:
@@ -87,14 +88,13 @@ class Metal3DModel:
         self.device: str | None = None
         self.checkpoint: str | None = None
 
-    def load(self, model_checkpoint: str, device: str, verbose: bool = False) -> None:
+    def load(self, model_checkpoint: str, device: str) -> None:
         """Load the requested checkpoint onto ``device`` if it is not already loaded."""
         if self.model is not None and self.device == device and self.checkpoint == model_checkpoint:
             return
         self.unload()
         checkpoint_path = _resolve_checkpoint_path(model_checkpoint)
-        if verbose:
-            logger.info("Loading Metal3D checkpoint %s from %s", model_checkpoint, checkpoint_path)
+        logger.update_status("Loading Metal3D weights")
         model = Model(kernel_size=CHECKPOINT_KERNEL_SIZES[model_checkpoint]).to(device).eval()
         checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         state_dict = _extract_state_dict(checkpoint)
@@ -119,7 +119,7 @@ class Metal3DModel:
             return
         if self.device == device:
             return
-        self.model = self.model.to(device)
+        self.model = move_model_to_device(self.model, self.device, device)
         self.device = device
 
 
@@ -174,9 +174,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     model_checkpoint = input_dict.get("model_checkpoint", "metal3d-original")
     if model_checkpoint not in CHECKPOINT_FILES:
         raise ValueError(f"metal3d: unknown checkpoint {model_checkpoint!r}")
-    verbose = bool(input_dict.get("verbose", False))
-
-    _model.load(model_checkpoint, device, verbose=verbose)
+    _model.load(model_checkpoint, device)
     assert _model.model is not None
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -225,6 +223,7 @@ def _predict(
     record_by_id = dict(zip(ids, residue_records, strict=True))
     voxels, prot_centers, _prot_n, _prots, voxelized_ids = _process_structures(str(pdb_path), ids)
 
+    logger.update_status("Predicting metal sites", level=logging.DEBUG)
     outputs = torch.zeros([voxels.size(0), 1, 32, 32, 32], device="cpu")
     with torch.no_grad():
         for i in range(voxels.size(0)):
@@ -377,7 +376,7 @@ def _process_structures(
     prot.filter("protein and not hydrogen")
     results = []
     voxelized_ids: list[int] = []
-    for atom_id in atom_ids:
+    for atom_id in StatusCounter(logger, "Voxelizing residue %d/%d", atom_ids):
         result = _voxelize_single_notcentered((prot.copy(), atom_id))
         if result is not None:
             results.append(result)
@@ -419,7 +418,7 @@ def _get_probability_mean(grid: np.ndarray, prot_centers: np.ndarray, pvalues: n
     """Average per-voxel probabilities onto each grid point from nearby voxel centers.
 
     For each grid point, averages ``pvalues`` over voxel centers within ``cutoff`` Angstroms
-    (up to 20 neighbors); points with no neighbor in range get 0.
+    (up to 20 neighbors). Points with no neighbor in range get 0.
     """
     tree = KDTree(prot_centers)
     probabilities = []

@@ -29,7 +29,7 @@ class CrisprTracrRNAPrediction(BaseModel):
 
     Mirrors upstream CRISPRtracrRNA's ``complete_run`` CSV columns plus the
     multi-evidence ``score`` from ``candidate_ranking.py``. Every field is
-    nullable: ``model_run`` mode only populates candidate-detection fields;
+    nullable. ``model_run`` mode only populates candidate-detection fields.
     ``complete_run`` may populate any subject to pipeline-stage hits. Flag
     fields are raw strings (typically ``"True"``/``"False"``) to mirror
     upstream's CSV verbatim.
@@ -280,7 +280,7 @@ class CrisprTracrRNAOutput(BaseToolOutput):
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         import pandas as pd
 
-        # One row per candidate; sequences with no candidates emit a sequence_id-only row.
+        # Write one row per candidate, or a sequence_id-only row when no candidates were found.
         rows: list[dict[str, Any]] = []
         for result in self.results:
             if not result.candidates:

@@ -35,12 +35,12 @@ This tool predicts the structure of multi-component assemblies such as protein-D
 
 #### Usage Tips
 
-- **`model_checkpoint` selects the weights.** Pass a bundled model name — `opendde_v1` (default, general-purpose) or `opendde_abag` (antibody-antigen tuned) — both auto-downloaded into `PROTO_MODEL_CACHE` on first inference; or pass a path to a custom `.pt` checkpoint to fold with your own weights.
-- **`use_msa` defaults to `True`.** An MMseqs2 homology search generates an MSA for each protein chain; set it `False` to fold single-sequence, or attach precomputed MSAs to the input, which always take precedence. OpenDDE's own internal MSA search runs only when `use_msa=True` and no MSAs are supplied.
+- **`model_checkpoint` selects the weights.** Pass a bundled model name, `opendde_v1` (default, general-purpose) or `opendde_abag` (antibody-antigen tuned), both auto-downloaded into `PROTO_MODEL_CACHE` on first inference; or pass a path to a custom `.pt` checkpoint to fold with your own weights.
+- **`use_msa` defaults to `True`.** An MMseqs2 homology search generates an MSA for each protein chain; set it `False` to fold single-sequence, or attach precomputed MSAs to the input, which always take precedence. proto-tools gives every protein chain an MSA file (query-only when it has no hits), so OpenDDE never runs its own MSA search.
 - **`num_samples` draws independent diffusion samples.** OpenDDE draws `num_samples` (default `1`) structures per complex and keeps the best by ranking score, so raising it explores more candidate conformations at proportional cost. Predictions are stochastic; set `seed` for reproducibility.
 - **`num_steps` and `num_cycles` trade accuracy for time.** `num_steps` (default `200`) sets the number of diffusion denoising steps and `num_cycles` (default `10`) sets the recycling iterations; higher values refine the prediction but increase runtime.
 - **`use_template` and `use_rna_msa` enable OpenDDE's extra pipelines.** Both default to `False`; enable `use_template` for OpenDDE's template search and `use_rna_msa` for its RNA MSA pipeline when folding RNA-containing complexes.
-- **Confidence is reported as pLDDT, pTM, ipTM, gPDE, and a ranking score.** `avg_plddt` (0 to 100) is the primary per-structure quality metric; `iptm` is 0.0 for single-chain inputs, and `gpde` is in angstroms. OpenDDE writes only scalar summary confidences, so no per-token PAE matrix is available and the inherited `include_pae_matrix` is ignored.
+- **Confidence is reported as pLDDT, pTM, ipTM, gPDE, and a ranking score.** `avg_plddt` (0 to 100) is the primary per-structure quality metric; `iptm` is 0.0 for single-chain inputs, and `gpde` is in angstroms. By default the structure's B-factors carry per-atom pLDDT (0 to 100), so `Structure.per_residue_plddt` works like other predictors; set `atom_confidence=False` to skip OpenDDE's full confidence output (B-factors are then 0 and tagged unknown). Set the inherited `include_pae_matrix=True` to also attach the per-token PAE matrix (`pae`) and its mean (`avg_pae`), both in angstroms.
 
 ## Toolkit Notes
 
@@ -49,6 +49,7 @@ This tool predicts the structure of multi-component assemblies such as protein-D
 These apply to every OpenDDE tool in this toolkit (`opendde-prediction`).
 
 - **Requires a GPU.** OpenDDE runs through a PyTorch backend and needs an NVIDIA GPU; CPU execution is not practical.
+- **The model stays loaded between predictions.** The worker builds OpenDDE's inference runner once and reuses it for every complex and call; it reloads only when the checkpoint or a sampling setting (`num_samples`, `num_steps`, `num_cycles`, MSA/template flags) changes.
 - **Open AlphaFold3-style co-folding model.** OpenDDE releases both code and weights under Apache-2.0 for academic and commercial use, and follows the AlphaFold3 diffusion architecture like Boltz-2 and Protenix. Its `opendde_abag` checkpoint additionally specializes in antibody-antigen complexes.
 - **Predictions are stochastic.** Structures come from a diffusion process, so repeated runs vary unless sampling is seeded.
 - **Early preview upstream.** Checkpoints and interfaces may change, so pin the version you validate against.

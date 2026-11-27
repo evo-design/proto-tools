@@ -1,5 +1,6 @@
 """Standalone BioEmu inference implementation."""
 
+import hashlib
 import json
 import os
 import sys
@@ -8,15 +9,70 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from standalone_helpers import get_logger, get_random_int, set_torch_seed
+from standalone_helpers import (
+    StatusCounter,
+    count_a3m_rows,
+    get_logger,
+    get_random_int,
+    report_msa_rows_loaded,
+    set_torch_seed,
+)
 
 logger = get_logger(__name__)
+
+
+def _msa_cache_dir(cache_embeds_dir: str | None, msa_a3m: str | None) -> str | None:
+    """Return the embedding cache directory for this MSA, keyed by its hash.
+
+    BioEmu keys cached embeddings by sequence alone, so a shared directory would serve one MSA's
+    embeddings for another. Keying the directory by MSA keeps reuse correct and repeat calls cheap.
+    """
+    if not msa_a3m:
+        return cache_embeds_dir
+    if cache_embeds_dir is None:
+        import bioemu.get_embeds as get_embeds
+
+        cache_embeds_dir = get_embeds._get_default_embeds_dir()
+    root = os.path.expanduser(cache_embeds_dir)
+    return os.path.join(root, f"msa-{hashlib.sha256(msa_a3m.encode()).hexdigest()[:16]}")
+
+
+def _check_msa_source(sequence: str, msa_a3m: str | None, cache_embeds_dir: str | None) -> None:
+    """Warn when BioEmu would query its own MSA server, and log the rows it loads.
+
+    ``get_colabfold_embeds`` returns embeddings cached under the sequence's hash without reading any
+    MSA, so ``cache_embeds_dir`` must already be the MSA-specific directory from ``_msa_cache_dir``.
+    With no MSA file it queries the ColabFold server itself.
+    """
+    import bioemu.colabfold_inline.model_runner as model_runner
+    import bioemu.get_embeds as get_embeds
+
+    cache_dir = os.path.expanduser(cache_embeds_dir or get_embeds._get_default_embeds_dir())
+    key = get_embeds.shahexencode(sequence)
+    cached = all(os.path.exists(os.path.join(cache_dir, f"{key}_{part}.npy")) for part in ("single", "pair"))
+    if cached:
+        logger.debug("bioemu: reusing embeddings cached for this MSA in %s", cache_dir)
+    elif not msa_a3m:
+        logger.warning("bioemu: no MSA supplied; BioEmu will query the ColabFold server itself")
+
+    build = model_runner.build_monomer_feature
+    if getattr(build, "_logs_msa_rows", False):
+        build = build._wrapped
+
+    def build_logging_msa_rows(*args: Any, **kwargs: Any) -> Any:
+        features = build(*args, **kwargs)
+        report_msa_rows_loaded("bioemu", {"A": int(features["msa"].shape[0])}, {"A": count_a3m_rows(msa_a3m)})
+        return features
+
+    build_logging_msa_rows._logs_msa_rows = True  # type: ignore[attr-defined]
+    build_logging_msa_rows._wrapped = build  # type: ignore[attr-defined]
+    model_runner.build_monomer_feature = build_logging_msa_rows
 
 
 class BioEmuModel:
     """BioEmu standalone model wrapper.
 
-    Holds the score model + SDEs across calls so the worker only loads weights
+    Holds the score model and SDEs across calls so the worker only loads weights
     once. ``__call__`` moves the model to the requested device, runs sampling,
     then moves it back to CPU (matches the ``ProteinMPNNModel`` pattern).
     """
@@ -40,7 +96,6 @@ class BioEmuModel:
         denoiser_type: str = "dpm",
         denoiser_config: str | None = None,
         msa_a3m: str | None = None,
-        msa_host_url: str | None = None,
         cache_embeds_dir: str | None = None,
         cache_so3_dir: str | None = None,
         device: str = "cuda",
@@ -116,13 +171,17 @@ class BioEmuModel:
 
             base_seed = seed if seed is not None else get_random_int()
 
+            cache_embeds_dir = _msa_cache_dir(cache_embeds_dir, msa_a3m)
+            _check_msa_source(sequence, msa_a3m, cache_embeds_dir)
             existing_num_samples = count_samples_in_output_dir(output_path)
+            counter = StatusCounter(logger, "Sampling conformation %d/%d", total=num_samples)
             for start_idx in tqdm(
                 range(existing_num_samples, num_samples, adjusted_batch_size),
                 desc="Sampling batches...",
                 disable=not verbose,
             ):
                 n = min(adjusted_batch_size, num_samples - start_idx)
+                counter(start_idx + 1)
                 npz_path = output_path / format_npz_samples_filename(start_idx, n)
                 if npz_path.exists():
                     raise ValueError(
@@ -139,7 +198,6 @@ class BioEmuModel:
                     denoiser=denoiser,
                     cache_embeds_dir=cache_embeds_dir,
                     msa_file=msa_file,
-                    msa_host_url=msa_host_url,
                     fk_potentials=None,
                     steering_config=None,
                 )
@@ -153,6 +211,7 @@ class BioEmuModel:
             positions = torch.tensor(np.concatenate([np.load(f)["pos"] for f in samples_files]))
             node_orientations = torch.tensor(np.concatenate([np.load(f)["node_orientations"] for f in samples_files]))
             log_physicality(positions, node_orientations, sequence)
+            logger.update_status("Writing ensemble trajectory")
             save_pdb_and_xtc(
                 pos_nm=positions,
                 node_orientations=node_orientations,
@@ -169,7 +228,7 @@ class BioEmuModel:
                 "num_residues": num_residues,
             }
         finally:
-            # Park weights on CPU between calls (proteinmpnn pattern); next
+            # Park weights on CPU between calls, as ProteinMPNN does. The next
             # call's to_device() brings them back without reloading from disk.
             self.unload()
             if use_temp_dir:
@@ -196,7 +255,9 @@ class BioEmuModel:
             logger.info(f"Loaded ensemble: {traj.n_frames} frames, {traj.n_residues} residues")
 
         pdb_frames: list[str] = []
+        counter = StatusCounter(logger, "Extracting frame %d/%d", total=traj.n_frames)
         for frame_idx in range(traj.n_frames):
+            counter(frame_idx + 1)
             frame = traj.slice(frame_idx)
             with tempfile.NamedTemporaryFile(mode="w", suffix=".pdb", delete=False) as handle:
                 tmp_path = handle.name
@@ -223,9 +284,8 @@ class BioEmuModel:
         from bioemu.model_utils import load_model, load_sdes, maybe_download_checkpoint
 
         self.verbose = verbose
-        if verbose:
-            logger.info(f"Loading BioEmu model: {model_name} on {device}")
 
+        logger.update_status("Loading BioEmu weights")
         ckpt_path, model_config_path = maybe_download_checkpoint(
             model_name=model_name, ckpt_path=None, model_config_path=None
         )
@@ -253,7 +313,7 @@ class BioEmuModel:
             logger.info(f"Moving BioEmu to {device}")
         self.score_model = move_model_to_device(self.score_model, self.device, device)
         # sdes["node_orientations"] (SO3SDE) is a torch.nn.Module with precomputed IGSO(3)
-        # lookup tables; sdes["pos"] (CosineVPSDE) has no device state.
+        # lookup tables. sdes["pos"] (CosineVPSDE) has no device state.
         if self.sdes is not None and "node_orientations" in self.sdes:
             self.sdes["node_orientations"] = move_model_to_device(self.sdes["node_orientations"], self.device, device)
         self.device = device
@@ -273,9 +333,39 @@ class BioEmuModel:
         self.device = "cpu"
 
 
+def _use_managed_caches(input_data: dict[str, Any]) -> tuple[str, str]:
+    """Keep BioEmu's caches in its weights directory instead of the user's home directory.
+
+    Upstream defaults are ``~/.bioemu_embeds_cache`` (embeddings), ``~/sampling_so3_cache`` (SO3
+    lookup tables), and ``~/.cache/colabfold`` (the AF2 params the embeddings need, downloaded on
+    first use). Config values override the first two locations. The AF2 parameters have no config field and
+    are read from the alphafold2 toolkit's shared copy (set up by ``proto_ensure_af2_params`` in setup.sh).
+
+    Args:
+        input_data (dict[str, Any]): Dispatch payload.
+
+    Returns:
+        tuple[str, str]: The embeddings and SO3 cache directories to use.
+    """
+    import functools
+
+    from bioemu.colabfold_inline import model_runner
+    from standalone_helpers import require_weights_dir
+
+    weights = Path(require_weights_dir("bioemu"))
+    af2_weights = Path(require_weights_dir("alphafold2"))  # holds params/, the layout data_dir expects
+    # get_colabfold_embeds imports get_embeddings at call time, so rebinding it here takes effect
+    if not isinstance(model_runner.get_embeddings, functools.partial):
+        model_runner.get_embeddings = functools.partial(model_runner.get_embeddings, data_dir=af2_weights)
+    embeds_dir = input_data.get("cache_embeds_dir") or str(weights / "embeds_cache")
+    so3_dir = input_data.get("cache_so3_dir") or str(weights / "so3_cache")
+    return embeds_dir, so3_dir
+
+
 def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run BioEmu sampling for one or more sequences."""
     assert _model is not None, "run_bioemu_batch() must be reached via dispatch()"
+    cache_embeds_dir, cache_so3_dir = _use_managed_caches(input_data)
     sequences = input_data["sequences"]
     msa_a3m_contents = input_data["msa_a3m_contents"]
     output_dir = input_data["output_dir"]
@@ -302,9 +392,8 @@ def run_bioemu_batch(input_data: dict[str, Any]) -> dict[str, Any]:
                 denoiser_type=input_data.get("denoiser_type", "dpm"),
                 denoiser_config=input_data.get("denoiser_config"),
                 msa_a3m=msa_a3m_contents[seq_idx],
-                msa_host_url=input_data.get("msa_host_url"),
-                cache_embeds_dir=input_data.get("cache_embeds_dir"),
-                cache_so3_dir=input_data.get("cache_so3_dir"),
+                cache_embeds_dir=cache_embeds_dir,
+                cache_so3_dir=cache_so3_dir,
                 device=input_data["device"],
                 output_dir=per_sequence_output_dir,
                 seed=per_seq_seed,
@@ -340,13 +429,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "model_id": id(_model.score_model) if _model.score_model is not None else None,
         }
     raise ValueError(f"bioemu: unknown operation {operation!r}; valid: ['sample', 'introspect_loaded']")
-
-
-def to_device(device: str) -> dict[str, Any]:
-    """Move model to specified device (called by DeviceManager)."""
-    if _model is not None and _model._loaded:
-        _model.to_device(device)
-    return {"success": True, "device": device}
 
 
 def get_memory_stats() -> dict[str, Any]:

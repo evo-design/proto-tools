@@ -132,7 +132,7 @@ class USalignOutput(BaseToolOutput):
 
     @property
     def output_format_options(self) -> list[str]:
-        """Supported export formats; ``pdb`` is offered when a superimposed overlay exists."""
+        """Supported export formats. ``pdb`` is offered when a superimposed overlay exists."""
         return ["json", "pdb"] if self.superimposed_pdb else ["json"]
 
     @property

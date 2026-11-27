@@ -61,13 +61,15 @@ proto_resolve_weights_dir fampnn
 
 REPO_BASE="https://github.com/richardshuai/fampnn/raw/aaf788b1502ad95d5c5a84455cfc53f2544f3b45/weights"
 
+# proto_download_verified checks each checkpoint's SHA-256 before moving it into place, so neither
+# an interrupted run nor a bad download leaves a file a later setup would take as present.
+declare -A WEIGHT_SHA256=(
+    [fampnn_0_0.pt]=afbdfda29e6f2a1bd340971bb226638afb1bf460cfbc29f115d3b5964622c006
+    [fampnn_0_3.pt]=8969b3f1f3c941178076c7800952595a18b56fd3828d15bb993d3ef537938a05
+    [fampnn_0_3_cath.pt]=81112a9b8d436d9baf5233a3603bac911c75b9782ced59dae5a2726316802218
+)
 for WEIGHT_FILE in fampnn_0_0.pt fampnn_0_3.pt fampnn_0_3_cath.pt; do
-    if [ ! -f "${WEIGHTS_DIR}/${WEIGHT_FILE}" ]; then
-        echo "Downloading ${WEIGHT_FILE}..."
-        curl -fsSL -o "${WEIGHTS_DIR}/${WEIGHT_FILE}" "${REPO_BASE}/${WEIGHT_FILE}"
-    else
-        echo "${WEIGHT_FILE} already present."
-    fi
+    proto_download_verified "${REPO_BASE}/${WEIGHT_FILE}" "${WEIGHTS_DIR}/${WEIGHT_FILE}" "${WEIGHT_SHA256[$WEIGHT_FILE]}"
 done
 
 echo "FAMPNN setup complete!"

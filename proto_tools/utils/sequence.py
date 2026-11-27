@@ -15,11 +15,9 @@ from typing import Any, Literal, get_args
 DNA_NUCLEOTIDES = "ACGT"
 RNA_NUCLEOTIDES = "ACGU"
 
-# Source of truth for the 20 canonical amino acids. ``PROTEIN_AMINO_ACIDS``
-# (str) is derived from this Literal. The standalone-helpers copy
-# (``standalone_helpers/serialization.py``'s ``AMINO_ACIDS_LIST``) is a separate
-# hand-maintained list, since standalone envs can't import ``proto_tools``;
-# keep it in the same order if this Literal changes.
+# Source of truth for the 20 canonical amino acids vocabulary on the parent process side.
+# ``standalone_helpers/vocabulary.py`` holds the worker copy, and
+# ``tests/style_consistency_tests/test_vocabulary_consistency.py`` pins the two together.
 AminoAcid = Literal["A", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "V", "W", "Y"]
 PROTEIN_AMINO_ACIDS = "".join(get_args(AminoAcid))
 
@@ -30,10 +28,10 @@ _PROTEIN_AA_INDEX = {aa: i for i, aa in enumerate(PROTEIN_AMINO_ACIDS)}
 def normalize_excluded_amino_acids(value: Any) -> Any:
     """Deduplicate an ``excluded_amino_acids`` config value and fold an empty list to ``None``.
 
-    Use as a ``mode="before"`` field validator; the ``list[AminoAcid]`` annotation then rejects
-    anything that is not an uppercase canonical code. Case is deliberately not converted: in a
-    mixed protein/DNA alphabet lowercase spells a DNA base, so ``["c"]`` is rejected rather than
-    read as cysteine.
+    Use as a ``mode="before"`` field validator. The ``list[AminoAcid]`` annotation
+    then rejects values that are not uppercase canonical codes. Preserve case
+    because lowercase represents DNA bases in a mixed protein/DNA alphabet.
+    For example, ``["c"]`` is rejected rather than read as cysteine.
 
     Args:
         value (Any): Raw field value.
@@ -57,8 +55,9 @@ def normalize_excluded_amino_acids(value: Any) -> Any:
 def one_hot_protein_logits(sequence: str, *, sharpness: float = 20.0) -> list[list[float]]:
     """One-hot encode a protein sequence as logits (L x 20) in ``PROTEIN_AMINO_ACIDS`` order.
 
-    Default ``sharpness=20.0`` saturates a downstream softmax to ≈ one-hot; use a milder
-    value (e.g. ``2.0``) for a biased-but-not-saturated seed.
+    The default ``sharpness=20.0`` makes a downstream softmax approximately
+    one-hot. Use a smaller value, such as ``2.0``, for a biased starting
+    distribution that is not saturated.
 
     Args:
         sequence (str): Protein sequence; each character must be in ``PROTEIN_AMINO_ACIDS``.
@@ -66,7 +65,21 @@ def one_hot_protein_logits(sequence: str, *, sharpness: float = 20.0) -> list[li
 
     Returns:
         list[list[float]]: Logits matrix with shape ``(len(sequence), 20)``.
+
+    Raises:
+        ValueError: If a character is not one of the 20 canonical amino acids. ``X`` is the
+            common case: a designed sequence carries it where a model preserved a residue it
+            could not read, and an unknown residue has no one-hot column to set.
     """
+    unknown = sorted({aa for aa in sequence if aa not in _PROTEIN_AA_INDEX})
+    if unknown:
+        first = next(i for i, aa in enumerate(sequence, start=1) if aa in set(unknown))
+        raise ValueError(
+            f"one_hot_protein_logits cannot encode {unknown} (first at position {first}); only "
+            f"the 20 canonical amino acids have a column. 'X' marks a residue with no canonical "
+            "identity, such as one a structure parser preserved without designing it, so there "
+            "is no distribution to seed there."
+        )
     n = len(PROTEIN_AMINO_ACIDS)
     rows: list[list[float]] = []
     for aa in sequence:
@@ -240,7 +253,7 @@ def return_invalid_nucleotide_chars(
     sequence: str,
     additional_valid_chars: str | None = None,
 ) -> set[str]:
-    """Helper function that returns the invalid characters in a nucleotide sequence.
+    """Return the invalid characters in a nucleotide sequence.
 
     Args:
         sequence (str): The sequence string to validate.
@@ -277,17 +290,16 @@ def return_invalid_protein_chars(
 
 
 def detect_sequence_type(sequence: str, allowed_types: Collection[str] | None = None) -> str:
-    """Attempts to determine the type of a sequence based on the characters it contains.
+    """Determine the sequence type from its characters.
 
     Starts with more specific sequence types (less characters allowed) and works
     its way down to the least specific. Returns "unknown" if the sequence type
     cannot be determined.
 
     Note that there are ambiguous cases (e.g., "CCCCCC" could be DNA, RNA, protein, or
-    ligand SMILES). Priority is: DNA, RNA, protein, ligand. Because the protein
-    alphabet is a superset of DNA's, every DNA sequence also validates as protein;
-    pass ``allowed_types`` to restrict detection to a candidate set so ambiguous
-    sequences resolve within it (e.g. a protein-only tool detects "GATTACA" as protein).
+    ligand SMILES). Detection checks DNA, RNA, protein, then ligand. The protein
+    alphabet contains every DNA base, so every DNA sequence also validates as
+    protein. Pass ``allowed_types`` to limit detection to the relevant types (e.g. a protein-only tool detects "GATTACA" as protein).
 
     Args:
         sequence (str): The sequence string to detect the type of.

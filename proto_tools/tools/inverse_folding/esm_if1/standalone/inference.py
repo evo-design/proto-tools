@@ -192,7 +192,7 @@ class ESMIF1Model:
                 )
             sequences.append(sampled_seq)
 
-            # Score sampled sequence; avg_ll is the mean per-position log-likelihood.
+            # Score the sampled sequence and retain its mean per-position log-likelihood.
             avg_ll, _ = esm.inverse_folding.multichain_util.score_sequence_in_complex(
                 self.model,
                 self.alphabet,
@@ -273,8 +273,9 @@ class ESMIF1Model:
         verbose: bool = False,
     ) -> None:
         """Load ESM-IF1 model, optionally with ProteinDPO weights."""
-        if verbose:
-            logger.info(f"Loading ESM-IF ({weights_variant}) on {device}")
+        logger.update_status(
+            "Loading ProteinDPO weights" if weights_variant == "protein_dpo" else "Loading ESM-IF1 weights"
+        )
 
         import esm
         import esm.pretrained

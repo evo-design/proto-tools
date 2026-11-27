@@ -98,13 +98,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def to_device(device: str) -> dict[str, Any]:
-    """Passthrough for CLI tool; automatically unloads after each call."""
+    """Keep the device unchanged for a CLI tool that unloads after each call."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 
 def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
-    # CLI tools don't hold models in memory; report as unavailable
+    # CLI tools do not hold models in memory, so report memory statistics as unavailable.
     return {"available": False, "framework": "pytorch", "reason": "CLI tool, no persistent model"}
 
 

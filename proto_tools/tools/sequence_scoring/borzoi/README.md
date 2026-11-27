@@ -9,7 +9,7 @@
 
 ## Overview
 
-[Borzoi](https://github.com/calico/borzoi) is a deep learning model that predicts cell-type and tissue-specific RNA-seq coverage and other regulatory genomics tracks directly from DNA sequence, developed by the Kelley lab at [Calico Life Sciences](https://www.calicolabs.com/). Given a fixed 524,288 bp input window, it returns activity across 6,144 bins of 32 bp each for thousands of human or mouse genomic assays. This toolkit exposes single-replicate prediction and a four-replicate ensemble for uncertainty estimation.
+[Borzoi](https://github.com/calico/borzoi) is a deep learning model that predicts cell-type and tissue-specific RNA-seq coverage and other regulatory genomics tracks directly from DNA sequence, developed by the Kelley lab at [Calico Life Sciences](https://www.calicolabs.com/). Given a fixed 524,288 bp input window, it returns activity across 6,144 bins of 32 bp each for thousands of human or mouse genomic assays. This toolkit exposes single-replicate prediction, a four-replicate ensemble for uncertainty estimation, and a differentiable gradient form of the same prediction.
 
 ## Background
 
@@ -58,13 +58,29 @@ This tool is appropriate for final assessments and for any analysis that benefit
 - **Replicate selection is not exposed for the ensemble.** All four replicates are always evaluated. The single-replicate tool is the appropriate choice when only one specific replicate is needed.
 - **The species, track-selection, and averaging behavior match the single-replicate tool.** The same `species`, `output_tracks`, and `avg_output_tracks` guidance applies, and the ensemble inherits the same input modes and coordinate reporting.
 
+### Borzoi Gradient (`borzoi-gradient`)
+
+Reports Borzoi's predicted track activity and its derivative with respect to a relaxed distribution over selected positions, one quantity at a time. Each requested term names an output track and a span of 32 bp output bins, and comes back with its own mean activity and its own raw gradient.
+
+#### Applications
+
+This is the differentiable form of Borzoi prediction, intended as an objective inside a regulatory-sequence design loop: an optimizer holds a relaxed distribution over the bases it is allowed to change, asks for the gradients, and combines them into whatever objective it wants (raising a track over an enhancer window, or raising one cell type while suppressing another), then steps those bases accordingly. Setting `compute_gradient=False` turns it into a forward-only objective score for ranking candidates.
+
+#### Usage Tips
+
+- **Each candidate carries the whole context and only the designed positions.** Borzoi reads a fixed 524,288 bp window, but a design problem usually varies a small part of it. A candidate bundles the full context `sequence`, the 1-indexed `positions` whose bases are relaxed, and a `(len(positions), 4)` `logits` matrix aligned to them, so the returned gradient covers only those positions while the surrounding context still reaches the model.
+- **Bin spans are 1-indexed and inclusive** over the 6,144 output bins, each covering 32 bp. A term's score is the mean activity across its span, so widening the span smooths the objective.
+- **Several tracks share one forward pass.** Each requested quantity gets its own backward over that shared graph, so asking for K tracks costs one forward and K backwards rather than K of each.
+- **`max_chunk_size` is 1.** A single forward pass over a 524,288 bp context plus its backward pass is already large, so candidates are dispatched one at a time and fan out across devices rather than batching within a worker.
+- **Human uses FlashAttention.** As with prediction, `species="human"` requires a CUDA device.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every Borzoi tool in this toolkit (`borzoi-prediction`, `borzoi-ensemble`).
+These apply to every Borzoi tool in this toolkit (`borzoi-prediction`, `borzoi-ensemble`, `borzoi-gradient`).
 
-- **A CUDA GPU is required.** Both tools run on GPU, and human prediction uses FlashAttention kernels that are available only on CUDA hardware. The model checkpoints are downloaded from Hugging Face on first use and cached for subsequent runs.
+- **A CUDA GPU is required.** All three tools run on GPU, and human prediction uses FlashAttention kernels that are available only on CUDA hardware. The model checkpoints are downloaded from Hugging Face on first use and cached for subsequent runs.
 - **Input sequences accept only the bases A, C, G, T, and N.** Other characters are rejected during validation. The base N is permitted but encoded as the absence of any base, so a high N content reduces prediction quality and is best minimized.
 - **Predicted values are the model's raw track-activity outputs, returned without any additional post-processing.** Higher values correspond to stronger predicted signal. The values are best used for relative comparisons, for example between alleles or across positions, rather than as absolute experimental counts.
 - **Output bins map to source coordinates through the reported window.** Each result reports the output-bin span in source-sequence coordinates at a resolution of 32 bp per bin, so a bin index can be converted to a genomic position using the output start and the bin resolution.

@@ -6,7 +6,7 @@ This guide walks through building one, using a toolkit `mytool` in the category 
 
 ## Step 1: Lay out the toolkit
 
-Mirror the packaged layout under your package:
+Use the same layout as a packaged toolkit.
 
 ```
 mypkg/
@@ -28,7 +28,8 @@ mypkg/
                 └── inference.py
 ```
 
-- **Pick a unique toolkit name.** The toolkit directory name is shared with proto-tools' toolkits, so it cannot match a packaged toolkit (e.g. `esm2`) or another registered out-of-tree toolkit. Importing a toolkit that does raises a `ValueError` naming both directories.
+- **Pick a unique toolkit name.** The toolkit directory name is shared with proto-tools' toolkits, so it cannot match a packaged toolkit (e.g. `esm2`) or another registered out-of-tree toolkit. If a toolkit uses a name that is already registered, importing it raises a
+`ValueError` that names both directories.
 - **Keep the category in sync.** `@tool(category=...)` should match the category directory, so the `"scoring/mytool"` identifier form resolves.
 
 ## Step 2: Define the environment
@@ -62,7 +63,8 @@ To install a platform-specific binary, add `standalone/binary_config.py` (a `URL
 proto_install_binary mytool
 ```
 
-It reads `binary_config.py` from the directory `setup.sh` runs in, so it works from your package exactly as from a packaged toolkit.
+It reads `binary_config.py` from the directory where `setup.sh` runs, so the same helper works for both external
+and packaged toolkits.
 
 ### Shared envs
 
@@ -93,7 +95,8 @@ mypkg/tools/scoring/mytool/standalone/
 └── inference.py       # runs with esm2's Python and packages
 ```
 
-Your worker then runs in exactly the env `esm2` runs in (`esm2_env`, or the env a `PROTO_ESM2_STANDALONE_DIR` override builds), and nothing extra is installed. A private env has no stability promise: its packages, and even its Python version, can change in any proto-tools release, so pin the proto-tools version your package depends on. `proto-tools eject-standalone mytool` copies the env `esm2` ships with, ignoring any esm2 override. Only out-of-tree toolkits can borrow an env; proto-tools' toolkits share only through `proto_tools/shared_envs/`.
+Your worker then runs in exactly the env `esm2` runs in (`esm2_env`, or the env a `PROTO_ESM2_STANDALONE_DIR` override builds), and nothing extra is installed. A private environment's packages and Python version may change in any
+proto-tools release. Pin the proto-tools version your package depends on. `proto-tools eject-standalone mytool` copies the env `esm2` ships with, ignoring any esm2 override. Only out-of-tree toolkits can borrow an env. Proto-tools' toolkits share only through `proto_tools/shared_envs/`.
 
 ## Step 3: Write the worker script
 
@@ -152,11 +155,13 @@ def run_mytool_score(inputs: MyToolScoreInput, config: MyToolScoreConfig, instan
 
 - Each tool needs a separate config class.
 - Tool keys must be unique across all registered tools.
-- Running on remote devices (`device="modal"` or `device="proto"`) is coming soon.
+- Running on remote devices (`device="modal"`) is coming soon.
 
 ## Step 5: Add docs and metadata
 
 Add `README.md`, `cite.bib`, `license.yaml`, `links.yaml`, and `examples/example.ipynb` as for a packaged toolkit. They are read from the directory of the file that defines each tool, so `ToolRegistry.get_citation`, `get_license`, `get_links`, `get_readme`, and the notebook lookups work wherever the package is installed. `ToolRegistry.get_docs_url` returns `None`, since the docs site only covers packaged toolkits.
+
+A `versions.yaml` is optional. With one, outputs carry the toolkit's version and source hash as for a packaged toolkit. Without one, both fields are `None`. See `versioning.md`.
 
 ## Step 6: Package it
 
@@ -172,7 +177,8 @@ include = ["mypkg*"]
 
 ## Step 7: Import and run
 
-Import the module that defines the tool (or a package `__init__` that imports it); `@tool` registers it at import. From then on the tool behaves like any other:
+Import the module that defines the tool (or a package `__init__` that imports it). The `@tool` decorator registers it at import, after which
+it behaves like any other tool.
 
 ```python
 import mypkg.tools.scoring.mytool.mytool_score as mytool_score

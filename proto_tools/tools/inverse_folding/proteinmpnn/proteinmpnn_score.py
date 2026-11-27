@@ -7,6 +7,10 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
+from proto_tools.tools.inverse_folding.proteinmpnn._constraints import (
+    restrict_sequence_to_readable,
+    worker_excluded_positions,
+)
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
@@ -34,7 +38,7 @@ class ProteinMPNNScoringInput(BaseToolInput):
 
     Attributes:
         sequence_structure_pairs (list[SequenceStructurePair]): List of sequence-structure pairs to score.
-            Each pair contains a sequence, a structure, and optional per-pair ``fixed_positions``
+            Each pair contains a sequence, a structure, and optional per-pair ``excluded_positions``
             excluded from the scoring metrics.
     """
 
@@ -155,7 +159,8 @@ def run_proteinmpnn_score(
 
             - ``log_likelihood``, ``avg_log_likelihood``, ``perplexity`` (access via
               attribute ``score.perplexity`` or mapping ``score["perplexity"]``)
-            - ``logits``: Per-position logits tensor (seq_len, 21) if
+            - ``logits``: Per-position logits tensor (seq_len, 20) in proto's amino-acid
+              order if
               ``return_logits=True``, otherwise ``None``
             - ``vocab``: List of 21 amino acid characters (AlphaFold ordering) if
               ``return_logits=True``, otherwise ``None``
@@ -196,12 +201,20 @@ def run_proteinmpnn_score(
                 "operation": "score",
                 "pdb_path": str(pdb_path),
                 "chain_ids": sequence_structure_pair.structure.get_chain_ids(),
-                "sequence": sequence_structure_pair.sequence,
+                "sequence": restrict_sequence_to_readable(
+                    sequence_structure_pair.structure,
+                    sequence_structure_pair.structure.get_chain_ids(),
+                    sequence_structure_pair.sequence,
+                    tool="proteinmpnn-score",
+                    allow_excluded=not config.return_logits,
+                ),
                 "seed": seed,
-                "fixed_positions": (
-                    sequence_structure_pair.fixed_positions.to_residue_numbers(sequence_structure_pair.structure)
-                    if sequence_structure_pair.fixed_positions is not None
-                    else None
+                # The parser's own exclusions are already absent from the model's input, so
+                # sending them would fail to resolve there.
+                "fixed_positions": worker_excluded_positions(
+                    sequence_structure_pair.structure,
+                    sequence_structure_pair.excluded_positions,
+                    sequence_structure_pair.structure.get_chain_ids(),
                 ),
                 "device": config.device,
                 "model_choice": config.model_choice,

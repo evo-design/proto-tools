@@ -11,7 +11,7 @@ echo "Setting up AlphaGenome standalone environment..."
 CUDA_CONSTRAINT="${ALPHAGENOME_CUDA_TOOLKIT_CONSTRAINT:-${ALPHAGENOME_CUDA_TOOLKIT_VERSION:-}}"
 proto_install_cuda_toolkit "$CUDA_CONSTRAINT"
 
-# Collapse CUDNN to a single source: delete the CUDNN shipped by the mamba
+# Use one CUDNN installation by deleting the copy shipped by the mamba
 # cuda-toolkit so JAX's pip-bundled nvidia-cudnn-cu12 (under
 # site-packages/nvidia/cudnn/lib) is the only CUDNN visible at runtime.
 # Without this, LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib (env_vars.txt)
@@ -38,7 +38,9 @@ echo "Checking out pinned alphagenome_research commit ${ALPHAGENOME_COMMIT}..."
 git -C "$REPO_DIR" fetch origin "$ALPHAGENOME_COMMIT"
 git -C "$REPO_DIR" checkout "$ALPHAGENOME_COMMIT"
 echo "Installing alphagenome_research from local clone..."
-uv pip install "$REPO_DIR"
+# alphagenome_research declares a bare ``alphagenome``. alphagenome 2.0.0 (2026-11-11) removed
+# ``alphagenome.models.interval_scorers``, which inference.py imports, so keep the 0.x client.
+uv pip install "$REPO_DIR" "alphagenome<2"
 
 # alphagenome_research leaves JAX unconstrained and may upgrade jax/jaxlib to
 # versions incompatible with the selected CUDA plugin. Re-apply the selected

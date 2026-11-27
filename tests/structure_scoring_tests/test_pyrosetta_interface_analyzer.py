@@ -87,7 +87,7 @@ def test_interface_analyzer_accepts_multi_chain_target():
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_run_pyrosetta_interface_analyzer_on_pdb():
     """Default path: analyze the interface between chains A and B on pdl1."""
     result = run_pyrosetta_interface_analyzer(PyRosettaInterfaceAnalyzerInput(inputs=[TEST_PDB]))
@@ -107,7 +107,7 @@ def test_run_pyrosetta_interface_analyzer_on_pdb():
         assert isinstance(m.delta_unsat_hbonds, int) and m.delta_unsat_hbonds >= 0
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_interface_analyzer_with_pre_relax_preprocess():
     """Setting pre_relax_structures=True should shift interface_dG meaningfully.
 
@@ -130,7 +130,7 @@ def test_interface_analyzer_with_pre_relax_preprocess():
     )
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_interface_analyzer_binder_vs_rest_matches_unsplit_target():
     """Splitting the target into A+B (binder->C) preserves the binder-vs-rest interface dSASA."""
     base = run_pyrosetta_interface_analyzer(

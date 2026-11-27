@@ -1,7 +1,4 @@
-"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_score_intervals.py.
-
-AlphaGenome batched interval scoring tool.
-"""
+"""AlphaGenome batched interval scoring tool."""
 
 import csv
 import json

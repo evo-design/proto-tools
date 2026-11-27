@@ -15,14 +15,19 @@ from typing import Any
 
 import torch
 from standalone_helpers import AMINO_ACIDS_LIST, get_logger, move_model_to_device, release_cuda_memory, serialize_output
+from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
+from standalone_helpers.vocabulary import gather_indices
 
 logger = get_logger(__name__)
 # Suppress transformers logging
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
 # ESMFold PAE head maximum: 31 bins at 1.025 A spacing, used to normalize PAE loss to [0, 1].
-PAE_MAXIMUM = 31.75
-OPENFOLD_AMINO_ACIDS = list("ARNDCQEGHILKMFPSTWYV")
+#: Quantities this worker differentiates; what each measures is on the term class.
+_CONFIDENCE_QUANTITIES: frozenset[str] = frozenset({"plddt", "ptm", "pae"})
+# ESMFold's own residue order, matching transformers' openfold_utils.residue_constants.restypes.
+# Its embedding is 0-based, the same basis as _sequence_to_aatype; padding_idx=0 shifts nothing.
+ESMFOLD_AMINO_ACIDS: list[str] = list("ARNDCQEGHILKMFPSTWYV")
 
 
 class ESMFoldModel:
@@ -60,7 +65,8 @@ class ESMFoldModel:
             List of dicts with keys: pdb, avg_plddt, ptm, avg_pae, pae
         """
         # Lazy load on first call or device change
-        if not self._loaded:
+        loaded_now = not self._loaded
+        if loaded_now:
             self.load(device, verbose)
         elif self.device != device:
             self.to_device(device)
@@ -92,7 +98,9 @@ class ESMFoldModel:
                 tokenized_inputs["position_ids"] = position_ids
 
                 # Forward pass
-                logger.update_status(f"Folding {len(batch_data)} complex(es), num_recycles={num_recycles}")
+                if loaded_now:
+                    # The caller's progress bar counts structures; only replace the loading status.
+                    logger.update_status("Folding structures", level=logging.DEBUG)
                 outputs = self.model(**tokenized_inputs, num_recycles=num_recycles)
 
                 # Apply linker masking
@@ -112,10 +120,10 @@ class ESMFoldModel:
         target_chain_indices: list[int],
         residue_idx_offset: int,
         chain_linker: str,
-        temperature: float = 1.0,
+        temperature: float | None = 1.0,
         soft: float = 1.0,
         hard: float = 0.0,
-        loss_weights: dict[str, float] | None = None,
+        gradient_terms: list[str] | None = None,
         compute_gradient: bool = True,
         device: str = "cuda",
         verbose: bool = False,
@@ -130,14 +138,15 @@ class ESMFoldModel:
         distribution, so confidence losses can differentiate back to the input
         logits.
         """
-        if loss_weights is None:
-            loss_weights = {"plddt": 1.0}
-        unknown = set(loss_weights) - {"plddt", "ptm", "pae"}
+        if not gradient_terms:
+            gradient_terms = ["plddt"]
+        unknown = [name for name in gradient_terms if name not in _CONFIDENCE_QUANTITIES]
         if unknown:
-            raise ValueError(f"esmfold: unknown loss_weights keys {sorted(unknown)}")
+            raise ValueError(f"esmfold: unknown gradient_terms {sorted(unknown)}")
 
         if not self._loaded:
             self.load(device, verbose)
+            logger.update_status("Computing gradient", level=logging.DEBUG)
         elif self.device != device:
             self.to_device(device)
         active_device = self.device
@@ -163,57 +172,45 @@ class ESMFoldModel:
             self.model.trunk.set_chunk_size(64)
 
         try:
-            if all(weight == 0.0 for weight in loss_weights.values()):
-                # Forward-only path; avoid inference tensors.
-                with torch.no_grad(), _allow_tf32():
-                    outputs = self._run_discrete_forward(
-                        complex_data,
-                        residue_idx_offset=residue_idx_offset,
-                        chain_linker=chain_linker,
-                        num_recycles=num_recycles,
-                    )
-                result = self._extract_result(outputs, 0, include_pae_matrix)
-                metrics = _metrics_with_losses(result, {})
-                return {
-                    "gradient": serialize_output(torch.zeros_like(logits)) if compute_gradient else None,
-                    "loss": 0.0,
-                    "metrics": metrics,
-                    "vocab": AMINO_ACIDS_LIST,
-                    "pdb": result["pdb"],
-                }
-
             # Differentiable path; tensors must be saved for backward.
             with torch.inference_mode(False), torch.set_grad_enabled(compute_gradient), _allow_tf32():
-                relaxed_probs = _relaxed_amino_acid_probs(logits, temperature=temperature, soft=soft, hard=hard)
+                relaxed = relaxed_sequence(logits, temperature=temperature, soft=soft, hard=hard)
                 outputs = self._run_relaxed_forward(
                     complex_data,
-                    relaxed_probs=relaxed_probs,
+                    relaxed=relaxed,
                     target_chain_indices=target_chain_indices,
                     residue_idx_offset=residue_idx_offset,
                     chain_linker=chain_linker,
                     num_recycles=num_recycles,
                 )
-                loss_terms = self._confidence_loss_terms(outputs)
-                missing = [key for key, weight in loss_weights.items() if weight != 0.0 and key not in loss_terms]
+                quantities = self._confidence_quantities(outputs)
+                missing = [name for name in gradient_terms if name not in quantities]
                 if missing:
                     raise RuntimeError(
                         f"esmfold: model output did not include required confidence terms {missing}; "
-                        f"available terms: {sorted(loss_terms)}"
+                        f"available terms: {sorted(quantities)}"
                     )
-                weighted_terms = [
-                    float(weight) * loss_terms[key] for key, weight in loss_weights.items() if weight != 0.0
-                ]
-                weighted_loss = torch.stack(weighted_terms).sum()
 
-                gradient = None
-                if compute_gradient:
-                    gradient = torch.autograd.grad(weighted_loss, logits, allow_unused=False)[0]
+                # One backward per quantity, sharing one forward graph retained until the last.
+                terms = []
+                for position, name in enumerate(gradient_terms):
+                    quantity = quantities[name]
+                    gradient = None
+                    if compute_gradient:
+                        retain = position < len(gradient_terms) - 1
+                        gradient = torch.autograd.grad(quantity, logits, retain_graph=retain, allow_unused=False)[0]
+                    terms.append(
+                        {
+                            "id": name,
+                            "value": float(quantity.detach()),
+                            "gradient": serialize_output(gradient) if gradient is not None else None,
+                        }
+                    )
 
             result = self._extract_result(outputs, 0, include_pae_matrix)
-            metrics = _metrics_with_losses(result, {key: float(loss_terms[key].detach()) for key in loss_terms})
+            metrics = _confidence_metrics(result)
             return {
-                "gradient": serialize_output(gradient) if gradient is not None else None,
-                "loss": float(weighted_loss.detach()),
+                "terms": terms,
                 "metrics": metrics,
                 "vocab": AMINO_ACIDS_LIST,
                 "pdb": result["pdb"],
@@ -245,7 +242,7 @@ class ESMFoldModel:
         self,
         complex_data: dict[str, Any],
         *,
-        relaxed_probs: torch.Tensor,
+        relaxed: torch.Tensor,
         target_chain_indices: list[int],
         residue_idx_offset: int,
         chain_linker: str,
@@ -266,7 +263,7 @@ class ESMFoldModel:
             aa=aa,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            relaxed_probs=relaxed_probs,
+            relaxed=relaxed,
             target_spans=target_spans,
             num_recycles=num_recycles,
         )
@@ -281,7 +278,7 @@ class ESMFoldModel:
         aa: torch.Tensor,
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,
-        relaxed_probs: torch.Tensor,
+        relaxed: torch.Tensor,
         target_spans: list[tuple[int, int]],
         num_recycles: int,
     ) -> dict[str, torch.Tensor | None]:
@@ -296,24 +293,25 @@ class ESMFoldModel:
         cfg = self.model.config.esmfold_config
         batch_size, seq_len = aa.shape
 
+        # Translate the AF2 residue indices into ESM ids and wrap them in BOS and EOS
         esmaa = self.model.af2_idx_to_esm_idx(aa, attention_mask)
         bos = esmaa.new_full((batch_size, 1), self.model.esm_dict_cls_idx)
         eos = esmaa.new_full((batch_size, 1), self.model.esm_dict_padding_idx)
         esmaa = torch.cat([bos, esmaa, eos], dim=1)
         esmaa[range(batch_size), (esmaa != self.model.esm_dict_padding_idx).sum(1)] = self.model.esm_dict_eos_idx
 
+        # Overwrite the designed spans with the relaxed distribution over ESM embedding rows
         esm_attention_mask = esmaa != self.model.esm_dict_padding_idx
         token_embeddings = self.model.esm.embeddings.word_embeddings(esmaa)
         esm_ids = torch.tensor(
-            [self.model.config.vocab_list.index(aa_symbol) for aa_symbol in AMINO_ACIDS_LIST],
+            gather_indices(AMINO_ACIDS_LIST, self.model.config.vocab_list, label="esmfold/esm"),
             device=self.device,
         )
-        relaxed_esm_embeddings = relaxed_probs.to(token_embeddings.dtype) @ self.model.esm.embeddings.word_embeddings(
-            esm_ids
-        )
+        relaxed_esm_embeddings = relaxed.to(token_embeddings.dtype) @ self.model.esm.embeddings.word_embeddings(esm_ids)
         for start, end in target_spans:
             token_embeddings[0, start + 1 : end + 1] = relaxed_esm_embeddings
 
+        # Run the language model over those embeddings and keep every hidden state
         embedding_output = self.model.esm.embeddings(
             input_ids=esmaa,
             attention_mask=esm_attention_mask,
@@ -325,6 +323,7 @@ class ESMFoldModel:
             output_hidden_states=True,
             return_dict=True,
         )
+        # Drop BOS and EOS, then combine the layers into the single sequence state the trunk takes
         esm_s = torch.stack(esm_outputs["hidden_states"], dim=2)[:, 1:-1]
         esm_s = esm_s.to(self.model.esm_s_combine.dtype)
         if cfg.esm_ablate_sequence:
@@ -332,18 +331,22 @@ class ESMFoldModel:
         esm_s = (self.model.esm_s_combine.softmax(0).unsqueeze(0) @ esm_s).squeeze(2)
         s_s_0 = self.model.esm_s_mlp(esm_s)
 
+        # The trunk's pair state starts empty
         s_z_0 = s_s_0.new_zeros(batch_size, seq_len, seq_len, cfg.trunk.pairwise_state_dim)
+        # Add the residue-type embedding, again relaxed over the designed spans
         if self.model.config.esmfold_config.embed_aa:
             aa_embeddings = self.model.embedding(aa)
+            # embedding takes 0-based restype indices; the +1 shift belongs to af2_to_esm, handled by esm_ids.
             af2_ids = torch.tensor(
-                [OPENFOLD_AMINO_ACIDS.index(aa_symbol) + 1 for aa_symbol in AMINO_ACIDS_LIST],
+                gather_indices(AMINO_ACIDS_LIST, ESMFOLD_AMINO_ACIDS, label="esmfold"),
                 device=self.device,
             )
-            relaxed_aa_embeddings = relaxed_probs.to(aa_embeddings.dtype) @ self.model.embedding(af2_ids)
+            relaxed_aa_embeddings = relaxed.to(aa_embeddings.dtype) @ self.model.embedding(af2_ids)
             for start, end in target_spans:
                 aa_embeddings[0, start:end] = relaxed_aa_embeddings
             s_s_0 = s_s_0 + aa_embeddings
 
+        # Fold the sequence and pair states, keeping only the trunk outputs the heads below need
         structure = self.model.trunk(s_s_0, s_z_0, aa, position_ids, attention_mask, no_recycles=num_recycles)
         structure = {
             key: value
@@ -360,16 +363,19 @@ class ESMFoldModel:
                 "states",
             ]
         }
+        # Run the distogram and language-model heads, symmetrizing the distogram over the pair axes
         disto_logits = self.model.distogram_head(structure["s_z"])
         structure["distogram_logits"] = (disto_logits + disto_logits.transpose(1, 2)) / 2
         structure["lm_logits"] = self.model.lm_head(structure["s_s"])
 
+        # Build the per-residue atom masks and blank out the atoms of padded positions
         structure["aatype"] = aa
         make_atom14_masks(structure)
         for key in ["atom14_atom_exists", "atom37_atom_exists"]:
             structure[key] *= attention_mask.unsqueeze(-1)
         structure["residue_index"] = position_ids
 
+        # Turn the final structure-module state into per-residue pLDDT
         lddt_head = self.model.lddt_head(structure["states"]).reshape(
             structure["states"].shape[0],
             batch_size,
@@ -380,30 +386,35 @@ class ESMFoldModel:
         structure["lddt_head"] = lddt_head
         structure["plddt"] = categorical_lddt(lddt_head[-1], bins=self.model.lddt_bins)
 
+        # Derive pTM and the predicted aligned error from the same pairwise head
         ptm_logits = self.model.ptm_head(structure["s_z"])
         structure["ptm_logits"] = ptm_logits
         structure["ptm"] = compute_tm(ptm_logits, max_bin=31, no_bins=self.model.distogram_bins)
         structure.update(compute_predicted_aligned_error(ptm_logits, max_bin=31, no_bins=self.model.distogram_bins))
         return structure
 
-    def _confidence_loss_terms(self, outputs: dict[str, torch.Tensor | None]) -> dict[str, torch.Tensor]:
-        """Return differentiable ESMFold confidence losses on the masked complex."""
+    def _confidence_quantities(self, outputs: dict[str, torch.Tensor | None]) -> dict[str, torch.Tensor]:
+        """Return ESMFold's differentiable confidence quantities, in their own units.
+
+        These are the quantities themselves, not objectives built from them: pLDDT and pTM as the
+        model reports them, and PAE in angstroms. Inverting pLDDT, or dividing PAE onto a
+        comparable scale and capping it, are goals a caller applies to the returned value, where
+        the chain rule carries the transform through to the gradient.
+        """
         atom_exists = outputs["atom37_atom_exists"]
         plddt = outputs["plddt"]
         assert atom_exists is not None and plddt is not None
-        avg_plddt = (plddt * atom_exists).sum() / atom_exists.sum().clamp(min=1)
 
-        loss_terms: dict[str, torch.Tensor] = {"plddt": 1.0 - avg_plddt}
+        quantities: dict[str, torch.Tensor] = {"plddt": (plddt * atom_exists).sum() / atom_exists.sum().clamp(min=1)}
         ptm = outputs.get("ptm")
         if ptm is not None:
-            loss_terms["ptm"] = 1.0 - ptm.reshape(-1)[0]
+            quantities["ptm"] = ptm.reshape(-1)[0]
         pae = outputs.get("predicted_aligned_error")
         if pae is not None:
             residue_mask = atom_exists.any(dim=-1)
             pae_mask = residue_mask.unsqueeze(-1) * residue_mask.unsqueeze(-2)
-            avg_pae = (pae * pae_mask).sum() / pae_mask.sum().clamp(min=1)
-            loss_terms["pae"] = torch.clamp(avg_pae / PAE_MAXIMUM, max=1.0)
-        return loss_terms
+            quantities["pae"] = (pae * pae_mask).sum() / pae_mask.sum().clamp(min=1)
+        return quantities
 
     def _build_batch_tensors(
         self, batch_data: list[dict[str, Any]], residue_idx_offset: int, chain_linker: str
@@ -549,7 +560,7 @@ class ESMFoldModel:
                 "esmfold: transformers not importable; ensure ESMFold dependencies are installed"
             ) from None
 
-        logger.update_status(f"Loading ESMFold model: facebook/esmfold_v1 on {device}")
+        logger.update_status("Loading ESMFold weights")
 
         repo = "facebook/esmfold_v1"
         try:
@@ -558,7 +569,6 @@ class ESMFoldModel:
         except OSError as e:
             raise RuntimeError(f"esmfold: HF weight load from {repo!r} failed: {e}") from e
 
-        logger.update_status(f"Moving ESMFold to {device} (fp16)")
         self.model = self.model.to(device)
         self.model.esm = self.model.esm.half()
         self.model.requires_grad_(False)
@@ -607,29 +617,10 @@ def _decode_logits(logits: torch.Tensor) -> str:
     return "".join(AMINO_ACIDS_LIST[int(index)] for index in indices)
 
 
-def _relaxed_amino_acid_probs(
-    logits: torch.Tensor,
-    *,
-    temperature: float,
-    soft: float,
-    hard: float,
-) -> torch.Tensor:
-    """Convert logits to relaxed amino-acid probabilities with optional STE."""
-    import torch.nn.functional as F
-
-    probs = F.softmax(logits / temperature, dim=-1)
-    hard_probs = F.one_hot(probs.argmax(dim=-1), num_classes=len(AMINO_ACIDS_LIST)).to(probs.dtype)
-    relaxed = (1.0 - soft) * hard_probs + soft * probs
-    if hard > 0.0:
-        straight_through = hard_probs + probs - probs.detach()
-        relaxed = hard * straight_through + (1.0 - hard) * relaxed
-    return relaxed
-
-
 def _sequence_to_aatype(sequence: str, device: str | torch.device) -> torch.Tensor:
     """Convert a protein sequence to OpenFold/ESMFold residue indices."""
-    mapping = {aa: idx for idx, aa in enumerate(OPENFOLD_AMINO_ACIDS)}
-    x_index = len(OPENFOLD_AMINO_ACIDS)
+    mapping = {aa: idx for idx, aa in enumerate(ESMFOLD_AMINO_ACIDS)}
+    x_index = len(ESMFOLD_AMINO_ACIDS)
     return torch.tensor([mapping.get(aa, x_index) for aa in sequence], device=device, dtype=torch.long)
 
 
@@ -649,16 +640,18 @@ def _chain_spans(chains: list[str], chain_linker: str, selected_indices: list[in
     return spans
 
 
-def _metrics_with_losses(result: dict[str, Any], loss_terms: dict[str, float]) -> dict[str, Any]:
-    """Build JSON-safe ESMFold metrics with unweighted per-term losses."""
-    metrics = {
+def _confidence_metrics(result: dict[str, Any]) -> dict[str, Any]:
+    """Build JSON-safe ESMFold confidence metrics.
+
+    The quantities a caller differentiates are reported as terms, so these are the same numbers
+    read as metrics rather than a second, separately-named copy of them.
+    """
+    return {
         "avg_plddt": result["avg_plddt"],
         "ptm": result["ptm"],
         "avg_pae": result["avg_pae"],
         "pae": result.get("pae"),
     }
-    metrics.update({f"loss_{key}": value for key, value in loss_terms.items()})
-    return metrics
 
 
 # ============================================================================
@@ -686,22 +679,30 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
         return {"results": results}
     if operation == "compute_gradient":
-        return _model.compute_gradient(
-            complex_data=input_dict["complex_data"],
-            logits_list=input_dict["logits"],
-            target_chain_indices=input_dict["target_chain_indices"],
-            residue_idx_offset=input_dict["residue_idx_offset"],
-            chain_linker=input_dict["chain_linker"],
-            temperature=input_dict["temperature"],
-            soft=input_dict["soft"],
-            hard=input_dict["hard"],
-            loss_weights=input_dict["loss_weights"],
-            compute_gradient=input_dict["compute_gradient"],
-            device=input_dict["device"],
-            verbose=input_dict["verbose"],
-            include_pae_matrix=input_dict["include_pae_matrix"],
-            num_recycles=input_dict["num_recycles"],
-        )
+        # One chunk of independent complexes: the weights load once and each item is folded in turn.
+        results = [
+            _model.compute_gradient(
+                complex_data=item["complex_data"],
+                logits_list=item["logits"],
+                target_chain_indices=item["target_chain_indices"],
+                residue_idx_offset=input_dict["residue_idx_offset"],
+                chain_linker=input_dict["chain_linker"],
+                temperature=resolve_temperature(input_dict["temperature"]),
+                soft=input_dict["soft"],
+                hard=input_dict["hard"],
+                gradient_terms=input_dict["gradient_terms"],
+                compute_gradient=input_dict["compute_gradient"],
+                device=input_dict["device"],
+                verbose=input_dict["verbose"],
+                include_pae_matrix=input_dict["include_pae_matrix"],
+                num_recycles=input_dict["num_recycles"],
+            )
+            for item in input_dict["items"]
+        ]
+        return {
+            "results": [{key: result[key] for key in ("terms", "metrics", "pdb")} for result in results],
+            "vocab": results[0]["vocab"],
+        }
     raise ValueError(f"esmfold: unknown operation {operation!r}; valid: ['predict', 'compute_gradient']")
 
 

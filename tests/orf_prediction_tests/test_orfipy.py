@@ -145,7 +145,7 @@ def test_translation_table_map_matches_literal():
 # ── Benchmark ─────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_orfipy_finds_known_orf():
     """A hemoglobin alpha N-terminal fragment yields exactly one forward ORF spanning the input."""
     result = run_orfipy_prediction(

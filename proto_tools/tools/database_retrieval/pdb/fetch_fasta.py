@@ -50,7 +50,7 @@ class PdbFetchFastaOutput(BaseToolOutput):
 
     Attributes:
         chains (list[PdbChain]): Parsed chain sequences with protein/nucleotide classification.
-        source_url (str | None): URL used for the request.
+        source_url (str): URL used for the request.
     """
 
     chains: list[PdbChain] = Field(
@@ -58,7 +58,7 @@ class PdbFetchFastaOutput(BaseToolOutput):
         title="Chains",
         description="Parsed chain sequences",
     )
-    source_url: str | None = Field(default=None, title="Source URL", description="Request URL")
+    source_url: str = Field(title="Source URL", description="Request URL")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -137,7 +137,7 @@ def run_pdb_fetch_fasta(
     Args:
         inputs (PdbFetchFastaInput): PDB accession to look up.
         config (PdbFetchConfig): Empty placeholder (PDB fetch has no user settings).
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         PdbFetchFastaOutput: PdbFetchFastaOutput with chain sequences.
@@ -151,11 +151,12 @@ def run_pdb_fetch_fasta(
         mount_http=True,
     )
     pdb_id = inputs.pdb_id.upper()
+    source_url = f"{_PDB_FASTA_BASE}/{pdb_id}"
 
     try:
         raw_chains = _fetch_pdb_fasta(pdb_id, session)
         if raw_chains is None:
-            return PdbFetchFastaOutput()
+            return PdbFetchFastaOutput(source_url=source_url)
         pdb_chains = [
             PdbChain(
                 chain_ids=_chain_ids_from_header(header),
@@ -167,7 +168,7 @@ def run_pdb_fetch_fasta(
         ]
         return PdbFetchFastaOutput(
             chains=pdb_chains,
-            source_url=f"{_PDB_FASTA_BASE}/{pdb_id}",
+            source_url=source_url,
         )
     finally:
         session.close()

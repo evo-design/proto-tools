@@ -19,7 +19,7 @@ _VALID_BASES = set("ACGT")
 
 
 def _validate_oligo_sequence(sequence: str) -> str:
-    """Validate and normalize a DNA oligo: strip, uppercase, allow only A/C/G/T."""
+    """Validate and normalize a DNA oligo by stripping whitespace, uppercasing, and requiring A/C/G/T."""
     normalized = sequence.strip().upper()
     if not normalized:
         raise ValueError("oligo sequence must not be empty")
@@ -143,7 +143,7 @@ class Primer3ThermodynamicsConfig(BaseConfig):
 
     Defaults match primer3-py's own defaults so results are reproducible against
     Primer3 directly. For qPCR, common practice is mv_conc≈50, dv_conc≈1.5-3,
-    dntp_conc≈0.8, dna_conc≈200-250; see the README for target ranges.
+    dntp_conc≈0.8, dna_conc≈200-250. See the README for target ranges.
 
     Attributes:
         mv_conc (float): Monovalent cation concentration in mM. Default 50.0.

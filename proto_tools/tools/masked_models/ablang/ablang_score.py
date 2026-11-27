@@ -96,6 +96,7 @@ def run_ablang_score(
     sequences = [ab.to_sequence() for ab in inputs.antibodies]
     model_choice = _resolve_model_choice(inputs.antibodies)
     logger.debug("Using local venv for AbLang scoring: %s", model_choice)
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "ablang",
         {

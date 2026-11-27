@@ -1,12 +1,11 @@
 """Notebook display helpers for tool documentation.
 
-Thin Jupyter-display wrappers over the text-extraction API in
-``proto_tools.utils.tool_docs``. Each ``display_*`` function pulls structured
+Display documentation from ``proto_tools.utils.tool_docs`` in Jupyter. Each ``display_*`` function pulls structured
 content via the public extractors, renders it through ``IPython.display``, and
 returns ``None`` (the display is the side-effect).
 
-Use ``proto_tools.utils.tool_docs`` directly for programmatic access — agents,
-MCP servers, and any non-notebook consumer should not import from this module.
+For programmatic access from agents, MCP servers, or other code outside
+notebooks, use ``proto_tools.utils.tool_docs`` directly.
 """
 
 from __future__ import annotations
@@ -112,38 +111,6 @@ def _model_table(doc: ModelDoc, kind: str, model_class: type[BaseModel] | None =
     return _field_table(f"**{kind.capitalize()}** — `{doc.name}`", doc)
 
 
-def _is_entity(cls: type) -> bool:
-    """True for shared entity models (Structure, Ligands, …); rendered as leaf types."""
-    return "proto_tools.entities" in getattr(cls, "__module__", "")
-
-
-def _is_metrics(cls: type) -> bool:
-    """True for Metrics subclasses; rendered from ``metric_spec``, not raw fields."""
-    return hasattr(cls, "metric_spec")
-
-
-def _nested_submodels(model_class: type[BaseModel]) -> list[type[BaseModel]]:
-    """Return nested Pydantic submodels referenced by a model's fields, in field order.
-
-    Walks each field annotation (including inside ``list``/``dict``/``Union``) and
-    collects referenced models, skipping shared entities and Metrics classes — those
-    are rendered specially or left as leaf types.
-    """
-    found: list[type[BaseModel]] = []
-
-    def walk(annotation: object) -> None:
-        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-            if not _is_entity(annotation) and not _is_metrics(annotation) and annotation not in found:
-                found.append(annotation)
-            return
-        for arg in typing.get_args(annotation):
-            walk(arg)
-
-    for info in model_class.model_fields.values():
-        walk(info.annotation)
-    return found
-
-
 def _metric_table(metrics_class: type, per_item_field: str | None) -> str:
     """Render a Metrics subclass's ``metric_spec`` as a markdown table, or ``""`` if none."""
     specs = get_model_doc(metrics_class, metrics_class=metrics_class).metric_specs or []
@@ -173,23 +140,10 @@ def _metric_table(metrics_class: type, per_item_field: str | None) -> str:
 
 
 def _render_output(spec: typing.Any) -> str:
-    """Render a tool's output model: top-level table, nested submodels, then metrics.
-
-    Recurses nested Pydantic submodels (stopping at shared entities and Metrics
-    classes), then appends the metric-spec table for the tool's Metrics model.
-    """
-    blocks: list[str] = []
-    seen: set[type] = set()
-
-    def walk(cls: type, title: str) -> None:
-        if cls in seen:
-            return
-        seen.add(cls)
-        blocks.append(_field_table(title, get_model_doc(cls)))
-        for sub in _nested_submodels(cls):
-            walk(sub, f"**`{sub.__name__}`**")
-
-    walk(spec.output_model, f"**Output** — `{spec.output_model.__name__}`")
+    """Render a tool's output model: top-level table, its nested models' tables, then metrics."""
+    doc = get_model_doc(spec.output_model)
+    blocks = [_field_table(f"**Output** — `{doc.name}`", doc)]
+    blocks += [_field_table(f"**`{sub.name}`**", sub) for sub in doc.nested]
     if spec.metrics_model is not None:
         metric_md = _metric_table(spec.metrics_model, spec.iterable_output_field)
         if metric_md:

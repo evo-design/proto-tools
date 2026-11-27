@@ -49,6 +49,7 @@ def _prepare_receptor(
         ResidueChemTemplates,
     )
 
+    # Assign receptor residue templates, atom types, and charges before writing PDBQT.
     polymer = Polymer.from_pdb_string(
         receptor_pdb,
         ResidueChemTemplates.create_from_defaults(),
@@ -62,6 +63,7 @@ def _prepare_receptor(
         raise RuntimeError("vina: rigid-receptor preparation unexpectedly produced flexible residues")
     if not rigid_pdbqt.strip():
         raise ValueError("vina: receptor preparation produced an empty PDBQT model")
+    # Record omitted residues and template changes so callers can inspect preparation.
     ignored_residue_ids = sorted(polymer.get_ignored_monomers())
     template_assignments = [
         {
@@ -89,6 +91,7 @@ def _prepare_ligand(ligand_smiles: str, seed: int) -> tuple[str, dict[str, Any]]
         raise ValueError("vina: RDKit could not parse ligand_smiles")
     molecule = Chem.AddHs(molecule)
 
+    # Generate a reproducible 3D conformer from the ligand graph.
     embed_parameters = AllChem.ETKDGv3()  # type: ignore[attr-defined]
     embed_parameters.randomSeed = seed
     if AllChem.EmbedMolecule(molecule, embed_parameters) != 0:  # type: ignore[attr-defined]
@@ -97,6 +100,8 @@ def _prepare_ligand(ligand_smiles: str, seed: int) -> tuple[str, dict[str, Any]]
     optimization_method: str | None = None
     optimization_status: int | None = None
     iteration_limits: list[int] = []
+    # Minimize with MMFF94 when it has full parameters for the molecule, otherwise with UFF
+    # when UFF does, and skip minimization when neither covers it.
     if AllChem.MMFFHasAllMoleculeParams(molecule):  # type: ignore[attr-defined]
         optimization_method = "MMFF94"
         optimizer = AllChem.MMFFOptimizeMolecule  # type: ignore[attr-defined]
@@ -109,6 +114,7 @@ def _prepare_ligand(ligand_smiles: str, seed: int) -> tuple[str, dict[str, Any]]
     if optimizer is not None:
         iteration_limits.append(_INITIAL_OPTIMIZATION_ITERATIONS)
         optimization_status = int(optimizer(molecule, maxIters=_INITIAL_OPTIMIZATION_ITERATIONS))
+        # Give an unconverged conformer a second attempt with a higher iteration limit.
         if optimization_status == 1:
             iteration_limits.append(_RETRY_OPTIMIZATION_ITERATIONS)
             optimization_status = int(optimizer(molecule, maxIters=_RETRY_OPTIMIZATION_ITERATIONS))
@@ -226,6 +232,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     from rdkit import rdBase
     from vina import Vina
 
+    # Parse the search box and docking settings from the request
     config = input_dict["config"]
     search_box = input_dict["search_box"]
     center = [float(value) for value in search_box["center"]]
@@ -239,6 +246,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     cpu = _native_int(config, "cpu", 0)
     energy_range = float(config["energy_range"])
     min_rmsd = float(config["min_rmsd"])
+    # Reject non-finite or non-positive pose filtering thresholds
     if not math.isfinite(energy_range) or energy_range <= 0:
         raise ValueError("vina: energy_range must be finite and greater than zero")
     if not math.isfinite(min_rmsd) or min_rmsd <= 0:
@@ -255,6 +263,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         input_dict["receptor_pdb"],
         bool(config["allow_bad_residues"]),
     )
+    # Record a warning for any receptor residues Meeko omitted
     warnings: list[str] = []
     ignored_residue_ids = receptor_preparation["ignored_residue_ids"]
     if ignored_residue_ids:
@@ -265,6 +274,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         warnings.append(warning)
 
     results = []
+    # Write the receptor PDBQT to a temporary file for Vina to load
     with tempfile.TemporaryDirectory() as temporary_directory:
         receptor_path = Path(temporary_directory) / "receptor.pdbqt"
         receptor_path.write_text(receptor_pdbqt)
@@ -275,6 +285,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             ligand_seed = (seed + ligand_index - 1) % _SIGNED_INT32_MAX + 1
             _update_status(f"Preparing ligand {ligand_index + 1}/{len(ligand_smiles_list)}")
             ligand_pdbqt, ligand_preparation = _prepare_ligand(ligand_smiles, ligand_seed)
+            # Warn when the ligand conformer was not minimized or did not converge
             ligand_warnings: list[str] = []
             if ligand_preparation["optimization_method"] is None:
                 warning = (
@@ -291,6 +302,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 logger.warning(warning)
                 ligand_warnings.append(warning)
 
+            # Load the receptor and ligand into Vina, then precompute grid maps over the box
             _update_status(f"Computing affinity maps {ligand_index + 1}/{len(ligand_smiles_list)}")
             docking = Vina(
                 sf_name=config["scoring_function"],
@@ -306,6 +318,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 spacing=grid_spacing,
             )
 
+            # Dock the ligand and keep poses within energy_range of the best one
             _update_status(f"Searching docking poses {ligand_index + 1}/{len(ligand_smiles_list)}")
             docking.dock(
                 exhaustiveness=exhaustiveness,
@@ -318,6 +331,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 energy_range=energy_range,
             )
 
+            # Convert poses to SDF and check each PDBQT model has a matching SDF record
             _update_status(f"Converting docking poses {ligand_index + 1}/{len(ligand_smiles_list)}")
             poses_sdf = _convert_poses_to_sdf(poses_pdbqt)
             pdbqt_models = _split_pdbqt_models(poses_pdbqt)
@@ -328,6 +342,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                     f"{len(pdbqt_models)} PDBQT models, {len(sdf_records)} SDF records"
                 )
 
+            # Pair each PDBQT pose with its SDF record and extract the corresponding score.
             poses = []
             for rank, (pdbqt_model, sdf_record) in enumerate(zip(pdbqt_models, sdf_records, strict=True), start=1):
                 affinity, rmsd_lower_bound, rmsd_upper_bound = _pose_metrics(pdbqt_model)
@@ -342,6 +357,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                     }
                 )
 
+            # Collect this ligand's poses, preparation details and warnings
             results.append(
                 {
                     "smiles": ligand_smiles,

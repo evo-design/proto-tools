@@ -36,7 +36,7 @@ def test_sasa_input_rejects_invalid_chain():
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_run_pyrosetta_sasa_on_pdb():
     structure = Structure(structure=TEST_PDB)
     result = run_pyrosetta_sasa(PyRosettaSASAInput(inputs=[structure]))
@@ -56,7 +56,7 @@ def test_run_pyrosetta_sasa_on_pdb():
     assert 0 <= residue.sasa <= 300, f"Residue SASA {residue.sasa} outside expected range"
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_run_pyrosetta_sasa_hydrophobic_breakdown():
     """Pin hydrophobic SASA against Rosetta's values so a definition change is caught."""
     result = run_pyrosetta_sasa(PyRosettaSASAInput(inputs=[Structure(structure=TEST_PDB)]))
@@ -80,7 +80,7 @@ def test_run_pyrosetta_sasa_hydrophobic_breakdown():
     assert sum(r.hsasa_sc for r in sasa.per_residue) == pytest.approx(sasa["hydrophobic_sasa_sc"], rel=1e-9)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 def test_run_pyrosetta_sasa_chain_selection_filters_residues():
     """Chain A selection should return fewer residues and different SASA than whole complex."""
     whole = run_pyrosetta_sasa(PyRosettaSASAInput(inputs=[TEST_CIF_MULTICHAIN]))

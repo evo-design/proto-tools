@@ -282,12 +282,14 @@ def run_pdockq2(
     target_chains = set(inputs.target_chains.chains)
     cutoff = config.distance_cutoff
 
+    # Convert normalized pLDDT to the 0-100 scale used by the scoring formula.
     per_residue_plddt = structure.per_residue_plddt
     if per_residue_plddt is None:
         raise ValueError("structure.per_residue_plddt is None; cannot score pDockQ2")
     plddt_100 = np.asarray(per_residue_plddt, dtype=float) * 100.0
     pae = np.asarray(structure.metrics["pae"], dtype=float)
 
+    # Match each residue's coordinates to its confidence and aligned-error entries.
     chain_ids, ca_coords_list = _collect_ca_per_residue(structure)
     ca_coords = np.stack(ca_coords_list, axis=0)
     chain_ids_arr = np.asarray(chain_ids)
@@ -298,30 +300,37 @@ def run_pdockq2(
 
     ordered_chains = list(dict.fromkeys(chain_ids))
 
+    # Find residue pairs close enough to contact, excluding pairs within one chain.
     diff = ca_coords[:, None, :] - ca_coords[None, :, :]
     dists = np.sqrt(np.sum(diff * diff, axis=-1))
     same_chain = chain_ids_arr[:, None] == chain_ids_arr[None, :]
     in_contact = (dists <= cutoff) & ~same_chain
 
+    # Score each chain's interface with every other chain
     per_chain_results: list[InterfacePDockQ2] = []
     for this_chain in ordered_chains:
         rows_mask = chain_ids_arr == this_chain
         contact_block = in_contact[rows_mask]
+        # Give chains with no inter-chain contacts a zero score
         if not contact_block.any():
             per_chain_results.append(
                 InterfacePDockQ2(chain_id=this_chain, neighbor_chains="", if_plddt=0.0, norm_pae=0.0, pmidockq=0.0)
             )
             continue
 
+        # Weight each residue's confidence by the number of inter-chain contacts it makes.
         contact_counts = contact_block.sum(axis=1)
         if_plddt = float(np.average(plddt_100[rows_mask], weights=contact_counts))
 
+        # Transform each contact's PAE as 1 / (1 + (PAE / 10)^2) and average
         pae_values = pae[rows_mask][contact_block]
         norm_pae = float(np.mean(1.0 / (1.0 + (pae_values / 10.0) ** 2)))
 
+        # List the chains this chain contacts
         neighbor_chains = sorted(set(chain_ids_arr[contact_block.any(axis=0)].tolist()))
         neighbor_chains_str = "".join(neighbor_chains)
 
+        # Map interface pLDDT times normalized PAE through the pmiDockQ sigmoid
         pmidockq = _pmidockq_sigmoid(if_plddt * norm_pae)
         per_chain_results.append(
             InterfacePDockQ2(
@@ -333,10 +342,12 @@ def run_pdockq2(
             )
         )
 
+    # Average only the requested target chains that contact the binder.
     scoring_interfaces = [
         r for r in per_chain_results if r.chain_id in target_chains and binder_chain in set(r.neighbor_chains)
     ]
 
+    # Summarize the scoring interfaces and count binder-target contacts, or report zero
     if scoring_interfaces:
         pdockq2 = float(np.mean([r.pmidockq for r in scoring_interfaces]))
         avg_if_plddt = float(np.mean([r.if_plddt for r in scoring_interfaces]))

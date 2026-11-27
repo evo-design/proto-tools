@@ -153,7 +153,8 @@ def test_entry_priority_distinguishes_reviewed_from_unreviewed():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_uniprot_fetch_by_name_returns_canonical_swissprot():
     """Default symbol search returns the canonical Swiss-Prot entry, not a TrEMBL hit.
 
@@ -170,7 +171,8 @@ def test_uniprot_fetch_by_name_returns_canonical_swissprot():
     assert output.sequence is not None and output.sequence.startswith("M")
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_uniprot_fetch_with_fields_shrinks_response_and_populates_typed_output():
     """`fields` config restricts the API response and only populates requested typed fields.
 
@@ -214,7 +216,8 @@ def test_uniprot_fetch_with_fields_shrinks_response_and_populates_typed_output()
     assert "features" in full.raw_entry
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_uniprot_fetch_with_fields_in_search_mode():
     """`fields` works in search mode and the ranker still picks the canonical Swiss-Prot."""
     output = run_uniprot_fetch(

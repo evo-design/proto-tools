@@ -2313,3 +2313,222 @@ def test_under_floor_pydantic_names_itself_instead_of_raising_typeerror() -> Non
 
     with pytest.raises(TypeError, match="something else entirely"):
         tool_registry._coerce_model(_Other(), _Other, "some-tool", "input")
+
+
+# ── config.timeout for in-process network tools (#343) ───────────────────────
+def _register_http_tool(registry, key, url, calls):
+    """Register an in-process tool that GETs ``url`` through the shared HTTP session."""
+    from proto_tools.utils import build_http_session
+
+    def tool(inputs, config, instance=None):
+        calls.append(time.monotonic())
+        with build_http_session(http_retries=2, backoff_seconds=0.0, user_agent="test", mount_http=True) as session:
+            session.get(url, timeout=15).raise_for_status()
+        return MockToolOutput(result="unexpected")
+
+    registry.register(
+        key=key,
+        label=key,
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description=key,
+    )(tool)
+    return registry.get(key)
+
+
+@pytest.mark.parametrize("handler_name", ["TricklingHandler", "RetryAfterHandler"])
+def test_in_process_http_tool_honors_config_timeout(clean_registry, fast_retry, handler_name):
+    """A slow server fails the call with TimeoutError near config.timeout, not after the server gives up."""
+    from tests import _http_servers
+
+    calls: list[float] = []
+    with _http_servers.serve(getattr(_http_servers, handler_name)) as server:
+        spec = _register_http_tool(clean_registry, f"http-timeout-{handler_name.lower()}", server.url, calls)
+        started = time.monotonic()
+        with pytest.raises(TimeoutError):
+            spec.function(MockToolInput(input_data="x"), MockToolConfig(param1="v", timeout=2))
+        elapsed = time.monotonic() - started
+    assert 1.9 <= elapsed < 3.0
+    assert len(calls) == 1
+
+
+def test_connection_error_retries_share_one_timeout_budget(clean_registry, monkeypatch):
+    """Registry retries of a transient failure draw on the same config.timeout, not a fresh one each."""
+    import proto_tools.tools.tool_registry as reg_module
+
+    monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.6)
+    calls = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal calls
+        calls += 1
+        time.sleep(0.6)
+        raise ConnectionError("connection reset")
+
+    clean_registry.register(
+        key="retry-budget",
+        label="retry-budget",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="retry-budget",
+    )(tool)
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        clean_registry.get("retry-budget").function(
+            MockToolInput(input_data="x"), MockToolConfig(param1="v", timeout=1)
+        )
+    assert 0.95 <= time.monotonic() - started < 2.5
+    assert calls < 1 + MAX_RETRIES
+
+
+def test_tool_instance_tool_retries_ignore_the_timeout(clean_registry, tmp_path, monkeypatch):
+    """A tool with a standalone env keeps every retry and full backoff, as before, whatever its timeout."""
+    import proto_tools.tools.tool_registry as reg_module
+
+    monkeypatch.setattr(reg_module, "RETRY_DELAY", 0.3)
+    calls = 0
+
+    def tool(inputs, config, instance=None):
+        nonlocal calls
+        calls += 1
+        raise ConnectionError("connection reset")
+
+    clean_registry.register(
+        key="standalone-retry",
+        label="standalone-retry",
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description="standalone-retry",
+    )(tool)
+    spec = clean_registry.get("standalone-retry")
+    (tmp_path / "standalone").mkdir()
+    spec.source_file = tmp_path / "tool.py"
+
+    started = time.monotonic()
+    with pytest.raises(ConnectionError):
+        spec.function(MockToolInput(input_data="x"), MockToolConfig(param1="v", timeout=1))
+    assert calls == 1 + MAX_RETRIES
+    assert time.monotonic() - started >= 0.3 * (1 + 2 + 4)
+
+
+@pytest.mark.parametrize("standalone", [False, True])
+def test_only_tools_without_a_tool_instance_run_under_the_deadline(clean_registry, tmp_path, standalone):
+    """In-process tools get config.timeout as a deadline; tools with a standalone env keep ToolInstance's timeout."""
+    from proto_tools.utils.deadlines import remaining
+
+    seen: list[float | None] = []
+
+    def tool(inputs, config, instance=None):
+        seen.append(remaining())
+        return MockToolOutput(result="ok")
+
+    key = f"deadline-scope-{standalone}"
+    clean_registry.register(
+        key=key,
+        label=key,
+        category="test",
+        input_class=MockToolInput,
+        config_class=MockToolConfig,
+        output_class=MockToolOutput,
+        description=key,
+    )(tool)
+    spec = clean_registry.get(key)
+    if standalone:
+        (tmp_path / "standalone").mkdir()
+        spec.source_file = tmp_path / "tool.py"
+    assert spec.has_standalone_env is standalone
+
+    spec.function(MockToolInput(input_data="x"), MockToolConfig(param1="v", timeout=60))
+    if standalone:
+        assert seen == [None]
+    else:
+        assert seen[0] is not None and 59 < seen[0] <= 60
+
+
+# ── record_calls ─────────────────────────────────────────────────────────────
+
+
+def _ok_tool(inputs, config, instance=None):
+    return MockToolOutput(result="ok")
+
+
+def test_record_calls_records_each_tool_with_the_version_its_output_carries(clean_registry, monkeypatch):
+    """A call inside the block is recorded once, with the same version stamped on its output."""
+    # Mock tools have no versions.yaml, so give each a distinct version the record must match
+    monkeypatch.setattr("proto_tools.tools.tool_registry._tool_version", lambda key: f"1.0.0+{key}")
+    with clean_registry.record_calls() as calls:
+        first = _register_and_run(clean_registry, "recorded-a", _ok_tool)
+        clean_registry.get("recorded-a").function(MockToolInput(input_data="again"), MockToolConfig(param1="v"))
+        second = _register_and_run(clean_registry, "recorded-b", _ok_tool)
+    assert calls == {"recorded-a": first.tool_version, "recorded-b": second.tool_version}
+    assert first.tool_version != second.tool_version
+    assert list(calls) == ["recorded-a", "recorded-b"], "first-call order"
+
+
+def test_record_calls_ignores_calls_outside_the_block(clean_registry):
+    """Calls before or after the block are not recorded (control for the test above)."""
+    _register_and_run(clean_registry, "before-block", _ok_tool)
+    with clean_registry.record_calls() as calls:
+        pass
+    clean_registry.get("before-block").function(MockToolInput(input_data="after"), MockToolConfig(param1="v"))
+    assert calls == {}
+
+
+def test_record_calls_nests(clean_registry):
+    """An inner block sees only its own calls; the outer block sees every call made while it is open."""
+    with clean_registry.record_calls() as outer:
+        _register_and_run(clean_registry, "outer-only", _ok_tool)
+        with clean_registry.record_calls() as inner:
+            _register_and_run(clean_registry, "both", _ok_tool)
+    assert set(inner) == {"both"}
+    assert set(outer) == {"outer-only", "both"}
+
+
+def test_record_calls_records_a_call_that_raises(clean_registry):
+    """A failed call still ran the tool, so it is recorded."""
+
+    def failing(inputs, config, instance=None):
+        raise ValueError("bad input")
+
+    with clean_registry.record_calls() as calls, pytest.raises(ValueError, match="bad input"):
+        _register_and_run(clean_registry, "raises", failing)
+    assert set(calls) == {"raises"}
+
+
+def test_record_calls_records_a_call_a_dispatch_backend_serves(clean_registry):
+    """A call routed to a dispatch backend (e.g. Modal) never runs locally but is recorded."""
+    clean_registry.configure_dispatch_backend(lambda key, inputs, config: MockToolOutput(result="remote"))
+    try:
+        with clean_registry.record_calls() as calls:
+            result = _register_and_run(clean_registry, "remote-tool", _ok_tool)
+    finally:
+        clean_registry.clear_dispatch_backend()
+    assert result.result == "remote"
+    assert set(calls) == {"remote-tool"}
+
+
+def test_record_calls_sees_threads_run_in_a_copy_of_its_context_only(clean_registry):
+    """ToolPool runs its workers in a copy of the caller's context, so their calls count; a plain thread's don't."""
+    import contextvars
+    import threading
+
+    _register_and_run(clean_registry, "threaded", _ok_tool)
+    call = (clean_registry.get("threaded").function, MockToolInput(input_data="t"), MockToolConfig(param1="v"))
+
+    def run_in_thread(copy_context: bool) -> dict[str, str | None]:
+        with clean_registry.record_calls() as calls:
+            # The copy is taken inside the block, as ToolPool takes it inside the program's run
+            target, args = (contextvars.copy_context().run, call) if copy_context else (call[0], call[1:])
+            thread = threading.Thread(target=target, args=args)
+            thread.start()
+            thread.join()
+        return calls
+
+    assert set(run_in_thread(copy_context=True)) == {"threaded"}
+    assert run_in_thread(copy_context=False) == {}

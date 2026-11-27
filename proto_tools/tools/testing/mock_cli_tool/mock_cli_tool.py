@@ -1,6 +1,6 @@
-"""proto_tools/tools/testing/mock_cli_tool/mock_cli_tool.py.
+"""Test subprocess inference and device routing for CLI tools.
 
-This is a minimal CLI-pattern tool that spawns a subprocess for inference,
+A minimal CLI-pattern tool that spawns a subprocess for inference,
 matching the pattern used by tools like Boltz2, RFDiffusion3, and Protenix.
 It uses get_subprocess_device_env() for device routing.
 """

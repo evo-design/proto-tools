@@ -12,7 +12,7 @@ so the notebook reproduces upstream's own worked examples.
 <!-- docs:ignore start -->
 `pdl1_target_5o45_cropped.cif` contains 15 atoms with NaN coordinates across 6 residues,
 all of them unresolved crystallographic *sidechain* atoms (`ASN17` CG/OD1/ND2, `GLU45` OE2,
-`LYS46` CD/NZ, `ARG82` CZ/NH1/NH2, `ARG125` CZ/NH1/NH2, `LYS129` CD/CE/NZ) — the backbone is
+`LYS46` CD/NZ, `ARG82` CZ/NH1/NH2, `ARG125` CZ/NH1/NH2, `LYS129` CD/CE/NZ). The backbone is
 fully resolved. That is why upstream's own rigid-group selection filters with
 `and not has_nan_coord()`; its three hotspot selections carry no such filter.
 It is a binder *target*, not a suitable

@@ -21,7 +21,8 @@ from proto_tools.tools.database_retrieval import (
 )
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_non_coding_rna_lookup_returns_no_translation():
     """MALAT1 is a long non-coding RNA: lookup with expand should return transcripts but no Translation block."""
     out = run_ensembl_lookup(EnsemblLookupInput(symbol="MALAT1"), EnsemblLookupConfig(expand=True))
@@ -31,7 +32,8 @@ def test_non_coding_rna_lookup_returns_no_translation():
     assert all(t.Translation is None for t in out.result.Transcript)
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_non_human_species_mouse_lookup():
     """Mouse Trp53 lookup with species=mus_musculus returns a mouse ENSMUSG ID."""
     out = run_ensembl_lookup(
@@ -43,7 +45,8 @@ def test_non_human_species_mouse_lookup():
     assert out.result.species == "mus_musculus"
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_vep_clinvar_pathogenic_variant():
     """A well-studied BRCA1 missense (c.181T>G, p.Cys61Gly) is reported as missense_variant."""
     vep = run_ensembl_vep(EnsemblVEPInput(hgvs="ENST00000357654:c.181T>G"))
@@ -57,7 +60,8 @@ def test_vep_clinvar_pathogenic_variant():
     )
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_concurrent_lookup_panel_dispatch():
     """8 concurrent lookups across distinct symbols all return correct gene records.
 

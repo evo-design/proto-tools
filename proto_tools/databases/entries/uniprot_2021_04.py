@@ -1,21 +1,20 @@
 """UniProt full (release 2021_04) — paired-MSA + template DB for AF3."""
 
+from proto_tools.databases.mmseqs2 import MMseqs2DatabaseEntry, MMseqs2SearchFlags
 from proto_tools.databases.registry import (
-    DatasetEntry,
+    BuildRecipe,
+    BuildStep,
     DatasetRegistry,
     DownloadSpec,
-    IndexRecipe,
-    IndexStep,
-    MmseqsFlags,
 )
 
-ENTRY = DatasetEntry(
+ENTRY = MMseqs2DatabaseEntry(
     name="uniprot-2021-04",
     molecule_type="protein",
     display_name="UniProt (release 2021_04)",
     description="Full UniProt; AF3 paired-MSA + template hits source.",
     citation_doi="10.1093/nar/gkaa1100",  # UniProt — UniProt Consortium 2021
-    urls=[
+    downloads=[
         DownloadSpec(
             url="https://storage.googleapis.com/alphafold-databases/v3.0/uniprot_all_2021_04.fa.zst",
             filename="uniprot_all_2021_04.fa.zst",
@@ -23,17 +22,17 @@ ENTRY = DatasetEntry(
     ],
     total_download_bytes=95_000_000_000,
     total_disk_bytes=165_000_000_000,
-    index_recipe=IndexRecipe(
+    build=BuildRecipe(
         steps=[
-            IndexStep(
+            BuildStep(
                 command=["zstd", "-d", "--rm", "uniprot_all_2021_04.fa.zst"],
                 description="Decompress source FASTA",
             ),
-            IndexStep(
+            BuildStep(
                 command=["mmseqs", "createdb", "uniprot_all_2021_04.fa", "uniprot"],
                 description="Build MMseqs2 DB from FASTA",
             ),
-            IndexStep(
+            BuildStep(
                 command=["mmseqs", "makepaddedseqdb", "uniprot", "uniprot_padded"],
                 description="Build GPU padded-sequence DB for MMseqs2-GPU",
             ),
@@ -43,10 +42,9 @@ ENTRY = DatasetEntry(
             "uniprot_padded.index",
         ],
     ),
-    mmseqs_flags=MmseqsFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
+    search_flags=MMseqs2SearchFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
     db_prefix="uniprot_padded",
-    supports_gpu=True,
-    min_gpu_memory_gb=10.0,
+    gpu_db="uniprot_padded",
     a3m_adapter="plain",
 )
 

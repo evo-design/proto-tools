@@ -1,11 +1,11 @@
 """Antibody entity."""
 
-from typing import Any
+from collections.abc import Iterator
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing_extensions import Self
 
-from proto_tools.utils.sequence import PROTEIN_AMINO_ACIDS
+from proto_tools.utils.sequence_logits import ProteinSequenceLogits, SequenceLogits
 
 
 class Antibody(BaseModel):
@@ -53,28 +53,30 @@ class Antibody(BaseModel):
 
 
 class AntibodyLogits(BaseModel):
-    """An antibody represented by relaxed logit distributions over amino acids.
+    """An antibody represented by relaxed distributions over amino acids.
 
-    At least one of ``heavy_chain`` or ``light_chain`` must be provided.
+    At least one of ``heavy_chain`` or ``light_chain`` must be provided. Both chains are
+    ordinary relaxed sequence matrices, and :meth:`iter_sequence_logits` exposes them so a
+    gradient input composing this model validates each chain through the shared contract.
 
     Attributes:
-        heavy_chain (list[list[float]] | None): Heavy chain logits with shape
+        heavy_chain (ProteinSequenceLogits | None): Heavy chain relaxed state with shape
             (Lh, 20) in canonical amino-acid order.
-        light_chain (list[list[float]] | None): Light chain logits with shape
+        light_chain (ProteinSequenceLogits | None): Light chain relaxed state with shape
             (Ll, 20) in canonical amino-acid order.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    heavy_chain: list[list[float]] | None = Field(
+    heavy_chain: ProteinSequenceLogits | None = Field(
         default=None,
         title="Heavy Chain Logits",
-        description="Heavy chain logits with shape (Lh, 20) in canonical amino-acid order",
+        description="Heavy chain relaxed state with shape (Lh, 20) in canonical amino-acid order",
     )
-    light_chain: list[list[float]] | None = Field(
+    light_chain: ProteinSequenceLogits | None = Field(
         default=None,
         title="Light Chain Logits",
-        description="Light chain logits with shape (Ll, 20) in canonical amino-acid order",
+        description="Light chain relaxed state with shape (Ll, 20) in canonical amino-acid order",
     )
 
     @model_validator(mode="after")
@@ -84,16 +86,16 @@ class AntibodyLogits(BaseModel):
             raise ValueError("At least one of heavy_chain or light_chain must be provided")
         return self
 
-    @field_validator("heavy_chain", "light_chain")
-    @classmethod
-    def validate_chain_logits(cls, v: list[list[float]] | None, info: Any) -> list[list[float]] | None:
-        """Ensure chain logits are a non-empty rectangular L x 20 matrix."""
-        if v is None:
-            return v
-        if not v:
-            raise ValueError(f"{info.field_name} must contain at least one position")
-        expected_width = len(PROTEIN_AMINO_ACIDS)
-        for idx, row in enumerate(v):
-            if len(row) != expected_width:
-                raise ValueError(f"{info.field_name} row {idx} must have {expected_width} columns, got {len(row)}")
-        return v
+    def iter_sequence_logits(self) -> Iterator[tuple[str, SequenceLogits]]:
+        """Yield ``(chain_name, matrix)`` for each populated chain.
+
+        Gradient inputs call this to find the matrices a composite field holds, so the chains
+        are validated individually against the shared contract.
+
+        Yields:
+            tuple[str, SequenceLogits]: Chain field name and its ``(L, 20)`` relaxed state.
+        """
+        for name in ("heavy_chain", "light_chain"):
+            chain = getattr(self, name)
+            if chain is not None:
+                yield name, chain

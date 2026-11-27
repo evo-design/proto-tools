@@ -1,7 +1,4 @@
-"""proto_tools/utils/system_info.py.
-
-Collects platform, GPU, and environment information without torch dependency.
-"""
+"""Collect platform, GPU, and environment information without importing torch."""
 
 import functools
 import logging
@@ -195,7 +192,7 @@ def available_memory_bytes() -> int:
     limit applies, and to 0 only when nothing is readable.
 
     Pure-stdlib and portable: reads ``/proc`` and ``/sys/fs/cgroup`` directly
-    (cgroup v1 and v2), degrading gracefully on systems without them.
+    (cgroup v1 and v2), falling back when those limits are unavailable.
     """
     physical = int(_get_ram_gb() * 1024**3)
     cgroup_limit = _cgroup_memory_limit_bytes()
@@ -379,7 +376,7 @@ def get_parent_process_env() -> ParentEnv:
 
 # Patterns that indicate sensitive environment variables (case-insensitive substring match)
 _SENSITIVE_PATTERNS = [
-    # Credentials & secrets
+    # Credentials and secrets
     "KEY",
     "TOKEN",
     "SECRET",
@@ -387,26 +384,26 @@ _SENSITIVE_PATTERNS = [
     "AUTH",
     "CRED",
     "PRIVATE",
-    # API & access
+    # API and access
     "BEARER",
     "OAUTH",
     "API",
     "ACCESS",
     "WEBHOOK",
-    # Encryption & signing
+    # Encryption and signing
     "ENCRYPT",
     "SIGNING",
     "SALT",
     "CERT",
     "PEM",
     "JWT",
-    # Session & identity
+    # Session and identity
     "SESSION",
     "COOKIE",
     "SID",
     # Connection strings
     "DSN",
-    # SSH & remote access
+    # SSH and remote access
     "SSH",
 ]
 

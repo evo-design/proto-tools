@@ -1,7 +1,7 @@
 """ProGen3 scoring tool."""
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringConfig,
@@ -50,8 +50,8 @@ class ProGen3ScoringConfig(CausalModelScoringConfig):
         local_path (str | None): Override HuggingFace download with a local weights directory.
         batch_size (int): Number of sequences to process simultaneously on GPU.
         return_logits (bool): Whether to include forward-pass per-position logits in the
-            output. Reverse-pass info is already exposed via ``per_position_metrics``
-            (forward/reverse/bidirectional log-likelihoods).
+            output. Reverse-pass info is already exposed via the ``_pp`` per-position
+            metrics (forward/reverse/bidirectional log-likelihoods).
 
     Note:
         - Lower perplexity indicates higher model confidence.
@@ -70,6 +70,12 @@ class ProGen3ScoringConfig(CausalModelScoringConfig):
         description="Override the default download with a local weights directory",
         reload_on_change=True,
     )
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "ProGen3ScoringConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "progen3-112m")
+        return cast("ProGen3ScoringConfig", super().minimal(**kwargs))
 
 
 # ============================================================================
@@ -127,8 +133,14 @@ def run_progen3_score(
         >>> result = run_progen3_score(inputs, config)
         >>> print(f"Perplexity: {result.scores[0]['perplexity']}")
     """
+    if config.device == "cpu":
+        raise ValueError(
+            "progen3 needs a GPU: its model code places tensors with torch.cuda, so device='cpu' cannot run"
+        )
+
     logger.debug(f"Using local venv for ProGen3 scoring: {config.model_checkpoint}")
 
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "progen3",
         {

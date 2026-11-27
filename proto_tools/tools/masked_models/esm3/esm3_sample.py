@@ -180,6 +180,7 @@ def run_esm3_sample(
         ESM3SampleOutput: ESM3SampleOutput with sampled sequences and optional logits.
     """
     logger.debug(f"Using local for ESM3 sampling: {config.model_checkpoint}")
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "esm3",
         {

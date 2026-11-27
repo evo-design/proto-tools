@@ -344,7 +344,7 @@ def run_pubchem_fetch(
             / inchi / inchikey).
         config (PubChemFetchConfig): Properties to request and the synonym,
             description, and BioAssay-ID toggles.
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         PubChemFetchOutput: Resolved CID, requested properties, optional
@@ -359,6 +359,7 @@ def run_pubchem_fetch(
     )
 
     try:
+        # Resolve the identifier and keep all matches, using the first for retrieval.
         all_cids = _resolve_to_cids(inputs, session)
         if not all_cids:
             raise ValueError(f"PubChem returned no CIDs for the supplied identifier: {_describe_input(inputs)}")
@@ -371,6 +372,7 @@ def run_pubchem_fetch(
             )
         cid = all_cids[0]
 
+        # Fetch the requested properties and make extra requests only for enabled options.
         property_record, property_url = _fetch_properties(cid, config, session)
         synonyms = _fetch_synonyms(cid, session) if config.include_synonyms else []
         descriptions = _fetch_descriptions(cid, session) if config.include_description else []
@@ -425,9 +427,11 @@ def _describe_input(inputs: PubChemFetchInput) -> str:
 
 def _resolve_to_cids(inputs: PubChemFetchInput, session: requests.Session) -> list[int]:
     """Resolve any identifier to matching PubChem CIDs (POST for InChI; GET otherwise)."""
+    # Use a given CID directly
     if inputs.cid is not None:
         return [inputs.cid]
 
+    # POST InChI in the request body rather than the URL path
     if inputs.inchi is not None:
         url = f"{_PUBCHEM_BASE}/compound/inchi/cids/JSON"
         response = request_with_retry(
@@ -440,6 +444,7 @@ def _resolve_to_cids(inputs: PubChemFetchInput, session: requests.Session) -> li
             backoff_seconds=_BACKOFF_SECONDS,
         )
     else:
+        # Build a GET URL from the URL-encoded name, SMILES or InChIKey
         if inputs.name is not None:
             url = f"{_PUBCHEM_BASE}/compound/name/{quote(inputs.name, safe='')}/cids/JSON"
         elif inputs.smiles is not None:
@@ -452,6 +457,7 @@ def _resolve_to_cids(inputs: PubChemFetchInput, session: requests.Session) -> li
             backoff_seconds=_BACKOFF_SECONDS,
         )
 
+    # Treat a 404 as no matching compounds, otherwise parse the CID list
     if response.status_code == 404:
         return []
     response.raise_for_status()
@@ -545,11 +551,11 @@ def _fetch_aids(cid: int, session: requests.Session) -> list[int]:
 
 
 def _opt_float(value: Any) -> float | None:
-    """Coerce to float; pass through None unchanged.
+    """Convert a value to float, leaving None unchanged.
 
     `None` is legitimate (PubChem omits properties absent from the request
-    bundle); any other non-numeric value is a real schema regression and
-    raises ValueError.
+    bundle). Other non-numeric values indicate an unexpected response and
+    raise ValueError.
     """
     return None if value is None else float(value)
 

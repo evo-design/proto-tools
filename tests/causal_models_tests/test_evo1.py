@@ -129,6 +129,33 @@ def test_evo1_scoring_export_json(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.uses_env
+def test_evo1_sampler_only_picks_nucleotides():
+    """The sampler evo's generation loop calls returns only ACGT, even when other tokens score highest.
+
+    A space (32), the stop token (0, decoded as a space) and lowercase ``a`` (97) outscore the
+    nucleotides. The check runs inside the evo1 env against the real ``evo`` package.
+    """
+    from proto_tools.utils import run_in_env
+
+    code = (
+        "import torch\n"
+        "import evo.generation\n"
+        "import inference\n"
+        "inference.restrict_sampling_to_dna()\n"
+        "torch.manual_seed(0)\n"
+        "logits = torch.randn(256, 512)\n"
+        "logits[:, [0, 32, 97]] = 50.0\n"
+        "picked = set()\n"
+        "for top_k, top_p, temperature in [(4, 1.0, 1.0), (1, 1.0, 1.0), (0, 0.9, 0.5), (8, 1.0, 2.0)]:\n"
+        "    ids = evo.generation.sample(logits.clone(), top_k=top_k, top_p=top_p, temperature=temperature)\n"
+        "    picked |= set(ids.tolist())\n"
+        "print(''.join(sorted(chr(i) for i in picked)))\n"
+    )
+    output = run_in_env("evo1", code=code)
+    assert set(output.strip().splitlines()[-1]) <= set("ACGT")
+
+
 @pytest.mark.uses_gpu
 def test_evo1_sample_tool():
     """Test the evo1 sampling tool end-to-end: inference, output structure, and export."""
@@ -152,10 +179,9 @@ def test_evo1_sample_tool():
     assert len(result.results) == 2
     assert all(sample.metrics is not None for sample in result.results)
 
-    valid_chars = set("ACGTacgt")
     for seq in result.sequences:
         assert isinstance(seq, str) and len(seq) > 0
-        invalid = set(seq) - valid_chars
+        invalid = set(seq) - set("ACGT")
         assert not invalid, f"Non-DNA characters in output: {invalid}"
 
 
@@ -287,6 +313,8 @@ def test_evo1_sample_benchmark(request):
         assert isinstance(seq, str)
         assert seq.startswith(prompt), "prepend_prompt=True should return the prompt followed by the continuation"
         assert len(seq) > len(prompt), "Should have generated at least one token beyond the prompt"
+        invalid = set(seq) - set("ACGT")
+        assert not invalid, f"Non-DNA characters in output: {invalid}"
 
 
 @pytest.mark.benchmark("evo1-score")

@@ -50,11 +50,11 @@ def split_into_safe_batches(complexes: list[dict[str, Any]], max_residues: int) 
 
 
 def relabel_chains(pdb_str: str, chain_lengths: list[int], chain_ids: list[str] | None = None) -> str:
-    """Relabel single-chain PDB output into multiple chains (A, B, C, ...).
+    """Relabel single-chain PDB output into multiple chains.
 
     ESMFold predicts multi-chain complexes by linking chains together, producing
     a single-chain PDB. This function splits the single chain back into separate
-    chains with standard alphabetic labels (A, B, C, etc.).
+    chains labeled by ``chain_ids``, or positionally (A, B, C, ...) when omitted.
 
     Args:
         pdb_str (str): PDB file content as a string (assumed to be a single chain)

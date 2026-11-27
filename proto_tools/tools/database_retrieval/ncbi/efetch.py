@@ -185,7 +185,7 @@ def run_ncbi_efetch(
             parameters.
         config (NCBIFetchConfig): NCBI API key and email settings.
 
-        instance (Any): Optional ToolInstance for subprocess execution.
+        instance (Any): Unused by this HTTP-only tool.
 
     Returns:
         NCBIEfetchOutput: Parsed FASTA records and the sanitized request URL.
@@ -213,6 +213,7 @@ def run_ncbi_efetch(
         if result is None:
             raise ValueError(f"No record found for {inputs.db}:{inputs.identifier}")
         text, url = result
+        # Convert the downloaded FASTA into one record per sequence.
         records = _parse_fasta_records(text)
         return NCBIEfetchOutput(fasta_records=records, source_url=url)
     finally:

@@ -3,7 +3,10 @@
 from pathlib import Path
 from typing import Any, Literal
 
-from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import LigandMPNNModelType
+from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
+    LigandMPNNImplementation,
+    local_checkpoint_on_remote,
+)
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingScoringMetrics,
     InverseFoldingScoringOutput,
@@ -17,6 +20,7 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
+from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.progress import progress_bar
 
 LigandMPNNScoringMode = Literal["single_aa", "autoregressive"]
@@ -27,7 +31,7 @@ class LigandMPNNScoringInput(BaseToolInput):
 
     Attributes:
         sequence_structure_pairs (list[SequenceStructurePair]): Sequence and structure pairs to
-            score; each pair may carry per-pair ``fixed_positions`` excluded from the metrics.
+            score; each pair may carry per-pair ``excluded_positions`` excluded from the metrics.
     """
 
     sequence_structure_pairs: list[SequenceStructurePair] = InputField(
@@ -46,10 +50,14 @@ class LigandMPNNScoringConfig(BaseConfig):
         device (str): Device to run the model on.
         return_logits (bool): Whether to include per-position logits.
         scoring_mode (LigandMPNNScoringMode): Single-position or autoregressive scoring mode.
-        model_type (LigandMPNNModelType): LigandMPNN implementation. ``ligand_mpnn`` (default) is
-            the Foundry implementation; ``original`` runs the original LigandMPNN code and weights,
-            auto-provisioned on first use.
-        checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
+        implementation (LigandMPNNImplementation): Which LigandMPNN code runs: ``"foundry"``
+            (default) or ``"original"``, the upstream LigandMPNN code (fetched on first use), which
+            matches the reference repository's scores. The two prepare the structure differently,
+            so scores differ between them even with the same weights.
+        model_checkpoint (str): Sequence-model weights, which work with either implementation:
+            ``"ligandmpnn_v_32_010_25"`` (default) or ``"ligandmpnn_v_32_020_25"``, the published
+            weights trained with 0.10 Å and 0.20 Å backbone noise, or a path to your own ``.pt``
+            checkpoint, which runs only locally.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         cutoff_for_score (float): Ligand-residue distance cutoff (Å).
@@ -72,16 +80,17 @@ class LigandMPNNScoringConfig(BaseConfig):
         default="single_aa",
         description="Use single-position probabilities or one seed-determined autoregressive order.",
     )
-    model_type: LigandMPNNModelType = ConfigField(
-        title="Model Type",
-        default="ligand_mpnn",
-        description="Implementation: 'ligand_mpnn' (Foundry, default) or the 'original' LigandMPNN implementation.",
+    implementation: LigandMPNNImplementation = ConfigField(
+        title="Implementation",
+        default="foundry",
+        description="'foundry' (default) or 'original', the upstream LigandMPNN code.",
         reload_on_change=True,
     )
-    checkpoint_path: str | None = ConfigField(
-        title="Checkpoint Path",
-        default=None,
-        description="Optional explicit LigandMPNN checkpoint path.",
+    model_checkpoint: str = ConfigField(
+        title="Model / Checkpoint",
+        default="ligandmpnn_v_32_010_25",
+        min_length=1,
+        description="'ligandmpnn_v_32_010_25', 'ligandmpnn_v_32_020_25', or a path to a custom .pt checkpoint.",
         reload_on_change=True,
     )
     use_atom_context: bool = ConfigField(
@@ -100,6 +109,10 @@ class LigandMPNNScoringConfig(BaseConfig):
         gt=0.0,
         description="Ligand-residue distance cutoff (Å).",
     )
+
+    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
+        """A local checkpoint path isn't present on a remote worker."""
+        return local_checkpoint_on_remote(self.model_checkpoint, device)
 
 
 def example_input() -> Any:
@@ -154,15 +167,15 @@ def run_ligandmpnn_score(
                     "sequence": pair.sequence,
                     "seed": seed,
                     "fixed_positions": (
-                        pair.fixed_positions.to_residue_numbers(pair.structure)
-                        if pair.fixed_positions is not None
+                        pair.excluded_positions.to_residue_numbers(pair.structure)
+                        if pair.excluded_positions is not None
                         else None
                     ),
                     "device": config.device,
                     "return_logits": config.return_logits,
                     "verbose": config.verbose,
-                    "model_type": config.model_type,
-                    "checkpoint_path": config.checkpoint_path,
+                    "implementation": config.implementation,
+                    "model_checkpoint": config.model_checkpoint,
                     "scoring_mode": config.scoring_mode,
                     "ligand_mpnn_use_atom_context": config.use_atom_context,
                     "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,

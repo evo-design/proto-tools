@@ -58,7 +58,14 @@ app = get_app_for_service("ProteinMPNNService")
     retries=SERVICE_RETRIES,
     secrets=[HF_TOKEN_SECRET],
 )
-@register_tools({"proteinmpnn-sample": "sample", "proteinmpnn-score": "score", "proteinmpnn-gradient": "gradient"})
+@register_tools(
+    {
+        "proteinmpnn-sample": "sample",
+        "proteinmpnn-sample-homooligomer": "sample_homooligomer",
+        "proteinmpnn-score": "score",
+        "proteinmpnn-gradient": "gradient",
+    }
+)
 class ProteinMPNNService:
     """Modal service for ProteinMPNN inverse folding inference."""
 
@@ -97,6 +104,32 @@ class ProteinMPNNService:
             run_proteinmpnn_sample,
             ProteinMPNNSampleInput,
             ProteinMPNNSampleConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
+
+    @modal.method()
+    def sample_homooligomer(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Design a symmetric homooligomer by tying corresponding protomer positions.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Design sets whose protomers all carry the same sampled sequence.
+        """
+        from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample_homooligomer import (
+            ProteinMPNNHomooligomerSampleConfig,
+            ProteinMPNNHomooligomerSampleInput,
+            run_proteinmpnn_sample_homooligomer,
+        )
+
+        return run_tool_call(
+            run_proteinmpnn_sample_homooligomer,
+            ProteinMPNNHomooligomerSampleInput,
+            ProteinMPNNHomooligomerSampleConfig,
             input_dict,
             config_dict,
             instance=self.instance,

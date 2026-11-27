@@ -1,0 +1,8 @@
+code:
+  spdx: Apache-2.0
+  url: https://github.com/gpp-rnd/rs3/blob/master/LICENSE
+commercial_use: 'yes'
+redistribution: true
+attribution_required: true
+notes: 'RS3 is distributed under Apache-2.0. The pinned PyPI package includes the published model artifact.'
+last_updated: '2026-09-10'

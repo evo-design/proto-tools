@@ -180,7 +180,7 @@ class MirandaOutput(BaseToolOutput):
 
 # Config:
 class MirandaConfig(BaseConfig):
-    """microRNA query set + scoring thresholds and alignment parameters for miRanda.
+    """microRNA query set, scoring thresholds and alignment parameters for miRanda.
 
     The microRNA queries are part of Config because they apply uniformly to every
     target sequence in the scan — same queries, many targets — and so the per-item
@@ -271,8 +271,8 @@ class MirandaConfig(BaseConfig):
     def _validate_mirnas(self) -> "MirandaConfig":
         """Reject explicit-empty query lists and mismatched id lists.
 
-        ``None`` is allowed at construction (default for ``Config()`` auto-instantiation;
-        dispatch raises if still ``None``).
+        ``None`` is allowed when constructing the default ``Config()``.
+        Dispatch raises if the query set is still ``None``.
         """
         if self.mirna_queries is not None and len(self.mirna_queries) == 0:
             raise ValueError("miranda-scan: `mirna_queries` cannot be empty")
@@ -288,7 +288,7 @@ class MirandaConfig(BaseConfig):
 
     @classmethod
     def minimal(cls, **kwargs: Any) -> "MirandaConfig":
-        """Cheap-mode defaults: bundle the bantam example query so ``Config.minimal()`` works without args."""
+        """Bundle the bantam example query in the cheap-mode defaults so ``Config.minimal()`` works without args."""
         if "mirna_queries" not in kwargs:
             kwargs = {**example_config(), **kwargs}
         return super().minimal(**kwargs)  # type: ignore[return-value]
@@ -323,7 +323,7 @@ def example_input() -> Any:
 
 
 def example_config() -> dict[str, Any]:
-    """The config the example needs: the bantam microRNA, which is known to target the hid 3'UTR."""
+    """Return the bantam microRNA configuration for the hid 3'UTR example."""
     _, mirna_seqs = _read_fasta(_EXAMPLES_DIR / "bantam_mirna.fasta")
     return {"mirna_queries": mirna_seqs, "mirna_ids": ["miR-bantam"]}
 
@@ -367,8 +367,8 @@ def run_miranda_scan(inputs: MirandaInput, config: MirandaConfig, instance: Any 
     if config.mirna_queries is None:
         raise ValueError("miranda-scan: `mirna_queries` is required (set on MirandaConfig)")
     mirna_ids = resolve_sequence_ids(config.mirna_queries, config.mirna_ids)
-    # Target ids are positional: the iterable framework may dedup/cache-strip
-    # target_sequences, so a parallel user-supplied id list cannot stay aligned.
+    # Keep target IDs positional because the iterable framework may deduplicate or remove cached
+    # target_sequences, which would leave a separate user-supplied ID list out of step.
     target_ids = resolve_sequence_ids(inputs.target_sequences, None)
 
     output_data = ToolInstance.dispatch(
@@ -424,7 +424,7 @@ def _parse_miranda_output(stdout: str, mirna_ids: list[str]) -> dict[int, list[M
     """Parse miRanda stdout into target sites grouped by target index.
 
     Each hit is a self-identifying tab-delimited ``>`` line preceded by a
-    ``Query:``/pairing/``Ref:`` block; internal ids ``q{i}``/``t{j}`` map back to
+    ``Query:``/pairing/``Ref:`` block. Internal ids ``q{i}``/``t{j}`` map back to
     input order. ``mirna_ids`` gives user-facing names by query order. Returns
     ``{target_index: [sites sorted by score desc]}``.
     """

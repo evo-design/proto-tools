@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger, resolve_weights_dir, serialize_output, set_torch_seed
+from standalone_helpers import export_weights_dir, get_logger, serialize_output, set_torch_seed
 
 logger = get_logger(__name__)
 
@@ -33,19 +33,13 @@ def _configure_caliby_env(model_checkpoint: str) -> None:
         model_checkpoint (str): Bundled checkpoint name or a path to a ``.ckpt`` file.
 
     Raises:
-        FileNotFoundError: If no weights directory resolves, or the requested checkpoint
-            is not present in it.
+        RuntimeError: If no weights directory resolves.
+        FileNotFoundError: If the requested checkpoint is not present in it.
     """
     os.environ.setdefault("PDB_MIRROR_PATH", "")
     os.environ.setdefault("CCD_MIRROR_PATH", "")
 
-    weights_dir = resolve_weights_dir("caliby")
-    if not weights_dir:
-        raise FileNotFoundError(
-            "caliby: unable to resolve a weights directory; set PROTO_CALIBY_WEIGHTS_DIR, "
-            "or configure PROTO_MODEL_CACHE"
-        )
-    os.environ["MODEL_PARAMS_DIR"] = weights_dir
+    weights_dir = export_weights_dir("MODEL_PARAMS_DIR", "caliby")
 
     if model_checkpoint.endswith(".ckpt"):
         if not Path(model_checkpoint).is_file():
@@ -128,7 +122,7 @@ def _build_fixed_pos_seq(
     fixed positions are emitted as one ``<chain><residue number>`` token each.
 
     Args:
-        chain_ids (list[str]): All polymer chain IDs, in input structure order.
+        chain_ids (list[str]): The input structure's protein chain IDs, in input order.
         chains_to_redesign (list[str] | None): Chains whose sequence is redesigned.
         fixed_positions (dict[str, list[int]] | None): Per-chain residue numbers to fix.
 
@@ -231,27 +225,25 @@ def _split_chain_sequences(sequence: str, chain_ids: list[str]) -> list[str]:
 
     Caliby emits one part per chain its featurizer kept, in alphabetical chain order. The
     featurizer keeps peptide polymers of at least five residues and discards everything
-    else, so that set matches the input structure's polymer chains for a plain protein
-    input but omits nucleic acid and short peptide chains. A disagreement is reported
-    rather than silently mis-assigning sequences to chains.
+    else, so that set matches the input structure's protein chains unless one is shorter.
+    A disagreement is reported rather than silently mis-assigning sequences to chains.
 
     Args:
         sequence (str): A Caliby sequence with ``':'`` between chains.
-        chain_ids (list[str]): All polymer chain IDs, in input structure order.
+        chain_ids (list[str]): The input structure's protein chain IDs, in input order.
 
     Returns:
         list[str]: One sequence per chain, aligned with ``chain_ids``.
 
     Raises:
-        ValueError: If the sequence does not carry one part per input polymer chain.
+        ValueError: If the sequence does not carry one part per input protein chain.
     """
     parts = sequence.split(":")
     if len(parts) != len(chain_ids):
         raise ValueError(
             f"caliby: the model produced {len(parts)} chain(s) but the input structure has "
-            f"{len(chain_ids)} polymer chain(s) ({chain_ids}). Caliby designs peptide chains of "
-            "at least five residues and discards everything else, so nucleic acid chains and "
-            "shorter peptides are dropped before the model sees them. Supply protein chains only."
+            f"{len(chain_ids)} protein chain(s) ({chain_ids}). Caliby designs peptide chains of "
+            "at least five residues and drops shorter ones before the model sees them."
         )
     by_chain_id = dict(zip(sorted(chain_ids), parts, strict=True))
     return [by_chain_id[chain_id] for chain_id in chain_ids]
@@ -268,7 +260,7 @@ def _sequence_recovery(
     Args:
         designed (list[str]): Designed per-chain sequences, in ``chain_ids`` order.
         native (list[str]): Input per-chain sequences, in ``chain_ids`` order.
-        chain_ids (list[str]): All polymer chain IDs, in input structure order.
+        chain_ids (list[str]): The input structure's protein chain IDs, in input order.
         chains_to_redesign (list[str] | None): Chains whose sequence is redesigned.
 
     Returns:
@@ -340,9 +332,19 @@ class CalibyRunner:
         """
         _configure_caliby_env(model_checkpoint)
 
-        from caliby import load_model
+        from caliby import checkpoint_utils, load_model
+        from standalone_helpers import set_current_cuda_device
 
-        logger.debug("Loading Caliby checkpoint %s on %s", model_checkpoint, device)
+        # The bundled checkpoints hold cuda:0 tensors, and caliby loads them with no map_location, so
+        # Lightning restores them onto GPU 0 before load_model moves the model to ``device``. Load to
+        # CPU instead; load_model then places it.
+        load_kwargs = getattr(checkpoint_utils, "_LOAD_CKPT_KWARGS", None)
+        if isinstance(load_kwargs, dict):
+            load_kwargs["map_location"] = "cpu"
+        else:
+            logger.warning("caliby: checkpoint_utils._LOAD_CKPT_KWARGS is gone; checkpoints may load onto GPU 0 first")
+        set_current_cuda_device(device)
+        logger.update_status("Loading Caliby weights")
         self.model = load_model(model_checkpoint, device=device)
         self.device = device
         self._model_checkpoint = model_checkpoint
@@ -405,7 +407,7 @@ class CalibyRunner:
             primary_path (str): Path to the primary conformer.
             conformer_paths (list[str]): Paths to the other ensemble members; empty runs
                 single-structure design.
-            chain_ids (list[str]): All polymer chain IDs, in input structure order.
+            chain_ids (list[str]): The input structure's protein chain IDs, in input order.
             chains_to_redesign (list[str] | None): Chains whose sequence is redesigned.
             fixed_positions (dict[str, list[int]] | None): Per-chain residue numbers to fix.
             symmetric_chains (list[list[str]] | None): Chain groups sampled to one sequence.
@@ -428,16 +430,18 @@ class CalibyRunner:
         Raises:
             ValueError: If Caliby returns a different number of designs than requested.
         """
+        # Check that every fixed and pinned residue exists in the primary structure.
         _verify_fixed_positions(primary_path, fixed_positions)
         _verify_fixed_positions(primary_path, {cid: list(pins) for cid, pins in (pinned_residues or {}).items()})
         self.ensure_loaded(model_checkpoint, device)
 
         from caliby import make_constraints, make_ensemble_constraints
 
+        # Translate fixed, symmetric and pinned residues into Caliby's constraint strings.
         fixed_pos_seq = _build_fixed_pos_seq(chain_ids, chains_to_redesign, fixed_positions)
         symmetry_pos = _build_symmetry_pos(symmetric_chains, primary_path)
         override_seq = _build_fixed_pos_override_seq(pinned_residues)
-        # Only the columns that carry a value; an all-empty dict must stay None.
+        # Include only active constraints so an unconstrained request can pass None.
         constraint_cols = {
             key: value
             for key, value in (
@@ -447,6 +451,7 @@ class CalibyRunner:
             )
             if value
         }
+        # Set the number of Potts MCMC sweeps per designed sequence.
         overrides = {"potts_sampling_cfg": {"potts_sweeps": potts_sweeps}}
 
         with (
@@ -454,7 +459,7 @@ class CalibyRunner:
             tempfile.TemporaryDirectory() as out_dir,
         ):
             if staged_conformers:
-                # Element 0 is the primary conformer; the rest are aggregated position-wise.
+                # Place the primary conformer first and aggregate the others by matching positions.
                 pdb_to_conformers = {_ENSEMBLE_KEY: [str(staged_primary), *(str(path) for path in staged_conformers)]}
                 constraint_df = (
                     make_ensemble_constraints({_ENSEMBLE_KEY: constraint_cols}, pdb_to_conformers)
@@ -475,6 +480,7 @@ class CalibyRunner:
                     sampling_overrides=overrides,
                 )
             else:
+                # Design against the primary structure alone.
                 constraint_df = make_constraints({staged_primary.stem: constraint_cols}) if constraint_cols else None
                 results = self.model.sample(
                     [str(staged_primary)],
@@ -488,6 +494,7 @@ class CalibyRunner:
                     pos_constraint_df=constraint_df,
                     sampling_overrides=overrides,
                 )
+            # Read the designed structures before the output directory is removed.
             cif_strings = [Path(out_pdb).read_text() for out_pdb in results["out_pdb"]]
 
         if len(results["seq"]) != num_sequences:
@@ -495,6 +502,7 @@ class CalibyRunner:
                 f"caliby: requested {num_sequences} sequence(s) but the model returned {len(results['seq'])}"
             )
 
+        # Split each design into per-chain sequences and score recovery against the input.
         chain_sequences = [_split_chain_sequences(seq, chain_ids) for seq in results["seq"]]
         recoveries = [
             _sequence_recovery(designed, _split_chain_sequences(native, chain_ids), chain_ids, chains_to_redesign)

@@ -4,7 +4,6 @@ Tests for the InterPro fetch tool — direct UniProt-accession lookup and
 sequence submit-and-poll paths against EBI's iprscan5 endpoint.
 """
 
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -572,14 +571,16 @@ def test_extract_xref_ids_handles_diverse_shapes(raw, expected):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_direct_lookup_unknown_accession_surfaces_failure():
     """An unknown UniProt accession raises with a descriptive error."""
     with pytest.raises(Exception, match=r"(?i)no entries|not found"):
         run_interproscan_fetch(InterProScanFetchInput(uniprot_id="Q99999999"))
 
 
-@pytest.mark.integration
+@pytest.mark.network
+@pytest.mark.uses_env
 def test_direct_lookup_tp53_matches_uniprot_and_pfam_anchor():
     """TP53 returns its canonical Pfam P53 DBD (PF00870, 100-288) and agrees with uniprot-fetch on length.
 
@@ -601,9 +602,10 @@ def test_direct_lookup_tp53_matches_uniprot_and_pfam_anchor():
     assert all(1 <= d.start <= d.end <= uniprot.length for d in output.domains)
 
 
-@pytest.mark.integration
+@pytest.mark.uses_env
 @pytest.mark.slow
 @pytest.mark.skip_ci
+@pytest.mark.requires_credential("INTERPROSCAN_EMAIL")
 def test_submit_path_real_short_sequence():
     """End-to-end iprscan5 submit path against the first 200 residues of TP53.
 
@@ -614,8 +616,6 @@ def test_submit_path_real_short_sequence():
     Requires a real contact address in ``INTERPROSCAN_EMAIL``: EBI's fair-use policy
     mandates a valid email and blocks submitters that use placeholder addresses.
     """
-    if not os.environ.get("INTERPROSCAN_EMAIL"):
-        pytest.skip("INTERPROSCAN_EMAIL not set")
     # First 200 residues of P04637 — covers the P53 DNA-binding domain (residues 100-288 truncated to 100-200).
     sequence = (
         "MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDPGPDEAPRMPEAAPPVAPAPAAPTPAAPAPAPSWPLSSSVPSQK"

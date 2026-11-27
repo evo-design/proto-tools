@@ -9,7 +9,7 @@
 
 ## Overview
 
-[Enformer](https://github.com/google-deepmind/deepmind-research/tree/master/enformer) is a deep learning model that predicts [gene expression](https://en.wikipedia.org/wiki/Gene_expression) and chromatin activity directly from DNA sequence, developed by Google DeepMind and Calico Life Sciences. It reads a fixed 196,608 base-pair input window and predicts activity across thousands of genomic measurement tracks, summarized over 896 output bins of 128 base pairs each. This toolkit exposes Enformer through a single registered tool that returns the predicted track activity for one or more sequences.
+[Enformer](https://github.com/google-deepmind/deepmind-research/tree/master/enformer) is a deep learning model that predicts [gene expression](https://en.wikipedia.org/wiki/Gene_expression) and chromatin activity directly from DNA sequence, developed by Google DeepMind and Calico Life Sciences. It reads a fixed 196,608 base-pair input window and predicts activity across thousands of genomic measurement tracks, summarized over 896 output bins of 128 base pairs each. This toolkit exposes Enformer through a prediction tool that returns the predicted track activity for one or more sequences and a gradient tool that differentiates that activity for sequence design.
 
 ## Background
 
@@ -41,11 +41,27 @@ This tool is appropriate for analyses that relate noncoding DNA sequence to pred
 - **`batch_size` controls how many sequences are processed together on the GPU and defaults to 1.** Larger values increase throughput when many sequences are scored in one call, subject to the available GPU memory.
 - **The output covers a 114,688 base-pair central window, narrower than the input context.** The 896 output bins span the central portion of the input, and the per-result `output_start` and `output_end` coordinates report exactly which part of the source sequence the bins cover. A feature of interest must fall within this central window to receive a prediction.
 
+### Enformer Gradient (`enformer-gradient`)
+
+Reports Enformer's predicted track activity and its derivative with respect to a relaxed distribution over selected positions, one quantity at a time. Each requested term names an output track and a span of 128 bp output bins, and comes back with its own mean activity and its own raw gradient.
+
+#### Applications
+
+This is the differentiable form of Enformer prediction, intended as an objective inside a regulatory-sequence design loop: an optimizer holds a relaxed distribution over the bases it is allowed to change, asks for the gradients, and combines them into whatever objective it wants (raising a track over an enhancer window, or raising one cell type while suppressing another), then steps those bases accordingly. Setting `compute_gradient=False` turns it into a forward-only activity score for ranking candidates.
+
+#### Usage Tips
+
+- **Each candidate carries the whole context and only the designed positions.** Enformer reads a fixed 196,608 bp window, but a design problem usually varies a small part of it. A candidate bundles the full context `sequence`, the 1-indexed `positions` whose bases are relaxed, and a `(len(positions), 4)` `logits` matrix aligned to them, so the returned gradient covers only those positions while the surrounding context still reaches the model.
+- **Bin spans are 1-indexed and inclusive** over the 896 output bins, each covering 128 bp. A term's score is the mean activity across its span, so widening the span smooths the objective.
+- **Several tracks share one forward pass.** Each requested quantity gets its own backward over that shared graph, so asking for K tracks costs one forward and K backwards rather than K of each.
+- **`max_chunk_size` is 1.** A forward pass over a 196,608 bp context plus its backward pass is already large, so candidates are dispatched one at a time and fan out across devices rather than batching within a worker.
+- **`species` picks the output head.** Human exposes 5,313 tracks, mouse 1,643; a term's `track` indexes the selected head.
+
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every Enformer tool in this toolkit (`enformer-prediction`).
+These apply to every Enformer tool in this toolkit (`enformer-prediction`, `enformer-gradient`).
 
 - **Enformer runs on a GPU and downloads its published weights on first use.** The model parameters are retrieved from the hosted `enformer-official-rough` checkpoint the first time the tool runs and are reused on subsequent runs. A CUDA-capable GPU is recommended because the 196,608 base-pair context makes CPU inference slow.
 - **Output coordinates are 0-based with exclusive ends, following the genomics interval convention rather than the 1-based residue numbering used elsewhere in proto-tools.** The `context_start`, `context_end`, `output_start`, and `output_end` fields locate the model window and the output-bin span within the source sequence using this convention.

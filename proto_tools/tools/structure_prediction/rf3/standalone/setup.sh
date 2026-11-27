@@ -5,7 +5,7 @@ source standalone_helpers.sh
 
 echo "Setting up RoseTTAFold3 standalone environment..."
 
-# Platform gate: rc-foundry[rf3] pulls cuequivariance_ops_cu12, whose wheels are
+# Check platform support before installing rc-foundry[rf3]. It pulls cuequivariance_ops_cu12, whose wheels are
 # Linux x86_64 + CUDA 12 only. Refuse to set up on unsupported platforms with a
 # clear message rather than a downstream wheel-install failure.
 if [ "$(uname -s)" != "Linux" ] || [ "$(uname -m)" != "x86_64" ]; then

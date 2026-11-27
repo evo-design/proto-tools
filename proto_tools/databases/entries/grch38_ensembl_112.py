@@ -5,11 +5,11 @@ GENCODE annotations bundled with SpliceAI; a caller's "chr1" is normalized to it
 """
 
 from proto_tools.databases.registry import (
+    BuildRecipe,
+    BuildStep,
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,
-    IndexRecipe,
-    IndexStep,
 )
 
 FASTA = "Homo_sapiens.GRCh38.dna.primary_assembly.fa"
@@ -20,7 +20,7 @@ ENTRY = DatasetEntry(
     display_name="GRCh38 (Ensembl 112)",
     description="Human reference genome GRCh38 primary assembly, Ensembl release 112.",
     citation_doi="10.1093/nar/gkad1049",  # Ensembl 2024 — Harrison et al.
-    urls=[
+    downloads=[
         DownloadSpec(
             url=(
                 "https://ftp.ensembl.org/pub/release-112/fasta/homo_sapiens/dna/"
@@ -31,12 +31,12 @@ ENTRY = DatasetEntry(
     ],
     total_download_bytes=881_964_081,
     total_disk_bytes=3_200_000_000,
-    index_recipe=IndexRecipe(
+    build=BuildRecipe(
         # Decompress only. pyfaidx builds the .fai on first open, and doing it here would need a
         # Python with pyfaidx on PATH, which a provisioning step is not guaranteed. The Modal
         # services build the index once at warmup instead, off the concurrent request path.
         steps=[
-            IndexStep(
+            BuildStep(
                 command=["gunzip", "-f", f"{FASTA}.gz"],
                 description="Decompress the reference FASTA",
             ),

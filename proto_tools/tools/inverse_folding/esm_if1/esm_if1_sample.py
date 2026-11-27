@@ -9,8 +9,7 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import Field
 
-from proto_tools.entities.complex import Chain
-from proto_tools.entities.ligands import Fragment
+from proto_tools.tools.inverse_folding.esm_if1._readable import esm_if1_readable_positions
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -18,6 +17,9 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
+    preserved_positions,
+    split_fixed_positions,
+    summarize_positions,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import ConfigField
@@ -61,6 +63,17 @@ class ESMIF1SampleConfig(InverseFoldingConfig):
         description="Sampling temperature; lower = greedier, higher = more diverse",
         examples=[0.5, 1.0, 2.0],
     )
+
+    def readable_positions(self, inp: Any) -> dict[str, list[int]]:
+        """Positions ESM-IF1 reads, which excludes residues biotite cannot name.
+
+        Args:
+            inp (Any): One structure input.
+
+        Returns:
+            dict[str, list[int]]: Ascending readable positions per chain ID.
+        """
+        return esm_if1_readable_positions(inp.structure)
 
 
 class ESMIF1DesignMetrics(Metrics):
@@ -111,7 +124,7 @@ class ESMIF1Design(DesignedComplex):
     redesigned, all other chains are carried over as fixed context.
 
     Attributes:
-        chains (list[Chain | Fragment]): All protein chains of the design, in input
+        chains (list[Chain | Fragment]): All polymer chains of the design, in input
             structure chain order.
         metrics (ESMIF1DesignMetrics): Per-design metrics, including the average
             per-position log-likelihood of the redesigned target chain.
@@ -166,6 +179,30 @@ def example_input() -> Any:
     )
 
 
+def _worker_fixed_positions(inp: Any, readable: dict[str, list[int]]) -> Any:
+    """Renumber the caller's fixed positions into the numbering ESM-IF1 addresses.
+
+    The model holds only the residues it read, numbered from 1 with no gaps, so a caller's
+    position has to be renumbered before it names the same residue to the model.
+
+    Args:
+        inp (Any): One structure input, exposing ``fixed_positions``.
+        readable (dict[str, list[int]]): Positions the model reads, per chain ID.
+
+    Returns:
+        Any: A ``ResidueSelection`` in the model's numbering, or ``None`` when nothing is left.
+    """
+    resolved, dropped = split_fixed_positions(inp.fixed_positions, readable, renumber=True)
+    for chain_id, positions in dropped.items():
+        logger.warning(
+            "esm-if1-sample: Chain %s, position %s cannot be fixed because ESM-IF1's parser does not "
+            "read it. The original residue is preserved in the output regardless.",
+            chain_id,
+            summarize_positions(inp.structure, chain_id, positions),
+        )
+    return resolved
+
+
 @tool(
     key="esm-if1-sample",
     label="ESM-IF1 Sampling",
@@ -216,25 +253,25 @@ def run_esm_if1_sample(
     ):
         all_seqs, all_metrics = [], []
         remaining = config.num_sequences_per_structure
-        # Materialize the Structure to a tempfile once per input — reused across chunks.
-        with inp.structure.temp_file() as pdb_path:
+        readable = config.readable_positions(inp)
+        preserved = preserved_positions(readable, inp.structure, inp.fixed_positions)
+        worker_fixed = _worker_fixed_positions(inp, readable)
+        # Staged once per input and reused across chunks, numbered 1..N per chain so ESM-IF1,
+        # which addresses residues by number alone, sees every insertion-coded residue.
+        with inp.staged() as staged:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 input_dict = {
                     "operation": "sample",
-                    "pdb_path": str(pdb_path),
-                    "chain_ids": inp.chain_ids_to_redesign,
+                    "pdb_path": str(staged.path),
+                    "chain_ids": staged.chains(inp.chain_ids_to_redesign),
                     "batch_size": chunk,
                     "temperature": config.temperature,
                     "seed": base_seed + dispatch_idx,
                     "device": config.device,
                     "weights_variant": config.weights_variant,
                     "verbose": config.verbose,
-                    "fixed_positions": (
-                        inp.fixed_positions.to_residue_numbers(inp.structure)
-                        if inp.fixed_positions is not None
-                        else None
-                    ),
+                    "fixed_positions": staged.positions(worker_fixed),
                 }
                 result = ToolInstance.dispatch(
                     "esm_if1",
@@ -249,17 +286,19 @@ def run_esm_if1_sample(
 
         # ESM-IF1 complexes exactly one chain; standalone falls back to chain_ids[0].
         target = inp.chain_ids_to_redesign[0]
-        structure_chain_ids = inp.structure.get_chain_ids()
-        context_seqs = {cid: inp.structure.get_chain_sequence(cid) for cid in structure_chain_ids if cid != target}
-
-        complexes = []
-        for designed_seq, metrics in zip(all_seqs, all_metrics, strict=True):
-            chains: list[Chain | Fragment] = [
-                Chain(id=cid, sequence=designed_seq if cid == target else context_seqs[cid])
-                for cid in structure_chain_ids
-            ]
-            designed: list[bool] = [cid == target for cid in structure_chain_ids]
-            complexes.append(ESMIF1Design(chains=chains, designed=designed, metrics=ESMIF1DesignMetrics(**metrics)))
+        complexes = [
+            ESMIF1Design.from_design(
+                inp.structure,
+                {target: designed_seq},
+                {target},
+                tool="esm-if1-sample",
+                include_ligands=False,
+                readable_positions=readable,
+                fixed_positions=preserved,
+                metrics=ESMIF1DesignMetrics(**metrics),
+            )
+            for designed_seq, metrics in zip(all_seqs, all_metrics, strict=True)
+        ]
         design_sets.append(ESMIF1DesignSet(complexes=complexes))
 
     return ESMIF1SampleOutput(design_sets=design_sets)

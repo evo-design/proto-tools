@@ -14,14 +14,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from proto_tools.utils.device_manager import DeviceManager
+from proto_tools.utils.download_progress import ProgressDeadline
 from proto_tools.utils.logging_config import verbose_level_from_env
 from proto_tools.utils.persistent_worker import (
     _apply_verbose_to_console_handlers,
     _build_subprocess_env,
+    _download_dirs,
     _drain_subprocess_stderr,
     _stderr_buffer_lines,
 )
-from proto_tools.utils.tool_instance import ToolInstance
+from proto_tools.utils.tool_instance import ToolInstance, _local_visible_device
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -43,22 +45,25 @@ def run_in_env(
 
     Exactly one of ``code`` or ``script`` must be provided. The environment is built if
     it does not yet exist (build time is not counted against ``timeout``). In-env
-    proto-logging is streamed to the parent's ``proto_tools.worker.{toolkit}`` logger;
-    only stdout is captured and returned.
+    proto-logging is streamed to the parent's ``proto_tools.worker.{toolkit}`` logger.
+    Only stdout is captured and returned.
 
     For ``cuda`` devices a transient :class:`DeviceManager` lease is held for the run — it
-    is never evicted and honors shared-GPU mode (``allow_multiple_per_device``) — and the
-    resolved device is exported to the program as ``RUN_IN_ENV_DEVICE``. ``timeout`` bounds
-    the whole run, so set it generously when the program downloads weights on first use.
+    is never evicted and honors shared-GPU mode (``allow_multiple_per_device``). The program
+    sees only the leased GPU(s), renumbered ``cuda:0..N-1``, so bare ``"cuda"`` and JAX land on
+    the lease rather than on a GPU a tool worker holds. The device is exported as
+    ``RUN_IN_ENV_DEVICE``. A ``cpu`` run sees no GPU at all (``JAX_PLATFORMS=cpu``), so it
+    cannot claim one. ``timeout`` bounds the run, except for time spent while the toolkit's
+    weights download keeps progressing.
 
     Args:
         toolkit (str): Toolkit whose environment to run in (for example ``"esm2"``).
         code (str | None): A Python source string to execute.
         script (Path | str | None): Path to a Python script to execute.
         args (Sequence[str]): Command-line arguments passed to the code/script as ``sys.argv[1:]``.
-        device (str): Device to lease and run on; the resolved value is exported as ``RUN_IN_ENV_DEVICE``.
-        timeout (int): Maximum seconds to wait for the run.
-        verbose (int): Verbosity for re-emitted logs; ``>= 3`` also tees raw stderr.
+        device (str): Device to lease. The resolved value is exported as ``RUN_IN_ENV_DEVICE``.
+        timeout (int): Maximum seconds to wait for the run, not counting weight downloads.
+        verbose (int): Verbosity for re-emitted logs. Values ``>= 3`` also show raw stderr.
 
     Returns:
         str: The captured standard output of the run.
@@ -66,7 +71,7 @@ def run_in_env(
     Raises:
         ValueError: If not exactly one of ``code`` / ``script`` is provided.
         RuntimeError: If the subprocess exits with a non-zero status.
-        TimeoutError: If the run exceeds ``timeout`` seconds.
+        TimeoutError: If the run exceeds ``timeout`` seconds of non-download time.
     """
     if (code is None) == (script is None):
         raise ValueError("run_in_env requires exactly one of code= or script=.")
@@ -93,14 +98,19 @@ def run_in_env(
         else:
             run_device = device
 
+        # Restrict visible GPUs to the lease (none for cpu). An unleased process that opens a GPU
+        # a tool worker holds fails on an Exclusive_Process GPU, and JAX opens every visible GPU.
+        pinned = run_device == "cpu" or run_device.startswith("cuda")
         env = _build_subprocess_env(
             run_device,
             tool_env_path=instance.env_path,
             tool_env_vars=instance._tool_env_vars,
             toolkit=toolkit,
+            pin_visible_devices=pinned,
         )
         env["TOOL_VENV_PATH"] = str(instance.env_path)
-        env["RUN_IN_ENV_DEVICE"] = run_device  # resolved device for the in-env program to use
+        # Export the device as the program sees it, renumbered cuda:0..N-1 for a pinned lease.
+        env["RUN_IN_ENV_DEVICE"] = _local_visible_device(run_device) if pinned else run_device
         # Append, so the published helpers stay ahead of any stale copy in the standalone dir.
         env["PYTHONPATH"] = os.pathsep.join(p for p in (env.get("PYTHONPATH", ""), standalone_dir) if p)
 
@@ -138,8 +148,9 @@ def run_in_env(
             stdout_thread.start()
             stderr_thread.start()
 
+            deadline = ProgressDeadline(timeout, _download_dirs(toolkit, env, instance.env_path), label=toolkit)
             try:
-                proc.wait(timeout=timeout)
+                deadline.wait_process(proc)
             except subprocess.TimeoutExpired:
                 # killpg, not proc.kill, so grandchildren don't orphan with live CUDA handles.
                 with suppress(OSError):
@@ -151,7 +162,9 @@ def run_in_env(
                         os.killpg(proc.pid, signal.SIGKILL)
                     with suppress(Exception):
                         proc.wait(timeout=5)
-                raise TimeoutError(f"run_in_env({toolkit!r}) timed out after {timeout}s.") from None
+                raise TimeoutError(
+                    f"run_in_env({toolkit!r}) timed out after {timeout}s{deadline.timeout_note()}."
+                ) from None
             finally:
                 stdout_thread.join(timeout=2)
                 stderr_thread.join(timeout=2)

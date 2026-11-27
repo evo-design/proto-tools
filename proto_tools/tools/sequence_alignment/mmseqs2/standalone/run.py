@@ -1,13 +1,13 @@
 """Standalone runner for the unified ``mmseqs2`` toolkit.
 
-Routes the four operations exposed by this toolkit to the right helper:
+Routes the four operations exposed by this toolkit to the appropriate helper.
 
-- ``protein_search`` — ``mmseqs easy-search``; optional ``--gpu 1`` when the
-  the dispatched ``device`` is a CUDA device and the target DB has a ``*.idx_pad`` index.
+- ``protein_search`` — ``mmseqs easy-search``, with optional ``--gpu 1`` when the
+  dispatched ``device`` is a CUDA device and the target DB has a ``*.idx_pad`` index.
 - ``genome_search`` — ``createdb`` + ``search`` + ``convertalis`` workflow
   for nucleotide-vs-nucleotide search. CPU only.
 - ``clustering`` — ``mmseqs cluster`` greedy set-cover. CPU only.
-- ``homology_search`` — ColabFold-style iterative MSA pipeline; GPU when dispatched
+- ``homology_search`` — ColabFold-style iterative MSA pipeline, using GPU when dispatched
   via the upstream ``colabfold_search`` CLI shipped with this env.
 
 Communicates via JSON input/output files (one-shot CLI) or via the
@@ -15,6 +15,7 @@ persistent-worker ``dispatch`` import (see ``utils/_worker_bootstrap.py``).
 """
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -56,7 +57,7 @@ def _find_binary(name: str = "mmseqs") -> str:
 
 
 def _run_cmd(cmd: list[str], description: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
-    """Run a subprocess command and raise on failure; ``env`` pins it to a device when given."""
+    """Run a subprocess command and raise on failure. ``env`` pins it to a device when given."""
     try:
         return subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
     except subprocess.CalledProcessError as e:
@@ -109,6 +110,7 @@ def _resolve_to_mmseqs_db(
     if not Path(user_path).exists():
         raise FileNotFoundError(f"{label}: path {user_path!r} does not exist.")
     if _is_fasta(user_path):
+        logger.update_status("Building MMseqs2 database")
         _run_cmd([mmseqs, "createdb", user_path, temp_db_path], f"mmseqs createdb ({label})")
         return temp_db_path, True
     raise RuntimeError(
@@ -219,7 +221,7 @@ def _run_search_with_thread_fallback(
     A pre-indexed target's effective dbSize is its memory-sized index split count,
     not the sequence count the up-front cap reads — so recover from the value mmseqs
     reports. Floored at 1 (not the up-front cap's 2): a dbSize of 1 needs --threads 1
-    and flooring to 2 would re-trigger the abort; the floor also avoids --threads 0 for
+    and flooring to 2 would re-trigger the abort. The floor also avoids --threads 0 for
     a degenerate dbSize of 0, which mmseqs rejects.
     """
     try:
@@ -265,6 +267,7 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
             target_fasta = str(tmp_path / "target_genomes.fna")
             _write_fasta(target_sequences, target_fasta, input_data.get("target_ids"), prefix="target")
             target_db_path = str(tmp_path / "target_db")
+            logger.update_status("Building target database")
             _run_cmd([mmseqs, "createdb", target_fasta, target_db_path], "mmseqs createdb (target)")
             target_db_size = len(target_sequences)
         else:
@@ -305,6 +308,7 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
         else:
             effective_threads = max(2, min(requested_threads, target_db_size))
 
+        logger.update_status("Building query database")
         _run_cmd([mmseqs, "createdb", query_fasta, query_db], "mmseqs createdb (query)")
 
         def _search_cmd(n_threads: int) -> list[str]:
@@ -336,6 +340,7 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
                 *(str(arg) for arg in input_data.get("extra_args", [])),
             ]
 
+        logger.update_status("Searching target database", level=logging.DEBUG)
         _run_search_with_thread_fallback(_search_cmd, effective_threads, mmseqs_tmp, res_dir)
 
         m8_columns = input_data["m8_columns"]
@@ -365,9 +370,10 @@ def run_genome_search(input_data: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Run ``mmseqs cluster`` on inline sequences, a FASTA path, or a pre-built DB stem; return cluster_assignments."""
+    """Run ``mmseqs cluster`` on inline sequences, a FASTA path, or a pre-built DB stem and return cluster_assignments."""
     mmseqs = _find_binary()
 
+    # Lay out scratch directories for results and mmseqs temporary files
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         res_dir = tmp_path / "mmseqs_results"
@@ -380,9 +386,11 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
         db_dir.mkdir()
         temp_db = str(db_dir / "seqs")
         sequences = input_data.get("sequences")
+        # Write inline sequences to FASTA and build a DB, or resolve the given DB or FASTA path
         if sequences is not None:
             input_fasta = str(tmp_path / "input.faa")
             _write_fasta(sequences, input_fasta, input_data.get("sequence_ids"))
+            logger.update_status("Building sequence database")
             _run_cmd([mmseqs, "createdb", input_fasta, temp_db], "mmseqs createdb")
             seqs_db = temp_db
         else:
@@ -393,6 +401,8 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
                 label="mmseqs2-clustering mmseqs_db",
             )
 
+        # Cluster the DB with the configured identity, coverage, and sensitivity thresholds
+        logger.update_status("Clustering sequences", level=logging.DEBUG)
         _run_cmd(
             [
                 mmseqs,
@@ -419,12 +429,14 @@ def run_clustering(input_data: dict[str, Any]) -> dict[str, Any]:
             "mmseqs cluster",
         )
 
+        # Export the clustering as a representative-to-member TSV
         clusters_tsv = str(res_dir / "clusters.tsv")
         _run_cmd(
             [mmseqs, "createtsv", seqs_db, seqs_db, str(res_dir / "clusters"), clusters_tsv],
             "mmseqs createtsv",
         )
 
+        # Map each member ID to the ID of its cluster representative
         cluster_assignments: dict[str, str] = {}
         tsv_path = Path(clusters_tsv)
         if tsv_path.exists():
@@ -510,7 +522,7 @@ def _internal_header(idx: int) -> str:
     Decoupled from the user-supplied ``sequence_id`` so a user-chosen ID
     can never collide with colabfold_search's ``{idx}.a3m`` output naming.
     Specifically, ``colabfold_search --unpack=1`` (the default) renames
-    ``{job_idx}.a3m`` to ``{safe_filename(raw_jobname)}.a3m``; if the user
+    ``{job_idx}.a3m`` to ``{safe_filename(raw_jobname)}.a3m``. If the user
     supplied ``sequence_id="1"`` for the query at idx=0, the resulting
     rename loop would clobber the second query's output. Always-prefixed
     internal headers sidestep the conflict entirely.
@@ -547,12 +559,12 @@ def _build_homology_command(
 
     ``db1``/``db3`` are DB stems resolved relative to the ``dbbase`` directory.
     With ``use_env`` set, the metagenomic ``db3`` is searched (``--use-env 1``) to
-    deepen the unpaired per-chain MSAs; cross-chain pairing always stays UniRef-only
+    deepen the unpaired per-chain MSAs. Cross-chain pairing always stays UniRef-only
     (``--use-env-pairing`` off, env-pairing deferred). When ``pairing_strategy`` is
     set, the query FASTA is a colon-joined complex record and ``--unpack 0`` keeps
     the result DBs (``final.a3m``, ``pair.a3m``) for the caller to unpack itself.
     ``db_load_mode`` is colabfold's ``--db-load-mode`` (0 auto, 1 fread, 2 mmap,
-    3 mmap+touch); 2 caps resident memory by paging the sequence DB from disk.
+    3 mmap+touch). A value of 2 caps resident memory by paging the sequence DB from disk.
     """
     cmd = [colabfold_path, "--mmseqs", mmseqs_path, "--threads", str(num_threads)]
     if sensitivity is not None:
@@ -730,6 +742,12 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
         # Paired search ran with --unpack 0; unpack the result DBs ourselves.
         if pairing_strategy is not None:
             _unpack_paired_dbs(mmseqs_path, output_dir)
+        # A mixed batch can succeed because at least one query has hits while
+        # emitting no A3M at all for another query.  Make those individual
+        # no-hit outcomes explicit as query-only A3Ms; the public layer still
+        # normalizes them to MSA=None, but downstream tools can distinguish a
+        # completed local search from a missing input and must not search again.
+        _backfill_empty_a3ms(query_fasta, output_dir)
         return {"success": True, "output_dir": str(output_dir), "db_name": db_name}
     except subprocess.TimeoutExpired as e:
         return {
@@ -744,8 +762,8 @@ def run_homology_search(input_dict: dict[str, Any]) -> dict[str, Any]:
             if e.stderr:
                 print(e.stderr, file=sys.stderr)
         stderr = e.stderr or ""
-        # "prof_res does not exist" = no hits at all; backfill empty A3Ms and
-        # treat as success so the tool layer can return MSA=None for those queries.
+        # "prof_res does not exist" = no hits at all; backfill query-only A3Ms
+        # and treat as success so the tool layer can return MSA=None for them.
         if "prof_res does not exist" in stderr:
             _backfill_empty_a3ms(query_fasta, output_dir)
             return {"success": True, "output_dir": str(output_dir), "db_name": db_name, "no_hits_fallback": True}

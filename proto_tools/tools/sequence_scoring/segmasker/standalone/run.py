@@ -44,6 +44,7 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
     sequences = input_data["sequences"]
     config = input_data["config"]
 
+    # Locate the segmasker binary and read the SEG parameters
     segmasker_path = _find_binary("segmasker")
     window = config["window"]
     locut = config["locut"]
@@ -62,12 +63,14 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
     # Create temporary FASTA with all sequences
     with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as tmp_file:
         for seq_idx, seq_str in enumerate(sequences):
+            # Write a placeholder residue for empty sequences so every input keeps a record
             seq_to_write = seq_str if len(seq_str) > 0 else "A"
             tmp_file.write(f">seq_{seq_idx}\n{seq_to_write}\n")
         tmp_file.flush()
         tmp_path = tmp_file.name
 
     try:
+        # Run segmasker with FASTA output, where masked residues are lowercase
         cmd = [
             segmasker_path,
             "-in",
@@ -88,11 +91,13 @@ def run_segmasker(input_data: dict[str, Any]) -> dict[str, Any]:
                 f"segmasker: failed (exit {result.returncode}): {' | '.join((result.stderr or '').strip().splitlines()) or '<no stderr>'}"
             )
 
+        # Parse the masked FASTA and check there is one record per input
         seq_records = list(SeqIO.parse(StringIO(result.stdout), "fasta"))  # type: ignore[no-untyped-call]
 
         if len(seq_records) != len(sequences):
             raise RuntimeError(f"segmasker: returned {len(seq_records)} results but expected {len(sequences)}")
 
+        # Count lowercase (masked) residues per sequence; empty inputs score zero
         fractions: list[float] = []
         counts: list[int] = []
 

@@ -13,9 +13,9 @@ PARADE (Prediction And RAtional DEsign of mRNA UTRs) is a LegNet convolutional m
 
 ## Background
 
-PARADE ([Khoroshkin et al., 2024](https://doi.org/10.1101/2024.12.31.630783)) is a generative framework for designing UTRs with tailored cell-type-specific activity. Its predictive core adapts the DREAM-challenge LegNet architecture: an EfficientNet-style convolutional network with squeeze-and-excite blocks that reads a one-hot UTR sequence plus a reading-frame positional channel and, for activity, broadcast cell-condition channels.
+PARADE ([Khoroshkin et al., 2024](https://doi.org/10.1101/2024.12.31.630783)) is a generative framework for designing UTRs with tailored cell-type-specific activity. Its predictive core adapts the DREAM-challenge LegNet architecture, an EfficientNet-style convolutional network with squeeze-and-excite blocks that reads a one-hot UTR sequence plus a reading-frame positional channel and, for activity, broadcast cell-condition channels.
 
-The activity models are trained per construct type — one for 5' UTRs and one for 3' UTRs — and condition on a panel of named cell lines (`c1` MDA-MB-231, `c2` HepG2, `c4` Jurkat, `c6` SW480, `c17` NALM6, and, for 3' UTRs only, `c13` PA-1), returning a predicted activity mass-center for each. A separate 3' UTR model predicts mRNA stability as an RNA/gDNA log-ratio. The featurization matches the upstream reference pipeline exactly, so predictions reproduce the published values.
+The activity models are trained per construct type (one for 5' UTRs and one for 3' UTRs) and condition on a panel of named cell lines (`c1` MDA-MB-231, `c2` HepG2, `c4` Jurkat, `c6` SW480, `c17` NALM6, and, for 3' UTRs only, `c13` PA-1), returning a predicted activity mass-center for each. A separate 3' UTR model predicts mRNA stability as an RNA/gDNA log-ratio. The featurization matches the upstream reference pipeline exactly, so predictions reproduce the published values.
 
 ## Tools
 
@@ -29,10 +29,10 @@ Use this tool to rank UTR designs by predicted activity, screen candidate UTRs f
 
 #### Usage Tips
 
-- **Pick the construct type.** Set `construct_type` to `utr5` or `utr3`; it selects the matching checkpoint and cell-code panel.
+- **Pick the construct type.** Set `construct_type` to `utr5` or `utr3`. It selects the matching checkpoint and cell-code panel.
 - **Cell codes are panel-specific.** `c13` exists only for `utr3`. Select a cell line by either its code (`c2`) or its cell-line name (`HepG2`, case-insensitive). Leave `cell_types` empty to return the full panel for the construct type.
 - **Match the training length.** Upstream trained the 5' UTR model on ~50-nt inserts and the 3' UTR model on ~240-nt (roughly 200–300 nt) inserts; the model accepts any length (adaptive pooling) but predictions are only meaningful near the training regime.
-- **Mixed lengths batch together.** Different-length sequences in one call are batched per length group; RNA input (`U`) is accepted and mapped to `T`.
+- **Mixed lengths batch together.** Different-length sequences in one call are batched per length group. RNA input (`U`) is accepted and mapped to `T`.
 
 ### PARADE mRNA Stability (`parade-stability`)
 
@@ -50,7 +50,7 @@ Use this tool to rank 3' UTR designs by predicted mRNA stability or to pair stab
 
 ### PARADE UTR Activity Gradient (`parade-gradient`)
 
-Computes a weighted differentiable UTR-activity objective and, by default, returns the gradient with respect to batched relaxed UTR logits.
+Reports each selected cell's predicted UTR activity and, by default, that cell's own gradient with respect to batched relaxed UTR logits.
 
 #### Applications
 
@@ -58,18 +58,35 @@ Use this tool inside gradient-based UTR design loops (e.g. Fast SeqProp) to maxi
 
 #### Usage Tips
 
-- **Logits are batched.** Pass logits with shape `B x L x 4` in `A,C,G,T` order; use `B=1` for a single candidate.
-- **Terms target cell codes.** Each loss term names a `cell_type` — its code (`c2`) or cell-line name (`HepG2`, case-insensitive) — a `direction` (`max`/`min`), and a `weight`; all must be in the `construct_type` panel.
-- **Soft/hard mixing controls relaxation.** `soft=1.0, hard=0.0` is fully soft; increasing `hard` uses a straight-through hard-forward estimator.
+- **Logits are batched.** Pass logits with shape `B x L x 4` in `A,C,G,T` order; use `B=1` for a single candidate. Every batch item must share one sequence length.
+- **`temperature`** controls how the input logits are converted into nucleotide probabilities using `softmax(logits / temperature)`. Lower temperatures make the distribution more concentrated around the most likely nucleotide at each position, while higher temperatures produce more uniform distributions. The default is `1.0`, and the returned gradient is calculated with respect to the input logits. `soft` and `hard` then control how that relaxed state reaches the model.
+- **Advanced option:** `temperature=None` skips softmax and treats the input as probabilities rather than logits. Most users should leave the default in place. In this case, each row must contain nonnegative values that sum to 1, and the returned gradient is calculated with respect to those probabilities. This is generally less convenient for gradient-based optimization because updating probabilities directly can cause them to become negative or no longer sum to 1. Optimizing logits avoids this issue, since softmax always produces a valid probability distribution. However, working directly with probabilities can be useful when using an optimizer designed for probability distributions or when exact zero probabilities are needed to exclude particular tokens.
+- **Terms target cell codes.** Each term in `gradient_terms` names a `cell_type`, its code (`c2`) or cell-line name (`HepG2`, case-insensitive), which must be in the `construct_type` panel. A bare code or name is accepted as shorthand, and a cell may be named only once.
+- **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator. The forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, which is differentiable but outside the model's training distribution.
+
+### PARADE Stability Gradient (`parade-stability-gradient`)
+
+Scores PARADE's predicted 3' UTR stability (the RNA/gDNA log-ratio, where higher means more stable) and returns its derivative with respect to a relaxed distribution over the UTR bases.
+
+#### Applications
+
+This is the differentiable form of `parade-stability`, intended as an objective inside a 3' UTR design loop: an optimizer holds a relaxed distribution over the UTR, asks for the gradient, and steps it toward sequences the model predicts will be more (or less) stable. Pair it with `parade-gradient` when a design needs both an activity profile and a stability target, treating the two as separate objectives.
+
+#### Usage Tips
+
+- **Direction is a goal, not a setting.** The tool reports the predicted `log_ratio` as it is, in one term per candidate; `MaximizeGoal()` drives the sequence toward higher predicted stability and `MinimizeGoal()` does the reverse. Maximizing is the advised direction, so composing without naming a goal already steps toward stability.
+- **The quantity is a single scalar, so there are no per-cell terms.** Where `parade-gradient` takes one term per cell line, stability has just the one.
+- **It runs the stability checkpoint**, which is a different model from the activity checkpoints. There is no `construct_type` here, since stability is not conditioned on a UTR construct.
+- **One batch, one length.** The backend evaluates the batch in a single vectorized pass, so every candidate in a call must share a sequence length; the gradient comes back stacked and is split into one result per candidate.
 
 ## Toolkit Notes
 
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
-These apply to every PARADE tool in this toolkit (`parade-activity`, `parade-stability`, `parade-gradient`).
+These apply to every PARADE tool in this toolkit (`parade-activity`, `parade-stability`, `parade-gradient`, `parade-stability-gradient`).
 
 - **Runs on GPU or CPU.** The tools load a small PyTorch LegNet checkpoint; a GPU speeds up large batches but is not required.
-- **Weights are provisioned automatically.** By default, the standalone worker downloads the published checkpoint from the pinned `autosome-ru/parade` commit into the managed model cache and verifies its MD5 checksum.
+- **Weights are provisioned automatically.** `model_checkpoint="parade"` (the default) uses the checkpoints published with the paper, which environment setup downloads from the pinned `autosome-ru/parade` commit into the managed model cache and checks against their SHA-256. Set `model_checkpoint` to your own `.ckpt` path or `https` link to use a different checkpoint.
 - **Predictions are faithful to the reference.** The vendored PARADE model/data modules are the verbatim upstream bodies (with only a provenance/Ruff header added per file), so the published checkpoints load and score exactly as they do upstream.
 
 ## References

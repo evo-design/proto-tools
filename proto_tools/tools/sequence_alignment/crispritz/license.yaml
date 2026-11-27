@@ -1,0 +1,9 @@
+code:
+  spdx: Custom (CRISPRitz Dual License)
+  url: https://github.com/pinellolab/CRISPRitz/blob/v2.8.1/LICENSE
+  text: CRISPRitz has a dual license. It is made available for free to academic researchers under the Affero License (https://www.gnu.org/licenses/agpl-3.0.en.html). If you plan to use the CRISPRitz for-profit, you will need to purchase a license. Please contact rosalba.giugno@univr.it and lpinello@mgh.harvard.edu for more information.
+commercial_use: restricted
+redistribution: true
+attribution_required: true
+notes: CRISPRitz is free to academic researchers under AGPL-3.0. For-profit use requires a license from the authors.
+last_updated: '2026-11-07'

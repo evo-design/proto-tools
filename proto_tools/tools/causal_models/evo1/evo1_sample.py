@@ -1,8 +1,6 @@
-"""proto_tools/tools/causal_models/evo1/evo1_sample.py.
+"""Sample DNA sequences with Evo1.
 
-This module provides a standardized interface for sampling DNA sequences
-using the Evo1 language model, supporting multiple model checkpoints
-including CRISPR and transposon fine-tuned variants.
+Supported checkpoints include CRISPR and transposon fine-tuned variants.
 """
 
 import logging
@@ -46,7 +44,7 @@ class Evo1Sample(CausalModelSample):
     """One generated DNA sequence and its scoring metrics.
 
     Attributes:
-        sequence (str): The generated DNA sequence.
+        sequence (str): The generated DNA sequence; every generated base is A, C, G or T.
         metrics (CausalModelScoringMetrics | None): Scoring metrics for this sequence,
             including log_likelihood, avg_log_likelihood, and perplexity.
     """
@@ -85,7 +83,7 @@ class Evo1SampleConfig(CausalModelSampleConfig):
             use an 8,192-token context, ``evo-1-131k-base`` extends to 131,072 tokens, and
             ``-crispr``/``-transposon`` are domain fine-tunes.
         top_k (int): Limit sampling to the top-k most probable tokens at each step.
-            Defaults to ``4`` (one per DNA base).
+            Defaults to ``4`` (one per DNA base); sampling only ever picks A, C, G or T.
         max_new_tokens (int): Maximum number of new tokens to generate per prompt (excludes prompt).
         cached_generation (bool): Use the KV cache for autoregressive generation.
         force_prompt_threshold (int): Number of tokens to prefill in parallel before
@@ -194,6 +192,7 @@ def run_evo1_sample(
     """
     logger.debug(f"Using local venv for Evo1 sampling: {config.model_name}")
 
+    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "evo1",
         {

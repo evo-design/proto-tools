@@ -18,6 +18,26 @@ from proto_tools.tools.database_retrieval.alphamissense_db import (
     run_alphamissense_db_fetch,
 )
 
+# arXiv search
+from proto_tools.tools.database_retrieval.arxiv import (
+    ArxivSearchConfig,
+    ArxivSearchHit,
+    ArxivSearchInput,
+    ArxivSearchOutput,
+    ArxivSearchResult,
+    run_arxiv_search,
+)
+
+# bioRxiv preprint details
+from proto_tools.tools.database_retrieval.biorxiv import (
+    BiorxivDetailsConfig,
+    BiorxivDetailsInput,
+    BiorxivDetailsOutput,
+    BiorxivPreprint,
+    BiorxivVersion,
+    run_biorxiv_details,
+)
+
 # CCD lookup
 from proto_tools.tools.database_retrieval.ccd_lookup import (
     CcdLookupConfig,
@@ -25,6 +45,17 @@ from proto_tools.tools.database_retrieval.ccd_lookup import (
     CcdLookupOutput,
     CcdLookupResult,
     run_ccd_lookup,
+)
+
+# ENCODE portal search
+from proto_tools.tools.database_retrieval.encode import (
+    EncodeSearchConfig,
+    EncodeSearchHit,
+    EncodeSearchInput,
+    EncodeSearchOutput,
+    EncodeSearchQuery,
+    EncodeSearchResult,
+    run_encode_search,
 )
 
 # Ensembl REST tools (lookup / sequence / overlap / xrefs + VEP)
@@ -64,6 +95,22 @@ from proto_tools.tools.database_retrieval.ensembl import (
     run_ensembl_xrefs,
 )
 
+# Europe PMC literature search and full text
+from proto_tools.tools.database_retrieval.europepmc import (
+    EuropePMCFullTextConfig,
+    EuropePMCFullTextDocument,
+    EuropePMCFullTextInput,
+    EuropePMCFullTextOutput,
+    EuropePMCSearchConfig,
+    EuropePMCSearchHit,
+    EuropePMCSearchInput,
+    EuropePMCSearchOutput,
+    EuropePMCSearchResult,
+    EuropePMCSection,
+    run_europepmc_fulltext,
+    run_europepmc_search,
+)
+
 # InterPro fetch
 from proto_tools.tools.database_retrieval.interproscan import (
     InterProApp,
@@ -77,6 +124,7 @@ from proto_tools.tools.database_retrieval.interproscan import (
 
 # NCBI Entrez tools
 from proto_tools.tools.database_retrieval.ncbi import (
+    NCBIAssemblySummary,
     NCBIDatabase,
     NCBIEfetchConfig,
     NCBIEfetchInput,
@@ -89,10 +137,40 @@ from proto_tools.tools.database_retrieval.ncbi import (
     NCBIEsummaryOutput,
     NCBIFastaRecord,
     NCBIFetchConfig,
+    NCBIReferenceBundleConfig,
+    NCBIReferenceBundleInput,
+    NCBIReferenceBundleOutput,
     NCBISequenceDatabase,
     run_ncbi_efetch,
     run_ncbi_esearch,
     run_ncbi_esummary,
+    run_ncbi_reference_bundle,
+)
+
+# Paperclip literature retrieval
+from proto_tools.tools.database_retrieval.paperclip import (
+    LiteratureAccessKind,
+    PaperclipDocument,
+    PaperclipDocumentConfig,
+    PaperclipDocumentInput,
+    PaperclipDocumentOutput,
+    PaperclipGrepConfig,
+    PaperclipGrepInput,
+    PaperclipGrepMatch,
+    PaperclipGrepOutput,
+    PaperclipLineMatch,
+    PaperclipLookupConfig,
+    PaperclipLookupInput,
+    PaperclipLookupOutput,
+    PaperclipPaper,
+    PaperclipSearchConfig,
+    PaperclipSearchHit,
+    PaperclipSearchInput,
+    PaperclipSearchOutput,
+    run_paperclip_document,
+    run_paperclip_grep,
+    run_paperclip_lookup,
+    run_paperclip_search,
 )
 
 # PDB tools
@@ -105,8 +183,22 @@ from proto_tools.tools.database_retrieval.pdb import (
     PdbFetchFastaConfig,
     PdbFetchFastaInput,
     PdbFetchFastaOutput,
+    PdbSequenceSearchConfig,
+    PdbSequenceSearchHit,
+    PdbSequenceSearchInput,
+    PdbSequenceSearchOutput,
+    PdbSequenceSearchQuery,
+    PdbSequenceSearchResult,
+    PdbStructureSimilarityConfig,
+    PdbStructureSimilarityHit,
+    PdbStructureSimilarityInput,
+    PdbStructureSimilarityOutput,
+    PdbStructureSimilarityQuery,
+    PdbStructureSimilarityResult,
     run_pdb_fetch_entry,
     run_pdb_fetch_fasta,
+    run_pdb_sequence_search,
+    run_pdb_structure_similarity,
 )
 
 # PubChem fetch
@@ -144,12 +236,29 @@ from proto_tools.tools.database_retrieval.sequence_fetch import (
     run_sequence_fetch,
 )
 
+# SynBioHub design fetch
+from proto_tools.tools.database_retrieval.synbiohub import (
+    SynBioHubFeature,
+    SynBioHubFetchConfig,
+    SynBioHubFetchInput,
+    SynBioHubFetchOutput,
+    SynBioHubLocation,
+    SynBioHubPart,
+    run_synbiohub_fetch,
+)
+
 # UniProt fetch
 from proto_tools.tools.database_retrieval.uniprot import (
     UniProtFetchConfig,
     UniProtFetchInput,
     UniProtFetchOutput,
+    UniProtSearchConfig,
+    UniProtSearchHit,
+    UniProtSearchInput,
+    UniProtSearchOutput,
+    UniProtSearchResult,
     run_uniprot_fetch,
+    run_uniprot_search,
 )
 
 __all__ = [
@@ -165,12 +274,34 @@ __all__ = [
     "AlphaMissenseDBFetchOutput",
     "AlphaMissensePrediction",
     "run_alphamissense_db_fetch",
+    # arXiv search
+    "ArxivSearchConfig",
+    "ArxivSearchHit",
+    "ArxivSearchInput",
+    "ArxivSearchOutput",
+    "ArxivSearchResult",
+    "run_arxiv_search",
+    # bioRxiv preprint details
+    "BiorxivDetailsConfig",
+    "BiorxivDetailsInput",
+    "BiorxivDetailsOutput",
+    "BiorxivPreprint",
+    "BiorxivVersion",
+    "run_biorxiv_details",
     # CCD lookup
     "CcdLookupResult",
     "CcdLookupConfig",
     "CcdLookupInput",
     "CcdLookupOutput",
     "run_ccd_lookup",
+    # ENCODE portal search
+    "EncodeSearchConfig",
+    "EncodeSearchHit",
+    "EncodeSearchInput",
+    "EncodeSearchOutput",
+    "EncodeSearchQuery",
+    "EncodeSearchResult",
+    "run_encode_search",
     # Ensembl REST tools (lookup / sequence / overlap / xrefs + VEP)
     "EnsemblAssembly",
     "EnsemblExon",
@@ -205,6 +336,19 @@ __all__ = [
     "run_ensembl_sequence",
     "run_ensembl_vep",
     "run_ensembl_xrefs",
+    # Europe PMC literature search and full text
+    "EuropePMCFullTextConfig",
+    "EuropePMCFullTextDocument",
+    "EuropePMCFullTextInput",
+    "EuropePMCFullTextOutput",
+    "EuropePMCSection",
+    "EuropePMCSearchConfig",
+    "EuropePMCSearchHit",
+    "EuropePMCSearchInput",
+    "EuropePMCSearchOutput",
+    "EuropePMCSearchResult",
+    "run_europepmc_fulltext",
+    "run_europepmc_search",
     # InterPro fetch
     "InterProApp",
     "InterProDomain",
@@ -236,11 +380,45 @@ __all__ = [
     "NCBIEfetchInput",
     "NCBIEfetchOutput",
     "run_ncbi_efetch",
+    "NCBIAssemblySummary",
+    "NCBIReferenceBundleConfig",
+    "NCBIReferenceBundleInput",
+    "NCBIReferenceBundleOutput",
+    "run_ncbi_reference_bundle",
+    # Paperclip literature retrieval
+    "LiteratureAccessKind",
+    "PaperclipDocument",
+    "PaperclipDocumentConfig",
+    "PaperclipDocumentInput",
+    "PaperclipDocumentOutput",
+    "PaperclipSearchConfig",
+    "PaperclipSearchHit",
+    "PaperclipSearchInput",
+    "PaperclipSearchOutput",
+    "run_paperclip_document",
+    "PaperclipGrepConfig",
+    "PaperclipGrepInput",
+    "PaperclipGrepMatch",
+    "PaperclipGrepOutput",
+    "PaperclipLineMatch",
+    "PaperclipLookupConfig",
+    "PaperclipLookupInput",
+    "PaperclipLookupOutput",
+    "PaperclipPaper",
+    "run_paperclip_grep",
+    "run_paperclip_lookup",
+    "run_paperclip_search",
     # UniProt fetch
     "UniProtFetchConfig",
     "UniProtFetchInput",
     "UniProtFetchOutput",
     "run_uniprot_fetch",
+    "UniProtSearchConfig",
+    "UniProtSearchHit",
+    "UniProtSearchInput",
+    "UniProtSearchOutput",
+    "UniProtSearchResult",
+    "run_uniprot_search",
     # PDB tools
     "PdbChain",
     "PdbFetchConfig",
@@ -252,6 +430,13 @@ __all__ = [
     "PdbFetchFastaInput",
     "PdbFetchFastaOutput",
     "run_pdb_fetch_fasta",
+    "PdbSequenceSearchConfig",
+    "PdbSequenceSearchHit",
+    "PdbSequenceSearchInput",
+    "PdbSequenceSearchOutput",
+    "PdbSequenceSearchQuery",
+    "PdbSequenceSearchResult",
+    "run_pdb_sequence_search",
     # Rfam RNA families
     "RfamFamilyConfig",
     "RfamFamilyInput",
@@ -263,6 +448,13 @@ __all__ = [
     "RfamRegionsOutput",
     "run_rfam_family",
     "run_rfam_regions",
+    "PdbStructureSimilarityConfig",
+    "PdbStructureSimilarityHit",
+    "PdbStructureSimilarityQuery",
+    "PdbStructureSimilarityResult",
+    "PdbStructureSimilarityInput",
+    "PdbStructureSimilarityOutput",
+    "run_pdb_structure_similarity",
     # Sequence fetch (orchestrator)
     "FetchedSequence",
     "FetchedStructure",
@@ -272,4 +464,12 @@ __all__ = [
     "SequenceFetchRequest",
     "SequenceFetchResult",
     "run_sequence_fetch",
+    # SynBioHub design fetch
+    "SynBioHubFeature",
+    "SynBioHubFetchConfig",
+    "SynBioHubFetchInput",
+    "SynBioHubFetchOutput",
+    "SynBioHubLocation",
+    "SynBioHubPart",
+    "run_synbiohub_fetch",
 ]

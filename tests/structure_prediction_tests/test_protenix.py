@@ -3,6 +3,9 @@
 Tests for Protenix.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -94,6 +97,57 @@ def test_protenix_unpaired_msa_path_gets_deep_per_chain_unpaired(tmp_path):
         paired_rows = Path(pc["pairedMsaPath"]).read_text().count(">")
         assert unpaired_rows == 5, f"unpairedMsaPath should carry the deep unpaired, got {unpaired_rows}"
         assert paired_rows == 2, f"pairedMsaPath should carry the paired set, got {paired_rows}"
+
+
+def test_protenix_partial_supplied_bundle_gives_every_chain_an_msa_path(tmp_path):
+    """A chain without a path makes Protenix search its own server and overwrite the supplied MSAs."""
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.protenix.protenix import _write_msas_to_batch_json
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+
+    target, binder, linker = "MKTAYIAKQR", "GSHMLEDPVD", "ACDEFGHIKL"
+    inputs = ProtenixInput(
+        complexes=[Complex(chains=[Chain(sequence=s, entity_type="protein") for s in (target, binder, linker)])],
+        msas=[
+            ComplexMSAs(
+                per_chain={0: MSA(aligned_sequences=[target, "MKTAYIAKQA", "MKTAYIAKQE"])},
+                unpaired_per_chain={2: MSA(aligned_sequences=[linker, "ACDEFGHIKA"])},
+            )
+        ],
+    )
+    batch_json = [{"sequences": [{"proteinChain": {}} for _ in range(3)]}]
+
+    _write_msas_to_batch_json(batch_json, inputs, ProtenixConfig(), str(tmp_path))
+
+    paths = [entry["proteinChain"]["unpairedMsaPath"] for entry in batch_json[0]["sequences"]]
+    assert [Path(path).read_text().count(">") for path in paths] == [3, 1, 2]
+    assert Path(paths[1]).read_text() == f">query\n{binder}\n"
+
+
+@pytest.mark.uses_env
+def test_protenix_does_not_search_for_a_partial_supplied_bundle(tmp_path):
+    """Protenix's own need_msa_search stays False on the JSON we write for a target-only MSA."""
+    from proto_tools.entities.msa import MSA
+    from proto_tools.tools.structure_prediction.protenix.protenix import _write_msas_to_batch_json
+    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
+    from proto_tools.utils import run_in_env
+
+    target, binder = "MKTAYIAKQR", "GSHMLEDPVD"
+    inputs = ProtenixInput(
+        complexes=[
+            Complex(
+                chains=[Chain(sequence=target, entity_type="protein"), Chain(sequence=binder, entity_type="protein")]
+            )
+        ],
+        msas=[ComplexMSAs(per_chain={0: MSA(aligned_sequences=[target, "MKTAYIAKQA"])})],
+    )
+    batch_json = [{"sequences": [{"proteinChain": {"sequence": target}}, {"proteinChain": {"sequence": binder}}]}]
+    _write_msas_to_batch_json(batch_json, inputs, ProtenixConfig(), str(tmp_path))
+    job_path = tmp_path / "job.json"
+    job_path.write_text(json.dumps(batch_json[0]))
+
+    code = "import json, sys\nfrom runner.msa_search import need_msa_search\nprint(need_msa_search(json.load(open(sys.argv[1]))))"
+    assert run_in_env("protenix", code=code, args=[str(job_path)], timeout=1800).strip().splitlines()[-1] == "False"
 
 
 # ── protenix-v2 token limit (no GPU) ─────────────────────────────────────────
@@ -312,41 +366,10 @@ def test_protenix_benchmark(request):
     assert_metrics_in_spec(result)
 
 
-def _load_standalone_inference():
-    import importlib.util
-    import logging
-    import sys
-    import types
-    from pathlib import Path
+@pytest.mark.uses_env
+def test_protenix_reported_msa_depth_matches_data_config():
+    from proto_tools.tools.structure_prediction.protenix.protenix import PROTENIX_MSA_MAX_ROWS
+    from proto_tools.utils import run_in_env
 
-    _sh = sys.modules.setdefault("standalone_helpers", types.SimpleNamespace())
-    if not hasattr(_sh, "get_logger"):
-        _sh.get_logger = logging.getLogger
-    standalone_dir = (
-        Path(__file__).resolve().parents[2]
-        / "proto_tools"
-        / "tools"
-        / "structure_prediction"
-        / "protenix"
-        / "standalone"
-    )
-    spec = importlib.util.spec_from_file_location("_protenix_si_for_tests", standalone_dir / "inference.py")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def test_is_checkpoint_corruption_error_matches_stream_reader():
-    mod = _load_standalone_inference()
-    for msg in (
-        "PytorchStreamReader failed reading zip archive: failed finding central directory",
-        "BadZipFile: File is not a zip file",
-    ):
-        assert mod._is_checkpoint_corruption_error(RuntimeError(msg)), msg
-
-
-def test_is_checkpoint_corruption_error_rejects_unrelated_errors():
-    mod = _load_standalone_inference()
-    assert not mod._is_checkpoint_corruption_error(RuntimeError("CUDA out of memory"))
-    assert not mod._is_checkpoint_corruption_error(OSError("Permission denied"))
+    code = "from configs.configs_data import data_configs\nprint(data_configs['msa']['max_size']['test'])"
+    assert int(run_in_env("protenix", code=code, timeout=1800).strip().splitlines()[-1]) == PROTENIX_MSA_MAX_ROWS

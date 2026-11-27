@@ -29,6 +29,33 @@ pip install -e ".[dev]"      # first-time setup only
 Do not manually create or activate tool-specific environments; proto-tools
 builds and manages standalone tool environments automatically.
 
+At the start of a session, and after switching branch or worktree, confirm the
+environment imports the checkout you are editing:
+
+```bash
+python -c "import proto_tools; print(proto_tools.__file__)"
+```
+
+`pip install -e` records an absolute path, so an environment built for one
+worktree keeps importing that worktree from every other one, and several
+worktrees sharing one environment all import whichever was installed last. The
+symptoms do not point at the cause: expect an `ImportError` for a symbol
+plainly present in the file you are reading, or a `pydantic` error about a
+model you never touched, both of which mean two trees are on one path.
+
+Fix it by installing this worktree, not by prepending `PYTHONPATH` -- a path
+prefix leaves the editable `.pth` entries active and both trees importable,
+turning a clear failure into a stranger one.
+
+Repos that vendor proto-tools as a submodule, such as proto-train, add a second
+way for this to drift, since the pin moves between their branches.
+
+Never treat a triggered environment rebuild as a cost or a risk when weighing a
+change. Editing `setup.sh`, `requirements.txt` or anything else in the env
+fingerprint rebuilds that tool's environment, and that is intended. Do not
+raise it as a drawback, scope a change around avoiding it, or ask whether the
+rebuild is acceptable.
+
 Integration tests are skipped by default. See `notes/testing.md` for markers,
 selection flags, logs, and test layout.
 
@@ -39,6 +66,30 @@ and the test never catches a mistake. Test computed properties, validators,
 normalization, error cases, and defaults that are *derived* from other fields.
 Pinning a value is only worth it when it must agree with something external, such as
 an upstream snapshot.
+
+A test that exercises standalone implementation code directly — anything importing
+`torch`, `jax`, or another tool-env dependency into the pytest process — must run
+inside the toolkit's environment via `run_in_env`. Never write it against a copy of
+that package installed alongside proto-tools, and never reach for
+`pytest.importorskip("torch")` to paper over its absence.
+
+The orchestrator has no ML dependencies by design; models live in isolated tool
+environments. So `importorskip` on a toolkit's own dependency does not make the test
+fail when that dependency is missing — it makes it *skip*, silently and green, both
+in CI (which runs `pytest --cpu-only --no-envs`) and in an ordinary local run. Tests
+written that way can stop running for months with nobody noticing.
+
+Put the assertions in a `_{thing}_env_check.py` beside the test, run it with
+`run_in_env`, and assert on a sentinel in its stdout:
+
+```python
+check = Path(__file__).resolve().parent / "_esmc_token_layout_env_check.py"
+output = run_in_env("esmc", script=str(check), timeout=1800)
+assert "ESMC_TOKEN_LAYOUT_OK" in output, output
+```
+
+Mark such tests `uses_env` (or `uses_gpu`, which implies it). Reserve `importorskip`
+for genuinely optional extras, never for a dependency the toolkit owns.
 
 Before pushing any PR, run the full `tests/style_consistency_tests/` suite (fast,
 CPU-only, no env). These run in CI and enforce consistency checks (docstring style,
@@ -59,7 +110,7 @@ fails every predictor that nests it.
   management, docs extraction, storage, and logging infrastructure.
 - `proto_tools/shared_envs/`: reusable standalone environment definitions.
 - `tests/`: style, registry, infrastructure, and tool-specific tests.
-- `tutorials/` and `scripts/`: examples, runtime guides, and repository
+- `guides/` and `scripts/`: examples, runtime guides, and repository
   utilities.
 - `notes/`: canonical long-form developer references.
 
@@ -75,6 +126,7 @@ proto_tools/tools/{category}/{toolkit}/
   cite.bib
   license.yaml
   links.yaml
+  versions.yaml
   examples/
     example.ipynb
   standalone/              # optional, for isolated tool environments
@@ -122,11 +174,33 @@ Rules that affect behavior:
 - Outputs must be JSON-serializable Pydantic-compatible types. Do not expose
   DataFrames, numpy arrays, or arbitrary objects as output fields.
 - Biological coordinates are 1-indexed and inclusive.
+- Any change to a toolkit's hashed source needs a new top entry in its
+  `versions.yaml`; the style tests print the line to add. See
+  `notes/versioning.md`.
 - Use `logging.getLogger(__name__)`, never `print()`. See `notes/logging.md`.
 - Keep heavy ML and optional dependencies lazy unless a Pydantic field type
   requires a module-level import.
 - Tools with heavy dependencies use `standalone/` or shared environments. See
   `notes/tool-environments.md`.
+- Weight URLs, revisions and checksums live in the worker (`standalone/`
+  code or `setup.sh`), next to the download that checks them. The host side
+  owns only the checkpoint names a config accepts, and sends the name. See
+  `notes/storage.md`.
+- **Checkpoint selection is one `model_checkpoint` field**, even when a tool
+  has a single checkpoint. It takes a short bundled name (the default) or
+  the user's own checkpoint as a path (or https link); never add separate
+  `model_name` / `checkpoint_path` / `checkpoint` fields or an empty-string
+  default. Bundled files are downloaded by `setup.sh`, and a test asserts
+  `setup.sh` fetches every one. Reject a local path in
+  `remote_unsupported_reason`. See the implement-tool skill's "one
+  `model_checkpoint` field" section; `opendde` and `parade` follow it.
+- Credentials (API keys, tokens, account emails and passwords) are
+  `ConfigField(credential="TOOLKIT_NAME")` fields named `{toolkit}_{name}`,
+  such as `paperclip_api_key` and `PAPERCLIP_API_KEY`. Client code takes them
+  from the config and never reads credential environment variables itself.
+- A service URL override (`PAPERCLIP_BASE_URL`, `GI_BASE_URL`) is an
+  environment variable read where the request is built. It is never a
+  `ConfigField` and never a credential.
 
 ## Runtime API
 
@@ -159,6 +233,7 @@ targets are:
 - Error handling: `notes/error-handling.md`.
 - Logging: `notes/logging.md`.
 - Seeding and cache behavior: `notes/seeding.md`.
+- Toolkit versions and the output `tool_version` field: `notes/versioning.md`.
 - Storage and weights: `notes/storage.md`.
 - Test markers, placement, and patterns: `notes/testing.md`.
 - Tool implementation details: toolkit README, example notebook, metadata,

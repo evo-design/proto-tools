@@ -3,7 +3,7 @@
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -129,12 +129,10 @@ class IgLMConditioningInput(BaseToolInput):
 class IgLMGenerationConfig(BaseConfig):
     """Base configuration for IgLM sequence generation (full-length and infilling).
 
-    Built on ``BaseConfig`` rather than the category's ``CausalModelSampleConfig``
-    because IgLM generates a bundle of distinct sequences per input instead of one
-    continuation per prompt: ``batch_size`` counts candidate draws rather than prompts,
-    and ``prepend_prompt`` has no meaning for infilling, which always returns the whole
-    re-designed chain. ``IgLMSampleConfig`` adds ``prepend_prompt`` for the one tool
-    that can honour it.
+    IgLM generates several distinct sequences per input, so ``batch_size`` counts
+    candidate draws. Infilling always returns the whole redesigned chain, while
+    ``IgLMSampleConfig`` adds ``prepend_prompt`` for full-length generation. These
+    differences require ``BaseConfig`` rather than ``CausalModelSampleConfig``.
 
     IgLM resamples until it holds ``num_sequences_per_input`` *distinct*
     sequences per item, discarding malformed generations the same way upstream
@@ -206,6 +204,12 @@ class IgLMGenerationConfig(BaseConfig):
         description="Device to run the model on",
         include_in_key=False,
     )
+
+    @classmethod
+    def minimal(cls, **kwargs: Any) -> "IgLMGenerationConfig":
+        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
+        kwargs.setdefault("model_checkpoint", "IgLM-S")
+        return cast("IgLMGenerationConfig", super().minimal(**kwargs))
 
 
 # ============================================================================

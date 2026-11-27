@@ -4,8 +4,6 @@ Wraps two proto-tools entry points from the ``alphafold2`` toolkit:
 
 * ``run_alphafold2`` (structure prediction) from
   ``proto_tools.tools.structure_prediction.alphafold2.alphafold2``
-* ``run_alphafold2_gradient`` (binder design via ColabDesign) from
-  ``proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient``
 
 The build-time warmup runs a single AF2 prediction against the tool's example
 input so that JAX is initialized and weights are downloaded onto the shared
@@ -25,12 +23,11 @@ from proto_tools.modal.utils import RUNTIME_ENV, ensure_gpu_ready, env_for, run_
 
 
 def _warmup() -> None:
-    """Deploy-time: warm the weights without searching for an MSA.
+    """Warm the weights at deploy time without searching for an MSA.
 
-    ``use_msa`` defaults to True, so leaving the config off made the build depend on the ColabFold
-    server — slow, external, and unrelated to whether the image is sound. Every other structure
-    predictor already states this; alphafold2 was relying on something short-circuiting the search
-    for a four-residue input, which is not a property to build on.
+    ``use_msa`` defaults to True. Disable it so the build verifies inference
+    without depending on ColabFold server availability or an MSA search being
+    skipped for the short example input.
     """
     from proto_tools.tools.structure_prediction.alphafold2 import AlphaFold2Config
     from proto_tools.tools.structure_prediction.alphafold2.alphafold2 import (
@@ -64,7 +61,7 @@ app = get_app_for_service("AlphaFold2Service")
     retries=SERVICE_RETRIES,
     secrets=[HF_TOKEN_SECRET],
 )
-@register_tools({"alphafold2-prediction": "predict", "alphafold2-gradient": "gradient"})
+@register_tools({"alphafold2-prediction": "predict"})
 class AlphaFold2Service:
     """Modal service for AlphaFold2 structure prediction and binder design."""
 
@@ -101,30 +98,4 @@ class AlphaFold2Service:
 
         return run_tool_call(
             run_alphafold2, AlphaFold2Input, AlphaFold2Config, input_dict, config_dict, instance=self.instance
-        )
-
-    @modal.method()
-    def gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
-        """Compute AlphaFold2 binder-design loss and gradient via ColabDesign.
-
-        Args:
-            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
-            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
-
-        Returns:
-            dict[str, Any]: Binder-design loss, gradient, predicted structure, and metrics.
-        """
-        from proto_tools.tools.structure_prediction.alphafold2.alphafold2_gradient import (
-            AlphaFold2GradientConfig,
-            AlphaFold2GradientInput,
-            run_alphafold2_gradient,
-        )
-
-        return run_tool_call(
-            run_alphafold2_gradient,
-            AlphaFold2GradientInput,
-            AlphaFold2GradientConfig,
-            input_dict,
-            config_dict,
-            instance=self.instance,
         )

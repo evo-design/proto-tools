@@ -8,16 +8,17 @@ import numpy as np
 import pandas as pd
 import stability_data
 import torch
-import torch.nn.functional as F
 import utrdata_cl as utrdata
 from pl_regressor import RNARegressor
 from standalone_helpers import get_logger
+from standalone_helpers.relaxation import relaxed_sequence
+from standalone_helpers.vocabulary import DNA_NUCLEOTIDES
 from torch.utils.data import DataLoader
 from utrdata_cl import CELLTYPE_CODES_UTR3, CELLTYPE_CODES_UTR5
 
 logger = get_logger(__name__)
 
-DNA_VOCAB = ["A", "C", "G", "T"]
+DNA_VOCAB = list(DNA_NUCLEOTIDES)
 
 # PARADE regression heads emit several columns; these indices select the scalar the
 # published tutorials read back (see the upstream ``predict.py``).
@@ -41,7 +42,7 @@ _ACTIVITY_AUGMENT_KWS = {
 def load_legnet(checkpoint_path: str) -> Any:
     """Load a PARADE ``RNARegressor`` checkpoint and return its LegNet module.
 
-    ``weights_only=False`` is required: the Lightning hyperparameters pickle the LegNet
+    ``weights_only=False`` is required because the Lightning hyperparameters pickle the LegNet
     model class, which is resolved via the vendored ``legnet_classifier`` module.
     """
     regressor = RNARegressor.load_from_checkpoint(checkpoint_path, map_location="cpu", weights_only=False)
@@ -134,6 +135,7 @@ def _predict_activity_group(
     row_batch_size = batch_size * len(cell_types)
     frame["activity"] = _predict(model, dataset, row_batch_size, device)[:, _ACTIVITY_MASS_CENTER_INDEX]
 
+    # Gather each sequence's conditioned predictions using the requested cell-code order.
     rows: list[dict[str, float]] = []
     for seq_id in range(len(sequences)):
         sub = frame[frame["id"] == seq_id]
@@ -144,6 +146,7 @@ def _predict_activity_group(
 
 def predict_stability(model: Any, *, sequences: list[str], batch_size: int, device: str) -> list[float]:
     """Predict the RNA/gDNA log-ratio for each 3' UTR sequence, batching per length group."""
+    # Batch equal-length UTRs together, then restore predictions to the original order.
     values: list[float | None] = [None] * len(sequences)
     for indices in _group_by_length(sequences).values():
         group = _predict_stability_group(
@@ -160,17 +163,6 @@ def _predict_stability_group(model: Any, *, sequences: list[str], batch_size: in
     dataset = stability_data.StabilityData(df=frame, features=("sequence",), predict_cols=[])
     predictions = _predict(model, dataset, batch_size, device)[:, _STABILITY_LOG_RATIO_INDEX]
     return [float(value) for value in predictions]
-
-
-def _relaxed_dna_probs(logits: Any, *, temperature: float, soft: float, hard: float) -> Any:
-    """Convert ``... x L x 4`` DNA logits to relaxed probabilities with optional STE."""
-    probs = F.softmax(logits / temperature, dim=-1)
-    hard_probs = F.one_hot(probs.argmax(dim=-1), num_classes=len(DNA_VOCAB)).to(probs.dtype)
-    relaxed = (1.0 - soft) * hard_probs + soft * probs
-    if hard > 0.0:
-        straight_through = hard_probs + probs - probs.detach()
-        relaxed = hard * straight_through + (1.0 - hard) * relaxed
-    return relaxed
 
 
 def _featurize_logits(relaxed: Any, construct_type: str, cell: str) -> Any:
@@ -192,100 +184,148 @@ def _featurize_logits(relaxed: Any, construct_type: str, cell: str) -> Any:
     return torch.cat([seq_ch, positional_ch, condition_ch], dim=1)
 
 
-def compute_gradient(
+def compute_stability_gradient(
     model: Any,
     *,
     logits_list: list[list[list[float]]],
-    temperature: float,
-    construct_type: str,
-    loss_terms: list[dict[str, Any]],
+    temperature: float | None,
     soft: float,
     hard: float,
     compute_gradient: bool,
     device: str,
 ) -> dict[str, Any]:
-    """Compute a differentiable PARADE activity loss and optional gradient.
+    """Differentiate the PARADE stability log-ratio with respect to a relaxed state.
 
-    Each loss term maps a cell's raw activity through a max/min sigmoid; the weighted
-    terms are summed into one scalar loss and backpropagated to the relaxed input logits.
+    The stability checkpoint predicts one RNA/gDNA log-ratio per sequence, higher being more
+    stable, and that raw scalar is what is differentiated. No sign is applied, so the gradient is
+    ``d(log_ratio)/d(input)``. Its featurization is simpler than the activity model's.
+    ``StabilityData`` is built with ``features=("sequence",)``, meaning four sequence channels and
+    no positional or condition channels, so the relaxed matrix only needs transposing to
+    ``(B, 4, L)``.
+
+    Args:
+        model: Loaded stability checkpoint.
+        logits_list: Relaxed states, shape ``(B, L, 4)`` in ``A,C,G,T`` order.
+        temperature: Optional softmax temperature; ``None`` uses the rows as probabilities.
+        soft: Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard: Straight-through coefficient; 1 forwards a hard one-hot.
+        compute_gradient: If False, skip backward and return ``gradients=None``.
+        device: Device to run on.
+
+    Returns:
+        dict[str, Any]: Per-sample log-ratios, their gradients, and sequence lengths.
+
+    Raises:
+        ValueError: If the logits are not rank 3.
+        RuntimeError: If an expected gradient is missing after the backward pass.
     """
     with torch.set_grad_enabled(compute_gradient):
         logits = torch.tensor(logits_list, device=device, dtype=torch.float32, requires_grad=compute_gradient)
         if logits.ndim != 3:
             raise ValueError(f"parade: logits must have rank 3 (B, L, 4), got rank {logits.ndim}")
 
-        relaxed = _relaxed_dna_probs(logits, temperature=temperature, soft=soft, hard=hard)
+        relaxed = relaxed_sequence(logits, temperature=temperature, soft=soft, hard=hard)
         batch_size = int(relaxed.shape[0])
 
-        # PARADE conditions on a single cell type per forward pass (via the condition
-        # channels), so run one forward per requested cell type and reuse its raw
-        # activity across every loss term that targets that cell.
-        needed_cells = {term["cell_type"] for term in loss_terms}
-        raw_by_cell = {
-            cell: model(_featurize_logits(relaxed, construct_type, cell))[:, _ACTIVITY_MASS_CENTER_INDEX]
-            for cell in needed_cells
+        # Sequence channels only, matching StabilityData(features=("sequence",)).
+        log_ratio = model(relaxed.transpose(1, 2))[:, _STABILITY_LOG_RATIO_INDEX]
+
+        gradients: list[list[list[float]]] | None = None
+        if compute_gradient:
+            # Sum independent samples to compute their gradients in one backward pass.
+            log_ratio.sum().backward()
+            if logits.grad is None:
+                raise RuntimeError("parade: missing relaxed-state gradient after backward")
+            gradients = logits.grad.detach().cpu().tolist()
+
+        return {
+            "log_ratios": [float(value) for value in log_ratio.detach().cpu().tolist()],
+            "gradients": gradients,
+            "lengths": [int(relaxed.shape[1])] * batch_size,
         }
 
-        sample_losses = torch.zeros(batch_size, device=device, dtype=relaxed.dtype)
-        term_metrics_by_sample: list[list[dict[str, Any]]] = [[] for _ in range(batch_size)]
-        raw_scores_by_sample: list[dict[str, float]] = [{} for _ in range(batch_size)]
-        for term in loss_terms:
-            cell = term["cell_type"]
-            direction = term["direction"]
-            weight = float(term.get("weight", 1.0))
-            center = float(term.get("sigmoid_center", 2.0))
-            scale = float(term.get("sigmoid_scale", 1.0))
-            raw_score = raw_by_cell[cell]
-            scaled_score = (raw_score - center) / scale
-            sigmoid_value = torch.sigmoid(scaled_score)
-            if direction == "max":
-                score = 1.0 - sigmoid_value
-            elif direction == "min":
-                score = sigmoid_value
-            else:
-                raise ValueError(f"parade: invalid direction {direction!r}; expected 'max' or 'min'")
-            weighted_score = score * weight
-            sample_losses = sample_losses + weighted_score
 
-            raw_score_values = raw_score.detach().cpu().tolist()
-            scaled_score_values = scaled_score.detach().cpu().tolist()
-            sigmoid_values = sigmoid_value.detach().cpu().tolist()
-            score_values = score.detach().cpu().tolist()
-            weighted_score_values = weighted_score.detach().cpu().tolist()
-            for sample_idx in range(batch_size):
-                raw_scores_by_sample[sample_idx][cell] = float(raw_score_values[sample_idx])
-                term_metrics_by_sample[sample_idx].append(
-                    {
-                        "cell_type": cell,
-                        "direction": direction,
-                        "weight": weight,
-                        "raw_score": float(raw_score_values[sample_idx]),
-                        "scaled_score": float(scaled_score_values[sample_idx]),
-                        "sigmoid_value": float(sigmoid_values[sample_idx]),
-                        "score": float(score_values[sample_idx]),
-                        "weighted_score": float(weighted_score_values[sample_idx]),
-                        "sigmoid_center": center,
-                        "sigmoid_scale": scale,
-                    }
-                )
+def compute_gradient(
+    model: Any,
+    *,
+    logits_list: list[list[list[float]]],
+    temperature: float | None,
+    construct_type: str,
+    gradient_terms: list[dict[str, Any]],
+    soft: float,
+    hard: float,
+    compute_gradient: bool,
+    device: str,
+) -> dict[str, Any]:
+    """Differentiate each requested PARADE cell activity with respect to a relaxed state.
 
-        total_loss = sample_losses.sum()
-        sample_loss_values = [float(value) for value in sample_losses.detach().cpu().tolist()]
+    Every term names one cell, and its value is that cell's raw predicted activity. No direction,
+    weight or sigmoid is applied, so each gradient is ``d(activity)/d(input)``. PARADE conditions
+    on a single cell per forward pass via its condition channels, so one forward runs per cell and
+    is differentiated immediately, keeping at most one gradient on the device at a time. The
+    relaxation is shared by every cell, so its graph is retained until the final backward frees it.
 
-        gradient_value: list[list[list[float]]] | None = None
-        if compute_gradient:
-            total_loss.backward()
-            if logits.grad is None:
-                raise RuntimeError("parade: missing logits gradient")
-            gradient_value = logits.grad.detach().cpu().tolist()
+    Args:
+        model: Loaded activity checkpoint.
+        logits_list: Relaxed states, shape ``(B, L, 4)`` in ``A,C,G,T`` order.
+        temperature: Optional softmax temperature; ``None`` uses the rows as probabilities.
+        construct_type: ``"utr5"`` or ``"utr3"``, selecting the condition-channel panel.
+        gradient_terms: Resolved terms, each naming one ``cell_type``.
+        soft: Blend from the raw input matrix (0) to softmax probabilities (1).
+        hard: Straight-through coefficient; 1 forwards a hard one-hot.
+        compute_gradient: If False, skip every backward and return ``gradients=None`` per term.
+        device: Device to run on.
+
+    Returns:
+        dict[str, Any]: One entry per term with its per-sample values and gradients, plus
+            call-level descriptors and the vocabulary.
+
+    Raises:
+        ValueError: If the logits are not rank 3.
+        RuntimeError: If an expected gradient is missing after a backward pass.
+    """
+    with torch.set_grad_enabled(compute_gradient):
+        logits = torch.tensor(logits_list, device=device, dtype=torch.float32, requires_grad=compute_gradient)
+        if logits.ndim != 3:
+            raise ValueError(f"parade: logits must have rank 3 (B, L, 4), got rank {logits.ndim}")
+
+        relaxed = relaxed_sequence(logits, temperature=temperature, soft=soft, hard=hard)
+        batch_size = int(relaxed.shape[0])
+
+        # One forward per distinct cell, in first-requested order, carrying the caller's term id.
+        cells: list[tuple[str, str | None]] = []
+        seen: set[str] = set()
+        for term in gradient_terms:
+            if term["cell_type"] not in seen:
+                seen.add(term["cell_type"])
+                cells.append((term["cell_type"], term.get("id")))
+
+        terms: list[dict[str, Any]] = []
+        for position, (cell, term_id) in enumerate(cells):
+            # (B, L, 4) -> featurized -> (B,) raw activity for this cell
+            activity = model(_featurize_logits(relaxed, construct_type, cell))[:, _ACTIVITY_MASS_CENTER_INDEX]
+            entry: dict[str, Any] = {
+                "cell_type": cell,
+                "id": term_id,
+                "values": [float(value) for value in activity.detach().cpu().tolist()],
+                "gradients": None,
+            }
+
+            if compute_gradient:
+                # Sum independent samples to compute their gradients in one backward pass.
+                (gradient,) = torch.autograd.grad(activity.sum(), logits, retain_graph=(position < len(cells) - 1))
+                if gradient is None:
+                    raise RuntimeError(f"parade: missing gradient for cell {cell!r} after backward")
+                # Move this gradient to CPU before evaluating the next cell to limit GPU memory use.
+                entry["gradients"] = gradient.detach().cpu().tolist()
+                del gradient
+
+            terms.append(entry)
+            del activity
 
     return {
-        "gradient": gradient_value,
-        "loss": float(sum(sample_loss_values)),
+        "terms": terms,
         "metrics": {
-            "raw_scores": raw_scores_by_sample,
-            "loss_terms": term_metrics_by_sample,
-            "losses": sample_loss_values,
             "batch_size": batch_size,
             "temperature": temperature,
             "soft": soft,

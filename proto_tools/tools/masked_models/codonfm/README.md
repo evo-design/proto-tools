@@ -13,7 +13,7 @@ CodonFM (model name Encodon) is a codon-level masked language model of protein-c
 
 ## Background
 
-Encodon is a BERT-style Transformer encoder trained with a masked-language-modeling objective over codon tokens ([Darabi et al., 2025](https://research.nvidia.com/labs/dbr/assets/data/manuscripts/nv-codonfm-preprint.pdf)). Each coding sequence is split into in-frame codons, a fraction of codon tokens are masked, and the model predicts the original codon from its full bidirectional context. Because the vocabulary is codons rather than amino acids, the model learns the *language of codon translation* — which synonymous codon is expected in a given context — and not only the encoded protein. The released family spans four checkpoints (80M, 600M, 1B parameters, plus a codon-frequency-aware-masking 1B variant), all reading sequences up to 2048 tokens, i.e. coding sequences up to `(2048 - 2) × 3 = 6138 nt` after the CLS/SEP tokens.
+Encodon is a BERT-style Transformer encoder trained with a masked-language-modeling objective over codon tokens ([Darabi et al., 2025](https://research.nvidia.com/labs/dbr/assets/data/manuscripts/nv-codonfm-preprint.pdf)). Each coding sequence is split into in-frame codons, a fraction of codon tokens are masked, and the model predicts the original codon from its full bidirectional context. Because the vocabulary is codons rather than amino acids, the model learns the *language of codon translation* (which synonymous codon is expected in a given context) and not only the encoded protein. The released family spans four checkpoints (80M, 600M, 1B parameters, plus a codon-frequency-aware-masking 1B variant), all reading sequences up to 2048 tokens, i.e. coding sequences up to `(2048 - 2) × 3 = 6138 nt` after the CLS/SEP tokens.
 
 ## Tools
 
@@ -27,25 +27,25 @@ Sequence fitness is a zero-shot naturalness score for ranking or filtering codin
 
 #### Usage Tips
 
-- **Fitness is a relative score against Encodon's training distribution, not an absolute quantity.** It is most meaningful when comparing related sequences of similar length; the per-token mean already normalizes for length, but very short sequences are noisy.
+- **Fitness is a relative score against Encodon's training distribution, not an absolute quantity.** It is most meaningful when comparing related sequences of similar length. The per-token mean already normalizes for length, but very short sequences are noisy.
 - **`batch_size` trades memory for throughput.** Lower it if you OOM on long CDS, raise it for short sequences.
 
 ### CodonFM Score (`codonfm-score`)
 
-Scores individual **codon substitutions** by the reference-vs-alternate log-likelihood ratio at the mutated position. The reference codon is masked and the model's log-probability of the reference and alternate codons is compared; a positive `llr` (`ref − alt`) means the model favors the reference and the substitution is model-disfavored.
+Scores individual **codon substitutions** by the reference-vs-alternate log-likelihood ratio at the mutated position. The reference codon is masked and the model's log-probability of the reference and alternate codons is compared. A positive `llr` (`ref − alt`) means the model favors the reference and the substitution is model-disfavored.
 
 #### Applications
 
-The masked log-likelihood ratio is a canonical zero-shot variant-effect estimator. Because Encodon is codon-level, it discriminates *synonymous* substitutions (same amino acid, different codon) that an amino-acid model cannot see — useful for studying codon-usage effects on expression and mRNA stability.
+The masked log-likelihood ratio is a canonical zero-shot variant-effect estimator. Because Encodon is codon-level, it discriminates *synonymous* substitutions (same amino acid, different codon) that an amino-acid model cannot see, which is useful for studying codon-usage effects on expression and mRNA stability.
 
 #### Usage Tips
 
 - **Each mutation carries its own reference sequence, codon position (1-based), and ref/alt codons.** The reference codon is validated against the sequence at that position, so an off-by-one frame error is caught before dispatch rather than silently mis-scored.
-- **Scores are position-conditional.** The same substitution scored in different sequence contexts will differ; that context-dependence is the point.
+- **Scores are position-conditional.** The same substitution scored in different sequence contexts will differ. That context-dependence is the point.
 
 ### CodonFM Embeddings (`codonfm-embedding`)
 
-Returns the final-layer **CLS-token embedding** for each coding sequence — a fixed-length learned representation whose dimensionality follows the checkpoint.
+Returns the final-layer **CLS-token embedding** for each coding sequence, a fixed-length learned representation whose dimensionality follows the checkpoint.
 
 #### Applications
 
@@ -53,21 +53,22 @@ The CLS embedding is a codon-aware sequence descriptor for downstream supervised
 
 #### Usage Tips
 
-- **Different checkpoints produce different embedding sizes.** Representations from one checkpoint do not transfer to another without re-fitting downstream models; pick one and keep it fixed for an analysis.
+- **Different checkpoints produce different embedding sizes.** Representations from one checkpoint do not transfer to another without re-fitting downstream models. Pick one and keep it fixed for an analysis.
 
 ### CodonFM Gradient (`codonfm-gradient`)
 
-Computes the gradient of the mean masked negative log-likelihood with respect to a relaxed `(L, 64)` distribution over all 64 DNA codons, including the three standard stop codons (lexicographic order `AAA, AAC, AAG, AAT, …`). Each row's current argmax codon is the masked-language-model target. The Encodon weights are frozen; the relaxed distribution passes through Encodon's embedding layer and normalization, each codon position is masked in turn, and a per-chunk backward pass accumulates the gradient. An optional Straight-Through Estimator runs the forward on hard one-hot codons while routing gradients through the soft probabilities.
+Computes the gradient of the mean masked negative log-likelihood with respect to a relaxed `(L, 64)` distribution over all 64 DNA codons, including the three standard stop codons (lexicographic order `AAA, AAC, AAG, AAT, …`). Each row's current argmax codon is the masked-language-model target. The Encodon weights are frozen. The relaxed distribution passes through Encodon's embedding layer and normalization, each codon position is masked in turn, and a per-chunk backward pass accumulates the gradient.
 
 #### Applications
 
-This exposes Encodon as a differentiable, codon-level naturalness prior for continuous sequence design — usable inside gradient descent, MCMC, or any optimization loop over relaxed coding sequences (e.g. codon optimization with a learned constraint).
+This exposes Encodon as a differentiable, codon-level naturalness prior for continuous sequence design, usable inside gradient descent, MCMC, or any optimization loop over relaxed coding sequences (e.g. codon optimization with a learned constraint).
 
 #### Usage Tips
 
-- **`temperature` converts the raw input into a per-position distribution.** The default `1.0` applies `softmax(logits / T)`; set it to `None` only when every row is already a non-negative probability distribution summing to 1.
-- **`use_ste` enables the Straight-Through Estimator** for stronger guidance toward discrete codons while keeping a usable gradient.
-- **`compute_gradient=False` runs forward-only.** The `gradient` field is `None` but `loss` and `metrics` are still populated. This is a masked pseudo-log-likelihood objective; it is distinct from the visible-token objective returned by `codonfm-fitness`.
+- **`temperature`** controls how the input logits are converted into codon probabilities using `softmax(logits / temperature)`. Lower temperatures make the distribution more concentrated around the most likely codon at each position, while higher temperatures produce more uniform distributions. The default is `1.0`, and the returned gradient is calculated with respect to the input logits.
+- **Advanced option:** `temperature=None` skips softmax and treats the input as probabilities rather than logits. Most users should leave the default in place. In this case, each row must contain nonnegative values that sum to 1, and the returned gradient is calculated with respect to those probabilities. This is generally less convenient for gradient-based optimization because updating probabilities directly can cause them to become negative or no longer sum to 1. Optimizing logits avoids this issue, since softmax always produces a valid probability distribution. However, working directly with probabilities can be useful when using an optimizer designed for probability distributions or when exact zero probabilities are needed to exclude particular tokens.
+- **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator. The forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, which is differentiable but outside the model's training distribution.
+- **`compute_gradient=False` runs forward-only.** The term's `gradient` is `None` but its `term_value` and the item `metrics` are still populated. This is a masked pseudo-log-likelihood objective. It is distinct from the visible-token objective returned by `codonfm-fitness`.
 
 ### CodonFM Sampling (`codonfm-sample`)
 
@@ -79,9 +80,9 @@ Masked-codon resampling is the local-edit primitive behind coding-sequence desig
 
 #### Usage Tips
 
-- **`num_mutations` overrides `mask_fraction`.** It sets an exact number of positions to resample, not a guaranteed Hamming distance: the model can draw the original codon again.
-- **`temperature` controls diversity.** Below 1.0 sharpens toward the model's favorite codon; above 1.0 broadens exploration. Because sampling is stochastic, pass a `seed` for reproducible proposals.
-- **`excluded_amino_acids` bans residues from resampled codons.** Pass uppercase single-letter codes (e.g. `["C"]` to forbid new cysteines); every codon encoding one of them is dropped from the draw, so the constraint is on the translated residue rather than on any specific codon. Codons outside the resampled positions are untouched, so an excluded residue already present in the input survives unless its codon is masked.
+- **`num_mutations` and `mask_fraction` are mutually exclusive.** `num_mutations` sets an exact number of positions to resample, not a guaranteed Hamming distance: the model can draw the original codon again.
+- **`temperature` controls diversity.** Below 1.0 sharpens toward the model's favorite codon. Above 1.0 broadens exploration. Because sampling is stochastic, pass a `seed` for reproducible proposals.
+- **`excluded_amino_acids` bans residues from resampled codons.** Pass uppercase single-letter codes (e.g. `["C"]` to forbid new cysteines). Every codon encoding one of them is dropped from the draw, so the constraint is on the translated residue rather than on any specific codon. Codons outside the resampled positions are untouched, so an excluded residue already present in the input survives unless its codon is masked.
 
 ## Toolkit Notes
 
@@ -89,8 +90,8 @@ Masked-codon resampling is the local-edit primitive behind coding-sequence desig
 
 These apply to every CodonFM tool in this toolkit (`codonfm-fitness`, `codonfm-score`, `codonfm-embedding`, `codonfm-gradient`, `codonfm-sample`).
 
-- **Checkpoints download on demand.** The `nvidia/NV-CodonFM-Encodon-*-v1` repos are public; the standalone worker fetches the `.safetensors` weights and their `config.json` on first use and caches them. No HuggingFace token is required (one is used automatically if present).
+- **Checkpoints download on demand.** The `nvidia/NV-CodonFM-Encodon-*-v1` repos are public. The standalone worker fetches the `.safetensors` weights and their `config.json` on first use and caches them. No HuggingFace token is required (one is used automatically if present).
 - **A CUDA GPU is required.** The pinned upstream Encodon attention implementation uses xFormers kernels that do not provide a CPU execution path.
-- **Inputs are codon-aligned nucleotide sequences.** Each length must be a multiple of 3; RNA `U` is mapped to `T`, while ambiguous bases such as `N` are rejected because upstream tokenization would shift codon positions. Inputs are not checked for a start codon, terminal stop, internal stops, or coding-strand orientation.
-- **Max sequence length is 6138 nt (2046 codons).** Encodon's positional cap is 2048 tokens; longer inputs raise `ValueError` rather than truncating.
-- **The default checkpoint is `encodon_80m`.** It is the fastest; the 600M/1B checkpoints trade throughput for fidelity. Pick a larger one for final scoring.
+- **Inputs are codon-aligned nucleotide sequences.** Each length must be a multiple of 3. RNA `U` is mapped to `T`, while ambiguous bases such as `N` are rejected because upstream tokenization would shift codon positions. Inputs are not checked for a start codon, terminal stop, internal stops, or coding-strand orientation.
+- **Max sequence length is 6138 nt (2046 codons).** Encodon's positional cap is 2048 tokens. Longer inputs raise `ValueError` rather than truncating.
+- **The default checkpoint is `encodon_80m`.** It is the fastest. The 600M/1B checkpoints trade throughput for fidelity. Pick a larger one for final scoring.

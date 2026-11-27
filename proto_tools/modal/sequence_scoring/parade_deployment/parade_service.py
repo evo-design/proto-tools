@@ -104,7 +104,7 @@ class ParadeService:
 
     @modal.method()
     def gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
-        """Compute input gradients of a PARADE prediction with respect to sequence.
+        """Compute PARADE UTR-activity gradients with respect to the relaxed input logits.
 
         Args:
             input_dict (dict[str, Any]): Mapping of input names to their serialized values.

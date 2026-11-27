@@ -1,10 +1,10 @@
 # Tool Persistence Reference
 
 This note covers how `proto_tools` keeps model workers alive across calls,
-namely the worker cache hierarchy, the dispatch resolution paths,
+including the worker cache hierarchy, dispatch resolution,
 preprocess/dispatch worker sharing, config-change restarts, multi-GPU fan-out,
 and device management. The user-facing walkthrough lives in the Tool Persistence
-guide, while this is the internals reference.
+guide. This note explains the implementation.
 
 Source of truth: `proto_tools/utils/tool_instance.py`,
 `proto_tools/utils/persistent_worker.py`, `proto_tools/utils/tool_pool.py`,
@@ -19,13 +19,12 @@ the call returns. Nothing leaks between calls and no GPU memory is retained.
 
 <img src="../guides/assets/tool-persistence/default.svg" alt="In the default one-shot mode, each call reloads the model and releases its GPU memory afterward." width="560">
 
-One-shot is the safe default but pays the model load on every call. A forward
+One-shot execution loads the model on every call. A forward
 pass may take well under a second, while loading a structure-prediction or
 language model takes seconds to tens of seconds. **Persistence** keeps the worker
 subprocess (and its loaded model) alive between calls so the load is paid once.
 
-There are three opt-in mechanisms, all peers of the one-shot default rather than
-upgrades over it:
+Choose one of three persistence mechanisms when you need to reuse a worker.
 
 | Mechanism | Scope | Cleanup | Use when |
 |---|---|---|---|
@@ -38,12 +37,12 @@ test fixtures and batch jobs (see [Cache scopes](#cache-scopes)).
 
 ## The worker cache hierarchy
 
-Persistence is bookkeeping over a set of caches. A `ToolInstance` is a handle to
+Persistence uses caches to find workers that are already running. A `ToolInstance` is a handle to
 one isolated environment plus (optionally) a live persistent worker. Cached
 instances are looked up by a string key (the toolkit name by default, or an
 explicit `instance_name`).
 
-Three layers exist, consulted in this order by `_lookup_instance(key)`:
+`_lookup_instance(key)` checks the following caches in order.
 
 1. **Auto-persist overlay** (`_auto_persist_overlay`, a `ContextVar`) is a
    per-task overlay seeded by `_auto_persist_scope` so that a tool's
@@ -68,14 +67,13 @@ resolves a worker as follows. The `instance` kwarg is forwarded from the
 - **Path 2, `instance` is a `str`**: resolve it as a cache key via
   `_lookup_instance`. If found, reuse it. If not found but a persist context
   is active, create-and-register under that key, and if not found and no persist
-  context is active, raise `ValueError`. A bare string is a reference, not a
-  creation request.
+  context is active, raise `ValueError`. A bare string refers to a cached instance.
 - **Path 3, `instance is None`**: look up the toolkit key. If a cached
   instance exists, reuse it. Otherwise, if persist mode is active, create and
   cache one (`get(toolkit)`). Otherwise fall through.
 - **Path 4, no cached instance, no persist mode**: run a one-shot ephemeral
   subprocess (`_oneshot`). For GPU devices this takes a transient device lease
-  so concurrent one-shot calls do not stomp the same GPU.
+  so concurrent one-shot calls do not use the same GPU.
 
 ## persist(): auto-cache everything in a block
 
@@ -102,7 +100,7 @@ establishes the configuration, and a later change is picked up by the
 
 `persist_tool(toolkit, *, instance_name=None, env_overrides=None)` scopes
 persistence to a single tool. For most batch work `persist()` is sufficient.
-Reach for `persist_tool()` when you need **more than one live worker for the
+Use `persist_tool()` when you need **more than one live worker for the
 same tool at once**, most often one worker per GPU:
 
 ```python
@@ -151,7 +149,7 @@ concurrent callers do not collide.
 ## Preprocess/dispatch worker sharing
 
 Some tools define a config `preprocess()` that **itself runs the model** before
-the main inference. The canonical case is masked-language-model sampling
+the main inference. One example is masked-language-model sampling
 (`esm2-sample`, `esm3-sample`), where `preprocess` calls the embedding tool to
 score positions for a model-based masking strategy and then the main sampling
 call runs the same model. Without coordination that is two loads per call.
@@ -212,12 +210,23 @@ and the `verbose` scale.
 
 ## Auto-restart on config change (`reload_on_change`)
 
-A persistent worker reflects the configuration it was last loaded with. When a
-**load-time** parameter changes between calls (`device`, `model_checkpoint`,
-`model_name`, or any other field marked `reload_on_change=True` on the tool's
-`Config`), the persistence layer detects the mismatch (`reload_fields()` /
-`_reload_params`) and transparently restarts the worker with the new config
-before running the call.
+A persistent worker reflects the configuration it was spawned with. When a
+**load-time** parameter changes between calls (`model_checkpoint`, `model_name`,
+or any other field marked `reload_on_change=True` on the tool's `Config`), the
+persistence layer detects the mismatch (`reload_fields()` / `_reload_params`)
+and transparently restarts the worker with the new config before running the
+call. A `device` change is not a reload field: the worker moves in-process
+(`to_device`), and only a pinned worker is respawned.
+
+The tools of one toolkit share its worker and may declare different reload
+fields (ESMFold2 prediction declares `model_checkpoint`; the inversion tools also
+declare `lm_dropout`). Reuse across them is only sound when the worker already
+holds the model the call asks for, which this layer cannot see, so leaving a
+recorded field undeclared is **opt-in per field**: `_SHARED_RELOAD_FIELDS` in
+`tool_instance.py` lists the fields a tool may omit, added one at a time once
+someone has checked that omitting it cannot change the model that tool gets.
+Anything else restarts the worker. A field every tool declares needs no entry,
+since those values are always compared. `_reload_changes` carries the exact rule.
 
 Two rules for tool authors:
 
@@ -225,8 +234,8 @@ Two rules for tool authors:
   changes how the model is constructed but is not marked, a persistent worker
   will silently keep serving the stale model.
 - **Standalone scripts must not check for config changes themselves.** The
-  `ToolInstance` layer owns restarts. A standalone that re-inits on its own will
-  double-load.
+  `ToolInstance` layer handles restarts. If the standalone script also reloads
+  the model, it will load twice.
 
 Runtime-only fields (e.g. `timeout`) set `reload_on_change=False` and do not
 trigger restarts.
@@ -237,18 +246,17 @@ A few tools expose several **mutually exclusive** checkpoints that callers switc
 between rapidly (e.g. `borzoi`'s four replicates, iterated per `borzoi-ensemble`
 call). Restarting the whole worker process on each switch — the default
 `reload_on_change` path — means a fresh process spawn, re-import, and model
-reload every time, which both dominated runtime and repeatedly exercised the
-GPU-teardown path that could wedge a worker.
+reload every time, which dominated runtime and repeatedly triggered a GPU cleanup path that
+could leave a worker stuck.
 
 Such a tool may instead swap the checkpoint **in-process**: leave the selecting
 field (`replicate`/`species`) *unmarked* (`reload_on_change` absent) and have the
 standalone rebuild its module-level model when the requested checkpoint differs
-from the loaded one, unloading the old one first. This is the one sanctioned
-exception to "standalone scripts must not check for config changes": it is safe
-**only because the field is unmarked**, so the `ToolInstance` layer never also
-restarts — the standalone is the *sole* reloader, so there is no double-load. The
+from the loaded one, unloading the old one first. This is the one exception to the rule that standalone scripts must not check
+for config changes. **The field must be unmarked**, so only the standalone
+script reloads the model and the `ToolInstance` layer does not also restart it. The
 standalone must return the applied checkpoint (e.g. `applied_replicate`) and the
-wrapper must verify it matches the request, so a failed swap surfaces loudly
+wrapper must verify it matches the request, so a failed swap raises an error
 instead of mislabeling another checkpoint's output.
 
 ## ToolPool and parallel execution
@@ -329,14 +337,45 @@ in full in `notes/device-management.md`.
 ## Timeouts
 
 Every tool call enforces a timeout, default 3600 seconds (`DEFAULT_TIMEOUT`,
-overridable per call via the `timeout` config field). The timeout bounds the
-**entire** wait for the worker's response — including any third-party or native
-output written to the worker's stdout, not just the first byte. If a call exceeds
-it, the worker subprocess is killed and a `TimeoutError` is raised. For a
+overridable per call via the `timeout` config field). The timeout bounds the wait
+for the worker's response — including any third-party or native output written to
+the worker's stdout, not just the first byte — except for time spent downloading
+weights. If a call exceeds it, the worker subprocess is killed and a `TimeoutError`
+is raised.
+
+A first call can download gigabytes of weights at whatever speed the link allows, so
+`ProgressDeadline` (`proto_tools/utils/download_progress.py`) adds back every interval
+in which the toolkit's download folders grew by at least 1 MiB: `HF_HOME`, `TORCH_HOME`,
+and its weights directory, checked every `PROTO_DOWNLOAD_POLL_SECONDS` (default 30).
+Smaller growth (a cache, a log) is not a download. A download that stalls stops growing,
+so the clock runs again and the remaining timeout bounds it. At most
+`PROTO_DOWNLOAD_MAX_SECONDS` (default 12 hours) is added back per request, so a writer
+mistaken for a download cannot keep an unresponsive worker alive. The JAX and compile caches
+are not watched. The same rule applies to one-shot runs and `run_in_env`. A timeout
+message reports any download time it excluded. With no timeout, the heartbeat watches
+the same folders, so a long download logs "Downloading weights" rather than a warning about an
+unresponsive worker.
+
+The first call of each `reload_on_change` combination (and the first one-shot run of an
+env) also gets at least 3600 s, the warm-up extension, for first-run work that is not a
+download, such as JIT compiles and model loading. A `.warmup_complete_*` marker in the env
+records each combination that has finished once. For a
 **persistent** worker the timeout is per-call: a call that trips the timeout tears
 down that worker, so the next call reloads the model in a fresh subprocess.
 `timeout` is `reload_on_change=False` and `include_in_key=False`, so changing it
 never restarts a worker on its own.
+
+A tool with no standalone environment runs in the caller's process, so the
+`@tool` wrapper enforces its `config.timeout` as a deadline
+(`proto_tools/utils/deadlines.py`) instead. Requests from `build_http_session`
+sessions, and the waits in `request_with_retry` and `poll_until_complete`, end at
+that deadline with `DeadlineExceededError`, a `TimeoutError`. In-process network
+code should use these helpers, and wrap work sent to a thread pool in `propagate()`.
+`tests/style_consistency_tests/test_thread_deadline_propagation.py` enforces that for tool code.
+
+The deadline is a hard wall-clock limit: a request still in flight when it passes is cut
+off, even one that is making progress. Tools that need longer must set an appropriate timeout in their config. `NCBIReferenceBundleConfig` defaults `timeout` to None so a multi-GB download on a slow
+link finishes, and `GIConfig.effective_timeout()` grows to cover its own `timeout_seconds`.
 
 ## Lifecycle and cleanup
 
@@ -360,4 +399,4 @@ never restarts a worker on its own.
 - Outputs must stay JSON-serializable for the worker wire protocol (see
   `notes/finding-tools.md`).
 - For batch APIs, prefer one shared worker (`persist()`) or a `ToolPool` over
-  manual per-item `get()`/`shutdown()` churn.
+  repeated per-item `get()` and `shutdown()` calls.

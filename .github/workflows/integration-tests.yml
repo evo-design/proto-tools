@@ -41,4 +41,5 @@ jobs:
         key: ${{ runner.os }}-micromamba
     - name: Install dependencies
       run: uv pip install --system ".[dev]"
-    - run: pytest --integration --cpu-only --random-order
+    # Tests that run a tool env (uses_env) run by default; --network adds those that call a live service.
+    - run: pytest --network --cpu-only --random-order

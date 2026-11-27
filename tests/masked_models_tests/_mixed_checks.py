@@ -3,7 +3,6 @@
 import importlib
 import json
 import math
-import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -11,8 +10,7 @@ import pytest
 from standalone_helpers.mixed_sequence import tokenize_mixed_sequence
 
 from proto_tools.tools.masked_models.mixed_data_models import MIXED_VOCAB, one_hot_mixed_logits
-from proto_tools.utils import ToolInstance
-from proto_tools.utils.persistent_worker import _build_subprocess_env
+from proto_tools.utils import run_in_env
 from tests.conftest import benchmark_twice
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -63,19 +61,24 @@ def check_embeddings_score_gradient(toolkit, checkpoint):
     assert score.perplexity == pytest.approx(math.exp(-score.avg_log_likelihood))
     assert np.asarray(score.logits).shape == (8, 24)
     np.testing.assert_array_equal(np.asarray(score.logits)[[0, 3, 6, 7]], 0.0)
-    inputs = {"sequence": LOCUS, "logits": one_hot_mixed_logits(LOCUS, sharpness=1.0), "temperature": None}
+    inputs = {
+        "inputs": {"sequence": LOCUS, "logits": one_hot_mixed_logits(LOCUS, sharpness=1.0)},
+        "temperature": None,
+    }
     backward = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2)
     forward = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2, compute_gradient=False)
-    gradient = np.asarray(backward.gradient)
+    gradient = np.asarray(backward.results[0].terms[0].gradient)
     assert gradient.shape == (8, 24)
     assert np.isfinite(gradient).all()
     np.testing.assert_array_equal(gradient[[0, 3, 6, 7]], 0.0)
     np.testing.assert_array_equal(gradient[[1, 2], 20:], 0.0)
     np.testing.assert_array_equal(gradient[[4, 5], :20], 0.0)
     assert np.any(gradient[[1, 2, 4, 5]] != 0.0)
-    assert backward.loss == pytest.approx(-score.avg_log_likelihood, rel=2e-5, abs=2e-5)
-    assert forward.loss == pytest.approx(backward.loss, rel=2e-5, abs=2e-5)
-    assert forward.gradient is None
+    assert backward.results[0].terms[0].term_value == pytest.approx(-score.avg_log_likelihood, rel=2e-5, abs=2e-5)
+    assert forward.results[0].terms[0].term_value == pytest.approx(
+        backward.results[0].terms[0].term_value, rel=2e-5, abs=2e-5
+    )
+    assert forward.results[0].terms[0].gradient is None
     validate_output(backward)
 
 
@@ -110,7 +113,7 @@ def check_gradient_finite_difference(toolkit, checkpoint):
     """Compare a real model's relaxed masked-PLL derivative with a central difference."""
     sequence = "<+>M<+>a"
     logits = np.asarray(one_hot_mixed_logits(sequence, sharpness=2.0))
-    inputs = {"sequence": sequence, "logits": logits.tolist(), "temperature": 0.9}
+    inputs = {"inputs": {"sequence": sequence, "logits": logits.tolist()}, "temperature": 0.9}
     result = call_model(toolkit, "gradient", checkpoint, inputs, batch_size=2)
     epsilon = 0.02
     losses = []
@@ -122,25 +125,29 @@ def check_gradient_finite_difference(toolkit, checkpoint):
                 toolkit,
                 "gradient",
                 checkpoint,
-                {**inputs, "logits": perturbed.tolist()},
+                {**inputs, "inputs": {"sequence": sequence, "logits": perturbed.tolist()}},
                 batch_size=2,
                 compute_gradient=False,
-            ).loss
+            )
+            .results[0]
+            .terms[0]
+            .term_value
         )
     derivative = (losses[0] - losses[1]) / (2 * epsilon)
-    assert result.gradient[3][21] == pytest.approx(derivative, rel=0.03, abs=3e-4)
+    assert result.results[0].terms[0].gradient[3][21] == pytest.approx(derivative, rel=0.03, abs=3e-4)
 
 
 _UPSTREAM_REFERENCE = """
-import importlib.util,json,sys,torch
+import importlib.util,json,os,sys,torch
+device=os.environ["RUN_IN_ENV_DEVICE"]
 path,checkpoint,sequence,depth=sys.argv[1:]
 spec=importlib.util.spec_from_file_location("mixed_reference_adapter",path)
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 adapter=module._MODEL
-adapter.load(checkpoint,"cuda")
+adapter.load(checkpoint,device)
 tokenizer=adapter.tokenizer
 encoded=tokenizer(sequence,add_special_tokens=False,return_tensors="pt")
-ids=encoded["input_ids"].to("cuda")
+ids=encoded["input_ids"].to(device)
 mask=torch.ones_like(ids)
 tokens=tokenizer.convert_ids_to_tokens(ids[0].tolist())
 vocab=list("ACDEFGHIKLMNPQRSTVWYacgt")
@@ -162,32 +169,25 @@ print("MIXED_REFERENCE="+json.dumps(result))
 
 
 def upstream_reference(toolkit, checkpoint, sequence, interaction_layers=0):
-    """Run native upstream forwards in the managed environment, outside the tool algorithms."""
-    instance = ToolInstance.get(toolkit)
-    instance.ensure_ready()
+    """Run native upstream forwards in the managed environment, outside the tool algorithms.
+
+    Goes through ``run_in_env`` so the GPU is leased from DeviceManager. The module's persistent
+    worker usually holds it by now, and on an ``Exclusive_Process`` GPU a process started beside
+    it cannot create a CUDA context; the lease evicts the worker first, and the next tool call
+    restarts it.
+    """
     inference = (
         Path(__file__).parents[2] / "proto_tools" / "tools" / "masked_models" / toolkit / "standalone" / "inference.py"
     )
-    process = subprocess.run(
-        [
-            str(instance.env_path / "bin" / "python"),
-            "-c",
-            _UPSTREAM_REFERENCE,
-            str(inference),
-            checkpoint,
-            sequence,
-            str(interaction_layers),
-        ],
-        env=_build_subprocess_env(device="cuda", tool_env_path=instance.env_path),
-        check=True,
-        capture_output=True,
-        text=True,
+    output = run_in_env(
+        toolkit,
+        code=_UPSTREAM_REFERENCE,
+        args=[str(inference), checkpoint, sequence, str(interaction_layers)],
+        device="cuda",
         timeout=600,
     )
     reference = next(
-        line.removeprefix("MIXED_REFERENCE=")
-        for line in process.stdout.splitlines()
-        if line.startswith("MIXED_REFERENCE=")
+        line.removeprefix("MIXED_REFERENCE=") for line in output.splitlines() if line.startswith("MIXED_REFERENCE=")
     )
     return json.loads(reference)
 
@@ -211,7 +211,7 @@ def benchmark_operation(request, toolkit, checkpoint, operation):
         inputs = {"sequences": [sequence[:-1] + base for base in "acgt"]}
     settings = {"batch_size": 4}
     if operation == "gradient":
-        inputs = {"sequence": sequence, "logits": one_hot_mixed_logits(sequence, sharpness=2.0)}
+        inputs = {"inputs": {"sequence": sequence, "logits": one_hot_mixed_logits(sequence, sharpness=2.0)}}
     if operation == "sample":
         settings["seed"] = 0
     result = benchmark_twice(request, toolkit, lambda: call_model(toolkit, operation, checkpoint, inputs, **settings))

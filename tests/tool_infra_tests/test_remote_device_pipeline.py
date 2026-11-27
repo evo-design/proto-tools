@@ -2,9 +2,9 @@
 
 Tests that a remote device runs the same prepared work a local one does.
 
-``device="proto"`` and ``device="modal"`` once dispatched before dedup, the per-item cache,
-and ``preprocess``, so the paid device repeated work the caller had already done and never
-reused a cached item. Both now fall through the shared pipeline and dispatch at the point a
+Remote devices once dispatched before dedup, the per-item cache, and ``preprocess``, so the
+paid device repeated work the caller had already done and never reused a cached item. They now
+fall through the shared pipeline and dispatch at the point a
 local device would execute, and the config records that preprocess ran so the worker on the
 far side does not repeat it.
 """
@@ -101,10 +101,6 @@ def _register_probe(
             results=[_RemoteItem(value=item) for item in inputs.items],
         )
 
-    import proto_tools.proto as proto_module
-
-    monkeypatch.setattr(proto_module, "dispatch_to_proto", fake_dispatch, raising=False)
-
     def fake_batch_dispatch(tool_key: str, inputs_list, configs):
         """Chunked fan-out path; one config per chunk, recorded as the single-call form does."""
         return [fake_dispatch(tool_key, chunk, one) for chunk, one in zip(inputs_list, configs, strict=True)]
@@ -142,22 +138,20 @@ def program_cache():
     _program_tool_cache.reset(token)
 
 
-@pytest.mark.parametrize("device", ["proto", "modal"])
-def test_remote_dispatch_receives_deduplicated_items(remote_tool, device):
+def test_remote_dispatch_receives_deduplicated_items(remote_tool):
     """Duplicates collapse before dispatch, and the caller still gets one result per input."""
     spec, seen = remote_tool
 
-    result = spec.function(_RemoteInput(items=["a", "b", "a", "b"]), _RemoteConfig(device=device))
+    result = spec.function(_RemoteInput(items=["a", "b", "a", "b"]), _RemoteConfig(device="modal"))
 
     assert seen["dispatches"] == [["a", "b"]], "the remote should only be paid for unique items"
     assert [r.value for r in result.results] == ["a", "b", "a", "b"]
 
 
-@pytest.mark.parametrize("device", ["proto", "modal"])
-def test_remote_dispatch_reuses_cached_items(remote_tool, program_cache, device):
+def test_remote_dispatch_reuses_cached_items(remote_tool, program_cache):
     """A repeat call skips dispatch, and a partial repeat dispatches only the new item."""
     spec, seen = remote_tool
-    config = lambda: _RemoteConfig(device=device)  # noqa: E731 — a fresh config per call
+    config = lambda: _RemoteConfig(device="modal")  # noqa: E731 — a fresh config per call
 
     first = spec.function(_RemoteInput(items=["a", "b"]), config())
     spec.function(_RemoteInput(items=["a", "b"]), config())
@@ -168,12 +162,11 @@ def test_remote_dispatch_reuses_cached_items(remote_tool, program_cache, device)
     assert [r.value for r in third.results] == ["a", "b", "c"]
 
 
-@pytest.mark.parametrize("device", ["proto", "modal"])
-def test_preprocess_runs_once_on_the_caller(remote_tool, device):
+def test_preprocess_runs_once_on_the_caller(remote_tool):
     """The caller preprocesses, and says so, so the worker on the far side does not repeat it."""
     spec, seen = remote_tool
 
-    spec.function(_RemoteInput(items=["a"]), _RemoteConfig(device=device))
+    spec.function(_RemoteInput(items=["a"]), _RemoteConfig(device="modal"))
 
     assert _RemoteConfig.preprocess_calls == 1
     assert seen["preprocess_completed"] == [True]
@@ -217,12 +210,11 @@ def test_a_short_remote_result_is_reported_clearly(remote_tool, program_cache, m
         spec.function(_RemoteInput(items=["a", "b"]), _RemoteConfig(device="modal"))
 
 
-@pytest.mark.parametrize("device", ["proto", "modal"])
-def test_a_trivially_local_tool_is_never_dispatched(trivially_local_tool, device):
-    """No GPU and no standalone environment means a worker offers nothing, on either device."""
+def test_a_trivially_local_tool_is_never_dispatched(trivially_local_tool):
+    """No GPU and no standalone environment means a worker offers nothing."""
     spec, seen = trivially_local_tool
 
-    result = spec.function(_RemoteInput(items=["a", "b"]), _RemoteConfig(device=device))
+    result = spec.function(_RemoteInput(items=["a", "b"]), _RemoteConfig(device="modal"))
 
     assert seen["dispatches"] == [], "a remote worker has nothing to offer this tool"
     assert [r.value for r in result.results] == ["a", "b"]

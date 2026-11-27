@@ -9,9 +9,9 @@ Atom/bond detail and 2D/3D rendering are not produced here — the calling
 tool reconstructs an RDKit ``Mol`` from the canonical SMILES, and
 ``Fragment.visualize()`` covers visualization on the consumer side.
 
-This module runs in an isolated micromamba environment and MUST NOT import
-from `proto_tools`. All heavy chemistry deps are imported lazily inside
-function bodies to keep subprocess startup cost minimal.
+This module runs in an isolated micromamba environment and must not import
+from `proto_tools`. Import chemistry dependencies inside functions to keep
+subprocess startup fast.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import re
 import sys
 from typing import Any
 
-from standalone_helpers import get_logger, resolve_weights_dir
+from standalone_helpers import StatusCounter, get_logger, resolve_weights_dir
 
 logger = get_logger(__name__)
 
@@ -93,7 +93,7 @@ def _read_bundle(components_path: str) -> Any:
     if doc is None:
         import gemmi
 
-        logger.info("Reading CCD bundle %s ...", components_path)
+        logger.update_status("Reading CCD bundle")
         doc = gemmi.cif.read(components_path)
         _GEMMI_DOCS[components_path] = doc
     return doc
@@ -138,6 +138,21 @@ def _is_likely_ccd_code(s: str) -> bool:
     return True
 
 
+def _parses_as_smiles(s: str) -> bool:
+    """Return whether RDKit parses `s` as a SMILES.
+
+    Args:
+        s (str): Candidate identifier.
+
+    Returns:
+        bool: True if RDKit builds a molecule with at least one atom from `s`.
+    """
+    from rdkit import Chem
+
+    mol = Chem.MolFromSmiles(s)
+    return mol is not None and mol.GetNumAtoms() > 0
+
+
 # ============================================================================
 # CCD index for SMILES/InChIKey -> code resolution
 # ============================================================================
@@ -146,9 +161,9 @@ def _is_likely_ccd_code(s: str) -> bool:
 def _compute_ccd_indices(components_path: str) -> tuple[dict[str, str], dict[str, str]]:
     """Build canonical SMILES and InChIKey -> CCD code maps from the CCD bundle.
 
-    Expensive: parses every block of the CCD (about a minute and several GB of
-    memory). Blocks that fail to parse are skipped. Ambiguous InChIKeys
-    (multiple codes mapping to one key) are dropped to keep lookups deterministic.
+    Parse every CCD block, taking about a minute and several GB of memory. Blocks that fail
+    to parse are skipped. Ambiguous InChIKeys (multiple codes mapping to one key) are
+    dropped to keep lookups deterministic.
 
     Args:
         components_path (str): Path to the uncompressed components.cif.
@@ -166,7 +181,7 @@ def _compute_ccd_indices(components_path: str) -> tuple[dict[str, str], dict[str
     inchikey_index: dict[str, str] = {}
 
     with _silence_rdkit_logger():
-        for block in doc:
+        for block in StatusCounter(logger, "Indexing CCD entry %d/%d", doc):
             ccd_id = block.name
             try:
                 # sanitize=False maximizes coverage; sanitization rejects many organometallic/hypervalent entries.
@@ -421,8 +436,8 @@ def _physchem_properties(component: Any, mol: Any) -> dict[str, float]:
 
     Pulls documented values from ``component.physchem_properties`` (RDKit
     Properties() output) when available, falling back to direct RDKit calls for
-    any missing key. Always returns the same key schema; pdbeccdutils' bulk
-    descriptor output (chi*/kappa*/etc.) is intentionally dropped.
+    any missing key. Return a consistent set of keys. Omit pdbeccdutils' bulk
+    descriptor output, such as chi and kappa indices.
     """
     from rdkit.Chem import Crippen, Descriptors, Lipinski
 
@@ -675,6 +690,7 @@ def run_ccd_lookup(input_data: dict[str, Any]) -> dict[str, Any]:
     include_xrefs = bool(cfg.get("include_cross_references", False))
     include_pdb_usage = bool(cfg.get("include_pdb_usage", False))
     sanitize = bool(cfg.get("sanitize", True))
+    identifier_type = str(cfg.get("identifier_type", "auto"))
 
     weights_dir = resolve_weights_dir("ccd_lookup")
     components_path = os.path.join(weights_dir, "components.cif")
@@ -686,7 +702,9 @@ def run_ccd_lookup(input_data: dict[str, Any]) -> dict[str, Any]:
     # Silence the C++ logger across the batch — pdbeccdutils re-emits "bond type above 3" /
     # "Invalid InChI prefix" warnings even after scoped silencers; real failures already land on record["errors"].
     with _silence_rdkit_logger():
-        records = _process_identifiers(identifiers, components_path, sanitize, include_xrefs, include_pdb_usage)
+        records = _process_identifiers(
+            identifiers, components_path, sanitize, include_xrefs, include_pdb_usage, identifier_type
+        )
     return {"records": records}
 
 
@@ -696,6 +714,7 @@ def _process_identifiers(
     sanitize: bool,
     include_xrefs: bool,
     include_pdb_usage: bool,
+    identifier_type: str = "auto",
 ) -> list[dict[str, Any]]:
     """Iterate identifiers and build their enrichment records.
 
@@ -705,22 +724,32 @@ def _process_identifiers(
         sanitize (bool): Whether to sanitize parsed RDKit molecules.
         include_xrefs (bool): Fetch UniChem cross-references when True.
         include_pdb_usage (bool): Fetch RCSB PDB usage when True.
+        identifier_type (str): ``"ccd_code"`` or ``"smiles"`` reads every identifier one way;
+            ``"auto"`` decides per identifier with ``_is_likely_ccd_code``.
 
     Returns:
         list[dict[str, Any]]: One record per input identifier in input order.
     """
     records: list[dict[str, Any]] = []
-    for raw_id in identifiers:
+    for raw_id in StatusCounter(logger, "Looking up compound %d/%d", identifiers):
         identifier = (raw_id or "").strip()
+        # Record blank identifiers as errors without looking them up
         if not identifier:
             records.append(_empty_record(None, ["Empty identifier"]))
             continue
 
         try:
-            is_ccd = _is_likely_ccd_code(identifier)
+            # Read the identifier as a CCD code or a SMILES, warning when both fit
+            is_ccd = identifier_type == "ccd_code" or (identifier_type == "auto" and _is_likely_ccd_code(identifier))
             resolved_code: str | None = None
             warnings: list[str] = []
+            if identifier_type == "auto" and is_ccd and _parses_as_smiles(identifier):
+                warnings.append(
+                    f"{identifier!r} was read as a CCD code, but it is also a valid SMILES; "
+                    "set identifier_type='smiles' to read it as one"
+                )
 
+            # Uppercase CCD codes directly, or resolve a SMILES to its matching CCD code
             if is_ccd:
                 resolved_code = identifier.upper()
             else:
@@ -730,9 +759,11 @@ def _process_identifiers(
                     records.append(_empty_record(None, [f"SMILES resolution failed: {exc}"]))
                     continue
                 if resolved_code is None:
-                    records.append(_empty_record(None, ["No CCD match for SMILES"]))
+                    # A new molecule is still a usable ligand: the lookup found nothing, but nothing failed
+                    records.append(_empty_record(None, [], ["No CCD match for SMILES"]))
                     continue
 
+            # Load the component from components.cif, recording an error if it is absent
             component, component_warnings = _load_component(resolved_code, components_path, sanitize=sanitize)
             warnings.extend(component_warnings)
             if component is None:
@@ -745,10 +776,12 @@ def _process_identifiers(
                 )
                 continue
 
+            # Build the enrichment record and carry over any warnings collected so far
             record = _extract_record(component, components_path)
             if warnings:
                 record["warnings"] = list(record.get("warnings", [])) + warnings
 
+            # Optionally attach UniChem cross-references and RCSB PDB usage
             if include_xrefs and resolved_code is not None:
                 xrefs, warn = _fetch_unichem_cross_refs(resolved_code, record.get("inchikey"))
                 record["cross_references"] = xrefs
@@ -763,6 +796,7 @@ def _process_identifiers(
 
             records.append(record)
         except Exception as exc:
+            # Turn any unexpected failure into an error record so the batch continues
             logger.exception("Unhandled error processing identifier %r", identifier)
             records.append(_empty_record(None, [f"Unhandled error: {exc}"]))
 

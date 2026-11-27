@@ -1,10 +1,4 @@
-"""proto_tools/tools/structure_prediction/viennarna/viennarna.py.
-
-RNA secondary structure prediction using ViennaRNA.
-
-This module provides standardized interfaces for RNA secondary structure
-prediction using ViennaRNA's minimum free energy (MFE) folding algorithm.
-"""
+"""Predict RNA secondary structures with ViennaRNA's minimum free energy algorithm."""
 
 import csv
 import json
@@ -137,8 +131,7 @@ class ViennaRNAOutput(BaseToolOutput):
 class ViennaRNAConfig(BaseConfig):
     """Configuration object for ViennaRNA secondary structure prediction.
 
-    This class defines configuration parameters for running ViennaRNA's
-    minimum free energy (MFE) folding algorithm.
+    Configure ViennaRNA's minimum free energy (MFE) folding algorithm.
 
     Attributes:
         temperature (float): Temperature in Celsius for energy calculations.
@@ -218,9 +211,8 @@ def run_viennarna(
 ) -> ViennaRNAOutput:
     """Predict RNA secondary structures using ViennaRNA's MFE algorithm.
 
-    This function uses ViennaRNA's minimum free energy (MFE) algorithm to
-    predict the most thermodynamically stable secondary structure for each
-    input RNA sequence.
+    Use ViennaRNA's minimum free energy (MFE) algorithm to predict the most
+    thermodynamically stable secondary structure for each input RNA sequence.
 
     Args:
         inputs (ViennaRNAInput): Input containing RNA sequences to fold.
@@ -260,7 +252,7 @@ def run_viennarna(
     """
     logger.debug("Using standalone venv for ViennaRNA structure prediction...")
 
-    # Prepare input data for inference script
+    # Collect the sequences and folding settings for the standalone worker.
     input_data = {
         "operation": "predict",
         "sequences": inputs.sequences,
@@ -273,7 +265,7 @@ def run_viennarna(
         "verbose": config.verbose,
     }
 
-    # Call the inference script in the isolated venv
+    # Fold the sequences in ViennaRNA's isolated CPU environment.
     input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "viennarna",
@@ -282,7 +274,7 @@ def run_viennarna(
         config=config,
     )
 
-    # Convert results back to ViennaRNAResult objects
+    # Keep each sequence together with its dot-bracket structure and free energy.
     results = [
         ViennaRNAResult(
             sequence=r["sequence"],

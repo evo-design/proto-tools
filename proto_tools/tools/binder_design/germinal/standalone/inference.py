@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv as _csv
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -19,6 +20,21 @@ from standalone_helpers import get_logger
 logger = get_logger(__name__)
 
 # Typed Config threshold fields → filter YAML keys (shape: {value, operator}).
+# AbLang weights germinal's ColabDesign fork loads (ablang2-paired for scFv, ablang1-heavy otherwise).
+# Same archives as the ablang toolkit, whose cache folder germinal shares (ablang2 is pinned to match).
+_ABLANG_ARCHIVES: dict[str, tuple[str, str]] = {
+    "ablang1-heavy": ("https://opig.stats.ox.ac.uk/data/downloads/ablang-heavy.tar.gz", "amodel.pt"),
+    "ablang2-paired": ("https://zenodo.org/records/10185169/files/ablang2-weights.tar.gz", "model.pt"),
+}
+
+# Mirror of the Zenodo archive's two extracted files, tried first because Zenodo answers some
+# networks with HTTP 403. Upstream publishes no digest, so each file carries its own SHA-256.
+_ABLANG2_MIRROR_URL = "https://huggingface.co/bviggiano/AbLang2/resolve/main"
+_ABLANG2_MIRROR_FILES: dict[str, str] = {
+    "model.pt": "56d6f07862a6f824f88c8707bbc03e4026c9db762be2d3041e9767e2e6f86386",
+    "hparams.json": "33474b76d78e01beb24b3621cd44d42b0813333d21e5b806168580bd836c5c8d",
+}
+
 _TYPED_FILTER_KEY_MAP: dict[str, str] = {
     "plddt_threshold": "external_plddt",
     "iptm_threshold": "external_iptm",
@@ -48,18 +64,20 @@ _DESIGN_NAME_INDICES = re.compile(r"_s(\d+)(?:_abmpnn_(\d+))?$")
 
 
 class GerminalRunner:
-    """Stateless runner that locates the Germinal repo + weights and dispatches one campaign."""
+    """Locate the Germinal repository and weights, then run one campaign."""
 
     def __init__(self) -> None:
-        """Lazy-init; setup happens in `load()` on first call."""
+        """Defer setup until ``load()`` runs on the first call."""
         self._loaded = False
         self.germinal_repo: Path | None = None
         self.weights_dir: Path | None = None
         self.af_params_dir: Path | None = None
 
     def load(self) -> None:
-        """Resolve the cloned Germinal repo and AF-Multimer params directory."""
-        from standalone_helpers import resolve_weights_dir
+        """Resolve the cloned repo and point it at the shared AF2, Chai-1, and AbLang caches."""
+        import importlib.util
+
+        from standalone_helpers import download_archive, export_weights_dir, link_to_cache, require_weights_dir
 
         venv = os.environ.get("TOOL_VENV_PATH") or os.environ.get("VIRTUAL_ENV")
         if not venv:
@@ -70,31 +88,41 @@ class GerminalRunner:
         if not (repo / "run_germinal.py").exists():
             raise FileNotFoundError(f"Germinal repository not found at {repo}. Re-run standalone/setup.sh.")
         self.germinal_repo = repo
+        self.weights_dir = Path(require_weights_dir("germinal"))
 
-        weights_dir = resolve_weights_dir("germinal")
-        if weights_dir is None:
-            raise RuntimeError("resolve_weights_dir('germinal') returned None — weights not provisioned.")
-        self.weights_dir = Path(weights_dir)
-
-        # Resolve af_params_dir: prefer the .params_redirect file written by
-        # setup.sh when reusing the AF2 standalone's params; otherwise use
-        # $WEIGHTS_DIR/params (where setup.sh downloads them).
-        redirect = self.weights_dir / ".params_redirect"
-        if redirect.exists():
-            for line in redirect.read_text().splitlines():
-                if "=" in line:
-                    key, _, val = line.partition("=")
-                    if key.strip() == "PROTO_GERMINAL_AF_PARAMS_DIR":
-                        self.af_params_dir = Path(val.strip())
-                        break
-        if self.af_params_dir is None:
-            self.af_params_dir = self.weights_dir / "params"
-
+        # AF-Multimer params are the alphafold2 toolkit's copy (setup.sh: proto_ensure_af2_params)
+        self.af_params_dir = Path(require_weights_dir("alphafold2")) / "params"
         if not self.af_params_dir.exists() or not list(self.af_params_dir.glob("*.npz")):
             raise FileNotFoundError(
                 f"AlphaFold-Multimer params not found at {self.af_params_dir}. "
                 "Re-run standalone/setup.sh to download them."
             )
+
+        # The run_germinal.py subprocess inherits os.environ: Chai-1 reads the chai1 toolkit's
+        # cache, and AbLang's hardcoded package paths point at the ablang toolkit's cache.
+        export_weights_dir("CHAI_DOWNLOADS_DIR", "chai1")
+        ablang_cache = Path(require_weights_dir("ablang"))
+        # Locate the installed ablang2 package without importing it (and torch with it)
+        ablang_spec = importlib.util.find_spec("ablang2")
+        if ablang_spec is None or not ablang_spec.submodule_search_locations:
+            raise RuntimeError("germinal: ablang2 is not installed in the env; re-run standalone/setup.sh")
+        ablang_pkg = Path(next(iter(ablang_spec.submodule_search_locations)))
+        if not all(
+            (ablang_cache / f"model-weights-{model}" / marker).exists()
+            for model, (_url, marker) in _ABLANG_ARCHIVES.items()
+        ):
+            logger.update_status("Downloading AbLang weights")
+        for model, (url, marker) in _ABLANG_ARCHIVES.items():
+            target = ablang_cache / f"model-weights-{model}"
+            cached = target if model == "ablang2-paired" and self._mirror_ablang2(target) else None
+            if cached is None:
+                cached = download_archive(url, target, marker=marker)
+            link_to_cache(ablang_pkg / f"model-weights-{model}", cached)
+
+        # setup.sh links the built DAlphaBall into the repo; repoint it if the cache moved
+        dalphaball = self.weights_dir / "binaries" / "DAlphaBall.gcc"
+        if dalphaball.exists():
+            link_to_cache(repo / "params" / "DAlphaBall.gcc", dalphaball)
 
         self._loaded = True
         logger.debug(
@@ -103,6 +131,30 @@ class GerminalRunner:
             self.weights_dir,
             self.af_params_dir,
         )
+
+    @staticmethod
+    def _mirror_ablang2(target: Path) -> bool:
+        """Fetch AbLang2's weights from the mirror into ``target``, or report that it could not.
+
+        A digest miss counts as a miss, so the caller falls back to Zenodo rather than linking
+        unverified weights into the ablang2 package. A partial set is harmless:
+        ``download_archive`` empties the directory before unpacking.
+
+        Args:
+            target (Path): The ``model-weights-ablang2-paired`` cache directory.
+
+        Returns:
+            bool: Whether every mirrored file is now present and verified.
+        """
+        from standalone_helpers import download_weights
+
+        try:
+            for name, digest in _ABLANG2_MIRROR_FILES.items():
+                download_weights(f"{_ABLANG2_MIRROR_URL}/{name}", target / name, sha256=digest)
+        except (OSError, RuntimeError) as err:
+            logger.warning("AbLang2 mirror unavailable (%s); falling back to the Zenodo archive", err)
+            return False
+        return True
 
     def __call__(self, input_dict: dict[str, Any]) -> dict[str, Any]:
         """Run one Germinal campaign end-to-end and return parsed outputs."""
@@ -144,6 +196,7 @@ class GerminalRunner:
         env = {**os.environ, **get_subprocess_device_env(input_dict.get("device", "cuda"))}
 
         logger.debug("Spawning Germinal subprocess: %s", " ".join(cmd))
+        logger.update_status("Designing antibodies", level=logging.DEBUG)
         repo_cwd = str(self.germinal_repo)
         verbose = input_dict.get("verbose", False)
         try:
@@ -167,7 +220,7 @@ class GerminalRunner:
         """True if ``value`` is a path to an existing file.
 
         Inline PDB content can exceed the filesystem's NAME_MAX and make
-        ``Path.is_file()`` raise ENAMETOOLONG; treat that as "not a file".
+        ``Path.is_file()`` raise ENAMETOOLONG. Treat that as inline content.
         """
         try:
             return Path(value).is_file()
@@ -190,12 +243,12 @@ class GerminalRunner:
             out.write_text(source)
 
     def _write_overlay_configs(self, workdir: Path, target_name: str, d: dict[str, Any]) -> None:
-        """Write target + per-call filter overlay YAMLs into ``{workdir}/configs/``.
+        """Write target and per-call filter overlay YAMLs into ``{workdir}/configs/``.
 
         Filter overlays use a unique ``<design_type>_<target_name>`` stem because
-        Hydra's ``+hydra.searchpath=`` is appended AFTER the primary config_path
-        — writing under the upstream stem would silently lose to the bundled
-        preset. ``_build_cmd`` selects the unique stem via ``filter/initial=``.
+        Hydra searches ``+hydra.searchpath=`` after the primary config path.
+        Reusing the upstream stem would therefore select the bundled preset
+        instead of the overlay. ``_build_cmd`` selects the unique stem via ``filter/initial=``.
         """
         import yaml
 
@@ -273,7 +326,7 @@ class GerminalRunner:
             f"structure_model={d['structure_model']}",
             f"af_params_dir={self.af_params_dir}",
         ]
-        # cfg.seed is not in upstream's struct config; numpy/torch seeded via set_torch_seed.
+        # Upstream's structured config has no cfg.seed. Seed NumPy and torch through set_torch_seed.
         for key, val in (d.get("germinal_overrides") or {}).items():
             cmd.append(f"{key}={val}")
         return cmd
@@ -285,6 +338,7 @@ class GerminalRunner:
         d: dict[str, Any],
     ) -> dict[str, Any]:
         """Walk Germinal's output tree and assemble a JSON-serialisable result dict."""
+        logger.update_status("Collecting designs")
         run_dir = workdir / "runs" / target_name
         designs: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -329,8 +383,7 @@ class GerminalRunner:
                     }
                 )
 
-        # failure_counts.csv is a single-row "header → counts" CSV with no
-        # design_name key column, so it's parsed flat (NOT through _read_csv).
+        # Parse failure_counts.csv as a single row of counts because it has no design_name column.
         fail_csv = run_dir / "failure_counts.csv"
         pipeline_stats = self._read_flat_counts(fail_csv) if fail_csv.exists() else {}
 
@@ -456,7 +509,7 @@ class GerminalRunner:
         if design_type != "scfv" or len(residues) < 2:
             return full_seq, None
 
-        # Find the largest CA-CA gap to split the H + L chains
+        # Find the largest CA-CA gap to separate the heavy and light chains.
         max_gap = 0.0
         split_idx: int | None = None
         for i in range(1, len(residues)):
