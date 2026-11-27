@@ -157,4 +157,5 @@ TOOL_MAP: dict[str, ToolEntry] = {
     "tmalign-alignment": ToolEntry("proto-tools-tmalign", "TMalignService", "align", False),
     "usalign-alignment": ToolEntry("proto-tools-usalign", "USalignService", "align", False),
     "viennarna-prediction": ToolEntry("proto-tools-viennarna", "ViennaRNAService", "predict", False),
+    "vina-docking": ToolEntry("proto-tools-vina", "VinaService", "dock", False),
 }
