@@ -57,6 +57,7 @@ app = get_app_for_service("ParadeService")
         "parade-activity": "activity",
         "parade-gradient": "gradient",
         "parade-stability": "stability",
+        "parade-stability-gradient": "stability_gradient",
     }
 )
 class ParadeService:
@@ -149,6 +150,32 @@ class ParadeService:
             run_parade_stability,
             ParadeSequenceInput,
             ParadeCheckpointConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
+
+    @modal.method()
+    def stability_gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate PARADE transcript stability with respect to the relaxed input logits.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-position gradients and term values for each UTR.
+        """
+        from proto_tools.tools.sequence_scoring.parade.parade_stability_gradient import (
+            ParadeStabilityGradientConfig,
+            ParadeStabilityGradientInput,
+            run_parade_stability_gradient,
+        )
+
+        return run_tool_call(
+            run_parade_stability_gradient,
+            ParadeStabilityGradientInput,
+            ParadeStabilityGradientConfig,
             input_dict,
             config_dict,
             instance=self.instance,

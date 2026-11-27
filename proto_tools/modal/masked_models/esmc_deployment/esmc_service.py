@@ -54,6 +54,7 @@ app = get_app_for_service("ESMCService")
 @register_tools(
     {
         "esmc-embedding": "inference",
+        "esmc-gradient": "gradient",
         "esmc-sae-features": "sae_features",
     }
 )
@@ -121,6 +122,32 @@ class ESMCService:
             run_esmc_sae_features,
             ESMCSAEFeaturesInput,
             ESMCSAEFeaturesConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
+
+    @modal.method()
+    def gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate the ESM C masked pseudo-log-likelihood against the relaxed input logits.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-position gradients and term values for each sequence.
+        """
+        from proto_tools.tools.masked_models.esmc.esmc_gradient import (
+            ESMCGradientConfig,
+            ESMCGradientInput,
+            run_esmc_gradient,
+        )
+
+        return run_tool_call(
+            run_esmc_gradient,
+            ESMCGradientInput,
+            ESMCGradientConfig,
             input_dict,
             config_dict,
             instance=self.instance,

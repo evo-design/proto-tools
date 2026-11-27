@@ -54,7 +54,13 @@ app = get_app_for_service("ESMFold2Service")
     retries=SERVICE_RETRIES,
     secrets=[HF_TOKEN_SECRET],
 )
-@register_tools({"esmfold2-prediction": "predict"})
+@register_tools(
+    {
+        "esmfold2-inversion-binder-gradient": "inversion_binder_gradient",
+        "esmfold2-inversion-gradient": "inversion_gradient",
+        "esmfold2-prediction": "predict",
+    }
+)
 class ESMFold2Service:
     """Modal service for ESMFold2 all-atom complex structure prediction."""
 
@@ -91,4 +97,56 @@ class ESMFold2Service:
 
         return run_tool_call(
             run_esmfold2, ESMFold2Input, ESMFold2Config, input_dict, config_dict, instance=self.instance
+        )
+
+    @modal.method()
+    def inversion_gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate ESMFold2 structure quantities for a relaxed complex.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-chain gradients and term values for each complex.
+        """
+        from proto_tools.tools.structure_prediction.esmfold2.esmfold2_inversion_gradient import (
+            ESMFold2InversionGradientConfig,
+            ESMFold2InversionGradientInput,
+            run_esmfold2_inversion_gradient,
+        )
+
+        return run_tool_call(
+            run_esmfold2_inversion_gradient,
+            ESMFold2InversionGradientInput,
+            ESMFold2InversionGradientConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
+
+    @modal.method()
+    def inversion_binder_gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate ESMFold2 structure quantities for a binder against its target.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-chain gradients and term values for each binder candidate.
+        """
+        from proto_tools.tools.structure_prediction.esmfold2.esmfold2_inversion_binder_gradient import (
+            ESMFold2BinderGradientConfig,
+            ESMFold2BinderGradientInput,
+            run_esmfold2_inversion_binder_gradient,
+        )
+
+        return run_tool_call(
+            run_esmfold2_inversion_binder_gradient,
+            ESMFold2BinderGradientInput,
+            ESMFold2BinderGradientConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
         )

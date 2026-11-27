@@ -53,6 +53,7 @@ app = get_app_for_service("PuffinService")
 )
 @register_tools(
     {
+        "puffin-gradient": "gradient",
         "puffin-interpretation": "interpret",
         "puffin-prediction": "predict",
     }
@@ -121,6 +122,32 @@ class PuffinService:
             run_puffin_prediction,
             PuffinPredictionInput,
             PuffinPredictionConfig,
+            input_dict,
+            config_dict,
+            instance=self.instance,
+        )
+
+    @modal.method()
+    def gradient(self, input_dict: dict[str, Any], config_dict: dict[str, Any]) -> dict[str, Any]:
+        """Differentiate Puffin initiation signals with respect to the relaxed input logits.
+
+        Args:
+            input_dict (dict[str, Any]): Mapping of input names to their serialized values.
+            config_dict (dict[str, Any]): Mapping of configuration parameter names to values.
+
+        Returns:
+            dict[str, Any]: Per-position gradients and term values for each promoter.
+        """
+        from proto_tools.tools.sequence_scoring.puffin.puffin_gradient import (
+            PuffinGradientConfig,
+            PuffinGradientInput,
+            run_puffin_gradient,
+        )
+
+        return run_tool_call(
+            run_puffin_gradient,
+            PuffinGradientInput,
+            PuffinGradientConfig,
             input_dict,
             config_dict,
             instance=self.instance,
