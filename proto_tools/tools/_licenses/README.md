@@ -9,7 +9,7 @@ in the toolkit's `license.yaml` instead.
 ## Field reference for `license.yaml`
 
 The schema is enforced by `tests/style_consistency_tests/test_license_consistency.py`.
-Three of the operational fields are easy to confuse. Read them with the
+Three of the operational fields are easy to confuse — read them with the
 following meanings:
 
 ### `redistribution: bool`
@@ -152,7 +152,7 @@ When code and weights have different licenses, the **most restrictive** of
 the two drives `redistribution` and `commercial_use`.
 
 Note that copyleft licenses (GPL/LGPL/AGPL) keep `commercial_use: yes`
-because the license itself doesn't restrict commercial use, but
+because the license itself doesn't restrict commercial use — but
 `redistribution: false` because copyleft and source-disclosure obligations
 make proprietary-image bundling unsafe without legal review.
 
@@ -162,5 +162,5 @@ make proprietary-image bundling unsafe without legal review.
    SPDX-canonical filename, e.g. `BSD-3-Clause.txt`).
 2. Add the SPDX identifier to `_ALLOWED_SPDX` in
    `tests/style_consistency_tests/test_license_consistency.py`.
-3. Reference it from any `license.yaml` via `spdx: <id>`. Do not inline the
+3. Reference it from any `license.yaml` via `spdx: <id>` — do not inline the
    text again.

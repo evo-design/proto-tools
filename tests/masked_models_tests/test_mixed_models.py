@@ -10,7 +10,7 @@ from standalone_helpers.compression import compress_array
 from standalone_helpers.mixed_sequence import tokenize_mixed_sequence
 
 from proto_tools.tools.masked_models.execution import dispatch_masked_model
-from proto_tools.tools.masked_models.glm2 import GLM2EmbeddingsConfig, GLM2GradientConfig, GLM2MaskedPLLTerm
+from proto_tools.tools.masked_models.glm2 import GLM2EmbeddingsConfig
 from proto_tools.tools.masked_models.minerva import MinervaEmbeddingsConfig, MinervaInteractionsConfig
 from proto_tools.tools.masked_models.mixed_data_models import (
     MIXED_VOCAB,
@@ -23,7 +23,7 @@ from proto_tools.tools.masked_models.mixed_data_models import (
 )
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.transforms.masking import MaskingStrategy
-from proto_tools.utils import GradientMetadata, GradientResult, TermGradient, ToolInstance
+from proto_tools.utils import ToolInstance
 from proto_tools.utils.interaction_models import SequenceInteractionsOutput
 
 _LOCUS = "+MA+ac-X"
@@ -72,32 +72,6 @@ def test_mixed_parser_accepts_window_edges_and_masked_reverse_strand_sites(seque
     assert "".join(tokenize_mixed_sequence(sequence, allow_masks=True)) == sequence
 
 
-def test_mixed_preprocess_reads_templates_from_gradient_items(caplog):
-    """The config hook must find the templates on the gradient input's items.
-
-    ``preprocess`` runs on every dispatch before the model loads, and it reaches the templates by
-    looking at the input's shape. The gradient input carries one template per item rather than a
-    list of sequences, so a hook that only knows the list shape raises ``AttributeError`` before
-    any work starts — on the real tool, not just in a test that drives the worker directly.
-    """
-    bad, good = "MA+ac-X", _LOCUS
-    inputs = MixedSequenceGradientInput(
-        inputs=[
-            {"sequence": bad, "logits": one_hot_mixed_logits(bad)},
-            {"sequence": good, "logits": one_hot_mixed_logits(good)},
-        ]
-    )
-
-    with caplog.at_level(logging.WARNING, logger="proto_tools.tools.masked_models.mixed_configs"):
-        result = GLM2GradientConfig(device="cpu").preprocess(inputs)
-
-    assert result is inputs
-    warnings = [record.getMessage() for record in caplog.records if "strand marker" in record.getMessage()]
-    assert warnings == [
-        "Sequence 0 does not start with a strand marker (+ or -). Generally this means the input was malformed.",
-    ], "the hook must inspect each item's own template"
-
-
 def test_mixed_preprocess_warns_once_per_sequence_missing_leading_marker(caplog):
     inputs = MixedSequenceInput(sequences=["MA+ac-X", _LOCUS, "ac-X"])
     with caplog.at_level(logging.WARNING, logger="proto_tools.tools.masked_models.mixed_configs"):
@@ -110,23 +84,20 @@ def test_mixed_preprocess_warns_once_per_sequence_missing_leading_marker(caplog)
 
 
 @pytest.mark.parametrize(
-    ("build", "read"),
+    ("input_class", "field", "extra"),
     [
-        (lambda spelling: MixedSequenceInput(sequences=spelling), lambda model: model.sequences[0]),
-        (lambda spelling: MixedSequenceSampleInput(sequences=spelling), lambda model: model.sequences[0]),
-        (
-            lambda spelling: MixedSequenceGradientInput(
-                inputs={"sequence": spelling, "logits": one_hot_mixed_logits(_LOCUS)}
-            ),
-            lambda model: model.inputs[0].sequence,
-        ),
+        (MixedSequenceInput, "sequences", {}),
+        (MixedSequenceSampleInput, "sequences", {}),
+        (MixedSequenceGradientInput, "sequence", {"logits": one_hot_mixed_logits(_LOCUS)}),
     ],
-    ids=["sequence-input", "sample-input", "gradient-input"],
 )
 @pytest.mark.parametrize("spelling", [_LONG_LOCUS, "<+>MA+ac<->X", "+MA<+>ac-X"])
-def test_mixed_inputs_normalize_long_and_mixed_marker_spellings(build, read, spelling):
-    """Every marker spelling stores the same canonical template, wherever the template lives."""
-    assert read(build(spelling)) == read(build(_LOCUS)) == _LOCUS
+def test_mixed_inputs_normalize_long_and_mixed_marker_spellings(input_class, field, extra, spelling):
+    long_form = input_class(**{field: spelling}, **extra)
+    short_form = input_class(**{field: _LOCUS}, **extra)
+    assert getattr(long_form, field) == getattr(short_form, field)
+    stored = getattr(long_form, field)
+    assert (stored if isinstance(stored, str) else stored[0]) == _LOCUS
     assert tokenize_mixed_sequence(_LOCUS) == _TOKENS
 
 
@@ -192,10 +163,7 @@ def test_mixed_sequence_one_hot_alignment_and_probability_mode():
             assert sum(row) == 1.0
         else:
             assert not any(row)
-    assert (
-        MixedSequenceGradientInput(inputs={"sequence": _LOCUS, "logits": rows}, temperature=None).inputs[0].logits
-        == rows
-    )
+    assert MixedSequenceGradientInput(sequence=_LOCUS, logits=rows, temperature=None).logits == rows
 
 
 @pytest.mark.parametrize("sharpness", [math.nan, math.inf, -math.inf])
@@ -207,31 +175,21 @@ def test_mixed_one_hot_rejects_nonfinite_sharpness(sharpness):
 def test_mixed_gradient_rejects_alignment_fixed_context_and_nonfinite_values():
     rows = one_hot_mixed_logits(_LOCUS)
     with pytest.raises(ValidationError, match=r"one row per model token"):
-        MixedSequenceGradientInput(inputs={"sequence": _LOCUS, "logits": rows[:-1]})
+        MixedSequenceGradientInput(sequence=_LOCUS, logits=rows[:-1])
     rows[0][0] = 1.0
     with pytest.raises(ValidationError, match=r"Fixed context row 1"):
-        MixedSequenceGradientInput(inputs={"sequence": _LOCUS, "logits": rows})
-    with pytest.raises(ValidationError, match=r"must have 24 columns"):
-        MixedSequenceGradientInput(inputs={"sequence": "+A", "logits": [[0.0] * 24, [0.0] * 23]})
-    for row in [[math.nan] * 24, [math.inf] * 24]:
-        with pytest.raises(ValidationError, match=r"only finite numbers"):
-            MixedSequenceGradientInput(inputs={"sequence": "+A", "logits": [[0.0] * 24, row]})
+        MixedSequenceGradientInput(sequence=_LOCUS, logits=rows)
+    for row in [[0.0] * 23, [math.nan] * 24, [math.inf] * 24]:
+        with pytest.raises(ValidationError, match=r"24 finite numbers"):
+            MixedSequenceGradientInput(sequence="+A", logits=[[0.0] * 24, row])
     with pytest.raises(ValidationError, match=r"at least one canonical"):
-        MixedSequenceGradientInput(inputs={"sequence": "<+>X", "logits": [[0.0] * 24] * 2})
+        MixedSequenceGradientInput(sequence="<+>X", logits=[[0.0] * 24] * 2)
 
 
-@pytest.mark.parametrize(
-    "row, expected",
-    [
-        ([0.0] * 24, r"must be a probability distribution"),
-        ([-1.0] + [0.0] * 23, r"must be nonnegative"),
-        # DNA mass on a protein token: outside the position's permitted modality block.
-        ([0.0] * 20 + [1.0, 0.0, 0.0, 0.0], r"non-permitted columns at zero"),
-    ],
-)
-def test_mixed_gradient_probability_mode_rejects_wrong_domains(row, expected):
-    with pytest.raises(ValidationError, match=expected):
-        MixedSequenceGradientInput(inputs={"sequence": "+A", "logits": [[0.0] * 24, row]}, temperature=None)
+@pytest.mark.parametrize("row", [[0.0] * 24, [-1.0] + [0.0] * 23, [0.0] * 20 + [1.0, 0.0, 0.0, 0.0]])
+def test_mixed_gradient_probability_mode_rejects_wrong_domains(row):
+    with pytest.raises(ValidationError, match=r"probability distribution within its modality"):
+        MixedSequenceGradientInput(sequence="+A", logits=[[0.0] * 24, row], temperature=None)
 
 
 # ── Checkpoint-specific limits ──────────────────────────────────────────────
@@ -350,39 +308,17 @@ def test_mixed_dispatch_decompresses_nested_matrices(monkeypatch):
 
 
 def test_mixed_gradient_export_preserves_values(tmp_path):
-    """Export round-trips the term surface, which is what these tools now report."""
-    matrix = [[0.0] * 24] * len(_TOKENS)
-    output = MixedGradientOutput(
-        results=[
-            GradientResult(
-                terms=[
-                    TermGradient(
-                        term=GLM2MaskedPLLTerm(),
-                        term_value=1.0,
-                        gradient=matrix,
-                        metadata=GradientMetadata.from_input(matrix, vocab=MIXED_VOCAB, temperature=1.0),
-                    )
-                ]
-            )
-        ],
-        vocab=MIXED_VOCAB,
-    )
+    output = MixedGradientOutput(gradient=[[0.0] * 24] * len(_TOKENS), loss=1.0, vocab=MIXED_VOCAB)
     output._export_output(tmp_path / "gradient.v1", "json")
     restored = MixedGradientOutput.model_validate_json((tmp_path / "gradient.v1.json").read_text())
-
-    assert restored.vocab == output.vocab
-    (term,) = restored.results[0].terms
-    assert (term.term_value, term.gradient) == (1.0, matrix)
-    assert term.metadata is not None and term.metadata.units == "nats per position"
-    # A base-typed output reads the term back as DifferentiableTerm; with no selectors to lose,
-    # the id is all there is to preserve.
-    assert term.term.id == "masked_pll"
+    for field in ("gradient", "loss", "metrics", "vocab"):
+        assert getattr(restored, field) == getattr(output, field)
 
 
 # ── Numerical runtime checks with a tiny differentiable model ────────────────
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_mixed_runtime_checks_run_in_env():
     """Scoring, gradient, batching, sampling and request-validation checks run inside the glm2 env.
 

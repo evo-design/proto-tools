@@ -39,7 +39,7 @@ def _ensure_ccd_database() -> None:
 # ============================================================================
 # CCD code caches
 #
-# Build the following caches in one pass over the database file.
+# Four independent caches are built from a single pass over the database file:
 #
 # - ``_ALL_CCD_CODES``: the raw set of every CCD code in the file. Used by
 #   ``is_valid_ccd_code`` and ``get_all_ccd_codes`` so validity checks remain
@@ -70,7 +70,7 @@ _UNSANITIZABLE_HEAVY_ATOMS: dict[str, int] = {}
 
 
 def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str], dict[str, str]]:
-    """Build the code set, canonical SMILES maps, and InChIKey map in one pass.
+    """Build the raw-code set + canonical maps + InChIKey map in one pass.
 
     Returns:
         tuple[set[str], dict[str, str], dict[str, str], dict[str, str]]:
@@ -85,7 +85,7 @@ def _build_caches() -> tuple[set[str], dict[str, str], dict[str, str], dict[str,
     all_codes: set[str] = set()
     smiles_to_ccd: dict[str, str] = {}
     ccd_to_smiles: dict[str, str] = {}
-    # Track collisions so only unambiguous InChIKey-to-CCD entries
+    # Build with collision tracking; only unambiguous InChIKey → CCD entries
     # are kept in the final cache (see module docstring).
     inchikey_groups: dict[str, list[str]] = defaultdict(list)
     skipped = 0
@@ -195,7 +195,7 @@ def _write_pickled_caches(
 
 
 def _ensure_caches() -> None:
-    """Load caches on first use, rebuilding and saving them if the pickle is missing or stale."""
+    """Lazy-initialize all caches on first use; rebuild + persist if the pickle is missing or stale."""
     global _ALL_CCD_CODES, _RDKIT_CANONICAL_TO_CCD, _CCD_TO_RDKIT_CANONICAL, _INCHIKEY_TO_CCD
     if _ALL_CCD_CODES is not None:
         return
@@ -251,7 +251,7 @@ def map_smiles_to_ccd_code(smiles: str) -> str | None:
 
     1. **Canonical-SMILES match** (primary): canonicalize the input via RDKit
        and look it up in the bundled CCD cache. Handles the common case
-       directly. OpenEye-canonical entries in the wwPDB CCD file are
+       cleanly; OpenEye-canonical entries in the wwPDB CCD file are
        re-canonicalized via RDKit at cache build time so the keys agree.
 
     2. **InChIKey match** (fallback): when (1) misses, compute the IUPAC-standard
@@ -259,7 +259,7 @@ def map_smiles_to_ccd_code(smiles: str) -> str | None:
        more aggressively than canonical SMILES (handles tautomers, ionization,
        aromaticity-perception edge cases) and is the cross-tool standard used
        by ChEMBL, RCSB, PubChem, and PDBe for chemical identity. Only
-       unambiguous matches are honored. Ambiguous InChIKeys (mostly single-atom
+       unambiguous matches are honored; ambiguous InChIKeys (mostly single-atom
        ions and tautomer/stereo variants) return None and let the caller
        decide what to do.
 
@@ -307,10 +307,10 @@ def map_ccd_code_to_smiles(ccd_code: str) -> str | None:
 def _heavy_atoms_without_sanitization(ccd_code: str) -> int | None:
     """Heavy-atom count for a real component whose SMILES RDKit refuses to sanitize.
 
-    A few hundred CCD SMILES violate RDKit's valence rules, such as four-bond
-    boron, and are absent from the canonical cache. Parse their raw SMILES
-    without sanitizing because atom counts need only the molecular graph.
-    Return ``None`` if the code is absent from the database.
+    A few hundred CCD entries carry SMILES that are structurally fine but violate RDKit's
+    valence rules (a four-bond boron, say), so they never reach the canonical cache. Counting
+    atoms only needs the molecular graph, so the raw SMILES is parsed unsanitized. Returns
+    ``None`` if the code is not in the database at all.
     """
     from rdkit import Chem, RDLogger
 

@@ -1,6 +1,6 @@
 """Wraps `foldmason msa2lddt` for scoring a precomputed MSA against a structure set.
 
-Runs locally because there is no corresponding remote endpoint. Computes a per-MSA average LDDT score plus
+Local-only — no remote analog. Computes a per-MSA average LDDT score plus
 per-column scores by aligning each row's structure with the alignment, useful
 as a quality metric for any structural-MSA pipeline.
 """
@@ -23,7 +23,6 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
-from proto_tools.utils.file_inputs import MSA_FILES
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +43,7 @@ class FoldmasonScoreMSAInput(BaseToolInput):
             ``'structure_0'``, ...). Must match the FASTA record headers in
             ``msa`` so msa2lddt can resolve each row to its structure.
         msa (MSA): Amino-acid MSA, typically from ``foldmason-msa``. Accepts an
-            ``MSA`` object, raw FASTA text, or a path to a ``.a3m``, ``.fasta`` or ``.fa`` file
-            (optionally gzipped).
+            ``MSA`` object or a raw FASTA string.
     """
 
     structures: list[Structure] = InputField(
@@ -60,15 +58,13 @@ class FoldmasonScoreMSAInput(BaseToolInput):
     )
     msa: MSA = InputField(
         title="Amino-acid MSA",
-        description="Amino-acid MSA (MSA object, FASTA text, or .a3m/.fasta/.fa path); row order/IDs match `structures`",
+        description="Amino-acid MSA (MSA object or raw FASTA string); row order/IDs match `structures`",
     )
 
     @field_validator("msa", mode="before")
     @classmethod
     def _coerce_fasta_string_to_msa(cls, value: Any) -> Any:
-        """Accept a path to an MSA file or raw FASTA text in place of an `MSA`."""
-        if isinstance(value, (str, Path)) and (path := MSA_FILES.resolve(value)) is not None:
-            return MSA.from_file(path)
+        """Accept a raw FASTA string in place of an `MSA`; parse it to the typed form."""
         if isinstance(value, str):
             return MSA.from_fasta_string(value)
         return value

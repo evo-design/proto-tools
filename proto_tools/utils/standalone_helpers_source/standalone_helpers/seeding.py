@@ -1,7 +1,7 @@
 """Random seed helpers for standalone scripts.
 
 Set reproducible RNG state for PyTorch/JAX/NumPy/stdlib RNGs. The JAX
-persistent compilation cache is configured by the parent, which sets
+persistent compilation cache is not configured here: the parent sets
 ``JAX_COMPILATION_CACHE_DIR`` on every tool subprocess (see
 ``persistent_worker._jax_compilation_cache_dir``).
 """

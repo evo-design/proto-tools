@@ -61,7 +61,7 @@ def test_translation_table_map_matches_literal():
 # ── Integration ────────────────────────────────────────────────────────
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_empty_prediction():
     """Sequence with no genes returns zero ORFs."""
     inp = ProdigalInput(input_sequences="AAAAAAAAAA")
@@ -71,7 +71,7 @@ def test_empty_prediction():
     assert result.num_orfs == 0
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_batch_prediction():
     sequences = ["ATGCGTAAATAA" * 50, "ATGGCATAA" * 50, "ATGAAACGT" * 50]
     inp = ProdigalInput(input_sequences=sequences)
@@ -82,7 +82,7 @@ def test_batch_prediction():
     assert sum(len(orfs) for orfs in result.predicted_orfs) == result.num_orfs
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_batch_processing_consistency():
     """Batch gives same results as individual processing."""
     sequences = ["ATGCGTAAATAA" * 50, "ATGGCATAA" * 50]
@@ -97,7 +97,7 @@ def test_batch_processing_consistency():
         assert len(batch_orfs) == single_result.num_orfs
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_caching_behavior():
     cache = ToolCache()
     token = _program_tool_cache.set(cache)

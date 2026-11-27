@@ -1,4 +1,7 @@
-"""Shared input and output models, metric containers, and execution metadata."""
+"""proto_tools/utils/tool_io.py.
+
+Base input/output classes for standardized tool results with metadata tracking.
+"""
 
 import copy
 import json
@@ -20,7 +23,6 @@ if TYPE_CHECKING:
 
 from proto_tools.utils.compressed_array import is_compressed_array
 from proto_tools.utils.export_names import sanitize_field
-from proto_tools.utils.file_inputs import coerce_path_field, coerce_path_values
 
 _REMOVED_UI_KWARGS = frozenset({"advanced", "hidden", "depends_on"})
 
@@ -474,12 +476,10 @@ def _check_list_in_spec(name: str, value: Any, spec: MetricSpec) -> None:
     bounds checking (per-position gaps where the metric is undefined).
     """
     type_str = spec.get("type")
-    # Reject a value that is not a list at all
     if not isinstance(value, list):
         raise AssertionError(
             f"Metric {name!r} has type {type(value).__name__} but spec declares {type_str or 'list'!r}"
         )
-    # Decide which element types to enforce; with no declared type, only bounds are checked
     strict = type_str is not None
     allow_none = type_str == "list[float|None]"
     expect_inner_list = type_str is not None and type_str.startswith("list[list")
@@ -489,27 +489,22 @@ def _check_list_in_spec(name: str, value: Any, spec: MetricSpec) -> None:
     )
     min_v = spec.get("min")
     max_v = spec.get("max")
-    # Check each element's type, then its finiteness and bounds
     for i, entry in enumerate(value):
-        # Skip None gaps, which a typed spec allows only for list[float|None]
         if entry is None:
             if strict and not allow_none:
                 raise AssertionError(f"Metric {name!r} element at index {i} is None but spec declares {type_str!r}")
             continue
-        # Recurse into nested lists with the inner list[float] spec (or this spec when untyped)
         if isinstance(entry, list):
             if strict and not expect_inner_list:
                 raise AssertionError(f"Metric {name!r} element at index {i} is a list but spec declares {type_str!r}")
             _check_list_in_spec(f"{name}[{i}]", entry, inner_spec if inner_spec is not None else spec)
             continue
-        # Treat bools as non-numeric even though bool subclasses int
         if isinstance(entry, bool):
             if strict:
                 raise AssertionError(
                     f"Metric {name!r} element at index {i} has type bool but spec declares {type_str!r}"
                 )
             continue
-        # Reject other non-numeric entries when typed; skip them when untyped
         if not isinstance(entry, (int, float)):
             if strict:
                 raise AssertionError(
@@ -517,12 +512,10 @@ def _check_list_in_spec(name: str, value: Any, spec: MetricSpec) -> None:
                     f"but spec declares {type_str!r}"
                 )
             continue
-        # A bare number where list[list[float]] expects an inner list is an error
         if expect_inner_list:
             raise AssertionError(
                 f"Metric {name!r} element at index {i} is {type(entry).__name__} but spec expects inner list"
             )
-        # Reject NaN and Inf, then enforce the declared min and max
         if isinstance(entry, float) and not math.isfinite(entry):
             raise AssertionError(
                 f"Metric {name!r} element at index {i} = {entry} is not finite (NaN/Inf rejected by spec)"
@@ -549,16 +542,6 @@ class BaseToolInput(BaseModel):
         validate_default=True,  # Validate default values
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def _accept_path_objects(cls, data: Any) -> Any:
-        """Accept a ``Path`` wherever a field takes a path as a ``str``."""
-        return coerce_path_values(cls, data)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        """Assign a field, accepting a ``Path`` for a field that takes a path as a ``str``."""
-        super().__setattr__(name, coerce_path_field(type(self), name, value))
-
     @classmethod
     def cache_exclude_fields(cls) -> set[str]:
         """Return field names marked with ``include_in_key=False``."""
@@ -574,17 +557,17 @@ class BaseToolInput(BaseModel):
 
         A broadcastable field (``InputField(..., broadcastable=True)``) is either supplied
         once (length 1 → broadcast to every item) or once per item (length N → strict 1:1).
-        Run this in a ``model_validator(mode="after")`` so every parallel field has
-        length N before deduplication, caching, or partitioning. The framework
-        then handles broadcast values like any other per-item input.
+        This runs in a ``model_validator(mode="after")`` so the field is a genuine length-N
+        parallel sibling before any dedup/cache/partition logic sees it — keeping the per-item
+        cache key correct by construction with no broadcast branch in the framework hot path.
 
         ``None`` is left as-is (the field is simply absent from the active parallel group).
         Raises ``ValueError`` on any other length (not 1 and not N).
 
         Each broadcast slot is an **independent copy** of the sole supplied value (Pydantic
         ``model_copy`` for ``BaseModel`` instances, ``copy.deepcopy`` for anything else,
-        ``None`` reused as a singleton). Unlike ``[obj] * n``, separate copies
-        allow one mutable slot to change without affecting the others.
+        ``None`` aliased as the singleton). Avoids the ``[obj] * n`` aliasing footgun if a
+        future broadcastable element type is mutable and something mutates one slot in place.
         """
         n = len(getattr(self, primary_field))
         for name in self.broadcastable_fields():
@@ -626,9 +609,8 @@ class BaseToolInput(BaseModel):
 
 # Metadata fields populated by the @tool decorator — these differ between
 # runs and are excluded from output comparisons.
-OUTPUT_METADATA_FIELDS: set[str] = {
+_OUTPUT_METADATA_FIELDS: set[str] = {
     "tool_id",
-    "tool_version",
     "execution_time",
     "timestamp",
     "success",
@@ -644,15 +626,12 @@ class BaseToolOutput(BaseModel, ABC):
     All tools should extend this with tool-specific result fields. Provides
     execution tracking (tool_id, execution_time, timestamp, success, warnings).
 
-    Tool functions can construct outputs without metadata such as ``tool_id``,
-    ``execution_time``, and ``success``. The ``@tool`` decorator fills these
-    fields when the call completes.
+    NOTE: Metadata fields (tool_id, execution_time, success) are optional during
+    construction within tool functions. The @tool decorator
+    automatically populates these fields when wrapping tool execution.
 
     Attributes:
         tool_id (str | None): Unique tool identifier (e.g., ``"blast-search"``).
-        tool_version (str | None): Version of the toolkit that produced the output,
-            from its ``versions.yaml``. Suffixed ``+dirty`` when the source no longer
-            matches that version. See ``notes/versioning.md``.
         execution_time (float | None): Execution time in seconds.
         timestamp (datetime): Execution timestamp.
         success (bool | None): Whether execution succeeded. ``True`` for any
@@ -680,11 +659,6 @@ class BaseToolOutput(BaseModel, ABC):
         default=None,
         title="Tool ID",
         description="Unique tool identifier (e.g., 'blast-search', 'esm3-embedding')",
-    )
-    tool_version: str | None = Field(
-        default=None,
-        title="Tool Version",
-        description="Toolkit version from versions.yaml; suffixed '+dirty' if the source has changed",
     )
     execution_time: float | None = Field(
         default=None,
@@ -734,7 +708,6 @@ class BaseToolOutput(BaseModel, ABC):
             "examples": [
                 {
                     "tool_id": "blast-search",
-                    "tool_version": "1.0.0",
                     "execution_time": 45.2,
                     "timestamp": "2025-10-06T10:30:00Z",
                     "success": True,
@@ -922,7 +895,7 @@ class BaseToolOutput(BaseModel, ABC):
             AssertionError: If the outputs differ, with the path to the first difference.
         """
         for field_name in type(self).model_fields:
-            if field_name in OUTPUT_METADATA_FIELDS:
+            if field_name in _OUTPUT_METADATA_FIELDS:
                 continue
             self_val = getattr(self, field_name)
             other_val = getattr(other, field_name)

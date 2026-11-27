@@ -1,6 +1,6 @@
-"""Test device management, worker lifecycle, and fan-out with a small PyTorch model.
+"""proto_tools/tools/testing/mock_pytorch_tool/mock_pytorch_tool.py.
 
-A minimal PyTorch tool designed for fast testing of device management,
+This is a minimal PyTorch tool designed for fast testing of device management,
 memory tracking, worker lifecycle, and parallel fan-out. It loads a tiny model
 in <1 second while still exercising all DeviceManager and ToolPool code paths.
 """

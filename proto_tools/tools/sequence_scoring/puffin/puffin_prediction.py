@@ -19,7 +19,6 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
-from proto_tools.utils.tool_io import OUTPUT_METADATA_FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +94,7 @@ class PuffinPredictionInput(BaseToolInput):
 class PuffinPredictionResult(BaseModel):
     """Per-sequence Puffin prediction result.
 
-    The 10 output channels follow ``TRACK_NAMES``, with five forward-strand
+    The 10 output channels are ordered as ``TRACK_NAMES``: five forward-strand
     targets (FANTOM_CAGE+, ENCODE_CAGE+, ENCODE_RAMPAGE+, GRO_CAP+, PRO_CAP+),
     then five reverse-strand targets (PRO_CAP-, GRO_CAP-, ENCODE_RAMPAGE-,
     ENCODE_CAGE-, FANTOM_CAGE-). Per-base values are in log-scale and can be
@@ -184,7 +183,16 @@ class PuffinPredictionOutput(BaseToolOutput):
 
     def _export_output(self, export_path: Path | str, file_format: str) -> None:
         path = Path(export_path).with_suffix(f".{file_format}")
-        data = {k: v for k, v in self.model_dump().items() if k not in OUTPUT_METADATA_FIELDS}
+        _metadata_fields = {
+            "tool_id",
+            "execution_time",
+            "timestamp",
+            "success",
+            "warnings",
+            "errors",
+            "metadata",
+        }
+        data = {k: v for k, v in self.model_dump().items() if k not in _metadata_fields}
         if file_format == "json":
             with open(path, "w") as f:
                 json.dump(data, f, indent=2)

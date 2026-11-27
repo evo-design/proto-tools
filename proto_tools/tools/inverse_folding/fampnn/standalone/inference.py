@@ -94,7 +94,7 @@ class FAMPNNModel:
             },
         }
 
-        # Convert fixed positions to the table format expected by FAMPNN.
+        # Build fixed position CSV dataframe if needed
         import pandas as pd
 
         fixed_pos_df = pd.DataFrame(columns=["fixed_pos_seq", "fixed_pos_scn"])
@@ -218,8 +218,9 @@ class FAMPNNModel:
             psce_j = psce_j[seq_mask_j.bool()]
             all_psce.append(psce_j.mean(dim=-1).tolist())
 
-        # Detach coordinates before upstream PDB serialization converts them to NumPy.
-        # Use temporary files to read the serialized PDB strings.
+        # Save PDB strings via temp files
+        # Detach tensors to avoid "Can't call numpy() on Tensor that
+        # requires grad" in upstream pdb_utils (PyTorch >=2.x compat)
         detached_samples = {k: v.detach() if isinstance(v, torch.Tensor) else v for k, v in samples.items()}
         with tempfile.TemporaryDirectory() as tmpdir:
             pdb_paths_out = [f"{tmpdir}/sample_{j}.pdb" for j in range(B)]
@@ -246,7 +247,6 @@ class FAMPNNModel:
         verbose: bool = False,
     ) -> dict[str, Any]:
         """Pack sidechains onto a backbone given known sequence."""
-        # Load the requested variant, or move the loaded model to the new device
         if not self._loaded or self._model_variant != model_variant:
             self.load(model_variant, device, verbose)
         elif self.device != device:
@@ -262,12 +262,10 @@ class FAMPNNModel:
         )
         from fampnn.model.sd_model import SeqDenoiser
 
-        # Seed torch and FAMPNN's sampling RNGs
         set_torch_seed(seed)
         sampling_seed = seed if seed is not None else get_random_int()
         sampling_utils.seed_everything(sampling_seed)
 
-        # Build a linear side-chain diffusion schedule and its sampler settings
         t_scd = sampling_utils.get_timesteps_from_schedule(
             num_steps=scn_diffusion_steps,
             mode="linear",
@@ -306,7 +304,6 @@ class FAMPNNModel:
                 index=[pdb_name],
             )
 
-        # Featurize the input structure
         data = load_feats_from_pdb(pdb_path)
         single = process_single_pdb(data)
         chain_id_mapping = data["chain_id_mapping"]
@@ -326,7 +323,6 @@ class FAMPNNModel:
 
         B = num_samples
 
-        # Stack num_samples copies of the structure into one padded batch on the device
         batch_list = [single] * B
         max_len = max(b["x"].shape[0] for b in batch_list)
         batch_list_padded = [
@@ -335,11 +331,9 @@ class FAMPNNModel:
         batch = {k: torch.cat([b[k] for b in batch_list_padded], dim=0) for k in model_input_keys}
         batch = {k: batch[k].to(self.device) for k in model_input_keys}
 
-        # Give every sample in the batch the same diffusion timesteps
         scd_inputs = dict(scd_inputs_template)
         scd_inputs["timesteps"] = t_scd[None].expand(B, -1).to(self.device)
 
-        # Turn the fixed positions into masks of residues whose identity or side chain is kept
         pdb_names = [pdb_name] * B
         batch_chain_id_mapping = [chain_id_mapping] * B
 
@@ -352,7 +346,6 @@ class FAMPNNModel:
             mode="packing",
         )
 
-        # Denoise side chains onto the backbone
         with torch.no_grad():
             x_denoised, aatype_denoised, aux = self.model.sidechain_pack(
                 batch["x"],
@@ -376,14 +369,12 @@ class FAMPNNModel:
             "psce": aux["psce"],
         }
 
-        # Collect the mean predicted side-chain error (pSCE) of each valid residue per sample
         for j in range(B):
             seq_mask_j = samples["seq_mask"][j].cpu()
             psce_j = aux["psce"][j].cpu()
             psce_j = psce_j[seq_mask_j.bool()]
             all_psce.append(psce_j.mean(dim=-1).tolist())
 
-        # Write each packed sample to a temporary PDB file and read it back as a string
         detached_samples = {k: v.detach() if isinstance(v, torch.Tensor) else v for k, v in samples.items()}
         with tempfile.TemporaryDirectory() as tmpdir:
             pdb_paths_out = [f"{tmpdir}/packed_{j}.pdb" for j in range(B)]
@@ -405,7 +396,6 @@ class FAMPNNModel:
         verbose: bool = False,
     ) -> dict[str, Any]:
         """Score every possible single mutation at every position."""
-        # Load the requested variant, or move the loaded model to the new device
         if not self._loaded or self._model_variant != model_variant:
             self.load(model_variant, device, verbose)
         elif self.device != device:
@@ -417,12 +407,10 @@ class FAMPNNModel:
         from fampnn.data.data import load_feats_from_pdb, process_single_pdb
         from fampnn.sampling_utils import seed_everything
 
-        # Seed torch and FAMPNN's sampling RNGs
         set_torch_seed(seed)
         sampling_seed = seed if seed is not None else get_random_int()
         seed_everything(sampling_seed)
 
-        # Featurize the structure and move the model inputs to the device
         data = load_feats_from_pdb(pdb_path)
         batch = process_single_pdb(data)
 
@@ -431,25 +419,21 @@ class FAMPNNModel:
 
         B = batch_size
 
-        # Repeat the structure batch_size times so each copy can mask a different position
         def repeat_fn(x: Any) -> Any:
             return x[None, ...].repeat(B, *([1] * len(x.shape)))
 
         model_inputs = {k: repeat_fn(v) for k, v in model_inputs.items()}
 
-        # Split the valid residue positions into chunks of batch_size
         num_positions = int(torch.sum(model_inputs["seq_mask"][0]).item())
         total_positions = torch.arange(num_positions)
         batched_positions = total_positions.split(B)
 
         scores_dict = {}
         for positions in batched_positions:
-            # Take one structure copy per position in this chunk
             x, aatype, seq_mask, missing_atom_mask, residue_index, chain_index = [
                 model_inputs[k][: len(positions), ...].clone() for k in model_input_keys
             ]
 
-            # Mask copy i at the i-th position of this chunk
             x_masked, aatype_masked, missing_atom_mask_masked, scn_mlm_mask = scoring_utils.mask_positions(
                 x,
                 aatype,
@@ -458,7 +442,6 @@ class FAMPNNModel:
                 positions,
             )
 
-            # Predict amino acid log-probabilities with those positions masked
             with torch.no_grad():
                 logprobs = self.model.score(
                     x=x_masked,
@@ -470,13 +453,11 @@ class FAMPNNModel:
                     chain_index=chain_index,
                 )
 
-            # Score every substitution as its log-probability minus the wild-type log-probability
             wt_aatype = aatype[torch.arange(len(positions)), positions]
             wt_logprobs = logprobs[torch.arange(len(positions)), positions, wt_aatype][:, None]
             mut_logprobs = logprobs[torch.arange(len(positions)), positions, :]
             scores = mut_logprobs - wt_logprobs
 
-            # Map each position to its per-amino-acid mutation scores
             for score, position, wt_res in zip(scores, positions, wt_aatype, strict=False):
                 # Key format: "1A" = 1-indexed position + wild-type residue
                 key = f"{position.item() + 1}{rc.idx_to_restype_with_x[wt_res.item()]}"
@@ -661,7 +642,8 @@ class FAMPNNModel:
                 f"set PROTO_FAMPNN_WEIGHTS_DIR or run setup.sh"
             )
 
-        logger.update_status("Loading FAMPNN weights")
+        if verbose:
+            logger.info(f"Loading FAMPNN model ({model_variant}) from {checkpoint_path}")
 
         torch_device = torch.device(device)
         ckpt = torch.load(checkpoint_path, map_location=torch_device, weights_only=False)
@@ -716,7 +698,6 @@ _model: FAMPNNModel | None = None
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
-    # Create the model wrapper once and reuse it across calls
     global _model
     if _model is None:
         _model = FAMPNNModel()
@@ -724,7 +705,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     pdb_path = input_dict["pdb_path"]
     operation = input_dict["operation"]
 
-    # Route the request to the method for its operation
     if operation == "sample":
         return _model.sample(
             pdb_path=pdb_path,

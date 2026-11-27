@@ -17,8 +17,7 @@ uv pip install -r requirements.txt
 # Building against this environment instead supplies both.
 uv pip install "setuptools>=77" "packaging>=24.2" wheel
 
-# Install the pinned Caliby revision. uv resolves its nested git dependencies
-# (atomworks-caliby and protpardelle) using the upstream pins.
+# Pinned install; uv resolves caliby's nested git deps (atomworks-caliby, protpardelle) at upstream's pins.
 CALIBY_COMMIT="41d31560c3c73d7980d94f40f3c852b90bfab5c0"
 echo "Installing Caliby at ${CALIBY_COMMIT}..."
 uv pip install "caliby @ git+https://github.com/ProteinDesignLab/caliby@${CALIBY_COMMIT}" \

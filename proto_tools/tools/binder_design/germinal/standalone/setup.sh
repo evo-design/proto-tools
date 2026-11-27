@@ -61,13 +61,10 @@ if [ "$(uname -m)" = "aarch64" ]; then
 else
     echo "Installing Chai-1..."
     uv pip install "chai-lab==0.6.1"
-    # Same pinned weights as the chai1 toolkit, in its folder (inference.py sets CHAI_DOWNLOADS_DIR)
-    proto_ensure_chai1_weights
 fi
 
 echo "Installing antibody language models (--no-deps; would otherwise downgrade torch/jax)..."
-# Pinned to the ablang toolkit's version: germinal reads that toolkit's cached AbLang2 weights.
-uv pip install --no-deps "ablang2==0.2.1"
+uv pip install --no-deps ablang2
 uv pip install --no-deps iglm
 uv pip install rotary_embedding_torch
 
@@ -78,12 +75,27 @@ uv pip install "transformers==4.46.*"
 echo "Installing pinned Python dependencies..."
 uv pip install -r requirements.txt
 
-# AF-Multimer params, shared with the alphafold2 toolkit (~5.3 GB, downloaded once).
-proto_ensure_af2_params
-
-# Resolved after the AF2 helper, which points WEIGHTS_DIR at alphafold2's directory
 proto_resolve_weights_dir germinal
-mkdir -p "$WEIGHTS_DIR/binaries"
+mkdir -p "$WEIGHTS_DIR/params" "$WEIGHTS_DIR/binaries"
+
+# AF-Multimer params (~7 GB). Reuse the AF2 standalone's copy if available
+# (env-var redirect; safer than symlinks across filesystems).
+AF2_PARAMS=""
+if [ -n "${PROTO_ALPHAFOLD2_WEIGHTS_DIR:-}" ] && [ -d "${PROTO_ALPHAFOLD2_WEIGHTS_DIR}/params" ]; then
+    AF2_PARAMS="${PROTO_ALPHAFOLD2_WEIGHTS_DIR}/params"
+elif [ -n "${PROTO_MODEL_CACHE:-}" ] && [ -d "${PROTO_MODEL_CACHE}/alphafold2/params" ]; then
+    AF2_PARAMS="${PROTO_MODEL_CACHE}/alphafold2/params"
+elif [ -d "${PROTO_HOME:-$HOME/.proto}/proto_model_cache/alphafold2/params" ]; then
+    AF2_PARAMS="${PROTO_HOME:-$HOME/.proto}/proto_model_cache/alphafold2/params"
+fi
+if [ -n "$AF2_PARAMS" ] && ls "$AF2_PARAMS"/*.npz >/dev/null 2>&1; then
+    echo "Reusing AlphaFold-Multimer params from ${AF2_PARAMS}"
+    echo "PROTO_GERMINAL_AF_PARAMS_DIR=${AF2_PARAMS}" > "$WEIGHTS_DIR/.params_redirect"
+elif ! ls "$WEIGHTS_DIR/params"/*.npz >/dev/null 2>&1; then
+    echo "Downloading AlphaFold-Multimer parameters (~7 GB)..."
+    curl -fsSL https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar \
+        | tar x -C "$WEIGHTS_DIR/params"
+fi
 
 # DSSP from conda-forge (salilab is dead + linked an unavailable boost 1.73). Symlink in place —
 # copying to $WEIGHTS_DIR breaks RPATH — and always reinstall so its libs stay in the env.

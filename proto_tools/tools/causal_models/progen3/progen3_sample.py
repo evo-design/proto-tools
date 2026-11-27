@@ -1,7 +1,7 @@
 """ProGen3 sampling tool."""
 
 import logging
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelSample,
@@ -110,12 +110,6 @@ class ProGen3SampleConfig(CausalModelSampleConfig):
         description="Minimum newly-generated tokens per prompt before stopping is allowed",
     )
 
-    @classmethod
-    def minimal(cls, **kwargs: Any) -> "ProGen3SampleConfig":
-        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
-        kwargs.setdefault("model_checkpoint", "progen3-112m")
-        return cast("ProGen3SampleConfig", super().minimal(**kwargs))
-
 
 # ============================================================================
 # Tool Implementation
@@ -194,12 +188,6 @@ def run_progen3_sample(
     direction_token = _DIRECTION_TOKEN[config.direction]
     prefixed_prompts = [f"{direction_token}{p}" for p in inputs.prompts]
 
-    if config.device == "cpu":
-        raise ValueError(
-            "progen3 needs a GPU: its model code places tensors with torch.cuda, so device='cpu' cannot run"
-        )
-
-    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "progen3",
         {

@@ -1,4 +1,7 @@
-"""Choose positions to mask before sampling with a masked language model."""
+"""proto_tools/transforms/masking/base.py.
+
+Masking strategies for masked language model sampling.
+"""
 
 import logging
 from collections.abc import Callable
@@ -33,9 +36,10 @@ MASK_TOKEN = "_"  # noqa: S105 -- not a password
 def validate_whole_token_masks(seq: str, token_size: int = 1) -> list[str]:
     """Split *seq* into tokens, refusing a mask that covers only part of one.
 
-    Codon models require masks to cover whole codons. For example, ``"AUG___UUU"``
-    masks codon 2, while ``"AUG_CCUUU"`` leaves a partial token, ``"_CC"``. Reject
-    partial masks here so the error identifies the token before the model runs.
+    A caller may pre-mask its own positions, and for a codon model the only meaningful
+    unit is a whole codon: ``"AUG___UUU"`` asks for codon 2, while ``"AUG_CCUUU"`` leaves
+    ``"_CC"``, which is neither a codon nor a mask and cannot be tokenized. Catching it
+    here names the offending token instead of failing later inside the model.
 
     Args:
         seq (str): Sequence to check.
@@ -512,17 +516,14 @@ def build_position_score_fn(
             that returns per-position logits, or ``None`` if the masking
             method doesn't need logits (e.g. random).
     """
-    # Return None when the masking method needs no model input (e.g. random)
     masker_cls = MASKERS[masking_strategy.method]
     if masker_cls.requires is None:
         return None
 
-    # Request logits on the sampling device, with the sampling checkpoint so the persistent worker is reused
     config_kwargs: dict[str, Any] = {"device": device, "return_logits": True}
     if sampling_checkpoint is not None:
         config_kwargs["model_checkpoint"] = sampling_checkpoint
 
-    # Wrap ESM2 embeddings so the masker gets per-position logits for each sequence
     if sampling_model == "esm2":
 
         def position_score_fn(sequences: list[str]) -> list[list[list[float]]]:
@@ -540,7 +541,6 @@ def build_position_score_fn(
 
         return position_score_fn
 
-    # Wrap ESM3 embeddings the same way
     if sampling_model == "esm3":
 
         def position_score_fn(sequences: list[str]) -> list[list[list[float]]]:

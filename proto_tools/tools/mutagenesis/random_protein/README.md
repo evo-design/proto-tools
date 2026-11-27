@@ -9,13 +9,13 @@
 
 ## Overview
 
-Random Protein Sampling fills masked positions in protein sequences with amino acids drawn from a codon scheme. Positions can be marked directly with `_` or selected automatically by a masking strategy. The codon scheme sets amino-acid frequencies. `UNIFORM` weights all twenty equally, while degenerate schemes such as `NNK` or `NDT` weight each amino acid by how many codons encode it. Optional amino-acid exclusions remove unwanted residues such as cysteine. It runs on CPU with no model and no external dependencies.
+Random Protein Sampling fills masked positions in protein sequences with amino acids drawn from a codon scheme. Positions can be marked directly with `_` or selected automatically by a masking strategy. The codon scheme sets amino-acid frequencies: `UNIFORM` weights all twenty equally, while degenerate schemes such as `NNK` or `NDT` weight each amino acid by how many codons encode it. Optional amino-acid exclusions remove unwanted residues such as cysteine. It runs on CPU with no model and no external dependencies.
 
 ## Background
 
-Random Protein Sampling performs random mutagenesis at the protein level. It takes a protein sequence, determines which positions are designable, and replaces each with an amino acid sampled from the distribution implied by a codon scheme. It generates protein-sequence diversity without any learned model, the simplest possible baseline against which model-guided designers can be compared.
+Random Protein Sampling performs random mutagenesis at the protein level: it takes a protein sequence, determines which positions are designable, and replaces each with an amino acid sampled from the distribution implied by a codon scheme. It generates protein-sequence diversity without any learned model, the simplest possible baseline against which model-guided designers can be compared.
 
-Internally, designable positions are either the `_` characters already present in the input or, when none are present, positions chosen by the configured masking strategy. The codon scheme is expanded to its concrete codons, and each amino acid's sampling weight is set proportional to the number of codons in the scheme that encode it, with stop codons excluded by default. `UNIFORM` instead assigns equal weight to all twenty standard amino acids. If `excluded_amino_acids` is set, those residue types are removed after codon-scheme and stop-codon handling. The sampler raises an error if no reachable residue remains. Each masked position is filled independently by a weighted random draw. With a fixed seed the output is deterministic.
+Internally, designable positions are either the `_` characters already present in the input or, when none are present, positions chosen by the configured masking strategy. The codon scheme is expanded to its concrete codons, and each amino acid's sampling weight is set proportional to the number of codons in the scheme that encode it, with stop codons excluded by default. `UNIFORM` instead assigns equal weight to all twenty standard amino acids. If `excluded_amino_acids` is set, those residue types are removed after codon-scheme and stop-codon handling; the sampler raises an error if no reachable residue remains. Each masked position is filled independently by a weighted random draw. With a fixed seed the output is deterministic.
 
 This tool is original proto-tools code maintained by [Proto](https://github.com/evo-design/proto-tools).
 
@@ -45,5 +45,5 @@ Use this to build randomized protein libraries that mimic experimental degenerat
 
 These apply to every Random Protein Sampling tool in this toolkit (`random-protein-sample`).
 
-- **Runs on CPU.** The sampler is pure Python with no model and no external dependencies. Execution is near-instant.
-- **Deterministic only with a seed.** Without a `seed` the filled positions differ every run. Set one when you need reproducible libraries.
+- **Runs on CPU.** The sampler is pure Python with no model and no external dependencies; execution is near-instant.
+- **Deterministic only with a seed.** Without a `seed` the filled positions differ every run; set one when you need reproducible libraries.

@@ -1,11 +1,10 @@
 """LigandMPNN structure-aware sequence design."""
 
 from proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample import (
-    LIGANDMPNN_BUNDLED_MODELS,
     LigandMPNNDesign,
     LigandMPNNDesignMetrics,
     LigandMPNNDesignSet,
-    LigandMPNNImplementation,
+    LigandMPNNModelType,
     LigandMPNNSampleConfig,
     LigandMPNNSampleInput,
     LigandMPNNSampleOutput,
@@ -23,11 +22,10 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
 )
 
 __all__ = [
-    "LIGANDMPNN_BUNDLED_MODELS",
     "LigandMPNNDesign",
     "LigandMPNNDesignMetrics",
     "LigandMPNNDesignSet",
-    "LigandMPNNImplementation",
+    "LigandMPNNModelType",
     "LigandMPNNSampleConfig",
     "LigandMPNNSampleInput",
     "LigandMPNNSampleOutput",

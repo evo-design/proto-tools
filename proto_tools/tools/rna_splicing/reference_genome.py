@@ -43,7 +43,7 @@ class ReferenceGenomeConfig(BaseConfig):
             provisioned assembly name (``'grch38'``/``'grch37'``, or their UCSC
             spellings ``'hg38'``/``'hg19'``), downloaded on first use and the
             only form a remote worker can resolve, or a path to a FASTA on this
-            machine. Required at call time. ``None`` raises a
+            machine. Required at call time; ``None`` raises a
             ``MissingAssetError`` so un-provisioned hosts skip cleanly.
     """
 

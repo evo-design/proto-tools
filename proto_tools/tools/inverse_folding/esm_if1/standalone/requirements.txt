@@ -1,4 +1,2 @@
 fair-esm==2.0.0
-# Pinned because _readable.py transcribes biotite's three-to-one residue table: a silent
-# upgrade would change which residues ESM-IF1 reads without changing this repo.
-biotite==2.0.0
+biotite

@@ -1,4 +1,4 @@
-"""Build filenames using the shared export naming convention.
+"""Filesystem-safe filename builder for the unified export convention.
 
 Composes ``{project}__{run_name}__{YYYY-MM-DD_HHMMSS}{discriminator}.{ext}``. Empty fields drop out
 with their separator. Discriminators (e.g. ``_stage-0``) must start with ``_``.
@@ -16,10 +16,7 @@ _WIN_RESERVED = frozenset(
 
 
 def sanitize_field(raw: str | None) -> str:
-    """Normalize text to NFC and replace unsafe filename characters with ``_``.
-
-    Collapse repeated whitespace and trim dots and whitespace from both ends.
-    """
+    """NFC; replace unsafe chars with ``_``; collapse whitespace; trim leading/trailing dots and whitespace."""
     if not raw:
         return ""
     s = _BAD_CHARS.sub("_", unicodedata.normalize("NFC", str(raw)))
@@ -34,19 +31,17 @@ def build_export_name(
     discriminator: str | None = None,
     ext: str | None = None,
 ) -> str:
-    """Build an export filename, omitting empty fields and their ``__`` separators."""
+    """Compose the unified filename; empty fields drop with their ``__`` separator."""
     if isinstance(timestamp, datetime):
         ts = timestamp.strftime("%Y-%m-%d_%H%M%S")
     elif timestamp is None:
         ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     else:
         ts = timestamp
-    # Clean each field before joining the nonempty parts.
     parts = [sanitize_field(project), sanitize_field(run_name), sanitize_field(ts)]
     base = "__".join(p for p in parts if p) or "export"
     if discriminator:
         base += sanitize_field(discriminator)
-    # Prefix names that Windows reserves for devices.
     if base.split(".", 1)[0].upper() in _WIN_RESERVED:
         base = "_" + base
     safe_ext = sanitize_field(ext) if ext else ""

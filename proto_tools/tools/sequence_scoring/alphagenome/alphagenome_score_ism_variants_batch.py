@@ -1,4 +1,7 @@
-"""AlphaGenome batched in-silico mutagenesis (ISM) tool."""
+"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_score_ism_variants_batch.py.
+
+AlphaGenome batched in-silico mutagenesis (ISM) tool.
+"""
 
 import csv
 import json

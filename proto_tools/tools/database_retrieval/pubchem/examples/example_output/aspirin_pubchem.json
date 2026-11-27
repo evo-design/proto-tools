@@ -1,8 +1,7 @@
 {
   "tool_id": "pubchem-fetch",
-  "tool_version": "1.0.2",
-  "execution_time": 1.5400545597076416,
-  "timestamp": "2026-11-08T20:40:03.584959",
+  "execution_time": 0.734581470489502,
+  "timestamp": "2026-06-20T19:08:48.892697",
   "success": true,
   "warnings": [],
   "errors": [],

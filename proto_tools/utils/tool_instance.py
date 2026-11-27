@@ -1,18 +1,19 @@
-"""Run tools in isolated subprocesses and optionally keep workers alive across calls.
+"""proto_tools/utils/tool_instance.py.
 
-By default, ``dispatch()`` starts a subprocess for one call and shuts it down
-afterward, releasing its GPU memory. To reuse a worker, use ``persist()`` to
-cache all tools in a block, ``persist_tool()`` for a specific tool, or ``get()``
-for a worker whose lifetime you manage yourself.
+**One-shot by default**: ``dispatch()`` runs an ephemeral subprocess —
+no leaked workers, no GPU memory retained after the call.
 
-``config.device`` reaches the worker through ``input_dict["device"]``.
-ToolInstance restarts persistent workers when a ``reload_on_change`` config
-field, such as the model checkpoint, differs from the value the live worker was
-spawned with. Tools of one toolkit share that worker and may declare different
-reload fields; a field listed in ``_SHARED_RELOAD_FIELDS`` may be left
-undeclared without replacing the worker (see ``_reload_changes``). Standalone
-scripts should leave these checks to ToolInstance. Mark every config field
-that affects model initialization with ``reload_on_change=True``.
+**Opt-in persistence**: use ``persist()`` (auto-cache all tools),
+``persist_tool()`` (tool-specific), or ``get()`` (manual lifecycle)
+when you need to keep a worker alive across calls.
+
+Device is always driven by ``config.device`` (a ``BaseConfig`` field)
+which flows through ``input_dict["device"]``.  Persistent workers
+auto-restart when any ``reload_on_change`` config field changes between
+calls (device, model checkpoint, etc.).  Standalone scripts must NOT
+check for config changes themselves — the ToolInstance layer handles
+restarts.  Any config field that affects model initialization must be
+marked ``reload_on_change=True`` in the tool's Config class.
 
 Usage::
 
@@ -47,9 +48,7 @@ import atexit
 import collections
 import contextvars
 import datetime
-import errno
 import hashlib
-import itertools
 import json
 import logging
 import os
@@ -66,24 +65,19 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from proto_tools.utils.base_config import DEFAULT_TIMEOUT, BaseConfig
-from proto_tools.utils.dependency_caps import write_env_caps
 from proto_tools.utils.device import parse_device_string
 from proto_tools.utils.device_manager import DeviceManager
-from proto_tools.utils.download_progress import ProgressDeadline
-from proto_tools.utils.env_warmup import warm_environment
 from proto_tools.utils.logging_config import verbose_level_from_env
 from proto_tools.utils.persistent_worker import (
     PersistentWorker,
     _apply_verbose_to_console_handlers,
     _build_subprocess_env,
-    _download_dirs,
     _drain_subprocess_stderr,
     _parse_env_vars_file,
     _stderr_buffer_lines,
 )
 from proto_tools.utils.progress import get_current_tool_function, has_active_progress_bar, progress_bar, set_substatus
 from proto_tools.utils.tool_io import MissingAssetError
-from proto_tools.utils.weights_manifest import RECORD_ENV_VAR, RECORD_NAME, weights_problem, write_manifest
 
 if TYPE_CHECKING:
     from proto_tools.tools.tool_registry import ToolSpec
@@ -110,8 +104,6 @@ ENV_BUILD_LOCK_TIMEOUT = 60 * 60
 # Singleton registry
 # ============================================================================
 _lock = threading.Lock()  # protects _instances dict
-# Numbers the DeviceManager allocations of instances that have no cache key (see _device_manager_name).
-_uncached_allocation_ids = itertools.count(1)
 _instances: dict[str, "ToolInstance"] = {}
 
 _scope_override: contextvars.ContextVar[dict[str, "ToolInstance"] | None] = contextvars.ContextVar(
@@ -120,43 +112,12 @@ _scope_override: contextvars.ContextVar[dict[str, "ToolInstance"] | None] = cont
 _persist_mode: contextvars.ContextVar[bool] = contextvars.ContextVar("_persist_mode", default=False)
 
 # Set by the ``@tool()`` wrapper around each dispatch so ``ToolInstance`` can
-# read flags such as ``gpu_only`` without passing ``ToolSpec`` through each
-# call site. The mapping contains {"key": str, "gpu_only": bool,
-# "pin_visible_devices": bool, "uses_gpu": bool}.
+# read per-tool flags (e.g. ``gpu_only``) without plumbing the ``ToolSpec``
+# through every call site. Contents: {"key": str, "gpu_only": bool,
+# "pin_visible_devices": bool}.
 _current_tool_invocation: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
     "_current_tool_invocation", default=None
 )
-
-
-# Only ETXTBSY: executing a file another process still holds open for writing is transient by
-# construction, since the writer closes it. Wider errnos (EBUSY, EAGAIN) also cover failures that
-# repeat forever, and treating one of those as transient replaces a fast "previously failed setup"
-# with a full rebuild on every call.
-_TRANSIENT_ERRNOS = frozenset({errno.ETXTBSY})
-
-
-def _is_transient_os_error(exc: BaseException) -> bool:
-    """Whether ``exc``, or anything it was raised from, is an OS error worth retrying rather than caching.
-
-    Args:
-        exc (BaseException): The exception a build raised.
-
-    Returns:
-        bool: True when the failure says the machine was busy, not that this toolkit cannot build.
-    """
-    current: BaseException | None = exc
-    seen: set[int] = set()
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        if isinstance(current, OSError) and current.errno in _TRANSIENT_ERRNOS:
-            return True
-        # ``raise ... from None`` sets __suppress_context__ to say the context is not the cause, so a
-        # transient error that something deliberately disowned must not make its replacement transient.
-        if current.__cause__ is not None:
-            current = current.__cause__
-        else:
-            current = None if current.__suppress_context__ else current.__context__
-    return False
 
 
 def _device_change_needed(current: str, requested: str) -> bool:
@@ -170,85 +131,6 @@ def _device_change_needed(current: str, requested: str) -> bool:
     if req.devices is None:  # auto request (cuda / cudaxN) satisfied by any same-kind, same-count allocation
         return not (cur.kind == req.kind and cur.count == req.count)
     return (cur.kind, cur.devices) != (req.kind, req.devices)
-
-
-_UNSET = "<unset>"
-
-# Per toolkit, the reload fields a tool may leave undeclared without replacing a live worker. Add one
-# only after checking that omitting it cannot change the model that tool gets, since whether the worker
-# already holds the right model is a property of its own cache, which this layer cannot see. A field
-# every tool declares needs no entry: those values are always compared.
-_SHARED_RELOAD_FIELDS: dict[str, frozenset[str]] = {
-    # The worker keys its model on ``(model_checkpoint, lm_dropout)`` and every tool sends both, so it
-    # holds the requested model or rebuilds it.
-    "esmfold2": frozenset({"lm_dropout"}),
-}
-
-
-def _reload_changes(
-    spawned_with: dict[str, Any],
-    reload_params: dict[str, Any],
-    input_dict: dict[str, Any],
-    *,
-    shared_fields: frozenset[str],
-) -> dict[str, tuple[Any, Any]]:
-    """Return the reload values that keep a live worker from serving this call, as ``{key: (old, new)}``.
-
-    ``spawned_with`` holds the reload values of the call that spawned the worker.
-
-    The call must declare the values the worker was spawned with. A recorded field the call does not declare
-    restarts the worker unless that field is opted in for this toolkit (``shared_fields``, see
-    ``_SHARED_RELOAD_FIELDS``), which states that a tool not declaring it is unaffected by its value.
-
-    So a reuse is allowed only when the worker is known to hold an equivalent model:
-
-    - every field this call declares was recorded at spawn with the same value (one never recorded is unknown,
-      so it restarts, with ``old`` reported as ``"<unset>"``), and
-    - every recorded field this call sends without declaring it also matches, so a tool that pins a value
-      (e.g. a fixed ``model_checkpoint``) never reuses a worker spawned with another.
-
-    Recorded fields this call neither declares nor sends are ignored: they configure a model this tool does
-    not use differently.
-
-    Args:
-        spawned_with (dict[str, Any]): Reload values recorded when the live worker was spawned.
-        reload_params (dict[str, Any]): This call's declared reload fields and their values.
-        input_dict (dict[str, Any]): This call's worker payload.
-        shared_fields (frozenset[str]): Reload fields a call of this toolkit may leave undeclared without
-            replacing the worker.
-
-    Returns:
-        dict[str, tuple[Any, Any]]: Each blocking field with its recorded and requested value; empty to reuse.
-    """
-    changes = {
-        key: (spawned_with.get(key, _UNSET), value)
-        for key, value in reload_params.items()
-        if key not in spawned_with or spawned_with[key] != value
-    }
-    for key, recorded in spawned_with.items():
-        if key in reload_params:
-            continue
-        if key not in shared_fields:
-            # Nothing here can show the loaded model still suits a call that never declared this field, so
-            # the worker is replaced rather than reused.
-            changes[key] = (recorded, _UNSET)
-        elif key in input_dict and input_dict[key] != recorded:
-            changes[key] = (recorded, input_dict[key])
-    return changes
-
-
-def _dispatch_pins_worker() -> bool:
-    """Whether the current tool call's worker must see only its leased GPU(s).
-
-    True when the tool declares ``pin_visible_devices``, or when it is a GPU tool on a host whose
-    GPUs are in Exclusive_Process mode (``DeviceManager.pins_gpu_workers``). Read from the
-    ``@tool`` wrapper's invocation, so direct ``ToolInstance.run`` calls with no invocation keep
-    their own setting.
-    """
-    invocation = _current_tool_invocation.get() or {}
-    if invocation.get("pin_visible_devices"):
-        return True
-    return bool(invocation.get("uses_gpu")) and DeviceManager.get_instance().pins_gpu_workers
 
 
 def _local_visible_device(device: str) -> str:
@@ -507,9 +389,10 @@ class ToolInstance:
     ) -> dict[str, Any]:
         """Run a tool, reusing a cached persistent instance if one exists.
 
-        Tool wrappers use this entry point to find an existing worker or start
-        a one-shot subprocess. Workers cached through :meth:`persist`,
-        :meth:`persist_tool`, or :meth:`get` are reused.
+        This is the primary entry point for tool wrappers.  When no
+        persistent instance is cached, runs an ephemeral one-shot
+        subprocess (no leak).  When a persistent instance exists (via
+        :meth:`persist`, :meth:`persist_tool`, or :meth:`get`), reuses it.
 
         Args:
             toolkit (str): Worker-group folder name (e.g. ``"esm2"``).
@@ -614,10 +497,10 @@ class ToolInstance:
         verbose: int = 0,
         timeout: int | None = None,
     ) -> dict[str, Any]:
-        """Run a tool once and release its subprocess afterward.
+        """Run a tool in an ephemeral subprocess — no caching, no worker.
 
-        For GPU calls, hold a transient DeviceManager lease so concurrent
-        one-shot calls do not use the same GPU.
+        For GPU devices, acquires a transient lease from DeviceManager
+        to prevent concurrent one-shot calls from stomping the same GPU.
 
         Args:
             toolkit (str): Model-level folder name (e.g. ``"esm2"``).
@@ -629,7 +512,6 @@ class ToolInstance:
         inst = cls(toolkit)
         effective_script = Path(script_path) if script_path else inst.script_path
         device = input_dict.get("device")
-        pinned = _dispatch_pins_worker()
 
         if device and device.startswith("cuda"):
             dm = DeviceManager.get_instance()
@@ -641,7 +523,6 @@ class ToolInstance:
                     script_path=effective_script,
                     verbose=verbose,
                     timeout=timeout,
-                    pin_visible_devices=pinned,
                 )
         else:
             return inst._run_oneshot(
@@ -649,7 +530,6 @@ class ToolInstance:
                 script_path=effective_script,
                 verbose=verbose,
                 timeout=timeout,
-                pin_visible_devices=pinned,
             )
 
     @classmethod
@@ -715,9 +595,7 @@ class ToolInstance:
                     "will NOT be automatically used by tool calls and "
                     "must be explicitly specified — pass instance=<this "
                     "instance> to run_*() calls, or use instance_name= "
-                    "to give it a unique cache key. It runs its own worker, "
-                    "so unless GPU sharing is enabled it evicts the cached "
-                    "instance's worker from a GPU they both want.",
+                    "to give it a unique cache key.",
                     toolkit,
                 )
                 inst = cls(toolkit, env_overrides=env_overrides)
@@ -869,8 +747,6 @@ class ToolInstance:
 
         self._env_ready = False
         self._cache_keys: set[str] = set()
-        # Name of this instance's DeviceManager allocation; fixed at its first device request.
-        self._dm_name: str | None = None
         self._instance_lock = threading.RLock()  # protects _worker lifecycle
         self._worker: PersistentWorker | None = None
         # Tracks previous reload-field values for restart detection
@@ -878,10 +754,8 @@ class ToolInstance:
         # Latches True if any dispatch sets gpu_only; eviction then uses the
         # worker-kill path. See notes/tool-environments.md.
         self._gpu_only: bool = False
-        # Latches True if any dispatch pins the worker (CVD-pinned worker, respawns on device change).
+        # Latches True if any dispatch sets pin_visible_devices (CVD-pinned worker, respawns on device change).
         self._pin_visible_devices: bool = False
-        # The visibility the live worker was spawned with, compared on each dispatch.
-        self._worker_pinned: bool = False
 
     def _ensure_env(self) -> None:
         """Build the tool's environment if it doesn't exist or is broken.
@@ -916,7 +790,7 @@ class ToolInstance:
             if self.env_name not in self._env_build_locks:
                 self._env_build_locks[self.env_name] = threading.Lock()
         with self._env_build_locks[self.env_name], self._env_build_process_lock():
-            # Another thread may have recorded a failure before this one acquired the lock.
+            # Re-check under the build lock in case the race winner already recorded a failure.
             if self.toolkit in self._build_failures:
                 tail = self._build_failures[self.toolkit]
                 sentinel = self._parse_asset_sentinel(tail)
@@ -937,23 +811,10 @@ class ToolInstance:
                 if status_file.exists():
                     status = status_file.read_text()
                     if status.startswith("SUCCESS"):
-                        # With unchanged setup files, the env is being set up again for its weights
-                        unchanged = f"Setup hash: {self._setup_hash()}" in status
-                        problem = weights_problem(self.env_path) if unchanged else None
-                        # A CPU build being rebuilt for the GPU is reported by _create_env, which every rebuild runs
-                        if unchanged and self._built_without_gpu_now_visible(status):
-                            pass
-                        elif problem is not None:
-                            logger.info(
-                                "Setting up %s again to download its weights: %s",
-                                self.toolkit,
-                                problem,
-                            )
-                        else:
-                            logger.info(
-                                "Setup files changed for %s, rebuilding environment",
-                                self.toolkit,
-                            )
+                        logger.info(
+                            "Setup files changed for %s, rebuilding environment",
+                            self.toolkit,
+                        )
                     elif status.startswith("FAILED"):
                         current_hash = self._setup_hash()
                         if f"Setup hash: {current_hash}" in status:
@@ -979,35 +840,10 @@ class ToolInstance:
                     self._create_env()
                 except Exception as exc:
                     # Store exception message as fallback if _create_env didn't populate _build_failures
-                    # Recording a failure makes every later call in this process fail without retrying, which
-                    # is right for a build that will fail the same way again. A transient OS error says
-                    # nothing about this toolkit, so it is raised without being remembered.
-                    if self.toolkit not in self._build_failures and not _is_transient_os_error(exc):
+                    if self.toolkit not in self._build_failures:
                         self._build_failures[self.toolkit] = str(exc)
                     raise
-            # Under the build lock, so a rebuild can't replace the env mid-read and processes starting together warm
-            # it once: the rest find it cached.
-            self._warm_shared_libraries()
         self._env_ready = True
-
-    def _warm_shared_libraries(self) -> None:
-        """Pre-read this env's large shared libraries, where that is worth doing.
-
-        ``import torch`` mmaps gigabytes of CUDA libraries, and on a parallel filesystem each
-        page fault is a network round-trip, so the first run on a node can spend far longer
-        waiting on them than computing. Reading the files sequentially first fills the same
-        page cache much faster.
-
-        Skipped unless page faults on the env's largest library are measured to be slow, which
-        a local disk, a fast network filesystem, and an already-cached library all avoid.
-        Warm-up is optional, including the fingerprint lookup that reads setup
-        files. If anything fails, skip warm-up so :meth:`_ensure_env` can still
-        run. See :mod:`proto_tools.utils.env_warmup`.
-        """
-        try:
-            warm_environment(self.env_path, self._setup_hash())
-        except Exception as error:
-            logger.debug("Skipping the %s env warm-up: %s", self.toolkit, error)
 
     @contextmanager
     def _env_build_process_lock(self) -> Generator[None, None, None]:
@@ -1097,38 +933,18 @@ class ToolInstance:
             worker.stop()
 
         # Release device from DeviceManager
-        dm_name = getattr(self, "_dm_name", None)
-        if dm_name is not None:
-            DeviceManager.get_instance().release_device(dm_name)
+        cache_keys: set[str] = getattr(self, "_cache_keys", set())
+        if cache_keys:
+            instance_name = next(iter(cache_keys))
+            device_manager = DeviceManager.get_instance()
+            device_manager.release_device(instance_name)
 
         # Optionally evict from cache by stored keys
-        cache_keys: set[str] = getattr(self, "_cache_keys", set())
         if remove_from_cache:
             with _lock:
                 cache = _active_cache()
                 for k in cache_keys:
                     cache.pop(k, None)
-
-    def _device_manager_name(self) -> str:
-        """Return the name of this instance's DeviceManager allocation, fixing it on first use.
-
-        An instance owns at most one worker process, so it gets its own allocation record: its
-        cache key when it has one, otherwise a unique ``<toolkit>#<n>``. Falling back to the
-        toolkit name would let an uncached instance (a nested ``persist_tool``, a direct
-        ``ToolInstance(toolkit)``) share a cached instance's record. DeviceManager would then
-        record one worker even though two workers use the GPU, so it would skip eviction.
-        On an ``Exclusive_Process`` GPU, the second worker would fail to create a CUDA context. The name never changes once
-        set, since the allocation is released under it at shutdown. Callers hold
-        ``_instance_lock``.
-
-        Returns:
-            str: The allocation name.
-        """
-        if self._dm_name is None:
-            self._dm_name = (
-                next(iter(self._cache_keys)) if self._cache_keys else f"{self.toolkit}#{next(_uncached_allocation_ids)}"
-            )
-        return self._dm_name
 
     def _to(self, device: str) -> "ToolInstance":
         """Move this tool instance to a different device (internal).
@@ -1149,7 +965,8 @@ class ToolInstance:
             ToolInstance: Self, for method chaining.
         """
         with self._instance_lock:
-            instance_name = self._device_manager_name()
+            # Get instance name for DeviceManager
+            instance_name = next(iter(self._cache_keys)) if self._cache_keys else self.toolkit
 
             # If no worker exists yet, just update internal device tracking
             if self._worker is None:
@@ -1317,14 +1134,10 @@ class ToolInstance:
     ) -> dict[str, Any]:
         """Execute via the persistent worker, restarting if config changed.
 
-        Compares this call's reload-field values against those the live worker
-        was spawned with (see :func:`_reload_changes`). If any differs or is
-        unknown (or the script path changed), the existing worker is stopped
-        and a new one is created. A tool that declares fewer reload fields than
-        the one that spawned the worker reuses it when the fields it does
-        declare match and the rest are opted in for that toolkit
-        (``_SHARED_RELOAD_FIELDS``); otherwise the worker is replaced. On the
-        very first call the worker is lazily created.
+        Compares the current reload-field values against the previous call.
+        If any tracked field changed (or the script path changed), the
+        existing worker is stopped and a new one is created.  On the very
+        first call the worker is lazily created.
 
         Args:
             input_dict (dict[str, Any]): JSON-serializable input for the standalone script.
@@ -1347,18 +1160,8 @@ class ToolInstance:
         _invocation = _current_tool_invocation.get() or {}
         if _invocation.get("gpu_only"):
             self._gpu_only = True
-        if _dispatch_pins_worker():
+        if _invocation.get("pin_visible_devices"):
             self._pin_visible_devices = True
-
-        # A live worker spawned with the other visibility would read local cuda:0 as the wrong GPU (or
-        # see GPUs it must not); respawn it with the visibility this dispatch needs.
-        if (
-            self._worker is not None
-            and getattr(self, "_worker_pinned", self._pin_visible_devices) != self._pin_visible_devices
-        ):
-            set_substatus("Restarting worker")
-            self._worker.stop()
-            self._worker = None
 
         # Pinned workers have a fixed CUDA_VISIBLE_DEVICES and cannot move in-process; respawn on a device change.
         if self._worker is not None and self._pin_visible_devices:
@@ -1370,33 +1173,28 @@ class ToolInstance:
 
         if self._worker is not None:
             script_changed = self._worker.script_path != sp
-            changes = (
-                _reload_changes(
-                    self._reload_params,
-                    reload_params,
-                    input_dict,
-                    shared_fields=_SHARED_RELOAD_FIELDS.get(self.toolkit, frozenset()),
-                )
-                if reload_params is not None
-                else {}
-            )
-            if script_changed or changes:
-                if changes:
+            params_changed = reload_params is not None and reload_params != self._reload_params
+            if script_changed or params_changed:
+                if params_changed:
+                    assert reload_params is not None
+                    changed = {k for k in (reload_on or set()) if self._reload_params.get(k) != reload_params.get(k)}
                     logger.info(
                         "Config changed (%s) for %s, restarting worker",
-                        ", ".join(f"{k}: {old!r} → {new!r}" for k, (old, new) in sorted(changes.items())),
+                        ", ".join(
+                            f"{k}: {self._reload_params.get(k)!r} → {reload_params[k]!r}" for k in sorted(changed)
+                        ),
                         self.toolkit,
                     )
                 set_substatus("Restarting worker")
                 self._worker.stop()
                 self._worker = None
 
-        # The tracked values describe what the live worker was spawned with, so they are set only when one is
-        # about to spawn; a reused worker keeps them, even when the reusing tool declares a narrower set.
-        if self._worker is None:
-            self._reload_params = dict(reload_params) if reload_params is not None else {}
+        if track_reload:
+            assert reload_params is not None
+            self._reload_params = reload_params
 
-        instance_name = self._device_manager_name()
+        # Get instance name for DeviceManager (use first cache key if available)
+        instance_name = next(iter(self._cache_keys)) if self._cache_keys else self.toolkit
 
         if self._worker is None:
             # Request device from DeviceManager
@@ -1468,7 +1266,6 @@ class ToolInstance:
                 env_overrides=self._env_overrides,
                 pin_visible_devices=self._pin_visible_devices,
             )
-            self._worker_pinned = self._pin_visible_devices
         else:
             # Live worker that needs no physical-device change (pinned ones that do were respawned above).
             device_manager = DeviceManager.get_instance()
@@ -1505,7 +1302,6 @@ class ToolInstance:
         script_path: Path | None = None,
         verbose: int = 0,
         timeout: int | None = None,
-        pin_visible_devices: bool = False,
     ) -> dict[str, Any]:
         """Run in an ephemeral subprocess (no persistent worker).
 
@@ -1530,14 +1326,10 @@ class ToolInstance:
             verbose (int): Verbosity level on the 0-3 scale; see :class:`BaseConfig`.
                 ``PROTO_WORKER_VERBOSE`` env var acts as a global ceiling override.
             timeout (int | None): Maximum seconds to wait.
-            pin_visible_devices (bool): Spawn the subprocess seeing only ``device``'s physical GPU(s),
-                which it addresses as local ``cuda:0..N-1`` (as a pinned persistent worker does).
         """
         self._ensure_env()
         sp = script_path or self.script_path
         device = input_dict.get("device", self.device)
-        if pin_visible_devices:
-            input_dict = {**input_dict, "device": _local_visible_device(device)}
         # Effective level = max(per-call config, env-var ceiling).
         effective_verbose = max(int(verbose), verbose_level_from_env())
         inherit_stdout = effective_verbose >= 3
@@ -1555,7 +1347,6 @@ class ToolInstance:
                 tool_env_path=self.env_path,
                 tool_env_vars=self._tool_env_vars,
                 toolkit=self.toolkit,
-                pin_visible_devices=pin_visible_devices,
             )
             env["TOOL_VENV_PATH"] = str(self.env_path)
             python_exe = str(self.env_path / "bin" / "python")
@@ -1605,11 +1396,8 @@ class ToolInstance:
                 )
                 drain_thread.start()
 
-                deadline = ProgressDeadline(
-                    effective_timeout, _download_dirs(self.toolkit, env, self.env_path), label=self.toolkit
-                )
                 try:
-                    rc = deadline.wait_process(proc)
+                    rc = proc.wait(timeout=effective_timeout)
                 except subprocess.TimeoutExpired:
                     # killpg, not proc.kill, so grandchildren don't orphan with live CUDA handles.
                     with suppress(OSError):
@@ -1621,9 +1409,7 @@ class ToolInstance:
                             os.killpg(proc.pid, signal.SIGKILL)
                         with suppress(Exception):
                             proc.wait(timeout=5)
-                    raise TimeoutError(
-                        f"{self.toolkit}: timed out after {effective_timeout}s{deadline.timeout_note()}"
-                    ) from None
+                    raise TimeoutError(f"{self.toolkit}: timed out after {effective_timeout}s") from None
                 finally:
                     drain_thread.join(timeout=2)
 
@@ -1725,19 +1511,16 @@ class ToolInstance:
         if not registry.exists():
             return
 
-        # Registrations under these roots are envs proto-tools manages
         managed_roots = (
             ToolInstance._get_tool_envs_root().resolve(strict=False),
             ToolInstance._get_foundation_env_path().resolve(strict=False),
         )
-        # Read the registry, keeping line endings so kept lines are written back unchanged
         try:
             lines = registry.read_text().splitlines(keepends=True)
         except OSError as e:
             logger.warning("Could not read conda environment registry at %s: %s", registry, e)
             return
 
-        # Drop managed env registrations; keep comments, blank lines and every other env
         kept = []
         removed = 0
         for line in lines:
@@ -1749,11 +1532,9 @@ class ToolInstance:
                     continue
             kept.append(line)
 
-        # Leave the file untouched when nothing was removed
         if removed == 0:
             return
 
-        # Write a per-process temp file, then rename it over the registry so readers never see a partial file
         tmp_registry = registry.with_name(f"{registry.name}.{os.getpid()}.tmp")
         try:
             tmp_registry.write_text("".join(kept))
@@ -1761,41 +1542,8 @@ class ToolInstance:
             logger.info("Removed %d proto-tools env registrations from %s", removed, registry)
         except OSError as e:
             logger.warning("Could not update conda environment registry at %s: %s", registry, e)
-            # Remove the temp file if the write or rename failed
             with suppress(OSError):
                 tmp_registry.unlink()
-
-    @staticmethod
-    @contextmanager
-    def _staged_micromamba(mamba_root: Path) -> Generator[Path, None, None]:
-        """Extract into a staging directory, then put the binary in place in one step.
-
-        ``bin/micromamba`` must never be visible at its final path while it is still being written:
-        another process that finds it there runs it, and executing a file an extraction still holds
-        open fails with ``ETXTBSY`` ("Text file busy"). Only a rename makes the binary appear
-        complete-or-not-at-all, which is what lets the unlocked fast path in ``_ensure_micromamba``
-        trust ``exists()``. The file lock stops concurrent downloads; this is what makes a concurrent
-        *reader* safe.
-
-        Args:
-            mamba_root (Path): ``PROTO_HOME/.micromamba``, which must already exist; staging is a
-                directory inside it, so the rename stays on one filesystem.
-
-        Returns:
-            Generator[Path, None, None]: Yields the directory to extract ``bin/micromamba`` into.
-        """
-        final = mamba_root / "bin" / "micromamba"
-        staging = Path(tempfile.mkdtemp(dir=mamba_root, prefix=".staging."))
-        try:
-            yield staging
-            extracted = staging / "bin" / "micromamba"
-            if not extracted.is_file():
-                raise RuntimeError(f"micromamba extraction produced no binary at {extracted}")
-            extracted.chmod(0o755)
-            final.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(extracted, final)
-        finally:
-            shutil.rmtree(staging, ignore_errors=True)
 
     @staticmethod
     def _ensure_micromamba() -> Path:
@@ -1803,8 +1551,6 @@ class ToolInstance:
 
         Uses a file lock to prevent concurrent downloads when multiple
         processes (e.g. pytest-xdist workers) race to install micromamba.
-        The binary is renamed into place (``_staged_micromamba``), so a
-        process that sees it can always run it.
 
         Returns:
             Path: Path to micromamba binary.
@@ -1812,10 +1558,7 @@ class ToolInstance:
         mamba_root = ToolInstance._get_micromamba_root()
         mamba_bin = mamba_root / "bin" / "micromamba"
 
-        # Executable, not merely present: a PROTO_HOME written before the binary was renamed into
-        # place can hold one that was never chmod'd, and trusting its existence would keep handing
-        # out a file nothing can run. Anything unusable is replaced below.
-        if os.access(mamba_bin, os.X_OK):
+        if mamba_bin.exists():
             ToolInstance._configure_micromamba_root(mamba_root)
             ToolInstance._cleanup_registered_micromamba_envs()
             return mamba_bin
@@ -1829,14 +1572,8 @@ class ToolInstance:
             # Re-check after acquiring lock - another process may have installed it
             ToolInstance._configure_micromamba_root(mamba_root)
             ToolInstance._cleanup_registered_micromamba_envs()
-            if os.access(mamba_bin, os.X_OK):
+            if mamba_bin.exists():
                 return mamba_bin
-
-            # Holding the lock, so any staging directory left here belongs to a process that died
-            # before it could clean up (SIGKILL skips the ``finally``). Nothing reads these, but
-            # each holds a partial ~19 MB binary, so they are swept rather than left to pile up.
-            for stale in mamba_root.glob(".staging.*"):
-                shutil.rmtree(stale, ignore_errors=True)
 
             logger.info("Downloading micromamba to %s...", mamba_root)
 
@@ -1876,19 +1613,16 @@ class ToolInstance:
                         check=True,
                         capture_output=True,
                     )
-                    with ToolInstance._staged_micromamba(mamba_root) as staged:
-                        subprocess.run(
-                            ["tar", "-xvj", "-C", str(staged), "bin/micromamba"],
-                            input=result.stdout,
-                            check=True,
-                            capture_output=True,
-                        )
+                    subprocess.run(
+                        ["tar", "-xvj", "-C", str(mamba_root), "bin/micromamba"],
+                        input=result.stdout,
+                        check=True,
+                        capture_output=True,
+                    )
+                    mamba_bin.chmod(0o755)
                     logger.info("Micromamba installed successfully from %s", url)
                     return mamba_bin
-                # OSError and RuntimeError cover the staging step as well as curl/tar, so a publish that
-                # cannot complete still falls through to the fallback and the other URL instead of
-                # aborting the whole bootstrap.
-                except (subprocess.CalledProcessError, OSError, RuntimeError) as e:
+                except (subprocess.CalledProcessError, FileNotFoundError) as e:
                     logger.info("curl/tar download failed (%s), trying urllib fallback", e)
 
                 # Attempt 2: Python stdlib fallback (no external deps required)
@@ -1899,11 +1633,10 @@ class ToolInstance:
 
                     with _urllib_request.urlopen(url, timeout=120) as resp:  # noqa: S310
                         data = resp.read()
-                    with (
-                        ToolInstance._staged_micromamba(mamba_root) as staged,
-                        _tarfile.open(fileobj=io.BytesIO(data), mode="r:bz2") as tar,
-                    ):
-                        tar.extract(tar.getmember("bin/micromamba"), path=str(staged), filter="data")
+                    with _tarfile.open(fileobj=io.BytesIO(data), mode="r:bz2") as tar:
+                        member = tar.getmember("bin/micromamba")
+                        tar.extract(member, path=str(mamba_root), filter="data")
+                    mamba_bin.chmod(0o755)
                     logger.info("Micromamba installed via urllib fallback from %s", url)
                     return mamba_bin
                 except Exception as e:
@@ -1919,9 +1652,9 @@ class ToolInstance:
     @staticmethod
     def _get_foundation_env_path() -> Path:
         """Return ``PROTO_HOME/.foundation_env/``."""
-        from proto_tools.utils.foundation_env import foundation_env_path
+        from proto_tools.utils.proto_home import get_proto_home
 
-        return foundation_env_path()
+        return get_proto_home() / ".foundation_env"
 
     @staticmethod
     def _ensure_foundation_env() -> Path | None:
@@ -1929,14 +1662,12 @@ class ToolInstance:
 
         The foundation env is a shared micromamba environment at
         ``PROTO_HOME/.foundation_env/`` containing git, curl, make, cmake,
-        pkg-config, binutils, gcc, and gxx from conda-forge
-        (``foundation_env.FOUNDATION_TOOLS`` plus the compilers). Standalone tool
-        setup scripts get its ``bin/`` prepended to PATH so they can compile and
-        download regardless of the host system. An existing env missing one of
-        those tools (built before it was added) has the missing packages installed.
+        pkg-config, gcc, and gxx from conda-forge. Standalone tool setup
+        scripts get its ``bin/`` prepended to PATH so they can compile and
+        download regardless of the host system.
 
-        Skipped entirely when the host already provides every one of those tools at
-        a recent enough version — see ``foundation_env.host_has_foundation_tools``.
+        Skipped entirely when the host already provides those tools at a
+        recent enough version — see ``foundation_env.host_has_foundation_tools``.
         Override with ``PROTO_USE_FOUNDATION_ENV=1`` to force-install or ``=0``
         to force-skip (without probing).
 
@@ -1947,12 +1678,7 @@ class ToolInstance:
             Path | None: Path to the foundation env root, or ``None`` if the
                 host satisfies the contract and creation was skipped.
         """
-        from proto_tools.utils.foundation_env import (
-            FOUNDATION_TOOLS,
-            MIN_FOUNDATION_GCC,
-            host_has_foundation_tools,
-            missing_foundation_packages,
-        )
+        from proto_tools.utils.foundation_env import MIN_FOUNDATION_GCC, host_has_foundation_tools
 
         override = os.environ.get("PROTO_USE_FOUNDATION_ENV")
         if override == "0":
@@ -1965,7 +1691,7 @@ class ToolInstance:
         foundation_path = ToolInstance._get_foundation_env_path()
         marker = foundation_path / ".ready"
 
-        if marker.exists() and not missing_foundation_packages(foundation_path):
+        if marker.exists():
             return foundation_path
 
         from filelock import FileLock
@@ -1976,36 +1702,16 @@ class ToolInstance:
         lock = FileLock(foundation_path.parent / ".foundation_env.lock", timeout=600)
         with lock:
             # Re-check after acquiring lock - another process may have created it
-            missing = missing_foundation_packages(foundation_path) if marker.exists() else None
-            if missing == []:
+            if marker.exists():
                 return foundation_path
 
             mamba_bin = ToolInstance._ensure_micromamba()
             mamba_root = ToolInstance._get_micromamba_root()
-            mamba_env = {**os.environ, "MAMBA_ROOT_PREFIX": str(mamba_root)}
-
-            if missing:
-                logger.info("Adding %s to foundation environment at %s...", ", ".join(missing), foundation_path)
-                set_substatus("Updating foundation environment")
-                try:
-                    subprocess.run(
-                        [str(mamba_bin), "install", "-y", "-p", str(foundation_path), *missing, "-c", "conda-forge"],
-                        check=True,
-                        capture_output=True,
-                        env=mamba_env,
-                    )
-                except subprocess.CalledProcessError as e:
-                    detail = ToolInstance._called_process_detail(e)
-                    logger.error("Failed to update foundation environment:\n%s", detail)
-                    raise RuntimeError(
-                        f"foundation_env: micromamba install {' '.join(missing)} failed at {foundation_path} "
-                        f"(exit {e.returncode}): {' | '.join(detail.splitlines()) or '<no stderr>'}"
-                    ) from e
-                return foundation_path
 
             logger.info("Creating foundation environment at %s...", foundation_path)
             set_substatus("Setting up foundation environment (git, curl, gcc)")
 
+            mamba_env = {**os.environ, "MAMBA_ROOT_PREFIX": str(mamba_root)}
             # Pin to MIN_FOUNDATION_GCC as a floor - keeps the installed env at
             # least as new as the threshold we accept on the host, so behavior
             # matches whether tools fall through to the host or use this env.
@@ -2019,7 +1725,11 @@ class ToolInstance:
                         "-y",
                         "-p",
                         str(foundation_path),
-                        *FOUNDATION_TOOLS.values(),
+                        "git",
+                        "curl",
+                        "make",
+                        "cmake",
+                        "pkg-config",
                         gcc_pin,
                         gxx_pin,
                         "-c",
@@ -2138,7 +1848,6 @@ class ToolInstance:
                 ``default`` key, or any value fails validation.
         """
         versions: dict[str, str] = {}
-        # Parse each `key: value` line, stripping comments and skipping blank lines
         for raw_line in content.splitlines():
             line = raw_line.split("#", 1)[0].strip()
             if not line:
@@ -2148,7 +1857,6 @@ class ToolInstance:
                     f"Invalid line in {source}: '{line}'. "
                     f"Expected 'key: value' format (e.g., 'default: {example}', 'linux-aarch64: {example}')."
                 )
-            # Split on the first colon and lowercase the key
             key, _, value = line.partition(":")
             key = key.strip().lower()
             value = value.strip()
@@ -2156,10 +1864,8 @@ class ToolInstance:
                 raise ValueError(f"Invalid line in {source}: '{line}'. Empty key before ':'.")
             if key in versions:
                 raise ValueError(f"Duplicate key '{key}' in {source}.")
-            # Validate each value as it is read so errors name the offending key
             versions[key] = validate(value, f"{source} (key '{key}')")
 
-        # Require at least one entry, and a default to fall back to
         if not versions:
             raise ValueError(
                 f"{file_name} at {source} has no entries after stripping comments and "
@@ -2175,7 +1881,6 @@ class ToolInstance:
         # Three-tier lookup: most specific wins.
         if platform_key in versions:
             return versions[platform_key]
-        # Fall back to the OS-only key (e.g. linux), then the default
         os_key = platform_key.partition("-")[0]
         if os_key and os_key in versions:
             return versions[os_key]
@@ -2384,11 +2089,9 @@ class ToolInstance:
         lifetime of the process. Phantom directories (stale helper copies
         without setup.sh or scripts) are filtered out and cleaned up.
         """
-        # Return the cached mapping after the first scan
         if cls._tool_dir_cache is not None:
             return cls._tool_dir_cache
 
-        # Collect each toolkit dir whose standalone/ has a setup.sh or runnable script
         tools_dir = Path(__file__).parent.parent / "tools"
         candidates: dict[str, list[Path]] = {}
         for standalone_dir in tools_dir.rglob("standalone"):
@@ -2397,13 +2100,11 @@ class ToolInstance:
             if cls._has_valid_standalone(standalone_dir):
                 candidates.setdefault(standalone_dir.parent.name, []).append(standalone_dir.parent)
 
-        # Pick one dir per toolkit; several paths usually mean stale copies left by a category move
         result: dict[str, Path] = {}
         for name, dirs in candidates.items():
             if len(dirs) == 1:
                 result[name] = dirs[0]
             else:
-                # Prefer the one copy that is still a package (has __init__.py); the rest are stale
                 with_init = [d for d in dirs if (d / "__init__.py").is_file()]
                 if len(with_init) == 1:
                     result[name] = with_init[0]
@@ -2414,7 +2115,6 @@ class ToolInstance:
                         [d for d in dirs if d != with_init[0]],
                     )
                 else:
-                    # Otherwise take the first path in sorted order so the choice is deterministic
                     ordered = sorted(dirs)
                     result[name] = ordered[0]
                     logger.warning(
@@ -2424,7 +2124,6 @@ class ToolInstance:
                         ordered[0],
                     )
 
-        # Cache the mapping, then remove phantom standalone dirs left behind by moved tools
         cls._tool_dir_cache = result
         cls._cleanup_stale_standalone_dirs(tools_dir)
         return cls._tool_dir_cache
@@ -2518,7 +2217,7 @@ class ToolInstance:
                 f"setup.sh and python_version.txt (missing: {missing}). "
                 f"`proto-tools eject-standalone {toolkit}` produces a valid starting point."
             )
-        # Report implementation files left by older ejects because editing them has no effect.
+        # Older ejects included these. Say so, rather than let an edit to them quietly do nothing.
         stray = [f for f in ("run.py", "inference.py") if (path / f).is_file()]
         if stray:
             logger.warning(
@@ -2584,9 +2283,10 @@ class ToolInstance:
         the *packaged* definition (resolving shared envs and ``toolkit:`` references),
         ignoring any active override.
 
-        The override changes only the environment definition. Exclude tool
-        implementation files such as ``run.py``, ``inference.py``, and their
-        imports because editing copied versions would have no effect.
+        The tool implementation (``run.py``, ``inference.py``, and any modules they
+        import) is deliberately excluded: the override redirects the environment
+        definition only, so copying implementation would offer an edit that silently
+        does nothing.
 
         Returns:
             Path: The destination directory (``dest_root/<toolkit>``).
@@ -2960,37 +2660,8 @@ class ToolInstance:
                 return line[:200]
         return ""
 
-    def _built_without_gpu_now_visible(self, status: str) -> bool:
-        """Whether the env was built where no GPU was visible, and one is visible now.
-
-        ``setup.sh`` installs CPU-only PyTorch and JAX when it sees no GPU (a login node, or a run with
-        ``CUDA_VISIBLE_DEVICES=``), so such an env must be built again before it can use one. Only that
-        direction: a GPU build runs on CPU too, so a CPU-only machine sharing the env keeps it. An env
-        built before the platform was recorded counts as a CPU build when it holds a ``+cpu`` torch.
-
-        Args:
-            status (str): The env's STATUS.txt.
-
-        Returns:
-            bool: True when the env should be built again for the GPU.
-        """
-        from proto_tools.utils.compute_deps import detect_compute_environment
-
-        if detect_compute_environment()["DETECTED_COMPUTE_PLATFORM"] != "cuda":
-            return False
-        recorded = next(
-            (line.split(":", 1)[1].strip() for line in status.splitlines() if line.startswith("Compute platform:")),
-            None,
-        )
-        if recorded is not None:
-            stale = recorded == "cpu"
-        else:
-            # Built before the platform was recorded: a CPU-only torch on disk says it was a CPU build.
-            stale = any(self.env_path.glob("lib/python*/site-packages/torch-*+cpu.dist-info"))
-        return stale
-
     def _is_env_ok(self) -> bool:
-        """Check STATUS.txt, the Python executable, the setup hash, the compute platform, and the weights."""
+        """Check STATUS.txt, verify the Python executable, and compare setup hash."""
         status_file = self.env_path / "STATUS.txt"
         if not status_file.exists():
             return False
@@ -3011,12 +2682,7 @@ class ToolInstance:
                 return False
             # Compare stored hash to current setup files
             current_hash = self._setup_hash()
-            if f"Setup hash: {current_hash}" not in status:
-                return False
-            if self._built_without_gpu_now_visible(status):
-                return False
-            # Weights setup.sh downloaded may have been deleted since (e.g. a scratch purge)
-            return weights_problem(self.env_path) is None
+            return f"Setup hash: {current_hash}" in status
         except Exception:
             return False
 
@@ -3045,23 +2711,6 @@ class ToolInstance:
         except (subprocess.SubprocessError, OSError) as e:
             logger.debug("Could not clean micromamba package archives: %s", e)
 
-    def _schedule_uv_prune(self, cache_dir: Path) -> None:
-        """Start a background prune of the uv cache this build used (see :mod:`proto_tools.utils.uv_prune`).
-
-        Skipped for an env pinned to another uv, which could misjudge the default uv's cache entries.
-        Best-effort, like :meth:`_clean_package_archives`: it never fails a build that succeeded.
-        """
-        # Imported here: the detached prune runs this module with -m, which a package-level import would shadow
-        from proto_tools.utils import uv_prune
-
-        uv = self.env_path / "bin" / "uv"
-        if self._get_uv_version() != UV_VERSION or not uv.is_file():
-            return
-        try:
-            uv_prune.schedule(uv, cache_dir)
-        except OSError as e:
-            logger.debug("Could not start a uv cache prune: %s", e)
-
     def _create_env(self) -> None:
         """Create (or rebuild) the tool's isolated environment.
 
@@ -3071,14 +2720,8 @@ class ToolInstance:
         """
         status_file = self.env_path / "STATUS.txt"
 
-        # Remove env if setup files changed, or it was built without a GPU and one is visible now
+        # Remove env if setup files changed
         if self.env_path.exists() and not self._is_env_ok():
-            status = status_file.read_text() if status_file.exists() else ""
-            if status.startswith("SUCCESS") and self._built_without_gpu_now_visible(status):
-                logger.info(
-                    "Rebuilding %s for the GPU: it was built where no GPU was visible, so it has CPU-only packages",
-                    self.toolkit,
-                )
             logger.info("Removing environment at %s", self.env_path)
             shutil.rmtree(self.env_path)
 
@@ -3171,14 +2814,6 @@ class ToolInstance:
         env["PIP_EXE"] = str(self.env_path.absolute() / "bin" / "pip")
         env["MAMBA_BIN"] = str(mamba_bin.absolute())
         env["PROTO_INSTALL_BINARY"] = str(Path(__file__).parent.absolute() / "install_binary.py")
-        # proto_resolve_weights_dir appends each weights folder setup.sh fills here
-        record = self.env_path / RECORD_NAME
-        record.unlink(missing_ok=True)
-        env[RECORD_ENV_VAR] = str(record.absolute())
-        # Install under the caps on releases known to break this machine
-        env_caps = write_env_caps(self.env_path, env)
-        if env_caps is not None:
-            env["UV_CONSTRAINT"] = env["PIP_CONSTRAINT"] = str(env_caps)
 
         returncode, combined_output = _run_setup_script(
             self.setup_script,
@@ -3189,14 +2824,9 @@ class ToolInstance:
         )
 
         if returncode == 0:
-            write_manifest(self.env_path, self.toolkit)
-            status_file.write_text(
-                f"SUCCESS\nSetup hash: {self._setup_hash()}\n"
-                f"Compute platform: {env.get('DETECTED_COMPUTE_PLATFORM', 'cpu')}\n"
-            )
+            status_file.write_text(f"SUCCESS\nSetup hash: {self._setup_hash()}\n")
             logger.debug("Environment setup completed for %s", self.toolkit)
             self._clean_package_archives(mamba_bin)
-            self._schedule_uv_prune(Path(env["UV_CACHE_DIR"]))
         else:
             tail = self._stderr_tail(combined_output)
             logger.error(

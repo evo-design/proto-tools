@@ -1,13 +1,19 @@
-"""Serialization helpers for standalone inference scripts.
-
-Vocabulary orders live in ``standalone_helpers.vocabulary``.
-"""
+"""Shared bio constants and serialization helpers for standalone inference scripts."""
 
 from typing import Any
 
 from .proto_logging import get_logger
 
 logger = get_logger(__name__)
+
+AMINO_ACIDS_LIST: list[str] = list("ACDEFGHIKLMNPQRSTVWY")
+"""Canonical 20 standard amino acids in alphabetical order."""
+
+DNA_NUCLEOTIDES: str = "ACGT"
+"""Standard DNA nucleotides."""
+
+RNA_NUCLEOTIDES: str = "ACGU"
+"""Standard RNA nucleotides."""
 
 
 def serialize_output(value: Any) -> Any:

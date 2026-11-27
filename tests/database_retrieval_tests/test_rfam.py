@@ -241,8 +241,7 @@ def test_family_alignment_without_structure_is_an_error(monkeypatch):
 # ============================================================================
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_live_regions_sbw25():
     out = run_rfam_regions(RfamRegionsInput(family="RF01731", taxid=216595))
     assert out.matched_regions >= 1
@@ -250,8 +249,7 @@ def test_live_regions_sbw25():
     assert (top.sequence_accession, top.start, top.end, top.strand) == ("AM181176.4", 1720658, 1720784, "+")
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_live_family_by_id():
     out = run_rfam_family(RfamFamilyInput(family="TwoAYGGAY"))
     assert out.accession == "RF01731"

@@ -18,11 +18,9 @@ from proto_tools.tools.database_retrieval.ncbi.shared_data_models import (
     _parse_fasta_records,
 )
 from proto_tools.tools.database_retrieval.sequence_fetch.sequence_fetch import (
-    SequenceFetchRequest,
     _ncbi_gene_term,
     _ncbi_term,
     _select_best_record,
-    parse_accession,
 )
 
 
@@ -58,193 +56,6 @@ def test_sequence_fetch_rejects_ncrna_as_protein_request():
     assert any("TYPE_MISMATCH" in error for error in output.results[0].errors)
 
 
-def test_sequence_fetch_request_needs_a_name_and_organism_or_an_identifier():
-    with pytest.raises(ValueError, match="Provide both target_name and organism, or an accession"):
-        SequenceFetchInput(requests=[{"target_name": "lacI", "sequence_types": ["protein"]}])
-
-
-@pytest.mark.parametrize(
-    ("accession", "expected"),
-    [
-        ("P04637", ("uniprot", "P04637")),
-        ("p04637-2", ("uniprot", "P04637-2")),
-        ("P04637.2", ("uniprot", "P04637")),
-        ("A0A023GPI8", ("uniprot", "A0A023GPI8")),
-        ("2lyz", ("pdb", "2LYZ")),
-        ("pdb_00001tsr", ("pdb", "1TSR")),
-        ("NC_000017.11", ("genomic", "NC_000017.11")),
-        ("NG_017013.2", ("genomic", "NG_017013.2")),
-        ("NZ_CP012345.1", ("genomic", "NZ_CP012345.1")),
-        ("NZ_AABC02000001.1", ("genomic", "NZ_AABC02000001.1")),
-        ("NM_000546.6", ("transcript", "NM_000546.6")),
-        ("XR_001234567.1", ("transcript", "XR_001234567.1")),
-        ("NP_000537.3", ("protein", "NP_000537.3")),
-        ("WP_000123456.1", ("protein", "WP_000123456.1")),
-        ("AAA12345.1", ("protein", "AAA12345.1")),
-        ("ABC1234567", ("protein", "ABC1234567")),
-        ("U49845", ("nucleotide", "U49845")),
-        ("AF123456.2", ("nucleotide", "AF123456.2")),
-        ("CP01234567", ("nucleotide", "CP01234567")),
-        ("AAAA02000001", ("nucleotide", "AAAA02000001")),
-        ("7157", ("gene", "7157")),
-        ("Gene: 7157", ("gene", "7157")),
-        ("uniprot:p04637", ("uniprot", "P04637")),
-        ("pdb:1234", ("pdb", "1234")),
-    ],
-)
-def test_parse_accession_reads_the_kind_from_the_format(accession, expected):
-    assert parse_accession(accession) == expected
-
-
-@pytest.mark.parametrize(
-    ("accession", "message"),
-    [
-        ("lysozyme", "Unrecognised accession 'lysozyme'"),
-        ("NC_000913.3:1-100", "genomic coordinates go in genomic_coordinates"),
-        ("gene:", "needs one accession, without spaces, after its kind prefix"),
-        ("gene:TP53", "an NCBI Gene ID is a number"),
-    ],
-)
-def test_parse_accession_rejects_what_it_cannot_route(accession, message):
-    with pytest.raises(ValueError, match=re.escape(message)):
-        parse_accession(accession)
-
-
-def test_sequence_fetch_request_takes_at_most_one_accession_of_each_kind():
-    with pytest.raises(ValueError, match="at most one uniprot accession per request, got P04637 and P69905"):
-        SequenceFetchRequest(accessions=["P04637", "P69905"], sequence_types=["protein"])
-
-
-def test_sequence_fetch_request_rejects_the_removed_id_fields():
-    with pytest.raises(ValueError, match="uniprot_id"):
-        SequenceFetchRequest(uniprot_id="P04637", target_name="TP53", organism="Homo sapiens", sequence_types="protein")
-
-
-@pytest.mark.parametrize(
-    ("accessions", "sequence_type", "expected_fetch"),
-    [
-        (["NP_000537.3"], "protein", ("protein", "NP_000537.3", "fasta")),
-        (["AAA12345"], "protein", ("protein", "AAA12345", "fasta")),
-        (["NM_000546.6"], "rna_transcript", ("nuccore", "NM_000546.6", "fasta")),
-        (["NM_000546.6"], "dna_cds", ("nuccore", "NM_000546.6", "fasta_cds_na")),
-        (["NC_000017.11"], "dna_genomic", ("nuccore", "NC_000017.11", "fasta")),
-        (["U49845"], "dna_genomic", ("nuccore", "U49845", "fasta")),
-        (["U49845"], "rna_transcript", ("nuccore", "U49845", "fasta")),
-        (["NC_000017.11", "NM_000546.6"], "dna_genomic", ("nuccore", "NC_000017.11", "fasta")),
-        (["NC_000017.11", "NM_000546.6"], "rna_transcript", ("nuccore", "NM_000546.6", "fasta")),
-        (["NP_000537.3"], "dna_cds", ("protein", "NP_000537.3", "fasta_cds_na")),
-    ],
-)
-def test_sequence_fetch_routes_each_accession_kind_to_its_ncbi_database(
-    monkeypatch, accessions, sequence_type, expected_fetch
-):
-    fetches = []
-
-    def fake_efetch(db, identifier, rettype, config, session, **kwargs):
-        fetches.append((db, identifier, rettype))
-        return f">{identifier} test record\nATGAAATAA\n", f"https://example.org/{identifier}"
-
-    monkeypatch.setattr(sf_module, "_ncbi_efetch", fake_efetch)
-
-    output = run_sequence_fetch(
-        SequenceFetchInput(requests=[{"accessions": accessions, "sequence_types": sequence_type}])
-    )
-
-    assert output.results[0].errors == []
-    assert fetches[0] == expected_fetch
-
-
-@pytest.mark.parametrize("sequence_type", ["rna_transcript", "dna_cds"])
-def test_sequence_fetch_never_reads_a_genomic_accession_as_a_transcript(sequence_type):
-    output = run_sequence_fetch(
-        SequenceFetchInput(requests=[{"accessions": ["NC_000017.11"], "sequence_types": sequence_type}])
-    )
-
-    assert output.results[0].status == "failed"
-    assert "needs a search by name" in output.results[0].errors[0]
-
-
-def test_sequence_fetch_takes_genomic_dna_for_a_gene_id_from_its_locus(monkeypatch):
-    fetches = []
-    monkeypatch.setattr(
-        sf_module,
-        "_ncbi_esummary",
-        lambda db, identifier, config, session: (
-            {identifier: {"genomicinfo": [{"chraccver": "NC_000017.11", "chrstart": 7687489, "chrstop": 7668401}]}},
-            "https://example.org/esummary",
-        ),
-    )
-
-    def fake_efetch(db, identifier, rettype, config, session, **kwargs):
-        fetches.append((db, identifier, kwargs))
-        return f">{identifier} test record\nATGAAATAA\n", f"https://example.org/{identifier}"
-
-    monkeypatch.setattr(sf_module, "_ncbi_efetch", fake_efetch)
-
-    output = run_sequence_fetch(SequenceFetchInput(requests=[{"accessions": "7157", "sequence_types": "dna_genomic"}]))
-
-    assert output.results[0].resolved_ids["gene_id"] == "7157"
-    assert fetches == [("nuccore", "NC_000017.11", {"seq_start": 7668402, "seq_stop": 7687490, "strand": "-"})]
-
-
-@pytest.mark.parametrize(
-    ("download", "include_structure", "status", "error"),
-    [
-        ("ok", True, "success", None),
-        ("fails", True, "warning", "HTTP_ERROR[structure_coordinates]"),
-        ("ok", False, "success", None),  # metadata only: nothing downloaded
-    ],
-)
-def test_sequence_fetch_structure_by_pdb_id_alone(
-    monkeypatch: pytest.MonkeyPatch, download: str, include_structure: bool, status: str, error: str | None
-) -> None:
-    """A structure request returns the entry's coordinates; if they can't be downloaded, its metadata and why."""
-    import requests
-
-    monkeypatch.setattr(
-        sf_module,
-        "_fetch_pdb_entry",
-        lambda pdb_id, session: {"title": "Hen egg-white lysozyme", "method": "X-RAY DIFFRACTION", "resolution": 2.0},
-    )
-    mmcif = (Path(__file__).parent.parent / "dummy_data" / "2CSM.cif").read_text()
-    downloads: list[str] = []
-
-    def fetch_mmcif(pdb_id: str, session: object) -> str:
-        downloads.append(pdb_id)
-        if download == "fails":  # after the session's retries
-            raise requests.exceptions.ConnectionError("files.rcsb.org unreachable")
-        return mmcif
-
-    monkeypatch.setattr(sf_module, "_fetch_pdb_mmcif", fetch_mmcif)
-
-    output = run_sequence_fetch(
-        SequenceFetchInput(requests=[{"request_id": "hen", "accessions": "2lyz", "sequence_types": ["structure"]}]),
-        SequenceFetchConfig(include_structure=include_structure),
-    )
-
-    item = output.results[0]
-    fetched = item.fetched_structures[0]
-    assert item.status == status
-    assert fetched.pdb_id == "2LYZ" and fetched.title == "Hen egg-white lysozyme"  # the metadata, always
-    assert (fetched.structure is not None) is (download == "ok" and include_structure)
-    assert downloads == (["2LYZ"] if include_structure else [])
-    assert [e.split(":")[0] for e in item.errors] == ([error] if error else [])
-    assert item.target_name is None
-
-
-def test_sequence_fetch_says_which_types_need_a_name_when_only_an_identifier_is_given():
-    output = run_sequence_fetch(
-        SequenceFetchInput(requests=[{"accessions": ["2LYZ"], "sequence_types": ["dna_genomic"]}])
-    )
-
-    item = output.results[0]
-    assert item.status == "failed"
-    assert item.errors == [
-        "NOT_FOUND[dna_genomic]: this sequence type needs a search by name, so give target_name and organism, "
-        "or an accession for it"
-    ]
-
-
 def test_pdb_protein_fetch_filters_dna_chains(monkeypatch):
     """PDB FASTA with DNA chain first must still return protein chain."""
     fake_records = [
@@ -261,8 +72,10 @@ def test_pdb_protein_fetch_filters_dna_chains(monkeypatch):
         requests=[
             {
                 "request_id": "pdb_test",
+                "target_name": "lacI",
+                "organism": "Escherichia coli",
                 "sequence_types": ["protein"],
-                "accessions": ["1LBG"],
+                "pdb_id": "1LBG",
             }
         ]
     )
@@ -295,8 +108,10 @@ def test_pdb_protein_fetch_fails_when_no_protein_chains(monkeypatch):
         requests=[
             {
                 "request_id": "no_protein",
+                "target_name": "test",
+                "organism": "test org",
                 "sequence_types": ["protein"],
-                "accessions": ["1ABC"],
+                "pdb_id": "1ABC",
             }
         ]
     )
@@ -306,30 +121,6 @@ def test_pdb_protein_fetch_fails_when_no_protein_chains(monkeypatch):
 
     assert item.status == "failed"
     assert any("NOT_FOUND" in e for e in item.errors)
-
-
-def test_sequence_fetch_raises_when_its_timeout_elapses(monkeypatch):
-    """A fetch cut off by the call's timeout fails the call, not just that item."""
-    from proto_tools.utils import DeadlineExceededError
-
-    def timed_out(pdb_id, session):
-        raise DeadlineExceededError("Timed out requesting PDB: the tool's timeout elapsed")
-
-    monkeypatch.setattr(sf_module, "_fetch_pdb_fasta", timed_out)
-    inputs = SequenceFetchInput(
-        requests=[
-            {
-                "request_id": "slow",
-                "target_name": "test",
-                "organism": "test org",
-                "sequence_types": ["protein"],
-                "accessions": ["1ABC"],
-            }
-        ]
-    )
-
-    with pytest.raises(TimeoutError):
-        run_sequence_fetch(inputs, SequenceFetchConfig())
 
 
 def test_select_best_record_prefers_name_match():
@@ -367,8 +158,7 @@ def test_ncbi_gene_term_format():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_sequence_fetch_protein_and_structure_by_name():
     """Fetch TP53 protein + structure by gene name and organism."""
     inputs = SequenceFetchInput(
@@ -400,11 +190,9 @@ def test_sequence_fetch_protein_and_structure_by_name():
     struct = item.fetched_structures[0]
     assert struct.pdb_id
     assert struct.source_url
-    assert struct.structure.num_residues > 0
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_sequence_fetch_export_fasta(tmp_path):
     """Fetch a protein from UniProt by accession and export it to FASTA format."""
     inputs = SequenceFetchInput(
@@ -414,7 +202,7 @@ def test_sequence_fetch_export_fasta(tmp_path):
                 "target_name": "TP53",
                 "organism": "Homo sapiens",
                 "sequence_types": ["protein"],
-                "accessions": ["P04637"],
+                "uniprot_id": "P04637",
             }
         ]
     )
@@ -439,9 +227,8 @@ def test_sequence_fetch_export_fasta(tmp_path):
     assert "MEEPQ" in content
 
 
-@pytest.mark.network
 @pytest.mark.skip_ci
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_sequence_fetch_dna_genomic_by_name():
     """Fetch lacI genomic DNA from NCBI by gene name."""
     inputs = SequenceFetchInput(
@@ -468,9 +255,8 @@ def test_sequence_fetch_dna_genomic_by_name():
     assert seq.length > 500
 
 
-@pytest.mark.network
 @pytest.mark.skip_ci
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_sequence_fetch_premrna_minus_strand_no_double_rc():
     """Regression: pre-mRNA on minus-strand must NOT double reverse-complement.
 

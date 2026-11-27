@@ -1,12 +1,12 @@
 """proto_tools/utils/outage.py.
 
-Declare when a tool, or one of its modes, is unavailable because an upstream
-service is down or has restricted access. A matching call is refused
+Upstream outages declared on a tool: a whole tool, or one mode of it, that cannot be served
+because a service it depends on is down or has restricted access. A matching call is refused
 before dispatch with :class:`OutageError`, raised the way a validation error is.
 
 The check belongs to the entry point (the caller's wrapper, the MCP, the hosted API). A Modal
 container skips it (:func:`outage_checks_skipped`): it cannot see the caller's override, and an
-exception raised there would hide the outage details and trigger retries.
+exception raised there would come back opaque and be retried rather than refused.
 """
 
 from __future__ import annotations
@@ -59,17 +59,15 @@ class Outage(BaseModel):
     def _predicate_is_labelled(self) -> Outage:
         """Require ``affects`` with ``when``, so a catalogue can name the mode a predicate tests.
 
-        A label without a predicate is allowed because ``when`` is excluded from dumps,
-        and the dumped model must still load.
-        ``tests/style_consistency_tests/test_outage_declarations.py`` catches declarations
-        that are missing their predicate.
+        Not the converse: ``when`` is excluded from dumps, and a dump must rebuild. A declaration
+        missing its predicate is caught by ``tests/style_consistency_tests/test_outage_declarations.py``.
         """
         if self.when is not None and self.affects is None:
             raise ValueError("Outage.when requires Outage.affects")
         return self
 
     def describe(self) -> str:
-        """Return a one-line description for error messages, MCP notes, and the CLI."""
+        """One-line description shared by the error message, MCP notes, and CLI."""
         scope = f"affects {self.affects}" if self.affects else "affects every call"
         return f"{self.reason} (since {self.since.isoformat()}; {scope}). Tracking: {self.tracking_url}"
 
@@ -107,11 +105,10 @@ def outage_checks_skipped() -> Iterator[None]:
 
 
 def _reaches(tool_key: str, outage: Outage, inputs: Any, config: Any) -> bool:
-    """Check whether a call is affected by the outage.
+    """Whether a call reaches ``outage``; a predicate that raises is logged and counts as no.
 
-    Log predicate errors and treat the call as unaffected. A broken declaration
-    should not block a call the tool could serve. If the upstream is still down,
-    the call will fail with the upstream's error.
+    A broken predicate is a bug in the declaration, so it must not refuse a call the tool could
+    serve. Letting the call through means the worst case is the upstream's own error.
     """
     if outage.affects is None:
         return True
@@ -144,7 +141,6 @@ def active_outage(tool_key: str, outages: Iterable[Outage], inputs: Any, config:
     """
     if _checks_skipped.get():
         return None
-    # Find the first matching outage, then honor any caller override.
     matched = next((o for o in outages if _reaches(tool_key, o, inputs, config)), None)
     if matched is not None and os.environ.get(IGNORE_OUTAGES_ENV_VAR) == "1":
         logger.warning(

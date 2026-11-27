@@ -9,7 +9,7 @@ import logging
 import sys
 from typing import Any
 
-from standalone_helpers import StatusCounter, get_logger
+from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -18,7 +18,8 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 class ViennaRNAModel:
     """ViennaRNA secondary structure prediction model.
 
-    Wraps ViennaRNA's MFE folding algorithm with lazy loading and JSON-compatible I/O.
+    This class provides a lightweight wrapper around ViennaRNA's MFE folding
+    algorithm with lazy loading and JSON-compatible I/O.
     """
 
     def __init__(self) -> None:
@@ -102,9 +103,7 @@ class ViennaRNAModel:
 
         # Fold each sequence
         results = []
-        counter = StatusCounter(logger, "Folding sequence %d/%d", total=len(sequences))
         for seq_idx, sequence in enumerate(sequences):
-            counter(seq_idx + 1)
             if not sequence:
                 logger.debug(f"Warning: Found empty sequence (index {seq_idx})")
                 results.append(

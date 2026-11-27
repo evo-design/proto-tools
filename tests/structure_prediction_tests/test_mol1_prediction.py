@@ -16,10 +16,7 @@ from proto_tools.tools import Chain, Mol1Config, Mol1Input, run_mol1_prediction
 from proto_tools.tools.structure_prediction import Complex, ComplexMSAs
 from proto_tools.tools.structure_prediction.mol1.helpers import complex_to_mol1_json
 from tests._structure_fixtures import synthetic_cif
-from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
-
-_persistent_tool = make_persistent_fixture("mol1")
 
 _PEPTIDE = "NLYIQWLKDGGPSSGRPPPS"
 _METRICS = {
@@ -212,10 +209,11 @@ def test_mol1_seeded_batch_preserves_duplicate_items_and_item_indices(captured_d
     assert [capture["payload"]["seed"] for capture in captured_dispatch] == [7, 7]
 
 
-def test_mol1_local_checkpoint_is_rejected_on_remote_workers():
+@pytest.mark.parametrize("device", ["proto", "modal"])
+def test_mol1_local_checkpoint_is_rejected_on_remote_workers(device):
     """Remote workers cannot read an arbitrary checkpoint from the caller's filesystem."""
-    assert Mol1Config().remote_unsupported_reason("modal") is None
-    assert Mol1Config(model_checkpoint="/local/custom.pt").remote_unsupported_reason("modal")
+    assert Mol1Config().remote_unsupported_reason(device) is None
+    assert Mol1Config(model_checkpoint="/local/custom.pt").remote_unsupported_reason(device)
 
 
 @pytest.fixture

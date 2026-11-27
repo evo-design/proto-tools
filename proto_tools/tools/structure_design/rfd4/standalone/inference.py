@@ -1,10 +1,10 @@
 """RFD4-Proteina inference implementation.
 
-Generation runs in-process so persistent workers can reuse the checkpoint.
-Both tools set ``pin_visible_devices=True`` because upstream's Lightning trainer
-uses local ``cuda:0..N-1`` and cannot switch to another logical GPU within the
-process. DeviceManager therefore starts a new pinned worker when the device
-changes, and this module has no ``to_device()`` function.
+Generation runs in-process so a persistent worker can hold the checkpoint across calls.
+There is deliberately no module-level ``to_device()``: both tools register
+``pin_visible_devices=True`` because upstream's Lightning trainer claims local
+``cuda:0..N-1`` and cannot be retargeted at a logical index from inside the process, so
+DeviceManager respawns a pinned worker on a device change instead of moving the model.
 
 References:
     https://github.com/RosettaCommons/RFD4-Proteina
@@ -13,7 +13,6 @@ References:
 
 import csv
 import json
-import logging
 import os
 import sys
 from pathlib import Path
@@ -47,9 +46,9 @@ def _drop_ephemeral_paths(row: dict[str, Any]) -> dict[str, Any]:
 
     Upstream's ``per_example_metrics.csv`` records absolute paths for the run it came from
     (``designed_structure_path``, ``dataset_name``, ...). The implementation runs in a fresh
-    temporary directory for each call, so those paths differ even when results
-    match. Remove them to avoid exposing host paths or breaking comparisons
-    between seeded runs. The returned design already contains the structure.
+    temporary directory every call, so those values differ between two otherwise identical
+    runs: they would leak host paths to callers and defeat output comparison and seeded
+    reproducibility. The design's content is returned directly, so the paths carry nothing.
 
     Args:
         row (dict[str, Any]): One metrics row.
@@ -72,8 +71,8 @@ def _format_override(key: str, value: Any) -> str:
     Hydra override syntax (``metrics_tags=[]``), and bools use Hydra's literal form.
 
     A key prefixed with ``~`` is Hydra's config-group *deletion* syntax and renders as a
-    bare token with no value. Remove a group default to switch it off. Config
-    groups require a group name, so ``recycle_strategy=null`` fails composition with
+    bare token with no value. Removing a group default is the only way to switch one off:
+    a config group takes a group name, so ``recycle_strategy=null`` fails composition with
     "Config group override must be a string or a list. Got NoneType".
 
     Args:
@@ -203,10 +202,11 @@ class RFD4Model:
         model_revision: str | None,
         adapter_path: str | None,
         device: str,
+        verbose: bool = False,
     ) -> None:
         """Load the RFD4-Proteina checkpoint and hold it for subsequent calls.
 
-        Apply the adapter during loading because upstream's
+        The adapter is applied here rather than per call: upstream's
         ``load_ckpt_n_configure_inference`` re-applies ``adapter_path`` every time it is
         given one, which would stack LoRA layers onto a model that is being reused.
         ``adapter_path`` is ``reload_on_change``, so a different adapter respawns the worker.
@@ -216,6 +216,7 @@ class RFD4Model:
             model_revision (str | None): Pinned HuggingFace revision, or None for the default.
             adapter_path (str | None): Local PEFT/LoRA adapter directory, or None.
             device (str): Device to hold the model on (e.g. ``"cuda"``, ``"cpu"``).
+            verbose (bool): Log the checkpoint being loaded.
 
         Raises:
             ImportError: If the rfd4-proteina package is not importable.
@@ -228,7 +229,9 @@ class RFD4Model:
         except ImportError as exc:
             raise ImportError("rfd4: the rfd4-proteina package is not importable; re-run setup.sh") from exc
 
-        logger.update_status("Loading RFD4-Proteina weights")
+        if verbose:
+            logger.info(f"Loading RFD4-Proteina checkpoint {model_checkpoint} (revision={model_revision})")
+
         model = Proteina.from_pretrained(model_checkpoint, revision=model_revision, nn_overrides={})
         if adapter_path:
             from rfproteina.utils.lora import load_lora_adapter
@@ -246,9 +249,9 @@ class RFD4Model:
     def _compose(self, spec_path: str, output_dir: str, seed: int | None, cli_kwargs: dict[str, Any]) -> Any:
         """Compose the inference config the ``rfd4-generate`` CLI would have composed.
 
-        Build a fresh config because ``run_generation`` changes ``cfg.seed`` and
-        ``cfg.out_dir``. Leave out ``adapter_path`` because the held model already
-        has the adapter and passing it again would apply it twice.
+        A fresh config is built per call because ``run_generation`` mutates what it is
+        given (``cfg.seed``, ``cfg.out_dir``). ``adapter_path`` is dropped: the adapter is
+        already on the held model, and passing it again would re-apply it.
 
         Args:
             spec_path (str): Path to the condition-spec YAML/JSON.
@@ -305,6 +308,7 @@ class RFD4Model:
         spec_keys: list[str],
         device: str = "cuda",
         seed: int | None = None,
+        verbose: bool = False,
         **cli_kwargs: Any,
     ) -> dict[str, Any]:
         """Run RFD4-Proteina generation and harvest the designs it wrote.
@@ -315,6 +319,7 @@ class RFD4Model:
             spec_keys (list[str]): Spec ids that were dispatched, in input order.
             device (str): Device string (e.g. ``"cuda"``, ``"cuda:1"``, ``"cpu"``).
             seed (int | None): Base seed; ``None`` lets upstream draw its own.
+            verbose (bool): Log the composed overrides and the checkpoint being loaded.
             **cli_kwargs (Any): Hydra overrides forwarded verbatim as ``key=value``.
 
         Returns:
@@ -338,6 +343,7 @@ class RFD4Model:
                 model_revision=None if revision in (None, "null") else str(revision),
                 adapter_path=cli_kwargs.get("adapter_path"),
                 device=device,
+                verbose=verbose,
             )
 
         from standalone_helpers import is_cuda_oom, raise_oom
@@ -346,8 +352,6 @@ class RFD4Model:
 
         from rfproteina.generate import run_generation
 
-        n_designs = len(spec_keys) * int(cli_kwargs.get("num_replicates", 1))
-        logger.update_status(f"Generating {n_designs} design{'' if n_designs == 1 else 's'}", level=logging.DEBUG)
         try:
             run_generation(cfg, job_id=0, model=self.model)
         except Exception as exc:
@@ -473,8 +477,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     operation = kwargs.pop("operation")
     if operation not in _VALID_OPERATIONS:
         raise ValueError(f"rfd4: unknown operation {operation!r}; valid: {list(_VALID_OPERATIONS)}")
-    # Not a Hydra override: everything left in kwargs is forwarded to upstream verbatim.
-    kwargs.pop("verbose", None)
 
     return _model(
         spec_path=kwargs.pop("spec_path"),
@@ -482,6 +484,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         spec_keys=kwargs.pop("spec_keys"),
         device=kwargs.pop("device"),
         seed=kwargs.pop("seed"),
+        verbose=kwargs.pop("verbose"),
         **kwargs,
     )
 

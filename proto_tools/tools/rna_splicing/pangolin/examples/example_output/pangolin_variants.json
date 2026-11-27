@@ -1,8 +1,7 @@
 {
   "tool_id": "pangolin-score-variants",
-  "tool_version": "1.0.1",
-  "execution_time": 4.040494441986084,
-  "timestamp": "2026-11-08T21:03:49.188178",
+  "execution_time": 3.6131227016448975,
+  "timestamp": "2026-06-20T23:57:16.359132",
   "success": true,
   "warnings": [],
   "errors": [],

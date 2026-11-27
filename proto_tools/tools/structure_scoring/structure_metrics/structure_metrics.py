@@ -180,9 +180,9 @@ def run_structure_metrics(
 ) -> StructureMetricsOutput:
     """Compute structural quality metrics from PDB structures.
 
-    Return secondary-structure percentages, the longest alpha helix, and the
-    radius of gyration for each structure. These metrics help filter disordered
-    or artifactual predictions.
+    Computes secondary structure percentages, longest alpha helix, and radius of
+    gyration for each input structure. Used to filter out disordered or artifactual
+    predicted structures.
 
     Args:
         inputs (StructureMetricsInput): Structures to analyze.
@@ -193,7 +193,6 @@ def run_structure_metrics(
         StructureMetricsOutput: Per-structure quality metrics, index-aligned with inputs.structures.
     """
     metrics = []
-    # Keep the metrics in the same order as the input structures.
     for struct in inputs.structures:
         ss = struct.secondary_structure_percentages()
         metrics.append(

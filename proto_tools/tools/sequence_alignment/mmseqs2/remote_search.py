@@ -100,17 +100,14 @@ def search_remote_msas(
     Returns:
         dict[str, Any]: Paths per query, plus counts and any per-query errors.
     """
-    # Create the output directory and its msas/ subdirectory
     output_dir.mkdir(parents=True, exist_ok=True)
     msas_dir = output_dir / "msas"
     msas_dir.mkdir(exist_ok=True)
 
-    # Collect alignment paths per query, plus any per-query errors
     msa_paths: dict[str, str] = {}
     paired_msa_paths: dict[str, list[str]] = {}
     errors: list[tuple[str, str]] = []
 
-    # Search each paired group as a separate submission, setting unpaired queries aside
     unpaired: list[tuple[int, str]] = []
     for index, query in enumerate(queries):
         sequences = query["sequences"]
@@ -130,13 +127,11 @@ def search_remote_msas(
                     timeout,
                 )
             except Exception as exc:
-                # Record the failure against this group and continue with the rest
                 logger.debug("Remote MSA search failed for %s: %s", label, exc)
                 errors.append((label, f"Failed to generate MSA for {label}: {exc!s}"))
         else:
             unpaired.append((index, sequences))
 
-    # Submit unpaired queries in chunks of at most MAX_SEQUENCES_PER_SUBMISSION
     for start in range(0, len(unpaired), MAX_SEQUENCES_PER_SUBMISSION):
         batch = unpaired[start : start + MAX_SEQUENCES_PER_SUBMISSION]
         try:
@@ -145,12 +140,10 @@ def search_remote_msas(
             )
         except Exception as exc:
             logger.debug("Remote MSA search failed for %d unpaired quer(ies): %s", len(batch), exc)
-            # A failed submission fails every query in it
             for index, _ in batch:
                 label = f"query_{index}"
                 errors.append((label, f"Failed to generate MSA for {label}: {exc!s}"))
 
-    # Report paths and success counts, attaching errors only if any occurred
     result: dict[str, Any] = {
         "msa_paths": msa_paths,
         "paired_msa_paths": paired_msa_paths,

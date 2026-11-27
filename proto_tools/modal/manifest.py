@@ -1,6 +1,6 @@
-"""Define which services run in each Modal app.
+"""Source of truth for the per-app Modal split.
 
-Each service declaration records its app, timeout, and Python module.
+Declares which services belong to which app, their timeouts, and their modules.
 """
 
 import logging
@@ -71,7 +71,6 @@ APP_BUCKETS: dict[str, list[str]] = {
     "proto-tools-pyhmmer": ["PyHmmerService"],
     "proto-tools-pymol": ["PyMOLService"],
     "proto-tools-pyrosetta": ["PyRosettaService"],
-    "proto-tools-rs3": ["RS3Service"],
     "proto-tools-segmasker": ["SegmaskerService"],
     "proto-tools-structure-metrics": ["StructureMetricsService"],
     "proto-tools-tmalign": ["TMalignService"],
@@ -181,7 +180,6 @@ SERVICE_TIERS: dict[str, str] = {
     "RF3Service": "long",
     "RFD4Service": "long",
     "RFdiffusion3Service": "long",
-    "RS3Service": "fast",
     "SegmaskerService": "fast",
     "SpliceAIService": "long",
     "SpliceAI2Service": "long",
@@ -240,7 +238,7 @@ SERVICE_MODAL_TIMEOUTS: dict[str, int] = {
 
 
 # Services whose containers are scheduled with a GPU. Callers translate a
-# logical device ("modal") into "cuda" for these and "cpu" otherwise —
+# logical device ("proto"/"modal") into "cuda" for these and "cpu" otherwise —
 # proto-tools' BaseConfig defaults to "cpu", which would otherwise run a model
 # on the CPU of a GPU container.
 GPU_SERVICES: frozenset[str] = frozenset(
@@ -369,7 +367,6 @@ SERVICE_TO_MODULE: dict[str, str] = {
     "RF3Service": "proto_tools.modal.structure_prediction.rf3_deployment.rf3_service",
     "RFD4Service": "proto_tools.modal.structure_design.rfd4_deployment.rfd4_service",
     "RFdiffusion3Service": "proto_tools.modal.structure_design.rfdiffusion3_deployment.rfdiffusion3_service",
-    "RS3Service": "proto_tools.modal.sequence_scoring.rs3_deployment.rs3_service",
     "SegmaskerService": "proto_tools.modal.sequence_utils.segmasker_deployment.segmasker_service",
     "SpliceAIService": "proto_tools.modal.rna_splicing.spliceai_deployment.spliceai_service",
     "SpliceAI2Service": "proto_tools.modal.rna_splicing.spliceai2_deployment.spliceai2_service",

@@ -49,7 +49,7 @@ def test_ncbi_esearch_retries_connection_reset(monkeypatch):
     """Same reused-connection failure as rest.uniprot.org, here against NCBI eutils."""
     monkeypatch.setattr(shared_data_models, "_BACKOFF_SECONDS", 0.0)
     session = _ResetThenOkSession(failures=2, text='{"esearchresult": {"idlist": ["12345"]}}')
-    ids, _ = _ncbi_esearch("protein", "lacI", 10, NCBIFetchConfig(), session)
+    ids = _ncbi_esearch("protein", "lacI", 10, NCBIFetchConfig(), session)
     assert ids == ["12345"]
     assert session.calls == 3
 
@@ -86,9 +86,8 @@ def test_accession_from_header_empty():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.network
 @pytest.mark.skip_ci
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_ncbi_efetch_fasta():
     """Fetch protein FASTA from NCBI by accession."""
     inputs = NCBIEfetchInput(
@@ -101,8 +100,7 @@ def test_ncbi_efetch_fasta():
     assert output.fasta_records[0].sequence.startswith("M")
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_ncbi_esummary_gene():
     """Retrieve gene summary from NCBI by gene ID."""
     inputs = NCBIEsummaryInput(
@@ -114,8 +112,7 @@ def test_ncbi_esummary_gene():
     assert output.source_url is not None
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_ncbi_esearch_retstart_paginates():
     """`retstart` shifts the result window so a paginated second page returns different IDs."""
     page1 = run_ncbi_esearch(

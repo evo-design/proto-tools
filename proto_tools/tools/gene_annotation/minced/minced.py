@@ -1,6 +1,8 @@
-"""Find CRISPR repeats and spacers in nucleotide sequences with MinCED.
+"""proto_tools/tools/gene_annotation/minced/minced.py.
 
-MinCED stands for Mining CRISPRs in Environmental Datasets.
+This module provides a standardized interface for detecting CRISPR arrays
+in nucleotide sequences using MinCED (Mining CRISPRs in Environmental Datasets),
+a tool for finding CRISPR repeats and spacers in genomic sequences.
 """
 
 from pathlib import Path
@@ -157,7 +159,7 @@ class MincedOutput(BaseToolOutput):
 class MincedConfig(BaseConfig):
     """Configuration for MinCED CRISPR array detection.
 
-    Tighten ``min_num_repeats`` to ≥4 for high-confidence detection. Widen
+    Tighten ``min_num_repeats`` to ≥4 for high-confidence detection; widen
     spacer/repeat ranges for noncanonical CRISPR families.
 
     Attributes:

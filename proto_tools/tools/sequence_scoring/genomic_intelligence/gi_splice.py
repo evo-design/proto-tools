@@ -1,8 +1,8 @@
 """Splice donor/acceptor site prediction via the Genomic Intelligence hosted API.
 
-The model is strand-specific. Submit the sequence in transcript orientation.
-Scoring the opposite strand does not raise an error. It returns sites at different
-positions, frequently at high confidence, so no score or count
+The model is strand-specific: submit the sequence in transcript orientation.
+Scoring the opposite strand does not fail loudly — it returns sites at different
+positions, frequently at high confidence — so there is no score or count that
 identifies a mis-oriented submission after the fact. Reverse-complement
 minus-strand genes before calling.
 """
@@ -27,10 +27,7 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     validate_gi_sequence,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField, get_logger
-from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
-
-logger = get_logger(__name__)
+from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField
 
 SPLICE_MIN_BP = 100
 """Published ``minLength`` for the splice endpoint, in base pairs."""
@@ -297,7 +294,7 @@ def run_gi_splice(
     """
     del instance
     results: list[GISpliceResult] = []
-    for item in StatusCounter(logger, "Predicting splice sites for sequence %d/%d", inputs.sequences):
+    for item in inputs.sequences:
         sequence = validate_gi_sequence(item.sequence, min_bp=SPLICE_MIN_BP, task="splice")
         data, payload = call_predict(
             config,

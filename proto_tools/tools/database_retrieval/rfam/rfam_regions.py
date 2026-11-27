@@ -122,7 +122,6 @@ class RfamRegionsOutput(BaseToolOutput):
         matched_regions (int): Regions left after the input filters.
         truncated (bool): Whether matched regions exceeded max_regions.
         regions (list[RfamRegion]): Matched regions, at most max_regions of them.
-        source_url (str): Rfam regions URL.
     """
 
     accession: str = Field(title="Accession", description="Rfam accession of the family")
@@ -134,7 +133,6 @@ class RfamRegionsOutput(BaseToolOutput):
     regions: list[RfamRegion] = Field(
         default_factory=list, title="Regions", description="Matched regions, at most max_regions of them"
     )
-    source_url: str = Field(title="Source URL", description="Rfam regions URL")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -172,7 +170,6 @@ class RfamRegionsOutput(BaseToolOutput):
 
 def _parse_regions(text: str, family: str) -> tuple[str, str, str | None, int, list[RfamRegion]]:
     """Parse the regions endpoint's text into (accession, id, release, total, regions)."""
-    # Reject a response that does not open with Rfam's '#' header block
     lines = text.splitlines()
     if not lines or not lines[0].startswith("#"):
         raise ValueError(
@@ -184,7 +181,6 @@ def _parse_regions(text: str, family: str) -> tuple[str, str, str | None, int, l
     release: str | None = None
     total: int | None = None
     regions: list[RfamRegion] = []
-    # Read family, release and count from '#' header lines and regions from data rows
     for line in lines:
         if line.startswith("#"):
             if match := _HEADER_FAMILY.match(line):
@@ -196,12 +192,10 @@ def _parse_regions(text: str, family: str) -> tuple[str, str, str | None, int, l
             continue
         if not line.strip():
             continue
-        # Split the tab-separated row and check it has the expected column count
         fields = line.split("\t")
         if len(fields) != _REGION_COLUMNS:
             raise ValueError(f"Unexpected Rfam regions row ({len(fields)} columns): {line[:200]}")
         seq_acc, score, first, last, description, species, taxid = fields
-        # Store start <= end and infer the strand from the order Rfam reports them in
         first_pos, last_pos = int(first), int(last)
         regions.append(
             RfamRegion(
@@ -215,7 +209,6 @@ def _parse_regions(text: str, family: str) -> tuple[str, str, str | None, int, l
                 taxid=int(taxid),
             )
         )
-    # Require the family header, and fall back to the row count when no total was listed
     if not accession:
         raise ValueError(f"Rfam regions for {family!r} came back without a family header")
     return accession, rfam_id, release, total if total is not None else len(regions), regions
@@ -271,7 +264,7 @@ def run_rfam_regions(
         inputs (RfamRegionsInput): Family plus optional taxid, species, and sequence filters.
         config (RfamRegionsConfig): Cap on the number of regions returned.
 
-        instance (Any): Unused by this HTTP-only tool.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         RfamRegionsOutput: Family identity, region counts, and the matched regions.
@@ -289,11 +282,9 @@ def run_rfam_regions(
         if response is None:
             raise _not_found(inputs.family)
         accession, rfam_id, release, total, regions = _parse_regions(response.text, inputs.family)
-        source_url = str(response.url)
     finally:
         session.close()
 
-    # Filter the downloaded regions before applying the output limit.
     matched = [r for r in regions if _matches(r, inputs)]
     return RfamRegionsOutput(
         accession=accession,
@@ -303,5 +294,4 @@ def run_rfam_regions(
         matched_regions=len(matched),
         truncated=len(matched) > config.max_regions,
         regions=matched[: config.max_regions],
-        source_url=source_url,
     )

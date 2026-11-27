@@ -203,7 +203,7 @@ def test_build_upstream_flags():
 # ── Integration ───────────────────────────────────────────────────────────
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_run_model_run_real_sequence():
     """model_run on a Listeria locus populates the cmsearch-only schema fields on the top candidate."""
     seq = _read_fasta_sequence(DATA_DIR / "AAAABU010000051.fasta")
@@ -222,7 +222,7 @@ def test_run_model_run_real_sequence():
     assert top.e_value is not None or top.best_e_value is not None
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_positive_control_spyogenes_sf370():
     """S. pyogenes SF370 complete_run — top tracrRNA carries the canonical sgRNA scaffold + multiple candidates ranked.
 

@@ -7,9 +7,10 @@ from typing import Literal
 
 from proto_tools.utils.device import is_remote_device
 
-Device = Literal["modal", "local"]
+Device = Literal["modal", "proto", "local"]
 
 DEVICE_ENV = "PROTO_MCP_DEVICE"
+API_KEY_ENV = "PROTO_API_KEY"
 
 # The registry's own guard, which derives its set from ``RemoteDevice`` so the type and the
 # runtime check cannot drift. ``local`` is the one Device it rejects, which is the question here.
@@ -28,10 +29,11 @@ def resolve_device(requested: str | None = None) -> Device:
             :data:`DEVICE_ENV`. ``None`` takes the default.
 
     Returns:
-        Device: ``"modal"`` or ``"local"``.
+        Device: ``"modal"``, ``"proto"``, or ``"local"``.
 
     Raises:
-        DeviceUnavailableError: If the name is not a known device.
+        DeviceUnavailableError: If ``proto`` is requested without an API key, or
+            the name is not a known device.
     """
     choice = requested or os.environ.get(DEVICE_ENV)
     if not choice:
@@ -43,7 +45,15 @@ def resolve_device(requested: str | None = None) -> Device:
     if choice == "local":
         return "local"
 
-    raise DeviceUnavailableError(f"unknown device {choice!r}; expected 'modal' or 'local'")
+    if choice == "proto":
+        if not os.environ.get(API_KEY_ENV):
+            raise DeviceUnavailableError(
+                f"device='proto' needs {API_KEY_ENV}; see https://proto.evodesign.org for more "
+                "information. Or omit --device to run tools in your own Modal workspace."
+            )
+        return "proto"
+
+    raise DeviceUnavailableError(f"unknown device {choice!r}; expected 'modal', 'proto', or 'local'")
 
 
 def is_deployable(device: Device) -> bool:

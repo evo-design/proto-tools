@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field, ValidationInfo, computed_field, field_val
 
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     PARADE_CELL_LINE_NAMES,
-    PARADE_CELL_PANEL,
     PARADE_CELL_TYPES,
     ParadeActivityMetrics,
     ParadeCellType,
@@ -18,6 +17,7 @@ from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     ParadeConstructType,
     ParadeSequenceInput,
     resolve_cell_type,
+    resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolOutput, ConfigField, ToolInstance
@@ -38,8 +38,9 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
             code (``"c2"``) or cell-line name (``"HepG2"``, case-insensitive); names are
             resolved to canonical codes. Empty means the full panel for ``construct_type``.
             Requested codes must belong to that panel.
-        model_checkpoint (str): ``"parade"`` (the bundled checkpoint for ``construct_type``) or your
-            own local ``.ckpt`` path or ``https`` link (a schemeless ``host.tld/path`` is accepted).
+        checkpoint (str): Optional override for the pinned checkpoint — a local ``.ckpt`` path or an
+            ``https`` link (a schemeless ``host.tld/path`` is accepted). Caller overrides run on local
+            devices only (rejected on ``device="proto"``). Empty uses the pinned per-target checkpoint.
         batch_size (int): Number of sequences to run per GPU batch.
     """
 
@@ -52,7 +53,7 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
     cell_types: list[ParadeCellType] = ConfigField(
         title="Cell Types",
         default_factory=list,
-        description=f"Cells to return: {PARADE_CELL_PANEL}; empty = all",
+        description="Cell lines to return by code ('c2') or name ('HepG2'); empty returns the full panel.",
     )
 
     @field_validator("cell_types", mode="before")
@@ -65,7 +66,7 @@ class ParadeActivityConfig(ParadeCheckpointConfig):
             value = [value]
         if not isinstance(value, list):
             return value  # type: ignore[no-any-return]
-        # Resolve each str selector to its canonical cell code. Leave
+        # Resolve every str selector (a cell code or cell-line name) to its canonical code; leave
         # non-str items untouched so the field's type validation rejects them with a clear error.
         return [resolve_cell_type(item) if isinstance(item, str) else item for item in value]
 
@@ -159,7 +160,7 @@ class ParadeActivityOutput(BaseToolOutput):
     def cell_line_names(self) -> dict[str, str]:
         """Human-readable cell-line name for each present code, ``{code: name}`` (computed field).
 
-        A display aid derived from ``cell_types``. ``scores`` stays keyed by the canonical code.
+        A display aid derived from ``cell_types``; ``scores`` stays keyed by the canonical code.
         """
         return {code: PARADE_CELL_LINE_NAMES[cast(ParadeCellType, code)] for code in self.cell_types}
 
@@ -255,7 +256,7 @@ def run_parade_activity(
     """Predict cell-type-specific UTR activity with PARADE.
 
     A requested cell line may be given by code (``"c2"``) or by cell-line name (``"HepG2"``,
-    case-insensitive). Names are resolved to canonical codes and the scores stay code-keyed.
+    case-insensitive); names are resolved to canonical codes and the scores stay code-keyed.
 
     Args:
         inputs (ParadeActivityInput): UTR sequences to score.
@@ -269,8 +270,10 @@ def run_parade_activity(
     # Revalidate a dumped copy so in-place mutation of the list field cannot bypass
     # Pydantic's assignment hooks between config construction and execution.
     config = ParadeActivityConfig.model_validate(config.model_dump())
-    # The standalone groups sequences by length before batching, so mixed lengths are
-    # safe even when partial cache hits leave an arbitrary subset of the inputs.
+    # Sequences may have mixed lengths; the standalone batches them per length group, so this
+    # is safe under the framework's per-item iterable cache (partial cache hits pass any subset).
+    checkpoint_path, url, md5, filename = resolve_checkpoint_source(config.construct_type, config.checkpoint)
+
     output_data = ToolInstance.dispatch(
         "parade",
         {
@@ -278,7 +281,10 @@ def run_parade_activity(
             "sequences": inputs.sequences,
             "construct_type": config.construct_type,
             "cell_types": config.resolved_cell_types,
-            "model_checkpoint": config.model_checkpoint,
+            "checkpoint_path": checkpoint_path,
+            "checkpoint_url": url,
+            "checkpoint_md5": md5,
+            "checkpoint_filename": filename,
             "batch_size": config.batch_size,
             "device": config.device,
             "verbose": config.verbose,

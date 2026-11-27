@@ -8,7 +8,6 @@ Usage (called by ToolInstance, not directly):
 """
 
 import json
-import logging
 import sys
 from functools import partial
 from multiprocessing.pool import ThreadPool
@@ -85,10 +84,10 @@ def run_prodigal(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run Prodigal gene prediction on one or more sequences.
 
     Args:
-        input_data: Dictionary containing sequences and config.
+        input_data: Dict with keys: sequences, config
 
     Returns:
-        Dictionary containing predicted_orfs, a list of ORF dictionary lists.
+        Dict with key: predicted_orfs (list of list of ORF dicts)
     """
     sequences = input_data["sequences"]
     config = input_data.get("config", {})
@@ -119,13 +118,9 @@ def run_prodigal(input_data: dict[str, Any]) -> dict[str, Any]:
     if not meta_mode:
         # Concatenate all sequences for training
         training_seq = "".join(sequences)
-        logger.update_status("Training Prodigal gene model")
         gene_finder.train(training_seq.encode("utf-8"), translation_table=translation_table)
 
-    logger.update_status(
-        f"Predicting genes in {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
-    )
-    # Process sequences in parallel when both the batch and thread count allow it.
+    # Process in parallel if multiple sequences and threads > 1
     if num_threads > 1 and len(sequences) > 1:
         with ThreadPool(num_threads) as pool:
             process_with_finder = partial(_process_sequence, gene_finder)

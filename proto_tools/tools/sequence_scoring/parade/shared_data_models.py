@@ -1,5 +1,6 @@
 """Shared constants and base models for the PARADE UTR activity/stability tools."""
 
+import hashlib
 import ipaddress
 import json
 import re
@@ -13,6 +14,33 @@ from proto_tools.utils import BaseConfig, BaseToolInput, ConfigField, InputField
 from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.sequence import return_invalid_nucleotide_chars
 from proto_tools.utils.tool_io import Metrics, MetricSpec
+
+# PARADE ships its trained checkpoints inside the public MIT-licensed GitHub
+# repository. We provision them from raw.githubusercontent.com pinned to a commit
+# so the exact artifact the paper published is what gets loaded.
+PARADE_COMMIT = "f8e3e02688918e40d85eff0976a984810ee04372"
+_PARADE_RAW_BASE = f"https://raw.githubusercontent.com/autosome-ru/parade/{PARADE_COMMIT}"
+
+# Per-target checkpoint provisioning. ``url`` uses percent-encoded ``=`` because the
+# upstream filenames embed ``epoch=..-step=..``. ``filename`` is the sanitized local
+# cache name (no ``=``). ``md5`` is the checksum of the upstream artifact.
+PARADE_CHECKPOINTS: dict[str, dict[str, str]] = {
+    "utr5": {
+        "filename": "parade-model-utr5-deltas-epoch9-step840.ckpt",
+        "url": f"{_PARADE_RAW_BASE}/predictor/regression_multiple/saved_models/model-utr5-deltas-epoch%3D9-step%3D840.ckpt",
+        "md5": "a48aeffc516e32f4d8780b855bbcd849",
+    },
+    "utr3": {
+        "filename": "parade-model-utr3-deltas-epoch9-step1330.ckpt",
+        "url": f"{_PARADE_RAW_BASE}/predictor/regression_multiple/saved_models/model-utr3-deltas-epoch%3D9-step%3D1330.ckpt",
+        "md5": "399be95c4f6b9aa80c1c17452f31d558",
+    },
+    "stability": {
+        "filename": "parade-stability-epoch24-step725.ckpt",
+        "url": f"{_PARADE_RAW_BASE}/predictor/regression_stability/saved_models/stability-epoch%3D24-step%3D725.ckpt",
+        "md5": "511c0b4d794f948708ab1e6fa866734b",
+    },
+}
 
 # PARADE's queryable cell-line panel per UTR construct type -- the lines the upstream tutorial
 # predicts on. Each code identifies a human cell line (see ``PARADE_CELL_LINE_NAMES``); the codes
@@ -42,9 +70,6 @@ PARADE_CELL_LINE_NAMES: dict[ParadeCellType, str] = {
     "c13": "PA-1",
 }
 
-# One rendering of the panel, shared by the cell-selector descriptions and the resolver's error.
-PARADE_CELL_PANEL = ", ".join(f"{code} {name}" for code, name in PARADE_CELL_LINE_NAMES.items())
-
 # Case-insensitive lookup that accepts either a code (``"c2"``) or a cell-line name (``"HepG2"``).
 _CELL_SELECTOR_TO_CODE: dict[str, ParadeCellType] = {
     **{code.lower(): code for code in PARADE_CELL_LINE_NAMES},
@@ -56,7 +81,7 @@ def resolve_cell_type(value: str) -> ParadeCellType:
     """Resolve a PARADE cell selector to its canonical code.
 
     Accepts either a cell code (``"c2"``) or a cell-line name (``"HepG2"``), matched
-    case-insensitively after stripping surrounding whitespace. A code is returned unchanged.
+    case-insensitively after stripping surrounding whitespace; a code is returned unchanged.
     Panel membership (which codes are valid for a given construct type) is enforced separately
     by the tool configs -- this only maps a name or code to a code.
 
@@ -73,19 +98,25 @@ def resolve_cell_type(value: str) -> ParadeCellType:
         raise ValueError(f"PARADE cell type must be a string, got {type(value).__name__}")
     code = _CELL_SELECTOR_TO_CODE.get(value.strip().lower())
     if code is None:
-        raise ValueError(
-            f"Unknown PARADE cell type {value!r}; expected a cell code or cell-line name: {PARADE_CELL_PANEL}"
-        )
+        known = ", ".join(f"{name} ({code})" for code, name in PARADE_CELL_LINE_NAMES.items())
+        raise ValueError(f"Unknown PARADE cell type {value!r}; expected a cell code or cell-line name: {known}")
     return code
 
 
 _VALID_INPUT_CHARS = "N"  # U is normalized to T; A/C/G/T come from DNA_NUCLEOTIDES.
 
+_CUSTOM_CHECKPOINT_REJECTED = (
+    "A custom checkpoint cannot be used with device='proto'. Loading a checkpoint executes "
+    "the code inside it, and Proto's hosted service runs only the pinned checkpoints it can "
+    "verify. Leave checkpoint empty to use the pinned one, run locally with device='cpu' or "
+    "device='cuda', or use device='modal' to run it in a Modal workspace you own."
+)
+
 
 def normalize_utr_sequence(sequence: str) -> str:
     """Uppercase, strip whitespace, map RNA ``U`` to ``T``, and validate A/C/G/T/N.
 
-    PARADE encodes UTRs in the DNA alphabet (``T``, not ``U``). Accepting ``U`` and
+    PARADE encodes UTRs in the DNA alphabet (``T``, not ``U``); accepting ``U`` and
     normalizing it lets callers pass RNA. ``N`` is accepted but, matching the upstream
     featurizer (which assigns 0.25 into an integer one-hot tensor and so truncates to 0),
     encodes as an all-zero column ``[0, 0, 0, 0]`` rather than a uniform 0.25 base.
@@ -111,7 +142,7 @@ def normalize_utr_sequence(sequence: str) -> str:
 
 
 def require_https_checkpoint_url(value: str) -> str:
-    """Validate a custom checkpoint URL, requiring HTTPS, a real host, and no embedded credentials.
+    """Validate a custom checkpoint URL: HTTPS scheme, a real host, and no embedded credentials.
 
     A PARADE checkpoint is unpickled after download, so a custom URL must be well-formed and
     fetched over a non-downgradeable transport. Malformed values (``https:relative``,
@@ -121,31 +152,26 @@ def require_https_checkpoint_url(value: str) -> str:
 
     Error messages never echo the raw value, which may itself contain the credential.
     """
-    # Leave an empty value alone so the pinned checkpoint URL is used
     if not value:
         return value
-    # Reject whitespace, control characters and raw non-ASCII before parsing
     if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in value):
-        raise ValueError("model_checkpoint link must not contain whitespace or control characters")
+        raise ValueError("checkpoint_url must not contain whitespace or control characters")
     try:
         value.encode("ascii")
     except UnicodeEncodeError:
-        raise ValueError("model_checkpoint link must use ASCII with non-ASCII characters percent-encoded") from None
-    # Parse the URL; reading the port raises on a non-numeric or out-of-range value
+        raise ValueError("checkpoint_url must use ASCII with non-ASCII characters percent-encoded") from None
     try:
         parsed = urllib.parse.urlparse(value)
         parsed.port  # noqa: B018 - property access validates the port (ValueError if non-numeric/out of range)
     except ValueError:
-        raise ValueError("model_checkpoint link is not a valid URL") from None
-    # Require https, a host and no embedded user:pass credentials
+        raise ValueError("checkpoint_url is not a valid URL") from None
     if parsed.scheme != "https":
-        raise ValueError("model_checkpoint link must be an https:// URL")
+        raise ValueError("checkpoint_url must be an https:// URL")
     if not parsed.hostname:
-        raise ValueError("model_checkpoint link must include a host (e.g. https://host/path)")
+        raise ValueError("checkpoint_url must include a host (e.g. https://host/path)")
     if parsed.username or parsed.password:
-        raise ValueError("model_checkpoint link must not embed credentials (user:pass@); use HF_TOKEN instead")
+        raise ValueError("checkpoint_url must not embed credentials (user:pass@); use HF_TOKEN instead")
     host = parsed.hostname.rstrip(".")
-    # Accept an IP literal; otherwise check every DNS label is well-formed
     try:
         ipaddress.ip_address(host)
     except ValueError:
@@ -155,7 +181,7 @@ def require_https_checkpoint_url(value: str) -> str:
             or any(not label or len(label) > 63 for label in labels)
             or any(re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?", label) is None for label in labels)
         ):
-            raise ValueError("model_checkpoint link host must be a valid IPv4, IPv6, or DNS hostname") from None
+            raise ValueError("checkpoint_url host must be a valid IPv4, IPv6, or DNS hostname") from None
     return value
 
 
@@ -163,7 +189,7 @@ def _looks_like_checkpoint_url(value: str) -> bool:
     """True if ``value`` is a download link — ``http(s)://…`` or a schemeless ``host.tld/path``.
 
     A bare filename or local path (``model.ckpt``, ``sub/x.ckpt``, ``/oak/x.ckpt``, ``./x``) is not a
-    link. A schemeless ``huggingface.co/user/model.ckpt`` is (and is normalized to ``https://`` on use).
+    link; a schemeless ``huggingface.co/user/model.ckpt`` is (and is normalized to ``https://`` on use).
     """
     if not value:
         return False
@@ -176,43 +202,16 @@ def _looks_like_checkpoint_url(value: str) -> bool:
     return all(re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?", label) for label in head.split("."))
 
 
-# Bundled model names: ``setup.sh`` fetches their checkpoint files, and the worker picks the one each
-# operation scores. Any other ``model_checkpoint`` is your own ``.ckpt`` path or https link.
-PARADE_BUNDLED_MODELS: frozenset[str] = frozenset({"parade"})
-
-
-def local_checkpoint_on_remote(model_checkpoint: str, device: str) -> str | None:
-    """Reject a local checkpoint path on a remote worker, where it doesn't exist.
-
-    Args:
-        model_checkpoint (str): A bundled model name, an https link, or a local path.
-        device (str): The remote device the config is dispatched to.
-
-    Returns:
-        str | None: Why the config can't run on ``device``, or ``None`` if it can.
-    """
-    if model_checkpoint in PARADE_BUNDLED_MODELS or model_checkpoint.startswith("https://"):
-        return None
-    return (
-        f"model_checkpoint points to a local file not available on device='{device}'. Use the bundled "
-        "model 'parade' or an https link, or run locally with device='cuda' or device='cpu'."
-    )
-
-
 def normalize_checkpoint_override(value: str) -> str:
-    """Validate a ``model_checkpoint``: a bundled name, an https link (schemeless allowed), or a local path.
+    """Validate a checkpoint override: an https link (schemeless allowed) or a local path.
 
-    A link (``http(s)://…`` or ``host.tld/path``) is validated (HTTPS-only, real host, no embedded
-    credentials) and returned with a lowercase ``https://`` prefix, which is how the worker tells a
-    link from a path; a bundled name or local path passes through unchanged. A checkpoint is unpickled after
-    download, so a link must use a non-downgradeable HTTPS transport.
+    A link (``http(s)://…`` or ``host.tld/path``) is normalized to ``https://`` and validated
+    (HTTPS-only, real host, no embedded credentials); a local path passes through unchanged. A
+    checkpoint is unpickled after download, so a link must use a non-downgradeable HTTPS transport.
     """
-    if not value:
-        raise ValueError("model_checkpoint must not be empty; use 'parade' or your own .ckpt path or https link")
-    if not _looks_like_checkpoint_url(value):
+    if not value or not _looks_like_checkpoint_url(value):
         return value
-    scheme = urllib.parse.urlparse(value).scheme  # urlparse lowercases the scheme
-    normalized = f"{scheme}{value[len(scheme) :]}" if scheme else f"https://{value}"
+    normalized = value if urllib.parse.urlparse(value).scheme else f"https://{value}"
     return require_https_checkpoint_url(normalized)
 
 
@@ -224,7 +223,7 @@ def _redact_checkpoint_url_input(value: Any, *, redact_all_strings: bool = False
         return {
             ("<redacted-key>" if redact_all_strings and isinstance(key, str) else key): (
                 "<redacted-checkpoint>"
-                if key == "model_checkpoint"
+                if key == "checkpoint"
                 else _redact_checkpoint_url_input(item, redact_all_strings=redact_all_strings)
             )
             for key, item in value.items()
@@ -256,7 +255,7 @@ class _SafeCheckpointUrlConfigMixin:
                 for line_error in line_errors:
                     error_input = line_error.get("input")
                     location = line_error.get("loc", ())
-                    if "model_checkpoint" in location:
+                    if "checkpoint" in location:
                         line_error["input"] = "<redacted-checkpoint>"
                     elif not location:
                         # Top-level error: input is the whole config (dict) or a bare scalar. A bare
@@ -278,10 +277,12 @@ class _SafeCheckpointUrlConfigMixin:
     def model_validate_json(cls, json_data: str | bytes | bytearray, **kwargs: Any) -> Any:
         """Validate JSON, redacting the raw input (which may hold a signed URL) from parse errors.
 
-        Parse with ``json.loads`` first because Pydantic's ``json_invalid`` error echoes the
-        payload, which could expose credentials in a signed ``checkpoint_url``. Malformed
-        JSON raises a redacted error that retains the parser's line, column, or byte
-        offset. Valid JSON is passed unchanged to Pydantic to preserve JSON-mode validation.
+        The pre-parse with ``json.loads`` is deliberate, not gratuitous: pydantic's own
+        ``json_invalid`` error echoes the offending payload verbatim, which could leak a
+        credentialed/signed ``checkpoint_url``. So we detect malformedness first and raise our own
+        redacted error, then hand a valid payload to pydantic UNCHANGED (preserving JSON-mode
+        validation semantics). The surfaced message keeps the parser's POSITION (line/column or
+        byte offset) — which says *where* the JSON is broken without reproducing its contents.
         """
         try:
             json.loads(json_data)
@@ -300,13 +301,13 @@ class _SafeCheckpointUrlConfigMixin:
         ) from None
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """Prevalidate a ``model_checkpoint`` assignment so the error is a plain, non-echoing ValueError.
+        """Prevalidate a ``checkpoint`` assignment so the error is a plain, non-echoing ValueError.
 
-        Assignment validation runs the field schema directly and bypasses the model
-        wrap-validator above. Its ValidationError would expose the raw value, so this
-        check raises a plain ValueError first to keep embedded credentials out of the error.
+        NOT redundant with ``validate_assignment``: assignment re-validation runs the field schema
+        directly (never the model wrap-validator above), so its ValidationError would render the raw
+        value. Raising a plain ValueError here first keeps any embedded credential out of the text.
         """
-        if name == "model_checkpoint" and isinstance(value, str):
+        if name == "checkpoint" and isinstance(value, str):
             normalize_checkpoint_override(value)
         super().__setattr__(name, value)
 
@@ -354,11 +355,13 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
 
     Attributes:
         device (str): Device used for inference.
-        model_checkpoint (str): ``"parade"``, the bundled checkpoints published with the paper
-            (the worker picks the one for each construct type or stability), or your own
-            checkpoint as a local ``.ckpt`` path or an ``https`` download link (a schemeless
-            ``host.tld/path`` is accepted and normalized to ``https://``). A link also works on
-            ``device="modal"``; a local path runs only locally.
+        checkpoint (str): Your own checkpoint to use instead of the pinned upstream one, given
+            as a local ``.ckpt`` path or an ``https`` download link (a schemeless
+            ``host.tld/path`` is accepted and normalized to ``https://``). Works on
+            ``device="cpu"``, ``device="cuda"``, and ``device="modal"``, all of which run on
+            hardware you control. Rejected on ``device="proto"``, because loading a checkpoint
+            executes the code inside it and Proto's hosted service runs only checkpoints it can
+            verify. Leave empty to use the pinned per-target checkpoint.
         batch_size (int): Number of sequences to run per GPU batch.
     """
 
@@ -368,10 +371,10 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
         description="Device to run PARADE inference on.",
         include_in_key=False,
     )
-    model_checkpoint: str = ConfigField(
-        title="Model / Checkpoint",
-        default="parade",
-        description="Bundled model name ('parade') or your own .ckpt path or https link.",
+    checkpoint: str = ConfigField(
+        title="Checkpoint",
+        default="",
+        description="Your own .ckpt path or https link, used instead of the pinned checkpoint.",
         reload_on_change=True,
         repr=False,
     )
@@ -383,22 +386,24 @@ class ParadeCheckpointConfig(_SafeCheckpointUrlConfigMixin, BaseConfig):
         include_in_key=False,
     )
 
-    @field_validator("model_checkpoint")
+    @field_validator("checkpoint")
     @classmethod
     def _validate_checkpoint(cls, value: str) -> str:
-        """Validate a bundled name, an https link (schemeless allowed), or a local path."""
+        """Validate a checkpoint override: an https link (schemeless allowed) or a local path."""
         return normalize_checkpoint_override(value)
 
     def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """A local checkpoint path isn't present on a remote worker."""
-        return local_checkpoint_on_remote(self.model_checkpoint, device)
+        """Proto will not load a custom checkpoint; a deployment the caller owns may."""
+        if device == "proto" and self.checkpoint:
+            return _CUSTOM_CHECKPOINT_REJECTED
+        return None
 
 
 class ParadeActivityMetrics(Metrics):
     """PARADE per-cell-type UTR activity predictions for one sequence.
 
-    Values are the predicted activity mass-center for each requested PARADE cell code.
-    Higher means higher predicted activity in that cell line. Metrics documented in
+    Values are the predicted activity mass-center for each requested PARADE cell code;
+    higher means higher predicted activity in that cell line. Metrics documented in
     ``metric_spec`` cover every code across the 5'UTR and 3'UTR panels.
     """
 
@@ -413,3 +418,27 @@ class ParadeActivityMetrics(Metrics):
         }
         for code in PARADE_CELL_LINE_NAMES
     }
+
+
+def resolve_checkpoint_source(target: str, checkpoint: str) -> tuple[str, str, str, str]:
+    """Resolve ``(checkpoint_path, url, md5, filename)`` for the standalone dispatch.
+
+    - ``checkpoint`` empty            -> pinned URL + built-in pinned checksum (no local path)
+    - ``checkpoint`` is a link        -> download it (no checksum), under a link-specific cache name
+    - ``checkpoint`` is a local path  -> pass the path through (no download)
+
+    Args:
+        target (str): One of ``"utr5"``, ``"utr3"``, or ``"stability"``.
+        checkpoint (str): Optional override — empty, an https link, or a local ``.ckpt`` path.
+
+    Returns:
+        tuple[str, str, str, str]: ``(checkpoint_path, url, md5, filename)`` for the resolved checkpoint.
+    """
+    entry = PARADE_CHECKPOINTS[target]
+    if not checkpoint:
+        return "", entry["url"], entry["md5"], entry["filename"]
+    if _looks_like_checkpoint_url(checkpoint):
+        url = checkpoint if urllib.parse.urlparse(checkpoint).scheme else f"https://{checkpoint}"
+        digest = hashlib.sha256(url.encode()).hexdigest()[:12]
+        return "", url, "", f"parade-{target}-custom-{digest}.ckpt"
+    return checkpoint, "", "", ""

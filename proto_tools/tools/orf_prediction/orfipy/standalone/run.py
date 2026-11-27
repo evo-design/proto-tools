@@ -31,7 +31,7 @@ def _parse_orfipy_header(header: str) -> dict[str, Any] | None:
 
     Returns:
         Dictionary containing parsed ORF information, or None if parsing fails.
-        Keys include parent_id, orf_id, start, end, strand, and frame.
+        Keys include: parent_id, orf_id, start, end, strand, frame.
     """
     # Split header into ID and metadata parts
     parts = header.split(" ", 1)
@@ -81,10 +81,10 @@ def run_orfipy(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run Orfipy ORF prediction on one or more sequences.
 
     Args:
-        input_data: Dictionary containing sequences, sequence_ids, and config.
+        input_data: Dict with keys: sequences, sequence_ids, config
 
     Returns:
-        Dictionary containing predicted_orfs, a list of ORF dictionary lists.
+        Dict with key: predicted_orfs (list of list of ORF dicts)
     """
     sequences = input_data["sequences"]
     sequence_ids = input_data["sequence_ids"]
@@ -211,7 +211,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def to_device(device: str) -> dict[str, Any]:
-    """Keep the device unchanged for this CLI tool, which spawns subprocesses and unloads after each call."""
+    """Passthrough for a CLI tool: it spawns subprocesses and unloads after each call."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 

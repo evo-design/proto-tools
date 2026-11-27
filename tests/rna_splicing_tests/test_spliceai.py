@@ -22,11 +22,9 @@ from proto_tools.tools import (
     run_spliceai_predict,
     run_spliceai_score,
 )
-from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
+from tests.conftest import benchmark_twice, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
-
-_persistent_tool = make_persistent_fixture("spliceai")
 
 _EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "proto_tools/tools/rna_splicing/spliceai/examples"
 
@@ -198,13 +196,13 @@ def _run_predict(device: str) -> None:
     assert all(len(pos) == 3 and all(0.0 <= p <= 1.0 for p in pos) for pos in result.predictions[0])
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_spliceai_score_cpu(tmp_path: Path) -> None:
     """SpliceAI variant scoring on CPU."""
     _run_score(tmp_path, "cpu")
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_spliceai_predict_cpu() -> None:
     """SpliceAI raw prediction on CPU."""
     _run_predict("cpu")

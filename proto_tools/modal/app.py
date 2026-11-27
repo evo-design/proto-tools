@@ -113,8 +113,8 @@ def resolve_environment(explicit: str | None = None) -> str:
 def environment_names(client: Any | None = None) -> list[str] | None:
     """Return the Modal environments this workspace has, or ``None`` if they cannot be read.
 
-    If listing fails, report the workspace as unknown rather than empty so
-    callers do not mistake a lookup failure for an absent environment.
+    Best-effort: a workspace that cannot be listed is reported as unknown rather than as empty,
+    so a caller never mistakes "we could not ask" for "there are none".
 
     Args:
         client (Any | None): Modal client to list against, or ``None`` for the process's own.
@@ -182,7 +182,7 @@ def retries_for_service(service_class_name: str) -> modal.Retries:
 # both the container start and the model load.
 #
 # Thirty seconds covers a burst of calls arriving together while keeping idle GPU time
-# short to limit unexpected idle charges. Raise it for interactive
+# short, which is the safer default to bill someone by surprise. Raise it for interactive
 # work, where reading output and typing the next call takes longer than the window.
 # Baked in at deploy time:
 #

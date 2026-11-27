@@ -1,7 +1,4 @@
-"""proto_tools/tools/binder_design/germinal/germinal_design.py.
-
-Germinal de novo epitope-targeted antibody design (VHH or scFv).
-"""
+"""Germinal de novo epitope-targeted antibody design (VHH or scFv)."""
 
 from __future__ import annotations
 
@@ -469,7 +466,7 @@ class GerminalConfig(BaseConfig):
         structure_model (Literal["chai", "af3", "protenix"]): Cofolding backend
             for structure validation. Default ``"chai"`` (auto-installed);
             ``"af3"`` and ``"protenix"`` require user-provisioned weights/env
-            (see README → Toolkit Notes).
+            (see README → Backend Configuration).
         plddt_threshold (float | None): Override final ``external_plddt``
             (VHH: ``> 0.87``, scFv: ``> 0.85``). Distinct from upstream's
             in-loop ``plddt_threshold`` save filter — use ``germinal_overrides``.
@@ -838,15 +835,16 @@ def run_germinal_design(
 ) -> GerminalOutput:
     """Run a Germinal antibody-design campaign end-to-end.
 
-    Run the pinned upstream ``run_germinal.py`` in the tool's standalone
-    environment and read its ``runs/<exp>/{accepted,redesign_candidates,trajectories}/``
-    outputs into a :class:`GerminalOutput`. Each call handles one target because
-    the pipeline keeps state throughout a campaign.
+    Spawns the upstream ``run_germinal.py`` (pinned commit) inside the tool's
+    standalone env, parses the resulting ``runs/<exp>/{accepted,redesign_candidates,trajectories}/``
+    output trees, and returns a typed :class:`GerminalOutput`. Each call is one
+    end-to-end campaign against a single target — Germinal's pipeline is
+    stateful within a run so we do not fan out across targets.
 
     Args:
-        inputs (GerminalInput): Target PDB, chain layout, and hotspot residues.
-        config (GerminalConfig): Pipeline settings. Defaults match Germinal source.
-            Attribute docstrings describe how they map to upstream settings.
+        inputs (GerminalInput): Target PDB + chain layout + hotspot residues.
+        config (GerminalConfig): Pipeline settings. Defaults match Germinal source;
+            see attribute docstrings for source-vs-default mapping.
         instance (Any): Optional :class:`ToolInstance` for subprocess execution.
 
     Returns:
@@ -878,7 +876,7 @@ def run_germinal_design(
         config.structure_model,
     )
 
-    # Write the target structure to a temporary file for the standalone worker.
+    # Materialize the target Structure to a tempfile for the standalone to read.
     with inputs.target_pdb.temp_file() as target_pdb_path:
         input_data: dict[str, Any] = {
             # Target
@@ -888,7 +886,7 @@ def run_germinal_design(
             "hotspots": inputs.hotspots,
             "target_name": inputs.target_name,
             "hotspot_residue": inputs.hotspot_residue,
-            # Set the design mode, stopping criteria, and validation model.
+            # Mode + stopping criteria + backend
             "design_type": config.design_type,
             "max_trajectories": config.max_trajectories,
             "max_hallucinated_trajectories": config.max_hallucinated_trajectories,
@@ -911,7 +909,6 @@ def run_germinal_design(
         }
         output_data = ToolInstance.dispatch("germinal", input_data, instance=instance, config=config)
 
-    # Keep each design's stage and trajectory indices alongside its sequence and metrics.
     designs = [
         GerminalDesign(
             sequence_heavy=d["sequence_heavy"],

@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from proto_tools.entities.complex import Chain
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding import (
     InverseFoldingInput,
@@ -30,6 +29,7 @@ from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
 
 TEST_CIF_FILE = Path(__file__).parent.parent / "dummy_data" / "renin.cif"
+DEFAULT_CHECKPOINT = Path.home() / ".foundry" / "checkpoints" / "ligandmpnn_v_32_010_25.pt"
 
 
 _persistent_tool = make_persistent_fixture("ligandmpnn")
@@ -55,8 +55,8 @@ def test_ligandmpnn_sample_simple(cif_structure: Structure):
     for design in design_set.complexes:
         # LigandMPNN returns every chain (designed + fixed) per design.
         assert len(design.chains) > 0
-        assert all(isinstance(chain.sequence, str) for chain in design.chains if isinstance(chain, Chain))
-        assert all(len(chain.sequence) > 0 for chain in design.chains if isinstance(chain, Chain))
+        assert all(isinstance(chain.sequence, str) for chain in design.chains)
+        assert all(len(chain.sequence) > 0 for chain in design.chains)
         recovery = design.metrics["sequence_recovery"]
         assert 0.0 <= recovery <= 1.0
         interface_recovery = design.metrics["ligand_interface_sequence_recovery"]
@@ -108,8 +108,8 @@ def test_ligandmpnn_sample_chunked_batching(cif_structure: Structure):
     design_set = output.design_sets[0]
     assert len(design_set.complexes) == 6
     for design in design_set.complexes:
-        assert all(isinstance(chain.sequence, str) for chain in design.chains if isinstance(chain, Chain))
-        assert all(len(chain.sequence) > 0 for chain in design.chains if isinstance(chain, Chain))
+        assert all(isinstance(chain.sequence, str) for chain in design.chains)
+        assert all(len(chain.sequence) > 0 for chain in design.chains)
         assert math.isfinite(design.metrics["sequence_recovery"])
         assert "ligand_interface_sequence_recovery" in design.metrics
 
@@ -133,48 +133,7 @@ def test_ligandmpnn_sample_multiple_structures(cif_structure: Structure):
     for design_set in output.design_sets:
         assert len(design_set.complexes) == 3
         for design in design_set.complexes:
-            assert all(isinstance(chain.sequence, str) for chain in design.chains if isinstance(chain, Chain))
-
-
-def test_ligandmpnn_sample_carries_input_ligands(monkeypatch):
-    """LigandMPNN conditions on the input's ligands, so each design keeps them as undesigned context."""
-
-    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
-        # The tool must stage MSE as ATOM, or AtomWorks splits it into a non-polymer chain and
-        # the packed structure comes back with a chain the input has no residue IDs for.
-        staged_lines = Path(payload["pdb_path"]).read_text().splitlines()
-
-        def record_types(residue: str) -> set[str]:
-            return {line[:6].strip() for line in staged_lines if line[17:20].strip() == residue}
-
-        assert record_types("MSE") == {"ATOM"}, "selenomethionine must reach the parser as a polymer residue"
-        assert record_types("SEP") == {"HETATM"}, "an unlisted modified residue is left alone"
-        # Six residues, not the chain's eight: SEP and DAL are read as ligand context and hold
-        # no design position, while MSE stays and reads as MET.
-        return {
-            "chain_sequences": [[{"id": "A", "sequence": "MKTAYI"}]],
-            "metrics": [{"sequence_recovery": 1.0, "ligand_interface_sequence_recovery": math.nan, "pmpnn": 0.5}],
-            "pdb_strings": [None],
-        }
-
-    monkeypatch.setattr(
-        "proto_tools.tools.inverse_folding.ligandmpnn.ligandmpnn_sample.ToolInstance.dispatch",
-        fake_dispatch,
-    )
-    structure = Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb")
-    output = run_ligandmpnn_sample(
-        InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=structure)]),
-        LigandMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=0, device="cpu"),
-    )
-
-    design = output.design_sets[0].complexes[0]
-    assert [(type(e).__name__, e.id) for e in design.chains] == [
-        ("Chain", "A"),
-        ("Fragment", "A"),
-        ("Chain", "B"),
-        ("Fragment", "L"),
-    ]
-    assert design.designed == [True, False, False, False]
+            assert all(isinstance(chain.sequence, str) for chain in design.chains)
 
 
 def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
@@ -204,8 +163,8 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
             batch_size=1,
             seed=7,
             device="cpu",
-            implementation="original",
-            model_checkpoint="ligandmpnn.pt",
+            model_type="original",
+            checkpoint_path="ligandmpnn.pt",
             sc_num_denoising_steps=3,
             sc_num_samples=2,
         ),
@@ -215,101 +174,19 @@ def test_ligandmpnn_sample_dispatch_contract(monkeypatch):
     assert captured["toolkit"] == "ligandmpnn"
     payload = captured["payload"]
     assert payload["operation"] == "sample"
-    assert payload["implementation"] == "original"
-    assert payload["model_checkpoint"] == "ligandmpnn.pt"
+    assert payload["model_type"] == "original"
+    assert payload["checkpoint_path"] == "ligandmpnn.pt"
     assert payload["sc_num_denoising_steps"] == 3
     assert payload["sc_num_samples"] == 2
     assert "backend" not in payload
     assert "reference_backend_path" not in payload
 
 
-def test_ligandmpnn_bundled_weights_are_fetched_and_local_paths_stay_local() -> None:
-    """setup.sh fetches every bundled checkpoint, and only bundled weights run on a remote worker."""
-    import ast
-
-    from proto_tools.tools.inverse_folding import ligandmpnn
-
-    standalone = Path(ligandmpnn.__file__).parent / "standalone"
-    bundled = next(
-        ast.literal_eval(node.value)
-        for node in ast.parse((standalone / "inference.py").read_text()).body
-        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", None) == "_BUNDLED_CHECKPOINTS"
-    )
-    assert set(bundled) == ligandmpnn.LIGANDMPNN_BUNDLED_MODELS
-    setup = (standalone / "setup.sh").read_text()
-    for filename in bundled.values():
-        assert f"${{WEIGHTS_DIR}}/{filename}" in setup, f"setup.sh does not download {filename}"
-
-    for config_class in (LigandMPNNSampleConfig, LigandMPNNScoringConfig):
-        for weights in ligandmpnn.LIGANDMPNN_BUNDLED_MODELS:
-            assert config_class(model_checkpoint=weights).remote_unsupported_reason("modal") is None
-        assert "local file" in config_class(model_checkpoint="/data/mine.pt").remote_unsupported_reason("modal")
-
-
-@pytest.mark.parametrize(
-    "device",
-    [pytest.param("cuda", marks=pytest.mark.uses_gpu), pytest.param("cpu", marks=pytest.mark.uses_env)],
-)
-def test_ligandmpnn_original_samples_short_structure(device: str) -> None:
-    """The original implementation designs and packs a structure shorter than 20 residues, on GPU and CPU.
-
-    Guards the two fixes applied to the vendored original code: a gather that indexed past the end
-    of any structure under 20 residues, and a mask always built on CUDA, which broke ``device="cpu"``.
-    """
-    pdb_lines = (Path(__file__).parent.parent / "dummy_data" / "pdl1.pdb").read_text().splitlines()
-    chain_a = [line for line in pdb_lines if line.startswith("ATOM") and line[21] == "A"]
-    first_residues = list(dict.fromkeys(line[22:27] for line in chain_a))[:12]
-    short_pdb = "\n".join(line for line in chain_a if line[22:27] in first_residues) + "\nEND\n"
-    inp = InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=Structure.model_validate(short_pdb))])
-
-    output = run_ligandmpnn_sample(inp, LigandMPNNSampleConfig(implementation="original", seed=0, device=device))
-
-    design = output.design_sets[0].complexes[0]
-    assert len(design.chains[0].sequence) == 12
-    assert design.structure is not None
-
-
-@pytest.mark.uses_env
-def test_ligandmpnn_native_vocabularies_map_to_proto_columns() -> None:
-    """Both scoring paths' runtime token orders must gather onto proto's 20 columns.
-
-    Neither order is a constant in this repo — one comes from Foundry's token encoding, the
-    other from the downloaded script's ``restype_int_to_str`` — so the check runs in the toolkit
-    env and drives the real mapping with distinguishable values. No model weights are loaded.
-    """
-    from pathlib import Path as _Path
-
-    from proto_tools.utils import run_in_env
-
-    check = _Path(__file__).resolve().parent / "_ligandmpnn_vocabulary_env_check.py"
-    output = run_in_env("ligandmpnn", script=str(check), timeout=900)
-
-    assert "ALL CHECKS PASSED" in output, output
-    # The Foundry encoding is always available, so its absence means the check did not really run.
-    assert "PASS foundry" in output, output
-
-
-@pytest.mark.uses_env
-def test_ligandmpnn_pdb_writer_handles_non_finite_annotations() -> None:
-    """The Foundry path writes NaN B-factors and occupancies, as an RFD4 backbone carries, as Biotite's defaults.
-
-    The check first confirms Biotite's own writer rejects the array, so it fails if it stops
-    exercising the crash, then compares what ``_atom_array_to_pdb`` wrote atom by atom.
-    """
-    from proto_tools.utils import run_in_env
-
-    check = Path(__file__).resolve().parent / "_ligandmpnn_pdb_writer_env_check.py"
-    output = run_in_env("ligandmpnn", script=str(check), timeout=900)
-
-    assert "CONTROL biotite rejects the array" in output, output
-    assert "ALL CHECKS PASSED" in output, output
-
-
 def test_ligandmpnn_score_dispatch_contract(monkeypatch):
     captured = {}
     structure = ligandmpnn_example_input().inputs[0].structure
     sequence = structure.get_chain_sequence("A")
-    vocab = list("ACDEFGHIKLMNPQRSTVWY")  # what the worker returns: proto order, no unknown column
+    vocab = list("ACDEFGHIKLMNPQRSTVWYX")
 
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["toolkit"] = toolkit
@@ -331,7 +208,7 @@ def test_ligandmpnn_score_dispatch_contract(monkeypatch):
                 SequenceStructurePair(
                     sequence=sequence,
                     structure=structure,
-                    excluded_positions={"A": [1]},
+                    fixed_positions={"A": [1]},
                 )
             ]
         ),
@@ -352,8 +229,7 @@ def test_ligandmpnn_score_dispatch_contract(monkeypatch):
     assert payload["sequence"] == sequence
     assert payload["fixed_positions"] == {"A": [1]}
     assert payload["return_logits"] is True
-    assert payload["implementation"] == "foundry"
-    assert payload["model_checkpoint"] == "ligandmpnn_v_32_010_25"
+    assert payload["model_type"] == "ligand_mpnn"
     assert payload["scoring_mode"] == "autoregressive"
     assert "backend" not in payload
     assert "reference_backend_path" not in payload

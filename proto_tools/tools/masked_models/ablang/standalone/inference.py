@@ -9,22 +9,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import (
-    StatusCounter,
-    download_archive,
-    download_weights,
-    get_logger,
-    link_to_cache,
-    log_likelihood_metrics,
-    require_weights_dir,
-    serialize_output,
-)
-from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
-from standalone_helpers.vocabulary import AMINO_ACIDS_LIST
+from standalone_helpers import get_logger, log_likelihood_metrics, serialize_output
 
 logger = get_logger(__name__)
 
-STANDARD_AMINO_ACIDS = "".join(AMINO_ACIDS_LIST)
+STANDARD_AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 
 
 # Mirror of setup.sh's URL table — kept in sync by hand (URLs are static).
@@ -34,67 +23,81 @@ _ABLANG_MODEL_INFO: dict[str, tuple[str, str]] = {
     "ablang2-paired": ("https://zenodo.org/records/10185169/files/ablang2-weights.tar.gz", "model.pt"),
 }
 
-# Mirror of the Zenodo archive's two extracted files, tried first because Zenodo answers some
-# networks with HTTP 403. Upstream publishes no digest, so each file carries its own SHA-256.
-# setup.sh carries the same table.
-_ABLANG2_MIRROR_URL = "https://huggingface.co/bviggiano/AbLang2/resolve/main"
-_ABLANG2_MIRROR_FILES: dict[str, str] = {
-    "model.pt": "56d6f07862a6f824f88c8707bbc03e4026c9db762be2d3041e9767e2e6f86386",
-    "hparams.json": "33474b76d78e01beb24b3621cd44d42b0813333d21e5b806168580bd836c5c8d",
-}
 
+def _redownload_ablang_to_cache(model_choice: str) -> Path | None:
+    """Re-fetch ablang weights into PROTO_MODEL_CACHE via setup.sh's curl-with-retry path.
 
-def _mirror_ablang2_weights(target: Path) -> bool:
-    """Fetch AbLang2's weights from the mirror into ``target``, or report that it could not.
-
-    A digest miss counts as a miss, so the caller falls back to Zenodo rather than staging
-    unverified weights. A partial set is harmless: ``download_archive`` empties the directory.
-
-    Args:
-        target (Path): The ``model-weights-ablang2-paired`` cache directory.
-
-    Returns:
-        bool: Whether every mirrored file is now present and verified.
-    """
-    try:
-        for name, digest in _ABLANG2_MIRROR_FILES.items():
-            download_weights(f"{_ABLANG2_MIRROR_URL}/{name}", target / name, sha256=digest)
-    except (OSError, RuntimeError) as err:
-        logger.warning("AbLang2 mirror unavailable (%s); falling back to the Zenodo archive", err)
-        return False
-    return True
-
-
-def _stage_ablang_weights(model_choice: str) -> Path:
-    """Ensure the weights are in the managed cache and ablang2's package path points at them.
-
-    ablang2 only looks for weights at ``$(dirname ablang2.__file__)/model-weights-<name>``, so the
-    files live in ``resolve_weights_dir("ablang")`` and that package path is a symlink to them.
-    Repointing on every load also repairs a link left stale by a cache move.
+    Restores the cache-and-symlink layout after a corruption-triggered
+    cleanup, instead of falling through to ablang2's brittle ``requests.get``.
 
     Args:
         model_choice (str): Key from ``_ABLANG_MODEL_INFO``.
 
     Returns:
-        Path: The cached weights directory.
+        Path | None: Cache dir staged into, or ``None`` if ``PROTO_MODEL_CACHE=NONE``
+            without a fallback venv path. Caller creates the symlink on success.
+
+    Raises:
+        subprocess.CalledProcessError: ``curl`` or ``tar`` exited nonzero.
+        RuntimeError: Tarball is not gzip, or extracted dir is missing the weight file.
     """
-    import ablang2
+    import subprocess
+
+    from standalone_helpers import get_subprocess_device_env
+    from standalone_helpers.weights import resolve_weights_dir
+
+    weights_dir = resolve_weights_dir("ablang")
+    if weights_dir is None:
+        return None
 
     url, weight_file = _ABLANG_MODEL_INFO[model_choice]
-    target = Path(require_weights_dir("ablang")) / f"model-weights-{model_choice}"
-    if model_choice == "ablang2-paired" and _mirror_ablang2_weights(target):
-        cache_dir = target
-    else:
-        cache_dir = Path(download_archive(url, target, marker=weight_file))
-    link_to_cache(Path(os.path.dirname(ablang2.__file__)) / f"model-weights-{model_choice}", cache_dir)
+    cache_dir = Path(weights_dir) / f"model-weights-{model_choice}"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    tmp_tarball = cache_dir / "tmp.tar.gz"
+
+    # curl + tar don't touch CUDA, but the standalone-helper convention is to
+    # always pass the device-mapped env to subprocess calls.
+    env = get_subprocess_device_env("cpu")
+
+    logger.info("AbLang %s: re-downloading from %s into %s", model_choice, url, cache_dir)
+    curl_cmd = [
+        "curl",
+        "--no-progress-meter",
+        "--show-error",
+        "--location",
+        "--fail",
+        "--retry",
+        "5",
+        "--retry-delay",
+        "30",
+        "--retry-all-errors",
+        "--max-time",
+        "600",
+        "--output",
+        str(tmp_tarball),
+        url,
+    ]
+    subprocess.run(curl_cmd, check=True, env=env)
+    with tmp_tarball.open("rb") as f:
+        if f.read(2) != b"\x1f\x8b":
+            tmp_tarball.unlink()
+            raise RuntimeError(f"ablang: pre-fetched {model_choice} tarball is not gzip")
+    tar_cmd = ["tar", "-zxf", str(tmp_tarball), "-C", str(cache_dir)]
+    subprocess.run(tar_cmd, check=True, env=env)
+    tmp_tarball.unlink()
+
+    if not (cache_dir / weight_file).exists():
+        raise RuntimeError(f"ablang: extracted {model_choice} tarball missing expected weight file {weight_file}")
     return cache_dir
 
 
 def _validate_ablang_weights(model_choice: str) -> None:
-    """Stage the cached weights, re-fetching them once if the checkpoint does not load.
+    """Validate cached ablang weights; on corruption, wipe and re-stage into PROTO_MODEL_CACHE.
 
-    Mirrors protenix's ``cleanup_corrupted_checkpoints`` pattern: a truncated or corrupt file is
-    deleted from the cache and downloaded again rather than left for ablang2 to choke on.
+    Mirrors protenix's ``cleanup_corrupted_checkpoints`` pattern, with
+    re-staging via ``_redownload_ablang_to_cache`` so the cache-and-symlink
+    layout invariant holds regardless of whether cleanup ran. Handles linked,
+    un-linked, and dangling-symlink layouts.
 
     Args:
         model_choice (str): One of the keys in ``ablang2.load_model.list_of_models``
@@ -102,16 +105,49 @@ def _validate_ablang_weights(model_choice: str) -> None:
     """
     import pickle
 
+    import ablang2
     import torch
 
-    cache_dir = _stage_ablang_weights(model_choice)
-    weights_path = cache_dir / _ABLANG_MODEL_INFO[model_choice][1]
-    try:
-        torch.load(weights_path, map_location="cpu", weights_only=False)
-    except (RuntimeError, OSError, EOFError, pickle.UnpicklingError) as e:
-        logger.warning("AbLang %s: weights validation failed (%s); re-downloading", model_choice, e)
-        shutil.rmtree(cache_dir)
-        _stage_ablang_weights(model_choice)
+    pkg_dir = Path(os.path.dirname(ablang2.__file__))
+    model_dir = pkg_dir / f"model-weights-{model_choice}"
+    # Nothing to validate if neither a real dir nor a (possibly dangling) symlink is present.
+    if not model_dir.is_symlink() and not model_dir.is_dir():
+        return
+
+    weight_file = "amodel.pt" if "ablang1" in model_choice else "model.pt"
+    weights_path = model_dir / weight_file
+
+    reason: str | None = None
+    if not weights_path.exists():  # also covers dangling symlinks (exists() follows links)
+        reason = f"{weight_file} missing"
+    else:
+        try:
+            torch.load(weights_path, map_location="cpu", weights_only=False)
+        except (RuntimeError, OSError, EOFError, pickle.UnpicklingError) as e:
+            reason = f"weights validation failed ({e})"
+
+    if reason is None:
+        return
+
+    logger.warning("AbLang %s: %s; clearing for re-download", model_choice, reason)
+    # Explicit unlink + rmtree (rmtree on a symlink raises NotADirectoryError,
+    # which ignore_errors silently swallows without doing anything).
+    if model_dir.is_symlink():
+        target = model_dir.resolve(strict=False)
+        model_dir.unlink()
+        if target.is_dir():
+            shutil.rmtree(target, ignore_errors=True)
+    else:
+        shutil.rmtree(model_dir, ignore_errors=True)
+
+    # Re-stage so post-cleanup state matches post-setup state. None means
+    # PROTO_MODEL_CACHE=NONE without a fallback venv — let ablang2 recover
+    # in-package in that rare case.
+    cache_dir = _redownload_ablang_to_cache(model_choice)
+    if cache_dir is None:
+        return
+    model_dir.symlink_to(cache_dir)
+    logger.info("AbLang %s: cache restored at %s, symlinked from %s", model_choice, cache_dir, model_dir)
 
 
 class AbLangModel:
@@ -139,10 +175,11 @@ class AbLangModel:
 
     def load(self, device: str, verbose: bool = False) -> None:
         """Load AbLang model to device."""
-        # Validate checkpoint files and recover corrupted downloads before loading.
+        # Validate + auto-recover from corruption. No-op on the warm path.
         _validate_ablang_weights(self.model_choice)
 
-        logger.update_status("Loading AbLang weights")
+        if verbose:
+            logger.info(f"Loading AbLang model: {self.model_choice} on {device}")
 
         import ablang2
         from ablang2.models.ablang2.vocab import ablang_vocab
@@ -335,9 +372,7 @@ class AbLangModel:
         all_attention_masks: list[list[int]] = []
         all_logits: list[Any] | None = [] if return_logits else None
 
-        counter = StatusCounter(logger, "Embedding batch %d/%d", total=-(-len(sequences) // batch_size))
         for i in range(0, len(sequences), batch_size):
-            counter(i // batch_size + 1)
             batch = sequences[i : i + batch_size]
             formatted = self._format_sequences(batch)
 
@@ -411,20 +446,15 @@ class AbLangModel:
         all_metrics: list[dict[str, float]] = []
         all_logits: list[Any] | None = [] if return_logits else None
 
-        # Score the sequences batch by batch.
-        counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-len(sequences) // batch_size))
         for i in range(0, len(sequences), batch_size):
-            counter(i // batch_size + 1)
             batch = sequences[i : i + batch_size]
             formatted = self._format_sequences(batch)
 
-            # AbLang-1 exposes each mode as a method; AbLang-2 takes the mode as an argument.
             if self._is_ablang1:
                 scores = getattr(self.model, scoring_mode)(formatted)
             else:
                 scores = self.model(formatted, mode=scoring_mode)
 
-            # Collect one metrics dict per sequence, with log-likelihood stats for PLL mode.
             for j, s in enumerate(scores):
                 score_val = float(s)
                 m: dict[str, float] = {scoring_mode: score_val}
@@ -433,7 +463,6 @@ class AbLangModel:
                     m.update(log_likelihood_metrics(score_val, len(batch[j].replace("|", ""))))
                 all_metrics.append(m)
 
-            # Run a separate likelihood pass for per-residue logits when requested.
             if all_logits is not None:
                 all_logits.extend(self._per_position_aa_logits(formatted))
 
@@ -510,9 +539,7 @@ class AbLangModel:
         restored_sequences: list[str] = []
         all_logits: list[Any] | None = [] if return_logits else None
 
-        counter = StatusCounter(logger, "Sampling batch %d/%d", total=-(-len(sequences) // batch_size))
         for i in range(0, len(sequences), batch_size):
-            counter(i // batch_size + 1)
             batch = sequences[i : i + batch_size]
             formatted = self._format_sequences(batch)
 
@@ -641,8 +668,7 @@ class AbLangModel:
         logits_list: list[list[float]],
         *,
         temperature: float | None = None,
-        soft: float = 1.0,
-        hard: float = 0.0,
+        use_ste: bool = False,
         chain_break_position: int | None = None,
         seed: int | None = None,
         backprop: bool = True,
@@ -655,8 +681,7 @@ class AbLangModel:
         Args:
             logits_list (list[list[float]]): Input logits, shape (L, 20).
             temperature (float | None): Softmax temperature; ``None`` uses logits as-is.
-            soft (float): Blend from the raw input matrix (0) to softmax probabilities (1).
-            hard (float): Straight-through coefficient; 1 forwards a hard one-hot.
+            use_ste (bool): Straight-Through Estimator (hard forward, soft backward).
             chain_break_position (int | None): VH/VL split for ``<VH>|<VL>`` paired layout.
             seed (int | None): Random seed.
             backprop (bool): If False, skip backward and return ``gradient=None``.
@@ -679,13 +704,13 @@ class AbLangModel:
             seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
             sequence_length = int(seq_dist.shape[0])
 
-            # Targets come from P, not the blend, so they do not move with soft/hard.
-            to_vocab = self._canonical_amino_acid_to_vocab_matrix()
-            probs = relaxed_sequence(seq_dist, temperature=temperature)  # (L, 20)
-            residue_token_ids = (probs @ to_vocab).argmax(dim=-1).detach()  # (L,)
+            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist  # (L, 20)
+            mapped = x @ self._canonical_amino_acid_to_vocab_matrix()  # (L, V)
+            residue_token_ids = mapped.argmax(dim=-1).detach()  # (L,)
 
-            x = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)  # (L, 20)
-            mapped = x @ to_vocab  # (L, V)
+            if use_ste:
+                hard = F.one_hot(residue_token_ids, num_classes=mapped.size(-1)).float()
+                mapped = hard + (mapped - mapped.detach())  # hard forward, soft backward
 
             # Soft embeddings: (L, V) @ (V, D) → (L, D)
             if self._is_ablang1:
@@ -757,7 +782,7 @@ class AbLangModel:
             pos_idx = torch.arange(seq_len, device=self.device)  # (S,)
 
             # Chunked PLL: mask each AA position, predict from bidirectional context.
-            # Backpropagate each chunk separately to free its transformer activations.
+            # Per-chunk backward frees transformer activations immediately → O(chunk) memory.
             ie_grad = torch.zeros_like(input_embeddings) if backprop else None
             total_loss_val = 0.0
             for start in range(0, n_aa, batch_size):
@@ -782,11 +807,11 @@ class AbLangModel:
                 chunk_idx = torch.arange(chunk_len, device=self.device)
                 pred = chunk_logits[chunk_idx, chunk_aa_pos, :]  # (C, V)
                 labels = token_ids[0, aa_positions[start:end]]  # (C,)
-                loss_sum = F.cross_entropy(pred, labels, reduction="sum")
-                total_loss_val += loss_sum.item()
+                loss = F.cross_entropy(pred, labels, reduction="sum")
+                total_loss_val += loss.item()
 
                 if backprop:
-                    (loss_sum / n_aa).backward()
+                    loss.backward()
                     ie_grad += ie_chunk.grad
 
         mean_nll = total_loss_val / n_aa
@@ -814,35 +839,18 @@ class AbLangModel:
 _model: AbLangModel | None = None
 
 
-def _ensure_model(model_choice: str) -> AbLangModel:
-    """Return the worker's model for ``model_choice``, swapping checkpoints only when it changes.
-
-    AbLang picks its checkpoint from the chains an antibody carries, so one dispatch may need
-    more than one. Swapping unloads the previous checkpoint first, keeping a single one resident.
-
-    Args:
-        model_choice (str): One of ``ablang1-heavy``, ``ablang1-light``, ``ablang2-paired``.
-
-    Returns:
-        AbLangModel: The wrapper for that checkpoint, loaded on first use by the operation.
-    """
+def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
+    """Entry point for both persistent-worker and one-shot execution."""
     global _model
+    operation = input_dict["operation"]
+    model_choice = input_dict["model_choice"]
     if _model is None or _model.model_choice != model_choice:
         if _model is not None and _model._loaded:
             _model.unload()
         _model = AbLangModel(model_choice=model_choice)
-    return _model
-
-
-def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
-    """Entry point for both persistent-worker and one-shot execution."""
-    operation = input_dict["operation"]
-    if operation != "compute_gradient":
-        # Only the gradient carries a checkpoint per item; it resolves them below, grouped.
-        model = _ensure_model(input_dict["model_choice"])
 
     if operation == "embeddings":
-        return model.embeddings(
+        return _model.embeddings(
             sequences=input_dict["sequences"],
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
@@ -850,7 +858,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
         )
     if operation == "score":
-        return model.score(
+        return _model.score(
             sequences=input_dict["sequences"],
             scoring_mode=input_dict["scoring_mode"],
             batch_size=input_dict["batch_size"],
@@ -859,7 +867,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             return_logits=input_dict["return_logits"],
         )
     if operation == "sample":
-        return model.sample(
+        return _model.sample(
             sequences=input_dict["sequences"],
             batch_size=input_dict["batch_size"],
             device=input_dict["device"],
@@ -871,40 +879,17 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             excluded_amino_acids=input_dict["excluded_amino_acids"],
         )
     if operation == "compute_gradient":
-        # Group by checkpoint to load each variant once, then restore the original result order.
-        items = input_dict["items"]
-        groups: dict[str, list[int]] = {}
-        for index, item in enumerate(items):
-            groups.setdefault(item["model_choice"], []).append(index)
-
-        # Run each item's gradient with its checkpoint, writing results back to the item's slot.
-        results: list[dict[str, Any] | None] = [None] * len(items)
-        for model_choice, indices in groups.items():
-            model = _ensure_model(model_choice)
-            for index in indices:
-                item = items[index]
-                results[index] = model.compute_gradient(
-                    logits_list=item["logits"],
-                    temperature=resolve_temperature(input_dict["temperature"]),
-                    soft=float(input_dict.get("soft", 1.0)),
-                    hard=float(input_dict.get("hard", 0.0)),
-                    chain_break_position=item["chain_break_position"],
-                    seed=input_dict["seed"],
-                    backprop=input_dict.get("compute_gradient", True),
-                    batch_size=input_dict.get("batch_size"),
-                    device=input_dict["device"],
-                    verbose=input_dict["verbose"],
-                )
-
-        # Ensure every item produced a result.
-        completed = [result for result in results if result is not None]
-        if len(completed) != len(items):
-            raise RuntimeError(f"ablang: produced {len(completed)} results for {len(items)} item(s)")
-        # Return per-item results with the shared vocabulary listed once.
-        return {
-            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in completed],
-            "vocab": completed[0]["vocab"],
-        }
+        return _model.compute_gradient(
+            logits_list=input_dict["logits"],
+            temperature=input_dict["temperature"],
+            use_ste=input_dict["use_ste"],
+            chain_break_position=input_dict["chain_break_position"],
+            seed=input_dict["seed"],
+            backprop=input_dict.get("compute_gradient", True),
+            batch_size=input_dict.get("batch_size"),
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+        )
     raise ValueError(
         f"ablang: unknown operation {operation!r}; valid: ['embeddings', 'score', 'sample', 'compute_gradient']"
     )

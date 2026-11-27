@@ -28,7 +28,6 @@ from proto_tools.tools.tool_registry import ToolRegistry, ToolSpec
 from tests.seed_tests.test_seed_reproducibility import (
     _SEED_EXCLUDED_KEYS,
     _SEED_NON_PERSISTENT_EXCLUDED_KEYS,
-    seed_tolerance,
 )
 from tests.tool_infra_tests.pytest_helpers import (
     EXCLUDED_CATEGORIES,
@@ -161,7 +160,7 @@ def test_duplicate_inputs_reproducible_across_calls(spec: ToolSpec, tmp_path):
     r2 = spec.function(duplicated, config)
     assert r2.success, f"{spec.key} second call failed: {r2.errors}"
 
-    r1.approx_equal(r2, **seed_tolerance(spec.key))
+    r1.approx_equal(r2)
 
 
 @pytest.mark.extensive

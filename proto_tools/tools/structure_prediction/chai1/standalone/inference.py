@@ -5,50 +5,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import export_weights_dir, get_logger, get_random_int, report_msa_rows_loaded, set_torch_seed
+from standalone_helpers import get_logger, get_random_int, resolve_weights_dir, set_torch_seed
 
 logger = get_logger(__name__)
-
-
-def _install_msa_row_logging() -> None:
-    """Wrap chai-lab's ``get_msa_contexts`` to log each protein chain's loaded and paired MSA rows.
-
-    ``run_inference`` calls the name bound in ``chai_lab.chai1``, so patching it there takes effect.
-    Chains are concatenated in input order, so each chain's columns are its token span.
-    """
-    import chai_lab.chai1 as chai1  # type: ignore[import-not-found]
-    import pandas as pd
-    import torch
-    from chai_lab.data.dataset.msas.msa_context import NO_PAIRING_KEY  # type: ignore[import-not-found]
-    from chai_lab.data.parsing.msas.aligned_pqt import expected_basename  # type: ignore[import-not-found]
-
-    get_msa_contexts = chai1.get_msa_contexts
-    if getattr(get_msa_contexts, "_logs_msa_rows", False):
-        return
-
-    def get_msa_contexts_logging_rows(chains: Any, msa_directory: Any) -> Any:
-        joined, profile = get_msa_contexts(chains, msa_directory=msa_directory)
-        spans, start = [], 0
-        for chain in chains:
-            spans.append((chain, slice(start, start + chain.structure_context.num_tokens)))
-            start += chain.structure_context.num_tokens
-        keys = joined.pairing_key_hash[:, [span.start for _, span in spans]]
-        present = torch.stack([joined.mask[:, span].any(dim=1) for _, span in spans], dim=1)
-        loaded, sent, paired = {}, {}, {}
-        for j, (chain, _span) in enumerate(spans):
-            if chain.entity_data.entity_type.name != "PROTEIN":
-                continue
-            name = chain.entity_data.entity_name
-            shared = ((keys == keys[:, j : j + 1]) & present).sum(dim=1) > 1
-            loaded[name] = int(present[:, j].sum())
-            paired[name] = int((present[:, j] & (keys[:, j] != NO_PAIRING_KEY) & shared).sum())
-            pqt = Path(msa_directory) / expected_basename(chain.entity_data.sequence) if msa_directory else None
-            sent[name] = len(pd.read_parquet(pqt, columns=["sequence"])) if pqt is not None and pqt.is_file() else 0
-        report_msa_rows_loaded("chai1", loaded, sent, paired)
-        return joined, profile
-
-    get_msa_contexts_logging_rows._logs_msa_rows = True  # type: ignore[attr-defined]
-    chai1.get_msa_contexts = get_msa_contexts_logging_rows
 
 
 class Chai1Model:
@@ -175,13 +134,14 @@ class Chai1Model:
         logger.debug("Initializing Chai1")
 
         # chai_lab reads CHAI_DOWNLOADS_DIR at import, so set it first: setup.sh staged the weights there.
-        export_weights_dir("CHAI_DOWNLOADS_DIR", "chai1")
+        weights_dir = resolve_weights_dir("chai1")
+        if weights_dir:
+            os.environ["CHAI_DOWNLOADS_DIR"] = weights_dir
 
         try:
-            from chai_lab.chai1 import run_inference
+            from chai_lab.chai1 import run_inference  # type: ignore[import-not-found]
 
             self._chai1_run_inference = run_inference
-            _install_msa_row_logging()
         except ImportError:
             raise ImportError(
                 "chai1: chai_lab not importable; ensure Chai1 is installed in the current environment"

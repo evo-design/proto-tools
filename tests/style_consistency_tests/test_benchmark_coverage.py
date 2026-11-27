@@ -165,7 +165,7 @@ def _benchmarks_pinning_device() -> dict[str, str]:
 def test_benchmarks_do_not_pin_device() -> None:
     """A benchmark must let the harness choose the device, or it cannot measure a deployment.
 
-    ``--use-modal`` routes a run by patching the ``device`` default on every
+    ``--use-modal`` and ``--use-proto`` route a run by patching the ``device`` default on every
     config class. An explicit ``device=`` in the test body overrides that, so the benchmark quietly
     runs here and reports local timings as though they came from the remote backend — a wrong
     answer that looks like a right one.
@@ -173,7 +173,7 @@ def test_benchmarks_do_not_pin_device() -> None:
     pinned = _benchmarks_pinning_device()
     unexplained = sorted((key, where) for key, where in pinned.items() if key not in _DEVICE_PINNED_BENCHMARKS)
     assert not unexplained, (
-        f"Benchmarks pin device=, which defeats --use-modal: {unexplained}. Drop the "
+        f"Benchmarks pin device=, which defeats --use-modal/--use-proto: {unexplained}. Drop the "
         f"argument (the config default is already the right local device), or add the tool to "
         f"_DEVICE_PINNED_BENCHMARKS with the reason it can only run locally."
     )

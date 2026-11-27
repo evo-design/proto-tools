@@ -37,8 +37,12 @@ CCD_CIF="${WEIGHTS_DIR}/components.cif"
 if [ -f "${CCD_CIF}" ]; then
     echo "[ccd_lookup] components.cif already present at ${CCD_CIF}; skipping download."
 else
-    echo "[ccd_lookup] Fetching CCD bundle from ${CCD_URL}..."
-    proto_download "${CCD_URL}" "${CCD_GZ}"
+    if [ ! -f "${CCD_GZ}" ]; then
+        echo "[ccd_lookup] Downloading CCD bundle from ${CCD_URL}..."
+        curl -fsSL -o "${CCD_GZ}" "${CCD_URL}"
+    else
+        echo "[ccd_lookup] components.cif.gz already present; reusing."
+    fi
     echo "[ccd_lookup] Decompressing components.cif.gz..."
     gunzip -k -f "${CCD_GZ}"
     # gunzip -k preserves the .gz; remove it to save ~70MB.

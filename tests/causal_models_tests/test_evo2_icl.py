@@ -6,9 +6,7 @@ from pydantic import ValidationError
 import proto_tools.tools.causal_models.evo2.evo2_icl as evo2_icl
 from proto_tools.tools.causal_models.evo2.evo2_icl import Evo2ICLConfig, Evo2ICLInput, run_evo2_icl
 from proto_tools.utils.tool_cache import ToolCache, _program_tool_cache
-from tests.conftest import benchmark_twice, make_persistent_fixture
-
-_persistent_tool = make_persistent_fixture("evo2")
+from tests.conftest import benchmark_twice
 
 _EXAMPLES = ["ACGTACGT", "TGCATGCA"]
 _TWO_HUNDRED_BP_EXAMPLES = ["ACGT" * 50, "TGCA" * 50] * 8

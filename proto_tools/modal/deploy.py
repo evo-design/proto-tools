@@ -39,11 +39,10 @@ MODAL_ENVIRONMENT is set. Create it with: modal environment create proto-env
 class ModalTokens:
     """A Modal token pair, for deploying into a workspace that is not this process's own.
 
-    ``modal deploy`` authenticates through subprocess environment variables
-    rather than a client object. This class therefore holds the caller's raw
-    credentials and redacts them in ``__repr__`` so deployment errors cannot
-    expose them. :class:`subprocess.CalledProcessError` includes the command
-    in its string representation.
+    ``modal deploy`` is a subprocess, so it authenticates by environment rather than by the client
+    object every other Modal call here takes. That makes this the one place a caller's raw
+    credentials are handled, hence the redacting ``__repr__``: a deploy failure raises
+    :class:`subprocess.CalledProcessError`, whose string form carries the command it ran.
     """
 
     token_id: str
@@ -348,7 +347,7 @@ def _run_modal_deploy(
                 f.write(line)  # the log keeps the raw stream, redraw frames and all
                 phase = describe_progress(_ANSI_ESCAPE.sub("", line))
                 if verbose:
-                    # Prefix output with the app name so parallel deployments remain distinguishable.
+                    # Prefix per-app stdout so parallel deploy output stays greppable.
                     if (shown := for_display(line, seen)) is not None:
                         sys.stdout.write(f"[{app_slug(app_name)}] {shown}\n")
                         sys.stdout.flush()
@@ -370,7 +369,7 @@ def _run_modal_deploy(
 def deploy_apps(
     app_names: list[str], environment: str | None = None, max_parallel: int = 4, verbose: bool = False
 ) -> dict[str, bool]:
-    """Deploy apps in parallel and return ``{app_name: success}``. One failure never blocks the rest."""
+    """Deploy apps in parallel. Returns ``{app_name: success}``; one failure never blocks the rest."""
     results: dict[str, bool] = {}
     with ThreadPoolExecutor(max_workers=max_parallel) as executor:
         futures = {executor.submit(deploy_app, name, environment, None, verbose): name for name in app_names}
@@ -389,8 +388,8 @@ def record_fingerprints(
     """Record what each app was built from, so clients can detect drift later.
 
     Runs from the same source that was just deployed, so the recorded values
-    describe what actually shipped. If recording fails, keep the working
-    deployment available without drift detection.
+    describe what actually shipped. Best-effort: a failure here leaves a working
+    deployment with no drift detection, which beats failing the deploy.
 
     Args:
         app_names (list[str]): Apps whose services to record.
@@ -426,8 +425,8 @@ def record_fingerprints(
 def known_environments() -> list[str] | None:
     """Return the environment names in the active workspace, or ``None`` if they cannot be read.
 
-    ``None`` means the lookup failed. It does not establish that any named
-    environment is absent.
+    ``None`` is not "no environments" -- it means the lookup itself failed, so a caller must
+    not treat a name as absent on the strength of it.
     """
     try:
         from modal.environments import list_environments

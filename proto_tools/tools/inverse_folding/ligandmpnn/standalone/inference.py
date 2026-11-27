@@ -1,7 +1,6 @@
 """LigandMPNN inference implementation using Foundry."""
 
 import gc
-import hashlib
 import importlib
 import json
 import os
@@ -16,14 +15,7 @@ from typing import Any, cast
 
 import numpy as np
 import torch
-from standalone_helpers import (
-    get_logger,
-    log_likelihood_metrics,
-    move_model_to_device,
-    serialize_output,
-    set_current_cuda_device,
-)
-from standalone_helpers.vocabulary import AMINO_ACIDS_LIST, gather_indices
+from standalone_helpers import get_logger, log_likelihood_metrics, move_model_to_device, serialize_output
 
 logger = get_logger(__name__)
 
@@ -34,47 +26,17 @@ SCORING_CAUSALITY = {
     "autoregressive": "auto_regressive",
 }
 
-# Bundled weights -> their file in the weights dir, downloaded by setup.sh. Either implementation loads
-# either file (same format; they differ in training noise). Keep in sync with LIGANDMPNN_BUNDLED_MODELS.
-_BUNDLED_CHECKPOINTS: dict[str, str] = {
-    "ligandmpnn_v_32_010_25": "ligandmpnn_v_32_010_25.pt",
-    "ligandmpnn_v_32_020_25": "ligandmpnn_v_32_020_25.pt",
-}
-_LEGACY_PACKER_FILENAME = "ligandmpnn_sc_v_32_002_16.pt"
-
 # ============================================================================
 # Original LigandMPNN provisioning (full-atom side-chain packing)
 # ============================================================================
 _LEGACY_SOURCE_COMMIT = "1e42fc763bd37256227437c14a93c99d1f44241d"
 _LEGACY_CODE_TARBALL_URL = f"https://github.com/gelnesr/dEVA/archive/{_LEGACY_SOURCE_COMMIT}.tar.gz"
-_LEGACY_CODE_TARBALL_SHA256 = "bde72c9fa29c75b2b36c984c78aa3050ca16fa753f017ef8faf208b6499ee18c"
 _LEGACY_CODE_SUBDIR = f"dEVA-{_LEGACY_SOURCE_COMMIT}/models/ligandmpnn"
 # Importable package name expected by ``_load_legacy_modules`` (imports ``ligandmpnn.*``).
 _LEGACY_PACKAGE_DIRNAME = "ligandmpnn"
-_LEGACY_SOURCE_PATCHES: tuple[tuple[str, str, str], ...] = (
-    # Read each sampled residue's probability along the amino-acid axis. Upstream gathers along the
-    # residue axis, which indexes past the end for structures shorter than 20 residues.
-    (
-        "model_utils.py",
-        "torch.gather(all_probs, 1, S.unsqueeze_(dim=2))",
-        "torch.gather(all_probs, 2, S.unsqueeze_(dim=2))",
-    ),
-    # Pass every argument. Upstream drops ``encoded_residue_dict``, so ``device`` lands in
-    # ``omit_AA_per_residue_multi`` and the mask is always built on CUDA, which breaks device="cpu".
-    (
-        "ligandmpnn.py",
-        "omit_aa(args, encoded_residues, design_params['omit_AA_per_residue'], device)",
-        "omit_aa(args, encoded_residues, encoded_residue_dict, design_params['omit_AA_per_residue'], device=device)",
-    ),
-)
-# (filename, URL, SHA-256): the original implementation's side-chain packer, fetched on first use
-# and checked before it is used.
-_LEGACY_WEIGHT_URLS: tuple[tuple[str, str, str], ...] = (
-    (
-        _LEGACY_PACKER_FILENAME,
-        "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_sc_v_32_002_16.pt",
-        "799a9de6c1c72bb0c7ceb37998391a6fd0e3e21cb42928ee31a28313a3b1b46a",
-    ),
+_LEGACY_WEIGHT_URLS: tuple[tuple[str, str], ...] = (
+    ("ligandmpnn_v_32_020_25.pt", "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_v_32_020_25.pt"),
+    ("ligandmpnn_sc_v_32_002_16.pt", "https://files.ipd.uw.edu/pub/ligandmpnn/ligandmpnn_sc_v_32_002_16.pt"),
 )
 
 
@@ -96,34 +58,14 @@ def _sequence_tokens(sequence: str) -> tuple[list[str], list[int]]:
         raise ValueError(f"ligandmpnn: unsupported residue {exc.args[0]!r}") from exc
 
 
-# Values Biotite's PDB writer fills in when an atom array has no such annotation.
-_PDB_DEFAULT_ANNOTATIONS: dict[str, float] = {"b_factor": 0.0, "occupancy": 1.0}
-
-
 def _atom_array_to_pdb(atom_array: Any) -> str:
-    """Serialize a Foundry/Biotite atom array to a PDB string.
-
-    Atoms without finite coordinates are dropped. Foundry's output keeps the input's
-    annotations, and an input may carry non-finite B-factors or occupancies (RFD4 writes
-    ``B_iso_or_equiv = nan`` for designed residues), which Biotite's fixed-width writer
-    rejects. Those values are written as Biotite's defaults for an absent annotation.
-    """
+    """Serialize a Foundry/Biotite atom array to a PDB string."""
     from biotite.structure.io.pdb import PDBFile
 
     finite_atoms = np.isfinite(np.asarray(atom_array.coord)).all(axis=-1)
-    # Boolean indexing copies, so the annotation edits below never reach the caller's array.
     atom_array = atom_array[finite_atoms]
     if len(atom_array) == 0:
         raise ValueError("ligandmpnn: sampled structure contains no finite-coordinate atoms.")
-    annotations = atom_array.get_annotation_categories()
-    for name, default in _PDB_DEFAULT_ANNOTATIONS.items():
-        if name not in annotations:
-            continue
-        values = np.asarray(atom_array.get_annotation(name), dtype=float)
-        non_finite = ~np.isfinite(values)
-        if non_finite.any():
-            logger.debug("ligandmpnn: writing %d non-finite %s values as %s", int(non_finite.sum()), name, default)
-            atom_array.set_annotation(name, np.where(non_finite, default, values))
     pdb_file = PDBFile()
     pdb_file.set_structure(atom_array)
     buffer = StringIO()
@@ -136,13 +78,14 @@ class LigandMPNNModel:
 
     def __init__(
         self,
-        checkpoint_path: str,
+        checkpoint_path: str | None = None,
     ):
-        """Initialize LigandMPNNModel with the checkpoint file it loads."""
+        """Initialize LigandMPNNModel."""
         self._loaded = False
         self._engine: Any = None
         self.device: str | None = None
         self.checkpoint_path = checkpoint_path
+        self._model_type: str | None = None
 
     def sample(
         self,
@@ -155,6 +98,7 @@ class LigandMPNNModel:
         seed: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
+        model_type: str = "ligand_mpnn",
         ligand_mpnn_use_atom_context: bool = True,
         ligand_mpnn_use_side_chain_context: bool = False,
         ligand_mpnn_cutoff_for_score: float = 8.0,
@@ -174,6 +118,8 @@ class LigandMPNNModel:
                 expects an int).
             device: Device to run on ('cuda' or 'cpu').
             verbose: Whether to print status messages.
+            model_type: LigandMPNN variant to load (currently only
+                'ligand_mpnn' is wired through the tool layer).
             ligand_mpnn_use_atom_context: Encode ligand atom context.
             ligand_mpnn_use_side_chain_context: Condition on sidechain atoms of
                 fixed residues.
@@ -191,13 +137,14 @@ class LigandMPNNModel:
         if seed is None:
             raise ValueError("ligandmpnn: sample requires an explicit int seed")
 
-        if not self._loaded or self.device != device:
-            self.load(device, verbose)
+        # Lazy load the model (reload if model_type changed)
+        if not self._loaded or self.device != device or self._model_type != model_type:
+            self.load(device, verbose, model_type=model_type)
 
         fixed_residues = _fixed_residues(fixed_positions)
 
-        # Foundry accepts either residue-based or chain-based constraints. With
-        # fixed_residues, every unfixed residue is implicitly designable.
+        # Foundry can't mix residue-based (fixed_residues) and chain-based (designed_chains) constraints;
+        # when fixed_residues is set, designed_chains is implicit (the unfixed residues).
         input_dict = {
             "structure_path": pdb_path,
             "name": "design",
@@ -275,6 +222,7 @@ class LigandMPNNModel:
         seed: int | None = None,
         device: str = "cuda",
         verbose: bool = False,
+        model_type: str = "ligand_mpnn",
         return_logits: bool = False,
         scoring_mode: str = "single_aa",
         ligand_mpnn_use_atom_context: bool = True,
@@ -286,17 +234,14 @@ class LigandMPNNModel:
         from mpnn.pipelines.mpnn import build_mpnn_transform_pipeline
         from mpnn.utils.inference import MPNNInferenceInput
 
-        # Validate the seed and scoring mode before loading anything
         if seed is None:
             raise ValueError("ligandmpnn: score requires an explicit int seed")
         if scoring_mode not in SCORING_CAUSALITY:
             raise ValueError(f"ligandmpnn: scoring_mode must be one of {sorted(SCORING_CAUSALITY)}")
 
-        # Load the model unless it is already loaded on this device
-        if not self._loaded or self.device != device:
-            self.load(device, verbose)
+        if not self._loaded or self.device != device or self._model_type != model_type:
+            self.load(device, verbose, model_type=model_type)
 
-        # Seed torch and numpy, including the CUDA or MPS generator
         torch.manual_seed(seed)
         np.random.seed(seed)
         if torch.cuda.is_available():
@@ -304,7 +249,6 @@ class LigandMPNNModel:
         elif torch.backends.mps.is_available():
             torch.mps.manual_seed(seed)
 
-        # Request one teacher-forced pass that returns the target tokens, loss mask, and logits
         input_dict = {
             "structure_path": pdb_path,
             "name": "score",
@@ -323,17 +267,14 @@ class LigandMPNNModel:
                 "decoder_features": ["logits", "log_probs"],
             },
         }
-        # Pass the fixed residues if any, otherwise the chains to design
         fixed_residues = _fixed_residues(fixed_positions)
         if fixed_residues:
             input_dict["fixed_residues"] = fixed_residues
         else:
             input_dict["designed_chains"] = chain_ids
 
-        # Parse the structure and fill in Foundry's defaults for the remaining input fields
         inference_input = MPNNInferenceInput.from_atom_array_and_dict(input_dict=input_dict)
         input_dict = inference_input.input_dict
-        # Forward only the filtering options that were set to the transform pipeline
         pipeline_args = {}
         if input_dict["occupancy_threshold_sidechain"] is not None:
             pipeline_args["occupancy_threshold_sidechain"] = input_dict["occupancy_threshold_sidechain"]
@@ -348,7 +289,6 @@ class LigandMPNNModel:
             device=self._engine.device,
             **pipeline_args,
         )
-        # Featurize the structure and collate it into a batch of one
         network_input = FeatureCollator()(
             [
                 pipeline(
@@ -368,21 +308,17 @@ class LigandMPNNModel:
             ]
         )
 
-        # Tokenize the query sequence and check it matches the parsed residue count
         vocab, token_ids = _sequence_tokens(sequence)
-        canonical_columns = gather_indices(AMINO_ACIDS_LIST, vocab, label="ligandmpnn")
         parsed_len = int(network_input["input_features"]["S"].shape[1])
         if len(token_ids) != parsed_len:
             raise ValueError(f"Sequence length {len(sequence)} does not match structure ({parsed_len} residues).")
 
-        # Swap the structure's native sequence for the query sequence
         target = torch.tensor([token_ids], dtype=network_input["input_features"]["S"].dtype, device=self._engine.device)
         network_input["input_features"]["S"] = target
 
         with torch.no_grad():
             output = self._engine.model(network_input)
 
-        # Gather each residue's log-probability of its query token over the scored positions
         mask = output["input_features"]["mask_for_loss"][0].bool()
         log_probs = output["decoder_features"]["log_probs"][0]
         selected = log_probs[torch.arange(parsed_len, device=log_probs.device), target[0]][mask]
@@ -390,30 +326,38 @@ class LigandMPNNModel:
         if effective_length == 0:
             raise ValueError("ligandmpnn: no residues available to score")
 
-        # Average the log-likelihood over the scored residues
         avg_log_likelihood = float(selected.sum().item()) / effective_length
 
-        # Free the model, then return logits reordered to the canonical amino acid vocabulary
         self.unload()
         return {
-            "logits": output["decoder_features"]["logits"][0][..., canonical_columns] if return_logits else None,
+            "logits": output["decoder_features"]["logits"][0] if return_logits else None,
             "metrics": log_likelihood_metrics(avg_log_likelihood, effective_length),
-            "vocab": AMINO_ACIDS_LIST,
+            "vocab": vocab,
         }
 
-    def load(self, device: str = "cuda", verbose: bool = False) -> None:
+    def load(self, device: str = "cuda", verbose: bool = False, model_type: str = "ligand_mpnn") -> None:
         """Load the LigandMPNN model via Foundry.
 
         Args:
             device: Device to load the model on.
             verbose: Whether to print status messages.
+            model_type: LigandMPNN variant (currently only 'ligand_mpnn'
+                is wired through the tool layer).
         """
-        logger.update_status("Loading LigandMPNN weights")
+        if verbose:
+            logger.info(f"Loading LigandMPNN model_type={model_type} on {device}")
+
+        # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
+        from standalone_helpers import resolve_weights_dir
+
+        weights_dir = resolve_weights_dir("ligandmpnn")
+        if weights_dir:
+            os.environ["FOUNDRY_CHECKPOINT_DIRS"] = weights_dir
 
         from mpnn.inference_engines.mpnn import MPNNInferenceEngine
 
         self._engine = MPNNInferenceEngine(
-            model_type="ligand_mpnn",
+            model_type=model_type,
             checkpoint_path=self.checkpoint_path,
             is_legacy_weights=True,
             device=device,
@@ -421,6 +365,7 @@ class LigandMPNNModel:
             write_structures=False,
         )
         self.device = device
+        self._model_type = model_type
         self._loaded = True
 
         if verbose:
@@ -438,14 +383,15 @@ class LigandMPNNModel:
             # LigandMPNN uses Foundry engine which doesn't support standard .to() movement
             # Use helper for consistency (it will handle gracefully), then reload engine
             self._engine = move_model_to_device(self._engine, self.device, device)
-            # Foundry engine requires full reload for device change
-            self.load(device, verbose=False)
+            # Foundry engine requires full reload for device change; preserve model_type
+            self.load(device, verbose=False, model_type=self._model_type or "ligand_mpnn")
 
     def unload(self) -> None:
         """Unload the model to free GPU memory."""
         self._engine = None
         self._loaded = False
         self.device = None
+        self._model_type = None
 
         gc.collect()
         if torch.cuda.is_available():
@@ -464,6 +410,17 @@ def _set_legacy_seed(seed: int | None) -> None:
     torch.backends.cudnn.enabled = False
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+
+def _pin_active_cuda_device(device: str) -> None:
+    """Pin the process's active CUDA device to ``device``.
+
+    The original LigandMPNN code builds some tensors on the default CUDA device (``cuda:0``)
+    rather than the one threaded through, which fails under multi-GPU dispatch when a worker
+    runs on ``cuda:1``. Setting the active device makes those default-device ops land correctly.
+    """
+    if device.startswith("cuda") and torch.cuda.is_available():
+        torch.cuda.set_device(device)
 
 
 def _is_legacy_package_path(path: Path) -> bool:
@@ -615,13 +572,13 @@ class LegacyCompatibleLigandMPNNModel:
     def __init__(
         self,
         package_path: Path,
-        checkpoint_path: str,
+        checkpoint_path: str | None = None,
         packer_checkpoint_path: str | None = None,
         use_side_chain_context: bool = False,
     ) -> None:
         """Initialize original package paths and lazy model state."""
         self.package_path = package_path
-        self.checkpoint_path = checkpoint_path
+        self.checkpoint_path = _legacy_checkpoint_path(package_path, checkpoint_path, "ligandmpnn_v_32_020_25.pt")
         self._configured_packer_checkpoint_path = packer_checkpoint_path
         self.packer_checkpoint_path: str | None = None
         self.use_side_chain_context = use_side_chain_context
@@ -639,7 +596,6 @@ class LegacyCompatibleLigandMPNNModel:
         if self._loaded:
             self.unload()
 
-        logger.update_status("Loading LigandMPNN weights")
         checkpoint = torch.load(self.checkpoint_path, map_location=device, weights_only=False)
         self.atom_context_num = int(checkpoint["atom_context_num"])
         k_neighbors = checkpoint["num_edges"]
@@ -674,9 +630,8 @@ class LegacyCompatibleLigandMPNNModel:
             self.packer_checkpoint_path = _legacy_checkpoint_path(
                 self.package_path,
                 self._configured_packer_checkpoint_path,
-                _LEGACY_PACKER_FILENAME,
+                "ligandmpnn_sc_v_32_002_16.pt",
             )
-        logger.update_status("Loading LigandMPNN side-chain packer weights")
         checkpoint_packer = torch.load(self.packer_checkpoint_path, map_location=device, weights_only=False)
         packer_cls = self._modules["sc_utils"].Packer
         self.packer = packer_cls(
@@ -728,7 +683,7 @@ class LegacyCompatibleLigandMPNNModel:
         **_: Any,
     ) -> dict[str, Any]:
         """Sample fixed-backbone sequences and packed full-atom structures."""
-        set_current_cuda_device(device)  # upstream builds some tensors on the current CUDA device
+        _pin_active_cuda_device(device)
         self.load(device)
         self.load_packer(device)
         _set_legacy_seed(seed)
@@ -800,11 +755,9 @@ class LegacyCompatibleLigandMPNNModel:
         **_: Any,
     ) -> dict[str, Any]:
         """Score a sequence against a structure with original-compatible semantics."""
-        # Load the upstream model on the target device and seed its RNGs
-        set_current_cuda_device(device)  # upstream builds some tensors on the current CUDA device
+        _pin_active_cuda_device(device)
         self.load(device)
         _set_legacy_seed(seed)
-        # Build the upstream CLI arguments and featurize the structure with its ligand context
         args = self._args(
             chain_ids=chain_ids,
             fixed_positions=fixed_positions,
@@ -819,14 +772,12 @@ class LegacyCompatibleLigandMPNNModel:
         protein_dict, _other_atoms, _icodes, feature_dict = self._prepare(
             pdb_path, args, device, use_atom_context=ligand_mpnn_use_atom_context
         )
-        # Tokenize the query sequence and check it matches the parsed residue count
         data_utils = self._modules["data_utils"]
         token_ids = [data_utils.restype_str_to_int[aa] for aa in sequence]
         if len(token_ids) != int(feature_dict["mask"].shape[1]):
             raise ValueError(
                 f"Sequence length {len(token_ids)} does not match structure ({int(feature_dict['mask'].shape[1])} residues)."
             )
-        # Swap in the query sequence and run the chosen upstream scoring pass
         feature_dict["S"] = torch.tensor([token_ids], device=device, dtype=torch.int32)
         with torch.inference_mode():
             if scoring_mode == "single_aa":
@@ -836,31 +787,24 @@ class LegacyCompatibleLigandMPNNModel:
             else:
                 raise ValueError(f"ligandmpnn: scoring_mode must be one of {sorted(SCORING_CAUSALITY)}")
 
-        # Average probabilities over the batch, then pick each residue's query-token probability
         probs_2d = torch.mean(torch.exp(score_dict["log_probs"]), 0)
         seq_tensor = feature_dict["S"].squeeze()
         selected = probs_2d[torch.arange(len(token_ids), device=device), seq_tensor].detach().cpu().numpy()
-        # Keep only the designable residues
         chain_mask = protein_dict["chain_mask"].detach().cpu().numpy().astype(bool)
         selected_masked = selected[chain_mask]
         if selected_masked.size == 0:
             raise ValueError("ligandmpnn score found no residues available to score")
-        # Average log-probabilities, clamped to avoid log(0)
         avg_log_likelihood = float(np.mean(np.log(np.maximum(selected_masked, 1e-12))))
         logits = None
-        # Convert the probabilities to log-probabilities in canonical amino acid order
         if return_logits:
-            native_vocab = [data_utils.restype_int_to_str[idx] for idx in range(len(data_utils.restype_int_to_str))]
-            canonical_columns = gather_indices(AMINO_ACIDS_LIST, native_vocab, label="ligandmpnn")
-            probabilities = probs_2d.detach().cpu().numpy()[:, canonical_columns]
-            logits = np.log(np.maximum(probabilities, 1e-12)).tolist()
+            logits = np.log(np.maximum(probs_2d.detach().cpu().numpy(), 1e-12)).tolist()
         return {
             "logits": logits,
             "metrics": {
                 **log_likelihood_metrics(avg_log_likelihood, int(selected_masked.size)),
                 "mean_current_probability": float(np.mean(selected_masked)),
             },
-            "vocab": AMINO_ACIDS_LIST,
+            "vocab": [data_utils.restype_int_to_str[idx] for idx in range(len(data_utils.restype_int_to_str))],
         }
 
     def _args(
@@ -977,57 +921,62 @@ class LegacyCompatibleLigandMPNNModel:
             torch.cuda.empty_cache()
 
 
-def _legacy_package_key() -> str:
-    """Cache directory name for the original code: the source commit plus a digest of its patches.
+def _download_file(url: str, dest: Path) -> None:
+    """Download ``url`` to ``dest`` via curl-with-retry, staging through a temp file."""
+    import subprocess
 
-    Changing ``_LEGACY_SOURCE_PATCHES`` changes the key, so a copy provisioned with other patches is
-    never reused and an existing cache is never rewritten.
-    """
-    patches_digest = hashlib.sha256(repr(_LEGACY_SOURCE_PATCHES).encode()).hexdigest()[:8]
-    return f"{_LEGACY_SOURCE_COMMIT[:12]}-{patches_digest}"
+    from standalone_helpers import get_subprocess_device_env
 
-
-def _patch_legacy_source(source_dir: Path) -> None:
-    """Apply ``_LEGACY_SOURCE_PATCHES`` to freshly extracted original code.
-
-    Raises:
-        RuntimeError: If a patch's buggy text is missing, i.e. the pinned source is not what the patch expects.
-    """
-    for filename, buggy, fixed in _LEGACY_SOURCE_PATCHES:
-        path = source_dir / filename
-        text = path.read_text()
-        if buggy not in text:
-            raise RuntimeError(f"ligandmpnn: cannot patch {path}; {buggy!r} is not in the pinned source")
-        path.write_text(text.replace(buggy, fixed))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    logger.info("ligandmpnn: downloading %s", url)
+    curl_cmd = [
+        "curl",
+        "--no-progress-meter",
+        "--show-error",
+        "--location",
+        "--fail",
+        "--retry",
+        "5",
+        "--retry-delay",
+        "10",
+        "--retry-all-errors",
+        "--max-time",
+        "1800",
+        "--output",
+        str(tmp),
+        url,
+    ]
+    subprocess.run(curl_cmd, check=True, env=get_subprocess_device_env("cpu"))
+    tmp.replace(dest)
 
 
 def _ensure_legacy_assets() -> Path:
-    """Provision the original LigandMPNN code + side-chain packer on first use; return the package path.
+    """Provision the original LigandMPNN code + weights on first use; return the package path.
 
     Fetches nothing unless the ``original`` model is actually requested. Code and
-    weights are cached under ``resolve_weights_dir("ligandmpnn")/legacy/<key>/``
-    and reused on subsequent calls. The code is patched with ``_LEGACY_SOURCE_PATCHES`` before it
-    is copied into the cache, and the key (``_legacy_package_key``) covers the source commit and the
-    patches, so changing either provisions a fresh copy instead of reusing a stale one. A user's own
-    checkout found next to their checkpoint is used as is.
+    weights are cached under ``resolve_weights_dir("ligandmpnn")/legacy/<commit>/``
+    and reused on subsequent calls. Keying on the source commit means bumping
+    ``_LEGACY_SOURCE_COMMIT`` provisions a fresh checkout instead of reusing a stale one.
     """
     import subprocess
 
-    from standalone_helpers import download_weights, get_subprocess_device_env, require_weights_dir
+    from standalone_helpers import get_subprocess_device_env, resolve_weights_dir
 
-    weights_dir = require_weights_dir("ligandmpnn")
-    package_path = Path(weights_dir) / "legacy" / _legacy_package_key() / _LEGACY_PACKAGE_DIRNAME
+    weights_dir = resolve_weights_dir("ligandmpnn")
+    if weights_dir is None:
+        raise RuntimeError("ligandmpnn: cannot resolve a weights directory for the original LigandMPNN assets")
+    package_path = Path(weights_dir) / "legacy" / _LEGACY_SOURCE_COMMIT[:12] / _LEGACY_PACKAGE_DIRNAME
 
     # 1. Code: fetch the original ligandmpnn package if the modules are missing.
     if not _is_legacy_package_path(package_path):
         package_path.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="ligandmpnn_code_") as tmpdir:
             tarball = Path(tmpdir) / "source.tar.gz"
-            download_weights(_LEGACY_CODE_TARBALL_URL, tarball, sha256=_LEGACY_CODE_TARBALL_SHA256)
+            _download_file(_LEGACY_CODE_TARBALL_URL, tarball)
             tar_cmd = ["tar", "-zxf", str(tarball), "-C", tmpdir, _LEGACY_CODE_SUBDIR]
             subprocess.run(tar_cmd, check=True, env=get_subprocess_device_env("cpu"))
             extracted = Path(tmpdir) / _LEGACY_CODE_SUBDIR
-            _patch_legacy_source(extracted)
             for item in extracted.iterdir():
                 target = package_path / item.name
                 if item.is_dir():
@@ -1037,33 +986,13 @@ def _ensure_legacy_assets() -> Path:
         if not _is_legacy_package_path(package_path):
             raise RuntimeError(f"ligandmpnn: provisioned package at {package_path} is missing required modules")
 
-    # 2. Packer: fetch it into model_params if missing.
+    # 2. Weights: fetch each checkpoint into model_params if missing.
     model_params = package_path / "model_params"
-    for filename, url, sha256 in _LEGACY_WEIGHT_URLS:
+    for filename, url in _LEGACY_WEIGHT_URLS:
         dest = model_params / filename
-        download_weights(url, dest, sha256=sha256)
+        if not dest.is_file():
+            _download_file(url, dest)
     return package_path
-
-
-def _resolve_checkpoint(model_checkpoint: str) -> str:
-    """The checkpoint file a ``model_checkpoint`` names: bundled weights, or the user's own file."""
-    from standalone_helpers import require_weights_dir
-
-    if model_checkpoint in _BUNDLED_CHECKPOINTS:
-        path = Path(require_weights_dir("ligandmpnn")) / _BUNDLED_CHECKPOINTS[model_checkpoint]
-        if not path.is_file():
-            raise FileNotFoundError(
-                f"ligandmpnn: bundled weights {model_checkpoint!r} are missing at {path}; re-run setup.sh to fetch them"
-            )
-        return str(path)
-    path = Path(model_checkpoint).expanduser()
-    if not path.is_file():
-        known = ", ".join(sorted(_BUNDLED_CHECKPOINTS))
-        raise FileNotFoundError(
-            f"ligandmpnn: no checkpoint file at {model_checkpoint!r}; use bundled weights ({known}) "
-            "or pass a path to an existing .pt checkpoint"
-        )
-    return str(path)
 
 
 # ============================================================================
@@ -1076,15 +1005,14 @@ _model_key: tuple[Any, ...] | None = None
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model, _model_key
-    model_checkpoint = input_dict["model_checkpoint"]
-    checkpoint_path = _resolve_checkpoint(model_checkpoint)
-    use_original = input_dict["implementation"] == "original"
+    checkpoint_path = input_dict.get("checkpoint_path")
+    use_legacy = input_dict.get("model_type") == "original"
     use_side_chain_context = bool(input_dict.get("ligand_mpnn_use_side_chain_context", False))
-    if use_original:
-        # Use an original LigandMPNN checkout the user's own checkpoint sits in, if any; otherwise
-        # auto-provision the original code + packer on first use. Applies to both sample (which
-        # packs) and score (which runs the original implementation).
-        package_path = None if model_checkpoint in _BUNDLED_CHECKPOINTS else _legacy_package_path(checkpoint_path)
+    if use_legacy:
+        # Use a checkout colocated with an explicit checkpoint_path if given; otherwise
+        # auto-provision the original code + weights on first use. Applies to both sample
+        # (which packs) and score (which runs the original implementation).
+        package_path = _legacy_package_path(checkpoint_path)
         if package_path is None:
             package_path = _ensure_legacy_assets()
     else:
@@ -1109,7 +1037,9 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
                 use_side_chain_context=use_side_chain_context,
             )
         else:
-            _model = LigandMPNNModel(checkpoint_path=checkpoint_path)
+            _model = LigandMPNNModel(
+                checkpoint_path=checkpoint_path,
+            )
         _model_key = model_key
 
     pdb_path = input_dict["pdb_path"]
@@ -1126,6 +1056,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "seed": input_dict["seed"],
             "device": input_dict["device"],
             "verbose": input_dict["verbose"],
+            "model_type": input_dict["model_type"],
             "ligand_mpnn_use_atom_context": input_dict["ligand_mpnn_use_atom_context"],
             "ligand_mpnn_use_side_chain_context": input_dict["ligand_mpnn_use_side_chain_context"],
             "ligand_mpnn_cutoff_for_score": input_dict["ligand_mpnn_cutoff_for_score"],
@@ -1142,6 +1073,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             seed=input_dict["seed"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],
+            model_type=input_dict["model_type"],
             return_logits=input_dict["return_logits"],
             scoring_mode=input_dict["scoring_mode"],
             ligand_mpnn_use_atom_context=input_dict.get("ligand_mpnn_use_atom_context", True),

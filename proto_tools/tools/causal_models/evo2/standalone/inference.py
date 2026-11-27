@@ -1,44 +1,17 @@
 """Evo 2 inference through evo2_flash and vLLM."""
 
 import json
-import logging
 import os
 import secrets
-import shutil
 import sys
 import uuid
-from pathlib import Path
 from typing import Any
 
 import torch
-from standalone_helpers import (
-    get_logger,
-    log_likelihood_metrics,
-    retry_on_checkpoint_corruption,
-    serialize_output,
-)
+from standalone_helpers import get_logger, log_likelihood_metrics, serialize_output
 
 logger = get_logger(__name__)
 EVO2_VOCAB = [chr(j) for j in range(512)]
-
-
-def _drop_incomplete_conversions(cache: Path) -> None:
-    """Remove converted checkpoints under ``cache`` that lost files, so evo2_flash converts them again.
-
-    evo2_flash reuses a converted directory whenever its ``config.json`` is there, so one whose
-    ``model.safetensors`` (or the FP8 metadata its config names) a scratch purge deleted would fail
-    to load. evo2_flash writes ``config.json`` last into a staging directory, so a conversion in
-    progress is never mistaken for an incomplete one.
-    """
-    for config in cache.glob("*/config.json"):
-        try:
-            fp8 = json.loads(config.read_text()).get("hyena_in_proj_fp8") or {}
-        except (OSError, ValueError):
-            fp8 = {"metadata_file": "<unreadable config.json>"}
-        needed = ["model.safetensors", *([fp8["metadata_file"]] if fp8.get("metadata_file") else [])]
-        if not all((config.parent / rel).is_file() for rel in needed):
-            logger.warning("evo2: converted checkpoint %s is incomplete; converting it again", config.parent)
-            shutil.rmtree(config.parent, ignore_errors=True)
 
 
 class Evo2Model:
@@ -53,7 +26,7 @@ class Evo2Model:
         self.device: str | None = None
         self._loaded = False
 
-    def load(self, device: str) -> None:
+    def load(self, device: str, verbose: bool = False) -> None:
         """Load the engine on one GPU; keep checkpoint conversion in the model cache."""
         if device == "cpu":
             raise ValueError("Evo 2 Flash inference requires an NVIDIA GPU")
@@ -62,34 +35,20 @@ class Evo2Model:
         os.environ["CUDA_VISIBLE_DEVICES"] = get_subprocess_device_env(device)["CUDA_VISIBLE_DEVICES"]
         os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
         from evo2_flash import Evo2
-        from evo2_flash.api import default_cache_dir
 
-        _drop_incomplete_conversions(Path(default_cache_dir()))
-        logger.update_status("Loading Evo 2 weights")
-
-        def construct() -> None:
-            self.model = Evo2(self.model_checkpoint, local_path=self.local_path)
-
-        if self.local_path is None:
-            from huggingface_hub import constants
-
-            # evo2_flash converts from a merged vortex .pt beside the hub cache when one exists.
-            merged = Path(constants.HF_HUB_CACHE).parent / f"{self.model_checkpoint}.pt"
-            retry_on_checkpoint_corruption(
-                construct, tool_name="evo2", max_attempts=2, recover=lambda: merged.unlink(missing_ok=True)
-            )
-        else:
-            construct()
+        if verbose:
+            logger.info("Loading Evo 2 Flash: %s on %s", self.model_checkpoint, device)
+        self.model = Evo2(self.model_checkpoint, local_path=self.local_path)
         self.tokenizer = self.model.tokenizer
         self.device = device
         self._loaded = True
 
-    def _ready(self, device: str) -> None:
+    def _ready(self, device: str, verbose: bool) -> None:
         """Load the engine before inference on its assigned GPU."""
         if device == "cpu":
             raise ValueError("Evo 2 Flash inference requires an NVIDIA GPU")
         if not self._loaded:
-            self.load(device)
+            self.load(device, verbose)
         elif self.device != device:
             raise ValueError("Evo 2 Flash engines are GPU-bound; use a new worker to change devices")
 
@@ -115,18 +74,16 @@ class Evo2Model:
     ) -> dict[str, Any]:
         """Generate continuations in one continuously batched vLLM submission.
 
-        ``batch_size`` and ``force_prompt_threshold`` are retained for compatibility.
-        vLLM handles variable-length requests and chunked prefill automatically.
-        Cache handles retain exact token prefixes, while vLLM manages their GPU state
-        and may evict it.
+        Legacy batch_size and force_prompt_threshold are compatibility arguments;
+        vLLM schedules ragged requests and chunked prefill automatically. Cache
+        handles retain exact token prefixes; vLLM owns and may evict their GPU state.
         """
-        self._ready(device)
+        self._ready(device, verbose)
         from vllm import SamplingParams
         from vllm.inputs import TokensPrompt
 
         if not prompts:
             raise ValueError("evo2: cannot generate from an empty prompt list")
-        # Reuse cached token prefixes when supplied, then check the total context length.
         ids = []
         for prompt in prompts:
             if old_kv_cache is None:
@@ -163,9 +120,6 @@ class Evo2Model:
             for i in range(len(ids))
         ]
         requests = [TokensPrompt(prompt_token_ids=tokens) for tokens in ids]
-        logger.update_status(
-            f"Sampling {len(requests)} sequence{'s' if len(requests) != 1 else ''}", level=logging.DEBUG
-        )
         outs = self.model.llm.generate(requests, params, use_tqdm=bool(verbose))
         if len(outs) != len(prompts):
             raise RuntimeError("evo2: vLLM returned an unexpected number of generations")
@@ -180,8 +134,8 @@ class Evo2Model:
             if return_kv_cache:
                 caches.append({"tokens": prefix_ids + tokens, "text": prompt + text})
             if return_logits:
-                # Recompute optional full-vocabulary logits for this request alone,
-                # without padding it to match neighboring requests.
+                # Full-vocabulary logits are deliberately opt-in: reconstruct
+                # them by prefill only for this request, without padding neighbors.
                 if tokens:
                     tensor = torch.tensor([prefix_ids + tokens[:-1]], dtype=torch.long, device="cuda:0")
                     logits, _ = self.model(tensor)
@@ -198,18 +152,16 @@ class Evo2Model:
         self,
         sequences: list[str],
         device: str = "cuda",
+        verbose: bool = False,
         batch_size: int = 1,  # noqa: ARG002 — vLLM manages batching and prefix state
         return_logits: bool = False,
         prepend_bos: bool = False,
         seed: int | None = None,  # noqa: ARG002 — deterministic scoring keeps the shared call signature
     ) -> dict[str, Any]:
         """Score unpadded sequences with prompt logprobs; capture logits only on request."""
-        self._ready(device)
+        self._ready(device, verbose)
         if not sequences or any(not seq for seq in sequences):
             raise ValueError("evo2: cannot score empty sequences")
-        logger.update_status(
-            f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
-        )
         means = self.model.score_sequences(sequences, prepend_bos=prepend_bos)
         counts = [len(self.tokenizer.tokenize(s)) + int(prepend_bos) - 1 for s in sequences]
         metrics = [log_likelihood_metrics(float(mean), count) for mean, count in zip(means, counts, strict=True)]
@@ -281,19 +233,15 @@ _model: Evo2Model | None = None
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Execute a tool operation in the managed standalone worker."""
     global _model
-    # Reject KV-cache handles in a one-shot script run, since they live in worker memory
     _ensure_cache_handles_use_persistent_worker(input_dict)
     operation = input_dict["operation"]
-    # Drop released KV caches from the worker-local store
     if operation == "release_kv_caches":
         _release_cache_handles(input_dict.get("kv_caches"))
         return {"released": True}
     if operation not in ("sample", "score"):
         raise ValueError(f"evo2: unknown operation {operation!r}")
-    # Load the model once and reuse it across calls
     if _model is None:
         _model = Evo2Model(input_dict["model_checkpoint"], input_dict.get("local_path"))
-    # Forward only the sampling arguments the caller supplied
     if operation == "sample":
         keys: tuple[str, ...] = (
             "prompts",
@@ -314,16 +262,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "seed",
         )
         kwargs = {k: input_dict[k] for k in keys if k in input_dict}
-        # Swap a KV-cache handle for the cached state it points to
         handle = input_dict.get("old_kv_cache")
         kwargs["old_kv_cache"] = _resolve_cache_handle(handle) if handle is not None else None
         result = _model.sample(**kwargs)
-        # Keep returned KV caches in the worker and hand back handles instead
         if result["kv_caches"] is not None:
             result["kv_caches"] = [_store_cache_handle(c) for c in result["kv_caches"]]
         return result
-    # Otherwise score the sequences
-    keys = ("sequences", "device", "batch_size", "return_logits", "prepend_bos", "seed")
+    keys = ("sequences", "device", "verbose", "batch_size", "return_logits", "prepend_bos", "seed")
     return _model.score(**{k: input_dict[k] for k in keys if k in input_dict})
 
 

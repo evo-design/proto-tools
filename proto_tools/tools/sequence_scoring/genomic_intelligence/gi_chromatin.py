@@ -25,10 +25,7 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     validate_gi_sequence,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField, get_logger
-from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
-
-logger = get_logger(__name__)
+from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField
 
 CHROMATIN_MIN_BP = 200
 """Published ``minLength`` for the chromatin endpoint, in base pairs."""
@@ -256,7 +253,7 @@ def run_gi_chromatin(
     """
     del instance
     results: list[GIChromatinResult] = []
-    for item in StatusCounter(logger, "Predicting chromatin state for sequence %d/%d", inputs.sequences):
+    for item in inputs.sequences:
         sequence = validate_gi_sequence(item.sequence, min_bp=CHROMATIN_MIN_BP, task="chromatin")
         data, payload = call_predict(
             config,

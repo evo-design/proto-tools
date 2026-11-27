@@ -1,7 +1,7 @@
 """proto_tools/tools/database_retrieval/ensembl/shared_data_models.py.
 
-Shared Pydantic models and HTTP helpers for Ensembl lookup, sequence, overlap,
-cross-reference, and variant-effect tools.
+Pydantic submodels + HTTP helpers shared by the ensembl-* tools (lookup,
+sequence, overlap, xrefs, vep).
 """
 
 from typing import Any, Literal
@@ -187,8 +187,9 @@ def build_session(tool_key: str) -> requests.Session:
         tool_key (str): Tool registry key, used in the User-Agent string.
 
     Returns:
-        requests.Session: Session with retry adapter. Ensembl's 429s wait out
-            the server's ``Retry-After``, up to the tool's timeout.
+        requests.Session: Session with retry adapter; urllib3's ``Retry()``
+            honors ``Retry-After`` by default so Ensembl's 429s sleep for
+            the server-directed interval.
     """
     return build_http_session(
         http_retries=_HTTP_RETRIES,
@@ -251,20 +252,6 @@ class EnsemblTranslation(BaseModel):
     Parent: str = Field(title="Parent", description="Parent transcript ID (ENST...)")
 
 
-class EnsemblMane(BaseModel):
-    """MANE annotation on an Ensembl transcript.
-
-    Attributes:
-        type (str): MANE category (``MANE_Select`` or ``MANE_Plus_Clinical``).
-        refseq_match (str): Matching RefSeq transcript (NM_...).
-    """
-
-    model_config = ConfigDict(extra="ignore")
-
-    type: str = Field(title="MANE Type", description="MANE category (MANE_Select or MANE_Plus_Clinical)")
-    refseq_match: str = Field(title="RefSeq Match", description="Matching RefSeq transcript (NM_...)")
-
-
 class EnsemblTranscript(BaseModel):
     """Transcript record returned by Ensembl REST (with optional Exon / Translation expansion).
 
@@ -281,8 +268,6 @@ class EnsemblTranscript(BaseModel):
         Exon (list[EnsemblExon]): Exons (PascalCase preserved from API).
         Translation (EnsemblTranslation | None): Translation block (PascalCase
             preserved from API); None for non-coding biotypes.
-        MANE (list[EnsemblMane]): MANE annotations (PascalCase preserved from
-            API); empty unless ``mane=True``.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -305,9 +290,6 @@ class EnsemblTranscript(BaseModel):
     )
     Translation: EnsemblTranslation | None = Field(
         default=None, title="Translation", description="Protein translation; None for non-coding biotypes"
-    )
-    MANE: list[EnsemblMane] = Field(
-        default_factory=list, title="MANE", description="MANE annotations (empty unless mane=True)"
     )
 
 
@@ -411,8 +393,9 @@ class EnsemblOverlapFeatureRecord(BaseModel):
     """One feature returned by /overlap/id.
 
     Different ``feature`` query values (gene, regulatory, variation, ...)
-    return different payload shapes. The typed fields below cover shared fields,
-    while ``raw`` preserves the complete record for access to feature-specific data.
+    return divergent payload shapes; the typed fields below are the
+    intersection across feature types, with ``raw`` carrying the full
+    upstream record for type-specific access.
 
     Attributes:
         feature_type (str): Feature type ('gene', 'transcript', 'exon',

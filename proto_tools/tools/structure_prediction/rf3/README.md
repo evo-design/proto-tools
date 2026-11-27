@@ -23,7 +23,7 @@ The reference implementation is open-sourced as part of the [RosettaCommons/foun
 
 ### RoseTTAFold3 Prediction (`rf3-prediction`)
 
-Predicts the 3D structure of a biomolecular complex. Each input complex can combine protein, DNA, RNA, and ligand chains. The assembly is folded by RF3 and returned as a predicted `Structure` per complex with confidence metrics, including average pLDDT, pTM, interface pTM for multi-chain inputs, per-chain pLDDT (under upstream's `chain_ptm` key), an overall and chain-pair PAE and PDE in angstroms, a composite ranking score, and a steric-clash flag.
+Predicts the 3D structure of a biomolecular complex. Each input complex can combine protein, DNA, RNA, and ligand chains. The assembly is folded by RF3 and returned as a predicted `Structure` per complex with confidence metrics, including average pLDDT, pTM, interface pTM for multi-chain inputs, per-chain pTM, an overall and chain-pair PAE and PDE in angstroms, a composite ranking score, and a steric-clash flag.
 
 #### Applications
 
@@ -35,7 +35,7 @@ This tool predicts the structure of multi-component assemblies such as protein-D
 - **Diffusion samples are ranked by `ranking_score`.** `diffusion_batch_size` (default `5`) independent samples are drawn per complex. The best by `ranking_score = 0.8*iptm + 0.2*ptm - 100*has_clash` is returned, with `num_steps` (default `50`) controlling the denoising step count.
 - **`n_recycles` (default `10`) trades accuracy for time.** More recycling iterations refine the prediction at higher runtime. Leave the upstream default of `10` unless you have a specific reason to lower it.
 - **Cyclic chains.** Mark chains as cyclic (head-to-tail) with `cyclic_chains=["A", ...]`.
-- **No template or conformer conditioning.** RF3 can condition on input coordinates (templates, holo ligand conformers), but this wrapper accepts only sequences, SMILES, and CCD codes (no coordinate input), so those upstream options are not exposed.
+- **No template or conformer conditioning.** RF3 can condition on input coordinates (templates, holo ligand conformers), but this wrapper accepts only sequences, SMILES, and CCD codes — no coordinate input — so those upstream options are not exposed.
 - **No per-token PAE matrix.** Unlike Boltz-2 and AlphaFold3, RF3 emits only chain-pair PAE aggregates (`avg_pae`, `chain_pair_pae`, `chain_pair_pae_min`) and a separate `pde` (predicted distance error). The inherited `include_pae_matrix` toggle is rejected by `RF3Config`.
 - **Multi-modal inputs.** Protein, DNA, RNA, and ligand entities are supported.
 

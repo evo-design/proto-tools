@@ -27,10 +27,11 @@ _BOLTZ2_CACHE_DIR = Path("/weights/boltz2")
 
 
 def _warmup() -> None:
-    """Warm the default config at deploy time.
+    """Deploy-time: warm the default config.
 
-    Clear the Boltz2 weights directory on failure so a partial Hugging Face
-    download on the volume does not cause subsequent builds to fail.
+    Clears the boltz2 weights dir on failure — a partial HuggingFace
+    download persisted on the volume would otherwise poison every
+    subsequent build.
     """
     import shutil
 

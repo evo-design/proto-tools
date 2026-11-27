@@ -11,6 +11,7 @@ from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     CODON_SIZE,
     CodonFMCheckpoint,
     MaskableCodonSequenceInput,
+    resolve_checkpoint_source,
 )
 from proto_tools.tools.mutagenesis.codons import codons_encoding
 from proto_tools.tools.tool_registry import tool
@@ -191,6 +192,8 @@ def run_codonfm_sample(
     Returns:
         CodonFMSampleOutput: One resampled coding sequence per input.
     """
+    safetensors_url, config_url, filename, subdir = resolve_checkpoint_source(config.model_checkpoint)
+
     output_data = ToolInstance.dispatch(
         "codonfm",
         {
@@ -198,7 +201,10 @@ def run_codonfm_sample(
             # Already masked: preprocess() ran the strategy, or the caller marked codons itself.
             "sequences": inputs.sequences,
             "temperature": config.temperature,
-            "model_checkpoint": config.model_checkpoint,
+            "safetensors_url": safetensors_url,
+            "config_url": config_url,
+            "safetensors_filename": filename,
+            "cache_subdir": subdir,
             "batch_size": config.batch_size,
             "device": config.device,
             "verbose": config.verbose,

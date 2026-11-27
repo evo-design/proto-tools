@@ -1,4 +1,4 @@
-"""Represent macromolecular structures and provide access to their sequences and coordinates."""
+"""Macromolecular structure representation as a Pydantic BaseModel."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from enum import Enum
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
@@ -19,30 +19,30 @@ if TYPE_CHECKING:
     import gemmi
     from biotite.structure import AtomArray
 
-    from proto_tools.entities.complex import Chain
-
-from proto_tools.entities.ligands.ccd_utils import get_canonical_component, is_valid_ccd_code
-from proto_tools.entities.structures.msa_conditioning import MSAConditioning
 from proto_tools.entities.structures.utils import (
-    _parses_with_atoms,
     _serialize_gemmi,
     convert_cif_str_to_pdb_str,
+    convert_pdb_str_to_cif_str,
     detect_structure_format,
+    is_valid_structure,
     load_structure_file,
+    looks_like_structure_path,
     looks_like_url,
     pdb_file_to_atomarray,
 )
-from proto_tools.utils.file_inputs import STRUCTURE_FILES
 from proto_tools.utils.tool_io import Metrics, MetricValue
 
 
 def _reject_private_address(url: str) -> None:
     """Refuse a URL naming an address that is not routable on the public internet.
 
-    Servers may fetch structure URLs on behalf of callers. Restrict destinations
-    to public addresses so a URL cannot request internal services or cloud
-    instance credentials at ``169.254.169.254``. Resolve the hostname before
-    checking it so a public hostname pointing to a private address is rejected too.
+    A structure field accepts a URL, and whoever supplies it does not necessarily own the machine
+    that fetches it -- a server accepting structures fetches on behalf of its callers. Left
+    unchecked that turns the field into a request-forgery primitive: ``169.254.169.254`` for cloud
+    instance credentials, or a private address for a service reachable only from inside.
+
+    Resolved rather than pattern-matched, so a public hostname pointing at a private address is
+    refused too.
 
     Raises:
         ValueError: If the host is unresolvable or resolves to a non-public address.
@@ -254,21 +254,6 @@ def _detect_plddt_from_metadata(content: Any, fmt: Any) -> BFactorType | None:
     return None
 
 
-class ResidueAtoms(NamedTuple):
-    """One polymer residue's identity and atom content, as a structure reader sees it.
-
-    Attributes:
-        name (str): Residue name, e.g. ``"ALA"``, ``"MSE"``, ``"CRO"``.
-        is_hetatm (bool): Whether the residue is written as ``HETATM`` rather than ``ATOM``.
-            A modified residue is part of the polymer yet still carries this flag.
-        atom_names (tuple[str, ...]): Atom names present on the residue, in file order.
-    """
-
-    name: str
-    is_hetatm: bool
-    atom_names: tuple[str, ...]
-
-
 class Structure(BaseModel):
     """Standardized representation of a macromolecular structure (protein, nucleic acid, etc.).
 
@@ -282,7 +267,7 @@ class Structure(BaseModel):
     ``SequenceStructurePair.structure``, ``MutationInput.structure``) takes a raw
     PDB/CIF string or file path directly — no ``{"structure": ...}`` envelope required.
 
-    Load the parsed gemmi structure on first access and store it in ``PrivateAttr``.
+    Heavy objects (gemmi parsed structure) are lazy-loaded via ``PrivateAttr``.
 
     Attributes:
         structure (str): Raw structure content in PDB or CIF format.
@@ -291,8 +276,6 @@ class Structure(BaseModel):
         source (str | None): Optional source identifier (filepath or tool name).
         metrics (Metrics): Associated metrics (e.g., pLDDT, pTM scores,
             per-chain lists, pairwise matrices). None values are stripped at construction.
-        msa_conditioning (MSAConditioning | None): The MSA rows the predictor sent its backend per
-            protein chain; None means unreported, not single-sequence prediction.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -318,13 +301,6 @@ class Structure(BaseModel):
     )
 
     _gemmi_struct: Any = PrivateAttr(default=None)
-    # Whether parsing had to correct an mmCIF file's own entity typing (see _mark_lone_hetatm_residues_nonpolymer).
-    _typing_corrected: bool = PrivateAttr(default=False)
-    msa_conditioning: MSAConditioning | None = Field(
-        default=None,
-        title="MSA Conditioning",
-        description="Per-chain MSA rows the predictor sent its backend; None means unreported.",
-    )
 
     @model_validator(mode="before")
     @classmethod
@@ -359,8 +335,6 @@ class Structure(BaseModel):
                 data["b_factor_type"] = inner.b_factor_type
             if data.get("metrics") is None:
                 data["metrics"] = inner.metrics
-            if data.get("msa_conditioning") is None:
-                data["msa_conditioning"] = inner.msa_conditioning
             structure_value = data["structure"]
 
         # If structure is an http(s) URL, fetch its content transparently (mirrors the path branch).
@@ -370,13 +344,12 @@ class Structure(BaseModel):
                 data["source"] = structure_value
             structure_value = data["structure"]
 
-        # A path to a structure file is read; any other string is structure content.
-        if isinstance(structure_value, (str, Path)):
-            file_text = STRUCTURE_FILES.read(structure_value)
-            if file_text is not None:
-                data["structure"] = file_text
-                if not data.get("source"):
-                    data["source"] = str(structure_value)
+        # If structure looks like a path to an existing file, load it transparently.
+        if structure_value is not None and looks_like_structure_path(structure_value):
+            path = Path(structure_value)
+            data["structure"] = load_structure_file(path)
+            if not data.get("source"):
+                data["source"] = str(path)
 
         # Auto-detect structure_format when not provided or explicitly None
         if "structure" in data and not data.get("structure_format"):
@@ -399,7 +372,7 @@ class Structure(BaseModel):
                 f"structure_format could not be determined (source={self.source!r}, content_len={len(self.structure)})"
             )
             raise ValueError(msg)
-        if not _parses_with_atoms(self.structure, self.structure_format):
+        if not is_valid_structure(structure_filepath_or_content=self.structure):
             msg = f"Structure content is invalid (source={self.source!r}, format={self.structure_format!r}, content_len={len(self.structure)})"
             raise ValueError(msg)
         return self
@@ -536,7 +509,7 @@ class Structure(BaseModel):
         Tools return metrics parallel to their input structures without
         mutating the inputs (so caching and reproducibility invariants hold).
         Use this helper to carry tool-emitted metrics back onto the original
-        ``Structure`` in place. Existing keys are overwritten.
+        ``Structure`` in place; existing keys are overwritten.
 
         Args:
             metrics (Metrics): The metrics container to merge into ``self.metrics``.
@@ -568,13 +541,6 @@ class Structure(BaseModel):
                     raise ValueError(f"No valid structure found in CIF content (source={self.source!r})")
             else:
                 self._gemmi_struct = gemmi.read_pdb_string(self.structure)
-            # Files often list a chain's ligands after every polymer chain; gemmi reads those as a
-            # second chain with the same ID unless the parts are merged.
-            self._gemmi_struct.merge_chain_parts()
-            corrected = _mark_lone_hetatm_residues_nonpolymer(self._gemmi_struct)
-            # Only mmCIF declares entities, so only an mmCIF file's own typing can be wrong.
-            self._typing_corrected = corrected and self.structure_format == "cif"
-            _name_unnamed_chains(self._gemmi_struct)
         return self._gemmi_struct  # type: ignore[no-any-return]
 
     @property
@@ -606,9 +572,9 @@ class Structure(BaseModel):
     def ca_coordinates_by_chain(self, model_index: int = 0) -> dict[str, list[tuple[float, float, float]]]:
         """CA ``(x, y, z)`` coordinates (angstroms) per chain, read via gemmi.
 
-        Handles both PDB and mmCIF content. Use this instead of a fixed-column
-        PDB parser when inputs may include mmCIF, such as RFdiffusion3 outputs.
-        Chains without a CA atom are omitted.
+        Handles both PDB and mmCIF content; prefer this over a hand-rolled
+        fixed-column PDB parser, which finds zero atoms in mmCIF output (e.g.
+        from RFdiffusion3). Chains without a CA atom are omitted.
 
         Args:
             model_index (int): Model to read; defaults to the first.
@@ -714,7 +680,6 @@ class Structure(BaseModel):
             b_factor_type=self.b_factor_type,
             source=self.source,
             metrics=self.metrics.model_copy(deep=True),
-            msa_conditioning=self.msa_conditioning.select_chains(keep) if self.msa_conditioning else None,
         )
 
     def with_renamed_chains(self, mapping: dict[str, str]) -> Structure:
@@ -771,71 +736,6 @@ class Structure(BaseModel):
             b_factor_type=self.b_factor_type,
             source=self.source,
             metrics=self.metrics.model_copy(deep=True),
-            msa_conditioning=self.msa_conditioning.with_renamed_chains(mapping) if self.msa_conditioning else None,
-        )
-
-    def with_chain_types(self, types: dict[str, str]) -> Structure:
-        """Return a new CIF Structure whose chains are typed as given, with matching entity records.
-
-        File metadata may misclassify chains. Predictors sometimes write ligands
-        as one-residue polymers or omit entity records entirely. When the
-        true type of each chain is known, as it is for a predicted complex, this sets it
-        directly, so :meth:`get_chain_types`, :attr:`num_chains`, and the written ``_entity``
-        records all agree with it. A structure whose own file already types its chains as given
-        is returned unchanged. Otherwise, return CIF because PDB cannot carry
-        entity types. Preserve ``b_factor_type``, ``source``, ``metrics``, and
-        ``msa_conditioning``.
-
-        Args:
-            types (dict[str, str]): Chain ID to ``"protein"``, ``"dna"``, ``"rna"``, or
-                ``"ligand"``. Chains not listed keep the type their file gives them.
-
-        Returns:
-            Structure: ``self`` if its file already has these chain types, else a new CIF Structure with them.
-
-        Raises:
-            ValueError: If a listed chain is missing, a type is not one of the four above, or a
-                chain typed as a polymer reads as a different polymer type (a chain sent as
-                protein that comes back as RNA).
-        """
-        import gemmi
-
-        allowed = {"protein", "dna", "rna", "ligand"}
-        unknown = {chain_id: kind for chain_id, kind in types.items() if kind not in allowed}
-        if unknown:
-            raise ValueError(f"Chain types must be one of {sorted(allowed)}, got {unknown}")
-        current = self.get_chain_types()
-        missing = set(types) - set(current)
-        if missing:
-            raise ValueError(f"Chains {sorted(missing)} not found. Available chains: {list(current)}")
-        if not self._typing_corrected and all(current[chain_id] == kind for chain_id, kind in types.items()):
-            return self
-        struct = self.gemmi_struct.clone()
-        # A ligand chain's residues are all ligand; a polymer chain keeps its own ligands and waters.
-        for model in struct:
-            for chain in model:
-                if types.get(chain.name) == "ligand":
-                    for residue in chain:
-                        if not residue.is_water():
-                            residue.entity_type = gemmi.EntityType.NonPolymer
-        struct.entities.clear()
-        struct.setup_entities()
-        for chain in struct[0]:
-            kind = types.get(chain.name)
-            if kind not in ("protein", "dna", "rna"):
-                continue
-            polymer = chain.get_polymer()
-            read_as = _polymer_entity_type(chain.name, polymer, strict=False) if polymer else "no polymer residues"
-            if read_as != kind:
-                raise ValueError(f"Chain {chain.name!r} was given as {kind} but reads as {read_as}")
-
-        return Structure(
-            structure=_serialize_gemmi(struct, "cif", source_format=self.structure_format),
-            structure_format="cif",
-            b_factor_type=self.b_factor_type,
-            source=self.source,
-            metrics=self.metrics.model_copy(deep=True),
-            msa_conditioning=self.msa_conditioning,
         )
 
     @classmethod
@@ -947,13 +847,9 @@ class Structure(BaseModel):
                 conversion cannot represent the structure even after chain shortening
                 (e.g., more chains than available single-character slots).
         """
-        # PDB input: no conversion, identity mapping. A file that leaves a chain unnamed is emitted
-        # from the parsed structure instead of verbatim, so the content carries the IDs this
-        # Structure reports and a caller's chain selections resolve in it.
+        # PDB input: no conversion, identity mapping.
         if self.structure_format == "pdb":
             identity = {cid: cid for cid in self.get_chain_ids()}
-            if _has_unnamed_chain(self.structure):
-                return self.gemmi_struct.make_pdb_string(), identity
             return self.structure, identity
 
         import gemmi
@@ -974,10 +870,6 @@ class Structure(BaseModel):
             if gemmi_struct is None:
                 raise ValueError(f"No valid structure found in CIF content (source={self.source!r})")
 
-            # Merge first: a chain whose ligands follow the other chains parses as two chains of one
-            # name, which shorten_chain_names would give two different letters and the map would keep
-            # only the last -- pointing the caller's chain at the wrong part.
-            gemmi_struct.merge_chain_parts()
             before = [chain.name for model in gemmi_struct for chain in model]
             gemmi_struct.shorten_chain_names()
             after = [chain.name for model in gemmi_struct for chain in model]
@@ -1000,11 +892,7 @@ class Structure(BaseModel):
     def structure_cif(self) -> str:
         """Get the structure content as a CIF string, converting from PDB if needed."""
         if self.structure_format == "pdb":
-            if not self.structure.strip():
-                return ""
-            struct = self.gemmi_struct.clone()
-            struct.setup_entities()
-            return _serialize_gemmi(struct, "cif", source_format="pdb")
+            return convert_pdb_str_to_cif_str(self.structure)
         return self.structure
 
     # ============================================================================
@@ -1022,7 +910,7 @@ class Structure(BaseModel):
     def write_pdb(self, filepath: Path | str) -> None:
         """Write the structure to a PDB file.
 
-        PDB format has limitations that may cause data loss.
+        WARNING: PDB format has limitations that may cause data loss.
 
         Args:
             filepath (Path | str): Path where to save the PDB file.
@@ -1062,63 +950,17 @@ class Structure(BaseModel):
     # Chain Related
     # ============================================================================
 
-    def get_chain(self, chain_id: str | None = None) -> Chain:
-        """Build the ``Chain`` for a polymer chain: its observed residues, type, and modifications.
-
-        The sequence holds one letter per observed polymer residue, with no gap markers;
-        use :meth:`get_chain_breaks` for where the chain is discontinuous. A modified
-        residue is written as its parent residue plus a ``ChainModification`` carrying its
-        CCD code, and a residue with no known parent as ``X`` plus its CCD code, so the
-        residue identity is kept. ``UNK`` and residue names outside the CCD become a bare
-        ``X``. ``entity_type`` comes from the polymer type gemmi assigns the chain.
-
-        Args:
-            chain_id (str | None): Chain ID to build (e.g., 'A'). If None, uses the first chain.
-
-        Returns:
-            Chain: The chain, with ``id`` set to the structure's chain identifier.
-
-        Raises:
-            ValueError: If chain_id is not found, the structure has no chains, the chain has
-                no polymer residues, or its polymer type is not protein, DNA, or RNA.
-
-        Examples:
-            >>> chain = protein.get_chain("A")
-            >>> chain.sequence, chain.entity_type, chain.modifications
-            ('MVLSEGEWQX', 'protein', [ChainModification(position=1, modification_code='MSE')])
-        """
-        from proto_tools.entities.complex import Chain, ChainModification
-
-        chain = self._get_chain(chain_id)
-        polymer = chain.get_polymer()
-        if not polymer:
-            raise ValueError(f"Chain '{chain.name}' has no polymer residues")
-        letters: list[str] = []
-        modifications: list[ChainModification] = []
-        for position, residue in enumerate(polymer, start=1):
-            letter, modification_code = _residue_letter(residue.name)
-            letters.append(letter)
-            if modification_code is not None:
-                modifications.append(ChainModification(position=position, modification_code=modification_code))
-        return Chain(
-            id=chain.name,
-            sequence="".join(letters),
-            entity_type=_polymer_entity_type(chain.name, polymer),
-            modifications=modifications,
-        )
-
     def get_chain_sequence(self, chain_id: str | None = None, remove_non_standard: bool = False) -> str:
         """Extract the polymer sequence of a specific chain from the structure.
 
         Args:
             chain_id (str | None): Chain ID to extract (e.g., 'A'). If None, returns the first chain.
-            remove_non_standard (bool): If True, removes unknown residues (X) from the
-                sequence. Default is False to preserve all residues.
+            remove_non_standard (bool): If True, removes non-standard residues (X) and gaps (-)
+                from the sequence. Default is False to preserve all residues.
 
         Returns:
-            str: One letter per observed polymer residue, as in :meth:`get_chain`. Modified
-                residues appear as their parent residue; waters and non-polymer ligands are
-                excluded.
+            str: One-letter amino acid sequence of the chain. Polymer residues only;
+                waters and non-polymer ligands are excluded.
 
         Raises:
             ValueError: If chain_id is not found, the structure has no chains, or the
@@ -1126,74 +968,47 @@ class Structure(BaseModel):
 
         Examples:
             >>> protein.get_chain_sequence("A")
-            'MVLSEGEWQX'
+            'MVLSE-GEWQX'
             >>> protein.get_chain_sequence("A", remove_non_standard=True)
             'MVLSEGEWQ'
-        """
-        seq = self.get_chain(chain_id).sequence
-        return seq.replace("X", "") if remove_non_standard else seq
-
-    def get_chain_sequences(self, remove_non_standard: bool = False) -> dict[str, str]:
-        """Extract the polymer sequences of all chains in the structure.
-
-        Args:
-            remove_non_standard (bool): If True, removes unknown residues (X) from the
-                sequences. Default is False to preserve all residues.
-
-        Returns:
-            dict[str, str]: Dictionary mapping chain ID to sequence, as in
-                :meth:`get_chain_sequence`. Polymer residues only; waters and non-polymer
-                ligands are excluded.
-
-        Examples:
-            >>> protein.get_chain_sequences()
-            {'A': 'MVLSEGEWQX', 'B': 'ACDEFGHIK'}
-            >>> protein.get_chain_sequences(remove_non_standard=True)
-            {'A': 'MVLSEGEWQ', 'B': 'ACDEFGHIK'}
-        """
-        return {
-            chain_id: self.get_chain_sequence(chain_id, remove_non_standard=remove_non_standard)
-            for chain_id in self.get_chain_ids()
-        }
-
-    def get_chain_breaks(self, chain_id: str | None = None) -> list[int]:
-        """Find where a polymer chain is discontinuous.
-
-        A break sits between two consecutive observed residues that are not bonded, such as
-        on either side of an unresolved loop. Positions index the sequence from
-        :meth:`get_chain_sequence`.
-
-        Args:
-            chain_id (str | None): Chain ID to inspect (e.g., 'A'). If None, uses the first chain.
-
-        Returns:
-            list[int]: 1-based sequence positions after which the chain breaks, in order.
-
-        Raises:
-            ValueError: If chain_id is not found, the structure has no chains, or the
-                chain has no polymer residues.
-
-        Examples:
-            >>> protein.get_chain_sequence("A")
-            'MVLSEGEWQX'
-            >>> protein.get_chain_breaks("A")
-            [5]
         """
         chain = self._get_chain(chain_id)
         polymer = chain.get_polymer()
         if not polymer:
             raise ValueError(f"Chain '{chain.name}' has no polymer residues")
-        # gemmi writes one character per residue and a '-' wherever consecutive residues are not bonded.
-        breaks: list[int] = []
-        residues_seen = 0
-        for char in polymer.make_one_letter_sequence():
-            if char == "-":
-                breaks.append(residues_seen)
-            else:
-                residues_seen += 1
-        if residues_seen != polymer.length():
-            raise ValueError(f"Chain '{chain.name}': gemmi's sequence does not have one character per residue")
-        return breaks
+        seq = polymer.make_one_letter_sequence()
+        if remove_non_standard:
+            seq = seq.replace("X", "").replace("-", "")
+        return seq
+
+    def get_chain_sequences(self, remove_non_standard: bool = False) -> dict[str, str]:
+        """Extract the polymer sequences of all chains in the structure.
+
+        Args:
+            remove_non_standard (bool): If True, removes non-standard residues (X) and gaps (-)
+                from the sequences. Default is False to preserve all residues.
+
+        Returns:
+            dict[str, str]: Dictionary mapping chain ID to sequence. Polymer residues only;
+                waters and non-polymer ligands are excluded.
+
+        Examples:
+            >>> protein.get_chain_sequences()
+            {'A': 'MVLSE-GEWQX', 'B': 'ACDEFGHIK'}
+            >>> protein.get_chain_sequences(remove_non_standard=True)
+            {'A': 'MVLSEGEWQ', 'B': 'ACDEFGHIK'}
+        """
+        self.gemmi_struct.setup_entities()
+        sequences = {}
+        for model in self.gemmi_struct:
+            for chain in model:
+                polymer = chain.get_polymer()
+                if polymer:
+                    seq = polymer.make_one_letter_sequence()
+                    if remove_non_standard:
+                        seq = seq.replace("X", "").replace("-", "")
+                    sequences[chain.name] = seq
+        return sequences
 
     def get_chain_ids(self) -> list[str]:
         """Extract the IDs of all polymer chains in the structure.
@@ -1204,35 +1019,33 @@ class Structure(BaseModel):
         Returns:
             list[str]: List of chain IDs that contain polymer residues.
         """
-        self.gemmi_struct.setup_entities()
-        return [chain.name for chain in self.gemmi_struct[0] if chain.get_polymer()]
+        return list(self.get_chain_sequences().keys())
 
     def get_chain_types(self) -> dict[str, str]:
-        """Classify each chain by what it holds.
-
-        Polymer chains are ``'protein'``, ``'dna'``, or ``'rna'``, from the polymer type
-        gemmi assigns them, or plain ``'polymer'`` for another type such as a DNA/RNA hybrid.
-        Chains without a polymer are ``'ligand'`` when they hold a non-polymer residue and
-        ``'water'`` otherwise.
+        """Classify each chain as either 'polymer' or 'ligand' based on entity type.
 
         Returns:
-            dict[str, str]: Dictionary mapping chain IDs to ``'protein'``, ``'dna'``,
-                ``'rna'``, ``'polymer'``, ``'ligand'``, or ``'water'``.
+            dict[str, str]: Dictionary mapping chain IDs to their type ('polymer' or 'ligand').
 
         Examples:
             >>> protein.get_chain_types()
-            {'A': 'protein', 'B': 'dna', 'C': 'ligand'}
+            {'A': 'polymer', 'B': 'polymer', 'C': 'ligand'}
         """
         self.gemmi_struct.setup_entities()
+
         chain_types = {}
-        for chain in self.gemmi_struct[0]:
-            polymer = chain.get_polymer()
-            if polymer:
-                chain_types[chain.name] = _polymer_entity_type(chain.name, polymer, strict=False)
-            elif chain.get_ligands():
-                chain_types[chain.name] = "ligand"
-            else:
-                chain_types[chain.name] = "water"
+        for model in self.gemmi_struct:
+            for chain in model:
+                polymer = chain.get_polymer()
+                ligands = chain.get_ligands()
+
+                if polymer.length() > 0:
+                    chain_types[chain.name] = "polymer"
+                elif ligands.length() > 0:
+                    chain_types[chain.name] = "ligand"
+                else:
+                    chain_types[chain.name] = "polymer"
+
         return chain_types
 
     def get_chain_ligands(self, chain_id: str | None = None) -> list[tuple[str, int]]:
@@ -1330,174 +1143,6 @@ class Structure(BaseModel):
         if chain_id not in residue_map:
             raise ValueError(f"Chain '{chain_id}' not found in structure. Available chains: {list(residue_map.keys())}")
         return [pos for _, pos in residue_map[chain_id]]
-
-    def get_chain_residue_ids(self, chain_id: str | None = None) -> dict[str, list[tuple[int, str]]]:
-        """Get each chain's polymer residue IDs as ``(number, insertion code)``, in chain order.
-
-        Unlike :meth:`get_chain_positions`, keeps the insertion code, so ``10`` and ``10A``
-        stay distinct residues rather than collapsing onto one number.
-
-        Args:
-            chain_id (str | None): Chain to read, or ``None`` for every polymer chain.
-
-        Returns:
-            dict[str, list[tuple[int, str]]]: Chain ID to residue IDs, first model only.
-
-        Raises:
-            ValueError: If ``chain_id`` is given but has no polymer residues.
-
-        Examples:
-            >>> antibody.get_chain_residue_ids("H")["H"][51:54]
-            [(52, ''), (52, 'A'), (53, '')]
-        """
-        self.gemmi_struct.setup_entities()
-        chains = [chain for chain in self.gemmi_struct[0] if chain.get_polymer() and chain_id in (None, chain.name)]
-        if chain_id is not None and not chains:
-            raise ValueError(f"Chain '{chain_id}' has no polymer residues")
-        return {
-            chain.name: [(residue.seqid.num, residue.seqid.icode.strip()) for residue in chain.get_polymer()]  # type: ignore[misc]
-            for chain in chains
-        }
-
-    def get_chain_residue_atoms(self, chain_id: str | None = None) -> dict[str, list[ResidueAtoms]]:
-        """Get each polymer residue's name, heteroatom flag, and atom names, in chain order.
-
-        Structure-reading models disagree about which residues they parse, and each keys on
-        some combination of these three things: ProteinMPNN rewrites a known modified residue
-        from ``HETATM`` to ``ATOM`` and then drops anything without a backbone ``N``, ESM-IF1
-        ignores the flag and goes by residue name alone, FAMPNN needs at least one recognized
-        atom name. This exposes the raw facts so each toolkit can answer for its own model.
-
-        Entries line up 1:1 with :meth:`get_chain_residue_ids`, so index ``i`` is 1-indexed
-        position ``i + 1``.
-
-        Args:
-            chain_id (str | None): Chain to read, or ``None`` for every polymer chain.
-
-        Returns:
-            dict[str, list[ResidueAtoms]]: Chain ID to its polymer residues, first model only.
-
-        Raises:
-            ValueError: If ``chain_id`` is given but has no polymer residues.
-
-        Examples:
-            >>> gfp.get_chain_residue_atoms("A")["A"][63]
-            ResidueAtoms(name='CRO', is_hetatm=True, atom_names=('N1', 'CA1', 'C1', ...))
-        """
-        self.gemmi_struct.setup_entities()
-        chains = [chain for chain in self.gemmi_struct[0] if chain.get_polymer() and chain_id in (None, chain.name)]
-        if chain_id is not None and not chains:
-            raise ValueError(f"Chain '{chain_id}' has no polymer residues")
-        return {
-            chain.name: [
-                ResidueAtoms(
-                    name=residue.name,
-                    is_hetatm=residue.het_flag == "H",
-                    atom_names=tuple(atom.name for atom in residue),
-                )
-                for residue in chain.get_polymer()
-            ]
-            for chain in chains
-        }
-
-    def renumbered_sequentially(self) -> tuple[str, dict[str, str]]:
-        """Return PDB content with each chain's residues numbered 1..N and insertion codes cleared.
-
-        A residue's number then equals its 1-indexed position, which is how selections in this
-        repository are written, so tools whose binaries address a residue by number alone cannot
-        collapse ``10`` and ``10A`` onto one residue. Non-polymer residues are numbered after the
-        polymer so none can share a number with a polymer residue.
-
-        Multi-character chain IDs, which PDB cannot hold, are shortened to single characters;
-        the returned map translates selections in and output chains back.
-
-        Returns:
-            tuple[str, dict[str, str]]: The renumbered structure as PDB content, and the map
-                from each original chain ID to its chain ID in that content.
-        """
-        import gemmi
-
-        pdb_content, chain_map = self.to_pdb_with_chain_mapping()
-        gemmi_struct = gemmi.read_pdb_string(pdb_content)
-        # A chain's ligands are often listed after every polymer chain, which parses as a second
-        # chain of the same ID; merged, they share one numbering so no ligand takes a polymer number.
-        gemmi_struct.merge_chain_parts()
-        gemmi_struct.setup_entities()
-        for model in gemmi_struct:
-            for chain in model:
-                polymer = chain.get_polymer()
-                polymer_subchain = polymer.subchain_id() if polymer else None
-                polymer_count = len(polymer)
-                polymer_index = other_index = 0
-                for residue in chain:
-                    if polymer_subchain is not None and residue.subchain == polymer_subchain:
-                        polymer_index += 1
-                        residue.seqid = gemmi.SeqId(polymer_index, " ")
-                    else:
-                        other_index += 1
-                        residue.seqid = gemmi.SeqId(polymer_count + other_index, " ")
-        return gemmi_struct.make_pdb_string(), chain_map
-
-    def with_residue_ids(
-        self,
-        residue_ids: dict[str, list[tuple[int, str]]],
-        chain_map: dict[str, str] | None = None,
-    ) -> Structure:
-        """Return a new Structure with the supplied chain IDs and residue numbering.
-
-        Each chain's ``i``-th polymer residue takes the ``i``-th ID given for it, insertion code
-        included, which puts a structure written in :meth:`renumbered_sequentially` numbering back
-        into its original numbering.
-
-        Args:
-            residue_ids (dict[str, list[tuple[int, str]]]): Residue IDs per chain, as
-                :meth:`get_chain_residue_ids` returns them.
-            chain_map (dict[str, str] | None): Original to current chain IDs, as
-                :meth:`renumbered_sequentially` returns them. ``None`` leaves IDs unchanged.
-
-        Only polymer residues are renumbered. Ligands and waters keep their numbers,
-        since ``residue_ids`` describes polymer chains alone.
-
-        Returns:
-            Structure: This structure's coordinates under the given IDs and numbering, in this
-                structure's format, except that restoring a chain ID too long for PDB forces CIF.
-
-        Raises:
-            ValueError: If a chain is absent from ``residue_ids`` or has a different number of
-                polymer residues, so its residues cannot be matched by position.
-        """
-        import gemmi
-
-        gemmi_struct = self.gemmi_struct.clone()
-        gemmi_struct.setup_entities()
-        original_chain_ids = {current: original for original, current in (chain_map or {}).items()}
-        for model in gemmi_struct:
-            for chain in model:
-                chain.name = original_chain_ids.get(chain.name, chain.name)
-                polymer = chain.get_polymer()
-                if not polymer:
-                    continue
-                original = residue_ids.get(chain.name)
-                if original is None or len(original) != len(polymer):
-                    raise ValueError(
-                        f"chain {chain.name} has {len(polymer)} residues but {len(original) if original else 'none'} "
-                        "residue IDs were given for it, so its residues cannot be matched by position"
-                    )
-                for residue, (number, icode) in zip(polymer, original, strict=True):
-                    residue.seqid = gemmi.SeqId(number, icode or " ")
-        # A chain ID that had to be shortened for PDB cannot be written back to PDB.
-        if self.structure_format == "pdb" and not any(len(original) > 1 for original in (chain_map or {})):
-            content, structure_format = gemmi_struct.make_pdb_string(), "pdb"
-        else:
-            content, structure_format = gemmi_struct.make_mmcif_document().as_string(), "cif"
-        return Structure(
-            structure=content,
-            structure_format=structure_format,  # type: ignore[arg-type]
-            b_factor_type=self.b_factor_type,
-            source=self.source,
-            metrics=self.metrics.model_copy(deep=True),
-            msa_conditioning=self.msa_conditioning.model_copy(deep=True) if self.msa_conditioning else None,
-        )
 
     @property
     def num_residues(self) -> int:
@@ -1940,7 +1585,6 @@ class Structure(BaseModel):
         import py3Dmol
         from IPython.display import HTML, display
 
-        # Default to chain coloring when the B-factors carry no defined meaning
         if color_by is None:
             color_by = "chain" if self.b_factor_type == BFactorType.UNSPECIFIED else "bfactor"
 
@@ -1948,7 +1592,6 @@ class Structure(BaseModel):
         if color_by not in valid_color_modes:
             raise ValueError(f"Invalid color_by value: '{color_by}'. Must be one of: {', '.join(valid_color_modes)}")
 
-        # Load the structure into a py3Dmol viewer in its stored format
         viewer = py3Dmol.view(width=width, height=height)
 
         if self.structure_format == "cif":
@@ -1959,11 +1602,9 @@ class Structure(BaseModel):
         legend_html = ""
 
         if color_by == "bfactor":
-            # Color each chain on a B-factor gradient, scaled 0-1 for normalized pLDDT else 0-100
             range_max = 1.0 if self.b_factor_type == BFactorType.NORMALIZED_PLDDT else 100.0
             chain_types = self.get_chain_types()
 
-            # Ligand chains take ligand_style, polymer chains take style
             for chain_id, chain_type in chain_types.items():
                 chain_style = ligand_style if chain_type == "ligand" else style
                 viewer.setStyle(
@@ -1984,7 +1625,6 @@ class Structure(BaseModel):
                 legend_html = _create_bfactor_legend_html(self.b_factor_type, range_max)
 
         elif color_by == "chain":
-            # Give each chain a distinct color, cycling through CHAIN_COLORS
             chain_ids = self.get_chain_ids()
             chain_types = self.get_chain_types()
             chain_color_map = {}
@@ -1999,10 +1639,8 @@ class Structure(BaseModel):
             if show_legend:
                 legend_html = _create_chain_legend_html(chain_color_map)
 
-        # Fit the camera to the whole structure
         viewer.zoomTo()
 
-        # Overlay the legend on the viewer HTML, or show the bare viewer
         if show_legend and legend_html:
             viewer_html = viewer._make_html()
             combined_html = f"""
@@ -2024,131 +1662,6 @@ class Structure(BaseModel):
 
     def __repr__(self) -> str:
         return self.__str__()
-
-
-def _has_unnamed_chain(pdb_content: str) -> bool:
-    """Return whether PDB content leaves any chain's identifier blank.
-
-    Args:
-        pdb_content (str): PDB content to inspect.
-
-    Returns:
-        bool: True when at least one atom record carries no chain identifier.
-    """
-    return any(
-        len(line) > 21 and line[21] == " " for line in pdb_content.splitlines() if line.startswith(("ATOM", "HETATM"))
-    )
-
-
-def _mark_lone_hetatm_residues_nonpolymer(struct: gemmi.Structure) -> bool:
-    """Mark every chain whose only residue is HETATM as a non-polymer, before entities are set up.
-
-    This is the fallback for files read without a known complex; a predicted structure is
-    typed from its input instead (see :meth:`Structure.with_chain_types`). A ligand whose CCD
-    code is an amino acid or nucleotide can otherwise read as a one-residue polymer of unknown
-    type, which no ``Chain`` can carry: PDB has no entity records, so gemmi types residues by
-    name (a Biopython-converted AlphaFold3 PDB writes an L-tyrosine ligand as one HETATM ``TYR``),
-    and some mmCIF writers declare
-    such a ligand a polymer entity (ESMFold2 writes it as ``polypeptide(L)`` ``Y``). Only
-    single-residue chains are retyped: real polymers can be HETATM throughout (D-peptides such
-    as 3MGN chain G, beta-peptide foldamers such as 6Q9T chain B), and a one-residue chain is
-    no polymer. When this changes an mmCIF file's typing, its entity records no longer hold and
-    are rebuilt by ``setup_entities``.
-
-    Args:
-        struct (gemmi.Structure): The structure to correct in place.
-
-    Returns:
-        bool: Whether any chain was retyped.
-    """
-    import gemmi
-
-    retyped = False
-    for model in struct:
-        for chain in model:
-            residue = chain[0] if len(chain) == 1 else None
-            if residue is None or residue.het_flag != "H" or residue.is_water():
-                continue
-            if residue.entity_type != gemmi.EntityType.NonPolymer:
-                residue.entity_type = gemmi.EntityType.NonPolymer
-                retyped = True
-    if retyped:
-        struct.entities.clear()
-    return retyped
-
-
-def _name_unnamed_chains(gemmi_struct: gemmi.Structure) -> None:
-    """Give every unnamed chain an ID, in place.
-
-    Some deposited files, including CASP targets, leave chain identifiers blank.
-    Assign each unnamed chain the first unused single character so selections,
-    ``Chain`` objects, and tools that read chain columns can refer to it.
-
-    Args:
-        gemmi_struct (gemmi.Structure): Structure to name in place.
-
-    Raises:
-        ValueError: If the structure holds more unnamed chains than there are free identifiers.
-    """
-    import string
-
-    taken = {chain.name for model in gemmi_struct for chain in model if chain.name}
-    free = (c for c in string.ascii_uppercase + string.ascii_lowercase + string.digits if c not in taken)
-    for model in gemmi_struct:
-        for chain in model:
-            if chain.name:
-                continue
-            name = next(free, None)
-            if name is None:
-                raise ValueError("structure has more unnamed chains than available chain identifiers")
-            chain.name = name
-
-
-# gemmi polymer types that map onto a Chain entity type.
-_ENTITY_TYPE_BY_POLYMER_TYPE = {"PeptideL": "protein", "PeptideD": "protein", "Dna": "dna", "Rna": "rna"}
-
-
-def _polymer_entity_type(chain_name: str, polymer: gemmi.ResidueSpan, *, strict: bool = True) -> str:
-    """Return the ``Chain`` entity type for a gemmi polymer.
-
-    Args:
-        chain_name (str): Chain the polymer belongs to, named in the error.
-        polymer (gemmi.ResidueSpan): The polymer to classify.
-        strict (bool): Raise for a type no ``Chain`` can carry; ``False`` returns ``"polymer"``.
-
-    Returns:
-        str: ``"protein"``, ``"dna"``, ``"rna"``, or ``"polymer"`` for another type when not strict.
-
-    Raises:
-        ValueError: If the polymer is not protein, DNA, or RNA and ``strict`` is set.
-    """
-    polymer_type = polymer.check_polymer_type().name
-    if polymer_type in _ENTITY_TYPE_BY_POLYMER_TYPE:
-        return _ENTITY_TYPE_BY_POLYMER_TYPE[polymer_type]
-    if not strict:
-        return "polymer"
-    raise ValueError(
-        f"Chain '{chain_name}' is a {polymer_type} polymer, which a Chain cannot carry; a Chain is a "
-        "protein, DNA, or RNA sequence. Split or drop that chain before building a Complex from this structure."
-    )
-
-
-def _residue_letter(residue_name: str) -> tuple[str, str | None]:
-    """Return a polymer residue's one-letter code and, for a non-standard residue, its CCD code.
-
-    A standard residue maps to its own letter. A modified residue maps to its parent's letter
-    and keeps its CCD code; one with no known parent maps to ``X`` and keeps its CCD code.
-    ``UNK`` and names outside the CCD map to a bare ``X``.
-    """
-    import gemmi
-
-    info = gemmi.find_tabulated_residue(residue_name)
-    if info.is_standard():
-        return info.one_letter_code.upper(), None
-    parent = get_canonical_component(residue_name)
-    if parent is not None:
-        return parent, residue_name
-    return "X", residue_name if is_valid_ccd_code(residue_name) else None
 
 
 def _extract_atom_positions(structure: Structure) -> list[tuple[str, tuple[float, float, float]]]:

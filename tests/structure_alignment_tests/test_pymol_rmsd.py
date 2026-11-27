@@ -88,7 +88,7 @@ def test_pymol_rmsd_dispatches_align_payload_with_selection_overrides():
     assert payload["mobile_selection"] == "mobile and name CA"
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_pymol_rmsd_e2e_self_alignment():
     """Run PyMOL through ToolInstance instead of mocking dispatch."""
     structure = Structure.from_file(_PDB_PATH)

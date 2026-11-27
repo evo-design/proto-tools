@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     CodonFMConfig,
     CodonSequenceInput,
+    resolve_checkpoint_source,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import BaseToolOutput, ToolInstance
@@ -129,12 +130,17 @@ def run_codonfm_fitness(
     Returns:
         CodonFMFitnessOutput: Per-sequence mean-log-likelihood fitness scores.
     """
+    safetensors_url, config_url, filename, subdir = resolve_checkpoint_source(config.model_checkpoint)
+
     output_data = ToolInstance.dispatch(
         "codonfm",
         {
             "operation": "fitness",
             "sequences": inputs.sequences,
-            "model_checkpoint": config.model_checkpoint,
+            "safetensors_url": safetensors_url,
+            "config_url": config_url,
+            "safetensors_filename": filename,
+            "cache_subdir": subdir,
             "batch_size": config.batch_size,
             "device": config.device,
             "verbose": config.verbose,

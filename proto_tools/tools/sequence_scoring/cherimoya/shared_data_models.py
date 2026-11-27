@@ -177,7 +177,7 @@ class CherimoyaSequenceInput(BaseToolInput):
     """DNA sequences for Cherimoya scoring and prediction.
 
     Exact-window mode takes sequences of exactly 2,114 bp, the model context. Target-range
-    mode takes longer sequences, each with a ``target_range`` of at most 1,000 bp. The tool
+    mode takes longer sequences, each with a ``target_range`` of at most 1,000 bp; the tool
     cuts the 2,114 bp window whose central 1,000 bp output starts at the range start (or as
     close as the sequence ends allow). There is no padding.
 

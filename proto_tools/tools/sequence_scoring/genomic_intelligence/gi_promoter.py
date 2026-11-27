@@ -24,10 +24,7 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     validate_gi_sequence,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField, get_logger
-from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
-
-logger = get_logger(__name__)
+from proto_tools.utils import BaseToolInput, BaseToolOutput, ConfigField, InputField
 
 PROMOTER_MIN_BP = 300
 """Published ``minLength`` for the promoter endpoint, in base pairs."""
@@ -290,7 +287,7 @@ def run_gi_promoter(
     """
     del instance
     results: list[GIPromoterResult] = []
-    for item in StatusCounter(logger, "Predicting promoter activity for sequence %d/%d", inputs.sequences):
+    for item in inputs.sequences:
         sequence = validate_gi_sequence(item.sequence, min_bp=PROMOTER_MIN_BP, task="promoter")
         data, payload = call_predict(
             config,

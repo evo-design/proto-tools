@@ -1,7 +1,6 @@
 """Macromolecular structure representations and format conversion."""
 
 from proto_tools.entities.structures.examples import GFP_CIF_PATH, get_gfp_structure
-from proto_tools.entities.structures.msa_conditioning import ChainMSAConditioning, MSAConditioning, MSASubsampling
 from proto_tools.entities.structures.selection import (
     ChainSelection,
     ResidueSelection,
@@ -45,9 +44,6 @@ __all__ = [
     "Structure",
     "BFactorType",
     "StructureEnsemble",
-    "ChainMSAConditioning",
-    "MSAConditioning",
-    "MSASubsampling",
     # Selection
     "ChainSelection",
     "SingleChainSelection",

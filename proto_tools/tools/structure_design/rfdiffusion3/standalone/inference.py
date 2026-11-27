@@ -7,7 +7,6 @@ References:
 
 import gzip
 import json
-import logging
 import os
 import re
 import shutil
@@ -16,6 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any, ClassVar
 
+import gemmi
 from standalone_helpers import get_logger, set_torch_seed
 
 logger = get_logger(__name__)
@@ -30,6 +30,28 @@ class RFdiffusion3Model:
     """
 
     _STRUCTURE_EXTENSIONS: ClassVar[tuple[str, ...]] = (".pdb", ".cif", ".pdb.gz", ".cif.gz")
+    _AA_MAP: ClassVar[dict[str, str]] = {
+        "ALA": "A",
+        "CYS": "C",
+        "ASP": "D",
+        "GLU": "E",
+        "PHE": "F",
+        "GLY": "G",
+        "HIS": "H",
+        "ILE": "I",
+        "LYS": "K",
+        "LEU": "L",
+        "MET": "M",
+        "ASN": "N",
+        "PRO": "P",
+        "GLN": "Q",
+        "ARG": "R",
+        "SER": "S",
+        "THR": "T",
+        "VAL": "V",
+        "TRP": "W",
+        "TYR": "Y",
+    }
 
     def __init__(self) -> None:
         """Initialize RFdiffusion3 model wrapper."""
@@ -57,7 +79,7 @@ class RFdiffusion3Model:
         """Run RFdiffusion3 structure design.
 
         This method supports all CLI arguments documented in the RFdiffusion3 input specification.
-        Common parameters are explicit. Pass other RFdiffusion3 CLI arguments as keyword arguments.
+        Common parameters are explicit; all other RFdiffusion3 CLI args can be passed as keyword arguments.
 
         For the full list of available CLI arguments, see:
         https://github.com/RosettaCommons/foundry/blob/production/models/rfd3/docs/input.md
@@ -137,17 +159,9 @@ class RFdiffusion3Model:
         from standalone_helpers import get_subprocess_device_env
 
         env = get_subprocess_device_env(device)
-        # Foundry's optional motif realignment performs a 3x3 SVD inside the
-        # low-precision inference context. CUDA implements neither float16 nor
-        # bfloat16 SVD, so preload a narrow sitecustomize patch that promotes only
-        # that alignment calculation to float32. Keep any caller PYTHONPATH.
-        precision_site = Path(__file__).with_name("rfd3_precision_site")
-        existing_pythonpath = env.get("PYTHONPATH")
-        env["PYTHONPATH"] = str(precision_site) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
 
-        logger.update_status("Generating designs", level=logging.DEBUG)
-
-        # Stream output when verbose, or capture it so failures can include the stderr tail.
+        # Run the command — inherit streams when verbose for real-time progress;
+        # capture when not verbose so we can surface stderr tail on failure.
         try:
             subprocess.run(
                 cmd,  # type: ignore[arg-type]
@@ -177,9 +191,11 @@ class RFdiffusion3Model:
         logger.debug("Initializing RFdiffusion3")
 
         # Set FOUNDRY_CHECKPOINT_DIRS so Foundry finds BPT-managed weights
-        from standalone_helpers import export_weights_dir
+        from standalone_helpers import resolve_weights_dir
 
-        export_weights_dir("FOUNDRY_CHECKPOINT_DIRS", "rfdiffusion3", prepend=True)
+        weights_dir = resolve_weights_dir("rfdiffusion3")
+        if weights_dir:
+            os.environ["FOUNDRY_CHECKPOINT_DIRS"] = weights_dir
 
         # Try venv bin directory first, then PATH
         venv_rfdiffusion3 = Path(sys.executable).parent / "rfd3"
@@ -220,6 +236,7 @@ class RFdiffusion3Model:
             designs.append(
                 {
                     "structure_content": content,
+                    "sequence": self._extract_sequence(content, is_cif=".cif" in struct_file.name),
                     "spec_key": spec_key,
                     "design_index": design_index,
                     "metadata": self._read_output_json(struct_file),
@@ -227,6 +244,26 @@ class RFdiffusion3Model:
             )
 
         return {"designs": designs}
+
+    def _extract_sequence(self, content: str, is_cif: bool = False) -> list[str]:
+        """Extract per-chain sequences from structure content.
+
+        Returns one entry per chain in PDB chain order. Uses 'X' for unknown
+        residues (ligands, modified AAs, nucleotides) to preserve index alignment
+        with structure. Critical for all-atom design with RFdiffusion3.
+        """
+        if is_cif:
+            doc = gemmi.cif.read_string(content)
+            structure = gemmi.make_structure_from_block(doc[0])
+        else:
+            structure = gemmi.read_pdb_string(content)
+
+        sequences = []
+        for chain in structure[0]:
+            seq = "".join(self._AA_MAP.get(res.name, "X") for res in chain)
+            if seq:
+                sequences.append(seq)
+        return sequences
 
     def _strip_ext(self, filename: str) -> str:
         """Strip structure file extensions (.cif.gz, .pdb.gz, .cif, .pdb)."""
@@ -290,8 +327,10 @@ def to_device(device: str) -> dict[str, Any]:
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """CLI tool, no persistent GPU state to report."""
-    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
+    """Report GPU memory usage (called by DeviceManager for monitoring)."""
+    from standalone_helpers import get_pytorch_memory_stats
+
+    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

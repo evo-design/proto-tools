@@ -13,7 +13,7 @@ First released in 2025, ProGen3 is a family of autoregressive protein language m
 
 ## Background
 
-ProGen3 ([Bhatnagar et al., 2025](https://doi.org/10.1101/2025.04.15.649055)) is a family of generative protein language models from Profluent. ProGen3 models employ a sparse mixture-of-experts (MoE) architecture, which routes model activations in the transformer feed-forward layers to smaller specialized MLPs to make each forward pass more computationally tractable. The published family spans 112 million to 46 billion parameters. This toolkit exposes the `progen3-112m` through `progen3-3b` checkpoints. Pre-training used roughly 1.5 trillion amino-acid tokens sampled from the Profluent Protein Atlas, a curated collection of full-length natural proteins.
+ProGen3 ([Bhatnagar et al., 2025](https://doi.org/10.1101/2025.04.15.649055)) is a family of generative protein language models from Profluent. ProGen3 models employ a sparse mixture-of-experts (MoE) architecture, which routes model activations in the transformer feed-forward layers to smaller specialized MLPs to make each forward pass more computationally tractable. The published family spans 112 million to 46 billion parameters; this toolkit exposes the `progen3-112m` through `progen3-3b` checkpoints. Pre-training used roughly 1.5 trillion amino-acid tokens sampled from the Profluent Protein Atlas, a curated collection of full-length natural proteins.
 
 Unlike a strictly left-to-right model, ProGen3 is trained autoregressively in **both directions**: forward predicts each residue from the N-terminus toward the C-terminus, and reverse predicts from the C-terminus toward the N-terminus. Generation runs in a chosen direction, and scoring combines both directions into a single per-residue likelihood. Two capabilities follow from this objective. Sampling from the predicted next-residue distributions produces new candidate protein sequences, and the likelihood the model assigns to an existing sequence provides a zero-shot proxy-fitness score with no additional task-specific training.
 
@@ -33,10 +33,10 @@ This tool performs de novo protein design, generating novel sequences that resem
 
 #### Usage Tips
 
-- **`direction` chooses which terminus is generated.** `"forward"` (the default) continues a prompt from the N-terminus toward the C-terminus. `"reverse"` treats the prompt as a C-terminal fragment and generates toward the N-terminus. Note that the reverse generation will append to the prompt to grow the sequence on the left. All starting sequences should still be provided in the left to right direction from N->C.
-- **Sampling defaults are conservative.** `temperature` defaults to `0.2` and `top_p` to `0.95`, which keep generations close to natural-looking sequences. Raise `temperature` for more diverse but riskier designs. This tool exposes only nucleus (`top_p`) sampling for ProGen3. There is no top-k cutoff.
+- **`direction` chooses which terminus is generated.** `"forward"` (the default) continues a prompt from the N-terminus toward the C-terminus; `"reverse"` treats the prompt as a C-terminal fragment and generates toward the N-terminus. Note that the reverse generation will append to the prompt to grow the sequence on the left. All starting sequences should still be provided in the left to right direction from N->C.
+- **Sampling defaults are conservative.** `temperature` defaults to `0.2` and `top_p` to `0.95`, which keep generations close to natural-looking sequences; raise `temperature` for more diverse but riskier designs. This tool exposes only nucleus (`top_p`) sampling for ProGen3; there is no top-k cutoff.
 - **`max_new_tokens` and `min_new_tokens` bound the generated length.** They count only newly generated residues (default `256` and `1`), separate from the prompt length.
-- **Output includes the prompt by default.** `prepend_prompt=True` (the toolkit default) returns the prompt joined to its continuation. Set it `False` to receive only the newly generated residues.
+- **Output includes the prompt by default.** `prepend_prompt=True` (the toolkit default) returns the prompt joined to its continuation; set it `False` to receive only the newly generated residues.
 - **Generated sequences are candidates.** Validate them with downstream tools (for example structure prediction, function annotation, or homology search) before drawing biological conclusions.
 
 ### ProGen3 Scoring (`progen3-score`)
@@ -50,7 +50,7 @@ This tool gives a zero-shot measure of how consistent a protein sequence is with
 #### Usage Tips
 
 - **Scores are bidirectional, not a single-direction log-likelihood.** The reported `log_likelihood`, `avg_log_likelihood`, and `perplexity` are derived from the averaged forward and reverse per-position values, so they are not directly comparable to a one-directional model's scores.
-- **Compare length-normalized scores within one checkpoint.** Total `log_likelihood` scales with sequence length, so use `perplexity` or `avg_log_likelihood` when comparing sequences of different lengths. Different checkpoints learn different distributions that are not calibrated to a common scale, so scores from different `model_checkpoint` values are hard to compare directly. A lower perplexity means the sequence is more consistent with that checkpoint's training distribution.
+- **Compare length-normalized scores within one checkpoint.** Total `log_likelihood` scales with sequence length, so use `perplexity` or `avg_log_likelihood` when comparing sequences of different lengths. Different checkpoints learn different distributions that are not calibrated to a common scale, so scores from different `model_checkpoint` values are hard to compare directly; a lower perplexity means the sequence is more consistent with that checkpoint's training distribution.
 - **`return_logits` defaults to `False`.** Leave it off unless you need the per-position distributions, since the logits tensor is large (sequence length by the token vocabulary).
 
 ## Toolkit Notes
@@ -59,6 +59,6 @@ This tool gives a zero-shot measure of how consistent a protein sequence is with
 
 These apply to every ProGen3 tool in this toolkit (`progen3-sample`, `progen3-score`).
 
-- **Requires a GPU. Memory scales with checkpoint size.** This toolkit exposes the `progen3-112m` through `progen3-3b` checkpoints. Larger checkpoints are more capable but need substantially more GPU memory. `device="cpu"` is rejected: the model code places tensors with `torch.cuda`.
-- **`batch_size` trades memory for throughput across both tools.** It sets how many same-length prompts (`progen3-sample`) or sequences (`progen3-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences. Lower it (default `8`) if generation or scoring runs out of GPU memory.
-- **`model_checkpoint` selects the model size.** The default is `progen3-762m`. Smaller checkpoints (`progen3-112m`, `progen3-219m`, `progen3-339m`) are faster and lighter, while `progen3-1b` and `progen3-3b` are more capable at higher memory cost.
+- **Requires a GPU; memory scales with checkpoint size.** This toolkit exposes the `progen3-112m` through `progen3-3b` checkpoints; larger checkpoints are more capable but need substantially more GPU memory. CPU execution is not practical.
+- **`batch_size` trades memory for throughput across both tools.** It sets how many same-length prompts (`progen3-sample`) or sequences (`progen3-score`) are processed per GPU forward pass. Raise it for higher throughput on many short sequences; lower it (default `1`) if generation or scoring runs out of GPU memory.
+- **`model_checkpoint` selects the model size.** The default is `progen3-762m`; smaller checkpoints (`progen3-112m`, `progen3-219m`, `progen3-339m`) are faster and lighter, while `progen3-1b` and `progen3-3b` are more capable at higher memory cost.

@@ -89,8 +89,7 @@ def test_chain_ids_from_header(header: str, expected: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_pdb_fetch_entry_metadata():
     """Fetch PDB entry metadata for a known structure."""
     inputs = PdbFetchEntryInput(pdb_id="1LBG")
@@ -100,8 +99,7 @@ def test_pdb_fetch_entry_metadata():
     assert output.source_url == "https://data.rcsb.org/rest/v1/core/entry/1LBG"
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_pdb_fetch_fasta():
     """Fetch PDB FASTA chains for a known structure."""
     inputs = PdbFetchFastaInput(pdb_id="1LBG")

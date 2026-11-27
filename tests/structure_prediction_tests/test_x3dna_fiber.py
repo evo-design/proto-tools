@@ -3,7 +3,7 @@
 Tests for the X3DNA Fiber idealized nucleic-acid duplex builder.
 
 Validation and helper coverage runs without any external binary; the execution
-tests are marked ``uses_env`` and skip cleanly when X3DNA is not resolvable.
+tests are marked ``integration`` and skip cleanly when X3DNA is not resolvable.
 """
 
 import importlib
@@ -96,7 +96,7 @@ def _require_x3dna():
         pytest.skip("X3DNA not installed; see the x3dna toolkit SETUP.md to provision bin/fiber")
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_x3dna_fiber_builds_b_dna_duplex():
     """B-DNA build yields one duplex structure with two chains of 2x the sequence."""
     _require_x3dna()
@@ -114,7 +114,7 @@ def test_x3dna_fiber_builds_b_dna_duplex():
     assert structure.num_residues == 2 * len(_DUPLEX_SEQ)
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_x3dna_fiber_single_stranded_yields_one_chain():
     """single_stranded=True emits only the sense strand (one chain, N residues)."""
     _require_x3dna()
@@ -130,7 +130,7 @@ def test_x3dna_fiber_single_stranded_yields_one_chain():
     assert structure.num_residues == len(_DUPLEX_SEQ)
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_x3dna_fiber_rna_form_builds_duplex():
     """RNA form builds an A-form RNA duplex (two chains, 2x the sequence)."""
     _require_x3dna()
@@ -151,7 +151,7 @@ def test_x3dna_fiber_rna_form_builds_duplex():
 
 @pytest.mark.benchmark("x3dna-fiber")
 @pytest.mark.slow
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_x3dna_fiber_benchmark(request: pytest.FixtureRequest):
     """Benchmark x3dna-fiber building a batch of B-DNA duplexes (cold + warm)."""
     _require_x3dna()

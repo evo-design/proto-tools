@@ -5,14 +5,7 @@ import os
 import sys
 from typing import Any
 
-from standalone_helpers import (
-    StatusCounter,
-    get_logger,
-    move_model_to_device,
-    oom_guard,
-    resolve_weights_dir,
-    serialize_output,
-)
+from standalone_helpers import get_logger, move_model_to_device, oom_guard, resolve_weights_dir, serialize_output
 
 logger = get_logger(__name__)
 
@@ -40,7 +33,7 @@ _PREDICT_OOM_HINT = (
 
 
 def _encode(sequence: str, assembly: str, reverse_complement: bool = False) -> Any:
-    """One-hot encode a sequence with its species channel. Padding stays all-zero."""
+    """One-hot encode a sequence with its species channel; padding stays all-zero."""
     import numpy as np
     from spliceai2.dataset import _one_hot_encode
 
@@ -72,14 +65,14 @@ class SpliceAI2Model:
         self._loaded = False
 
     # ============================================================================
-    # Model Loading and Device Management
+    # Model Loading & Device Management
     # ============================================================================
     def load(self, device: str) -> None:
         """Load both ensemble checkpoints onto device."""
         from spliceai2.model import SpliceAI2
 
         weights_dir = resolve_weights_dir("spliceai2")
-        logger.update_status("Loading SpliceAI2 weights")
+        logger.update_status("Loading SpliceAI2 checkpoints")
         self.models = [
             SpliceAI2.load_from_checkpoint(os.path.join(weights_dir, name, "model.ckpt"), map_location=device).eval()
             for name in CHECKPOINTS
@@ -155,7 +148,8 @@ class SpliceAI2Model:
         annotator = VariantAnnotator(self.models, VARIANT_CANDIDATE_SITES)
 
         rows: list[dict[str, Any]] = []
-        for variant in StatusCounter(logger, "Scoring variant %d/%d", variants):
+        for i, variant in enumerate(variants):
+            logger.update_status(f"Scoring variant {i + 1}/{len(variants)}")
             ref_window, alt_window = self._variant_window(fasta, variant)
             minus = variant["strand"] == "-"
             batch = (
@@ -182,7 +176,6 @@ class SpliceAI2Model:
         import torch
         from spliceai2.utils import decode_topk_tx
 
-        # Pad both flanks and round the input length to the model's pooling multiple.
         n = len(sequence)
         tail = -n % LENGTH_MULTIPLE
         padded = PAD * FLANK + sequence + PAD * (FLANK + tail)
@@ -195,7 +188,7 @@ class SpliceAI2Model:
             out_ss = torch.stack([model.forward_1d(ftrs) for model, ftrs in zip(self.models, ftrs_list, strict=True)])
             out_ss = out_ss.mean(dim=0)[:, :, :n]
 
-            # Select positions whose donor or acceptor usage clears the candidate threshold.
+            # Candidate sites: every position whose donor or acceptor usage clears the threshold.
             site_logits = out_ss.amax(dim=1)
             num_candidates = int((site_logits.sigmoid() > CANDIDATE_SITE_THRESHOLD).sum())
             probabilities = out_ss[0].sigmoid().cpu().numpy()
@@ -208,7 +201,6 @@ class SpliceAI2Model:
             if num_candidates < 2:
                 return prediction
 
-            # Score junctions between the selected splice sites using the shared features.
             idxs = site_logits.topk(num_candidates, dim=1)[1].sort(dim=1).values
             out_jxn = torch.stack(
                 [model.forward_2d(ftrs, idxs) for model, ftrs in zip(self.models, ftrs_list, strict=True)]
@@ -225,7 +217,6 @@ class SpliceAI2Model:
             for d, a in zip(donors, acceptors, strict=True)
         ]
 
-        # Decode transcript paths and remove duplicate exon arrangements.
         masks = decode_topk_tx(out_tx[0].cpu().numpy(), sites, n, num_candidates, k=num_transcripts)
         transcripts: list[list[tuple[int, int]]] = []
         for mask in masks:
@@ -244,10 +235,11 @@ class SpliceAI2Model:
     ) -> list[dict[str, Any]]:
         """Predict splice sites, junctions, and transcripts for each sequence."""
         self._ensure_loaded(device)
-        return [
-            self._predict_one(sequence, assembly, num_transcripts)
-            for sequence in StatusCounter(logger, "Predicting sequence %d/%d", sequences)
-        ]
+        results = []
+        for i, sequence in enumerate(sequences):
+            logger.update_status(f"Predicting sequence {i + 1}/{len(sequences)}")
+            results.append(self._predict_one(sequence, assembly, num_transcripts))
+        return results
 
 
 def _exon_intervals(mask: Any) -> list[tuple[int, int]]:

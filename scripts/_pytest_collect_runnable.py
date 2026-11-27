@@ -1,14 +1,14 @@
 """scripts/_pytest_collect_runnable.py.
 
-List the tests that would run for a given pytest command on this machine.
+Tiny pytest plugin loaded by ``list_incomplete_tests.py`` to enumerate
+the tests that would *actually run* under a given pytest invocation —
+i.e. collected items minus those any skip / skipif marker would skip on
+this machine.
 
-``list_incomplete_tests.py`` loads this plugin to collect tests and exclude
-those covered by ``skip`` or ``skipif`` markers.
-
-The ``pytest_collection_modifyitems`` hook runs with ``trylast=True``, after
-the project conftest has applied skips from custom markers
+We hook ``pytest_collection_modifyitems`` with ``trylast=True`` so the
+project conftest has already applied its custom-marker-driven skips
 (``uses_gpu``, ``skip_ci``, ``test_on_platforms``, etc.). Then we call
-pytest's ``evaluate_skip_marks`` to check the remaining skip markers, print one
+pytest's own ``evaluate_skip_marks`` for the final verdict, print one
 ``RUNNABLE: <nodeid>`` line per surviving item, and clear ``items`` so
 nothing actually executes.
 """

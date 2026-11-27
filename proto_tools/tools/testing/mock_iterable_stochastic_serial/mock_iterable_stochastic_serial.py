@@ -25,7 +25,7 @@ SEQ_LEN = 4  # matches the batched mock so outputs are bit-identical for the sam
 
 
 def _logits_from_prompt(prompt: str) -> list[int]:
-    """Map a prompt deterministically to logits over VOCAB.
+    """Deterministic 'forward pass': prompt → logits over VOCAB.
 
     Same hash-based mapping as in ``mock_iterable_stochastic`` so the
     two mocks produce bit-identical outputs for the same seed.
@@ -158,9 +158,9 @@ def run_mock_iterable_stochastic_serial(
     """Sample one token per prompt in a pure serial loop.
 
     The single ``random.Random`` instance is the analogue of torch's
-    global RNG state. Each weighted draw consumes it and advances the state,
+    global RNG state: each weighted draw consumes it and advances state,
     so two identical prompts processed back-to-back see the same logits
-    but can pick different tokens — the same mechanism as the batched
+    but pick different tokens — the same mechanism as the batched
     variant, just without internal batching.
 
     Args:
@@ -174,7 +174,6 @@ def run_mock_iterable_stochastic_serial(
             (count of items the framework handed to the tool function).
     """
     seed = config.seed if config.seed is not None else random.randint(0, 2**31 - 1)  # noqa: S311
-    # Share one random stream across items; each draw advances it, so repeated prompts can pick different tokens.
     rng = random.Random(seed)  # noqa: S311 -- not cryptographic
 
     prompts = list(inputs.prompts)

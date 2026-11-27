@@ -2,7 +2,7 @@
 
 import csv
 import json
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
@@ -14,28 +14,27 @@ from proto_tools.utils import (
     BaseConfig,
     BaseToolInput,
     BaseToolOutput,
-    BatchedNucleotideGradientInput,
     ConfigField,
-    DifferentiableTerm,
-    GradientConfig,
-    GradientMetadata,
     GradientOutput,
-    GradientResult,
     InputField,
-    NucleotideSequenceLogits,
-    TermCatalog,
-    TermGradient,
     ToolInstance,
-    resolve_terms,
     return_invalid_nucleotide_chars,
 )
 from proto_tools.utils.device import RemoteDevice
-from proto_tools.utils.tool_io import Directionality, Metrics, MetricSpec
+from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 DEFAULT_MALINOIS_ARTIFACT_PATH = ""
 DEFAULT_MALINOIS_DIR = ""
+DEFAULT_MALINOIS_ARTIFACT_FILENAME = "MODELS-malinois_artifacts__20211113_021200__287348.tar.gz"
+DEFAULT_MALINOIS_ARTIFACT_URL = (
+    "https://zenodo.org/records/10698014/files/MODELS-malinois_artifacts__20211113_021200__287348.tar.gz?download=1"
+)
+DEFAULT_MALINOIS_ARTIFACT_MD5 = "375142a714e7df73c463b46113a65210"
 MALINOIS_CELL_TYPES = ("K562", "HepG2", "SKNSH")
 MalinoisCellType = Literal["K562", "HepG2", "SKNSH"]
+MalinoisObjectiveDirection = Literal["max", "min"]
+MalinoisLogits = list[list[list[float]]]
+MalinoisGradientValue = list[list[list[float]]] | None
 
 
 class MalinoisActivityMetrics(Metrics):
@@ -216,8 +215,10 @@ class MalinoisScoreConfig(BaseConfig):
         cell_types (list[MalinoisCellType]): Cell-type outputs to return.
         seq_length (int): Expected insert length before MPRA flank padding.
         artifact_path (str): Optional local override path to the Malinois model
-            artifact tarball. Leave empty to download the published artifact into the
+            artifact tarball. Leave empty to download ``artifact_url`` into the
             managed weights cache.
+        artifact_url (str): HTTPS URL used to provision the Malinois artifact.
+        artifact_md5 (str): Optional MD5 checksum for the downloaded artifact.
         malinois_dir (str): Optional local override directory containing
             unpacked artifact metadata. Leave empty to use the cache extraction
             directory.
@@ -247,6 +248,18 @@ class MalinoisScoreConfig(BaseConfig):
         title="Artifact Path",
         default=DEFAULT_MALINOIS_ARTIFACT_PATH,
         description="Optional local artifact tarball path; empty uses the managed cache download.",
+        reload_on_change=True,
+    )
+    artifact_url: str = ConfigField(
+        title="Artifact URL",
+        default=DEFAULT_MALINOIS_ARTIFACT_URL,
+        description="HTTPS URL used to provision the Malinois artifact.",
+        reload_on_change=True,
+    )
+    artifact_md5: str = ConfigField(
+        title="Artifact MD5",
+        default=DEFAULT_MALINOIS_ARTIFACT_MD5,
+        description="Expected MD5 checksum for the downloaded Malinois artifact.",
         reload_on_change=True,
     )
     malinois_dir: str = ConfigField(
@@ -287,93 +300,112 @@ class MalinoisScoreConfig(BaseConfig):
         return None
 
 
-class MalinoisActivityTerm(DifferentiableTerm):
-    """Predicted Malinois MPRA activity for one cell type.
-
-    The value is the raw activity score in the model's own units, not a bounded transform of
-    it. Whether more activity is wanted, how steeply to saturate it, and how it balances
-    against another cell are goals a caller applies — ``SigmoidGoal(direction=..., center=...,
-    scale=...)`` reproduces the bounded objective this tool used to compute internally.
+class MalinoisGradientLossTerm(BaseModel):
+    """One differentiable Malinois objective term.
 
     Attributes:
-        id (Literal["activity"]): Fixed identifier for this kind of quantity. Every cell's term
-            reports the same one; the ``cell_type`` selector is what tells two of them apart.
-        cell_type (MalinoisCellType): Malinois cell-type output whose activity is differentiated.
+        cell_type (MalinoisCellType): Malinois output to optimize.
+        direction (MalinoisObjectiveDirection): ``"max"`` minimizes
+            ``1 - sigmoid((raw - center) / scale)``; ``"min"`` minimizes
+            ``sigmoid((raw - center) / scale)``.
+        weight (float): Non-negative scalar applied before terms are summed.
+        sigmoid_center (float): Raw Malinois score where the sigmoid is 0.5.
+        sigmoid_scale (float): Positive scale for the raw score transform.
     """
 
-    #: Whether more activity is wanted depends on whether the cell is a target or an off-target.
-    SUGGESTED_OPTIMIZATION_DIRECTION: ClassVar[Directionality] = "context-dependent"
-
-    #: What this quantity measures, copied into each gradient's metadata.
-    DESCRIPTION: ClassVar[str] = "Raw predicted Malinois MPRA activity for one cell line"
-
-    id: Literal["activity"] = Field(
-        default="activity",
-        title="Term ID",
-        description="Identifies this quantity as a Malinois MPRA activity prediction.",
-    )
     cell_type: MalinoisCellType = Field(
-        default="K562", title="Cell Type", description="Malinois cell-type output to differentiate."
+        default="K562", title="Cell Type", description="Malinois cell-type output to optimize."
+    )
+    direction: MalinoisObjectiveDirection = Field(
+        default="max",
+        title="Direction",
+        description="Whether to maximize ('max') or minimize ('min') activity for this cell type",
+    )
+    weight: float = Field(
+        default=1.0,
+        ge=0.0,
+        title="Weight",
+        description="Relative weight of this term in the summed objective (must be non-negative)",
+    )
+    sigmoid_center: float = Field(
+        default=4.0,
+        title="Sigmoid Center",
+        description="Raw Malinois score at the sigmoid midpoint (0.5 output)",
+    )
+    sigmoid_scale: float = Field(
+        default=1.0,
+        gt=0.0,
+        title="Sigmoid Scale",
+        description="Sigmoid steepness in raw-score units; larger values produce a wider transition",
     )
 
 
-class MalinoisTermGradient(TermGradient):
-    """One Malinois cell type's raw activity and its gradient.
-
-    Attributes:
-        term (MalinoisActivityTerm): The cell-type quantity this gradient answers.
-    """
-
-    term: MalinoisActivityTerm = Field(title="Term", description="Cell-type quantity answered.")
-
-
-class MalinoisGradientResult(GradientResult):
-    """One evaluated sample and every cell-type activity differentiated for it.
-
-    Attributes:
-        terms (list[MalinoisTermGradient]): One entry per requested cell, in the order requested.
-    """
-
-    terms: list[MalinoisTermGradient] = Field(  # type: ignore[assignment]  # narrows the element type
-        default_factory=list,
-        title="Terms",
-        description="One gradient per requested cell-type quantity, in the order requested.",
-    )
-
-
-class MalinoisGradientInput(BatchedNucleotideGradientInput):
+class MalinoisGradientInput(BaseToolInput):
     """Input for differentiable Malinois sequence optimization.
 
     Attributes:
-        inputs (list[NucleotideSequenceLogits]): One relaxed ``(L, 4)`` DNA state per
-            candidate in ``A,C,G,T`` order. Every item must share one length, because the
-            backend evaluates them in one vectorized pass.
-        temperature (float | None): Softmax temperature shared by every item. The default ``1.0``
-            reads each state as unnormalized and applies ``softmax(logits / T)``, returning
-            logit-space gradients; ``None`` reads them as probabilities and returns
-            probability-space gradients.
+        logits (MalinoisLogits): Batched relaxed DNA sequence logits with shape
+            ``(B, L, 4)`` in ``A,C,G,T`` order. Use ``B=1`` for a single
+            design candidate.
+        temperature (float): Softmax temperature used to relax logits.
     """
 
+    logits: MalinoisLogits = InputField(
+        title="Logits",
+        description="Batched relaxed DNA logits with shape (B, L, 4) in A,C,G,T order.",
+        examples=[[[[0.0] * 4] * 200]],
+    )
+    temperature: float = InputField(
+        default=1.0,
+        gt=0.0,
+        title="Temperature",
+        description="Softmax temperature used to convert logits into relaxed nucleotide probabilities.",
+    )
 
-class MalinoisGradientConfig(GradientConfig):
+    @field_validator("logits")
+    @classmethod
+    def validate_logits(cls, logits: MalinoisLogits) -> MalinoisLogits:
+        """Ensure logits are a non-empty ``B x L x 4`` tensor."""
+        if not logits:
+            raise ValueError("logits must contain at least one batch item")
+        expected_width = len(DNA_NUCLEOTIDES)
+        seq_length: int | None = None
+        for batch_idx, matrix in enumerate(logits):
+            if not matrix:
+                raise ValueError(f"logits batch {batch_idx} must contain at least one position")
+            if not isinstance(matrix[0], list):
+                raise ValueError("logits must have shape (B, L, 4); use batch size 1 for a single candidate")
+            if seq_length is None:
+                seq_length = len(matrix)
+            elif len(matrix) != seq_length:
+                raise ValueError(
+                    f"all batched logits must have the same sequence length; "
+                    f"batch 0 has {seq_length}, batch {batch_idx} has {len(matrix)}"
+                )
+            for row_idx, row in enumerate(matrix):
+                if len(row) != expected_width:
+                    raise ValueError(
+                        f"logits batch {batch_idx} row {row_idx} must have {expected_width} columns, got {len(row)}"
+                    )
+        return logits
+
+
+class MalinoisGradientConfig(BaseConfig):
     """Configuration for differentiable Malinois activity objectives.
 
     Attributes:
-        gradient_terms (list[MalinoisActivityTerm]): Cell types whose raw activity to
-            differentiate, by name or as instances.
+        loss_terms (list[MalinoisGradientLossTerm]): Per-cell objective terms
+            summed into one scalar loss.
         seq_length (int): Expected insert length before Malinois flank padding.
         artifact_path (str): Optional local artifact tarball path.
+        artifact_url (str): URL used to provision the Malinois artifact.
+        artifact_md5 (str): Expected checksum for the downloaded artifact.
         malinois_dir (str): Optional extracted Malinois artifact directory.
-        soft (float): Inherited blend from the raw input matrix (0) to softmax probabilities
-            (1). Recommended to leave at 1.0 in almost all use cases; exposed for research
-            and ColabDesign parity. See
-            :class:`~proto_tools.utils.gradient.models.RelaxationConfig`.
-        hard (float): Inherited straight-through coefficient; 1 forwards a hard one-hot.
+        soft (float): Blend hard argmax one-hot (0) to softmax probabilities (1).
+        hard (float): Straight-through hard-forward coefficient.
         compute_gradient (bool): Run backward pass and return gradient.
         device (str): Device used for inference and backpropagation.
     """
-
-    TERMS: ClassVar[TermCatalog] = {"activity": MalinoisActivityTerm}
 
     device: str = ConfigField(
         title="Device",
@@ -381,11 +413,10 @@ class MalinoisGradientConfig(GradientConfig):
         description="Device to run Malinois inference on",
         include_in_key=False,
     )
-    gradient_terms: list[MalinoisActivityTerm] = ConfigField(
-        default_factory=lambda: [MalinoisActivityTerm()],
-        min_length=1,
-        title="Gradient Terms",
-        description="Malinois cell types to differentiate, by name or as instances.",
+    loss_terms: list[MalinoisGradientLossTerm] = ConfigField(
+        default_factory=lambda: [MalinoisGradientLossTerm()],
+        title="Loss Terms",
+        description="Per-cell Malinois objectives to sum before backpropagation.",
     )
     seq_length: int = ConfigField(
         title="Sequence Length",
@@ -400,11 +431,37 @@ class MalinoisGradientConfig(GradientConfig):
         description="Optional local artifact tarball path; empty uses the managed cache download.",
         reload_on_change=True,
     )
+    artifact_url: str = ConfigField(
+        title="Artifact URL",
+        default=DEFAULT_MALINOIS_ARTIFACT_URL,
+        description="HTTPS URL used to provision the Malinois artifact.",
+        reload_on_change=True,
+    )
+    artifact_md5: str = ConfigField(
+        title="Artifact MD5",
+        default=DEFAULT_MALINOIS_ARTIFACT_MD5,
+        description="Expected MD5 checksum for the downloaded Malinois artifact.",
+        reload_on_change=True,
+    )
     malinois_dir: str = ConfigField(
         title="Malinois Directory",
         default=DEFAULT_MALINOIS_DIR,
         description="Optional local Malinois metadata directory; empty uses the managed cache extraction.",
         reload_on_change=True,
+    )
+    soft: float = ConfigField(
+        title="Soft Mixing",
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Blend hard argmax one-hot (0) to softmax probabilities (1).",
+    )
+    hard: float = ConfigField(
+        title="Hard Mixing",
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Straight-through hard-forward coefficient.",
     )
     compute_gradient: bool = ConfigField(
         title="Compute Gradient",
@@ -412,27 +469,11 @@ class MalinoisGradientConfig(GradientConfig):
         description="Run backward pass and return gradient; set False for forward-only scoring.",
     )
 
-    @field_validator("gradient_terms", mode="before")
-    @classmethod
-    def resolve_gradient_terms(cls, value: Any) -> Any:
-        """Accept a term by name or class, leaving an already-built instance as it is."""
-        if not isinstance(value, list):
-            return value
-        catalog = cls.supported_terms()
-        return [
-            resolve_terms([entry], catalog)[0]  # type: ignore[arg-type]
-            if isinstance(entry, str | type)
-            else entry
-            for entry in value
-        ]
-
     @model_validator(mode="after")
-    def reject_repeated_terms(self) -> "MalinoisGradientConfig":
-        """Each cell yields one quantity, so naming it twice is a mistake rather than a doubling."""
-        cells = [term.cell_type for term in self.gradient_terms]
-        repeated = sorted({cell for cell in cells if cells.count(cell) > 1})
-        if repeated:
-            raise ValueError(f"gradient_terms names cells {repeated} more than once; each cell yields one term")
+    def validate_loss_terms(self) -> "MalinoisGradientConfig":
+        """Validate that at least one loss term is active."""
+        if not self.loss_terms:
+            raise ValueError("loss_terms cannot be empty")
         return self
 
     def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
@@ -442,72 +483,133 @@ class MalinoisGradientConfig(GradientConfig):
         return None
 
 
+class MalinoisGradientSampleMetrics(Metrics):
+    """Per-sample differentiable Malinois objective metrics.
+
+    Raw cell-type predictions are stored as metrics when the corresponding cell
+    type is present in the objective. Per-term transformation metadata is kept
+    in ``loss_terms`` so metric values remain scalar and easy to index.
+
+    Metrics documented in ``metric_spec``:
+        loss (float): Weighted scalar objective value for one sample.
+        K562 (float): Raw Malinois activity prediction for K562 cells.
+        HepG2 (float): Raw Malinois activity prediction for HepG2 cells.
+        SKNSH (float): Raw Malinois activity prediction for SK-N-SH cells.
+
+    Attributes:
+        loss_terms (list[dict[str, Any]]): Per-objective-term metadata,
+            including direction, weight, sigmoid transform, and weighted score.
+    """
+
+    metric_spec: ClassVar[dict[str, MetricSpec]] = {
+        "loss": {
+            "availability": "always",
+            "type": "float",
+            "min": 0.0,
+            "max": None,
+            "description": "Weighted scalar Malinois objective value for one sample.",
+            "better_values_are": "lower",
+        },
+        "K562": {
+            "availability": "when requested",
+            "type": "float",
+            "min": None,
+            "max": None,
+            "description": "Raw Malinois activity prediction for K562 cells.",
+            "better_values_are": "context-dependent",
+        },
+        "HepG2": {
+            "availability": "when requested",
+            "type": "float",
+            "min": None,
+            "max": None,
+            "description": "Raw Malinois activity prediction for HepG2 cells.",
+            "better_values_are": "context-dependent",
+        },
+        "SKNSH": {
+            "availability": "when requested",
+            "type": "float",
+            "min": None,
+            "max": None,
+            "description": "Raw Malinois activity prediction for SK-N-SH cells.",
+            "better_values_are": "context-dependent",
+        },
+    }
+    primary_metric: str | None = Field(
+        default="loss",
+        title="Primary Metric",
+        description="Headline metric used to rank results.",
+    )
+
+    loss_terms: list[dict[str, Any]] = Field(
+        default_factory=list,
+        title="Loss Terms",
+        description="Per-objective-term transform metadata for this sample.",
+    )
+
+
+def _build_gradient_sample_metrics(metrics: dict[str, Any]) -> list[MalinoisGradientSampleMetrics]:
+    """Build per-sample metric containers from the standalone gradient payload."""
+    raw_scores_by_sample = metrics.get("raw_scores")
+    losses = metrics.get("losses")
+    loss_terms_by_sample = metrics.get("loss_terms")
+    if not isinstance(raw_scores_by_sample, list) or not isinstance(losses, list):
+        return []
+
+    sample_metrics = []
+    for sample_idx, loss in enumerate(losses):
+        raw_scores = raw_scores_by_sample[sample_idx] if sample_idx < len(raw_scores_by_sample) else {}
+        loss_terms = (
+            loss_terms_by_sample[sample_idx]
+            if isinstance(loss_terms_by_sample, list) and sample_idx < len(loss_terms_by_sample)
+            else []
+        )
+        metric_values: dict[str, float] = {"loss": float(loss)}
+        if isinstance(raw_scores, dict):
+            metric_values.update(
+                {
+                    cell_type: float(raw_scores[cell_type])
+                    for cell_type in MALINOIS_CELL_TYPES
+                    if cell_type in raw_scores
+                }
+            )
+        sample_metrics.append(MalinoisGradientSampleMetrics.model_validate({**metric_values, "loss_terms": loss_terms}))
+    return sample_metrics
+
+
 class MalinoisGradientOutput(GradientOutput):
     """Differentiable Malinois activity output.
 
     Attributes:
-        results (list[MalinoisGradientResult]): One per input sequence, in input order, each
-            holding that sample's requested cell-type activities and their raw gradients
-            (``None`` in forward-only mode).
+        gradient (MalinoisGradientValue): Gradient tensor matching input DNA
+            logits, or ``None`` when ``compute_gradient=False``.
+        loss (float): Sum of per-sample weighted scalar objective values.
+            Per-sample values are available in ``sample_metrics``.
+        sample_metrics (list[MalinoisGradientSampleMetrics]): Per-sample metric
+            containers with scalar loss and raw cell-type scores.
+        metrics (dict[str, Any]): Auxiliary metadata bundle from the standalone
+            worker, including raw scores, objective-term metadata, and runtime
+            relaxation parameters.
         vocab (list[str]): DNA column ordering for logits and gradient.
     """
 
-    results: list[MalinoisGradientResult] = Field(  # type: ignore[assignment]  # narrows the element type
-        title="Results",
-        description="One result per input sequence, in input order, each carrying its cell activities.",
+    gradient: MalinoisGradientValue = Field(
+        default=None,
+        title="Gradient",
+        description="Gradient w.r.t. input logits. None when compute_gradient=False.",
+    )
+    sample_metrics: list[MalinoisGradientSampleMetrics] = Field(
+        default_factory=list,
+        title="Sample Metrics",
+        description="Per-sample Malinois objective metrics.",
     )
 
-    @classmethod
-    def from_batch(
-        cls,
-        payload: Mapping[str, Any],
-        *,
-        matrices: Sequence[Sequence[Sequence[float]]],
-        temperature: float | None,
-        soft: float = 1.0,
-        hard: float = 0.0,
-    ) -> "MalinoisGradientOutput":
-        """Unbatch one worker payload into per-sample results.
-
-        The worker reports one entry per cell, each holding that cell's raw activity and
-        gradient for every sample, so this transposes cells x samples into one result per
-        sequence.
-
-        Args:
-            payload (Mapping[str, Any]): Worker payload for the whole batch.
-            matrices (Sequence[Sequence[Sequence[float]]]): The relaxed state each sample was
-                differentiated at, in input order. Every cell's gradient for one sample is a
-                derivative with respect to the same state, which is what lets them be combined.
-            temperature (float | None): The input's temperature, which fixes the coordinate space.
-            soft (float): Relaxation blend in force.
-            hard (float): Straight-through coefficient in force.
-
-        Returns:
-            MalinoisGradientOutput: One result per sample, in input order.
-        """
-        entries = list(payload["terms"])
-        batch_size = int(payload["metrics"]["batch_size"])
-        results = [
-            MalinoisGradientResult(
-                terms=[
-                    MalinoisTermGradient(
-                        term=MalinoisActivityTerm(cell_type=entry["cell_type"]),
-                        term_value=float(entry["values"][index]),
-                        gradient=entry["gradients"][index] if entry["gradients"] else None,
-                        metadata=GradientMetadata.from_input(
-                            matrices[index],
-                            vocab=payload["vocab"],
-                            temperature=temperature,
-                            soft=soft,
-                            hard=hard,
-                        ),
-                    )
-                    for entry in entries
-                ]
-            )
-            for index in range(batch_size)
-        ]
-        return cls(results=results, vocab=payload["vocab"])
+    @model_validator(mode="after")
+    def populate_sample_metrics(self) -> "MalinoisGradientOutput":
+        """Populate metric containers from the standalone metrics payload."""
+        if not self.sample_metrics:
+            self.sample_metrics = _build_gradient_sample_metrics(self.metrics)
+        return self
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
         """Export the gradient bundle as JSON."""
@@ -515,7 +617,7 @@ class MalinoisGradientOutput(GradientOutput):
             raise ValueError(f"Unsupported format: {file_format}")
         base = Path(export_path)
         json_path = base.parent / f"{base.name}.json"
-        payload = self.model_dump(include={"results", "vocab"})
+        payload = self.model_dump(include={"gradient", "loss", "sample_metrics", "metrics", "vocab"})
         json_path.write_text(json.dumps(payload, indent=2))
 
 
@@ -526,7 +628,7 @@ def example_input() -> Any:
 
 def example_gradient_input() -> Any:
     """Minimal valid input for differentiable Malinois examples."""
-    return MalinoisGradientInput(inputs=[NucleotideSequenceLogits([[0.0] * len(DNA_NUCLEOTIDES)] * 200)])
+    return MalinoisGradientInput(logits=[[[0.0] * len(DNA_NUCLEOTIDES)] * 200])
 
 
 @tool(
@@ -572,6 +674,8 @@ def run_malinois_score(
             "cell_types": config.cell_types,
             "seq_length": config.seq_length,
             "artifact_path": config.artifact_path,
+            "artifact_url": config.artifact_url,
+            "artifact_md5": config.artifact_md5,
             "malinois_dir": config.malinois_dir,
             "batch_size": config.batch_size,
             "device": config.device,
@@ -609,21 +713,19 @@ def run_malinois_score(
     input_class=MalinoisGradientInput,
     config_class=MalinoisGradientConfig,
     output_class=MalinoisGradientOutput,
-    description="Differentiate Malinois MPRA cell-type activity for relaxed DNA logits",
+    metrics_class=MalinoisGradientSampleMetrics,
+    description="Compute differentiable Malinois MPRA activity losses and gradients for relaxed DNA logits",
     uses_gpu=True,
     example_input=example_gradient_input,
     cacheable=False,
-    iterable_input_fields=["inputs"],
-    iterable_output_field="results",
-    max_chunk_size=32,
 )
 def run_malinois_gradient(
     inputs: MalinoisGradientInput,
     config: MalinoisGradientConfig,
     instance: Any = None,
 ) -> MalinoisGradientOutput:
-    """Report each requested Malinois cell activity and its gradient w.r.t. the relaxed logits."""
-    invalid_lengths = [len(matrix) for matrix in inputs.inputs if len(matrix) != config.seq_length]
+    """Compute Malinois activity gradients with respect to relaxed DNA logits."""
+    invalid_lengths = [len(matrix) for matrix in inputs.logits if len(matrix) != config.seq_length]
     if invalid_lengths:
         raise ValueError(f"Malinois gradient logits must have length {config.seq_length}; got {invalid_lengths[0]}")
 
@@ -631,11 +733,13 @@ def run_malinois_gradient(
         "malinois",
         {
             "operation": "compute_gradient",
-            "logits": [item.root for item in inputs.inputs],
+            "logits": inputs.logits,
             "temperature": inputs.temperature,
-            "gradient_terms": [term.model_dump() for term in config.gradient_terms],
+            "loss_terms": [term.model_dump() for term in config.loss_terms],
             "seq_length": config.seq_length,
             "artifact_path": config.artifact_path,
+            "artifact_url": config.artifact_url,
+            "artifact_md5": config.artifact_md5,
             "malinois_dir": config.malinois_dir,
             "soft": config.soft,
             "hard": config.hard,
@@ -647,10 +751,4 @@ def run_malinois_gradient(
         instance=instance,
         config=config,
     )
-    return MalinoisGradientOutput.from_batch(
-        result,
-        matrices=[item.root for item in inputs.inputs],
-        temperature=inputs.temperature,
-        soft=config.soft,
-        hard=config.hard,
-    )
+    return MalinoisGradientOutput(**result)

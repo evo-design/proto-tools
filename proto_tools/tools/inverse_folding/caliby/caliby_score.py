@@ -15,10 +15,10 @@ from pydantic import Field, field_validator, model_validator
 from proto_tools.entities.structures import Structure, StructureInputBase
 from proto_tools.tools.inverse_folding.caliby.caliby_sample import (
     DESIGN_CHECKPOINTS,
+    ensemble_paths,
     validate_checkpoint,
     validate_conformer_alignment,
 )
-from proto_tools.tools.inverse_folding.structure_staging import staged_ensemble
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -335,10 +335,10 @@ def run_caliby_score(
         unit="structure",
         disable=not config.verbose,
     ):
-        with staged_ensemble(inp.ensemble_structures) as (staged, conformer_paths):
+        with ensemble_paths(inp.ensemble_structures) as (primary_path, conformer_paths, _):
             input_dict = {
                 "operation": "score",
-                "primary_path": str(staged.path),
+                "primary_path": str(primary_path),
                 "conformer_paths": [str(p) for p in conformer_paths],
                 "return_local_energies": config.return_local_energies,
                 "batch_size": config.batch_size,

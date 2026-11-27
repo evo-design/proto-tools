@@ -1,20 +1,21 @@
 """MGnify clusters (release 2022_05) — metagenomic protein DB for AF3."""
 
-from proto_tools.databases.mmseqs2 import MMseqs2DatabaseEntry, MMseqs2SearchFlags
 from proto_tools.databases.registry import (
-    BuildRecipe,
-    BuildStep,
+    DatasetEntry,
     DatasetRegistry,
     DownloadSpec,
+    IndexRecipe,
+    IndexStep,
+    MmseqsFlags,
 )
 
-ENTRY = MMseqs2DatabaseEntry(
+ENTRY = DatasetEntry(
     name="mgnify-2022-05",
     molecule_type="protein",
     display_name="MGnify clusters (release 2022_05)",
     description="Metagenomic protein clusters from MGnify 2022_05 — AF3 metagenomic component.",
     citation_doi="10.1093/nar/gkac1080",  # MGnify — Richardson et al. 2023
-    downloads=[
+    urls=[
         DownloadSpec(
             url="https://storage.googleapis.com/alphafold-databases/v3.0/mgy_clusters_2022_05.fa.zst",
             filename="mgy_clusters_2022_05.fa.zst",
@@ -22,17 +23,17 @@ ENTRY = MMseqs2DatabaseEntry(
     ],
     total_download_bytes=60_000_000_000,
     total_disk_bytes=110_000_000_000,
-    build=BuildRecipe(
+    index_recipe=IndexRecipe(
         steps=[
-            BuildStep(
+            IndexStep(
                 command=["zstd", "-d", "--rm", "mgy_clusters_2022_05.fa.zst"],
                 description="Decompress source FASTA",
             ),
-            BuildStep(
+            IndexStep(
                 command=["mmseqs", "createdb", "mgy_clusters_2022_05.fa", "mgnify"],
                 description="Build MMseqs2 DB from FASTA",
             ),
-            BuildStep(
+            IndexStep(
                 command=["mmseqs", "makepaddedseqdb", "mgnify", "mgnify_padded"],
                 description="Build GPU padded-sequence DB for MMseqs2-GPU",
             ),
@@ -42,9 +43,10 @@ ENTRY = MMseqs2DatabaseEntry(
             "mgnify_padded.index",
         ],
     ),
-    search_flags=MMseqs2SearchFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
+    mmseqs_flags=MmseqsFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
     db_prefix="mgnify_padded",
-    gpu_db="mgnify_padded",
+    supports_gpu=True,
+    min_gpu_memory_gb=8.0,
     a3m_adapter="plain",
 )
 

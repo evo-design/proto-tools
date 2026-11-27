@@ -116,16 +116,16 @@ source standalone_helpers.sh
 
 uv pip install -r requirements.txt
 
-# Resolve the toolkit's weights folder ({PROTO_MODEL_CACHE}/{toolkit}/weights by default)
+# Resolve weight directory based on PROTO_MODEL_CACHE
 proto_resolve_weights_dir {toolkit}
 
-# Downloads once, verifies the checksum, retries transient failures
-proto_download_verified "https://example.com/model.pt" "$WEIGHTS_DIR/model.pt" "$MODEL_SHA256"
+if [ ! -f "$WEIGHTS_DIR/model.pt" ]; then
+    echo "Downloading model weights..."
+    wget -q -O "$WEIGHTS_DIR/model.pt" "https://example.com/model.pt"
+fi
 
 echo "Setup complete!"
 ```
-
-Every download a toolkit makes must land in its own `proto_model_cache/{toolkit}/` folder (see `notes/storage.md`). Hugging Face, torch hub, and JAX caches go there automatically. For everything else, use the shared helpers rather than hand-written download or path code: `download_weights` / `download_archive` for runtime downloads, `export_weights_dir` for libraries that read their own location variable (`CHAI_DOWNLOADS_DIR`, `FOUNDRY_CHECKPOINT_DIRS`, ...), `link_to_cache` for libraries that only look inside their installed package, and `require_weights_dir` instead of temp-dir fallbacks. If the tool reads another toolkit's weights, call that toolkit's shared `setup.sh` helper and add it to `tests/style_consistency_tests/test_shared_weights_pins.py`.
 
 **standalone/setup.sh for tools whose assets are NOT automatically downloaded** (Subagent 1) — for assets that setup.sh cannot fetch programmatically. Two cases qualify:
 

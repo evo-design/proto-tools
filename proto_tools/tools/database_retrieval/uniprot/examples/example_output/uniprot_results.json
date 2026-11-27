@@ -1,8 +1,7 @@
 {
   "tool_id": "uniprot-fetch",
-  "tool_version": "1.0.4",
-  "execution_time": 1.8126933574676514,
-  "timestamp": "2026-11-08T20:40:42.511388",
+  "execution_time": 0.7947096824645996,
+  "timestamp": "2026-06-20T19:08:59.983052",
   "success": true,
   "warnings": [],
   "errors": [],
@@ -83,7 +82,6 @@
     "2OCJ",
     "2PCX",
     "2RUK",
-    "2V5W",
     "2VUK",
     "2WGX",
     "2X0U",
@@ -124,7 +122,6 @@
     "4AGQ",
     "4BUZ",
     "4BV2",
-    "4FZ3",
     "4HFZ",
     "4HJE",
     "4IBQ",
@@ -304,35 +301,14 @@
     "9BR4",
     "9C5S",
     "9CHT",
-    "9EIQ",
-    "9EJD",
-    "9EK4",
     "9FZB",
     "9G5H",
     "9G6T",
     "9G6U",
-    "9OBF",
     "9R04",
     "9R2M",
     "9R2P",
-    "9R2Q",
-    "9S9L",
-    "9S9M",
-    "9S9N",
-    "9S9O",
-    "9S9P",
-    "9S9Q",
-    "9S9R",
-    "9SPM",
-    "9SPN",
-    "9SPO",
-    "9SPP",
-    "9SPQ",
-    "9SPR",
-    "9SPS",
-    "9SUK",
-    "9SZZ",
-    "9YZH"
+    "9R2Q"
   ],
   "source_url": "https://rest.uniprot.org/uniprotkb/P04637",
   "raw_entry": {
@@ -369,9 +345,9 @@
     "uniProtkbId": "P53_HUMAN",
     "entryAudit": {
       "firstPublicDate": "1987-08-13",
-      "lastAnnotationUpdateDate": "2026-11-04",
+      "lastAnnotationUpdateDate": "2026-06-10",
       "lastSequenceUpdateDate": "2009-11-24",
-      "entryVersion": 316,
+      "entryVersion": 314,
       "sequenceVersion": 4
     },
     "annotationScore": 5.0,
@@ -4220,7 +4196,7 @@
                 "id": "29681526"
               }
             ],
-            "value": "Acetylation of Lys-382 by CREBBP enhances transcriptional activity (PubMed:10656795, PubMed:15448695, PubMed:20228809, PubMed:23431171). Acetylation of Lys-382 by EP300 (PubMed:10656795, PubMed:15448695, PubMed:20228809, PubMed:23431171). Deacetylation of Lys-382 by SIRT1 impairs its ability to induce pro-apoptotic program and modulate cell senescence (PubMed:10656795, PubMed:15448695, PubMed:20228809, PubMed:23431171). Deacetylation by SIRT2 impairs its ability to induce transcription activation in a AKT-dependent manner (PubMed:10656795, PubMed:15448695, PubMed:20228809, PubMed:23431171, PubMed:29681526). Acetylation at Lys-381 increases stability (PubMed:29474172). Deacetylation at Lys-381 by SIRT6 decreases its stability, thereby regulating cell senescence (PubMed:29474172). Acetylated at Lys-120 by KAT5, KAT6A and KAT8; regulating its ability to induce pro-apoptotic program (PubMed:17189187, PubMed:19854137, PubMed:23431171)"
+            "value": "Acetylation of Lys-382 by CREBBP enhances transcriptional activity (PubMed:10656795, PubMed:15448695, PubMed:20228809, PubMed:23431171). Acetylation of Lys-382 by EP300 (PubMed:10656795, PubMed:15448695, PubMed:20228809, PubMed:23431171). Deacetylation of Lys-382 by SIRT1 impairs its ability to induce proapoptotic program and modulate cell senescence (PubMed:10656795, PubMed:15448695, PubMed:20228809, PubMed:23431171). Deacetylation by SIRT2 impairs its ability to induce transcription activation in a AKT-dependent manner (PubMed:10656795, PubMed:15448695, PubMed:20228809, PubMed:23431171, PubMed:29681526). Acetylation at Lys-381 increases stability (PubMed:29474172). Deacetylation at Lys-381 by SIRT6 decreases its stability, thereby regulating cell senescence (PubMed:29474172). Acetylated at Lys-120 by KAT5, KAT6A and KAT8; regulating its ability to induce proapoptotic program (PubMed:17189187, PubMed:19854137, PubMed:23431171)"
           }
         ],
         "commentType": "PTM"
@@ -11189,7 +11165,7 @@
             "modifier": "EXACT"
           }
         },
-        "description": "in sporadic cancers; somatic mutation; abolished acetylation; impaired ability to induce pro-apoptotic program; mimics lactylation, leading to decreased ability to undergo liquid-liquid phase separation and activate the transcription factor activity; dbSNP:rs121912658",
+        "description": "in sporadic cancers; somatic mutation; abolished acetylation; impaired ability to induce proapoptotic program; mimics lactylation, leading to decreased ability to undergo liquid-liquid phase separation and activate the transcription factor activity; dbSNP:rs121912658",
         "featureCrossReferences": [
           {
             "database": "dbSNP",
@@ -41057,7 +41033,28 @@
         "type": "Helix",
         "location": {
           "start": {
-            "value": 96,
+            "value": 92,
+            "modifier": "EXACT"
+          },
+          "end": {
+            "value": 94,
+            "modifier": "EXACT"
+          }
+        },
+        "description": "",
+        "evidences": [
+          {
+            "evidenceCode": "ECO:0007829",
+            "source": "PDB",
+            "id": "6SL6"
+          }
+        ]
+      },
+      {
+        "type": "Helix",
+        "location": {
+          "start": {
+            "value": 97,
             "modifier": "EXACT"
           },
           "end": {
@@ -41070,7 +41067,7 @@
           {
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
-            "id": "8A92"
+            "id": "4MZI"
           }
         ]
       },
@@ -41222,14 +41219,14 @@
         ]
       },
       {
-        "type": "Beta strand",
+        "type": "Helix",
         "location": {
           "start": {
-            "value": 148,
+            "value": 150,
             "modifier": "EXACT"
           },
           "end": {
-            "value": 150,
+            "value": 152,
             "modifier": "EXACT"
           }
         },
@@ -41238,7 +41235,7 @@
           {
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
-            "id": "5UN8"
+            "id": "3D06"
           }
         ]
       },
@@ -41281,6 +41278,27 @@
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
             "id": "3D06"
+          }
+        ]
+      },
+      {
+        "type": "Helix",
+        "location": {
+          "start": {
+            "value": 174,
+            "modifier": "EXACT"
+          },
+          "end": {
+            "value": 176,
+            "modifier": "EXACT"
+          }
+        },
+        "description": "",
+        "evidences": [
+          {
+            "evidenceCode": "ECO:0007829",
+            "source": "PDB",
+            "id": "8GCR"
           }
         ]
       },
@@ -41435,7 +41453,7 @@
         "type": "Helix",
         "location": {
           "start": {
-            "value": 221,
+            "value": 222,
             "modifier": "EXACT"
           },
           "end": {
@@ -41448,7 +41466,7 @@
           {
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
-            "id": "6SHZ"
+            "id": "3D06"
           }
         ]
       },
@@ -41750,7 +41768,28 @@
         "type": "Helix",
         "location": {
           "start": {
+            "value": 381,
+            "modifier": "EXACT"
+          },
+          "end": {
             "value": 383,
+            "modifier": "EXACT"
+          }
+        },
+        "description": "",
+        "evidences": [
+          {
+            "evidenceCode": "ECO:0007829",
+            "source": "PDB",
+            "id": "1H26"
+          }
+        ]
+      },
+      {
+        "type": "Helix",
+        "location": {
+          "start": {
+            "value": 384,
             "modifier": "EXACT"
           },
           "end": {
@@ -41763,7 +41802,7 @@
           {
             "evidenceCode": "ECO:0007829",
             "source": "PDB",
-            "id": "6RL3"
+            "id": "5MHC"
           }
         ]
       }
@@ -48542,7 +48581,7 @@
           "volume": "265"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY"
+          "X-RAY CRYSTALLOGRAPHY (2.2 ANGSTROMS) OF 94-289"
         ]
       },
       {
@@ -48573,7 +48612,7 @@
           "volume": "267"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY"
+          "X-RAY CRYSTALLOGRAPHY (1.7 ANGSTROMS) OF 325-356"
         ]
       },
       {
@@ -48608,7 +48647,7 @@
           "volume": "274"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY IN COMPLEX WITH MDM2"
+          "X-RAY CRYSTALLOGRAPHY (2.3 ANGSTROMS) OF 13-29 IN COMPLEX WITH MDM2"
         ]
       },
       {
@@ -48638,7 +48677,7 @@
           "volume": "274"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY IN COMPLEX WITH 53BP2"
+          "X-RAY CRYSTALLOGRAPHY (2.2 ANGSTROMS) OF 97-287 IN COMPLEX WITH 53BP2"
         ]
       },
       {
@@ -48669,7 +48708,7 @@
           "volume": "279"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY IN COMPLEX WITH ZINC IONS",
+          "X-RAY CRYSTALLOGRAPHY (1.9 ANGSTROMS) OF 94-312 IN COMPLEX WITH ZINC IONS",
           "SUBUNIT"
         ]
       },
@@ -48705,7 +48744,7 @@
           "volume": "22"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY IN COMPLEX WITH DNA AND ZINC IONS",
+          "X-RAY CRYSTALLOGRAPHY (1.8 ANGSTROMS) OF 94-293 IN COMPLEX WITH DNA AND ZINC IONS",
           "SUBUNIT"
         ]
       },
@@ -48741,7 +48780,7 @@
           "volume": "13"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY IN COMPLEX WITH USP7",
+          "X-RAY CRYSTALLOGRAPHY (1.6 ANGSTROMS) OF 358-367 IN COMPLEX WITH USP7",
           "INTERACTION WITH USP7"
         ]
       },
@@ -48776,7 +48815,7 @@
           "volume": "4"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY IN COMPLEX WITH USP7",
+          "X-RAY CRYSTALLOGRAPHY (1.65 ANGSTROMS) OF 360-368 IN COMPLEX WITH USP7",
           "MUTAGENESIS OF PRO-359; GLY-361 AND SER-362",
           "INTERACTION WITH USP7"
         ]
@@ -48814,7 +48853,7 @@
           "volume": "285"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY",
+          "X-RAY CRYSTALLOGRAPHY (2.50 ANGSTROMS) OF 377-386",
           "METHYLATION AT LYS-382",
           "MUTAGENESIS OF LYS-382",
           "INTERACTION WITH L3MBTL1"
@@ -48946,7 +48985,7 @@
           "volume": "103"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY IN COMPLEX WITH ZINC IONS"
+          "X-RAY CRYSTALLOGRAPHY (1.65 ANGSTROMS) OF 94-312 IN COMPLEX WITH ZINC IONS"
         ]
       },
       {
@@ -48981,7 +49020,7 @@
           "volume": "64"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY OF VARIANT GLN-282"
+          "X-RAY CRYSTALLOGRAPHY (1.54 ANGSTROMS) OF 94-292 OF VARIANT GLN-282"
         ]
       },
       {
@@ -49015,7 +49054,7 @@
           "volume": "105"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY OF VARIANT CYS-202 IN COMPLEX WITH ZINC IONS AND PHIKAN083"
+          "X-RAY CRYSTALLOGRAPHY (1.5 ANGSTROMS) OF 94-312 OF VARIANT CYS-202 IN COMPLEX WITH ZINC IONS AND PHIKAN083"
         ]
       },
       {
@@ -49053,7 +49092,7 @@
           "volume": "385"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY OF VARIANT SER-249 IN COMPLEX WITH DNA"
+          "X-RAY CRYSTALLOGRAPHY (1.2 ANGSTROMS) OF 94-293 OF VARIANT SER-249 IN COMPLEX WITH DNA"
         ]
       },
       {
@@ -49085,7 +49124,7 @@
           "volume": "22"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY IN COMPLEX WITH ZINC IONS"
+          "X-RAY CRYSTALLOGRAPHY (1.75 ANGSTROMS) OF 94-310 IN COMPLEX WITH ZINC IONS"
         ]
       },
       {
@@ -49119,7 +49158,7 @@
           "volume": "17"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY OF VARIANT CYS-220 IN COMPLEX WITH ZINC IONS"
+          "X-RAY CRYSTALLOGRAPHY (1.6 ANGSTROMS) OF 94-312 OF VARIANT CYS-220 IN COMPLEX WITH ZINC IONS"
         ]
       },
       {
@@ -49154,7 +49193,7 @@
           "volume": "17"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY IN COMPLEX WITH DNA AND ZINC IONS",
+          "X-RAY CRYSTALLOGRAPHY (1.7 ANGSTROMS) OF 94-293 IN COMPLEX WITH DNA AND ZINC IONS",
           "SUBUNIT"
         ]
       },
@@ -49189,7 +49228,7 @@
           "volume": "28"
         },
         "referencePositions": [
-          "X-RAY CRYSTALLOGRAPHY",
+          "X-RAY CRYSTALLOGRAPHY (3.10 ANGSTROMS) OF 17-56",
           "INTERACTION WITH S100A4"
         ],
         "evidences": [
@@ -52280,7 +52319,7 @@
         "properties": [
           {
             "key": "NucleotideSequenceId",
-            "value": "NM_000546.6"
+            "value": "NM_000546.5"
           }
         ],
         "isoformId": "P04637-1"
@@ -52390,7 +52429,7 @@
         "properties": [
           {
             "key": "NucleotideSequenceId",
-            "value": "NM_001276697.3"
+            "value": "NM_001276697.1"
           }
         ]
       },
@@ -52400,7 +52439,7 @@
         "properties": [
           {
             "key": "NucleotideSequenceId",
-            "value": "NM_001276698.3"
+            "value": "NM_001276698.1"
           }
         ]
       },
@@ -52410,7 +52449,7 @@
         "properties": [
           {
             "key": "NucleotideSequenceId",
-            "value": "NM_001276699.3"
+            "value": "NM_001276699.1"
           }
         ]
       },
@@ -53772,24 +53811,6 @@
       },
       {
         "database": "PDB",
-        "id": "2V5W",
-        "properties": [
-          {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "2.00 A"
-          },
-          {
-            "key": "Chains",
-            "value": "I/L=379-382"
-          }
-        ]
-      },
-      {
-        "database": "PDB",
         "id": "2VUK",
         "properties": [
           {
@@ -54510,24 +54531,6 @@
       },
       {
         "database": "PDB",
-        "id": "4FZ3",
-        "properties": [
-          {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "2.10 A"
-          },
-          {
-            "key": "Chains",
-            "value": "B=379-382"
-          }
-        ]
-      },
-      {
-        "database": "PDB",
         "id": "4HFZ",
         "properties": [
           {
@@ -54810,7 +54813,7 @@
           },
           {
             "key": "Chains",
-            "value": "A=93-292"
+            "value": "A=94-292"
           }
         ]
       },
@@ -54828,7 +54831,7 @@
           },
           {
             "key": "Chains",
-            "value": "A/B/C/D=93-358"
+            "value": "A/B/C/D=94-358"
           }
         ]
       },
@@ -54936,7 +54939,7 @@
           },
           {
             "key": "Chains",
-            "value": "B=379-385"
+            "value": "B=379-383"
           }
         ]
       },
@@ -57750,60 +57753,6 @@
       },
       {
         "database": "PDB",
-        "id": "9EIQ",
-        "properties": [
-          {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "2.21 A"
-          },
-          {
-            "key": "Chains",
-            "value": "C/F=249-257"
-          }
-        ]
-      },
-      {
-        "database": "PDB",
-        "id": "9EJD",
-        "properties": [
-          {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "2.15 A"
-          },
-          {
-            "key": "Chains",
-            "value": "C/F=250-257"
-          }
-        ]
-      },
-      {
-        "database": "PDB",
-        "id": "9EK4",
-        "properties": [
-          {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "2.05 A"
-          },
-          {
-            "key": "Chains",
-            "value": "C/F=249-257"
-          }
-        ]
-      },
-      {
-        "database": "PDB",
         "id": "9FZB",
         "properties": [
           {
@@ -57871,24 +57820,6 @@
           {
             "key": "Chains",
             "value": "A/B=94-312"
-          }
-        ]
-      },
-      {
-        "database": "PDB",
-        "id": "9OBF",
-        "properties": [
-          {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "3.25 A"
-          },
-          {
-            "key": "Chains",
-            "value": "C/F=187-197"
           }
         ]
       },
@@ -57965,308 +57896,2952 @@
         ]
       },
       {
-        "database": "PDB",
-        "id": "9S9L",
+        "database": "PDBsum",
+        "id": "1A1U",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.38 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A/B=94-312"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9S9M",
+        "database": "PDBsum",
+        "id": "1AIE",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.83 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A/B=94-312"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9S9N",
+        "database": "PDBsum",
+        "id": "1C26",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.72 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A/B=94-312"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9S9O",
+        "database": "PDBsum",
+        "id": "1DT7",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.49 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A/B=94-312"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9S9P",
+        "database": "PDBsum",
+        "id": "1GZH",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.40 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A/B=94-312"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9S9Q",
+        "database": "PDBsum",
+        "id": "1H26",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.87 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A/B=94-312"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9S9R",
+        "database": "PDBsum",
+        "id": "1HS5",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.70 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A/B=94-312"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9SPM",
+        "database": "PDBsum",
+        "id": "1JSP",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.71 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A=94-294"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9SPN",
+        "database": "PDBsum",
+        "id": "1KZY",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.93 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A=94-294"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9SPO",
+        "database": "PDBsum",
+        "id": "1MA3",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.48 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A=94-294"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9SPP",
+        "database": "PDBsum",
+        "id": "1OLG",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.47 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A=94-294"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9SPQ",
+        "database": "PDBsum",
+        "id": "1OLH",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "2.20 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A=94-294"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9SPR",
+        "database": "PDBsum",
+        "id": "1PES",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.66 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A=94-294"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9SPS",
+        "database": "PDBsum",
+        "id": "1PET",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.42 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A=94-294"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9SUK",
+        "database": "PDBsum",
+        "id": "1SAE",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.56 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A/B=94-312"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9SZZ",
+        "database": "PDBsum",
+        "id": "1SAF",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
-          {
-            "key": "Resolution",
-            "value": "1.70 A"
-          },
-          {
-            "key": "Chains",
-            "value": "A/B=94-312"
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
       {
-        "database": "PDB",
-        "id": "9YZH",
+        "database": "PDBsum",
+        "id": "1SAK",
         "properties": [
           {
-            "key": "Method",
-            "value": "X-ray"
-          },
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "1SAL",
+        "properties": [
           {
-            "key": "Resolution",
-            "value": "3.25 A"
-          },
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "1TSR",
+        "properties": [
           {
-            "key": "Chains",
-            "value": "C/F=187-197"
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "1TUP",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "1UOL",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "1XQH",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "1YC5",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "1YCQ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "1YCR",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "1YCS",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2AC0",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2ADY",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2AHI",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2ATA",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2B3G",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2BIM",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2BIN",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2BIO",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2BIP",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2BIQ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2F1X",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2FEJ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2FOJ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2FOO",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2GS0",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2H1L",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2H2D",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2H2F",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2H4F",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2H4H",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2H4J",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2H59",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2J0Z",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2J10",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2J11",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2J1W",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2J1X",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2J1Y",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2J1Z",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2J20",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2J21",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2K8F",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2L14",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2LY4",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2MEJ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2MWO",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2MWP",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2MWY",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2MZD",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2OCJ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2PCX",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2RUK",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2VUK",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2WGX",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2X0U",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2X0V",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2X0W",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2XWR",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2YBG",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2YDR",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2Z5S",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "2Z5T",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3D05",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3D06",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3D07",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3D08",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3D09",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3D0A",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3DAB",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3DAC",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3IGK",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3IGL",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3KMD",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3KZ8",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3LW1",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3OQ5",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3PDH",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3Q01",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3Q05",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3Q06",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3SAK",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3TG5",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3TS8",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "3ZME",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4AGL",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4AGM",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4AGN",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4AGO",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4AGP",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4AGQ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4BUZ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4BV2",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4HFZ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4HJE",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4IBQ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4IBS",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4IBT",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4IBU",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4IBV",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4IBW",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4IBY",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4IBZ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4IJT",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4KVP",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4LO9",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4LOE",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4LOF",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4MZI",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4MZR",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4QO1",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4RP6",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4RP7",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4X34",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4XR8",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "4ZZJ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5A7B",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5AB9",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5ABA",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5AOI",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5AOJ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5AOK",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5AOL",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5AOM",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5BUA",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5ECG",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5G4M",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5G4N",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5G4O",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5HOU",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5HP0",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5HPD",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5LAP",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5LGY",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5MCT",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5MCU",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5MCV",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5MCW",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5MF7",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5MG7",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5MHC",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5MOC",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5O1A",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5O1B",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5O1C",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5O1D",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5O1E",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5O1F",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5O1G",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5O1H",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5O1I",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5OL0",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5UN8",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "5XZC",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6FF9",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6FJ5",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6GGA",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6GGB",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6GGC",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6GGD",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6GGE",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6GGF",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6LHD",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6R5L",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RJZ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RK8",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RKI",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RKK",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RKM",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RL3",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RL4",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RL6",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RM5",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RM7",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RWH",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RWI",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RWS",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RWU",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RX2",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6RZ3",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6S39",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6S3C",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6S40",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6S9Q",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SHZ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SI0",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SI1",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SI2",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SI3",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SI4",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SIN",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SIO",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SIP",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SIQ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SL6",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6SLV",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6T58",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6V4F",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6V4H",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6VQO",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6VR1",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6VR5",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6VRM",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6VRN",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6W51",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6XRE",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "6ZNC",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B46",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B47",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B48",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B49",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B4A",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B4B",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B4C",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B4D",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B4E",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B4F",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B4G",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B4H",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7B4N",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7BWN",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7DHY",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7DHZ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7DVD",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7EAX",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7EDS",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7EEU",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7EL4",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7NMI",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7RM4",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7V97",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7XZX",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7XZZ",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "7YGI",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8A31",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8A32",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8A92",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8CG7",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8DC4",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8DC6",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8DC7",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8DC8",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8E7A",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8E7B",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8GCR",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8HLL",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8HLM",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8HLN",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8J8N",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8OXM",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8OXO",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8QWK",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8QWL",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8QWM",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8QWN",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8QWO",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8QWP",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8R1F",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8R1G",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8RBA",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8RBB",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8RBC",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8RCI",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8UQR",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8WD2",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8XCB",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8XCE",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "8XP5",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9BR3",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9BR4",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9C5S",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9CHT",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9FZB",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9G5H",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9G6T",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9G6U",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9R04",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9R2M",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9R2P",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
+          }
+        ]
+      },
+      {
+        "database": "PDBsum",
+        "id": "9R2Q",
+        "properties": [
+          {
+            "key": "Description",
+            "value": "-"
           }
         ]
       },
@@ -58481,37 +61056,7 @@
         ]
       },
       {
-        "database": "MDposit",
-        "id": "P04637",
-        "properties": [
-          {
-            "key": "Description",
-            "value": "-"
-          }
-        ]
-      },
-      {
-        "database": "MDRepo",
-        "id": "P04637",
-        "properties": [
-          {
-            "key": "Description",
-            "value": "-"
-          }
-        ]
-      },
-      {
         "database": "PCDDB",
-        "id": "P04637",
-        "properties": [
-          {
-            "key": "Description",
-            "value": "-"
-          }
-        ]
-      },
-      {
-        "database": "SASBDB",
         "id": "P04637",
         "properties": [
           {
@@ -58536,7 +61081,7 @@
         "properties": [
           {
             "key": "Interactions",
-            "value": "2584"
+            "value": "2579"
           }
         ]
       },
@@ -58546,7 +61091,7 @@
         "properties": [
           {
             "key": "EntryName",
-            "value": "TP53-MDM2-MDM4 transcription regulation complex"
+            "value": "p53-MDM2-MDM4 transcriptional regulation complex"
           }
         ]
       },
@@ -58556,7 +61101,7 @@
         "properties": [
           {
             "key": "EntryName",
-            "value": "TP53-MDM4 transcription regulation complex"
+            "value": "p53-MDM4 transcriptional regulation complex"
           }
         ]
       },
@@ -58566,7 +61111,7 @@
         "properties": [
           {
             "key": "EntryName",
-            "value": "TP53-MDM2 transcription regulation complex"
+            "value": "p53-MDM2 transcriptional regulation complex"
           }
         ]
       },
@@ -58866,7 +61411,7 @@
         "properties": [
           {
             "key": "glycosylation",
-            "value": "3 sites, 1 glycan"
+            "value": "1 site, 1 glycan"
           }
         ]
       },
@@ -59135,7 +61680,7 @@
         "properties": [
           {
             "key": "antibodies",
-            "value": "10498 antibodies from 69 providers"
+            "value": "9670 antibodies from 67 providers"
           }
         ]
       },
@@ -59554,7 +62099,7 @@
         "properties": [
           {
             "key": "Number of evidences",
-            "value": "393 evidence items across 289 molecular profiles"
+            "value": "392 evidence items across 285 molecular profiles"
           }
         ]
       },
@@ -59770,16 +62315,6 @@
       },
       {
         "database": "Orphanet",
-        "id": "726004",
-        "properties": [
-          {
-            "key": "Disease",
-            "value": "Astrocytoma grade 4"
-          }
-        ]
-      },
-      {
-        "database": "Orphanet",
         "id": "67038",
         "properties": [
           {
@@ -59940,16 +62475,6 @@
       },
       {
         "database": "Orphanet",
-        "id": "726036",
-        "properties": [
-          {
-            "key": "Disease",
-            "value": "Red cell aplasia-microcephaly-seizure-developmental delay syndrome"
-          }
-        ]
-      },
-      {
-        "database": "Orphanet",
         "id": "70573",
         "properties": [
           {
@@ -60000,7 +62525,7 @@
       },
       {
         "database": "OMA",
-        "id": "ACCQRNQ",
+        "id": "HKKGEPC",
         "properties": [
           {
             "key": "Fingerprint",
@@ -60400,6 +62925,16 @@
       },
       {
         "database": "Reactome",
+        "id": "R-HSA-70635",
+        "properties": [
+          {
+            "key": "PathwayName",
+            "value": "Urea cycle"
+          }
+        ]
+      },
+      {
+        "database": "Reactome",
         "id": "R-HSA-8852276",
         "properties": [
           {
@@ -60499,16 +63034,6 @@
         ]
       },
       {
-        "database": "Reactome",
-        "id": "R-HSA-9988426",
-        "properties": [
-          {
-            "key": "PathwayName",
-            "value": "Negative transcriptional regulation of urea cycle enzymes"
-          }
-        ]
-      },
-      {
         "database": "SABIO-RK",
         "id": "P04637",
         "properties": [
@@ -60560,16 +63085,6 @@
       },
       {
         "database": "CD-CODE",
-        "id": "0BA9F057",
-        "properties": [
-          {
-            "key": "EntryName",
-            "value": "p53 condensate"
-          }
-        ]
-      },
-      {
-        "database": "CD-CODE",
         "id": "1A18FFC4",
         "properties": [
           {
@@ -60585,16 +63100,6 @@
           {
             "key": "EntryName",
             "value": "Centrosome"
-          }
-        ]
-      },
-      {
-        "database": "CD-CODE",
-        "id": "904EB3AA",
-        "properties": [
-          {
-            "key": "EntryName",
-            "value": "CEBPZ condensates"
           }
         ]
       },
@@ -60887,14 +63392,7 @@
           },
           {
             "key": "GoEvidenceType",
-            "value": "EXP:UniProtKB"
-          }
-        ],
-        "evidences": [
-          {
-            "evidenceCode": "ECO:0000269",
-            "source": "PubMed",
-            "id": "17170702"
+            "value": "IEA:UniProtKB-SubCell"
           }
         ]
       },
@@ -60908,24 +63406,7 @@
           },
           {
             "key": "GoEvidenceType",
-            "value": "EXP:UniProtKB"
-          }
-        ],
-        "evidences": [
-          {
-            "evidenceCode": "ECO:0000269",
-            "source": "PubMed",
-            "id": "22726440"
-          },
-          {
-            "evidenceCode": "ECO:0000269",
-            "source": "PubMed",
-            "id": "25168243"
-          },
-          {
-            "evidenceCode": "ECO:0000269",
-            "source": "PubMed",
-            "id": "27323408"
+            "value": "IEA:UniProtKB-SubCell"
           }
         ]
       },
@@ -61085,11 +63566,6 @@
           {
             "evidenceCode": "ECO:0000314",
             "source": "PubMed",
-            "id": "22914926"
-          },
-          {
-            "evidenceCode": "ECO:0000314",
-            "source": "PubMed",
             "id": "24625977"
           },
           {
@@ -61174,32 +63650,6 @@
             "evidenceCode": "ECO:0000316",
             "source": "PubMed",
             "id": "17145718"
-          }
-        ]
-      },
-      {
-        "database": "GO",
-        "id": "GO:0017053",
-        "properties": [
-          {
-            "key": "GoTerm",
-            "value": "C:transcription repressor complex"
-          },
-          {
-            "key": "GoEvidenceType",
-            "value": "IPI:ComplexPortal"
-          }
-        ],
-        "evidences": [
-          {
-            "evidenceCode": "ECO:0000353",
-            "source": "PubMed",
-            "id": "18677113"
-          },
-          {
-            "evidenceCode": "ECO:0000353",
-            "source": "PubMed",
-            "id": "8875929"
           }
         ]
       },
@@ -63745,9 +66195,9 @@
         "Alternative sequence": 6,
         "Natural variant": 1363,
         "Mutagenesis": 38,
-        "Helix": 17,
+        "Helix": 21,
         "Turn": 7,
-        "Beta strand": 18
+        "Beta strand": 17
       },
       "uniParcId": "UPI000002ED67"
     }

@@ -32,9 +32,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-import time
-from collections.abc import Iterable, Iterator
-from typing import Any, Generic, TypeVar, cast, overload
+from typing import Any
 
 # Sentinel prefix on every JSON-tagged stderr line. Must match proto_tools/utils/logging_config.py:_TAG_PREFIX.
 _TAG_PREFIX = "\x00LOG\x00"
@@ -81,125 +79,18 @@ class ProtoLogger(logging.Logger):
             stacklevel=stacklevel,
         )
 
-    def update_status(self, msg: object, *args: Any, level: int = logging.INFO) -> None:
-        """Update the status line (the spinner subtitle, or a hosted run's subtitle) and log it at ``level``.
+    def update_status(self, msg: object, *args: Any) -> None:
+        """Emit a status record that updates the spinner subtitle and is captured by file handlers but never shown on console.
 
-        Use this for phase messages inside long-running tools ("Loading ESMFold weights",
-        "Folding structure 3/8"); it is itself a log record, so don't pair it with an ``info`` that
-        says the same thing. The status always updates, whatever this logger's level: ``level``
-        only decides where the record is logged. File handlers keep it at that level, and a
-        console handler shows it only when no progress bar is up to display it and its level
-        admits it. Pass ``logging.DEBUG`` for routine steps, keeping the default ``INFO`` for
-        phases worth a line in the log (loading weights, downloads, remote jobs).
-
-        Args:
-            msg (object): Message, %-formatted with ``args``.
-            args (Any): Arguments for ``msg``.
-            level (int): Level the record is logged at.
+        Use this for phase-transition messages inside long-running tools
+        ("Loading weights", "Moving to GPU", "Folding 1 complex"). The console
+        StreamHandler installs a Filter that drops these records, so they never
+        clutter terminal output regardless of verbose level. File handlers
+        (configured via ``setup_logging(log_to_file=True)``) still capture
+        them as a complete audit trail.
         """
-        # Not gated on isEnabledFor: a DEBUG status still has to reach the status line.
-        self._log(level, msg, args, update_status=True)
-
-
-# Seconds between the per-item statuses a StatusCounter reports, so a fast loop reads at human pace.
-STATUS_INTERVAL_SECONDS = 5.0
-
-
-_Item = TypeVar("_Item")
-
-
-class StatusCounter(Generic[_Item]):
-    """Report progress through a known number of items as status updates, throttled to human pace.
-
-    The first item is reported at once, then at most one every ``interval`` seconds, and the last item always.
-    A tight loop costs one clock read per item. Works with either logger that has ``update_status``: this
-    module's (in a tool's environment) or proto-tools' own (a tool that runs in the caller's process).
-
-    Wrap an iterable, like tqdm, or call the counter with each item's number when the loop isn't one item
-    per step (e.g. batches).
-
-    Example:
-        >>> for sequence in StatusCounter(logger, "Folding structure %d/%d", sequences):
-        ...     fold(sequence)
-        >>> counter = StatusCounter(logger, "Scoring batch %d/%d", total=num_batches)
-        >>> for start in range(0, len(sequences), batch_size):
-        ...     counter(start // batch_size + 1)
-    """
-
-    @overload
-    def __init__(
-        self: StatusCounter[Any],
-        logger: logging.Logger,
-        template: str,
-        iterable: None = None,
-        *,
-        total: int,
-        interval: float = ...,
-        level: int = ...,
-    ) -> None: ...
-
-    @overload
-    def __init__(
-        self,
-        logger: logging.Logger,
-        template: str,
-        iterable: Iterable[_Item],
-        *,
-        total: int | None = None,
-        interval: float = ...,
-        level: int = ...,
-    ) -> None: ...
-
-    def __init__(
-        self,
-        logger: logging.Logger,
-        template: str,
-        iterable: Iterable[_Item] | None = None,
-        *,
-        total: int | None = None,
-        interval: float = STATUS_INTERVAL_SECONDS,
-        level: int = logging.DEBUG,
-    ) -> None:
-        """Create a counter.
-
-        Args:
-            logger (logging.Logger): A logger with ``update_status`` (``get_logger(...)`` here, or proto-tools').
-            template (str): The status, with ``%d`` for the item number and then the total, e.g.
-                ``"Folding structure %d/%d"``.
-            iterable (Iterable[_Item] | None): Items to wrap; iterating the counter yields them and
-                reports each one. None when the counter is called with item numbers instead.
-            total (int | None): How many items there are; defaults to ``len(iterable)``.
-            interval (float): Minimum seconds between reports, except the last.
-            level (int): Level each report is logged at. DEBUG by default: a count is routine
-                progress, and the status line shows it whatever the level.
-        """
-        if total is None:
-            if iterable is None:
-                raise TypeError("StatusCounter needs an iterable or a total")
-            total = len(iterable)  # type: ignore[arg-type]
-        self._logger = logger
-        self._template = template
-        self._iterable = iterable
-        self._total = total
-        self._interval = interval
-        self._level = level
-        self._last: float | None = None
-
-    def __call__(self, number: int) -> None:
-        """Report item ``number`` (1-based) of the total, when the throttle allows."""
-        now = time.monotonic()
-        if number < self._total and self._last is not None and now - self._last < self._interval:
-            return
-        self._last = now
-        self._logger.update_status(self._template, number, self._total, level=self._level)  # type: ignore[attr-defined]
-
-    def __iter__(self) -> Iterator[_Item]:
-        """Yield the wrapped items, reporting each one before it is handed out."""
-        if self._iterable is None:
-            raise TypeError("StatusCounter was given no iterable to wrap; call it with item numbers instead")
-        for number, item in enumerate(self._iterable, start=1):
-            self(number)
-            yield item
+        if self.isEnabledFor(logging.INFO):
+            self._log(logging.INFO, msg, args, update_status=True)
 
 
 class _BridgeHandler(logging.Handler):
@@ -254,7 +145,7 @@ def install() -> None:
     worker_logger.setLevel(logging.DEBUG)
 
 
-def get_logger(name: str) -> ProtoLogger:
+def get_logger(name: str) -> logging.Logger:
     """Return a logger under the ``worker.*`` namespace bridged to the parent.
 
     Producer convention used by every standalone script and helper submodule:
@@ -269,15 +160,7 @@ def get_logger(name: str) -> ProtoLogger:
             record's ``name`` attribute and visible to the parent.
 
     Returns:
-        ProtoLogger: A logger under ``worker.{name}`` whose records are
-            bridged to the parent process via :class:`_BridgeHandler`. It is a
-            :class:`ProtoLogger` even before :func:`install` runs (e.g. from a
-            setup script), so ``update_status`` always works; without the
-            bridge it is an ordinary INFO record.
+        logging.Logger: A logger under ``worker.{name}`` whose records are
+            bridged to the parent process via :class:`_BridgeHandler`.
     """
-    logger = logging.getLogger(f"{_WORKER_NAMESPACE}.{name}")
-    if not hasattr(logger, "update_status"):
-        # A plain Logger, made before install() or outside a worker. ProtoLogger adds methods but no
-        # state, so switching this one instance's class is safe and leaves the global logger class alone.
-        logger.__class__ = ProtoLogger
-    return cast(ProtoLogger, logger)
+    return logging.getLogger(f"{_WORKER_NAMESPACE}.{name}")

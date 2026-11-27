@@ -9,7 +9,6 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_cluster import (
 )
 from proto_tools.tools.structure_alignment.foldseek.foldseek_multimer_search import (
     FoldseekMultimerHit,
-    FoldseekMultimerHitMetrics,
     FoldseekMultimerSearchConfig,
     FoldseekMultimerSearchInput,
     FoldseekMultimerSearchOutput,
@@ -29,7 +28,6 @@ from proto_tools.tools.structure_alignment.foldseek.foldseek_rbh import (
 )
 from proto_tools.tools.structure_alignment.foldseek.foldseek_search import (
     FoldseekHit,
-    FoldseekHitMetrics,
     FoldseekSearchConfig,
     FoldseekSearchInput,
     FoldseekSearchOutput,
@@ -42,12 +40,10 @@ __all__ = [
     "FoldseekClusterInput",
     "FoldseekClusterOutput",
     "FoldseekHit",
-    "FoldseekHitMetrics",
     "FoldseekMultimerClusterConfig",
     "FoldseekMultimerClusterInput",
     "FoldseekMultimerClusterOutput",
     "FoldseekMultimerHit",
-    "FoldseekMultimerHitMetrics",
     "FoldseekMultimerSearchConfig",
     "FoldseekMultimerSearchInput",
     "FoldseekMultimerSearchOutput",

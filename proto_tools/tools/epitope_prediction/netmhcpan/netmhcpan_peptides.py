@@ -58,7 +58,7 @@ class NetMHCpanPeptidesInput(BaseToolInput):
 class NetMHCpanPeptidesConfig(NetMHCpanConfig):
     """Configuration for netMHCpan prediction on explicit peptides.
 
-    There is no peptide-length setting because netMHCpan ignores ``-l`` in peptide mode and scores
+    Carries no peptide-length setting: netMHCpan ignores ``-l`` in peptide mode and scores
     each peptide at its own length.
 
     Attributes:
@@ -198,11 +198,11 @@ def run_netmhcpan_peptides(
     """Predict MHC class I binding for peptides that are already the right length.
 
     Each peptide is scored against every configured allele in a single netMHCpan
-    invocation. Peptide length is taken from each peptide itself. netMHCpan ignores its
+    invocation. Peptide length is taken from each peptide itself: netMHCpan ignores its
     ``-l`` flag in peptide mode, so this tool deliberately exposes no length setting (use
     ``netmhcpan-protein`` to enumerate k-mers from a protein instead).
 
-    ``rank_el`` is the quantity to threshold on and to compare across alleles. Raw scores
+    ``rank_el`` is the quantity to threshold on and to compare across alleles; raw scores
     sit on different per-allele background distributions.
 
     Args:
@@ -237,7 +237,7 @@ def run_netmhcpan_peptides(
     output_data = ToolInstance.dispatch("netmhcpan", input_data, instance=instance, config=config)
 
     # Rows are matched on (allele, peptide), so the order netMHCpan prints them in does not
-    # matter. A repeated peptide shares one row and gets the same prediction each time. An
+    # matter. A repeated peptide shares one row and gets the same prediction each time; an
     # expected pair that is absent raises below.
     by_key = {
         (binding.allele, binding.peptide): binding

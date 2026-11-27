@@ -6,15 +6,12 @@ FAMPNN exhaustive single-mutation scoring tool.
 import csv
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from proto_tools.entities.structures import Structure
-from proto_tools.tools.inverse_folding.fampnn._readable import fampnn_readable_positions
-from proto_tools.tools.inverse_folding.shared_data_models import flat_readable_positions
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -32,39 +29,6 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Data Models
 # ============================================================================
-def _to_structure_numbering(scores: dict[str, Any], structure: Structure) -> dict[str, Any]:
-    """Renumber score keys from FAMPNN's own numbering into the structure's.
-
-    FAMPNN numbers what its parser reads from 1 with no gaps, so a key names the *n*-th
-    residue it read rather than the *n*-th residue of the structure. The two diverge after
-    the first residue it skips, which would silently attribute a score to its neighbour.
-
-    Args:
-        scores (dict[str, Any]): Per-position scores keyed ``"{position}{wild_type}"`` in
-            FAMPNN's numbering.
-        structure (Structure): The structure that was scored.
-
-    Returns:
-        dict[str, Any]: The same scores keyed by 1-indexed position in the structure.
-    """
-    readable = flat_readable_positions(fampnn_readable_positions(structure), structure)
-    renumbered: dict[str, Any] = {}
-    for key, row in scores.items():
-        match = re.fullmatch(r"(\d+)(.*)", key)
-        if match is None:
-            renumbered[key] = row
-            continue
-        model_position = int(match.group(1))
-        if not 1 <= model_position <= len(readable):
-            raise ValueError(
-                f"fampnn-score-all-mutations: the model scored position {model_position}, but its "
-                f"parser reads {len(readable)} of this structure's residues. The readable_positions "
-                "rule most likely no longer matches the installed version of the model."
-            )
-        renumbered[f"{readable[model_position - 1]}{match.group(2)}"] = row
-    return renumbered
-
-
 class FAMPNNScoreAllMutationsInput(BaseToolInput):
     """Input for scoring all possible single mutations.
 
@@ -243,6 +207,6 @@ def run_fampnn_score_all_mutations(
                 instance=instance,
                 config=config,
             )
-        results.append(AllMutationsScoreResult(scores=_to_structure_numbering(result["scores"], structure)))
+        results.append(AllMutationsScoreResult(scores=result["scores"]))
 
     return FAMPNNScoreAllMutationsOutput(results=results)

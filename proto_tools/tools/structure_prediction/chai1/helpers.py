@@ -50,7 +50,7 @@ def write_msa_pqt(
             the original MSA). If None, uses synthetic ``seq_0``, ``seq_1``, etc.
         pairing_keys (list[str] | None): Optional per-row pairing key strings.
             When supplied, rows whose pairing_key matches across chains are paired
-            by chai_lab, which pairs the query row (index 0) itself whatever its key.
+            by chai_lab. The query row (index 0) should carry an empty pairing_key.
             When ``None``, all rows get an empty pairing_key (no cross-chain pairing).
     """
     import pandas as pd

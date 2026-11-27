@@ -5,21 +5,22 @@ Built locally as an MMseqs2 nucleotide DB with a search-type-3 k-mer
 index (no GPU padded variant — AlphaFast uses CPU for RNA search).
 """
 
-from proto_tools.databases.mmseqs2 import MMseqs2DatabaseEntry, MMseqs2SearchFlags
 from proto_tools.databases.registry import (
-    BuildRecipe,
-    BuildStep,
+    DatasetEntry,
     DatasetRegistry,
     DownloadSpec,
+    IndexRecipe,
+    IndexStep,
+    MmseqsFlags,
 )
 
-ENTRY = MMseqs2DatabaseEntry(
+ENTRY = DatasetEntry(
     name="rnacentral-active-90-80",
     molecule_type="rna",
     display_name="RNAcentral active (clustered 90/80)",
     description="RNAcentral active sequences clustered at 90% identity, 80% coverage — AF3 RNA MSA primary.",
     citation_doi="10.1093/nar/gkaa921",  # RNAcentral — RNAcentral Consortium 2021
-    downloads=[
+    urls=[
         DownloadSpec(
             url="https://storage.googleapis.com/alphafold-databases/v3.0/rnacentral_active_seq_id_90_cov_80_linclust.fasta.zst",
             filename="rnacentral_active_seq_id_90_cov_80_linclust.fasta.zst",
@@ -27,13 +28,13 @@ ENTRY = MMseqs2DatabaseEntry(
     ],
     total_download_bytes=30_000_000_000,
     total_disk_bytes=30_000_000_000,
-    build=BuildRecipe(
+    index_recipe=IndexRecipe(
         steps=[
-            BuildStep(
+            IndexStep(
                 command=["zstd", "-d", "--rm", "rnacentral_active_seq_id_90_cov_80_linclust.fasta.zst"],
                 description="Decompress source FASTA",
             ),
-            BuildStep(
+            IndexStep(
                 command=[
                     "mmseqs",
                     "createdb",
@@ -42,7 +43,7 @@ ENTRY = MMseqs2DatabaseEntry(
                 ],
                 description="Build MMseqs2 nucleotide DB from FASTA",
             ),
-            BuildStep(
+            IndexStep(
                 command=[
                     "mmseqs",
                     "createindex",
@@ -63,8 +64,10 @@ ENTRY = MMseqs2DatabaseEntry(
             "rnacentral.index",
         ],
     ),
-    search_flags=MMseqs2SearchFlags(sensitivity=7.0, prefilter_mode=0, max_seqs=300),
+    mmseqs_flags=MmseqsFlags(sensitivity=7.0, prefilter_mode=0, max_seqs=300),
     db_prefix="rnacentral",
+    supports_gpu=False,  # AlphaFast uses CPU for RNA search
+    min_gpu_memory_gb=None,
     a3m_adapter="rna",
 )
 

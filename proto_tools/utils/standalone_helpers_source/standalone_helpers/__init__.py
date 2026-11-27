@@ -27,31 +27,17 @@ older proto-tools left in a tool's ``standalone/`` dir.
 import os
 
 # Bridge install must happen before any submodule's module-level get_logger call so their loggers are ProtoLogger instances.
-from .proto_logging import StatusCounter, get_logger, install
+from .proto_logging import get_logger, install
 
 # Gated on TOOL_VENV_PATH so parent-side imports of this package don't attach the bridge to the parent's logger tree.
 if os.environ.get("TOOL_VENV_PATH"):
     install()
 
-from .completeness import (
-    COMPLETE_MARKER,
-    ensure_complete,
-    list_files,
-    missing_files,
-    missing_recorded_files,
-    record_files,
-)
 from .compression import (
     _COMPRESS_MIN_SIZE,
     _COMPRESSED_ARRAY_SENTINEL,
     compress_array,
     is_compressed_array,
-)
-from .containers import (
-    ContainerRuntime,
-    ResolvedExecutable,
-    resolve_container_runtime,
-    resolve_executable,
 )
 from .device import (
     _apply_jax_subprocess_env,
@@ -59,12 +45,9 @@ from .device import (
     get_subprocess_device_env,
     move_model_to_device,
     resolve_jax_device,
-    set_current_cuda_device,
 )
 from .memory import get_jax_memory_stats, get_pytorch_memory_stats
-from .msa_usage import count_a3m_rows, report_msa_rows_loaded
 from .oom import GpuOutOfMemoryError, is_cuda_oom, oom_guard, raise_oom, release_cuda_memory
-from .recovery import is_checkpoint_corruption_error, retry_on_checkpoint_corruption
 
 # ``iterative_sampling`` is not re-exported: it imports torch at module level, so keeping it off the package init lets torch-less envs (CI) import this package. Standalones import the submodule directly.
 from .scoring import log_likelihood_metrics
@@ -73,62 +56,38 @@ from .seeding import (
     set_jax_seed,
     set_torch_seed,
 )
-from .serialization import serialize_output
-from .subprocess_utils import run_teed
-from .vocabulary import (
+from .serialization import (
     AMINO_ACIDS_LIST,
     DNA_NUCLEOTIDES,
     RNA_NUCLEOTIDES,
-    gather_indices,
+    serialize_output,
 )
-from .weights import (
-    download_archive,
-    download_weights,
-    export_weights_dir,
-    file_digest,
-    file_lock,
-    link_to_cache,
-    redact_url,
-    require_weights_dir,
-    resolve_weights_dir,
-)
+from .subprocess_utils import run_teed
+from .weights import resolve_weights_dir
 
 __all__ = [
     # logging
     "get_logger",
-    "StatusCounter",
     # compression
     "_COMPRESS_MIN_SIZE",
     "_COMPRESSED_ARRAY_SENTINEL",
     "compress_array",
     "is_compressed_array",
-    # container execution
-    "ContainerRuntime",
-    "ResolvedExecutable",
-    "resolve_container_runtime",
-    "resolve_executable",
     # device
     "_apply_jax_subprocess_env",
     "_parse_cuda_indices",
     "get_subprocess_device_env",
     "move_model_to_device",
-    "set_current_cuda_device",
     "resolve_jax_device",
     # memory
     "get_jax_memory_stats",
     "get_pytorch_memory_stats",
-    # msa usage
-    "count_a3m_rows",
-    "report_msa_rows_loaded",
     # oom
     "GpuOutOfMemoryError",
     "is_cuda_oom",
     "oom_guard",
     "raise_oom",
     "release_cuda_memory",
-    # checkpoint recovery
-    "is_checkpoint_corruption_error",
-    "retry_on_checkpoint_corruption",
     # scoring
     "log_likelihood_metrics",
     # seeding
@@ -136,29 +95,12 @@ __all__ = [
     "set_jax_seed",
     "set_torch_seed",
     # serialization
-    "serialize_output",
-    # vocabulary
     "AMINO_ACIDS_LIST",
     "DNA_NUCLEOTIDES",
     "RNA_NUCLEOTIDES",
-    "gather_indices",
+    "serialize_output",
     # subprocess
     "run_teed",
-    # completeness
-    "COMPLETE_MARKER",
-    "ensure_complete",
-    "list_files",
-    "missing_files",
-    "missing_recorded_files",
-    "record_files",
     # weights
-    "download_archive",
-    "download_weights",
-    "export_weights_dir",
-    "file_digest",
-    "file_lock",
-    "link_to_cache",
-    "redact_url",
-    "require_weights_dir",
     "resolve_weights_dir",
 ]

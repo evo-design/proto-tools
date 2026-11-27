@@ -47,25 +47,6 @@ def test_sample_dispatches_one_sequence_per_prompt(monkeypatch):
     assert [payload["prompts"] for payload in captured_payloads] == [["1AAAA", "1CCCC"]]
 
 
-@pytest.mark.parametrize(
-    ("run", "inputs", "config"),
-    [
-        (run_progen3_score, ProGen3ScoringInput(sequences=["MKV"]), ProGen3ScoringConfig(device="cpu")),
-        (run_progen3_sample, ProGen3SampleInput(prompts=["MKV"]), ProGen3SampleConfig(device="cpu")),
-    ],
-)
-def test_cpu_is_refused_before_any_worker_starts(monkeypatch, run, inputs, config):
-    """ProGen3 cannot run on CPU, so device='cpu' fails clearly instead of deep in progen3 (#342)."""
-    module = run.__module__
-
-    def fail_dispatch(*args, **kwargs):
-        raise AssertionError("dispatched to a worker")
-
-    monkeypatch.setattr(f"{module}.ToolInstance.dispatch", fail_dispatch)
-    with pytest.raises(ValueError, match="progen3 needs a GPU"):
-        run(inputs, config)
-
-
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------

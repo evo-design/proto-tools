@@ -1,4 +1,7 @@
-"""AlphaGenome batched raw-sequence prediction tool."""
+"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_sequences.py.
+
+AlphaGenome batched raw-sequence prediction tool.
+"""
 
 import json
 import logging

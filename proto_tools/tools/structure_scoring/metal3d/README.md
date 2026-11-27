@@ -2,8 +2,6 @@
 
 # Metal3D
 
-![Metal3D](https://proto-bio.github.io/proto-assets/images/tool/metal3d/hero.png)
-
 > [!NOTE]
 > **License:** Metal3D uses MIT for code and CC-BY-4.0 for model weights and may require explicit attribution when utilized. Please refer to the [code license](https://github.com/gelnesr/dEVA/blob/main/LICENSE) and [model weights license](https://github.com/lcbc-epfl/metal-site-prediction#license) for full terms.
 
@@ -13,7 +11,7 @@ Metal3D is a deep-learning model that predicts where zinc ions bind in a protein
 
 ## Background
 
-Metal3D ([Dürr, Levy, and Rothlisberger, 2023](https://doi.org/10.1038/s41467-023-37870-6)) is a three-dimensional convolutional neural network for predicting zinc-ion locations in protein structures. Around each candidate metal-coordinating residue (such as histidine, cysteine, aspartate, and glutamate), it voxelizes the local atomic environment into a grid of physicochemical features, capturing properties such as hydrophobicity, aromaticity, metal-coordinating atoms, hydrogen-bond donors and acceptors, and charge. The network maps each voxelized environment to a per-voxel probability of zinc occupancy; these residue-centered densities are averaged onto a shared grid and clustered into discrete predicted sites, each with a confidence value. Because it reasons from local structure rather than sequence conservation, Metal3D localizes zinc ions accurately even for proteins with few homologs in the Protein Data Bank.
+Metal3D ([Dürr, Levy, and Rothlisberger, 2023](https://doi.org/10.1038/s41467-023-37870-6)) is a three-dimensional convolutional neural network for predicting zinc-ion locations in protein structures. Around each candidate metal-coordinating residue (such as histidine, cysteine, aspartate, and glutamate), it voxelizes the local atomic environment into a grid of physicochemical features — capturing properties such as hydrophobicity, aromaticity, metal-coordinating atoms, hydrogen-bond donors and acceptors, and charge. The network maps each voxelized environment to a per-voxel probability of zinc occupancy; these residue-centered densities are averaged onto a shared grid and clustered into discrete predicted sites, each with a confidence value. Because it reasons from local structure rather than sequence conservation, Metal3D localizes zinc ions accurately even for proteins with few homologs in the Protein Data Bank.
 
 Metal3D yields two complementary outputs used in protein engineering: a per-residue zinc density that feeds into design workflows, and a global zinc density suitable for annotating computationally predicted structures. The published model is trained solely on zinc sites from the Protein Data Bank, though the authors note that the same framework extends to other metals by retraining on the corresponding sites.
 

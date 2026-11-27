@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
-import random
 import re
 import sys
 import traceback
@@ -66,28 +65,12 @@ def _expect(exc: type[BaseException], match: str) -> Iterator[None]:
     raise AssertionError(f"expected {exc.__name__} matching {match!r}")
 
 
-def _make_runtime(*, shuffle_seed: int | None = None) -> MixedMLMRuntime:
-    """Build a runtime around a seeded toy MLM with the upstream glm2 vocabulary layout.
-
-    ``shuffle_seed`` permutes the toy tokenizer's order so it no longer opens with proto's
-    columns, and permutes the model's rows to match, leaving the same function of token *names*.
-
-    Args:
-        shuffle_seed (int | None): Seed for the vocabulary permutation, or ``None`` to keep the
-            upstream layout.
-
-    Returns:
-        MixedMLMRuntime: Runtime over a toy MLM with that vocabulary order.
-    """
-    base_order = (
+def _make_runtime() -> MixedMLMRuntime:
+    """Build a runtime around a seeded toy MLM with the upstream glm2 vocabulary layout."""
+    vocabulary = (
         list(MIXED_VOCAB) + list("XBUZO") + ["<+>", "<->", "<mask>", "<cls>", "<pad>", "<eos>", "<unk>", "<sep>"]
     )
-    vocabulary = list(base_order)
-    if shuffle_seed is not None:
-        random.Random(shuffle_seed).shuffle(vocabulary)
     vocab = {token: index for index, token in enumerate(vocabulary)}
-    # Row i of the shuffled model holds the weights of whichever token now sits at i.
-    row_permutation = [base_order.index(token) for token in vocabulary]
 
     class TinyModel(torch.nn.Module):
         def __init__(self) -> None:
@@ -114,12 +97,6 @@ def _make_runtime(*, shuffle_seed: int | None = None) -> MixedMLMRuntime:
             with torch.random.fork_rng(devices=[]):
                 torch.manual_seed(0)
                 model = TinyModel()
-            if shuffle_seed is not None:
-                with torch.no_grad():
-                    index = torch.tensor(row_permutation)
-                    model.embedding.weight.copy_(model.embedding.weight[index])
-                    model.projection.weight.copy_(model.projection.weight[index])
-                    model.projection.bias.copy_(model.projection.bias[index])
             tokenizer = SimpleNamespace(get_vocab=lambda: vocab, mask_token_id=vocab["<mask>"])
             return model, tokenizer
 
@@ -128,16 +105,6 @@ def _make_runtime(*, shuffle_seed: int | None = None) -> MixedMLMRuntime:
 
 def _dispatch(runtime: MixedMLMRuntime, operation: str, **payload: Any) -> Any:
     return _decompress_result(runtime.dispatch({"operation": operation, "device": "cpu", **payload}), to_list=True)
-
-
-def _gradient(runtime: MixedMLMRuntime, sequence: str, logits: Any, **extra: Any) -> Any:
-    """Dispatch one gradient candidate and return that candidate's own result.
-
-    The worker takes a list of candidates under ``inputs`` and answers with one entry per
-    candidate under ``results``, so a check about a single sequence wraps and unwraps here
-    rather than repeating the batch shape at every call site.
-    """
-    return _dispatch(runtime, "gradient", inputs=[{"sequence": sequence, "logits": logits}], **extra)["results"][0]
 
 
 def _assert_gradient_respects_alphabets(gradient: np.ndarray) -> None:
@@ -164,10 +131,11 @@ def check_score_matches_full_vocab_reference_and_gradient() -> None:
             logits = runtime.adapter.model(input_ids=masked).logits[0, position]
             log_probs.append(torch.log_softmax(logits, dim=-1)[ids[0, position]].item())
     _close(result["avg_log_likelihood"], float(np.mean(log_probs)))
-    gradient_result = _gradient(
+    gradient_result = _dispatch(
         runtime,
-        _LOCUS,
-        one_hot_mixed_logits(_LOCUS, sharpness=1.0),
+        "gradient",
+        sequence=_LOCUS,
+        logits=one_hot_mixed_logits(_LOCUS, sharpness=1.0),
         temperature=None,
         batch_size=2,
     )
@@ -181,14 +149,18 @@ def check_relaxed_gradient_matches_finite_difference() -> None:
     for batch_size in [1, 2, 8]:
         runtime = _make_runtime()
         logits = np.asarray(one_hot_mixed_logits("<+>M<+>a", sharpness=2.0))
-        options = {"temperature": 0.9, "batch_size": batch_size}
-        result = _gradient(runtime, "<+>M<+>a", logits.tolist(), **options)
+        payload = {"sequence": "<+>M<+>a", "logits": logits.tolist(), "temperature": 0.9, "batch_size": batch_size}
+        result = _dispatch(runtime, "gradient", **payload)
         losses = []
         epsilon = 0.01
         for delta in [epsilon, -epsilon]:
             perturbed = logits.copy()
             perturbed[3, 21] += delta
-            losses.append(_gradient(runtime, "<+>M<+>a", perturbed.tolist(), **options, compute_gradient=False)["loss"])
+            losses.append(
+                _dispatch(runtime, "gradient", **{**payload, "logits": perturbed.tolist(), "compute_gradient": False})[
+                    "loss"
+                ]
+            )
         numerical = (losses[0] - losses[1]) / (2 * epsilon)
         _close(result["gradient"][3][21], numerical, rel=0.01, abs_=3e-5)
 
@@ -198,13 +170,14 @@ def check_ste_uses_hard_context_and_soft_backward() -> None:
     for batch_size in [1, 2, 8]:
         runtime = _make_runtime()
         state = torch.tensor(one_hot_mixed_logits(_LOCUS, sharpness=0.7))
-        result = _gradient(
+        result = _dispatch(
             runtime,
-            _LOCUS,
-            state.tolist(),
+            "gradient",
+            sequence=_LOCUS,
+            logits=state.tolist(),
             temperature=temperature,
             batch_size=batch_size,
-            hard=1.0,
+            use_ste=True,
         )
         score = _dispatch(runtime, "score", sequences=[_LOCUS], batch_size=2)["scores"][0]
         _close(result["loss"], -score["avg_log_likelihood"])
@@ -253,7 +226,7 @@ def check_gradient_removes_embedding_hook_after_failure() -> None:
 
     runtime.adapter.forward = fail_forward
     with _expect(RuntimeError, r"synthetic forward failure"):
-        _gradient(runtime, "+A+a", one_hot_mixed_logits("+A+a"))
+        _dispatch(runtime, "gradient", sequence="+A+a", logits=one_hot_mixed_logits("+A+a"))
     assert not runtime.adapter.embedding_layer._forward_hooks
 
 
@@ -337,64 +310,7 @@ def check_sampling_is_independent_of_mask_mapping_order() -> None:
         )
 
 
-def check_forward_only_returns_loss_without_a_gradient() -> None:
-    """compute_gradient=False must return the same loss and vocabulary with gradient=None."""
-    state = torch.tensor(one_hot_mixed_logits(_LOCUS, sharpness=0.7))
-    payload = {
-        "inputs": [{"sequence": _LOCUS, "logits": state.tolist()}],
-        "temperature": 0.8,
-        "batch_size": 2,
-        "hard": 1.0,
-    }
-
-    with_gradient = _dispatch(_make_runtime(), "gradient", **payload)["results"][0]
-    forward_only_payload = _dispatch(_make_runtime(), "gradient", compute_gradient=False, **payload)
-    forward_only = forward_only_payload["results"][0]
-
-    assert forward_only["gradient"] is None, f"forward-only returned a gradient: {forward_only['gradient']}"
-    assert forward_only_payload["vocab"] == list(MIXED_VOCAB), (
-        f"forward-only reported {forward_only_payload['vocab'][:4]}"
-    )
-    _close(forward_only["loss"], with_gradient["loss"])
-
-
-def check_gradient_is_unchanged_by_a_shuffled_native_vocabulary() -> None:
-    """A shuffled tokenizer order must not move the returned gradient's columns.
-
-    The toy vocabulary opens with proto's own order, so a runtime that indexed native positions
-    directly would pass every other check here. Shuffling it, and permuting the model's rows to
-    match, keeps the model the same function of token names: the gradient must come back
-    identical, in proto's columns.
-    """
-    state = torch.tensor(one_hot_mixed_logits(_LOCUS, sharpness=0.7))
-    payload = {
-        "inputs": [{"sequence": _LOCUS, "logits": state.tolist()}],
-        "temperature": 0.8,
-        "batch_size": 2,
-        "hard": 1.0,
-    }
-
-    reference_payload = _dispatch(_make_runtime(), "gradient", **payload)
-    shuffled_runtime = _make_runtime(shuffle_seed=11)
-    shuffled_payload = _dispatch(shuffled_runtime, "gradient", **payload)
-    reference, shuffled = reference_payload["results"][0], shuffled_payload["results"][0]
-
-    shuffled_vocab = shuffled_runtime.adapter.tokenizer.get_vocab()
-    assert [shuffled_vocab[token] for token in MIXED_VOCAB] != list(range(len(MIXED_VOCAB))), (
-        "the shuffle left proto's columns at the head of the native order, so this proves nothing"
-    )
-    _close(shuffled["loss"], reference["loss"])
-    np.testing.assert_allclose(
-        np.asarray(shuffled["gradient"]), np.asarray(reference["gradient"]), rtol=1e-6, atol=1e-9
-    )
-    _assert_gradient_respects_alphabets(np.asarray(shuffled["gradient"]))
-    for label, answered in (("reference", reference_payload), ("shuffled", shuffled_payload)):
-        assert answered["vocab"] == list(MIXED_VOCAB), f"{label} reported {answered['vocab'][:4]}"
-
-
 CHECKS = [
-    check_forward_only_returns_loss_without_a_gradient,
-    check_gradient_is_unchanged_by_a_shuffled_native_vocabulary,
     check_score_matches_full_vocab_reference_and_gradient,
     check_relaxed_gradient_matches_finite_difference,
     check_ste_uses_hard_context_and_soft_backward,

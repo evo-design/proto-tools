@@ -296,20 +296,17 @@ def run_ipsae_scoring(
     binder_chain = inputs.binder_chain.chain
     target_chains = list(inputs.target_chains.chains)
 
-    # Grab the PAE matrix from the structure metrics as nested lists
     pae = structure.metrics.get("pae")
     if pae is None:
         raise ValueError("structure.metrics['pae'] is missing")
 
     pae_list = pae if isinstance(pae, list) else [list(row) for row in pae]
 
-    # Convert per-residue pLDDT to the 0-100 scale ipsae.py expects
     plddt = structure.per_residue_plddt
     plddt_list = [float(v) * 100.0 for v in plddt] if plddt is not None else None
 
     logger.debug("Running IPSAE scoring (pae_cutoff=%s, dist_cutoff=%s)", config.pae_cutoff, config.distance_cutoff)
 
-    # Run IPSAE in the standalone environment
     result = ToolInstance.dispatch(
         "ipsae",
         {
@@ -324,7 +321,6 @@ def run_ipsae_scoring(
         config=config,
     )
 
-    # Parse the chain-pair rows and pick the best binder-target max-type pair
     chain_pair_results_raw = result["chain_pair_results"]
     chain_pair_results = _parse_chain_pair_results(chain_pair_results_raw)
     binder_target_max = _extract_binder_target_scores(chain_pair_results, binder_chain, target_chains)
@@ -336,7 +332,6 @@ def run_ipsae_scoring(
             f"Check that the chain labels match the structure."
         )
 
-    # Build the headline metrics from the best binder-target pair
     metrics = IPSAEMetrics(
         ipsae=binder_target_max.get("ipsae", 0.0),
         pdockq2=binder_target_max.get("pdockq2", 0.0),

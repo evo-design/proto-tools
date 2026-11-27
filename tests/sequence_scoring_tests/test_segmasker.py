@@ -30,7 +30,7 @@ def test_segmasker_input_normalizes_single_string():
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_segmasker_scores_sequences():
     """Run segmasker on a mix of low-complexity and normal sequences."""
     inputs = SegmaskerInput(

@@ -413,13 +413,12 @@ def test_three_tool_eviction_chain():
 def test_config_moves_between_gpus(tool_factory):
     """Changing config device between calls should move the tool.
 
-    Pinned workers respawn on the move, freeing the source GPU: mock_jax_tool declares
-    pin_visible_devices, and on an Exclusive_Process host every GPU worker is pinned.
-    Elsewhere, non-pinned (PyTorch) workers move the model in-process.
+    Pinned workers (mock_jax_tool, pin_visible_devices=True) respawn on the move,
+    freeing the source GPU; non-pinned (PyTorch) workers move the model in-process.
     """
     dm = _setup_dm(["cuda:0", "cuda:1"], strategy=OffloadStrategy.CPU)
     toolkit = tool_factory()[0]
-    is_pinned = toolkit == "mock_jax_tool" or dm.pins_gpu_workers
+    is_pinned = toolkit == "mock_jax_tool"
 
     try:
         baseline = _snapshot_gpu_memory(dm)

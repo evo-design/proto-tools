@@ -43,7 +43,7 @@ class ESM3ScoringConfig(MaskedModelScoringConfig):
         batch_size (int): Masked variants per forward pass, pooled across all input sequences.
             Larger batches improve throughput but use more memory.
         device (str): Device to run the model on.
-        verbose (int): Verbosity level (0=quiet, 1=info, 2=debug, 3=raw subprocess stderr).
+        verbose (bool): Print status messages during scoring.
         return_logits (bool): Include per-position logits in the output (large; disable to
             save memory).
 
@@ -143,7 +143,6 @@ def run_esm3_score(
           are needed
     """
     logger.debug(f"Using local for ESM3 scoring: {config.model_checkpoint}")
-    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "esm3",
         {

@@ -9,13 +9,12 @@ Usage (called by ToolInstance, not directly):
 
 import json
 import sys
-from collections.abc import Iterable
 from typing import Any
 
 import pyhmmer
 import pyhmmer.easel
 import pyhmmer.plan7
-from standalone_helpers import StatusCounter, get_logger
+from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 
@@ -26,24 +25,10 @@ logger = get_logger(__name__)
 
 def _create_hmms_from_file(hmm_file_path: str) -> list[pyhmmer.plan7.HMM]:
     """Create PyHMMER HMM objects from file path."""
-    logger.update_status("Loading HMM profiles")
     hmms = []
     with pyhmmer.plan7.HMMFile(hmm_file_path) as hmm_file:
         hmms.extend(list(hmm_file))
     return hmms
-
-
-def _collect_with_status(results: Iterable[Any], template: str, total: int) -> list[Any]:
-    """Collect per-query results in order, reporting the query being searched as ``template`` (``%d/%d``)."""
-    counter = StatusCounter(logger, template, total=total)
-    if total:
-        counter(1)
-    collected: list[Any] = []
-    for number, result in enumerate(results, start=1):
-        collected.append(result)
-        if number < total:
-            counter(number + 1)
-    return collected
 
 
 def _create_sequences_from_strings(
@@ -182,7 +167,7 @@ def run_hmmsearch(input_data: dict[str, Any]) -> dict[str, Any]:
     }
     # pyhmmer's Pipeline rejects seed=None (TypeError on int conversion); Z/domZ
     # accept None directly and resolve to "use actual count". Skip all three when
-    # unset so the same filtering handles both the optional thresholds and the seed.
+    # unset to keep the kwarg dict symmetric and the seed branch the load-bearing one.
     if input_data["z_value"] is not None:
         kwargs["Z"] = input_data["z_value"]
     if input_data["domain_z_value"] is not None:
@@ -194,9 +179,7 @@ def run_hmmsearch(input_data: dict[str, Any]) -> dict[str, Any]:
     if input_data["bit_cutoffs"] is not None:
         kwargs["bit_cutoffs"] = input_data["bit_cutoffs"]
 
-    query_hits = _collect_with_status(
-        pyhmmer.hmmsearch(queries=hmms, sequences=sequences, **kwargs), "Searching profile %d/%d", len(hmms)
-    )
+    query_hits = list(pyhmmer.hmmsearch(queries=hmms, sequences=sequences, **kwargs))
 
     sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=hmms)
 
@@ -233,9 +216,7 @@ def run_hmmscan(input_data: dict[str, Any]) -> dict[str, Any]:
     if input_data["bit_cutoffs"] is not None:
         kwargs["bit_cutoffs"] = input_data["bit_cutoffs"]
 
-    query_hits = _collect_with_status(
-        pyhmmer.hmmscan(queries=sequences, profiles=hmms, **kwargs), "Scanning sequence %d/%d", len(sequences)
-    )
+    query_hits = list(pyhmmer.hmmscan(queries=sequences, profiles=hmms, **kwargs))
 
     sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=sequences)
 
@@ -270,11 +251,7 @@ def run_phmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     if input_data["skip_filters"]:
         kwargs |= {"F1": 1.0, "F2": 1.0, "F3": 1.0, "bias_filter": False}
 
-    query_hits = _collect_with_status(
-        pyhmmer.phmmer(queries=query_sequences, sequences=target_sequences, **kwargs),
-        "Searching query %d/%d",
-        len(query_sequences),
-    )
+    query_hits = list(pyhmmer.phmmer(queries=query_sequences, sequences=target_sequences, **kwargs))
 
     sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=query_sequences)
 
@@ -308,15 +285,11 @@ def run_nhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
         kwargs["seed"] = input_data["seed"]
     if input_data["skip_filters"]:
         kwargs |= {"F1": 1.0, "F2": 1.0, "F3": 1.0, "bias_filter": False}
-    # The wrapper uses 'both' by default, which pyhmmer represents as None.
+    # 'both' is the wrapper-default; pyhmmer expects None in that case.
     if input_data["strand"] != "both":
         kwargs["strand"] = input_data["strand"]
 
-    query_hits = _collect_with_status(
-        pyhmmer.nhmmer(queries=query_sequences, sequences=target_sequences, **kwargs),
-        "Searching query %d/%d",
-        len(query_sequences),
-    )
+    query_hits = list(pyhmmer.nhmmer(queries=query_sequences, sequences=target_sequences, **kwargs))
 
     sequence_hits, domain_hits = _convert_hits_to_dicts(hits=query_hits, queries=query_sequences)
 
@@ -330,11 +303,9 @@ def run_nhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
 
 def run_jackhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
     """Run PyHMMER jackhmmer (iterative protein sequence search)."""
-    # Convert query and target strings to digital protein sequences
     query_sequences = _create_sequences_from_strings(input_data["sequences"], alphabet="amino")
     target_sequences = _create_sequences_from_strings(input_data["target_sequences"], alphabet="amino")
 
-    # Map reporting and inclusion thresholds onto pyhmmer's keyword arguments
     kwargs: dict[str, Any] = {
         "cpus": input_data["num_threads"],
         "E": input_data["evalue_threshold"],
@@ -344,35 +315,28 @@ def run_jackhmmer(input_data: dict[str, Any]) -> dict[str, Any]:
         "incE": input_data["inclusion_evalue_threshold"],
         "incdomE": input_data["inclusion_domain_evalue_threshold"],
     }
-    # Pass optional search-space sizes and seed only when set
     if input_data["z_value"] is not None:
         kwargs["Z"] = input_data["z_value"]
     if input_data["domain_z_value"] is not None:
         kwargs["domZ"] = input_data["domain_z_value"]
     if input_data["seed"] is not None:
         kwargs["seed"] = input_data["seed"]
-    # Disable the MSV, Viterbi and Forward filters and the bias filter for maximum sensitivity
     if input_data["skip_filters"]:
         kwargs |= {"F1": 1.0, "F2": 1.0, "F3": 1.0, "bias_filter": False}
 
-    # Iterate each query to convergence or max_iterations, keeping only the final iteration
-    iteration_results = _collect_with_status(
+    iteration_results = list(
         pyhmmer.jackhmmer(
             queries=query_sequences,
             sequences=target_sequences,
             max_iterations=input_data["max_iterations"],
             checkpoints=False,
             **kwargs,
-        ),
-        "Searching query %d/%d",
-        len(query_sequences),
+        )
     )
 
-    # Convert the final iteration's hits into sequence and domain records
     final_hits = [result.hits for result in iteration_results]
     sequence_hits, domain_hits = _convert_hits_to_dicts(hits=final_hits, queries=query_sequences)
 
-    # Report per-query iteration counts and whether each search converged
     return {
         "sequence_hits": sequence_hits,
         "domain_hits": domain_hits,

@@ -1,6 +1,6 @@
-"""Test two-GPU CLI dispatch and device routing.
+"""proto_tools/tools/testing/mock_cli_multi_gpu_tool/mock_cli_multi_gpu_tool.py.
 
-A minimal 2-GPU CLI-pattern tool that spawns subprocesses for inference,
+This is a minimal 2-GPU CLI-pattern tool that spawns subprocesses for inference,
 matching tools like Boltz2 with multi-GPU support. It uses
 get_subprocess_device_env() for device routing with comma-separated device strings.
 """

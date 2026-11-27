@@ -280,9 +280,7 @@ def _remote_msa(inputs: FoldmasonMSAInput, config: FoldmasonMSAConfig) -> Foldma
     try:
         ids = inputs.structure_ids or [f"structure_{i}" for i in range(len(inputs.structures))]
         pdb_texts = [s.structure_pdb for s in inputs.structures]
-        logger.update_status("Submitting alignment")  # type: ignore[attr-defined]
         ticket_id = _submit_foldmason(pdb_texts, ids, session)
-        logger.update_status("Waiting for alignment results")  # type: ignore[attr-defined]
         poll_until_complete(
             session,
             f"{_FOLDMASON_BASE}/api/ticket/{ticket_id}",
@@ -290,7 +288,6 @@ def _remote_msa(inputs: FoldmasonMSAInput, config: FoldmasonMSAConfig) -> Foldma
             timeout_seconds=config.timeout_seconds,
         )
         result_url = f"{_FOLDMASON_BASE}/api/result/foldmason/{ticket_id}"
-        logger.update_status("Downloading alignment results")  # type: ignore[attr-defined]
         result_response = request_with_retry(
             lambda: session.get(result_url, timeout=_RESULT_DOWNLOAD_TIMEOUT_SECONDS),
             retries=_HTTP_RETRIES,
@@ -359,9 +356,9 @@ def _submit_foldmason(
     structure_ids: list[str],
     session: requests.Session,
 ) -> str:
-    """Submit a list of structures to FoldMason and return the job ticket ID.
+    """Submit a list of structures to FoldMason; return the job ticket ID.
 
-    The multipart format in ``FoldMasonSearch.vue`` uses one ``fileNames[]`` and
+    Multipart wire format (per ``FoldMasonSearch.vue``): one ``fileNames[]`` +
     one ``queries[]`` per structure. Filenames omit the ``.pdb`` extension so
     the server preserves user-supplied IDs verbatim as entry names.
     """

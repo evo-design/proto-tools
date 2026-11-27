@@ -1,4 +1,0 @@
-oligo_id,length,tm,hairpin_dg,homodimer_dg,heterodimer_dg,gc_content,gc_clamp,hairpin_structure_found,homodimer_structure_found,heterodimer_structure_found
-oligo_0,20,64.54023715452047,0.0,-0.0926871175476299,,0.55,True,False,True,
-oligo_1,20,64.30542352794794,0.0,1.397324912271848,,0.55,True,False,True,
-oligo_2,17,69.1758278416936,-4.555607470180527,-8.297479792993952,,0.7059,True,True,True,

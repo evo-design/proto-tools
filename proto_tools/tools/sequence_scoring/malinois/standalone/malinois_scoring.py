@@ -239,7 +239,6 @@ class BassetBranched(nn.Module):
     ):
         super().__init__()
 
-        # Store the architecture hyperparameters, with "same" padding for each conv kernel
         self.input_len = input_len
 
         self.conv1_channels = conv1_channels
@@ -272,7 +271,6 @@ class BassetBranched(nn.Module):
         self.use_batch_norm = use_batch_norm
         self.use_weight_norm = use_weight_norm
 
-        # Build the three conv blocks over one-hot DNA (4 input channels), each padded explicitly
         self.pad1 = nn.ConstantPad1d(self.conv1_pad, 0.0)
         self.conv1 = Conv1dNorm(
             4,
@@ -313,15 +311,12 @@ class BassetBranched(nn.Module):
             weight_norm=self.use_weight_norm,
         )
 
-        # Pooling layers that shrink the sequence axis between conv blocks
         self.pad4 = nn.ConstantPad1d((1, 1), 0.0)
         self.maxpool_3 = nn.MaxPool1d(3, padding=0)
         self.maxpool_4 = nn.MaxPool1d(4, padding=0)
 
-        # Size the first linear layer from the flattened conv output for this input length
         next_in_channels = self.conv3_channels * self._get_flatten_factor(self.input_len)
 
-        # Stack the shared linear layers as linear1, linear2, ... so checkpoint keys match
         for i in range(self.n_linear_layers):
             setattr(
                 self,
@@ -336,7 +331,6 @@ class BassetBranched(nn.Module):
             )
             next_in_channels = self.linear_channels
 
-        # Split into one branch per output, then project each branch to a single activity value
         self.branched = BranchedLinear(
             next_in_channels,
             self.branched_channels,
@@ -351,7 +345,6 @@ class BassetBranched(nn.Module):
         self.nonlin = getattr(nn, self.linear_activation)()
         self.dropout = nn.Dropout(p=self.linear_dropout_p)
 
-        # Attach the training loss only when its name is registered
         loss_cls = _LOSS_REGISTRY.get(self.loss_criterion)
         if loss_cls is not None:
             self.criterion = loss_cls(**self.loss_args)
@@ -441,7 +434,7 @@ def _unpack_artifact(artifact_path, download_path="./"):
 
 
 def _model_fn(model_dir):
-    checkpoint = torch.load(os.path.join(model_dir, "torch_checkpoint.pt"), map_location="cpu", weights_only=False)
+    checkpoint = torch.load(os.path.join(model_dir, "torch_checkpoint.pt"), weights_only=False)
     model_name = checkpoint["model_module"]
     model_cls = _MODEL_REGISTRY[model_name]
     model = model_cls(**vars(checkpoint["model_hparams"]))
@@ -452,15 +445,15 @@ def _model_fn(model_dir):
 
 
 def load_model(artifact_path):
-    """Load a Malinois model from a tar.gz artifact, on CPU (as boda.common.utils.load_model, minus its ``.cuda()``).
-
-    The caller places it: upstream's ``.cuda()`` would land on GPU 0 of a worker that sees every GPU.
-    """
+    """Load a Malinois model from a tar.gz artifact (same as boda.common.utils.load_model)."""
+    USE_CUDA = torch.cuda.device_count() >= 1
     if os.path.isdir("./artifacts"):
         shutil.rmtree("./artifacts")
     _unpack_artifact(artifact_path)
     my_model = _model_fn("./artifacts")
     my_model.eval()
+    if USE_CUDA:
+        my_model.cuda()
     return my_model
 
 
@@ -480,9 +473,9 @@ def load_malinois(artifact_path, malinois_dir=None, seq_len=200):
     if malinois_dir is None:
         malinois_dir = os.path.dirname(artifact_path)
 
-    input_len = torch.load(
-        os.path.join(malinois_dir, "artifacts/torch_checkpoint.pt"), map_location="cpu", weights_only=False
-    )["model_hparams"].input_len
+    input_len = torch.load(os.path.join(malinois_dir, "artifacts/torch_checkpoint.pt"), weights_only=False)[
+        "model_hparams"
+    ].input_len
 
     left_pad_len = (input_len - seq_len) // 2
     right_pad_len = (input_len - seq_len) - left_pad_len
@@ -491,6 +484,10 @@ def load_malinois(artifact_path, malinois_dir=None, seq_len=200):
     right_flank = dna2tensor(MPRA_DOWNSTREAM[:right_pad_len]).unsqueeze(0)
 
     flank_builder = FlankBuilder(left_flank=left_flank, right_flank=right_flank)
+
+    if torch.cuda.device_count() >= 1:
+        flank_builder.cuda()
+
     return model, flank_builder
 
 

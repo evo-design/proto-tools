@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import StatusCounter, get_logger, move_model_to_device, serialize_output
+from standalone_helpers import get_logger, move_model_to_device, serialize_output
 
 logger = get_logger(__name__)
 
@@ -39,7 +39,7 @@ class PangolinModel:
         self._loaded = False
 
     # ============================================================================
-    # Model Loading and Device Management
+    # Model Loading & Device Management
     # ============================================================================
     def _models_dir(self) -> str:
         """Locate the bundled Pangolin model weights directory."""
@@ -52,7 +52,7 @@ class PangolinModel:
         import torch
         from pangolin.model import AR, L, Pangolin, W
 
-        logger.update_status("Loading Pangolin weights")
+        logger.debug("Loading Pangolin ensembles for tissues=%s on %s", tissues, device)
 
         models_dir = self._models_dir()
         loaded: dict[str, tuple[list[Any], int]] = {}
@@ -111,7 +111,7 @@ class PangolinModel:
         self._ensure_loaded(device, tissues)
 
         results: list[dict[str, Any]] = []
-        for seq in StatusCounter(logger, "Predicting sequence %d/%d", sequences):
+        for seq in sequences:
             onehot = self._one_hot(seq, "+")
             per_tissue: list[Any] = []
             for tissue in tissues:
@@ -124,7 +124,7 @@ class PangolinModel:
         return results
 
     def _compute_score(self, ref_seq: str, alt_seq: str, strand: str, d: int, tissues: list[str]) -> tuple[Any, Any]:
-        """Compute per-position loss and gain across tissues, matching upstream compute_score."""
+        """Port of upstream compute_score: per-position loss/gain across tissues."""
         import numpy as np
 
         ref_onehot = self._one_hot(ref_seq, strand)
@@ -169,7 +169,7 @@ class PangolinModel:
         self._ensure_loaded(device, tissues)
 
         results: list[dict[str, Any]] = []
-        for variant in StatusCounter(logger, "Scoring variant %d/%d", variants):
+        for variant in variants:
             vp = variant["variant_position"]
             ref = variant["reference_bases"]
             alt = variant["alternate_bases"]
@@ -182,7 +182,6 @@ class PangolinModel:
             if eff_d < distance:
                 logger.debug("variant at %d: window clipped to +/-%d (requested +/-%d) by flank", vp, eff_d, distance)
 
-            # Build matching reference and alternate windows with enough context for scoring.
             lo = vp - FLANK - eff_d
             hi = vp + ref_len + FLANK + eff_d
             window = seq[lo:hi]
@@ -190,7 +189,6 @@ class PangolinModel:
             alt_window = window[:off] + alt + window[off + ref_len :]
 
             loss, gain = self._compute_score(window, alt_window, strand, eff_d, tissues)
-            # Locate the strongest effects and report their offsets from the variant.
             gain_idx = int(np.argmax(gain))
             loss_idx = int(np.argmin(loss))
             results.append(

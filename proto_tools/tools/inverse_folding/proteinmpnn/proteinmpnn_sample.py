@@ -8,15 +8,11 @@ import random
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
+import numpy as np
 from pydantic import Field, field_validator
 
-from proto_tools.tools.inverse_folding.proteinmpnn._constraints import resolve_constraints
-from proto_tools.tools.inverse_folding.proteinmpnn._readable import proteinmpnn_readable_positions
-from proto_tools.tools.inverse_folding.proteinmpnn._sampling import (
-    collect_samples,
-    looks_like_homooligomer,
-    split_chain_segments,
-)
+from proto_tools.entities.complex import Chain
+from proto_tools.entities.ligands import Fragment
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -24,10 +20,9 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
-    validate_residue_mapping,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import AminoAcid, ConfigField
+from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
 from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.sequence import normalize_excluded_amino_acids
 from proto_tools.utils.tool_io import Metrics, MetricSpec
@@ -82,17 +77,6 @@ class ProteinMPNNSampleConfig(InverseFoldingConfig):
         examples=[["C"]],
     )
 
-    def readable_positions(self, inp: Any) -> dict[str, list[int]]:
-        """Positions ProteinMPNN reads, which excludes unlisted modified residues.
-
-        Args:
-            inp (Any): One structure input.
-
-        Returns:
-            dict[str, list[int]]: Ascending readable positions per chain ID.
-        """
-        return proteinmpnn_readable_positions(inp.structure)
-
     @field_validator("excluded_amino_acids", mode="before")
     @classmethod
     def validate_excluded_amino_acids(cls, value: Any) -> Any:
@@ -137,9 +121,9 @@ class ProteinMPNNDesign(DesignedComplex):
     """One ProteinMPNN-designed complex with its per-design scalar metrics.
 
     Attributes:
-        chains (list[Chain | Fragment]): All polymer chains of the design, in input
+        chains (list[Chain | Fragment]): All protein chains of the design, in input
             structure chain order. Redesigned chains carry the model output;
-            context chains carry the original input chain unchanged.
+            context chains carry the original input sequence unchanged.
         metrics (ProteinMPNNDesignMetrics): Per-design metrics (perplexity and
             sequence recovery) for this design.
     """
@@ -241,8 +225,6 @@ def run_proteinmpnn_sample(
     base_seed = config.seed if config.seed is not None else config.get_random_int()
     # Draw a fresh seed per chunk so identical structures across inputs do not collide.
     seed_rng = random.Random(base_seed)  # noqa: S311 -- non-cryptographic
-    # One nudge per call, not one per structure, so a large batch stays readable.
-    warned_homooligomer = False
 
     for inp in progress_bar(
         inputs.inputs,
@@ -250,44 +232,73 @@ def run_proteinmpnn_sample(
         unit="structure",
         disable=not config.verbose,
     ):
+        all_seqs: list[str] = []
+        all_perp: list[float] = []
+        all_seq_recovery: list[float] = []
+        remaining = config.num_sequences_per_structure
+        # Materialize the Structure to a tempfile once per input, reused across chunks.
+        with inp.structure.temp_file() as pdb_path:
+            while remaining > 0:
+                chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
+                input_dict = {
+                    "operation": "sample",
+                    "pdb_path": str(pdb_path),
+                    "chain_ids": inp.chain_ids_to_redesign,
+                    "batch_size": chunk,
+                    "temperature": config.temperature,
+                    "fixed_positions": (
+                        inp.fixed_positions.to_residue_numbers(inp.structure)
+                        if inp.fixed_positions is not None
+                        else None
+                    ),
+                    "excluded_amino_acids": config.excluded_amino_acids,
+                    "seed": seed_rng.randint(0, 2**31 - 1),
+                    "device": config.device,
+                    "model_choice": config.model_choice,
+                    "verbose": config.verbose,
+                    "return_logits": False,
+                    "backbone_noise": config.backbone_noise,
+                }
+                result = ToolInstance.dispatch(
+                    "proteinmpnn",
+                    input_dict,
+                    instance=instance,
+                    config=config,
+                )
+                all_seqs.extend(result["seq"])
+                all_perp.extend(np.exp(result["score"]).tolist())
+                all_seq_recovery.extend(result["seqid"])
+                remaining -= chunk  # type: ignore[operator]
+
         redesign_ids = inp.chain_ids_to_redesign
-        if not warned_homooligomer and looks_like_homooligomer(inp.structure, redesign_ids):
-            warned_homooligomer = True
-            logger.warning(
-                "Chains %s are sequence-identical, so this looks like a homooligomer. "
-                "proteinmpnn-sample designs each chain independently against placeholder "
-                "partner sequences; proteinmpnn-sample-homooligomer ties corresponding "
-                "positions instead, sampling one protomer in the full complex context.",
-                redesign_ids,
-            )
-
-        # Resolved once per structure: dispatch, reconstruction and warnings share one answer.
-        constraints = resolve_constraints(inp.structure, redesign_ids, inp.fixed_positions, tool="proteinmpnn-sample")
-        validate_residue_mapping(constraints.readable, inp.structure)
-
-        all_seqs, all_perp, all_seq_recovery = collect_samples(
-            inp,
-            config,
-            chain_ids=redesign_ids,
-            fixed_positions=constraints.worker_fixed,
-            homooligomer=False,
-            seed_rng=seed_rng,
-            instance=instance,
-        )
-
+        redesign_set = set(redesign_ids)
+        all_chain_ids = inp.structure.get_chain_ids()
         complexes: list[ProteinMPNNDesign] = []
         for raw_seq, perp, recovery in zip(all_seqs, all_perp, all_seq_recovery, strict=True):
             # Segments are the redesigned chains in chain_ids_to_redesign order.
-            segments = split_chain_segments(raw_seq, redesign_ids, tied=False)
+            segments = raw_seq.split("/")
+            if len(segments) != len(redesign_ids):
+                raise ValueError(
+                    f"ProteinMPNN returned {len(segments)} sequence segment(s) but "
+                    f"{len(redesign_ids)} chain(s) were requested for redesign "
+                    f"({redesign_ids}). Raw sequence: {raw_seq!r}."
+                )
+            redesigned_seq_by_chain = dict(zip(redesign_ids, segments, strict=True))
+            # Build all chains in input order; context chains keep the input sequence.
+            chains: list[Chain | Fragment] = [
+                Chain(
+                    id=cid,
+                    sequence=redesigned_seq_by_chain[cid]
+                    if cid in redesign_set
+                    else inp.structure.get_chain_sequence(cid),
+                )
+                for cid in all_chain_ids
+            ]
+            designed: list[bool] = [cid in redesign_set for cid in all_chain_ids]
             complexes.append(
-                ProteinMPNNDesign.from_design(
-                    inp.structure,
-                    dict(zip(redesign_ids, segments, strict=True)),
-                    set(redesign_ids),
-                    tool="proteinmpnn-sample",
-                    include_ligands=False,
-                    readable_positions=constraints.readable,
-                    fixed_positions=constraints.effective_fixed,
+                ProteinMPNNDesign(
+                    chains=chains,
+                    designed=designed,
                     metrics=ProteinMPNNDesignMetrics(perplexity=perp, sequence_recovery=recovery),
                 )
             )

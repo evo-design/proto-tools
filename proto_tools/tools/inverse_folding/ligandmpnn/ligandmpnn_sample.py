@@ -10,11 +10,9 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from proto_tools.entities.complex import Chain
+from proto_tools.entities.ligands import Fragment
 from proto_tools.entities.structures import Structure
-from proto_tools.tools.inverse_folding.ligandmpnn._readable import (
-    LIGANDMPNN_ATOM_RECORD_RESIDUES,
-    ligandmpnn_readable_positions,
-)
 from proto_tools.tools.inverse_folding.shared_data_models import (
     DesignedComplex,
     DesignSet,
@@ -22,45 +20,28 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
     InverseFoldingOutput,
     InverseFoldingStructureInput,
-    preserved_positions,
-    split_fixed_positions,
-    summarize_positions,
 )
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import AminoAcid, ConfigField, ToolInstance
-from proto_tools.utils.device import RemoteDevice
 from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.sequence import normalize_excluded_amino_acids
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = logging.getLogger(__name__)
 
-# Which LigandMPNN code runs: Foundry's implementation, or the upstream LigandMPNN code, whose
-# sampler also packs side chains (code and packer fetched on first use).
-LigandMPNNImplementation = Literal["foundry", "original"]
+LigandMPNNModelType = Literal[
+    "ligand_mpnn",
+    # The original LigandMPNN implementation. Its sampler emits packed full-atom structures and
+    # its scorer runs the same original code; code and weights are auto-provisioned on first use.
+    # Foundry is the default otherwise.
+    "original",
+    # Membrane variants need transmembrane-label inputs that are not wired; disabled for now.
+    # "per_residue_label_membrane_mpnn",
+    # "global_label_membrane_mpnn",
+]
 
-# Bundled weights, downloaded by setup.sh: the published LigandMPNN checkpoints trained with 0.10 Å
-# and 0.20 Å backbone noise. Either runs under either implementation; any other model_checkpoint is
-# a path to your own .pt checkpoint.
-LIGANDMPNN_BUNDLED_MODELS: frozenset[str] = frozenset({"ligandmpnn_v_32_010_25", "ligandmpnn_v_32_020_25"})
-
-
-def local_checkpoint_on_remote(model_checkpoint: str, device: str) -> str | None:
-    """Reject a local checkpoint path on a remote worker, where it doesn't exist.
-
-    Args:
-        model_checkpoint (str): A bundled model name or a local path.
-        device (str): The remote device the config is dispatched to.
-
-    Returns:
-        str | None: Why the config can't run on ``device``, or ``None`` if it can.
-    """
-    if model_checkpoint in LIGANDMPNN_BUNDLED_MODELS:
-        return None
-    return (
-        f"model_checkpoint points to a local file not available on device='{device}'. Use bundled weights "
-        f"({', '.join(sorted(LIGANDMPNN_BUNDLED_MODELS))}), or run locally with device='cuda' or device='cpu'."
-    )
+# model_type values that run the original implementation instead of Foundry.
+LIGANDMPNN_LEGACY_MODEL_TYPES = frozenset({"original"})
 
 
 # ============================================================================
@@ -82,29 +63,24 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         temperature (float): Controls randomness in sampling from logits.
         excluded_amino_acids (list[AminoAcid] | None): One-letter codes of amino acids to exclude.
         seed (int): Random seed to use for sampling.
-        implementation (LigandMPNNImplementation): Which LigandMPNN code runs. ``"foundry"``
-            (default) is RosettaCommons Foundry's implementation. ``"original"`` is the upstream
-            LigandMPNN code, fetched on first use: it matches the reference repository's outputs
-            and returns packed full-atom structures. The two prepare the structure differently, so
-            sequences and scores differ between them even with the same weights.
-        model_checkpoint (str): Sequence-model weights, which work with either implementation:
-            ``"ligandmpnn_v_32_010_25"`` (default) or ``"ligandmpnn_v_32_020_25"``, the published
-            weights trained with 0.10 Å and 0.20 Å backbone noise, or a path to your own ``.pt``
-            checkpoint, which runs only locally.
+        model_type (LigandMPNNModelType): LigandMPNN implementation. ``ligand_mpnn`` (default) is
+            the Foundry implementation; ``original`` runs the original LigandMPNN code and weights,
+            auto-provisioned on first use, and emits packed full-atom structures.
+        checkpoint_path (str | None): Optional explicit LigandMPNN checkpoint path.
         use_atom_context (bool): Whether ligand-aware variants encode ligand atom context.
         use_side_chain_context (bool): Whether to condition on fixed-residue sidechain atoms.
         cutoff_for_score (float): Ligand-residue distance cutoff (Å) for the ligand-interface
             recovery score.
-        sc_num_denoising_steps (int): Side-chain denoising steps. Only used with
-            ``implementation="original"``.
-        sc_num_samples (int): Side-chain packing samples. Only used with
-            ``implementation="original"``.
+        sc_num_denoising_steps (int): Side-chain denoising steps. Only used when model_type
+            is ``original``.
+        sc_num_samples (int): Side-chain packing samples. Only used when model_type is
+            ``original``.
     """
 
-    implementation: LigandMPNNImplementation = ConfigField(
-        title="Implementation",
-        default="foundry",
-        description="'foundry' (default) or 'original', the upstream code, which returns packed full-atom structures.",
+    model_type: LigandMPNNModelType = ConfigField(
+        title="Model Type",
+        default="ligand_mpnn",
+        description="Implementation: 'ligand_mpnn' (Foundry, default) or 'original' (packs full-atom structures).",
         reload_on_change=True,
     )
     use_atom_context: bool = ConfigField(
@@ -112,11 +88,10 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         default=True,
         description="Encode ligand atom context in the message-passing graph",
     )
-    model_checkpoint: str = ConfigField(
-        title="Model / Checkpoint",
-        default="ligandmpnn_v_32_010_25",
-        min_length=1,
-        description="'ligandmpnn_v_32_010_25', 'ligandmpnn_v_32_020_25', or a path to a custom .pt checkpoint.",
+    checkpoint_path: str | None = ConfigField(
+        title="Checkpoint Path",
+        default=None,
+        description="Optional explicit LigandMPNN checkpoint path.",
         reload_on_change=True,
     )
     use_side_chain_context: bool = ConfigField(
@@ -141,13 +116,13 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         title="Sidechain Denoising Steps",
         default=8,
         ge=1,
-        description="Side-chain denoising steps; only used with implementation='original'.",
+        description="Side-chain denoising steps; only used with model_type='original'.",
     )
     sc_num_samples: int = ConfigField(
         title="Sidechain Samples",
         default=1,
         ge=1,
-        description="Side-chain packing samples; only used with implementation='original'.",
+        description="Side-chain packing samples; only used with model_type='original'.",
     )
 
     @field_validator("excluded_amino_acids", mode="before")
@@ -166,7 +141,7 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
         Returns:
             LigandMPNNSampleConfig: The validated config.
         """
-        if self.implementation != "original":
+        if self.model_type not in LIGANDMPNN_LEGACY_MODEL_TYPES:
             fields = type(self).model_fields
             misused = [
                 name
@@ -175,31 +150,9 @@ class LigandMPNNSampleConfig(InverseFoldingConfig):
             ]
             if misused:
                 raise ValueError(
-                    f"{', '.join(misused)} only apply when implementation='original'; got implementation={self.implementation!r}."
+                    f"{', '.join(misused)} only apply when model_type='original'; got model_type={self.model_type!r}."
                 )
         return self
-
-    def remote_unsupported_reason(self, device: RemoteDevice) -> str | None:
-        """A local checkpoint path isn't present on a remote worker."""
-        return local_checkpoint_on_remote(self.model_checkpoint, device)
-
-    def readable_positions(self, inp: Any) -> dict[str, list[int]] | None:
-        """Positions LigandMPNN designs, which excludes every HETATM residue.
-
-        Only the Foundry path has a declared rule. ``implementation='original'`` parses the
-        structure with the original implementation's own ``parse_PDB``, whose behaviour is
-        not mirrored here, so it keeps strict length matching.
-
-        Args:
-            inp (Any): One structure input.
-
-        Returns:
-            dict[str, list[int]] | None: Ascending readable positions per chain ID, or
-                ``None`` for the original implementation.
-        """
-        if self.implementation == "original":
-            return None
-        return ligandmpnn_readable_positions(inp.structure)
 
 
 class LigandMPNNDesignMetrics(Metrics):
@@ -256,8 +209,8 @@ class LigandMPNNDesign(DesignedComplex):
     order, plus this design's scalar recovery metrics.
 
     Attributes:
-        chains (list[Chain | Fragment]): All polymer chains of the design, in input
-            structure chain order, each followed by its ligands as context.
+        chains (list[Chain | Fragment]): All protein chains of the design, in input
+            structure chain order.
         metrics (LigandMPNNDesignMetrics): Per-design recovery metrics
             (``sequence_recovery`` and ``ligand_interface_sequence_recovery``).
     """
@@ -302,45 +255,13 @@ class LigandMPNNSampleOutput(InverseFoldingOutput):
     )
 
 
-def _resolvable_fixed_positions(inp: Any, readable: dict[str, list[int]] | None) -> Any:
-    """Drop fixed positions LigandMPNN's parser never puts in the designed chain.
-
-    AtomWorks moves every unlisted ``HETATM`` residue into a non-polymer chain, so a position
-    naming one no longer exists under the chain the caller asked for.
-    ``MPNNInferenceInput._mask_from_ids`` raises on an ID matching nothing rather than
-    ignoring it, so the whole run fails on a constraint that is already satisfied: the model
-    never redesigns that residue. Kept positions are not renumbered, because the model
-    matches a fixed position by residue id, which staging leaves at the chain's own ordinal.
-
-    Args:
-        inp (Any): One structure input, exposing ``fixed_positions``.
-        readable (dict[str, list[int]] | None): Positions the model designs, per chain ID, or
-            ``None`` for the original implementation, whose parser is not mirrored here.
-
-    Returns:
-        Any: A ``ResidueSelection`` the model can resolve, or ``None`` when nothing is left.
-    """
-    if readable is None:
-        return inp.fixed_positions
-    resolved, dropped = split_fixed_positions(inp.fixed_positions, readable, renumber=False)
-    for chain_id, positions in dropped.items():
-        logger.warning(
-            "ligandmpnn-sample: Chain %s, position %s is read as ligand context rather than a design "
-            "position, so it cannot be fixed at the model. The original residue is preserved in the "
-            "output regardless.",
-            chain_id,
-            summarize_positions(inp.structure, chain_id, positions),
-        )
-    return resolved
-
-
 def _fixed_positions_cover_structure(inp: InverseFoldingStructureInput) -> bool:
     """Return whether fixed_positions cover every residue in every structure chain."""
     if inp.fixed_positions is None:
         return False
+    fixed = inp.fixed_positions.to_residue_numbers(inp.structure)
     for chain_id in inp.structure.get_chain_ids():
-        selected = set(inp.fixed_positions.chains.get(chain_id, []))
-        if selected != set(range(1, len(inp.structure.get_chain_positions(chain_id)) + 1)):
+        if set(fixed.get(chain_id, [])) != set(inp.structure.get_chain_positions(chain_id)):
             return False
     return True
 
@@ -411,31 +332,29 @@ def run_ligandmpnn_sample(
         all_pmpnn: list[float | None] = []
         all_pdb_strings: list[str | None] = []
         remaining = config.num_sequences_per_structure
-        readable = config.readable_positions(inp)
-        worker_fixed = _resolvable_fixed_positions(inp, readable)
-        # Staged once per input and reused across chunks, numbered 1..N per chain so LigandMPNN,
-        # which addresses residues by number alone, sees every insertion-coded residue.
-        # Only the Foundry parser loses a HETATM residue to the chain split; the original
-        # implementation reads the staged file its own way and is not mirrored here.
-        record_residues = frozenset() if config.implementation == "original" else LIGANDMPNN_ATOM_RECORD_RESIDUES
-        with inp.staged(atom_record_residues=record_residues) as staged:
+        # Materialize the Structure to a tempfile once per input — reused across chunks.
+        with inp.structure.temp_file() as pdb_path:
             while remaining > 0:
                 chunk = min(config.batch_size, remaining)  # type: ignore[type-var]
                 all_positions_fixed = _fixed_positions_cover_structure(inp)
                 input_dict = {
                     "operation": "sample",
-                    "pdb_path": str(staged.path),
-                    "chain_ids": staged.chains(inp.chain_ids_to_redesign),
+                    "pdb_path": str(pdb_path),
+                    "chain_ids": inp.chain_ids_to_redesign,
                     "chains_explicitly_set": inp.chains_to_redesign is not None and not all_positions_fixed,
                     "batch_size": chunk,
                     "temperature": config.temperature,
-                    "fixed_positions": staged.positions(worker_fixed),
+                    "fixed_positions": (
+                        inp.fixed_positions.to_residue_numbers(inp.structure)
+                        if inp.fixed_positions is not None
+                        else None
+                    ),
                     "excluded_amino_acids": config.excluded_amino_acids,
                     "seed": base_seed + dispatch_idx,
                     "device": config.device,
                     "verbose": config.verbose,
-                    "implementation": config.implementation,
-                    "model_checkpoint": config.model_checkpoint,
+                    "model_type": config.model_type,
+                    "checkpoint_path": config.checkpoint_path,
                     "ligand_mpnn_use_atom_context": config.use_atom_context,
                     "ligand_mpnn_use_side_chain_context": config.use_side_chain_context,
                     "ligand_mpnn_cutoff_for_score": config.cutoff_for_score,
@@ -459,27 +378,18 @@ def run_ligandmpnn_sample(
                 remaining -= chunk  # type: ignore[operator]
 
         # The standalone emits ordered per-chain (chain_id, sequence) pairs.
-        redesign_ids = set(inp.chain_ids_to_redesign)
-        redesigned_ids = set() if _fixed_positions_cover_structure(inp) else redesign_ids
+        redesigned_ids = set() if _fixed_positions_cover_structure(inp) else set(inp.chain_ids_to_redesign)
 
-        preserved = preserved_positions(readable, inp.structure, inp.fixed_positions) if readable is not None else None
         complexes: list[LigandMPNNDesign] = []
         for chain_seqs, recovery, interface_recovery, pmpnn, pdb_string in zip(
             all_chain_sequences, all_recovery, all_interface_recovery, all_pmpnn, all_pdb_strings, strict=True
         ):
+            chains: list[Chain | Fragment] = [Chain(id=entry["id"], sequence=entry["sequence"]) for entry in chain_seqs]
+            designed: list[bool] = [entry["id"] in redesigned_ids for entry in chain_seqs]
             complexes.append(
-                LigandMPNNDesign.from_design(
-                    inp.structure,
-                    {
-                        cid: entry["sequence"]
-                        for entry in chain_seqs
-                        if (cid := staged.original_chain(entry["id"])) in redesign_ids
-                    },
-                    redesigned_ids,
-                    tool="ligandmpnn-sample",
-                    include_ligands=True,
-                    readable_positions=readable,
-                    fixed_positions=preserved,
+                LigandMPNNDesign(
+                    chains=chains,
+                    designed=designed,
                     metrics=LigandMPNNDesignMetrics(
                         sequence_recovery=(recovery if math.isfinite(recovery) else None),
                         # Foundry returns NaN when no ligand interface; route to None so the conditional key is dropped.
@@ -489,7 +399,7 @@ def run_ligandmpnn_sample(
                         pmpnn=(pmpnn if pmpnn is not None and math.isfinite(pmpnn) else None),
                     ),
                     structure=(
-                        staged.restore(pdb_string, source="ligandmpnn-sample", readable_positions=readable)
+                        Structure(structure=pdb_string, structure_format="pdb", source="ligandmpnn-sample")
                         if pdb_string
                         else None
                     ),

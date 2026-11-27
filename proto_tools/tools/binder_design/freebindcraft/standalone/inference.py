@@ -1,6 +1,6 @@
 """FreeBindCraft (PyRosetta-free) binder-design CLI subprocess wrapper for ToolInstance dispatch.
 
-Run the FreeBindCraft fork's ``bindcraft.py`` with ``--no-pyrosetta``. Relaxation runs on
+Invokes the FreeBindCraft fork's ``bindcraft.py`` with ``--no-pyrosetta``; relaxation runs on
 OpenMM and interface metrics come from sc-rs / FreeSASA / Biopython. PyRosetta-only metrics
 (interface energies, H-bond counts, packstat) are placeholders upstream and are dropped from the
 metric map below so they are never surfaced as real values.
@@ -8,7 +8,6 @@ metric map below so they are never surfaced as real values.
 
 import csv
 import json
-import logging
 import os
 import re
 import subprocess
@@ -17,7 +16,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import get_logger, get_subprocess_device_env, resolve_weights_dir
+from standalone_helpers import get_jax_memory_stats, get_logger, get_subprocess_device_env, resolve_weights_dir
 
 logger = get_logger(__name__)
 
@@ -137,10 +136,10 @@ def _build_advanced_settings(payload: dict[str, Any]) -> dict[str, Any]:
 def _build_filters(payload: dict[str, Any]) -> dict[str, Any]:
     """Load default filters and merge per-metric overrides on top.
 
-    Merge each metric separately. A partial override such as
+    Merges per metric rather than replacing: a partial override such as
     ``{"Average_pLDDT": {"threshold": 0.5}}`` keeps the default's other keys
     (notably ``"higher"``, which upstream's filter check reads unconditionally),
-    so the override cannot remove the comparison direction or trigger a KeyError.
+    so a partial override can't drop it and KeyError or invert the direction.
     """
     base: dict[str, Any] = json.loads(_DEFAULT_FILTERS_PATH.read_text())
     for metric, override in (payload.get("filter_overrides") or {}).items():
@@ -199,7 +198,7 @@ def _parse_interface_aas(s: str) -> dict[str, int]:
     """Parse a Python-dict-as-string or JSON dict cell into {aa: count}."""
     if not s:
         return {}
-    # Convert single-quoted Python dictionary cells to JSON before parsing.
+    # CSV cells are stringified Python dicts (single quotes); flip to JSON.
     try:
         return {str(k): int(v) for k, v in json.loads(s.replace("'", '"')).items()}
     except (TypeError, ValueError, json.JSONDecodeError):
@@ -266,7 +265,7 @@ def _parse_outputs(designs_dir: Path) -> dict[str, Any]:
                 designs.append(_design_from_row(mpnn_stats[design_name], pdb_path))
                 seen.add(design_name)
 
-    # Count at least one trajectory for every accepted design.
+    # Floor at len(designs) — can't have accepted more designs than trajectories run.
     n_trajectories = max(_count_trajectories(designs_dir), len(designs))
     return {
         "designs": designs,
@@ -281,7 +280,7 @@ def _parse_outputs(designs_dir: Path) -> dict[str, Any]:
 
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
-    """Write settings files, run bindcraft.py, and parse the results."""
+    """Materialize settings, invoke bindcraft.py, parse outputs."""
     operation = input_dict["operation"]
     if operation != "design":
         raise ValueError(f"Unknown BindCraft operation: {operation}")
@@ -293,7 +292,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         work_dir = Path(work_dir_str)
         (work_dir / "designs").mkdir(parents=True, exist_ok=True)
 
-        # Write the target, sampling, and filter settings expected by the upstream CLI.
         target = _build_target_settings(input_dict, work_dir)
         advanced = _build_advanced_settings(input_dict)
         filters = _build_filters(input_dict)
@@ -325,8 +323,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             "--no-pyrosetta",
         ]
 
-        logger.update_status("Designing binders", level=logging.DEBUG)
-
         verbose = bool(input_dict.get("verbose", False))
         try:
             subprocess.run(
@@ -342,7 +338,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         except subprocess.CalledProcessError as e:
             full_stderr = (e.stderr or "").strip()
             if full_stderr:
-                # Keep the full stderr text so earlier diagnostic messages remain available.
+                # Surface full stderr; a 10-line tail previously hid the root cause.
                 print(full_stderr, file=sys.stderr)
             stderr_tail = " | ".join(full_stderr.splitlines()) or "<no stderr>"
             raise RuntimeError(f"bindcraft: failed (exit {e.returncode}): {stderr_tail}") from e
@@ -361,8 +357,9 @@ def to_device(device: str) -> dict[str, Any]:
 
 
 def get_memory_stats() -> dict[str, Any]:
-    """CLI tool, no persistent GPU state to report."""
-    return {"available": False, "framework": "cli", "reason": "CLI tool, no persistent GPU state"}
+    """Report JAX memory stats for the worker's first visible device."""
+    stats: dict[str, Any] = get_jax_memory_stats(device_index=0)
+    return stats
 
 
 # ============================================================================

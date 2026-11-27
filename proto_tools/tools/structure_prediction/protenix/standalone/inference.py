@@ -1,19 +1,24 @@
 """Protenix inference implementation."""
 
 import json
-import logging
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import count_a3m_rows, get_logger, report_msa_rows_loaded, retry_on_checkpoint_corruption
+from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 
 # Retry ProtenixModel.load() when ByteDance TOS drops the checkpoint download.
 LOAD_MAX_ATTEMPTS = 3
 LOAD_BACKOFF_BASE_S = 2.0
+
+
+def _is_checkpoint_corruption_error(exc: BaseException) -> bool:
+    msg = str(exc)
+    return any(s in msg for s in ("PytorchStreamReader", "central directory", "zip archive", "BadZipFile"))
 
 
 def _cuequivariance_available() -> bool:
@@ -53,8 +58,8 @@ def validate_checkpoint(checkpoint_path: Path) -> bool:
         logger.info(f"Checkpoint validation passed: {checkpoint_path.name}")
         return True
     except MemoryError:
-        # Propagate resource failures so _validate_single_checkpoint does not delete
-        # a valid checkpoint after an out-of-memory error.
+        # Resource constraint, not corruption — let the caller decide; we MUST NOT
+        # let _validate_single_checkpoint delete a valid file because we OOM'd here.
         raise
     except Exception as e:  # any other torch.load failure means "not a valid checkpoint"
         logger.warning(f"Checkpoint validation failed for {checkpoint_path}: {e}")
@@ -89,7 +94,7 @@ def _validate_single_checkpoint(checkpoint_path: Path) -> None:
             logger.debug(f"Invalid validation marker, will re-validate: {e}")
 
     if needs_validation:
-        logger.update_status("Validating Protenix checkpoint")
+        logger.info(f"Validating checkpoint: {checkpoint_path.name}")
         if not validate_checkpoint(checkpoint_path):
             logger.warning(f"Removing corrupted checkpoint: {checkpoint_path}")
             checkpoint_path.unlink()
@@ -104,9 +109,10 @@ def _validate_single_checkpoint(checkpoint_path: Path) -> None:
 def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None:  # noqa: ARG001 — required by tool interface
     """Check and remove corrupted checkpoint files in the checkpoint directory.
 
-    Validate every .pt file in the directory, including dependency checkpoints,
-    such as ESM2 embedding models, because interrupted downloads can corrupt
-    them as well as the primary model.
+    Validates ALL .pt files in the directory (not just the named model),
+    because tools like protenix also download dependency checkpoints
+    (e.g., ESM2 embedding models) that can be corrupted by interrupted
+    downloads.
 
     Uses `.validated` marker files to cache validation results and avoid
     re-validating unchanged checkpoints on every inference call.
@@ -126,35 +132,6 @@ def cleanup_corrupted_checkpoints(checkpoint_dir: Path, model_name: str) -> None
         _validate_single_checkpoint(checkpoint_path)
 
 
-def _msa_rows_sent_by_job(
-    input_json_path: str, chain_ids: dict[str, list[str]] | None = None
-) -> dict[str, dict[str, int]]:
-    """MSA rows written per protein chain (keyed by position), per job; warn for chains without a path.
-
-    ``chain_ids`` maps a job name to its chain IDs in sequence order, naming chains in the warning.
-
-    A protein chain without an MSA path runs without an MSA: proto-tools disables Protenix's own
-    server search, which would otherwise replace every chain's supplied MSA.
-    """
-    jobs = json.loads(Path(input_json_path).read_text())
-    base = Path(input_json_path).parent
-    sent_by_job: dict[str, dict[str, int]] = {}
-    for job in jobs if isinstance(jobs, list) else [jobs]:
-        sent: dict[str, int] = {}
-        for position, entry in enumerate(job["sequences"]):
-            chain = entry.get("proteinChain")
-            if chain is None:
-                continue
-            paths = [base / chain[key] for key in ("unpairedMsaPath", "pairedMsaPath") if chain.get(key)]
-            sent[str(position)] = max((count_a3m_rows(path.read_text()) for path in paths if path.exists()), default=0)
-        labels = (chain_ids or {}).get(job["name"], [])
-        missing = [labels[int(p)] if int(p) < len(labels) else p for p, rows in sent.items() if rows == 0]
-        if missing:
-            logger.warning("protenix: protein chain(s) %s have no MSA and will run query-only", ", ".join(missing))
-        sent_by_job[job["name"]] = sent
-    return sent_by_job
-
-
 class ProtenixModel:
     """Protenix model for biomolecular structure prediction.
 
@@ -168,9 +145,6 @@ class ProtenixModel:
         """Initialize Protenix model wrapper."""
         self._loaded = False
         self.runner: Any = None
-        # Job name -> {protein chain position: MSA rows proto-tools wrote}, for the loaded-rows log.
-        self._msa_rows_sent: dict[str, dict[str, int]] = {}
-        self._msa_chain_ids: dict[str, list[str]] = {}
         self.device: str | None = None
         self._cache_key: tuple[Any, ...] | None = None
 
@@ -185,7 +159,6 @@ class ProtenixModel:
         num_diffusion_steps: int = 200,
         num_pairformer_cycles: int = 10,
         use_msa: bool = True,
-        chain_ids: dict[str, list[str]] | None = None,
         verbose: bool = False,
         include_pae_matrix: bool = False,
     ) -> list[dict[str, Any]]:
@@ -194,15 +167,15 @@ class ProtenixModel:
         Args:
             input_json_path: Path to input JSON file (list of job dicts)
             output_dir: Directory to write output to
-            device: Device the model is built on (e.g. ``"cuda:1"``). If it changes between calls,
-                the model is moved to the new device.
+            device: Device string (e.g. ``"cuda:0"``); protenix's ``init_env`` binds to
+                ``cuda:0`` of whatever the parent worker made visible via
+                ``CUDA_VISIBLE_DEVICES``.
             model_name: Protenix model variant to use
             seeds: Comma-separated seed values
             num_diffusion_samples: Number of diffusion samples per seed
             num_diffusion_steps: Number of denoising steps
             num_pairformer_cycles: Number of Pairformer recycling iterations
             use_msa: Whether to use MSA features
-            chain_ids: Job name to its chain IDs in sequence order, labelling the MSA-rows log
             verbose: Whether to print status messages
             include_pae_matrix: Attach the full per-token PAE matrix.
 
@@ -243,21 +216,31 @@ class ProtenixModel:
             inference_configs["dump_dir"] = output_dir
             # Retry on truncated-checkpoint errors from a dropped TOS download:
             # cleanup deletes the corrupt .pt; upstream re-downloads on retry.
-            retry_on_checkpoint_corruption(
-                lambda: self.load(
-                    device=device,
-                    model_name=model_name,
-                    num_pairformer_cycles=num_pairformer_cycles,
-                    num_diffusion_steps=num_diffusion_steps,
-                    num_diffusion_samples=num_diffusion_samples,
-                    use_msa=use_msa,
-                    kernel=kernel,
-                ),
-                tool_name="protenix",
-                max_attempts=LOAD_MAX_ATTEMPTS,
-                recover=lambda: cleanup_corrupted_checkpoints(checkpoint_dir, model_name),
-                backoff_s=LOAD_BACKOFF_BASE_S,
-            )
+            for attempt in range(1, LOAD_MAX_ATTEMPTS + 1):
+                try:
+                    self.load(
+                        model_name=model_name,
+                        num_pairformer_cycles=num_pairformer_cycles,
+                        num_diffusion_steps=num_diffusion_steps,
+                        num_diffusion_samples=num_diffusion_samples,
+                        use_msa=use_msa,
+                        kernel=kernel,
+                    )
+                    break
+                except (RuntimeError, OSError) as e:
+                    if attempt >= LOAD_MAX_ATTEMPTS or not _is_checkpoint_corruption_error(e):
+                        raise
+                    delay = LOAD_BACKOFF_BASE_S * (2 ** (attempt - 1))
+                    logger.warning(
+                        "Protenix load failed (attempt %d/%d): %s — cleaning corrupted "
+                        "checkpoints and retrying in %.1fs",
+                        attempt,
+                        LOAD_MAX_ATTEMPTS,
+                        e,
+                        delay,
+                    )
+                    cleanup_corrupted_checkpoints(checkpoint_dir, model_name)
+                    time.sleep(delay)
         # Catches both cache-hit device changes and "cuda" vs "cuda:0" label mismatch post-load.
         if self.device != device:
             self.to_device(device)
@@ -275,25 +258,16 @@ class ProtenixModel:
         prev_cwd = os.getcwd()
         os.chdir(working_dir)
         try:
-            self._msa_rows_sent = _msa_rows_sent_by_job(input_json_path, chain_ids) if use_msa else {}
-            self._msa_chain_ids = chain_ids or {}
-            # proto-tools writes every chain's MSA path; use_msa=False here only stops Protenix
-            # from searching its own server (which would overwrite them). The runner, built with
-            # use_msa above, still featurizes the supplied MSAs.
             processed_json = preprocess_input(
                 input_json=input_json_path,
                 out_dir=output_dir,
-                use_msa=False,
+                use_msa=use_msa,
             )
             configs = self.runner.configs
             configs["input_json_path"] = processed_json
             configs["seeds"] = seeds_list
             configs["dump_dir"] = output_dir
             from standalone_helpers import oom_guard
-
-            with open(input_json_path) as f:
-                num_jobs = len(json.load(f))
-            logger.update_status(f"Predicting {num_jobs} structure{'s' if num_jobs != 1 else ''}", level=logging.DEBUG)
 
             with oom_guard("protenix", hint="Lower num_diffusion_samples or use a larger GPU."):
                 infer_predict(self.runner, configs)
@@ -373,34 +347,9 @@ class ProtenixModel:
             "metrics": metrics_out,
         }
 
-    def _log_loaded_msa_rows(self, runner: Any) -> None:
-        """Wrap ``runner.predict`` to log each sample's featurized MSA rows per protein chain once."""
-        from protenix.data.msa.msa_utils import MSA_GAP_IDX  # type: ignore[import-not-found]
-
-        predict = runner.predict
-
-        def predict_logging_msa_rows(data: Any) -> Any:
-            # Popped so each call logs a job once; job names repeat across calls to a cached worker.
-            sent = self._msa_rows_sent.pop(data["sample_name"], None)
-            if sent is not None:
-                features = data["input_feature_dict"]
-                msa, asym = features["msa"], features["asym_id"]
-                loaded = {chain: int((msa[:, asym == int(chain)] != MSA_GAP_IDX).any(dim=1).sum()) for chain in sent}
-                labels = self._msa_chain_ids.get(data["sample_name"], [])
-                label = {position: labels[int(position)] for position in sent if int(position) < len(labels)}
-                report_msa_rows_loaded(
-                    "protenix",
-                    {label.get(k, k): v for k, v in loaded.items()},
-                    {label.get(k, k): v for k, v in sent.items()},
-                )
-            return predict(data)
-
-        runner.predict = predict_logging_msa_rows
-
     def load(
         self,
         *,
-        device: str,
         model_name: str,
         num_pairformer_cycles: int,
         num_diffusion_steps: int,
@@ -408,24 +357,10 @@ class ProtenixModel:
         use_msa: bool,
         kernel: str,
     ) -> None:
-        """Build and hold an ``InferenceRunner`` for the given config combo on ``device``.
-
-        The worker sees every GPU, and protenix's ``init_env`` binds ``cuda:{DIST_WRAPPER.local_rank}``
-        (``LOCAL_RANK``, 0 outside torchrun) and makes it current; its checkpoint load, ESM features and
-        Triton kernels follow. Pointing ``local_rank`` at the leased GPU builds the runner there. With
-        GPUs present ``init_env`` always picks CUDA, so a CPU target is built on the current GPU and
-        moved by the caller.
-        """
-        from protenix.utils.distributed import DIST_WRAPPER  # type: ignore[import-not-found]
+        """Build and hold an ``InferenceRunner`` for the given config combo."""
         from runner.batch_inference import get_default_runner
-        from standalone_helpers import _parse_cuda_indices, set_current_cuda_device
 
-        indices = _parse_cuda_indices(device)
-        if indices:
-            DIST_WRAPPER.local_rank = indices[0]
-        set_current_cuda_device(device)
-
-        logger.update_status("Loading Protenix weights")
+        logger.debug(f"Loading Protenix runner: model={model_name}, kernel={kernel}")
 
         if self.runner is not None:
             self.unload()
@@ -444,7 +379,6 @@ class ProtenixModel:
             triatt_kernel=kernel,
             need_atom_confidence=True,
         )
-        self._log_loaded_msa_rows(self.runner)
         self.device = str(self.runner.device)
         self._cache_key = (
             model_name,
@@ -490,10 +424,17 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Entry point for both persistent-worker and one-shot execution."""
     global _model
 
-    # Protenix downloads checkpoints (incl. the ESM2-3B used by mini_esm) and CCD data under PROTENIX_ROOT_DIR
-    from standalone_helpers import export_weights_dir
+    # Resolve checkpoint directory via PROTO_MODEL_CACHE
+    from standalone_helpers import resolve_weights_dir
 
-    export_weights_dir("PROTENIX_ROOT_DIR", "protenix")
+    weights_dir = resolve_weights_dir("protenix")
+    if weights_dir:
+        os.environ["PROTENIX_ROOT_DIR"] = weights_dir
+    elif not os.environ.get("PROTENIX_ROOT_DIR"):
+        # Fallback: store checkpoints in the tool env directory
+        env_path = os.environ.get("TOOL_VENV_PATH")
+        if env_path:
+            os.environ["PROTENIX_ROOT_DIR"] = env_path
 
     if _model is None:
         _model = ProtenixModel()
@@ -510,7 +451,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             num_diffusion_steps=input_dict["num_diffusion_steps"],
             num_pairformer_cycles=input_dict["num_pairformer_cycles"],
             use_msa=input_dict["use_msa"],
-            chain_ids=input_dict.get("chain_ids"),
             verbose=input_dict["verbose"],
             include_pae_matrix=input_dict["include_pae_matrix"],
         )
@@ -537,8 +477,7 @@ def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
-    device = _model.device if _model is not None and _model.device and _model.device.startswith("cuda:") else "cuda:0"
-    return get_pytorch_memory_stats(device=device.split(",")[0])  # type: ignore[no-any-return]
+    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

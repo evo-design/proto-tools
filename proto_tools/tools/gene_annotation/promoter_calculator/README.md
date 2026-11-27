@@ -36,7 +36,7 @@ Use this to quantify σ70 promoter strength when designing or analysing *E. coli
 #### Usage Tips
 
 - **Set `circular=True` for plasmids and bacterial chromosomes.** Linear scanning of a circular sequence cannot see candidates that span the wraparound origin. When the input is circular, the calculator examines the junction explicitly and recovers any promoter that straddles it.
-- **Short inputs need flanking context to score.** The element scan needs roughly 20 nucleotides on either side of the promoter region. Sequences shorter than the scan window return no predictions. Pad with neutral flanking sequence when scoring a single promoter element in isolation.
+- **Short inputs need flanking context to score.** The element scan needs roughly 20 nucleotides on either side of the promoter region; sequences shorter than the scan window return no predictions. Pad with neutral flanking sequence when scoring a single promoter element in isolation.
 - **Predictions are calibrated for *E. coli* σ70 only.** Applying the model to other organisms or to alternative sigma factors (σS, σ32, σ54, σ28) is not validated. Treat any cross-organism output as a relative ranking, not as a calibrated rate.
 - **`Tx_rate` is transcription initiation, not protein expression.** The model captures RNA polymerase binding and open-complex formation. End-to-end expression also depends on the ribosome binding site, mRNA stability, copy number, and growth state, none of which the calculator sees.
 - **The model does not see transcription factors, attenuation, or anti-σ factors.** Repression by a TF bound near the promoter, riboswitch attenuation, and anti-σ sequestration all reduce in vivo output without changing the predicted `Tx_rate`. Use the prediction as the unregulated upper bound.
@@ -48,5 +48,5 @@ Use this to quantify σ70 promoter strength when designing or analysing *E. coli
 These apply to every Promoter Calculator tool in this toolkit (`promoter-calculator`).
 
 - **Runs on CPU only.** The model is a Ridge-regression sum over 346 coefficients that ship with the Python source. No neural network is loaded at inference time, and there is no GPU acceleration to enable.
-- **Self-contained after install.** The standalone setup builds a Python virtual environment and pulls dependencies once. Subsequent runs need no further network access and no model-weight downloads.
+- **Self-contained after install.** The standalone setup builds a Python virtual environment and pulls dependencies once; subsequent runs need no further network access and no model-weight downloads.
 - **`threads` parallelises the internal TSS scan within a single sequence.** Raising it shortens wall-clock time on long inputs but does not change the predictions. Across input sequences the wrapper itself runs sequentially.

@@ -68,7 +68,7 @@ def test_input_single_sequence_normalized_to_list():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_fimo_scan_results_align_to_inputs():
     """Output is 1:1 with inputs; a sequence with no occurrences yields an empty bundle."""
     inputs = MEMEFimoScanInput(sequences=[SAMPLE_SEQUENCE, NO_MATCH_SEQUENCE], motifs=str(EXAMPLE_MEME_FILE))
@@ -86,7 +86,7 @@ def test_fimo_scan_results_align_to_inputs():
     assert match.start <= match.stop
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_fimo_scan_single_strand_finds_forward_matches():
     """Disabling reverse-strand scanning still recovers the forward occurrences."""
     inputs = MEMEFimoScanInput(sequences=SAMPLE_SEQUENCE, motifs=str(EXAMPLE_MEME_FILE))
@@ -98,7 +98,7 @@ def test_fimo_scan_single_strand_finds_forward_matches():
     assert all(m.strand == "+" for r in result.results for m in r.matches)
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("sequence", "strand"),
     [(LEADER_THEN_REPEAT, "+"), (REPEAT_SPACER_MINUS, "-")],
@@ -119,7 +119,7 @@ def test_fimo_scan_finds_motif_flush_against_sequence_end(sequence, strand):
     assert match.strand == strand
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_fimo_scan_sequence_exactly_motif_width_is_scanned():
     """A sequence exactly as long as the motif yields its single window's match."""
     inputs = MEMEFimoScanInput(sequences=CRISPR_REPEAT, motifs=str(EXAMPLE_MEME_FILE))
@@ -141,7 +141,7 @@ def _write_protein_motif(path: Path) -> None:
     )
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_fimo_scan_protein_motif_is_forward_only(tmp_path):
     """both_strands=True is ignored for a protein (non-complementable) motif.
 
@@ -159,7 +159,7 @@ def test_fimo_scan_protein_motif_is_forward_only(tmp_path):
     assert all(m.strand == "+" for r in result.results for m in r.matches)
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_fimo_scan_export_csv(tmp_path):
     """Results export to a CSV file on disk."""
     inputs = MEMEFimoScanInput(sequences=SAMPLE_SEQUENCE, motifs=str(EXAMPLE_MEME_FILE))

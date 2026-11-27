@@ -69,7 +69,7 @@ def visualize_search_box(
     ``config`` the run will use shows the box Vina will actually search, including the
     coordinates resolved from a :class:`VinaReferenceLigandBox`.
 
-    When the box was derived from a reference ligand, that ligand is drawn too. It carries
+    When the box was derived from a reference ligand, that ligand is drawn too: it carries
     real coordinates in the receptor frame, so it shows whether the cage sits on the pocket.
 
     Args:

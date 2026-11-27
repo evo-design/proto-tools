@@ -55,7 +55,7 @@ def _parse_rotation_matrix(matrix_text: str) -> dict[str, list[Any]] | None:
 
 
 def _read_superposition(matrix_path: Path) -> dict[str, Any]:
-    """Read and parse the matrix file, returning rotation/translation (``None`` on any failure)."""
+    """Read + parse the matrix file, returning rotation/translation (``None`` on any failure)."""
     try:
         parsed = _parse_rotation_matrix(matrix_path.read_text())
     except OSError:
@@ -67,7 +67,7 @@ def _read_superposition(matrix_path: Path) -> dict[str, Any]:
 
 
 def run_tmalign_alignment(pdb_text_1: str, pdb_text_2: str) -> dict[str, Any]:
-    """Run TMalign on two PDB text blobs and parse TM-scores and the superposition transform.
+    """Run TMalign on two PDB text blobs and parse TM-scores + the superposition transform.
 
     Args:
         pdb_text_1: PDB content of structure 1 (query / candidate).

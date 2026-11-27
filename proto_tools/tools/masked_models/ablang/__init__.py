@@ -10,7 +10,6 @@ from proto_tools.tools.masked_models.ablang.ablang_gradient import (
     AbLangGradientConfig,
     AbLangGradientInput,
     AbLangGradientOutput,
-    AbLangMaskedPLLTerm,
     run_ablang_gradient,
 )
 from proto_tools.tools.masked_models.ablang.ablang_sample import (
@@ -31,7 +30,6 @@ __all__ = [
     "AbLangEmbeddingsInput",
     "AbLangEmbeddingsOutput",
     "AbLangGradientConfig",
-    "AbLangMaskedPLLTerm",
     "AbLangGradientInput",
     "AbLangGradientOutput",
     "AbLangSampleConfig",

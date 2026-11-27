@@ -34,9 +34,6 @@ from proto_tools.tools.structure_prediction import (
     ESMFoldConfig,
     ESMFoldInput,
     ESMFoldOutput,
-    Mol1Config,
-    Mol1Input,
-    Mol1Output,
     OpenDDEConfig,
     OpenDDEInput,
     OpenDDEOutput,
@@ -53,17 +50,16 @@ from proto_tools.tools.structure_prediction import (
     run_chai1,
     run_esmfold,
     run_esmfold2,
-    run_mol1_prediction,
     run_opendde,
     run_protenix,
     run_rf3_prediction,
 )
-from proto_tools.tools.structure_prediction.shared_data_models import resolve_chain_ids
 from proto_tools.utils.tool_cache import (
     ToolCache,
     _program_tool_cache,
     get_cache_info,
 )
+from proto_tools.utils.tool_instance import ToolInstance
 from tests.structure_prediction_tests._fasta_helpers import load_all_test_complexes
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -80,7 +76,6 @@ _STRUCTURE_PREDICTORS = {
     "opendde": (run_opendde, OpenDDEInput, OpenDDEConfig, OpenDDEOutput),
     "protenix": (run_protenix, ProtenixInput, ProtenixConfig, ProtenixOutput),
     "rf3": (run_rf3_prediction, RF3Input, RF3Config, RF3Output),
-    "mol1": (run_mol1_prediction, Mol1Input, Mol1Config, Mol1Output),
 }
 
 _FAST_PREDICTORS = ["esmfold"]
@@ -200,9 +195,6 @@ def _generate_test_params() -> list:
                     marks = []
                     if predictor_name not in _FAST_PREDICTORS:
                         marks.append(pytest.mark.slow)
-                    if msa_search_mode == "remote":
-                        # The first fold per query searches the live ColabFold MMseqs2 server.
-                        marks.append(pytest.mark.network)
                     if msa_search_mode == "local":
                         marks.append(pytest.mark.extensive)
                         if uniref30_skip:
@@ -243,53 +235,39 @@ def _generate_test_params() -> list:
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
 
-# Each test takes a warm worker for its predictor from the session pool (tests/_warm_workers.py),
-# which keeps it across tests, and across files, for as long as consecutive tests use it, and
-# releases it as soon as the next test does not.
-WARM_WORKERS = True
-
-
-def _folding_config(config_class, use_msa: bool | None):
-    """The config test_folding runs a predictor with: ``minimal()``, MSA-compatible when use_msa.
-
-    ``minimal()`` cuts samples, diffusion steps and recycles, and picks a checkpoint that accepts
-    MSAs on the MSA path (ESMFold2's full model, say). Default settings are covered by the
-    default-config smoke test.
-    """
-    if use_msa is None:
-        return config_class.minimal(verbose=True)
-    return config_class.minimal(use_msa=use_msa, verbose=True)
-
-
-def worker_config_for(params: dict) -> dict:
-    """The reload_on_change values a parametrized case runs with, for the suite's run ordering."""
-    predictor = _STRUCTURE_PREDICTORS.get(params.get("predictor_name"))
-    if predictor is None:
-        return {}
-    config_class = predictor[2]
-    use_msa = bool(params.get("use_msa")) if _supports_msa(config_class) else None
-    config = _folding_config(config_class, use_msa)
-    return {field: getattr(config, field) for field in (config_class.reload_fields() or ())}
-
-
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="module", autouse=True)
 def _persistent_tool_instances(request):
-    """Give the test a warm worker for the predictor it runs."""
-    from tests import _warm_workers
+    """Keep tool workers alive across tests within this module.
 
+    Structure prediction tests reuse GPU models across test cases.
+    ToolInstance.persist() keeps workers cached across dispatch() calls for the
+    duration of this module and cleans them up on exit.
+    """
     if request.config.getoption("--cpu-only"):
         yield
         return
-    toolkit = _warm_workers.toolkit_of(request.node)
-    pool = _warm_workers.pool(request.config)
-    if toolkit is not None and pool is not None:
-        pool.acquire(toolkit, request.node.nodeid)
-    yield
+    with ToolInstance.persist():
+        yield
 
 
 @pytest.fixture
 def _release_between_predictors(request):
-    """Kept for test_folding's usefixtures: the pool now releases a predictor when the next test uses another."""
+    """Release tool workers when switching to a different predictor.
+
+    Works inside the module-scoped ToolInstance.persist() context from the
+    _persistent_tool_instances fixture above. When predictor_name changes between
+    consecutive tests, shuts down the previous predictor's worker so GPU memory
+    is freed before the next model loads.
+
+    Not autouse; only parametrized tests have callspec.params. Applied
+    via @pytest.mark.usefixtures on test_folding only.
+    """
+    prev = getattr(request.module, "_active_predictor", None)
+    predictor_name = request.node.callspec.params["predictor_name"]
+    if prev is not None and prev != predictor_name:
+        ToolInstance.shutdown_instance(prev)
+
+    request.module._active_predictor = predictor_name
     yield
 
 
@@ -443,7 +421,11 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
 
     # Create config with MSA settings if supported
     if _supports_msa(config_class):
-        config = _folding_config(config_class, use_msa)
+        # ESMFold2 ships two checkpoints; only the non-Fast one accepts MSA conditioning.
+        config_kwargs: dict = {"use_msa": use_msa, "verbose": True}
+        if predictor_name == "esmfold2" and use_msa:
+            config_kwargs["model_checkpoint"] = "esmfold2"
+        config = config_class(**config_kwargs)
 
         if use_msa and msa_search_mode is not None:
             from proto_tools.tools.sequence_alignment.mmseqs2.homology_search import (
@@ -452,7 +434,7 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
 
             config.msa_search_config = Mmseqs2HomologySearchConfig(search_mode=msa_search_mode, verbose=True)
     else:
-        config = _folding_config(config_class, None)
+        config = config_class(verbose=True)
 
     output = run_func(inputs, config)
 
@@ -471,15 +453,6 @@ def test_folding(test_name, predictor_name, use_msa, msa_search_mode):
             pytest.fail(f"Predicted structure {i} is not valid: {structure.structure_cif}")
 
     assert_metrics_in_spec(output)
-
-    # Chain types come from the input complex, whatever the predictor's file says.
-    for complex_, structure in zip(complexes, output.structures, strict=True):
-        expected = {
-            cid: chain.entity_type
-            for chain, cid in zip(complex_.chains, resolve_chain_ids(complex_.chains), strict=True)
-        }
-        assert structure.get_chain_types() == expected, f"{predictor_name} chain types differ from the input"
-        assert structure.num_chains == sum(kind != "ligand" for kind in expected.values())
 
 
 # ── Cache test (GPU) ───────────────────────────────────────────────────────────

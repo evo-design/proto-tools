@@ -4,11 +4,11 @@ Weights ship inside the ``iglm`` wheel (``iglm/trained_models/{IgLM,IgLM-S}``),
 so there is nothing to download and no model cache to resolve.
 Based on the IgLM repository: https://github.com/Graylab/IgLM
 
-This module reuses upstream's checkpoint paths, bad-word IDs, and formatting
-helpers, with batched generation and ordered deduplication. Upstream's
-``generate``, ``infill``, and ``log_likelihood`` methods are not called: they hardcode
-``max_length=150``, draw one candidate per forward pass, and return
-``list(set(...))`` in an order that can vary between processes with the same seed.
+Upstream's ``iglm.IgLM.generate``/``infill``/``log_likelihood`` are deliberately
+not called: they hardcode ``max_length=150``, draw one candidate per forward
+pass, and return ``list(set(...))``, whose order varies between processes even
+under a fixed seed. This module reuses upstream's checkpoint paths, bad-word
+ids, and format helpers while batching the draws and keeping the dedup ordered.
 """
 
 import json
@@ -18,7 +18,6 @@ from functools import partial
 from typing import Any, Literal
 
 from standalone_helpers import (
-    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
@@ -67,7 +66,9 @@ class IgLMModel:
 
     def load(self, device: str, verbose: bool = False) -> None:
         """Load IgLM weights and tokenizer from the installed package to device."""
-        logger.update_status("Loading IgLM weights")
+        if verbose:
+            logger.info(f"Loading IgLM model: {self.model_checkpoint} on {device}")
+        logger.update_status(f"Loading IgLM {self.model_checkpoint}")
 
         import transformers
         from iglm.model.IgLM import CHECKPOINT_DICT, VOCAB_FILE
@@ -199,7 +200,7 @@ class IgLMModel:
         input_ids = torch.tensor([token_ids], dtype=torch.long, device=self.device)
         attention_mask = torch.ones_like(input_ids)
 
-        # Keep accepted sequences in generation order while removing duplicates.
+        # Ordered dedup: dict keys preserve generation order, unlike upstream's set().
         accepted: dict[str, Any] = {}
         budget = max(IGLM_CANDIDATES_PER_SEQUENCE * num_sequences, IGLM_MIN_CANDIDATE_BUDGET)
         drawn = 0
@@ -207,8 +208,8 @@ class IgLMModel:
 
         with torch.no_grad():
             while len(accepted) < num_sequences and drawn < budget:
-                # Draw enough candidates to fill the remaining slots, allowing some rejections
-                # without exceeding the per-item attempt budget.
+                # Capped by what is still outstanding (with room for a rejection or two), so a
+                # large batch_size speeds up a library without over-drawing a single design.
                 outstanding = num_sequences - len(accepted)
                 num_to_draw = max(1, min(batch_size, 2 * outstanding, budget - drawn))
                 candidates = self.model.generate(
@@ -227,8 +228,8 @@ class IgLMModel:
                 drawn += num_to_draw
 
                 for candidate in candidates.detach().cpu().numpy():
-                    # Count truncated candidates before checking format so the error can
-                    # recommend a larger token budget when that is the cause.
+                    # Attributed before the format check: a clipped generation is usually also
+                    # malformed, and blaming the distribution for it points at the wrong remedy.
                     if self._ran_out_of_budget(candidate, max_length):
                         truncated += 1
                         continue
@@ -307,15 +308,14 @@ class IgLMModel:
             raise ValueError("iglm: cannot sample from empty prompt list")
 
         self._ensure_ready(device, verbose, seed)
+        logger.update_status(f"Generating {num_sequences_per_input} sequence(s) for {len(prompts)} prompt(s)")
 
         items = zip(prompts, chain_tokens, species_tokens, strict=True)
         all_sequences: list[list[str]] = []
 
-        counter = StatusCounter(logger, "Sampling from prompt %d/%d", total=len(prompts))
         for item_index, (prompt, chain_token, species_token) in enumerate(
             tqdm(list(items), desc="IgLM Sequence Generation", unit="prompt", disable=not verbose)
         ):
-            counter(item_index + 1)
             # Upstream conditions on [chain, species] then the prompt's residues, one token each.
             start_tokens = [chain_token, species_token, *prompt]
             all_sequences.append(
@@ -380,17 +380,15 @@ class IgLMModel:
             raise ValueError("iglm: cannot infill an empty sequence list")
 
         self._ensure_ready(device, verbose, seed)
+        logger.update_status(f"Infilling {num_sequences_per_input} span(s) for {len(sequences)} sequence(s)")
 
         items = zip(sequences, infill_ranges, chain_tokens, species_tokens, strict=True)
         all_sequences: list[list[str]] = []
         all_residues: list[list[str]] = []
 
-        counter = StatusCounter(logger, "Infilling sequence %d/%d", total=len(sequences))
-
         for item_index, (sequence, infill_range, chain_token, species_token) in enumerate(
             tqdm(list(items), desc="IgLM Span Re-design", unit="sequence", disable=not verbose)
         ):
-            counter(item_index + 1)
             start, end = infill_range
             prefix, suffix = sequence[:start], sequence[end:]
             start_tokens = [chain_token, species_token, *mask_span(list(sequence), start, end)]
@@ -453,10 +451,9 @@ class IgLMModel:
         if not sequences:
             raise ValueError("iglm: cannot score an empty sequence list")
 
-        # Load the model onto the device and apply the seed
         self._ensure_ready(device, verbose, seed)
+        logger.update_status(f"Scoring {len(sequences)} sequence(s)")
 
-        # Tokenize each sequence with its chain and species tokens, then split into batches
         items = list(zip(sequences, infill_ranges, chain_tokens, species_tokens, strict=True))
         encoded = [self._encode_for_scoring(item, index) for index, item in enumerate(items)]
         batches = [encoded[i : i + batch_size] for i in range(0, len(encoded), batch_size)]
@@ -464,16 +461,13 @@ class IgLMModel:
         all_metrics: list[dict[str, float]] = []
         all_logits: list[Any] = []
 
-        counter = StatusCounter(logger, "Scoring batch %d/%d", total=len(batches))
         with torch.inference_mode():
             for batch_index, batch in enumerate(
                 tqdm(batches, desc="IgLM Sequence Scoring", unit="batch", total=len(batches))
             ):
-                counter(batch_index + 1)
                 if verbose:
                     logger.info(f"Processing batch {batch_index + 1}/{len(batches)} ({len(batch)} sequences)")
 
-                # Right-pad the batch's token IDs and mask out the padded positions
                 lengths = [len(token_ids) for token_ids, _ in batch]
                 max_len = max(lengths)
                 input_ids = torch.full(
@@ -484,7 +478,6 @@ class IgLMModel:
                     input_ids[i, : len(token_ids)] = torch.tensor(token_ids, dtype=torch.long, device=self.device)
                     attention_mask[i, : len(token_ids)] = 1
 
-                # Run the forward pass and convert logits to log-probabilities over the vocabulary
                 logits = self.model(input_ids=input_ids, attention_mask=attention_mask).logits.float()
                 log_probs = torch.log_softmax(logits, dim=-1)
 
@@ -494,7 +487,6 @@ class IgLMModel:
                     scored_labels = input_ids[i, eval_start + 1 : length]
                     token_log_probs = scored_log_probs.gather(1, scored_labels.unsqueeze(1)).squeeze(1)
 
-                    # Summarize the mean token log-likelihood, keeping logits only if requested
                     all_metrics.append(log_likelihood_metrics(token_log_probs.mean().item(), token_log_probs.shape[0]))
                     if return_logits:
                         all_logits.append(logits[i, eval_start : length - 1, : len(self.vocab)].cpu())

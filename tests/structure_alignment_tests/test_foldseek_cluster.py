@@ -176,43 +176,6 @@ def test_input_rejects_mixed_pdb_and_fasta():
         FoldseekClusterInput(structures=[_TINY_FASTA, _TINY_PDB])
 
 
-@pytest.mark.parametrize("second_record", [_TINY_FASTA_2, "  " + _TINY_FASTA_2])
-def test_input_rejects_multi_record_fasta_entry(second_record):
-    """Each entry is one cluster member, so a FASTA entry holding two sequences is rejected, indented or not."""
-    with pytest.raises(ValidationError, match="one sequence"):
-        FoldseekClusterInput(structures=[_TINY_FASTA + second_record, _TINY_FASTA])
-
-
-@pytest.mark.parametrize("as_path", [False, True], ids=["str", "Path"])
-def test_input_rejects_multi_record_fasta_file(tmp_path, as_path):
-    """A FASTA file holding two sequences is rejected like the same text inline."""
-    fasta = tmp_path / "two.fasta"
-    fasta.write_text(_TINY_FASTA + _TINY_FASTA_2)
-    with pytest.raises(ValidationError, match="one sequence"):
-        FoldseekClusterInput(structures=[fasta if as_path else str(fasta), _TINY_FASTA])
-
-
-def test_input_rejects_fasta_dir_with_spaced_stems(tmp_path):
-    """Directory stems become FASTA headers, so a stem with a space is rejected in FASTA mode."""
-    (tmp_path / "design 1.fasta").write_text(_TINY_FASTA)
-    (tmp_path / "design 2.fasta").write_text(_TINY_FASTA_2)
-    with pytest.raises(ValidationError, match="whitespace"):
-        FoldseekClusterInput(structures=str(tmp_path))
-
-
-def test_input_rejects_fasta_entry_without_sequence():
-    """A header-only FASTA entry would be clustered as an empty record, so it is rejected."""
-    with pytest.raises(ValidationError, match="has no sequence"):
-        FoldseekClusterInput(structures=[">design_07\n\n", _TINY_FASTA])
-
-
-@pytest.mark.parametrize("bad_id", ["design 1", "sp|P12345"])
-def test_input_rejects_fasta_ids_foldseek_cannot_name(bad_id):
-    """Foldseek names FASTA records by the header's first word, so IDs with whitespace or '|' are rejected."""
-    with pytest.raises(ValidationError, match="whitespace or '\\|'"):
-        FoldseekClusterInput(structures=[_TINY_FASTA, _TINY_FASTA_2], structure_ids=[bad_id, "other"])
-
-
 # ── FoldseekClusterInput resolution from directory ────────────────────────────
 
 
@@ -355,7 +318,7 @@ def test_run_foldseek_cluster_with_fasta_inputs():
 # ── Integration ───────────────────────────────────────────────────────────────
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_foldseek_cluster_end_to_end_with_directory(tmp_path):
     """Real foldseek binary processes a directory of mixed PDB + CIF fixtures."""
     (tmp_path / "renin-pdb.pdb").write_text((_FIXTURES / "renin_af3.pdb").read_text())
@@ -369,25 +332,6 @@ def test_foldseek_cluster_end_to_end_with_directory(tmp_path):
     assert output.success, f"errors: {output.errors}"
     assert output.num_structures == 2
     assert output.num_clusters >= 1
-
-
-@pytest.mark.uses_env
-def test_foldseek_cluster_end_to_end_with_fasta():
-    """FASTA inputs cluster through ProstT5, and members carry the given structure IDs, not the FASTA headers."""
-    sequence = (
-        "MKTAYIAKQRQISFVKSHFSRQLEERLGLIEVQAPILSRVGDGTQDNLSGAEKAVQVKVKALPDAQFEVVHSLAKWKRQTLGQHDFSAGEGLYTHMKALRPDEDRL"
-        "SPLHSVYVDQWDWERVMGDGERQFSTLKSTVEAIWAGIKATEAAVSEEFGLAPFLPDQIHFVHSQELLSRYPDLDAKGRERAIAKDLGAVFLVGIGGKLSDGHRHDV"
-        "RAPDYDDW"
-    )
-    inputs = FoldseekClusterInput(
-        structures=[f">header_a\n{sequence}\n", f">header_b\n{sequence[:120]}\n{sequence[120:]}\n"],
-        structure_ids=["full", "wrapped"],
-    )
-
-    output = run_foldseek_cluster(inputs, FoldseekClusterConfig())
-
-    assert output.success, f"errors: {output.errors}"
-    assert sorted(m for c in output.clusters for m in c.member_ids) == ["full", "wrapped"]
 
 
 # ── Benchmark ───────────────────────────────────────────────────────────────────

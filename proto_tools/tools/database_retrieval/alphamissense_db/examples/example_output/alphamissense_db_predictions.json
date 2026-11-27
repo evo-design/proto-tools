@@ -1,8 +1,7 @@
 {
   "tool_id": "alphamissense-db-fetch",
-  "tool_version": "1.0.2",
-  "execution_time": 1.2184677124023438,
-  "timestamp": "2026-11-08T20:33:08.146061",
+  "execution_time": 0.18709969520568848,
+  "timestamp": "2026-06-20T19:09:27.513987",
   "success": true,
   "warnings": [],
   "errors": [],

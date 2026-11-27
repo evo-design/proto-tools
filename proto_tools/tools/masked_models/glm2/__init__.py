@@ -10,7 +10,6 @@ from proto_tools.tools.masked_models.glm2.glm2_gradient import (
     GLM2GradientConfig,
     GLM2GradientInput,
     GLM2GradientOutput,
-    GLM2MaskedPLLTerm,
     run_glm2_gradient,
 )
 from proto_tools.tools.masked_models.glm2.glm2_sample import (
@@ -31,7 +30,6 @@ __all__ = [
     "GLM2EmbeddingsInput",
     "GLM2EmbeddingsOutput",
     "GLM2GradientConfig",
-    "GLM2MaskedPLLTerm",
     "GLM2GradientInput",
     "GLM2GradientOutput",
     "GLM2SampleConfig",

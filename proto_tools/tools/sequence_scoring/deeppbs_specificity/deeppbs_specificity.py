@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -61,11 +61,9 @@ class DeepPBSSpecificityConfig(BaseConfig):
     configured here.
 
     Attributes:
-        output_directory (str | None): Directory to keep the canonical NPZ files in. When
-            unset, nothing is kept: scratch files go in a temporary directory that is removed,
-            and each result's ``output_npz_path`` is ``None``.
-        keep_intermediate (bool): Keep intermediate process and predict files under
-            ``output_directory/intermediate/<input>``. Requires ``output_directory``.
+        output_directory (str | None): Optional directory for canonical NPZ
+            artifacts. A temporary directory is used when unset.
+        keep_intermediate (bool): Keep intermediate process and predict files.
         no_clean_protein (bool): Pass --no_cleanp to DeepPBS preprocessing to skip
             pdb2pqr-dependent protein cleaning.
         allow_fallback (bool): On missing DeepPBS deps/outputs, return a uniform
@@ -82,13 +80,13 @@ class DeepPBSSpecificityConfig(BaseConfig):
     output_directory: str | None = ConfigField(
         title="Output Directory",
         default=None,
-        description="Directory to keep canonical NPZ files in; when unset, nothing is kept",
+        description="Optional output directory for canonical NPZ artifacts",
         include_in_key=False,
     )
     keep_intermediate: bool = ConfigField(
         title="Keep Intermediate",
         default=False,
-        description="Keep intermediate process and predict files under output_directory (requires it)",
+        description="Keep intermediate process and predict files",
         include_in_key=False,
     )
     no_clean_protein: bool = ConfigField(
@@ -103,13 +101,6 @@ class DeepPBSSpecificityConfig(BaseConfig):
         include_in_key=False,
     )
 
-    @model_validator(mode="after")
-    def _keep_intermediate_needs_output_directory(self) -> "DeepPBSSpecificityConfig":
-        """Intermediate files are kept only under output_directory, so it must be set."""
-        if self.keep_intermediate and self.output_directory is None:
-            raise ValueError("keep_intermediate=True needs output_directory: files are kept only there")
-        return self
-
 
 class DeepPBSSpecificityResult(BaseModel):
     """Canonicalized DeepPBS specificity result for one structure.
@@ -117,8 +108,7 @@ class DeepPBSSpecificityResult(BaseModel):
     Attributes:
         input_name (str): Basename of the scored input structure.
         source_method (str): Source method tag, always "deeppbs".
-        output_npz_path (str | None): Path to the canonical NPZ file, or ``None`` when no
-            ``output_directory`` was set (nothing is kept on disk then).
+        output_npz_path (str): Path to canonical NPZ output.
         predicted_ppm (list[list[float]]): Canonical DNA PPM in A,C,G,T order.
         true_sequence (list[int]): Canonical DNA truth indices in 0..3.
         mask (list[int]): Valid residue mask for canonical rows.
@@ -136,9 +126,9 @@ class DeepPBSSpecificityResult(BaseModel):
         title="Source Method",
         description="Source method tag for this prediction",
     )
-    output_npz_path: str | None = Field(
+    output_npz_path: str = Field(
         title="Output NPZ Path",
-        description="Path to the canonical NPZ file; None unless output_directory is set",
+        description="Path to canonical NPZ output",
     )
     predicted_ppm: list[list[float]] = Field(
         title="Predicted PPM",
@@ -264,9 +254,9 @@ def run_deeppbs_specificity(
     protein-DNA structure and returns a canonical DNA-only position probability
     matrix (PPM) in A,C,G,T order. When a required DeepPBS dependency (X3DNA
     binaries) is missing, or preprocessing/prediction fails to produce output,
-    the runner raises. With ``allow_fallback`` it instead returns a conservative
-    uniform PPM derived from the DNA residues in the PDB and flags the result
-    via ``used_fallback`` / ``fallback_reason``.
+    the runner falls back to a conservative uniform PPM derived from the DNA
+    residues in the PDB and flags the result via ``used_fallback`` /
+    ``fallback_reason``.
 
     Args:
         inputs (DeepPBSSpecificityInput): Input structure paths for prediction.

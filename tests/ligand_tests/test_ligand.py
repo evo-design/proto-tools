@@ -14,7 +14,7 @@ from tests.ligand_tests.ligand_inputs import LIGAND_TEST_FILES
 # ── Loading ──────────────────────────────────────────────────────────────
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 @pytest.mark.parametrize("file_key", ["smi", "2d_sdf", "3d_sdf"])
 @pytest.mark.parametrize("fixture_key", ["single_fragment", "multiple_fragment"], ids=["single", "multiple"])
 def test_ligands_from_file(fixture_key, file_key):
@@ -29,7 +29,7 @@ def test_ligands_from_file(fixture_key, file_key):
         assert frag.mol is not None
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_generate_conformers_for_all():
     smi_path = LIGAND_TEST_FILES["multiple_fragment"]["smi"]
     ligands = Ligands.from_file(smi_path)
@@ -38,7 +38,7 @@ def test_generate_conformers_for_all():
         assert len(frag.conformers) == 2
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_get_smiles_list_and_names_list():
     smi_path = LIGAND_TEST_FILES["multiple_fragment"]["smi"]
     ligands = Ligands.from_file(smi_path)
@@ -50,7 +50,7 @@ def test_get_smiles_list_and_names_list():
 # ── PDB generation ──────────────────────────────────────────────────────
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_to_pdb_single_fragment():
     ligands = Ligands.from_smiles("CCO")
     pdb_string = ligands.to_pdb()
@@ -68,7 +68,7 @@ def test_to_pdb_single_fragment():
     assert all(line[21] == "A" for line in atom_lines)
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_to_pdb_multiple_fragments():
     ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])
     ligands.generate_conformers(num_conformers=1)
@@ -97,7 +97,7 @@ def test_to_pdb_multiple_fragments():
     assert max(chain_a_x_coords) < min(chain_b_x_coords)
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_to_pdb_write_file(tmp_path):
     ligands = Ligands.from_smiles("CCO")
     pdb_path = tmp_path / "test.pdb"
@@ -108,7 +108,7 @@ def test_to_pdb_write_file(tmp_path):
     assert is_valid_structure(pdb_path)
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_to_pdb_empty_ligands():
     ligands = Ligands(fragments=[])
 
@@ -116,7 +116,7 @@ def test_to_pdb_empty_ligands():
         ligands.to_pdb()
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_to_pdb_spacing_parameter():
     """Larger spacing pushes chain B further along the X-axis."""
     ligands = Ligands(fragments=[Fragment(smiles="CCO"), Fragment(smiles="CO")])

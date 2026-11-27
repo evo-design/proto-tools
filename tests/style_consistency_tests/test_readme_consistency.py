@@ -1,7 +1,6 @@
 """tests/style_consistency_tests/test_readme_consistency.py."""
 
 import re
-import socket
 import time
 import urllib.error
 import urllib.request
@@ -799,7 +798,7 @@ def _extract_urls(text: str) -> list[tuple[int, str]]:
 _BROKEN_HTTP_CODES = {404, 410}
 
 
-def _fetch_url(url: str, method: str = "HEAD", timeout: int = 30, attempts: int = 3) -> None:
+def _fetch_url(url: str, method: str = "HEAD", timeout: int = 10, attempts: int = 3) -> None:
     """Fetch ``url`` with ``method``, retrying transient network errors.
 
     Retries only on ``URLError``/``OSError`` (transient network glitches, DNS
@@ -825,44 +824,13 @@ def _fetch_url(url: str, method: str = "HEAD", timeout: int = 30, attempts: int 
             time.sleep(1 + attempt)
 
 
-def _check_url(url: str) -> str | None:
-    """Return why ``url`` is broken, or ``None`` if it is reachable.
-
-    Only 404/410 and failures of both HEAD and GET count as broken. Access-restricted and
-    server-error responses (401, 403, 5xx) mean the URL exists. Any other HEAD failure is
-    retried with GET, because servers mishandle HEAD: some answer 405, and some never answer
-    at all (``https://alphafold.ebi.ac.uk/`` hangs on HEAD but serves GET at once). HEAD gets
-    one attempt for that reason; GET gets ``_fetch_url``'s retries.
-    """
-    try:
-        _fetch_url(url, method="HEAD", attempts=1)
-        return None
-    except urllib.error.HTTPError as exc:
-        if exc.code in _BROKEN_HTTP_CODES:
-            return f"HTTP {exc.code}"
-        if exc.code != 405:
-            return None
-    except (urllib.error.URLError, OSError):
-        pass
-    try:
-        _fetch_url(url, method="GET")
-        return None
-    except urllib.error.HTTPError as exc:
-        return f"HTTP {exc.code}" if exc.code in _BROKEN_HTTP_CODES else None
-    except (urllib.error.URLError, OSError) as exc:
-        return str(exc)
-
-
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 @pytest.mark.parametrize("readme", _ALL_READMES, ids=_ALL_IDS)
 def test_all_links_reachable(readme: Path) -> None:
     """All URLs in READMEs must be reachable (not 404 or DNS failure).
 
     Only flags clearly broken links. Access-restricted pages (401, 403, 502)
-    are treated as reachable since the URL itself is valid. A link that fails
-    both HEAD and GET (including a host that stays unreachable through the
-    retries) fails the test, so someone checks whether it moved or is down.
+    are treated as reachable since the URL itself is valid.
     """
     text = readme.read_text()
     urls = _extract_urls(text)
@@ -878,66 +846,24 @@ def test_all_links_reachable(readme: Path) -> None:
             continue
         if any(substring in url for substring in _SKIP_SUBSTRINGS):
             continue
-        reason = _check_url(url)
-        if reason is not None:
-            broken.append(f"  line {lineno}: {url} ({reason})")
+        try:
+            _fetch_url(url, method="HEAD")
+        except urllib.error.HTTPError as exc:
+            if exc.code in _BROKEN_HTTP_CODES:
+                broken.append(f"  line {lineno}: {url} (HTTP {exc.code})")
+            elif exc.code == 405:
+                # Server rejects HEAD; retry with GET
+                try:
+                    _fetch_url(url, method="GET")
+                except urllib.error.HTTPError as exc2:
+                    if exc2.code in _BROKEN_HTTP_CODES:
+                        broken.append(f"  line {lineno}: {url} (HTTP {exc2.code})")
+                except Exception:
+                    broken.append(f"  line {lineno}: {url} (GET fallback failed)")
+        except (urllib.error.URLError, OSError) as exc:
+            broken.append(f"  line {lineno}: {url} ({exc})")
 
     assert not broken, f"{_tool_id(readme)}/README.md has broken links:\n" + "\n".join(broken)
-
-
-def _http_error(code: int) -> urllib.error.HTTPError:
-    return urllib.error.HTTPError("https://example.org", code, "status", {}, None)  # type: ignore[arg-type]
-
-
-def _dns_error() -> urllib.error.URLError:
-    return urllib.error.URLError(socket.gaierror(-2, "Name or service not known"))
-
-
-@pytest.mark.parametrize(
-    ("head", "get", "broken"),
-    [
-        (None, None, False),
-        (TimeoutError("The read operation timed out"), None, False),  # alphafold.ebi.ac.uk/ hangs on HEAD
-        (urllib.error.URLError(ConnectionResetError(104, "reset")), None, False),
-        (_http_error(405), None, False),
-        (_http_error(403), None, False),
-        (_http_error(503), None, False),
-        (_http_error(404), None, True),
-        (_http_error(405), _http_error(404), True),
-        (TimeoutError("timed out"), _http_error(410), True),
-        (TimeoutError("timed out"), TimeoutError("timed out"), True),
-        (_dns_error(), _dns_error(), True),
-    ],
-    ids=[
-        "ok",
-        "head-timeout-get-ok",
-        "head-reset-get-ok",
-        "405-get-ok",
-        "403",
-        "503",
-        "404",
-        "405-get-404",
-        "head-timeout-get-410",
-        "both-time-out",
-        "dns",
-    ],
-)
-def test_check_url_classifies_responses(
-    monkeypatch: pytest.MonkeyPatch, head: Exception | None, get: Exception | None, broken: bool
-) -> None:
-    """Only dead links fail, and any HEAD failure short of 404/410 is retried with GET."""
-    methods: list[str] = []
-
-    def fake_urlopen(request: urllib.request.Request, timeout: int) -> None:
-        methods.append(request.get_method())
-        error = head if request.get_method() == "HEAD" else get
-        if error is not None:
-            raise error
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
-    assert (_check_url("https://example.org") is not None) == broken
-    assert methods.count("HEAD") == 1
 
 
 # ── Markdown hygiene ──────────────────────────────────────────────────────

@@ -1,9 +1,10 @@
 """Wraps `foldseek easy-cluster` for structural clustering of user-provided structures.
 
-Runs locally because there is no corresponding remote endpoint. The public Foldseek server only does query-vs-DB
-search. Clustering an arbitrary user set requires the local CLI.
+Local-only — no remote analog. The public Foldseek server only does query-vs-DB
+search; clustering an arbitrary user set requires the local CLI.
 """
 
+import gzip
 import json
 import logging
 from pathlib import Path
@@ -23,37 +24,20 @@ from proto_tools.utils import (
     InputField,
     ToolInstance,
 )
-from proto_tools.utils.file_inputs import (
-    STRUCTURE_FILES,
-    FileInput,
-    is_fasta_text,
-    is_structure_content,
-    read_text_file,
-)
 
 logger = logging.getLogger(__name__)
 
-# Directory filename suffixes; gz variants come first so `.pdb.gz` matches before `.pdb` in `str.endswith`
-_STRUCTURE_EXTENSIONS: tuple[str, ...] = (
-    tuple(f"{ext}.gz" for ext in STRUCTURE_FILES.extensions) + STRUCTURE_FILES.extensions
-)
-# Protein FASTA only: ProstT5 converts amino-acid sequences to 3Di
-_PROTEIN_FASTA_EXTENSIONS = (".fasta", ".fa", ".faa")
-_FASTA_EXTENSIONS: tuple[str, ...] = tuple(f"{ext}.gz" for ext in _PROTEIN_FASTA_EXTENSIONS) + _PROTEIN_FASTA_EXTENSIONS
-# How a `structures` list item tells a structure or FASTA file from structure or FASTA text
-_ITEM_FILES = FileInput(
-    "structure or FASTA",
-    STRUCTURE_FILES.extensions + _PROTEIN_FASTA_EXTENSIONS,
-    lambda text: is_structure_content(text) or is_fasta_text(text),
-)
+# gz variants before plain variants so `.pdb.gz` matches before `.pdb` in `str.endswith`.
+_STRUCTURE_EXTENSIONS: tuple[str, ...] = (".pdb.gz", ".cif.gz", ".mmcif.gz", ".pdb", ".cif", ".mmcif")
+_FASTA_EXTENSIONS: tuple[str, ...] = (".fasta.gz", ".fa.gz", ".faa.gz", ".fasta", ".fa", ".faa")
 _SUPPORTED_EXTENSIONS: tuple[str, ...] = _STRUCTURE_EXTENSIONS + _FASTA_EXTENSIONS
 
 
 def _detect_input_format(text: str) -> str:
     """Return ``"fasta"``, ``"pdb"``, or ``"cif"`` for an input text string.
 
-    FASTA is identified by a leading ``>`` (after stripping whitespace).
-    Everything else is delegated to :func:`detect_structure_format`.
+    FASTA is identified by a leading ``>`` (after stripping whitespace);
+    everything else is delegated to :func:`detect_structure_format`.
     """
     if text.lstrip().startswith(">"):
         return "fasta"
@@ -84,9 +68,7 @@ class FoldseekClusterInput(BaseToolInput):
 
     Inputs may be PDB, mmCIF, or FASTA — format is auto-detected per string.
     A single call must use one mode (all FASTA OR all PDB/mmCIF). FASTA inputs
-    go through Foldseek's built-in ProstT5 model to predict 3Di sequences. Each
-    FASTA item holds exactly one sequence, and its header is replaced by its
-    structure ID.
+    go through Foldseek's built-in ProstT5 model to predict 3Di sequences.
 
     Attributes:
         structures (list[Structure | str] | str | Path | None): Items to cluster
@@ -331,7 +313,7 @@ def run_foldseek_cluster(
 def _read_structures_dir(
     dir_path: str, extensions: tuple[str, ...] = _SUPPORTED_EXTENSIONS
 ) -> tuple[list[str], list[str]]:
-    """Enumerate ``extensions``-matching files sorted by filename and return their text and stems."""
+    """Enumerate ``extensions``-matching files (sorted by filename); return (texts, stems)."""
     path = Path(dir_path).expanduser().resolve()
     if not path.is_dir():
         raise ValueError(f"structures path {dir_path!r} is not an existing directory")
@@ -352,18 +334,24 @@ def _read_structures_dir(
             f"(extensions: {extensions}); found {len(matches)}"
         )
 
-    structures = [read_text_file(file_path) for file_path, _ in matches]
-    return structures, [stem for _, stem in matches]
+    structures, ids = [], []
+    for file_path, stem in matches:
+        if file_path.name.lower().endswith(".gz"):
+            with gzip.open(file_path, "rt", encoding="utf-8") as f:
+                structures.append(f.read())
+        else:
+            structures.append(file_path.read_text(encoding="utf-8"))
+        ids.append(stem)
+    return structures, ids
 
 
 def _coerce_structure_items_to_text(data: Any) -> Any:
-    """Convert ``Structure`` objects and file paths in ``structures`` to text before validation.
+    """``mode="before"`` helper: per-item, coerce ``Structure`` / ``Path`` entries in ``structures`` to text.
 
-    Structure objects emit their PDB representation. For file inputs resolved by
-    :mod:`proto_tools.utils.file_inputs`, read FASTA text verbatim so leading-``>``
-    detection still works. Parse structure files with ``Structure`` and emit PDB text.
-    Other strings are content and pass through unchanged (format auto-detected per string
-    at standalone dispatch).
+    Structure objects emit their PDB representation. Paths to FASTA files are read
+    as text (so FASTA's leading-``>`` detection still works downstream); paths to
+    structure files load via :func:`Structure.from_file` and emit PDB. Strings
+    pass through unchanged (format auto-detected per-string at standalone dispatch).
     """
     if not isinstance(data, dict):
         return data
@@ -374,15 +362,24 @@ def _coerce_structure_items_to_text(data: Any) -> Any:
     for item in items:
         if isinstance(item, Structure):
             coerced.append(item.structure_pdb)
-        elif isinstance(item, (str, Path)) and (text := _ITEM_FILES.read(item)) is not None:
-            coerced.append(text if _detect_input_format(text) == "fasta" else Structure(structure=text).structure_pdb)
+        elif isinstance(item, Path):
+            lower = item.name.lower()
+            if any(lower.endswith(ext) for ext in _FASTA_EXTENSIONS):
+                # Read FASTA (and gz) text verbatim so the leading-`>` check downstream still classifies it.
+                if lower.endswith(".gz"):
+                    with gzip.open(item, "rt") as f:
+                        coerced.append(f.read())
+                else:
+                    coerced.append(item.read_text())
+            else:
+                coerced.append(Structure.from_file(item).structure_pdb)
         else:
             coerced.append(item)
     return {**data, "structures": coerced}
 
 
 def _resolve_directory_structures(data: Any, *, extensions: tuple[str, ...] = _SUPPORTED_EXTENSIONS) -> Any:
-    """``mode="before"`` helper: read a directory-path ``structures`` (``str`` / ``Path``) into ``structures`` + ``structure_ids`` (filename stems). A list / ``None`` is left untouched."""
+    """``mode="before"`` helper: read a directory-path ``structures`` (``str`` / ``Path``) into ``structures`` + ``structure_ids`` (filename stems); a list / ``None`` is left untouched."""
     if not isinstance(data, dict):
         return data
     value = data.get("structures")
@@ -404,38 +401,22 @@ def _validate_resolved_input(
     reject_fasta: bool = False,
 ) -> None:
     """``mode="after"`` helper: require structures (non-list ⇒ none given), validate IDs, enforce uniform format."""
-    # Require structures; anything but a list means none were given
     if not isinstance(structures, list):
         raise ValueError("`structures` is required: provide a list of items or a directory path.")
 
-    # Count FASTA inputs so a call cannot mix sequences with PDB/mmCIF structures
     texts = [s if isinstance(s, str) else s.structure_pdb for s in structures]
     fasta_count = sum(1 for s in texts if _detect_input_format(s) == "fasta")
     if 0 < fasta_count < len(texts):
         raise ValueError("Cannot mix FASTA with PDB/mmCIF inputs in a single call; all inputs must be the same kind.")
     if reject_fasta and fasta_count:
         raise ValueError("FASTA input is not supported here; pass PDB or mmCIF text/files.")
-    # Ensure each FASTA input holds exactly one record with a non-empty sequence
-    if fasta_count:
-        for i, text in enumerate(texts):
-            lines = [line.strip() for line in text.splitlines()]
-            if sum(line.startswith(">") for line in lines) > 1:
-                raise ValueError(
-                    "Each FASTA input must hold one sequence; pass multiple sequences as separate list items."
-                )
-            if not any(line and not line.startswith(">") for line in lines):
-                raise ValueError(f"FASTA input {i} ({lines[0]!r}) has no sequence.")
 
-    # Check each ID is a safe, unique filename that Foldseek's output naming can carry
     if structure_ids is None:
         return
     seen: set[str] = set()
     for sid in structure_ids:
         if not sid or "/" in sid or "\\" in sid or sid in {".", ".."}:
             raise ValueError(f"structure_id {sid!r} is not a safe filename")
-        # Foldseek names FASTA records by the header's first word and parses `|`-delimited headers
-        if fasta_count and any(c.isspace() or c == "|" for c in sid):
-            raise ValueError(f"structure_id {sid!r} contains whitespace or '|', which FASTA headers cannot carry")
         if reject_underscore and "_" in sid:
             raise ValueError(
                 f"structure_id {sid!r} contains '_', which collides with Foldseek's "
@@ -447,7 +428,6 @@ def _validate_resolved_input(
                 f"(filename stems collide if a directory contains both `<stem>.pdb` and `<stem>.cif`)"
             )
         seen.add(sid)
-    # Require one ID per structure
     if len(structure_ids) != len(structures):
         raise ValueError(
             f"structure_ids length ({len(structure_ids)}) must match structures length ({len(structures)})"
@@ -457,7 +437,7 @@ def _validate_resolved_input(
 def _parse_cluster_tsv(tsv_text: str) -> list[FoldseekCluster]:
     """Parse Foldseek's 2-column cluster TSV (representative<TAB>member) into FoldseekCluster objects.
 
-    Each line is one (representative, member) pair. Representatives appear as
+    Each line is one (representative, member) pair; representatives appear as
     members of their own clusters. Empty lines are skipped.
     """
     members_by_rep: dict[str, list[str]] = {}

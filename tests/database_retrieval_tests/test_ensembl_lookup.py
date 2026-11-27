@@ -77,7 +77,6 @@ _BRCA1_LOOKUP_PAYLOAD = {
                 "length": 1863,
                 "Parent": "ENST00000357654",
             },
-            "MANE": [{"type": "MANE_Select", "refseq_match": "NM_007294.4", "id": "ENST00000357654"}],
         }
     ],
 }
@@ -106,20 +105,8 @@ def _stub_session(json_payload):
         ),
         ({"symbol": "BRCA1"}, {}, "/lookup/symbol/homo_sapiens/BRCA1", {}),
         ({"symbol": "BRCA1"}, {"expand": True}, "/lookup/symbol/homo_sapiens/BRCA1", {"expand": "1"}),
-        (
-            {"symbol": "BRCA1"},
-            {"expand": True, "mane": True},
-            "/lookup/symbol/homo_sapiens/BRCA1",
-            {"expand": "1", "mane": "1"},
-        ),
     ],
-    ids=[
-        "lookup-by-id-default",
-        "lookup-by-id-expand-on",
-        "lookup-by-symbol-default",
-        "lookup-by-symbol-expand-on",
-        "lookup-by-symbol-mane-on",
-    ],
+    ids=["lookup-by-id-default", "lookup-by-id-expand-on", "lookup-by-symbol-default", "lookup-by-symbol-expand-on"],
 )
 def test_url_and_params(inputs_kwargs, config_overrides, expected_url_suffix, expected_params):
     """Dispatch builds the right URL + query params for id vs symbol form."""
@@ -153,68 +140,6 @@ def test_dispatches_and_parses_into_ensembl_gene():
     assert len(transcript.Exon) == 1
     assert transcript.Translation is not None
     assert transcript.Translation.length == 1863
-    assert [(m.type, m.refseq_match) for m in transcript.MANE] == [("MANE_Select", "NM_007294.4")]
-
-
-@pytest.mark.parametrize(
-    "config_kwargs, match",
-    [
-        ({"transcripts": "canonical"}, "requires expand=True"),
-        ({"transcripts": "mane_select", "expand": True}, "requires mane=True"),
-        ({"transcripts": "mane_select", "expand": True, "mane": True, "assembly": "GRCh37"}, "GRCh38"),
-    ],
-    ids=["canonical-without-expand", "mane-without-mane-flag", "mane-on-grch37"],
-)
-def test_transcripts_rejects_requests_that_cannot_match(config_kwargs, match):
-    """A transcript selection fails at config time when the request could never satisfy it."""
-    with pytest.raises(ValidationError, match=match):
-        EnsemblLookupConfig(**config_kwargs)
-
-
-_ALT_TRANSCRIPT = {
-    **_BRCA1_LOOKUP_PAYLOAD["Transcript"][0],
-    "id": "ENST00000352993",
-    "is_canonical": False,
-    "MANE": [],
-}
-
-
-@pytest.mark.parametrize(
-    "transcripts, expected_ids",
-    [
-        ("all", ["ENST00000357654", "ENST00000352993"]),
-        ("canonical", ["ENST00000357654"]),
-        ("mane_select", ["ENST00000357654"]),
-    ],
-)
-def test_transcripts_filters_result(transcripts, expected_ids):
-    """The selection keeps only matching transcripts in ``result.Transcript``."""
-    payload = {**_BRCA1_LOOKUP_PAYLOAD, "Transcript": [*_BRCA1_LOOKUP_PAYLOAD["Transcript"], _ALT_TRANSCRIPT]}
-    with patch(
-        "proto_tools.tools.database_retrieval.ensembl.ensembl_lookup.build_session",
-        return_value=_stub_session(payload),
-    ):
-        out = run_ensembl_lookup(
-            EnsemblLookupInput(symbol="BRCA1"),
-            EnsemblLookupConfig(expand=True, mane=True, transcripts=transcripts),
-        )
-    assert [t.id for t in out.result.Transcript] == expected_ids
-
-
-def test_transcripts_warns_when_nothing_matches():
-    """A gene with no MANE Select transcript returns an empty selection and says why."""
-    payload = {**_BRCA1_LOOKUP_PAYLOAD, "Transcript": [_ALT_TRANSCRIPT]}
-    with patch(
-        "proto_tools.tools.database_retrieval.ensembl.ensembl_lookup.build_session",
-        return_value=_stub_session(payload),
-    ):
-        out = run_ensembl_lookup(
-            EnsemblLookupInput(symbol="BRCA1"),
-            EnsemblLookupConfig(expand=True, mane=True, transcripts="mane_select"),
-        )
-    assert out.result.id == "ENSG00000012048"
-    assert out.result.Transcript == []
-    assert out.warnings == ["Ensembl gene ENSG00000012048 has no mane_select transcript"]
 
 
 def test_wraps_corrupt_json_with_context():
@@ -251,11 +176,10 @@ def test_rejects_non_dict_payload():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_lookup_symbol_brca1_live():
     """BRCA1 lookup_symbol resolves to ENSG00000012048 with the canonical transcript present."""
-    out = run_ensembl_lookup(EnsemblLookupInput(symbol="BRCA1"), EnsemblLookupConfig(expand=True, mane=True))
+    out = run_ensembl_lookup(EnsemblLookupInput(symbol="BRCA1"), EnsemblLookupConfig(expand=True))
     assert out.success, out.errors
     assert out.result.id == "ENSG00000012048"
     assert out.result.display_name == "BRCA1"
@@ -264,12 +188,9 @@ def test_lookup_symbol_brca1_live():
     # Live BRCA1 returns 47 transcripts; floor at 20 catches "expand=False regression"
     # / "only canonical returned" without being drift-fragile.
     assert len(out.result.Transcript) >= 20
-    mane_select = [t.id for t in out.result.Transcript if any(m.type == "MANE_Select" for m in t.MANE)]
-    assert mane_select == ["ENST00000357654"]
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_lookup_id_grch37_routes_to_alt_host():
     """assembly='GRCh37' returns coordinates from the GRCh37 mirror (different from GRCh38)."""
     out_grch38 = run_ensembl_lookup(
@@ -286,8 +207,7 @@ def test_lookup_id_grch37_routes_to_alt_host():
     assert out_grch38.result.start != out_grch37.result.start
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_unknown_id_surfaces_failure():
     """An unknown Ensembl ID propagates the upstream HTTPError as a raised exception."""
     with pytest.raises(Exception):

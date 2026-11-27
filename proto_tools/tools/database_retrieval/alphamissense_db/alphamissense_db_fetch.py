@@ -230,13 +230,13 @@ def run_alphamissense_db_fetch(
 
     AlphaMissense covers all reviewed human UniProt proteins. Non-human accessions
     raise ValueError. Returns the full saturation grid (UniProt coords) or the
-    SNV-accessible subset (genomic coords). Filter the output client-side as needed.
+    SNV-accessible subset (genomic coords); filter the output client-side as needed.
 
     Args:
         inputs (AlphaMissenseDBFetchInput): UniProt accession to look up.
         config (AlphaMissenseDBFetchConfig): `coordinate_system` selects which
             AFDB CSV variant to fetch.
-        instance (Any): Unused by this HTTP-only tool.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         AlphaMissenseDBFetchOutput: Per-substitution predictions, count, mean
@@ -306,11 +306,12 @@ def _fetch_csv(url: str, session: requests.Session) -> list[dict[str, str]] | No
 def _parse_row(row: dict[str, str], source_url: str, *, is_genomic: bool = False) -> AlphaMissensePrediction:
     """Parse one CSV row into an AlphaMissensePrediction.
 
-    Read required CSV columns with `row[key]` so a missing column raises KeyError.
-    This lets the @tool decorator report an upstream schema change.
+    Required CSV columns are accessed with bare `row[key]` so that a missing
+    column raises KeyError -- a real schema regression in the upstream CSV
+    that the @tool decorator should surface, not silently coerce to "".
 
-    The UniProt-coordinate CSV has 3 columns. The hg19/hg38 CSVs have 10
-    columns and also populate the genomic-coordinate fields.
+    The UniProt-coordinate CSV has 3 columns; the hg19/hg38 CSVs have 10
+    columns and additionally populate the genomic-coordinate fields.
     """
     variant = row["protein_variant"].strip()
     if len(variant) < 3 or not variant[1:-1].isdigit():

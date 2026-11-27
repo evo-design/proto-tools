@@ -78,7 +78,7 @@ def test_build_hit_models_empty():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_pyhmmer_hmmsearch_success():
     inputs = PyHmmsearchInput(
         hmm=str(TEST_HMM_FILE),
@@ -98,7 +98,7 @@ def test_pyhmmer_hmmsearch_success():
     assert result.num_domain_hits == 2
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_pyhmmer_hmmsearch_no_hits():
     """Very restrictive thresholds should produce no hits."""
     inputs = PyHmmsearchInput(
@@ -116,7 +116,7 @@ def test_pyhmmer_hmmsearch_no_hits():
     assert result.num_domain_hits == 0
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_pyhmmer_hmmsearch_skip_filters_admits_more_hits():
     """Disabling the MSV/Viterbi/Forward and bias filters surfaces hits the filters prune at the same E-value."""
     inputs = PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=SAMPLE_SEQUENCES)
@@ -127,7 +127,7 @@ def test_pyhmmer_hmmsearch_skip_filters_admits_more_hits():
     assert unfiltered.num_sequence_hits > filtered.num_sequence_hits
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_pyhmmer_hmmsearch_gathering_cutoffs_drop_hits():
     """``bit_cutoffs='gathering'`` applies the HMM's GA thresholds, dropping hits a permissive E-value keeps."""
     inputs = PyHmmsearchInput(hmm=str(TEST_HMM_FILE), sequences=SAMPLE_SEQUENCES)
@@ -140,7 +140,7 @@ def test_pyhmmer_hmmsearch_gathering_cutoffs_drop_hits():
     assert 0 < gathering.num_sequence_hits < permissive.num_sequence_hits
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_pyhmmer_hmmscan_success():
     inputs = PyHmmscanInput(
         hmm_db=str(TEST_HMM_FILE),
@@ -151,7 +151,7 @@ def test_pyhmmer_hmmscan_success():
     validate_output(result)
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_pyhmmer_phmmer_success():
     inputs = PyPhmmerInput(
         sequences=SAMPLE_SEQUENCES[:2],
@@ -162,7 +162,7 @@ def test_pyhmmer_phmmer_success():
     validate_output(result, check_export=False)
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_pyhmmer_nhmmer_success():
     inputs = PyNhmmerInput(
         sequences=SAMPLE_DNA_SEQUENCES[:1],
@@ -181,7 +181,7 @@ def test_pyhmmer_nhmmer_success():
     assert result.num_sequence_hits >= 1
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_pyhmmer_jackhmmer_success():
     inputs = PyJackhmmerInput(
         sequences=SAMPLE_SEQUENCES[:1],

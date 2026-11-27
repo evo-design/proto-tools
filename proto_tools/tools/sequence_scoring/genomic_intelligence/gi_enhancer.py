@@ -2,7 +2,7 @@
 
 Reports two activity scores per window, following the STARR-seq split between
 developmental and housekeeping enhancer programmes. That split is a *Drosophila*
-assay definition. Read the scores as relative activity within a comparison
+assay definition; read the scores as relative activity within a comparison
 rather than as calibrated cross-species values.
 """
 
@@ -26,10 +26,7 @@ from proto_tools.tools.sequence_scoring.genomic_intelligence.shared_data_models 
     validate_gi_sequence,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import BaseToolInput, BaseToolOutput, InputField, get_logger
-from proto_tools.utils.standalone_helpers_source.standalone_helpers import StatusCounter
-
-logger = get_logger(__name__)
+from proto_tools.utils import BaseToolInput, BaseToolOutput, InputField
 
 ENHANCER_MIN_BP = 50
 """Published ``minLength`` for the enhancer endpoint, in base pairs."""
@@ -244,7 +241,7 @@ def run_gi_enhancer(
     """
     del instance
     results: list[GIEnhancerResult] = []
-    for item in StatusCounter(logger, "Predicting enhancer activity for sequence %d/%d", inputs.sequences):
+    for item in inputs.sequences:
         sequence = validate_gi_sequence(item.sequence, min_bp=ENHANCER_MIN_BP, task="enhancer")
         data, payload = call_predict(config, "enhancer", sequence, item.name)
         results.append(parse_enhancer_data(data, payload, item.name))

@@ -1,6 +1,6 @@
 """Checkpoint configuration shared by the GLM2 toolkit."""
 
-from typing import Any, ClassVar, Literal, cast
+from typing import ClassVar, Literal
 
 from proto_tools.tools.masked_models.mixed_configs import MixedModelConfig
 from proto_tools.utils import ConfigField
@@ -22,9 +22,3 @@ class GLM2Config(MixedModelConfig):
         description="gLM2 checkpoint; downloaded automatically from Hugging Face",
         reload_on_change=True,
     )
-
-    @classmethod
-    def minimal(cls, **kwargs: Any) -> "GLM2Config":
-        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
-        kwargs.setdefault("model_checkpoint", "tattabio/gLM2_150M")
-        return cast("GLM2Config", super().minimal(**kwargs))

@@ -5,7 +5,7 @@
 # behind a free (admin-approved) registration on the 3DNA Forum
 # (http://forum.x3dna.org/register/), so it is NOT auto-downloaded.
 # Install it once and either set the standard X3DNA environment variable to its
-# root, or point PROTO_X3DNA_WEIGHTS_DIR (or PROTO_MODEL_CACHE/x3dna/weights) at it.
+# root, or point PROTO_X3DNA_WEIGHTS_DIR (or PROTO_MODEL_CACHE/x3dna) at it.
 set -euo pipefail
 source standalone_helpers.sh
 
@@ -36,7 +36,7 @@ if [ -n "$x3dna_found" ]; then
     echo "[x3dna] Using X3DNA install at ${x3dna_found}"
 elif [ -n "$x3dna_configured" ]; then
     echo "ERROR: X3DNA path is set but bin/fiber was not found there." >&2
-    echo "Checked X3DNA / PROTO_X3DNA_WEIGHTS_DIR / PROTO_MODEL_CACHE/x3dna/weights; fix the path to an x3dna-v2.4 root." >&2
+    echo "Checked X3DNA / PROTO_X3DNA_WEIGHTS_DIR / PROTO_MODEL_CACHE/x3dna; fix the path to an x3dna-v2.4 root." >&2
     exit 1
 else
     {

@@ -11,14 +11,6 @@ from proto_tools.tools.sequence_alignment.blast import (
     run_blast_search,
     run_create_blast_db,
 )
-from proto_tools.tools.sequence_alignment.crispritz import (
-    CRISPRITZ_VERSION,
-    CRISPRitzHit,
-    CRISPRitzSearchConfig,
-    CRISPRitzSearchInput,
-    CRISPRitzSearchOutput,
-    run_crispritz_search,
-)
 from proto_tools.tools.sequence_alignment.mafft import MafftConfig, MafftInput, MafftOutput, run_mafft_align
 from proto_tools.tools.sequence_alignment.mmseqs2 import (
     Mmseqs2ClusteringConfig,
@@ -56,13 +48,6 @@ __all__ = [
     "CreateBlastDbInput",
     "CreateBlastDbConfig",
     "CreateBlastDbOutput",
-    # CRISPRitz
-    "CRISPRITZ_VERSION",
-    "CRISPRitzHit",
-    "CRISPRitzSearchInput",
-    "CRISPRitzSearchConfig",
-    "CRISPRitzSearchOutput",
-    "run_crispritz_search",
     # MAFFT
     "run_mafft_align",
     "MafftInput",

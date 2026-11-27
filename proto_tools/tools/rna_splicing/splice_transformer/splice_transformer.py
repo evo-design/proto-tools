@@ -24,7 +24,7 @@ from proto_tools.utils import (
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# Constants and Enums
+# Constants & Enums
 # ============================================================================
 CONTEXT_LENGTH = 4000
 TARGET_LENGTH = 1000
@@ -85,8 +85,9 @@ SPLICE_TISSUE_CHANNEL_INDEX: dict[SpliceTransformerTissue, int | None] = {
 class SpliceTransformerInput(BaseToolInput):
     """Input object for SpliceTransformer splice site prediction.
 
-    Provide RNA sequences for tissue-specific splice-site prediction with
-    SpliceTransformer.
+    This class defines the input parameters for predicting splice sites in RNA
+    sequences using SpliceTransformer, a deep learning model for tissue-specific
+    splicing prediction.
 
     Attributes:
         target_seqs (list[str]): RNA or DNA sequence(s) on which to make splicing
@@ -160,8 +161,8 @@ class SpliceTransformerConfig(BaseConfig):
 class SpliceTransformerOutput(BaseToolOutput):
     """Output from SpliceTransformer splice site prediction.
 
-    Contains per-position probabilities for splice-site types and tissue-specific
-    splicing.
+    This class encapsulates the results of SpliceTransformer prediction, providing
+    per-position probabilities for splice site types and tissue-specific splicing.
 
     Attributes:
         prediction (list[list[list[float]]]): Prediction tensor of shape ``[batch, target_length, 18]``
@@ -299,7 +300,8 @@ def run_splice_transformer(
 
     Note:
         - GPU is strongly recommended (CPU inference is very slow)
-        - Context length is fixed at 4000bp per side and target length at 1000bp
+        - Context length of 4000bp is recommended for best accuracy
+        - Target length is typically 1000bp but can vary
         - Each subprocess is fresh (no in-process caching)
     """
     logger.debug("Using local device for SpliceTransformer inference (context_length=%d)", CONTEXT_LENGTH)

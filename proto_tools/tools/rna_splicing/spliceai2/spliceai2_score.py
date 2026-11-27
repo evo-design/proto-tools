@@ -115,7 +115,7 @@ class SpliceAI2SiteChange(BaseModel):
         delta_score (float): Absolute change in splice site usage (0-1).
         ref_score (float): Predicted usage with the reference allele (0-1).
         alt_score (float): Predicted usage with the alternate allele (0-1).
-        distance (int): Signed distance (bp) from the variant to the site in genomic coordinates. Positive
+        distance (int): Signed distance (bp) from the variant to the site in genomic coordinates; positive
             is a higher coordinate on either strand, so on the minus strand it runs opposite to the gene.
     """
 
@@ -135,9 +135,9 @@ class SpliceAI2JunctionChange(BaseModel):
         ref_score (float): Predicted usage with the reference allele (0-1).
         alt_score (float): Predicted usage with the alternate allele (0-1).
         donor_distance (int): Signed distance (bp) from the variant to the junction donor in genomic
-            coordinates. Positive is a higher coordinate on either strand.
+            coordinates; positive is a higher coordinate on either strand.
         acceptor_distance (int): Signed distance (bp) from the variant to the junction acceptor in genomic
-            coordinates. Positive is a higher coordinate on either strand.
+            coordinates; positive is a higher coordinate on either strand.
     """
 
     delta_score: float = Field(title="Delta Score", description="Absolute change in junction usage (0-1)")
@@ -157,7 +157,7 @@ class SpliceAI2ScoreMetrics(Metrics):
     """Per-variant SpliceAI2 scoring metric.
 
     Metrics documented in ``metric_spec``:
-        summary_score (float): Largest donor/acceptor gain or loss, the headline
+        summary_score (float): Largest donor/acceptor gain or loss; the headline
             SpliceAI2 score (thresholds 0.1 / 0.25 / 0.5).
     """
 
@@ -304,7 +304,7 @@ class SpliceAI2ScoreConfig(SpliceAI2Config, ReferenceGenomeConfig):
             the sequence around each variant is read from. Either a provisioned
             assembly name (``'grch38'``/``'grch37'``, or ``'hg38'``/``'hg19'``),
             downloaded on first use, or a path to a FASTA on this machine.
-            Required at call time. ``None`` raises a ``MissingAssetError``.
+            Required at call time; ``None`` raises a ``MissingAssetError``.
         assembly (SpliceAI2Assembly): Species assembly whose channel conditions
             the model. ``GRCh38`` (human) for human sequence, including GRCh37
             coordinates.

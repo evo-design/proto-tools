@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """scripts/run_example_notebooks.py.
 
-Clean every ``example.ipynb`` under ``proto_tools/``, optionally re-running it first.
-This includes both tool and entity examples. Remove output MIME types that do not
-render outside the original session, such as ipywidgets progress bars and live
-Plotly or Bokeh handles. Keep the text/plain and text/html fallbacks.
+Re-execute (optional) and post-process every example notebook named
+``example.ipynb`` under ``proto_tools/`` (tool and entity examples alike) to
+strip output mime types that don't render outside the original execution
+context (ipywidgets progress bars, live Plotly/Bokeh handles, etc.). The
+text/plain and text/html fallbacks stay.
 
 py3Dmol viewers are the exception: their text/html is a script that GitHub and
 other static viewers strip, leaving a "3Dmol.js failed to load" box. Each one is
@@ -141,28 +142,16 @@ class Snapshotter:
             self._browser = self._playwright = None
 
 
-#: Warnings that describe the state of the machine that ran a notebook rather than the tool's
-#: behaviour. A reader of the committed output cannot act on them and they name local cache
-#: paths, so they are dropped here while the registry still raises them for a real caller.
-LOCAL_ONLY_WARNING_SUBSTRINGS = (
-    "not migrating",
-    "Setup files changed for",
-    "Removing environment at",
-    "env registrations from",
-)
-
-
 def _ignored_warning_substrings() -> tuple[str, ...]:
     """Warning substrings the registry suppresses at runtime, mirrored for sanitizing.
 
     Notebooks executed before a substring was added to the registry's ignore list
     carry the warning baked into saved stderr output. Re-using the same list lets
-    ``--sanitize-only`` scrub them without a full GPU re-run. The machine-specific
-    warnings in :data:`LOCAL_ONLY_WARNING_SUBSTRINGS` are dropped alongside them.
+    ``--sanitize-only`` scrub them without a full GPU re-run.
     """
     from proto_tools.tools.tool_registry import IGNORED_WARNING_SUBSTRINGS
 
-    return tuple(IGNORED_WARNING_SUBSTRINGS) + LOCAL_ONLY_WARNING_SUBSTRINGS
+    return tuple(IGNORED_WARNING_SUBSTRINGS)
 
 
 def _scrub_warning_lines(text: object, ignored: tuple[str, ...]) -> tuple[object, int]:
@@ -186,17 +175,12 @@ def _build_redaction_rules() -> list[tuple[re.Pattern[str], str]]:
     into this repo (rewritten repo-relative), any user's home directory, the
     running user's own home and username, and the author field embedded in
     generated structure files (CIF/PDB).
-
-    The repo-relative rewrite drops the checkout directory's own name along with
-    the absolute prefix. That name is whatever the clone happens to be called, so
-    keeping it would leak it; ``tests/style_consistency_tests/test_production_identity.py``
-    rejects some of the names it can take.
     """
     repo = re.escape(REPO_ROOT.name)
     rules: list[tuple[re.Pattern[str], str]] = [
-        # Absolute path descending into this repo -> repo-relative, checkout name and
-        # all. The lookbehind leaves URLs like https://github.com/org/<repo>/ untouched.
-        (re.compile(r"(?<![\w:/])(?:/[\w.+-]+)+/" + repo + r"/"), ""),
+        # Absolute path descending into this repo -> repo-relative. The lookbehind
+        # leaves URLs like https://github.com/org/<repo>/ untouched.
+        (re.compile(r"(?<![\w:/])(?:/[\w.+-]+)+/" + repo + r"/"), REPO_ROOT.name + "/"),
         # Any user's home directory.
         (re.compile(r"/home/[^/\s\"']+"), "/home/user"),
         (re.compile(r"/Users/[^/\s\"']+"), "/Users/user"),

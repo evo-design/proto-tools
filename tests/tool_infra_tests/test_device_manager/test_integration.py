@@ -17,11 +17,18 @@ from proto_tools.utils.device_manager import OffloadStrategy
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 def test_evicted_instance_variable_still_works():
-    """An instance reference remains usable after RESTART eviction.
+    """Integration test: Evicted ToolInstance variable reference still works after eviction.
 
-    Keep a reference to a ToolInstance, then let DeviceManager evict and shut down
-    its worker. The next call through that reference should restart the worker
-    and allocate a device again.
+    Critical test for RESTART strategy: When a user has a variable reference to a
+    ToolInstance (e.g., `with ToolInstance.persist_tool("mock_pytorch_tool") as inst:`),
+    and that instance gets evicted via LRU, the variable should still be usable. The
+    next call should automatically restart the worker and re-allocate a device.
+
+    This test verifies:
+    1. User creates instance and gets variable reference
+    2. Instance is evicted and shut down by DeviceManager
+    3. User's variable reference still works - automatically restarts
+    4. New worker gets allocated correctly
     """
     from proto_tools.tools.testing.mock_pytorch_tool import (
         MockPyTorchToolConfig,

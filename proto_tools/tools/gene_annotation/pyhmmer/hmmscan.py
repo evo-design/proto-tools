@@ -23,7 +23,8 @@ from proto_tools.utils import ConfigField, InputField, ToolInstance
 class PyHmmscanInput(PyHmmerInput):
     """Input object for PyHMMER hmmscan (protein sequences vs HMM database).
 
-    Provide protein sequences and an HMM database to identify domains and families.
+    This class defines the input parameters for searching protein sequences against
+    an HMM database to identify domains and protein families within the sequences.
 
     Attributes:
         sequences (list[str]): Query protein sequences to search.
@@ -115,8 +116,10 @@ def example_input() -> Any:
 def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig, instance: Any = None) -> PyHmmscanOutput:
     """Search protein sequences against HMM database using PyHMMER.
 
-    Search protein sequences against an HMM database to annotate domains and
-    protein families. This reverses the query and target roles used by hmmsearch.
+    This function implements the hmmscan algorithm, searching protein sequences
+    against an HMM database to identify domains and protein families within the
+    query sequences. This is the reverse of hmmsearch and is useful for annotating
+    proteins with known domain architectures.
 
     Args:
         inputs (PyHmmscanInput): Validated PyHMMER hmmscan input containing
@@ -153,7 +156,6 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig, instanc
         ...         domains = [h.query_name for h in hits]
         ...         print(f"{seq_name}: {' + '.join(domains)}")
     """
-    # Search each protein sequence against the profile database in the worker.
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {
@@ -178,7 +180,6 @@ def run_pyhmmer_hmmscan(inputs: PyHmmscanInput, config: PyHmmscanConfig, instanc
         config=config,
     )
 
-    # Convert worker dictionaries to typed sequence and domain hits.
     sequence_hits, domain_hits = _build_hit_models(output_data["sequence_hits"], output_data["domain_hits"])
 
     return PyHmmscanOutput(

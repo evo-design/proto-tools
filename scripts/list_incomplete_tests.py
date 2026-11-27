@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """scripts/list_incomplete_tests.py.
 
-Find tests that were not completed before a pytest run was interrupted.
-
-Compare the tests that would run on this machine with the log's
-``TEST PASSED``, ``TEST FAILED``, and ``TEST ERROR`` lines.
+Given a pytest log file, list every test that pytest *would have
+actually run* on this machine but for which no ``TEST PASSED`` /
+``TEST FAILED`` / ``TEST ERROR`` line was emitted before the run was
+killed.
 
 The log's first line records the exact pytest invocation, e.g.::
 
@@ -15,8 +15,9 @@ We re-run that command via the inline plugin in
 (so the project conftest applies its custom-marker-driven skips:
 ``uses_gpu``, ``skip_ci``, ``test_on_platforms``, missing assets, …)
 and then evaluates every ``skip``/``skipif`` marker. Tests that would
-be skipped are excluded. Removing tests with a recorded outcome leaves
-those that never ran or were interrupted.
+be skipped are excluded; the survivors form the canonical "should have
+run" set. Subtracting the IDs with a terminal log line yields the
+tests that never ran or were killed mid-flight.
 
 Usage::
 
@@ -92,12 +93,8 @@ def collect_runnable_node_ids(pytest_args: list[str]) -> set[str]:
     ``uses_gpu`` / ``skip_ci`` / etc. have been translated into skip
     markers), evaluates skip markers, and prints ``RUNNABLE: <nodeid>``
     for every survivor before clearing ``items`` so nothing executes.
-    Collection runs under this script's interpreter, so the node IDs
-    match the ones the same environment's pytest will accept.
     """
     cmd = [
-        sys.executable,
-        "-m",
         "pytest",
         # Clear project addopts (which forces -v / coverage / etc.) so
         # output stays minimal and our RUNNABLE: lines are easy to grep.

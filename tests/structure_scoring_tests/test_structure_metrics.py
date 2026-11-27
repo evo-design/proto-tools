@@ -82,7 +82,7 @@ def test_export_json(sample_output, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_run_structure_metrics_on_pdb(tmp_path):
     """Run structure metrics on a minimal PDB file."""
     pdb_content = """\

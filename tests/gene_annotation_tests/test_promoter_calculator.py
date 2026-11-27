@@ -88,7 +88,7 @@ def test_num_sequences_with_promoter_empty():
 # ── Integration ──────────────────────────────────────────────────────────
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_promoter_calculator_detects_consensus_promoter():
     """The sigma70 consensus promoter is predicted on the forward strand."""
     result = run_promoter_calculator(

@@ -6,10 +6,8 @@ and the masked pseudo-log-likelihood gradient.
 
 import importlib.util
 import math
-import re
 import sys
 from pathlib import Path
-from typing import get_args
 
 import numpy as np
 import pytest
@@ -29,13 +27,14 @@ from proto_tools.tools.masked_models.codonfm import (
     CodonFMScoreConfig,
     CodonFMScoreInput,
     one_hot_codon_logits,
+    resolve_checkpoint_source,
     run_codonfm_embeddings,
     run_codonfm_fitness,
     run_codonfm_gradient,
     run_codonfm_sample,
     run_codonfm_score,
 )
-from proto_tools.tools.masked_models.codonfm.shared_data_models import CODONFM_MAX_NT, CodonFMCheckpoint
+from proto_tools.tools.masked_models.codonfm.shared_data_models import CODONFM_CHECKPOINTS, CODONFM_MAX_NT
 from proto_tools.tools.mutagenesis.codons import CODON_TO_AA
 from proto_tools.transforms.masking import RandomMaskingStrategy
 from tests.conftest import benchmark_twice, make_persistent_fixture
@@ -117,25 +116,25 @@ def test_codonfm_one_hot_codon_logits_matches_vocab_order() -> None:
 
 def test_codonfm_gradient_input_validation() -> None:
     """The gradient input requires a non-empty L x 64 matrix and a positive temperature."""
-    inp = CodonFMGradientInput(inputs=[[0.0] * 64, [1.0] * 64])
+    inp = CodonFMGradientInput(logits=[[0.0] * 64, [1.0] * 64])
     assert inp.temperature == 1.0
 
-    assert CodonFMGradientInput(inputs=[[0.0] * 64], temperature=0.6).temperature == 0.6
+    assert CodonFMGradientInput(logits=[[0.0] * 64], temperature=0.6).temperature == 0.6
     with pytest.raises(ValidationError):
-        CodonFMGradientInput(inputs=[[0.0] * 64], temperature=0.0)
+        CodonFMGradientInput(logits=[[0.0] * 64], temperature=0.0)
     with pytest.raises(ValidationError):
-        CodonFMGradientInput(inputs=[[0.0] * 64], temperature=-1.0)
+        CodonFMGradientInput(logits=[[0.0] * 64], temperature=-1.0)
     with pytest.raises(ValidationError, match="64 columns"):
-        CodonFMGradientInput(inputs=[[0.0] * 63])
+        CodonFMGradientInput(logits=[[0.0] * 63])
     with pytest.raises(ValidationError, match="at least one"):
-        CodonFMGradientInput(inputs=[])
+        CodonFMGradientInput(logits=[])
     with pytest.raises(ValidationError, match="finite"):
-        CodonFMGradientInput(inputs=[[float("nan")] * 64])
+        CodonFMGradientInput(logits=[[float("nan")] * 64])
     with pytest.raises(ValidationError):
-        CodonFMGradientInput(inputs=[[0.0] * 64], temperature=float("inf"))
+        CodonFMGradientInput(logits=[[0.0] * 64], temperature=float("inf"))
     with pytest.raises(ValidationError, match="probability distribution"):
-        CodonFMGradientInput(inputs=[[0.0] * 64], temperature=None)
-    assert CodonFMGradientInput(inputs=[[1.0 / 64] * 64], temperature=None).temperature is None
+        CodonFMGradientInput(logits=[[0.0] * 64], temperature=None)
+    assert CodonFMGradientInput(logits=[[1.0 / 64] * 64], temperature=None).temperature is None
 
 
 def _load_codonfm_worker():
@@ -173,14 +172,9 @@ def test_codonfm_worker_padding_and_early_validation(monkeypatch) -> None:
     with pytest.raises(ValueError, match="positive integer"):
         worker.dispatch({"operation": "fitness", "device": "cpu", "batch_size": 0, "sequences": ["ATG"]})
     assert loaded is False
-    with pytest.raises(ValueError, match="model_checkpoint must be one of"):
-        worker.dispatch(
-            {"operation": "fitness", "device": "cpu", "model_checkpoint": "encodon_2b", "sequences": ["ATG"]}
-        )
-    assert loaded is False
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_codonfm_worker_gradient_is_padded_finite_and_does_not_touch_parameter_grads() -> None:
     """The relaxed worker path uses /8 padding and returns only input gradients.
 
@@ -194,18 +188,18 @@ def test_codonfm_worker_gradient_is_padded_finite_and_does_not_touch_parameter_g
     assert "CODONFM_GRADIENT_OK" in output, output
 
 
-def test_codonfm_worker_checkpoints_match_the_config_and_are_pinned() -> None:
-    """The worker provisions every checkpoint the config accepts, pinned and with both files checksummed.
-
-    A name on only one side would pass config validation and then fail in the worker; ``resolve/main``
-    would follow upstream changes the pinned digests no longer match.
-    """
-    checkpoints = _load_codonfm_worker().CHECKPOINTS
-    assert set(checkpoints) == set(get_args(CodonFMCheckpoint))
-    for alias, entry in checkpoints.items():
-        assert re.fullmatch("[0-9a-f]{40}", entry["revision"]), alias
-        assert re.fullmatch("[0-9a-f]{64}", entry["safetensors_sha256"]), alias
-        assert re.fullmatch("[0-9a-f]{64}", entry["config_sha256"]), alias
+def test_codonfm_resolve_checkpoint_source_covers_all_aliases() -> None:
+    """Every checkpoint alias resolves to public HF URLs plus a stable cache subdir."""
+    for alias, entry in CODONFM_CHECKPOINTS.items():
+        safetensors_url, config_url, filename, subdir = resolve_checkpoint_source(alias)
+        assert safetensors_url.startswith("https://huggingface.co/")
+        assert safetensors_url.endswith(entry["safetensors"])
+        assert config_url.endswith("/config.json")
+        assert filename == entry["safetensors"]
+        assert subdir.startswith(f"codonfm-{alias}-")
+    # Distinct checkpoints get distinct cache subdirs (no cross-checkpoint clobbering).
+    subdirs = {resolve_checkpoint_source(alias)[3] for alias in CODONFM_CHECKPOINTS}
+    assert len(subdirs) == len(CODONFM_CHECKPOINTS)
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +227,8 @@ def test_codonfm_fitness_dispatch_contract(monkeypatch) -> None:
     assert captured["toolkit"] == "codonfm"
     assert captured["payload"]["operation"] == "fitness"
     assert captured["payload"]["sequences"] == [_CDS, "ATGGCCACC"]
-    assert captured["payload"]["model_checkpoint"] == "encodon_80m"
+    assert captured["payload"]["safetensors_url"].endswith("NV-CodonFM-Encodon-80M-v1.safetensors")
+    assert captured["payload"]["config_url"].endswith("/config.json")
     assert [r.fitness for r in result.results] == [-0.5, -0.5]
     assert [r.sequence_length for r in result.results] == [30, 9]
 
@@ -306,19 +301,11 @@ def test_codonfm_gradient_dispatch_contract(monkeypatch) -> None:
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["toolkit"] = toolkit
         captured["payload"] = payload
+        n = len(payload["logits"])
         return {
-            "results": [
-                {
-                    "gradient": [[0.0] * 64 for _ in range(len(item))],
-                    "loss": 0.5,
-                    "metrics": {
-                        "log_likelihood": -5.0,
-                        "avg_log_likelihood": -0.5,
-                        "perplexity": float(np.exp(0.5)),
-                    },
-                }
-                for item in payload["items"]
-            ],
+            "gradient": [[0.0] * 64 for _ in range(n)],
+            "loss": 0.5,
+            "metrics": {"log_likelihood": -5.0, "avg_log_likelihood": -0.5, "perplexity": float(np.exp(0.5))},
             "vocab": CODONFM_CODON_VOCAB,
         }
 
@@ -328,20 +315,19 @@ def test_codonfm_gradient_dispatch_contract(monkeypatch) -> None:
     )
 
     result = run_codonfm_gradient(
-        CodonFMGradientInput(inputs=[[0.0] * 64] * 3, temperature=0.6),
-        CodonFMGradientConfig(model_checkpoint="encodon_80m", hard=1.0, batch_size=2, device="cpu"),
+        CodonFMGradientInput(logits=[[0.0] * 64] * 3, temperature=0.6),
+        CodonFMGradientConfig(model_checkpoint="encodon_80m", use_ste=True, batch_size=2, device="cpu"),
     )
 
     assert captured["toolkit"] == "codonfm"
     assert captured["payload"]["operation"] == "gradient"
-    assert captured["payload"]["items"] == [[[0.0] * 64] * 3]
+    assert captured["payload"]["logits"] == [[0.0] * 64] * 3
     assert captured["payload"]["temperature"] == 0.6
-    assert captured["payload"]["soft"] == 1.0
-    assert captured["payload"]["hard"] == 1.0
+    assert captured["payload"]["use_ste"] is True
     assert captured["payload"]["compute_gradient"] is True
     assert captured["payload"]["batch_size"] == 2
     assert captured["payload"]["device"] == "cpu"
-    assert result.results[0].terms[0].gradient is not None and len(result.results[0].terms[0].gradient) == 3
+    assert result.gradient is not None and len(result.gradient) == 3
     assert result.vocab == CODONFM_CODON_VOCAB
 
 
@@ -352,18 +338,9 @@ def test_codonfm_gradient_forward_mode_dispatch_contract(monkeypatch) -> None:
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["payload"] = payload
         return {
-            "results": [
-                {
-                    "gradient": None,
-                    "loss": 0.5,
-                    "metrics": {
-                        "log_likelihood": -5.0,
-                        "avg_log_likelihood": -0.5,
-                        "perplexity": float(np.exp(0.5)),
-                    },
-                }
-                for _ in payload["items"]
-            ],
+            "gradient": None,
+            "loss": 0.5,
+            "metrics": {"log_likelihood": -5.0, "avg_log_likelihood": -0.5, "perplexity": float(np.exp(0.5))},
             "vocab": CODONFM_CODON_VOCAB,
         }
 
@@ -373,14 +350,14 @@ def test_codonfm_gradient_forward_mode_dispatch_contract(monkeypatch) -> None:
     )
 
     result = run_codonfm_gradient(
-        CodonFMGradientInput(inputs=[[0.0] * 64] * 3),
+        CodonFMGradientInput(logits=[[0.0] * 64] * 3),
         CodonFMGradientConfig(compute_gradient=False, device="cpu"),
     )
 
     assert captured["payload"]["compute_gradient"] is False
-    assert result.results[0].terms[0].gradient is None
-    assert result.results[0].terms[0].term_value == 0.5
-    assert result.results[0].metrics["avg_log_likelihood"] == -0.5
+    assert result.gradient is None
+    assert result.loss == 0.5
+    assert result.metrics["avg_log_likelihood"] == -0.5
 
 
 def test_codonfm_sample_dispatch_contract(monkeypatch) -> None:
@@ -545,83 +522,6 @@ def test_codonfm_score_real_gpu() -> None:
         assert row.llr == pytest.approx(row.ref_log_likelihood - row.alt_log_likelihood, rel=1e-5)
 
 
-@pytest.mark.uses_env
-def test_codonfm_gradient_token_layout_matches_the_scoring_path() -> None:
-    """The gradient's ``[CLS] + codons + [SEP]`` row must match Encodon's own tokenized input.
-
-    The worker assembles the model input itself rather than tokenizing, so a drift in the
-    special tokens around the codon columns would score a sequence the model never sees while
-    staying finite and self-consistent. The check tokenizes a CDS through Encodon's
-    ``process_item`` — the preprocessing every scoring path uses — and compares both the ids and
-    the attention mask against the worker's own assembly helpers. Unlike ESM2 and AbLang there is
-    no whole-sequence scoring tool whose number the gradient should reproduce: ``codonfm-score``
-    scores mutations and ``codonfm-fitness`` reports a different quantity than the gradient's
-    masked PLL, so the input layout is pinned instead of the loss.
-    ``_codonfm_token_layout_env_check.py`` runs inside the codonfm env; a failed assertion
-    surfaces as ``RuntimeError``.
-    """
-    from proto_tools.utils import run_in_env
-
-    check = Path(__file__).resolve().parent / "_codonfm_token_layout_env_check.py"
-    output = run_in_env("codonfm", script=str(check), timeout=1800)
-    assert "CODONFM_TOKEN_LAYOUT_OK" in output, output
-
-
-@pytest.mark.uses_env
-def test_codonfm_tokenizer_covers_the_canonical_codon_order() -> None:
-    """The real tokenizer must map every canonical codon by name, with no weights involved.
-
-    The worker keys its column basis off ``DNA_CODONS`` and looks each codon up in the
-    tokenizer's encoder, so proto-ordered gradients depend on that lookup covering all 64. The
-    check runs in codonfm's env because the tokenizer package lives there; ``Tokenizer()`` takes
-    no checkpoint, so it costs seconds.
-    """
-    from pathlib import Path as _Path
-
-    from proto_tools.utils import run_in_env
-
-    check = _Path(__file__).resolve().parent / "_codonfm_vocabulary_env_check.py"
-    output = run_in_env("codonfm", script=str(check), timeout=900)
-
-    assert "ALL CHECKS PASSED" in output, output
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-def test_codonfm_gradient_probability_mode_matches_logit_mode() -> None:
-    """temperature=None on softmax(L) must reproduce temperature=1.0 on L, in both coordinates.
-
-    The two modes evaluate the same relaxed coding sequence, so the losses agree and the
-    gradients are related by the softmax Jacobian:
-    ``g_logit[i] = p[i] * (g_prob[i] - sum_j p[j] * g_prob[j])``.
-    """
-    _skip_if_no_gpu()
-
-    logits = one_hot_codon_logits(_CDS, sharpness=2.0)
-    probabilities = [[math.exp(v) / sum(math.exp(u) for u in row) for v in row] for row in logits]
-    config = CodonFMGradientConfig(model_checkpoint="encodon_80m", batch_size=4, device="cuda")
-
-    logit_mode = run_codonfm_gradient(CodonFMGradientInput(inputs=logits, temperature=1.0), config)
-    probability_mode = run_codonfm_gradient(CodonFMGradientInput(inputs=probabilities, temperature=None), config)
-
-    assert probability_mode.results[0].terms[0].term_value == pytest.approx(
-        logit_mode.results[0].terms[0].term_value, rel=1e-5
-    )
-    assert (
-        logit_mode.results[0].terms[0].gradient is not None
-        and probability_mode.results[0].terms[0].gradient is not None
-    )
-    for probs, g_prob, g_logit in zip(
-        probabilities,
-        probability_mode.results[0].terms[0].gradient,
-        logit_mode.results[0].terms[0].gradient,
-        strict=True,
-    ):
-        weighted = sum(p * g for p, g in zip(probs, g_prob, strict=True))
-        expected = [p * (g - weighted) for p, g in zip(probs, g_prob, strict=True)]
-        assert g_logit == pytest.approx(expected, rel=1e-3, abs=1e-6)
-
-
 @pytest.mark.uses_gpu
 @pytest.mark.slow
 def test_codonfm_gradient_real_gpu() -> None:
@@ -629,20 +529,18 @@ def test_codonfm_gradient_real_gpu() -> None:
     _skip_if_no_gpu()
 
     result = run_codonfm_gradient(
-        CodonFMGradientInput(inputs=one_hot_codon_logits(_CDS, sharpness=2.0), temperature=0.6),
+        CodonFMGradientInput(logits=one_hot_codon_logits(_CDS, sharpness=2.0), temperature=0.6),
         CodonFMGradientConfig(model_checkpoint="encodon_80m", batch_size=4, device="cuda"),
     )
     validate_output(result)
     assert result.tool_id == "codonfm-gradient"
-    assert result.results[0].terms[0].gradient is not None
-    assert len(result.results[0].terms[0].gradient) == len(_CDS) // 3
-    assert all(len(row) == 64 for row in result.results[0].terms[0].gradient)
-    assert all(math.isfinite(v) for row in result.results[0].terms[0].gradient for v in row)
-    assert any(v != 0.0 for row in result.results[0].terms[0].gradient for v in row)
-    assert result.results[0].terms[0].term_value > 0
-    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(
-        -result.results[0].terms[0].term_value, rel=1e-6
-    )
+    assert result.gradient is not None
+    assert len(result.gradient) == len(_CDS) // 3
+    assert all(len(row) == 64 for row in result.gradient)
+    assert all(math.isfinite(v) for row in result.gradient for v in row)
+    assert any(v != 0.0 for row in result.gradient for v in row)
+    assert result.loss > 0
+    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
     assert result.vocab == CODONFM_CODON_VOCAB
 
 
@@ -732,7 +630,7 @@ def test_codonfm_gradient_forward_mode_matches_backward_loss() -> None:
     """compute_gradient=False keeps the scalar masked-PLL objective identical to the backward pass."""
     _skip_if_no_gpu()
 
-    inputs = CodonFMGradientInput(inputs=one_hot_codon_logits(_CDS, sharpness=2.0), temperature=0.6)
+    inputs = CodonFMGradientInput(logits=one_hot_codon_logits(_CDS, sharpness=2.0), temperature=0.6)
     backward = run_codonfm_gradient(
         inputs, CodonFMGradientConfig(model_checkpoint="encodon_80m", batch_size=4, seed=42, device="cuda")
     )
@@ -742,8 +640,8 @@ def test_codonfm_gradient_forward_mode_matches_backward_loss() -> None:
             model_checkpoint="encodon_80m", batch_size=4, seed=42, compute_gradient=False, device="cuda"
         ),
     )
-    assert backward.results[0].terms[0].gradient is not None and forward.results[0].terms[0].gradient is None
-    assert forward.results[0].terms[0].term_value == pytest.approx(backward.results[0].terms[0].term_value, rel=1e-6)
+    assert backward.gradient is not None and forward.gradient is None
+    assert forward.loss == pytest.approx(backward.loss, rel=1e-6)
 
 
 @pytest.mark.benchmark("codonfm-fitness")
@@ -803,14 +701,13 @@ def test_codonfm_score_benchmark(request: pytest.FixtureRequest) -> None:
 @pytest.mark.uses_gpu
 def test_codonfm_gradient_benchmark(request: pytest.FixtureRequest) -> None:
     """Benchmark codonfm-gradient on a length-100-codon relaxed sequence (cold + warm)."""
-    inputs = CodonFMGradientInput(inputs=one_hot_codon_logits("ATG" * 100, sharpness=2.0), temperature=0.6)
+    inputs = CodonFMGradientInput(logits=one_hot_codon_logits("ATG" * 100, sharpness=2.0), temperature=0.6)
     config = CodonFMGradientConfig(model_checkpoint="encodon_80m", batch_size=32)
 
     result = benchmark_twice(request, "codonfm", lambda: run_codonfm_gradient(inputs, config))
     validate_output(result)
     assert result.tool_id == "codonfm-gradient"
-    (item,) = result.results
-    assert item.terms[0].gradient is not None and len(item.terms[0].gradient) == 100
+    assert result.gradient is not None and len(result.gradient) == 100
 
 
 @pytest.mark.benchmark("codonfm-sample")

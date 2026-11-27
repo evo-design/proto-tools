@@ -23,7 +23,6 @@ from proto_tools.tools.masked_models.codonfm.codonfm_gradient import (
     CodonFMGradientConfig,
     CodonFMGradientInput,
     CodonFMGradientOutput,
-    CodonFMMaskedPLLTerm,
     run_codonfm_gradient,
 )
 from proto_tools.tools.masked_models.codonfm.codonfm_sample import (
@@ -42,6 +41,7 @@ from proto_tools.tools.masked_models.codonfm.codonfm_score import (
     run_codonfm_score,
 )
 from proto_tools.tools.masked_models.codonfm.shared_data_models import (
+    CODONFM_CHECKPOINTS,
     CODONFM_CODON_VOCAB,
     CODONFM_NUM_CODONS,
     CodonFMCheckpoint,
@@ -49,9 +49,11 @@ from proto_tools.tools.masked_models.codonfm.shared_data_models import (
     CodonSequenceInput,
     normalize_codon_sequence,
     one_hot_codon_logits,
+    resolve_checkpoint_source,
 )
 
 __all__ = [
+    "CODONFM_CHECKPOINTS",
     "CODONFM_CODON_VOCAB",
     "CODONFM_NUM_CODONS",
     "CodonFMCheckpoint",
@@ -65,7 +67,6 @@ __all__ = [
     "CodonFMFitnessOutput",
     "CodonFMFitnessResult",
     "CodonFMGradientConfig",
-    "CodonFMMaskedPLLTerm",
     "CodonFMGradientInput",
     "CodonFMGradientOutput",
     "CodonFMMutation",
@@ -80,6 +81,7 @@ __all__ = [
     "CodonSequenceInput",
     "normalize_codon_sequence",
     "one_hot_codon_logits",
+    "resolve_checkpoint_source",
     "run_codonfm_embeddings",
     "run_codonfm_fitness",
     "run_codonfm_gradient",

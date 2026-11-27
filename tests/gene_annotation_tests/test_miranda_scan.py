@@ -171,7 +171,7 @@ def test_export_flattens_sites_to_csv_and_json(tmp_path):
 # -- Integration (runs the compiled binary) ---------------------------------
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_miranda_scan_finds_bantam_site():
     """End-to-end: miR-bantam scanned against the Drosophila hid 3'UTR finds a real site."""
     _, mirna_seqs = _read_fasta(_EXAMPLES_DIR / "bantam_mirna.fasta")

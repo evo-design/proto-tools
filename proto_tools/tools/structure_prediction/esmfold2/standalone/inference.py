@@ -1,19 +1,16 @@
-"""ESMFold2 worker: folds all-atom complexes and differentiates structure objectives."""
+"""Local ESMFold2 (Biohub) all-atom complex structure prediction model wrapper."""
 
-import gc
 import json
 import logging
 import sys
 from typing import Any
 
-import objective  # type: ignore[import-not-found]  # sibling module, resolved inside the tool env
 import torch
 from standalone_helpers import (
     get_logger,
     get_random_int,
     is_cuda_oom,
     release_cuda_memory,
-    report_msa_rows_loaded,
     serialize_output,
     set_torch_seed,
 )
@@ -24,20 +21,11 @@ logger = get_logger(__name__)
 logging.getLogger("esm").setLevel(logging.ERROR)
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
-# HF repos for the exposed checkpoints. Name an experimental head from the inversion configs
-# only: it loads through a different model class, and the folding tool's confidence outputs are
-# untested on it. The experimental heads load from byte-identical mirrors of Biohub's repos
-# (biohub/ESMFold2-Experimental*), which are published for reproducibility and may be withdrawn.
+# HF repos for the two exposed checkpoints
 _CHECKPOINT_REPOS = {
     "esmfold2": "biohub/ESMFold2",
     "esmfold2-fast": "biohub/ESMFold2-Fast",
-    "esmfold2-experimental": "bviggiano/ESMFold2-Experimental",
-    "esmfold2-experimental-fast": "bviggiano/ESMFold2-Experimental-Fast",
-    "esmfold2-experimental-cutoff2025": "bviggiano/ESMFold2-Experimental-Cutoff2025",
-    "esmfold2-experimental-fast-cutoff2025": "bviggiano/ESMFold2-Experimental-Fast-Cutoff2025",
 }
-#: Checkpoints that load through ``EsmFold2ExperimentalModel`` rather than ``EsmFold2Model``.
-EXPERIMENTAL_CHECKPOINTS = frozenset(k for k in _CHECKPOINT_REPOS if "experimental" in k)
 
 
 def _build_upstream_input(
@@ -84,23 +72,19 @@ def _build_upstream_input(
         if entity_type == "protein":
             msa_obj = None
             chain_msa_rows = msas.get(str(idx)) if msas else None
-            unpaired_rows = unpaired_msas.get(str(idx)) if unpaired_msas else None
-            # A chain with only unpaired rows is sent them as its base alignment, which never pairs.
-            pairs = msas_paired and bool(chain_msa_rows)
-            if not chain_msa_rows:
-                chain_msa_rows, unpaired_rows = unpaired_rows, None
             if chain_msa_rows:
                 from esm.utils.parsing import FastaEntry
 
                 # `key=<row_idx>` headers engage upstream paired_msa.py cross-chain pairing.
-                header_fmt = "key={row}" if pairs else "seq_{row}"
+                header_fmt = "key={row}" if msas_paired else "seq_{row}"
                 entries = [
                     FastaEntry(header=header_fmt.format(row=row_idx), sequence=seq)
                     for row_idx, seq in enumerate(chain_msa_rows)
                 ]
                 # Append the deep unpaired rows with non-`key=` headers: upstream reads
-                # taxonomy -1 for these and stacks them as unpaired depth after the
-                # paired rows, never key-paired (skip the query and any paired duplicate).
+                # taxonomy -1 for these and places them block-diagonally as per-chain
+                # depth after the paired rows (skip the query and any paired duplicate).
+                unpaired_rows = unpaired_msas.get(str(idx)) if unpaired_msas else None
                 if unpaired_rows:
                     seen = set(chain_msa_rows)
                     for u_seq in unpaired_rows[1:]:
@@ -123,20 +107,13 @@ def _build_upstream_input(
 class ESMFold2Model:
     """ESMFold2 all-atom structure prediction model wrapper."""
 
-    def __init__(self, model_checkpoint: str, lm_dropout: float = 0.0, esmc_cache_dir: str | None = None) -> None:
+    def __init__(self, model_checkpoint: str) -> None:
         """Initialize the model wrapper; defers weight load until first call."""
         if model_checkpoint not in _CHECKPOINT_REPOS:
             raise ValueError(
                 f"esmfold2: unknown model_checkpoint {model_checkpoint!r}; valid: {sorted(_CHECKPOINT_REPOS)}"
             )
-        if lm_dropout and model_checkpoint not in EXPERIMENTAL_CHECKPOINTS:
-            raise ValueError(
-                f"esmfold2: lm_dropout is only configurable on {sorted(EXPERIMENTAL_CHECKPOINTS)}; "
-                f"{model_checkpoint!r} has no dropout to configure"
-            )
         self._loaded = False
-        self.lm_dropout = lm_dropout
-        self.esmc_cache_dir = esmc_cache_dir
         self.model_checkpoint = model_checkpoint
         self.device: str | None = None
         self.model: Any = None
@@ -145,94 +122,22 @@ class ESMFold2Model:
     def load(self, device: str, verbose: bool = False) -> None:
         """Load the ESMFold2 model and input builder onto ``device``."""
         from esm.models.esmfold2 import ESMFold2InputBuilder, EsmFold2Model
-        from standalone_helpers import set_current_cuda_device
 
-        # ESMFold2's Triton kernels launch on the current device and cache their compiled form
-        # under it, so it must be the GPU the model is on from the first call.
-        set_current_cuda_device(device)
         repo = _CHECKPOINT_REPOS[self.model_checkpoint]
-        logger.update_status(f"Loading {repo.split('/')[-1]} weights")
         if verbose:
             logger.info(f"Loading ESMFold2 model: {repo} on {device}")
 
         try:
-            if self.model_checkpoint in EXPERIMENTAL_CHECKPOINTS:
-                from esm.models.esmfold2.experimental import EsmFold2ExperimentalModel
-                from esm.models.hub import resolve_model_dir
-
-                # These load their ESM C encoder from a separate repo, kept in the esmc toolkit's
-                # cache so the 6B backbone is stored once. They also carry a pair-representation
-                # dropout that can be held on during inference; 0.0 keeps a fold deterministic.
-                model = EsmFold2ExperimentalModel.from_pretrained(repo, load_esmc=False)
-                if model.esmc is None:
-                    model.load_esmc(resolve_model_dir(model.config.esmc_id, cache_dir=self.esmc_cache_dir))
-                model.configure_lm_dropout(self.lm_dropout, force_lm_dropout_during_inference=bool(self.lm_dropout))
-                self.model = model.to(device=device).eval().requires_grad_(False)
-            else:
-                self.model = EsmFold2Model.from_pretrained(repo, device=device).eval()
+            self.model = EsmFold2Model.from_pretrained(repo, device=device).eval()
         except OSError as e:
             raise RuntimeError(f"esmfold2: HF weight load from {repo!r} failed: {e}") from e
 
-        # The folding path's input builder is only exercised on the production heads; the
-        # experimental ones are reached solely through the inversion tools, which featurize
-        # with `prepare_esmfold2_input` directly.
-        self.builder = None if self.model_checkpoint in EXPERIMENTAL_CHECKPOINTS else ESMFold2InputBuilder()
-        if self.builder is not None:
-            self._log_loaded_msa_rows(self.builder)
+        self.builder = ESMFold2InputBuilder()
         self.device = device
         self._loaded = True
 
         if verbose:
             logger.info("ESMFold2 model loaded successfully")
-
-    def _log_loaded_msa_rows(self, builder: Any) -> None:
-        """Wrap ``builder.prepare_input`` to log each protein chain's featurized MSA rows."""
-        from esm.models.esmfold2.constants import MSA_GAP_TOKEN_ID
-
-        prepare_input = builder.prepare_input
-
-        def prepare_input_logging_msa_rows(*args: Any, **kwargs: Any) -> Any:
-            features, chain_infos = prepare_input(*args, **kwargs)
-            sent = getattr(self, "_msa_rows_sent", {})
-            if any(rows for rows in sent.values()):
-                msa, asym = features["msa"][0], features["asym_id"][0]
-                loaded = {
-                    str(info.chain_id): int((msa[:, asym == info.asym_id] != MSA_GAP_TOKEN_ID).any(dim=1).sum())
-                    for info in chain_infos
-                    if str(info.chain_id) in sent
-                }
-                report_msa_rows_loaded("esmfold2", loaded, sent)
-            return features, chain_infos
-
-        builder.prepare_input = prepare_input_logging_msa_rows
-
-    def ensure_loaded(self, device: str, verbose: bool = False, seed: int | None = None) -> Any:
-        """Load the checkpoint if needed, move it if the device changed, and return the model.
-
-        A given seed scopes the load, which can initialize runtime-only modules the checkpoint
-        does not carry; leaving that unseeded makes a run irreproducible for reasons that never
-        show up in the forward pass. Both the folding and the gradient path come through here,
-        so one set of weights serves both.
-
-        Args:
-            device (str): Device the model must end up on.
-            verbose (bool): Log the load.
-            seed (int | None): Seed scoping the load; ``None`` loads unseeded.
-
-        Returns:
-            Any: The loaded ``EsmFold2Model``.
-        """
-        if not self._loaded:
-            if seed is None:
-                self.load(device, verbose)
-            else:
-                from esm.models.esmfold2.layers import _seed_context as seed_context
-
-                with seed_context(seed):
-                    self.load(device, verbose)
-        elif self.device != device:
-            self.to_device(device)
-        return self.model
 
     def to_device(self, device: str) -> None:
         """Move the loaded model to a different device."""
@@ -257,29 +162,22 @@ class ESMFold2Model:
         noise_scale: float | None,
         max_inference_sigma: float | None,
         early_exit: bool,
-        msa_max_depth: int,
         include_pae_matrix: bool,
         device: str,
         verbose: bool,
         seed: int | None,
     ) -> dict[str, Any]:
         """Fold one complex and return CIF + metrics."""
-        loading = not self._loaded
-        self.ensure_loaded(device, verbose, seed)
-        if loading:
-            # Replace the loading status; the caller's progress bar reports each complex after this.
-            logger.update_status("Folding structure", level=logging.DEBUG)
+        if not self._loaded:
+            self.load(device, verbose)
+        elif self.device != device:
+            self.to_device(device)
 
         # Deterministic seed forwarded to the upstream sampler.
         effective_seed = seed if seed is not None else get_random_int()
         set_torch_seed(effective_seed)
 
         upstream_input = _build_upstream_input(chains, msas, msas_paired, unpaired_msas)
-        self._msa_rows_sent = {
-            str(chain["id"]): max(len((msas or {}).get(str(idx), [])), len((unpaired_msas or {}).get(str(idx), [])))
-            for idx, chain in enumerate(chains)
-            if chain.get("entity_type", "protein") == "protein"
-        }
 
         # Optional sampler overrides: upstream consumes them only when non-None.
         sampler_kwargs: dict[str, Any] = {}
@@ -303,7 +201,6 @@ class ESMFold2Model:
                         num_diffusion_samples=diffusion_samples,
                         seed=effective_seed,
                         early_exit=early_exit,
-                        msa_max_depth=msa_max_depth,
                         **sampler_kwargs,
                     )
                     break
@@ -353,380 +250,22 @@ class ESMFold2Model:
 
 
 # ============================================================================
-# Inversion gradients
-# ============================================================================
-#: Folding settings the reference recipe uses for a gradient step rather than a scoring pass.
-_NUM_LOOPS = 1
-_NUM_SAMPLING_STEPS = 1
-#: A chain occupies the amino-acid columns of a 33-token vocabulary, so a 20-wide relaxed state
-#: is padded on both sides to line up.
-_TOKEN_PAD = (2, 11)
-#: Residue-type indices 0 and 1 are padding and a gap, so the amino acids start at 2.
-_FIRST_AMINO_ACID_INDEX = 2
-
-
-def _folding_vocabulary() -> str:
-    """One-letter amino acids in the folding trunk's column order.
-
-    Returns:
-        str: Twenty one-letter amino acids in trunk column order.
-    """
-    from esm.models.esmfold2.constants import PROTEIN_3TO1, RES_TYPE_TO_CCD
-
-    start = _FIRST_AMINO_ACID_INDEX
-    return "".join(PROTEIN_3TO1[RES_TYPE_TO_CCD[index]] for index in range(start, start + 20))
-
-
-def _move_language_model(device: str) -> None:
-    """Move the cached ESM C to ``device`` if it is loaded somewhere else."""
-    global _language_model, _language_model_device
-    from standalone_helpers import move_model_to_device
-
-    if _language_model is not None and _language_model_device != device:
-        _language_model = move_model_to_device(_language_model, _language_model_device, device)
-        _language_model_device = device
-
-
-def _load_language_model(device: str, seed: int) -> Any:
-    """Load ESM C for the pseudo-perplexity term, caching it for the life of the worker."""
-    global _language_model, _language_model_device
-    from esm.models.esmc import EsmcForMaskedLM
-    from esm.models.esmfold2.layers import _seed_context as seed_context
-
-    if _language_model is None:
-        logger.update_status("Loading ESM C weights")
-        with seed_context(seed):
-            _language_model = EsmcForMaskedLM.from_pretrained("biohub/esmc-300m").to(device)
-        _language_model_device = device
-        logger.update_status("Computing gradient", level=logging.DEBUG)
-    else:
-        _move_language_model(device)
-    return _language_model
-
-
-def _trunk_to_lm_matrix(device: torch.device) -> torch.Tensor:
-    """Permutation mapping folding-trunk amino-acid columns onto ESM C's."""
-    from esm.models.esmc import EsmcTokenizer
-
-    lm_vocabulary = sorted(EsmcTokenizer().vocab.items(), key=lambda item: item[1])
-    lm_amino_acids = [token for token, _ in lm_vocabulary[4:24]]
-    matrix = torch.zeros(20, 20, device=device)
-    for trunk_index, amino_acid in enumerate(_folding_vocabulary()):
-        matrix[trunk_index, lm_amino_acids.index(amino_acid)] = 1
-    return matrix
-
-
-def _relax(source: torch.Tensor, order: list[int], data: dict[str, Any]) -> torch.Tensor:
-    """Turn one chain's caller-ordered logits into its relaxed state in trunk column order."""
-    reordered = source[:, order]
-    temperature = data["temperature"]
-    relaxed = reordered if temperature is None else torch.softmax(reordered / temperature, dim=-1)
-    soft, hard = data["soft"], data["hard"]
-    if soft != 1.0:
-        relaxed = soft * relaxed + (1 - soft) * reordered
-    if hard != 0.0:
-        relaxed = hard * objective.straight_through(relaxed) + (1 - hard) * relaxed
-    return relaxed
-
-
-class _Complex:
-    """One prepared complex: its chain spans, its relaxed state, and what to differentiate.
-
-    Attributes:
-        spans (dict[str, tuple[int, int]]): Chain id to its half-open rows in the complex.
-        sources (list[torch.Tensor]): Leaf tensors, one per designable chain, in fold order.
-        designable (list[str]): Designable chain ids, in fold order.
-        sequences (dict[str, str]): Decoded sequence per chain, as folded.
-        res_type_soft (torch.Tensor): The complex's relaxed residue types, shape ``(1, L, 33)``.
-        relaxed (dict[str, torch.Tensor]): Per-chain relaxed state, shape ``(1, len, 20)``.
-    """
-
-    def __init__(self, data: dict[str, Any], vocabulary: str) -> None:
-        """Build the complex from the worker payload.
-
-        Args:
-            data (dict[str, Any]): Worker payload carrying ``chains`` and relaxation settings.
-            vocabulary (str): Folding-trunk column order.
-        """
-        import torch.nn.functional as F
-
-        device = data["device"]
-        order = [data["alphabet"].index(residue) for residue in vocabulary]
-        self.spans: dict[str, tuple[int, int]] = {}
-        self.sources: list[torch.Tensor] = []
-        self.designable: list[str] = []
-        self.sequences: dict[str, str] = {}
-        self.relaxed: dict[str, torch.Tensor] = {}
-        blocks: list[torch.Tensor] = []
-        cursor = 0
-
-        for chain in data["chains"]:
-            chain_id = chain["chain_id"]
-            if chain["logits"] is not None:
-                source = torch.tensor(chain["logits"], dtype=torch.float32, device=device, requires_grad=True)
-                relaxed = _relax(source, order, data).unsqueeze(0)
-                self.sources.append(source)
-                self.designable.append(chain_id)
-                self.relaxed[chain_id] = relaxed
-                self.sequences[chain_id] = "".join(vocabulary[index] for index in relaxed[0].argmax(-1).tolist())
-                length = relaxed.shape[1]
-            else:
-                sequence = chain["sequence"]
-                relaxed = torch.zeros(1, len(sequence), 20, device=device)
-                for position, residue in enumerate(sequence):
-                    relaxed[0, position, vocabulary.index(residue)] = 1
-                self.relaxed[chain_id] = relaxed
-                self.sequences[chain_id] = sequence
-                length = len(sequence)
-            blocks.append(F.pad(relaxed, _TOKEN_PAD, mode="constant", value=0))
-            self.spans[chain_id] = (cursor, cursor + length)
-            cursor += length
-
-        self.res_type_soft = torch.cat(blocks, dim=1)
-        self.length = cursor
-
-    def chain_rows(self) -> dict[str, list[int]]:
-        """Where each designable chain's rows sit in the concatenated gradient."""
-        rows: dict[str, list[int]] = {}
-        cursor = 0
-        for chain_id in self.designable:
-            length = self.relaxed[chain_id].shape[1]
-            rows[chain_id] = [cursor, cursor + length]
-            cursor += length
-        return rows
-
-
-def _fold(model: Any, prepared: _Complex, data: dict[str, Any]) -> torch.Tensor:
-    """Fold the complex and return its distogram logits.
-
-    Args:
-        model (Any): The loaded folding model.
-        prepared (_Complex): The assembled complex.
-        data (dict[str, Any]): Worker payload, read for device and seed.
-
-    Returns:
-        torch.Tensor: Distogram logits, shape ``(1, length, length, bins)``.
-    """
-    from esm.models.esmfold2 import ProteinInput, StructurePredictionInput, load_ccd, prepare_esmfold2_input
-    from esm.models.esmfold2.layers import _seed_context as seed_context
-
-    device, seed = data["device"], data["seed"]
-    load_ccd()
-    sequences = [
-        ProteinInput(id=str(index), sequence=prepared.sequences[chain["chain_id"]], msa=None)
-        for index, chain in enumerate(data["chains"])
-    ]
-    features, _ = prepare_esmfold2_input(StructurePredictionInput(sequences=sequences), seed=seed)
-    # Distogram conditioning is unimplemented upstream and the forward pass rejects it.
-    features.pop("disto_cond", None)
-    features.pop("disto_cond_mask", None)
-    inputs = {key: value.unsqueeze(0).to(device) for key, value in features.items()}
-    # The relaxed state enters here, which is what keeps every designable chain differentiable.
-    inputs["res_type_soft"] = prepared.res_type_soft
-
-    with seed_context(seed):
-        output = model(
-            **inputs,
-            num_diffusion_samples=1,
-            num_sampling_steps=_NUM_SAMPLING_STEPS,
-            num_loops=_NUM_LOOPS,
-            seed=seed,
-        )
-    return output["distogram_logits"]
-
-
-def _epitope_mask(data: dict[str, Any], prepared: _Complex) -> torch.Tensor:
-    """Boolean mask over complex positions, true at the requested target hotspots."""
-    target_id = data["target_chain_id"]
-    start, _ = prepared.spans[target_id]
-    mask = torch.zeros(1, prepared.length, dtype=torch.bool, device=prepared.res_type_soft.device)
-    for hotspot in data.get("target_hotspot_ids") or []:
-        mask[0, start + int(hotspot[1:]) - 1] = True
-    return mask
-
-
-def _quantity(
-    name: str,
-    chain_id: str,
-    distogram: torch.Tensor | None,
-    midpoints: torch.Tensor | None,
-    prepared: _Complex,
-    data: dict[str, Any],
-) -> torch.Tensor:
-    """Evaluate one requested quantity over the chain it names.
-
-    Args:
-        name (str): Quantity id.
-        chain_id (str): Chain the quantity is evaluated over.
-        distogram (torch.Tensor | None): Distogram logits for the folded complex; ``None`` when
-            only the pseudo-perplexity was asked for, which does not fold.
-        midpoints (torch.Tensor | None): Bin midpoint distances, ``None`` alongside the distogram.
-        prepared (_Complex): The assembled complex, for its spans and relaxed state.
-        data (dict[str, Any]): Worker payload.
-
-    Returns:
-        torch.Tensor: A scalar for this candidate.
-
-    Raises:
-        ValueError: If the quantity is unknown, or an interface quantity is asked for without a
-            target chain.
-    """
-    span = prepared.spans[chain_id]
-    if name == "plm_nll":
-        return _pseudo_perplexity(prepared.relaxed[chain_id], data).squeeze(0)
-    assert distogram is not None and midpoints is not None
-    if name == "intra_contact":
-        return objective.intra_contact_loss(distogram, span, midpoints).squeeze(0)
-    if name == "globularity":
-        return objective.globularity_loss(distogram, span, midpoints).squeeze(0)
-    if name in ("inter_contact", "epitope"):
-        target_id = data.get("target_chain_id")
-        if target_id is None:
-            raise ValueError(f"quantity {name!r} needs a target chain; it is offered only by the binder tool")
-        if name == "inter_contact":
-            return objective.inter_contact_loss(distogram, prepared.spans[target_id], span, midpoints).squeeze(0)
-        return objective.epitope_loss(
-            distogram, _epitope_mask(data, prepared), span, midpoints, data["epitope_contact_distance"]
-        ).squeeze(0)
-    raise ValueError(f"esmfold2: unknown quantity {name!r}")
-
-
-def _pseudo_perplexity(relaxed: torch.Tensor, data: dict[str, Any]) -> torch.Tensor:
-    """Score one chain under ESM C, loading the language model only when it is asked for."""
-    from esm.models.esmc import EsmcTokenizer
-
-    device, seed = data["device"], data["seed"]
-    masked_lm = _load_language_model(device, seed)
-    tokenizer = EsmcTokenizer()
-    scored = torch.ones(relaxed.shape[0], relaxed.shape[1], dtype=torch.bool, device=relaxed.device)
-    # An unseeded call still needs a generator for the mask draws; seed 0 keeps it reproducible.
-    generator = torch.Generator(device=relaxed.device).manual_seed(0 if seed is None else int(seed))
-    return objective.pseudo_perplexity_nll(
-        masked_lm,
-        relaxed,
-        scored,
-        trunk_to_lm=_trunk_to_lm_matrix(relaxed.device),
-        cls_id=tokenizer.cls_token_id,
-        eos_id=tokenizer.eos_token_id,
-        mask_id=masked_lm.config.mask_token_id,
-        vocab_size=masked_lm.config.vocab_size,
-        amino_acid_offset=4,
-        passes=data["plm_passes"],
-        batch_size=data["plm_batch_size"],
-        generator=generator,
-    )
-
-
-def complex_gradient(data: dict[str, Any]) -> dict[str, Any]:
-    """Fold one complex and differentiate each requested quantity against its designable chains.
-
-    Args:
-        data (dict[str, Any]): Worker payload.
-
-    Returns:
-        dict[str, Any]: ``terms``, ``chain_rows`` and ``metrics``.
-    """
-    vocabulary = _folding_vocabulary()
-    prepared = _Complex(data, vocabulary)
-    requested = list(data["gradient_terms"])
-    metrics: dict[str, Any] = {
-        "complex_length": prepared.length,
-        "designable_length": sum(prepared.relaxed[name].shape[1] for name in prepared.designable),
-    }
-    # The pseudo-perplexity reads only the sequence, so a request for it alone skips the fold.
-    needs_fold = any(entry["id"] != "plm_nll" for entry in requested)
-    distogram = midpoints = None
-    if needs_fold:
-        wrapper = _wrapper(data["model_checkpoint"], data.get("lm_dropout", 0.0), data.get("esmc_cache_dir"))
-        loading = not wrapper._loaded
-        folder = wrapper.ensure_loaded(data["device"], seed=data["seed"])
-        if loading:
-            # Replace the weight-loading status once the model is up.
-            logger.update_status("Computing gradient", level=logging.DEBUG)
-        distogram = _fold(folder, prepared, data)
-        # Leave the grid at float32: casting it down to a bfloat16 head would quantize the
-        # angstrom values the cutoffs compare against.
-        midpoints = objective.bin_midpoints(distogram.shape[-1], distogram.device)
-        target_id = data.get("target_chain_id")
-        if target_id is not None:  # a binder against a target: report the distogram interface confidence too
-            binder_id = next(name for name in prepared.designable if name != target_id)
-            with torch.no_grad():
-                metrics["distogram_iptm_proxy"] = float(
-                    objective.distogram_iptm_proxy(
-                        distogram.detach(), prepared.spans[target_id], prepared.spans[binder_id], midpoints
-                    )[0]
-                )
-
-    values = [
-        (entry, _quantity(entry["id"], entry["chain_id"], distogram, midpoints, prepared, data)) for entry in requested
-    ]
-
-    terms = []
-    for position, (entry, value) in enumerate(values):
-        gradient = None
-        if data["compute_gradient"]:
-            # One backward per quantity over the shared forward graph, retained until the last.
-            # Chains a quantity does not touch get a zero block rather than being dropped, so
-            # every gradient covers the same rows and the terms stay composable.
-            parts = torch.autograd.grad(
-                value,
-                prepared.sources,
-                retain_graph=position < len(values) - 1,
-                allow_unused=True,
-                materialize_grads=True,
-            )
-            gradient = serialize_output(torch.cat(parts, dim=0))
-        terms.append(
-            {"id": entry["id"], "chain_id": entry["chain_id"], "value": float(value.detach()), "gradient": gradient}
-        )
-
-    return {"terms": terms, "chain_rows": prepared.chain_rows(), "metrics": metrics}
-
-
-# ============================================================================
 # Dispatch
 # ============================================================================
-#: The folding checkpoint, shared by the prediction and the gradient operations so one set of
-#: weights serves both. reload_on_change on model_checkpoint restarts the worker when the
-#: caller asks for the other variant, but the swap here is defensive.
 _model: ESMFold2Model | None = None
-#: Loaded only when the pseudo-perplexity term is requested, with the device it sits on.
-_language_model: Any = None
-_language_model_device: str | None = None
-
-
-def _wrapper(model_checkpoint: str, lm_dropout: float = 0.0, esmc_cache_dir: str | None = None) -> ESMFold2Model:
-    """Return the cached wrapper for this checkpoint and dropout, replacing it if either changed."""
-    global _model
-    if _model is None or (_model.model_checkpoint, _model.lm_dropout) != (model_checkpoint, lm_dropout):
-        # Construct first, which loads no weights, so a rejected request keeps the warm model. Then
-        # release the old one before the successor's weights load, leaving one model on the GPU.
-        successor = ESMFold2Model(
-            model_checkpoint=model_checkpoint, lm_dropout=lm_dropout, esmc_cache_dir=esmc_cache_dir
-        )
-        _model = None
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        _model = successor
-    return _model
 
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
-    """Entry point for both persistent-worker and one-shot execution.
+    """Entry point for both persistent-worker and one-shot execution."""
+    global _model
+    requested_checkpoint = input_dict["model_checkpoint"]
+    # reload_on_change=True restarts the worker on checkpoint change, but reinit defensively.
+    if _model is None or _model.model_checkpoint != requested_checkpoint:
+        _model = ESMFold2Model(model_checkpoint=requested_checkpoint)
 
-    Args:
-        input_dict (dict[str, Any]): Worker payload carrying an operation key.
-
-    Returns:
-        dict[str, Any]: The operation's reply.
-
-    Raises:
-        ValueError: If the operation is not one this worker offers.
-    """
     operation = input_dict["operation"]
     if operation == "predict":
-        return _wrapper(input_dict["model_checkpoint"], input_dict.get("lm_dropout", 0.0))(
+        return _model(
             chains=input_dict["chains"],
             msas=input_dict.get("msas"),
             msas_paired=input_dict.get("msas_paired", False),
@@ -738,34 +277,21 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             noise_scale=input_dict.get("noise_scale"),
             max_inference_sigma=input_dict.get("max_inference_sigma"),
             early_exit=input_dict.get("early_exit", False),
-            msa_max_depth=input_dict["msa_max_depth"],
             include_pae_matrix=input_dict["include_pae_matrix"],
             device=input_dict["device"],
             verbose=input_dict["verbose"],
             seed=input_dict.get("seed"),
         )
-    if operation == "complex_gradient":
-        try:
-            return complex_gradient(input_dict)
-        except RuntimeError as error:
-            if is_cuda_oom(error):
-                release_cuda_memory()
-            raise
-    raise ValueError(f"esmfold2: unknown operation {operation!r}; valid: ['predict', 'complex_gradient']")
+    raise ValueError(f"esmfold2: unknown operation {operation!r}; valid: ['predict']")
 
 
 def to_device(device: str) -> dict[str, Any]:
-    """Move every cached model to the specified device (called by DeviceManager)."""
-    moved = []
+    """Move model to specified device (called by DeviceManager)."""
+    global _model
     if _model is not None and _model._loaded:
         _model.to_device(device)
-        moved.append("esmfold2")
-    if _language_model is not None:
-        _move_language_model(device)
-        moved.append("esmc")
-    if not moved:
-        return {"success": True, "device": device, "note": "no model loaded yet"}
-    return {"success": True, "device": device, "moved": moved}
+        return {"success": True, "device": device}
+    return {"success": True, "device": device, "note": "model not loaded yet"}
 
 
 def get_memory_stats() -> dict[str, Any]:
@@ -786,5 +312,4 @@ if __name__ == "__main__":
     result = dispatch(input_data)
 
     with open(sys.argv[2], "w") as f:
-        # Non-finite values fail here rather than becoming NaN in the caller's JSON.
-        json.dump(serialize_output(result), f, allow_nan=False)
+        json.dump(serialize_output(result), f)

@@ -6,15 +6,6 @@ Config, helpers, sequence validation, I/O, caching, env management, device, logg
 from proto_tools.utils.auth import require_hf_token
 from proto_tools.utils.base_config import BaseConfig, ConfigField, run_preprocess
 from proto_tools.utils.chemistry import validate_smiles
-from proto_tools.utils.deadlines import (
-    DeadlineExceededError,
-    check_deadline,
-    deadline,
-    expired,
-    propagate,
-    remaining,
-    sleep_within_deadline,
-)
 from proto_tools.utils.device import (
     determine_visible_devices,
     display_gpu_memory_usage,
@@ -25,56 +16,8 @@ from proto_tools.utils.device import (
 from proto_tools.utils.device_manager import SUPPORTED_DEVICE_PREFIXES, AllocationType, DeviceManager, OffloadStrategy
 from proto_tools.utils.env_runner import run_in_env
 from proto_tools.utils.export_names import build_export_name, sanitize_field
-from proto_tools.utils.gradient.goals import (
-    AtLeastGoal,
-    AtMostGoal,
-    ClippedLinearGoal,
-    Goal,
-    GoalDirection,
-    MaximizeGoal,
-    MinimizeGoal,
-    RangeGoal,
-    SigmoidGoal,
-)
-from proto_tools.utils.gradient.metadata import GradientMetadata, gradient_l2_norm, input_fingerprint
-from proto_tools.utils.gradient.models import (
-    BatchedNucleotideGradientInput,
-    GradientConfig,
-    GradientInput,
-    GradientOutput,
-    GradientResult,
-    ProteinGradientInput,
-    RelaxationConfig,
-    attach_intrinsic_term,
-    coerce_to_item_list,
-)
-from proto_tools.utils.gradient.objectives import (
-    ComposableGradients,
-    GoalsArgument,
-    ObjectiveResult,
-    TermContribution,
-    TermKey,
-    WeightsArgument,
-    compose_gradients,
-    compose_terms,
-    resolve_goal,
-)
-from proto_tools.utils.gradient.terms import (
-    DifferentiableTerm,
-    GroupedTermCatalog,
-    TermCatalog,
-    TermGradient,
-    resolve_terms,
-)
-from proto_tools.utils.http_session import (
-    DeadlineAdapter,
-    DeadlineRetry,
-    build_http_session,
-    iter_content_within_deadline,
-    raise_for_status_with_body,
-    request_with_retry,
-    user_agent_for,
-)
+from proto_tools.utils.gradient_models import GradientInput, GradientOutput, GradientValue
+from proto_tools.utils.http_session import build_http_session, request_with_retry, user_agent_for
 from proto_tools.utils.interaction_models import (
     SequenceInteractionMap,
     SequenceInteractions,
@@ -100,13 +43,6 @@ from proto_tools.utils.sequence import (
     return_invalid_protein_chars,
     return_invalid_rna_chars,
     validate_positions_list,
-)
-from proto_tools.utils.sequence_logits import (
-    PROBABILITY_SUM_TOLERANCE,
-    NucleotideSequenceLogits,
-    ProteinSequenceLogits,
-    SequenceLogits,
-    iter_sequence_logits,
 )
 from proto_tools.utils.system_info import (
     capture_parent_env,
@@ -167,49 +103,10 @@ __all__ = [
     "RNA_NUCLEOTIDES",
     "PROTEIN_AMINO_ACIDS",
     "AminoAcid",
-    # Gradient goals and composition
-    "AtLeastGoal",
-    "AtMostGoal",
-    "ClippedLinearGoal",
-    "Goal",
-    "GoalDirection",
-    "ComposableGradients",
-    "GoalsArgument",
-    "MaximizeGoal",
-    "MinimizeGoal",
-    "ObjectiveResult",
-    "RangeGoal",
-    "SigmoidGoal",
-    "TermContribution",
-    "TermKey",
-    "WeightsArgument",
-    "compose_gradients",
-    "compose_terms",
-    "resolve_goal",
     # Gradient models
-    "BatchedNucleotideGradientInput",
-    "DifferentiableTerm",
-    "GradientConfig",
     "GradientInput",
     "GradientOutput",
-    "GradientMetadata",
-    "GradientResult",
-    "GroupedTermCatalog",
-    "TermCatalog",
-    "TermGradient",
-    "attach_intrinsic_term",
-    "coerce_to_item_list",
-    "gradient_l2_norm",
-    "input_fingerprint",
-    "resolve_terms",
-    "ProteinGradientInput",
-    "RelaxationConfig",
-    # Relaxed sequence state
-    "PROBABILITY_SUM_TOLERANCE",
-    "NucleotideSequenceLogits",
-    "ProteinSequenceLogits",
-    "SequenceLogits",
-    "iter_sequence_logits",
+    "GradientValue",
     # MSA
     "extract_msa_sequences",
     # I/O
@@ -243,24 +140,12 @@ __all__ = [
     "OffloadStrategy",
     "SUPPORTED_DEVICE_PREFIXES",
     # HTTP
-    "DeadlineAdapter",
-    "DeadlineRetry",
     "build_http_session",
-    "iter_content_within_deadline",
-    "raise_for_status_with_body",
     "request_with_retry",
     "user_agent_for",
     "extract_text_status",
     "poll_until_complete",
     "StatusExtractor",
-    # Deadlines
-    "DeadlineExceededError",
-    "check_deadline",
-    "deadline",
-    "expired",
-    "propagate",
-    "remaining",
-    "sleep_within_deadline",
     # Logging
     "get_logger",
     "setup_logging",

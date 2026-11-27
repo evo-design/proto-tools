@@ -1,7 +1,7 @@
 """IgLM antibody sequence likelihood scoring tool."""
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 from pydantic import field_validator, model_validator
 
@@ -86,12 +86,6 @@ class IgLMScoringConfig(CausalModelScoringConfig):
         description="IgLM weights variant; 'IgLM' is 13M parameters, 'IgLM-S' is 1.4M",
         reload_on_change=True,
     )
-
-    @classmethod
-    def minimal(cls, **kwargs: Any) -> "IgLMScoringConfig":
-        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
-        kwargs.setdefault("model_checkpoint", "IgLM-S")
-        return cast("IgLMScoringConfig", super().minimal(**kwargs))
 
 
 # ============================================================================
@@ -181,7 +175,6 @@ def run_iglm_score(
     """
     logger.debug("Using local venv for IgLM scoring: %s", config.model_checkpoint)
     spans = inputs.spans or [None] * len(inputs.sequences)
-    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "iglm",
         {

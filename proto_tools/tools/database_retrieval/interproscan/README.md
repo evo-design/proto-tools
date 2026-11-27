@@ -36,7 +36,7 @@ Use this to attach domain, family, and site annotation to a protein before desig
 
 #### Usage Tips
 
-- **The sequence-submission path requires a contact email.** When `sequence` is provided, `config.email` must be set. Provide it either via the `email` config attribute or via the `INTERPROSCAN_EMAIL` environment variable. An explicit config value overrides the env var. The tool raises a clear `ValueError` before contacting the server if neither is set. The direct accession path ignores `email`.
+- **The sequence-submission path requires a contact email.** When `sequence` is provided, `config.email` must be set. Provide it either via the `email` config attribute or via the `INTERPROSCAN_EMAIL` environment variable; an explicit config value overrides the env var. The tool raises a clear `ValueError` before contacting the server if neither is set. The direct accession path ignores `email`.
 - **Provide exactly one of `uniprot_id` or `sequence`.** The input validator rejects a call that supplies both or neither.
 - **`score` units are not uniform across rows.** The field carries whichever value the source member database publishes, an e-value for some databases and a bit-score for others, so filter by `member_database` before comparing scores.
 - **The direct path returns no pathway cross-references.** InterPro's UniProt-keyed endpoint does not surface pathway data, so `pathways` stays empty on that path regardless of configuration. Pathways are only populated on the sequence-submission path.

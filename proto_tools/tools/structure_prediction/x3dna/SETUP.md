@@ -28,7 +28,7 @@ downloaded:
 
 ```bash
 # Resolve the cache location the tool reads from (default ~/.proto/proto_model_cache):
-X3DNA_CACHE="${PROTO_MODEL_CACHE:-${PROTO_HOME:-$HOME/.proto}/proto_model_cache}/x3dna/weights"
+X3DNA_CACHE="${PROTO_MODEL_CACHE:-${PROTO_HOME:-$HOME/.proto}/proto_model_cache}/x3dna"
 mkdir -p "$X3DNA_CACHE"
 
 # Extract the downloaded archive, then copy the install root (the directory that

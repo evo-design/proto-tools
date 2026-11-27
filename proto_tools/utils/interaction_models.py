@@ -118,19 +118,19 @@ class SequenceInteractionsOutput(BaseToolOutput):
         """Plot one sequence's interaction maps as a heatmap.
 
         By default the base-pairing, repeat, and protein-contact channels are overlaid in one
-        panel. Each cell takes the color of its strongest channel, faded toward white as the
+        panel: each cell takes the color of its strongest channel, faded toward white as the
         probability drops, and base pairing wins wherever it reaches 0.5. Pass ``channel`` to
         plot a single map with a colorbar instead.
 
         Args:
             index (int): Position of the sequence in ``results``.
-            channel (str | None): Channel to plot, or ``None`` to overlay the known channels.
+            channel (str | None): Plot only this channel; ``None`` overlays the known channels.
             window (tuple[int, int] | None): 1-indexed inclusive ``(start, end)`` positions to zoom into.
             mask_by_modality (bool): Show protein contacts only between amino acids, and base pairing
                 and repeats only between nucleotides, using uppercase/lowercase axis labels.
             show_track (bool): Draw a strip along the top and left edges marking protein, nucleotide,
                 and strand-marker positions.
-            ax (Axes | None): Axes to draw into. Creates a new figure when omitted.
+            ax (Axes | None): Axes to draw into; a new figure is created when omitted.
             figsize (tuple[float, float]): Size of a newly created figure.
 
         Returns:

@@ -1,8 +1,7 @@
 {
   "tool_id": "alphafold-db-fetch",
-  "tool_version": "1.1.0",
-  "execution_time": 1.4014530181884766,
-  "timestamp": "2026-11-08T20:32:58.932018",
+  "execution_time": 0.3697683811187744,
+  "timestamp": "2026-06-20T19:09:19.754029",
   "success": true,
   "warnings": [],
   "errors": [],
@@ -434,8 +433,7 @@
         52.94,
         49.62
       ]
-    },
-    "msa_conditioning": null
+    }
   },
   "msa_a3m": null,
   "source_url": "https://alphafold.ebi.ac.uk/api/prediction/P04637",

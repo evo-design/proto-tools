@@ -3,12 +3,6 @@
 set -euo pipefail
 source standalone_helpers.sh
 
-# Constraints join UV_CONSTRAINT rather than a --constraint flag, which would replace the caps
-# Mol-1's Triton triangle-attention kernels use block pointers, which triton 3.9 removed, so keep
-# torch on a release paired with an older triton (https://github.com/triton-lang/triton/releases/tag/v3.9.0)
-TRITON_CONSTRAINT="${VENV_PATH}/mol1-triton-constraint.txt"
-echo "triton<3.9" > "$TRITON_CONSTRAINT"
-export UV_CONSTRAINT="${UV_CONSTRAINT:-} $TRITON_CONSTRAINT"
 proto_install_pytorch
 
 # Keep the hardware-matched Torch build when resolving upstream's dependencies.
@@ -17,7 +11,7 @@ python - <<'PY' > "$TORCH_CONSTRAINT"
 from importlib.metadata import version
 print(f"torch=={version('torch')}")
 PY
-UV_CONSTRAINT="$UV_CONSTRAINT $TORCH_CONSTRAINT" uv pip install -r requirements.txt
+uv pip install -r requirements.txt --constraint "$TORCH_CONSTRAINT"
 
 proto_resolve_weights_dir mol1
 mkdir -p "${WEIGHTS_DIR}/checkpoint"

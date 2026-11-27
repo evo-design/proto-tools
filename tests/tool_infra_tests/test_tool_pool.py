@@ -642,27 +642,6 @@ def test_interception_iterable_tool_intercepted_by_pool(clean_registry):
         _active_pool.reset(token)
 
 
-def test_pool_dispatch_runs_under_the_batch_timeout(clean_registry):
-    """A pooled batch of an in-process tool gets config.timeout per item as its deadline."""
-    from proto_tools.utils.deadlines import remaining
-
-    run_iterable, _ = _register_mock_tool(clean_registry, key="pooled-deadline")
-    seen: list[float | None] = []
-
-    def dispatch(key, func, inputs, config):
-        seen.append(remaining())
-        return MockOutput.model_construct(results=["x"] * 3, tool_id=key, success=True)
-
-    pool = MagicMock(spec=ToolPool)
-    pool._parallel_dispatch.side_effect = dispatch
-    token = _active_pool.set(pool)
-    try:
-        run_iterable(MockInput(items=["a", "b", "c"]), MockConfig(timeout=10))
-    finally:
-        _active_pool.reset(token)
-    assert seen and 20 < seen[0] <= 30
-
-
 def test_interception_pool_executing_prevents_re_interception(clean_registry):
     """When _pool_executing is True, tool calls should not re-route."""
 
@@ -1087,7 +1066,7 @@ def test_gpus_per_instance_derived_from_device_string():
     - cpu → 0 (no pool partitioning, single direct call)
     - cuda / cuda:N → 1
     - cudaxN / cuda:0,cuda:1 → N
-    - modal → 1 (remote dispatch is handled before pool partitioning)
+    - cloud → 1 (cloud dispatch is handled before pool partitioning)
     """
     assert BaseConfig().gpus_per_instance == 0  # default device='cpu'
     assert BaseConfig(device="cpu").gpus_per_instance == 0
@@ -1096,7 +1075,7 @@ def test_gpus_per_instance_derived_from_device_string():
     assert BaseConfig(device="cudax2").gpus_per_instance == 2
     assert BaseConfig(device="cudax4").gpus_per_instance == 4
     assert BaseConfig(device="cuda:0,cuda:1").gpus_per_instance == 2
-    assert BaseConfig(device="modal").gpus_per_instance == 1
+    assert BaseConfig(device="proto").gpus_per_instance == 1
 
 
 # ── Error propagation tests ─────────────────────────────────────────────────
@@ -1202,8 +1181,6 @@ def test_gpu_fanout_results_in_original_order():
 
     DeviceManager.reset_instance()
     ToolInstance.clear_all()
-    # Pinned workers would both report local cuda:0; this checks which GPU each partition ran on.
-    DeviceManager.get_instance()._auto_pin_exclusive = False
 
     try:
         data_items = [
@@ -1507,9 +1484,9 @@ def test_a_pool_partial_result_is_never_cached(monkeypatch):
 def test_post_process_hook_is_not_handed_placeholders(monkeypatch):
     """A tool's post-process hook works on the item type it declares, not on failure placeholders.
 
-    A hook reaches for a field only a real item has, so handing one a FailedItem raises and
-    destroys the partial result the caller asked to receive. No shipped tool declares a hook
-    today, and the mock has none of its own, so one is attached here to reach the path.
+    Four shipped tools attach UMAP projections this way and reach for a field only a real item
+    has, so handing one a FailedItem raises and destroys the partial result the caller asked to
+    receive. The mock has no hook of its own, so one is attached here to reach the path.
     """
     import proto_tools.tools.testing.mock_iterable_deterministic  # noqa: F401 -- registers the tool
     from proto_tools.utils.fanout import FailedItem

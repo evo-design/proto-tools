@@ -13,7 +13,7 @@
 
 ## Background
 
-gLM2 was introduced with the [Open MetaGenomic (OMG) corpus](https://huggingface.co/datasets/tattabio/OMG) ([Cornman et al., 2024](https://doi.org/10.1101/2024.08.14.607850)). Its bidirectional transformer predicts masked tokens from genomic context: coding regions are represented by amino acids and intergenic regions by individual nucleotides. Uppercase protein and lowercase DNA alphabets avoid token collisions. `+` and `-` represent strand orientation. The public 150M and 650M checkpoints both support 4096 tokens.
+gLM2 was introduced with the [Open MetaGenomic (OMG) corpus](https://huggingface.co/datasets/tattabio/OMG) ([Cornman et al., 2024](https://doi.org/10.1101/2024.08.14.607850)). Its bidirectional transformer predicts masked tokens from genomic context: coding regions are represented by amino acids and intergenic regions by individual nucleotides. Uppercase protein and lowercase DNA alphabets avoid token collisions; `+` and `-` represent strand orientation. The public 150M and 650M checkpoints both support 4096 tokens.
 
 This representation lets protein tokens condition on neighboring DNA and proteins without treating a DNA base and an identically named amino acid as the same symbol. The tool operates directly on that prepared representation.
 
@@ -29,9 +29,9 @@ Use the pooled vector as a feature for clustering, retrieval, or a downstream su
 
 #### Usage Tips
 
-- **`repr_layer=-1` selects the last transformer output.** Layer 0 selects the input embedding table. Positive indices select transformer outputs. Pooling includes every unpadded token, including strand markers.
-- **`return_logits=True` adds an `(L, 24)` matrix.** Columns follow `ACDEFGHIKLMNPQRSTVWYacgt`. These are raw logits, not normalized probabilities. The matrix includes strand-marker rows, one row per input character.
-- **CSV, NPY, and PT exports contain pooled vectors.** JSON also preserves `vocab` and optional `logits` for position-level analysis. Logits rows follow the input sequence.
+- **`repr_layer=-1` selects the last transformer output.** Layer 0 selects the input embedding table; positive indices select transformer outputs. Pooling includes every unpadded token, including strand markers.
+- **`return_logits=True` adds an `(L, 24)` matrix.** Columns follow `ACDEFGHIKLMNPQRSTVWYacgt`; these are raw logits, not normalized probabilities. The matrix includes strand-marker rows, one row per input character.
+- **CSV, NPY, and PT exports contain pooled vectors.** JSON also preserves `vocab` and optional `logits` for position-level analysis; logits rows follow the input sequence.
 
 ### gLM2 Scoring (`glm2-score`)
 
@@ -44,8 +44,8 @@ Rank related sequence variants with a contextual sequence prior. Scores reflect 
 #### Usage Tips
 
 - **`scored_positions` uses 1-indexed model-token positions.** Strand markers and accepted ambiguous protein symbols provide context but are excluded from score targets and the mean's denominator.
-- **`batch_size` controls masked variants per forward pass.** Scoring requires work proportional to the number of target positions. Start with the default 1 when memory is limited.
-- **Optional scoring logits come from masked passes.** Their `(L, 24)` rows align with the input sequence. Unscored marker and ambiguous-context rows are zero. These differ from the unmasked logits returned by embeddings.
+- **`batch_size` controls masked variants per forward pass.** Scoring requires work proportional to the number of target positions; start with the default 1 when memory is limited.
+- **Optional scoring logits come from masked passes.** Their `(L, 24)` rows align with the input sequence; unscored marker and ambiguous-context rows are zero. These differ from the unmasked logits returned by embeddings.
 - **PLL uses the full upstream vocabulary of 37 tokens.** Exported logits contain only the 24 biological tokens, so applying softmax to those columns does not reproduce PLL.
 - **Compare similar contexts.** Higher mean log-likelihood and lower perplexity mean the model predicts the sequence more readily. Summed log-likelihood also depends on the number of scored positions.
 
@@ -59,12 +59,12 @@ Propose local sequence edits for a design or variant-screening loop while keepin
 
 #### Usage Tips
 
-- **Automatic masking uses `MaskingStrategy`.** By default it selects about 30% of eligible canonical biological positions, with at least one when any are eligible. Set either `num_mutations` or `mask_fraction`. `fixed_positions` counts all model tokens, including markers. Entropy and max-logit selection use the same checkpoint as sampling.
+- **Automatic masking uses `MaskingStrategy`.** By default it selects about 30% of eligible canonical biological positions, with at least one when any are eligible. Set either `num_mutations` or `mask_fraction`; `fixed_positions` counts all model tokens, including markers. Entropy and max-logit selection use the same checkpoint as sampling.
 - **Premasked inputs require `mask_modalities`.** Supply one mapping per sequence that labels every `_` position as `"protein"` or `"dna"`. For example, `+M_+a_` needs `mask_modalities=[{3: "protein", 6: "dna"}]`. Explicit masks bypass automatic selection for the batch.
-- **The allowed alphabet is preserved per site.** Protein positions sample among the 20 canonical amino acids. DNA positions sample among lowercase `acgt`. A selected position can draw its original token again, so the number of masks is not a guaranteed number of substitutions.
+- **The allowed alphabet is preserved per site.** Protein positions sample among the 20 canonical amino acids; DNA positions sample among lowercase `acgt`. A selected position can draw its original token again, so the number of masks is not a guaranteed number of substitutions.
 - **`sampling_method` selects the fill algorithm.** `single_pass` fills all masks together. `iterative_refinement` progressively commits predictions and uses `num_steps`, `schedule`, `strategy`, `top_p`, and `temperature_annealing`. `temperature` controls sampling diversity and `seed` makes proposals reproducible.
-- **`excluded_amino_acids` bans residues from masked protein positions.** Pass uppercase single-letter codes (e.g. `["C"]` to forbid new cysteines). This alphabet is case-sensitive, so lowercase `c` is cytosine and is not accepted here. DNA positions, unmasked tokens, and the returned logits are unaffected.
-- **Optional sampling logits describe the completed locus.** They come from a final unmasked forward pass. Export prepared mixed strings as JSON or text. They are not nucleotide or protein FASTA records.
+- **`excluded_amino_acids` bans residues from masked protein positions.** Pass uppercase single-letter codes (e.g. `["C"]` to forbid new cysteines); this alphabet is case-sensitive, so lowercase `c` is cytosine and is not accepted here. DNA positions, unmasked tokens, and the returned logits are unaffected.
+- **Optional sampling logits describe the completed locus.** They come from a final unmasked forward pass. Export prepared mixed strings as JSON or text; they are not nucleotide or protein FASTA records.
 
 ### gLM2 Gradient (`glm2-gradient`)
 
@@ -76,11 +76,9 @@ Use the masked-language-model objective as a differentiable prior in sequence op
 
 #### Usage Tips
 
-- **The matrix axis includes every model token.** Columns are `ACDEFGHIKLMNPQRSTVWYacgt`. Strand-marker and ambiguous-context rows must be zero. Their returned gradients are also zero. Opposite-modality columns do not influence a position.
-- **`temperature`** controls how the input logits are converted into token probabilities, using a softmax within each position's own modality (`softmax(logits / temperature)` over the protein block for a protein token, the DNA block for a DNA token). Lower temperatures make the distribution more concentrated around the most likely token at each position, while higher temperatures produce more uniform distributions. The default is `1.0`, and the returned gradient is calculated with respect to the input logits. Rows for fixed context stay zero.
-- **Advanced option:** `temperature=None` skips softmax and treats the input as probabilities rather than logits. Most users should leave the default in place. In this case, each editable row must contain nonnegative values that sum to 1 across its own modality block and be zero outside it, and the returned gradient is calculated with respect to those probabilities. This is generally less convenient for gradient-based optimization because updating probabilities directly can cause them to become negative or no longer sum to 1. Optimizing logits avoids this issue, since softmax always produces a valid probability distribution. However, working directly with probabilities can be useful when using an optimizer designed for probability distributions or when exact zero probabilities are needed to exclude particular tokens. `one_hot_mixed_logits()` builds a valid starting state from a template.
-- **The objective masks canonical sites one at a time.** The target at each site is its current discrete argmax token, so it does not move with the relaxation controls. `compute_gradient=False` still returns the objective in `terms[0].term_value`, with `terms[0].gradient` set to `None`.
-- **`soft` and `hard` control the relaxation.** The default (`soft=1.0`, `hard=0.0`) feeds pure softmax probabilities. Set `hard=1.0` for a straight-through estimator. The forward pass sees a hard one-hot while gradients still flow through the probabilities. Lowering `soft` blends the raw input matrix in, masked to each position's own modality, which is differentiable but outside the model's training distribution.
+- **The matrix axis includes every model token.** Columns are `ACDEFGHIKLMNPQRSTVWYacgt`. Strand-marker and ambiguous-context rows must be zero; their returned gradients are also zero. Opposite-modality columns do not influence a position.
+- **`temperature=1.0` treats the input as logits.** The worker applies a softmax within the position's modality. With `temperature=None`, provide a nonnegative probability distribution within that modality and zeros elsewhere. `one_hot_mixed_logits()` builds a valid starting state from a template.
+- **The objective masks canonical sites one at a time.** The target at each site is its current discrete argmax token. `use_ste=True` uses hard forward tokens with soft derivatives; `compute_gradient=False` returns the objective with `gradient=None`.
 
 ## Toolkit Notes
 
@@ -88,10 +86,10 @@ Use the masked-language-model objective as a differentiable prior in sequence op
 
 These apply to every gLM2 tool in this toolkit.
 
-- **Inputs are prepared, case-sensitive strings.** Uppercase letters denote protein. Lowercase `acgt` denotes DNA. The uppercase protein symbols `X`, `B`, `U`, `Z`, and `O` are accepted as fixed context. Lowercase ambiguous nucleotides, whitespace, literal `<mask>`, and other control tokens are rejected. Sampling accepts `_` only with explicit modality metadata.
+- **Inputs are prepared, case-sensitive strings.** Uppercase letters denote protein; lowercase `acgt` denotes DNA. The uppercase protein symbols `X`, `B`, `U`, `Z`, and `O` are accepted as fixed context. Lowercase ambiguous nucleotides, whitespace, literal `<mask>`, and other control tokens are rejected. Sampling accepts `_` only with explicit modality metadata.
 - **Strand markers are `+` (forward) and `-` (reverse).** The upstream `<+>`/`<->` spelling is also accepted and converted to `+`/`-`. Token positions are 1-indexed string indices of the `+`/`-` form, not genomic nucleotide coordinates. No case conversion, strand insertion, reverse complementation, translation, or gene calling is performed.
 - **Prepare biologically appropriate orientation yourself.** Upstream examples use `+` for intergenic DNA and strand markers for translated coding regions. The tool preserves the submitted orientation and does not combine strands.
 - **Model setup and weights are managed automatically.** The isolated environment is built on first use and public Hugging Face checkpoints are downloaded into the shared model cache. A Hugging Face token is not required for these public checkpoints.
 - **Execution defaults to CUDA.** Reduce `batch_size` when memory is limited. Repeated calls with one checkpoint can reuse a persistent worker through the standard `ToolInstance.persist()` API.
-- **The default checkpoint is `tattabio/gLM2_650M`.** Select `tattabio/gLM2_150M` for the smaller model. Both accept at most 4096 model tokens, including strand markers. Longer inputs raise an error rather than truncating.
+- **The default checkpoint is `tattabio/gLM2_650M`.** Select `tattabio/gLM2_150M` for the smaller model. Both accept at most 4096 model tokens, including strand markers; longer inputs raise an error rather than truncating.
 - **This toolkit exposes MLM operations.** Upstream categorical-Jacobian interaction analysis is not part of the tool.

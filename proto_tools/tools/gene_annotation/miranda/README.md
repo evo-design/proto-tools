@@ -19,7 +19,7 @@
 
 ## Background
 
-[microRNAs](https://en.wikipedia.org/wiki/MicroRNA) are short (~22 nt) non-coding RNAs that regulate gene expression by base-pairing with complementary sites in target mRNAs, most often in the 3' untranslated region (3'UTR), and directing those transcripts toward translational repression or degradation. Because pairing is only partial in animals and concentrated in a short 5' "seed" of the microRNA, identifying genuine target sites from sequence alone requires a method tuned to complementarity rather than ordinary sequence identity.
+[microRNAs](https://en.wikipedia.org/wiki/MicroRNA) are short (~22 nt) non-coding RNAs that regulate gene expression by base-pairing with complementary sites in target mRNAs — most often in the 3' untranslated region (3'UTR) — and directing those transcripts toward translational repression or degradation. Because pairing is only partial in animals and concentrated in a short 5' "seed" of the microRNA, identifying genuine target sites from sequence alone requires a method tuned to complementarity rather than ordinary sequence identity.
 
 miRanda ([Enright et al., 2003](https://doi.org/10.1186/gb-2003-5-1-r1)) addresses this with a two-phase algorithm. First, a [Smith-Waterman](https://en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm) local alignment scores microRNA-to-target *complementarity* (rewarding A:U and G:C pairs, and tolerating G:U wobble) instead of identity, with extra weighting on the microRNA's 5' seed region to reflect its outsized role in binding. Second, for alignments that clear a score threshold, the bundled [ViennaRNA](https://github.com/ViennaRNA/ViennaRNA) RNAlib ([Hofacker et al., 1994](https://doi.org/10.1007/BF00818163)) estimates the duplex minimum free energy (ΔG, kcal/mol). Sites that pass both the score and the energy threshold are reported as candidate target sites.
 
@@ -31,7 +31,7 @@ miRanda ([Enright et al., 2003](https://doi.org/10.1186/gb-2003-5-1-r1)) address
 
 ### miRanda Target Scan (`miranda-scan`)
 
-Scans one or more microRNA queries against one or more RNA/DNA target sequences and returns, per target, the predicted target sites, each with its complementarity score, ViennaRNA duplex free energy, 1-indexed inclusive coordinates on both strands, percent identity and similarity, and the aligned strings.
+Scans one or more microRNA queries against one or more RNA/DNA target sequences and returns, per target, the predicted target sites — each with its complementarity score, ViennaRNA duplex free energy, 1-indexed inclusive coordinates on both strands, percent identity and similarity, and the aligned strings.
 
 #### Applications
 
@@ -39,9 +39,9 @@ Use this to nominate candidate microRNA target sites in a transcript before comm
 
 #### Usage Tips
 
-- **`score_threshold` and `energy_threshold` set the sensitivity-versus-specificity trade-off.** Lowering **score_threshold** below the default of 50 and raising **energy_threshold** toward 0 from the default of -20 kcal/mol both admit weaker sites and recover more candidates at the cost of more false positives. Tighten them in the other direction for high-confidence calls.
-- **Enable `strict` for higher confidence.** **strict** defaults to off. Turning it on passes `-strict` for stringent miRNA:target 5'-seed duplex heuristics that drop noisier, lower-confidence hits.
-- **Disable `compute_energy` for a much faster score-only scan.** **compute_energy** runs the ViennaRNA free-energy phase by default. Turning it off skips that phase entirely (the reported energy is then 0.0), which is useful for quick large-scale complementarity sweeps where ΔG ranking is not yet needed.
+- **`score_threshold` and `energy_threshold` set the sensitivity-versus-specificity trade-off.** Lowering **score_threshold** below the default of 50 and raising **energy_threshold** toward 0 from the default of -20 kcal/mol both admit weaker sites and recover more candidates at the cost of more false positives; tighten them in the other direction for high-confidence calls.
+- **Enable `strict` for higher confidence.** **strict** defaults to off; turning it on passes `-strict` for stringent miRNA:target 5'-seed duplex heuristics that drop noisier, lower-confidence hits.
+- **Disable `compute_energy` for a much faster score-only scan.** **compute_energy** runs the ViennaRNA free-energy phase by default; turning it off skips that phase entirely (the reported energy is then 0.0), which is useful for quick large-scale complementarity sweeps where ΔG ranking is not yet needed.
 - **All reported positions are 1-indexed and inclusive** on both the target and the microRNA, matching biological coordinate conventions.
 
 ## Toolkit Notes
@@ -52,4 +52,4 @@ These apply to every miRanda tool in this toolkit (`miranda-scan`).
 
 - **microRNA queries are user-supplied.** miRanda does not ship a microRNA database; obtain query sequences from [miRBase](https://www.mirbase.org/) (or your own designs) and pass them as `mirna_queries`.
 - **Target sequences should be mRNAs or 3'UTRs, not whole genomes.** The aligner builds a query-by-target dynamic-programming matrix, so memory scales with target length. Scan transcript-scale sequences, and use `trim` to cap very long targets rather than feeding whole chromosomes.
-- **Statistical shuffling and Z-scores are not supported.** The randomization-based Z-score significance machinery is non-functional upstream and is not exposed by the wrapper. Rank candidates by score and free energy instead.
+- **Statistical shuffling and Z-scores are not supported.** The randomization-based Z-score significance machinery is non-functional upstream and is not exposed by the wrapper; rank candidates by score and free energy instead.

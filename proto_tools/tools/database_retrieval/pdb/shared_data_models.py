@@ -1,7 +1,7 @@
 """proto_tools/tools/database_retrieval/pdb/shared_data_models.py.
 
-Contains configuration, chain models, and private helpers used by the
-pdb tool modules.
+Contains configuration, chain models, and private helpers used by
+fetch_entry and fetch_fasta tool modules.
 """
 
 import logging
@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 _PDB_ENTRY_BASE = "https://data.rcsb.org/rest/v1/core/entry"
 _PDB_FASTA_BASE = "https://www.rcsb.org/fasta/entry"
-_PDB_FILES_BASE = "https://files.rcsb.org/download"
 _REQUEST_TIMEOUT_SECONDS = 15
 _HTTP_RETRIES = 3
 _BACKOFF_SECONDS = 1.0
@@ -66,9 +65,10 @@ class PdbChain(BaseModel):
 class PdbFetchConfig(BaseConfig):
     """Configuration for PDB fetch operations.
 
-    Fetch operations use the PDB ID supplied as input and need no additional
-    settings. Keep this empty config so existing callers can still pass
-    ``run_pdb_fetch_entry(input, config)``.
+    PDB tools have no user-facing settings — all behavior comes from the
+    PDB ID supplied as input. This class is kept (rather than removed)
+    so callers can still pass ``run_pdb_fetch_entry(input, config)``
+    without breakage, but it has no fields.
     """
 
 
@@ -127,12 +127,6 @@ def _fetch_pdb_entry(pdb_id: str, session: requests.Session) -> dict[str, Any] |
     resolution = float(combined[0]) if isinstance(combined, list) and combined else None
 
     return {"title": title, "method": method, "resolution": resolution}
-
-
-def _fetch_pdb_mmcif(pdb_id: str, session: requests.Session) -> str | None:
-    """Fetch an entry's mmCIF text, or None on 404. Every entry has one; large entries have no .pdb file."""
-    response = _request_pdb(session, f"{_PDB_FILES_BASE}/{pdb_id}.cif", "pdb-mmcif")
-    return None if response is None else response.text
 
 
 def _fetch_pdb_fasta(pdb_id: str, session: requests.Session) -> list[tuple[str, str]] | None:

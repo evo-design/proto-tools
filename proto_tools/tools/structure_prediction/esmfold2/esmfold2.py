@@ -4,36 +4,24 @@ All-atom biomolecular complex structure prediction using ESMFold2 from Biohub.
 """
 
 from logging import getLogger
-from typing import Any, ClassVar, Literal, cast
+from typing import Any, ClassVar, Literal
 
 from pydantic import model_validator
 
-from proto_tools.entities.structures import BFactorType, MSASubsampling, Structure
-from proto_tools.tools.structure_prediction.msa_plan import (
-    SentMSA,
-    chain_base_rows,
-    protein_chain_msas,
-    unpaired_depth_rows,
-)
+from proto_tools.entities.structures import BFactorType, Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    Complex,
-    ComplexMSAs,
     MSAStructurePredictionConfig,
     StructurePredictionInput,
     StructurePredictionOutput,
-    align_with_input,
+    normalize_output_chain_ids,
     resolve_chain_ids,
 )
 from proto_tools.tools.tool_registry import tool
-from proto_tools.utils import ConfigField, ToolInstance, extract_msa_sequences
+from proto_tools.utils import ConfigField, ToolInstance
 from proto_tools.utils.progress import progress_bar
 from proto_tools.utils.tool_io import Metrics, MetricSpec
 
 logger = getLogger(__name__)
-
-# MSA rows ESMFold2 randomly keeps per loop; passed to fold() as msa_max_depth.
-ESMFOLD2_MSA_MAX_DEPTH = 1024
-_FAST_REASON = "proto-tools sends no MSA to esmfold2-fast, a single-sequence checkpoint"
 
 
 # ============================================================================
@@ -229,25 +217,6 @@ class ESMFold2Config(MSAStructurePredictionConfig):
             )
         return self
 
-    @classmethod
-    def minimal(cls, **kwargs: Any) -> "ESMFold2Config":
-        """Twenty diffusion sampling steps (default 100), on a checkpoint that matches ``use_msa``.
-
-        The device, seed and placement tests only need the model to load and run, so one
-        sample through a short diffusion schedule tests the same thing as the full one.
-
-        Args:
-            **kwargs (Any): Field values passed to the config constructor; they take precedence.
-
-        Returns:
-            ESMFold2Config: Config with cheap-mode sampling applied.
-        """
-        if kwargs.get("use_msa"):
-            # esmfold2-fast is single-sequence and rejects use_msa=True; the MSA path needs the full model.
-            kwargs.setdefault("model_checkpoint", "esmfold2")
-        kwargs.setdefault("num_sampling_steps", 20)
-        return cast("ESMFold2Config", super().minimal(**kwargs))
-
 
 # ============================================================================
 # Tool Implementation
@@ -357,6 +326,8 @@ def _run_esmfold2_on_complex(
     Returns:
         Structure: Predicted structure with ``ESMFold2Metrics`` attached.
     """
+    from proto_tools.tools.structure_prediction.shared_data_models import unwrap_complex_msas
+
     if seed is None:
         seed = config.seed
     if config.verbose:
@@ -368,19 +339,18 @@ def _run_esmfold2_on_complex(
         _chain_to_payload(chain, chain_id) for chain, chain_id in zip(sp_complex.chains, chain_ids, strict=True)
     ]
 
-    per_chain_msas = complex_msas.per_chain if complex_msas is not None else {}
-    unpaired_per_chain = complex_msas.unpaired_per_chain if complex_msas is not None else None
-    is_paired = complex_msas is not None and complex_msas.paired
+    per_chain_msas, unpaired_per_chain, is_paired = unwrap_complex_msas(complex_msas)
 
     # MSAs are only meaningful for the MSA-capable checkpoint.
     msa_payload: dict[str, list[str]] | None = None
     unpaired_payload: dict[str, list[str]] | None = None
-    if config.model_checkpoint == "esmfold2" and (per_chain_msas or unpaired_per_chain):
+    if config.model_checkpoint == "esmfold2" and per_chain_msas:
         msa_payload = _serialize_msas_for_worker(per_chain_msas)
-        # Deep per-chain unpaired MSAs ride after the paired rows as unpaired depth; a chain
-        # with only unpaired rows is sent them alone, unpaired.
+        # Deep per-chain unpaired MSAs ride alongside the paired rows for block-diagonal depth.
         if unpaired_per_chain:
             unpaired_payload = _serialize_msas_for_worker(unpaired_per_chain)
+    elif config.model_checkpoint == "esmfold2-fast" and per_chain_msas:
+        logger.warning("ESMFold2-Fast is single-sequence; ignoring supplied MSAs.")
 
     input_data: dict[str, Any] = {
         "operation": "predict",
@@ -389,9 +359,6 @@ def _run_esmfold2_on_complex(
         "msas_paired": is_paired,
         "unpaired_msas": unpaired_payload,
         "model_checkpoint": config.model_checkpoint,
-        # Prediction folds without pair dropout; sending it keeps an inversion worker that has dropout
-        # on from being reused here.
-        "lm_dropout": 0.0,
         "num_loops": config.num_loops,
         "num_sampling_steps": config.num_sampling_steps,
         "diffusion_samples": config.diffusion_samples,
@@ -399,7 +366,6 @@ def _run_esmfold2_on_complex(
         "noise_scale": config.noise_scale,
         "max_inference_sigma": config.max_inference_sigma,
         "early_exit": config.early_exit,
-        "msa_max_depth": ESMFOLD2_MSA_MAX_DEPTH,
         "include_pae_matrix": config.include_pae_matrix,
         "device": config.device,
         "verbose": config.verbose,
@@ -432,38 +398,7 @@ def _run_esmfold2_on_complex(
         metrics=ESMFold2Metrics(**metrics_dict),
         source="esmfold2-prediction",
     )
-    msa_sent = _esmfold2_sent_msas(config.model_checkpoint, sp_complex, complex_msas)
-    return align_with_input(
-        structure,
-        sp_complex.chains,
-        complex_msas=complex_msas,
-        report_msa=True,
-        msa_sent=msa_sent,
-        # fold() draws a fresh random msa_max_depth-row subset (query kept) every loop.
-        msa_subsampling=MSASubsampling(mode="stochastic", max_rows=ESMFOLD2_MSA_MAX_DEPTH),
-    )
-
-
-def _esmfold2_sent_msas(checkpoint: str, sp_complex: Complex, complex_msas: ComplexMSAs | None) -> dict[int, SentMSA]:
-    """The rows the ESMFold2 worker folds per protein chain.
-
-    No MSA payload is built for the single-sequence ``esmfold2-fast``. Otherwise the worker sends a
-    chain's primary rows with its deep unpaired rows appended (de-duplicated) beneath them, or a
-    chain's unpaired rows alone, unpaired, when it has no primary alignment.
-    """
-    sent: dict[int, SentMSA] = {}
-    bundle_paired = complex_msas is not None and complex_msas.paired
-    for chain in protein_chain_msas(sp_complex.chains, complex_msas):
-        base, unpaired, pairs = chain_base_rows(chain, bundle_paired)
-        if base is None:
-            continue
-        if checkpoint == "esmfold2-fast":
-            sent[chain.index] = SentMSA(ignored_reason=_FAST_REASON)
-            continue
-        rows, _ids = extract_msa_sequences(base, 0)
-        depth = unpaired_depth_rows(rows, unpaired)
-        sent[chain.index] = SentMSA(rows=len(rows), unpaired_rows=len(depth), paired=pairs)
-    return sent
+    return normalize_output_chain_ids(structure, sp_complex.chains)
 
 
 def _chain_to_payload(chain: Any, chain_id: str) -> dict[str, Any]:

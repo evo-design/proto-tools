@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class PangolinVariant(BaseToolInput):
     """A variant and the reference sequence window it sits in.
 
-    Sequence-centric, so no genome FASTA is needed. Coordinates are 0-based
+    Sequence-centric, so no genome FASTA is needed: coordinates are 0-based
     within ``sequence``, which must give ``PANGOLIN_FLANK`` (5,000) bp of flank on
     each side (``PANGOLIN_FLANK + distance`` to fill the full reporting window,
     else it is clipped). Only SNVs and simple indels are supported.
@@ -343,7 +343,7 @@ def run_pangolin_score_variants(
 
     Note:
         Annotation-based score masking (the CLI ``--mask`` option) is not
-        supported because it requires exon annotations. Raw gain/loss is returned.
+        supported because it requires exon annotations; raw gain/loss is returned.
     """
     logger.debug("Using local venv for Pangolin variant scoring (tissues=%s)", config.tissues)
 

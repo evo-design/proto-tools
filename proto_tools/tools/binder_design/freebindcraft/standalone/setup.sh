@@ -14,7 +14,7 @@ source standalone_helpers.sh
 
 echo "FreeBindCraft license notices:"
 echo "  BindCraft — MIT (https://github.com/martinpacesa/BindCraft)"
-echo "  FreeBindCraft — Elastic License 2.0 (https://github.com/cytokineking/FreeBindCraft)"
+echo "  FreeBindCraft — MIT (https://github.com/cytokineking/FreeBindCraft)"
 echo "  AlphaFold2 weights — CC BY 4.0 (https://github.com/google-deepmind/alphafold)"
 
 # Skip proto_install_cuda_toolkit: jax[cuda12] brings its own nvidia-cu12 wheel
@@ -39,11 +39,22 @@ echo "Installing OpenMM + PDBFixer via conda channel..."
 echo "Installing FreeSASA Python module (--no-deps; brings only its C wheel)..."
 uv pip install --no-deps freesasa
 
-# AF2 weights are shared with the alphafold2 toolkit (~5.3 GB, downloaded once).
-proto_ensure_af2_params
+# AF2 weights are shared with the alphafold2 toolkit (~5.5 GB, avoid re-download).
+proto_resolve_weights_dir alphafold2
+PARAMS_DIR="${WEIGHTS_DIR}/params"
+mkdir -p "$PARAMS_DIR"
+# Gate on a completion sentinel, not any .npz, so a partial extraction is re-downloaded.
+PARAMS_SENTINEL="${PARAMS_DIR}/.params_complete"
+if [ ! -f "$PARAMS_SENTINEL" ]; then
+    echo "Downloading AlphaFold2 parameters (~5.5GB)..."
+    curl -fsSL https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar | tar x -C "$PARAMS_DIR"
+    touch "$PARAMS_SENTINEL"
+else
+    echo "AlphaFold2 parameters already present at $PARAMS_DIR"
+fi
 
 # Clone FreeBindCraft (ships sc/FASPR/dssp binaries + pr_alternative_utils.py).
-BINDCRAFT_COMMIT="${BINDCRAFT_COMMIT:-c1fcd0e52316a3e08058c1f15ad17725f69751d4}"
+BINDCRAFT_COMMIT="${BINDCRAFT_COMMIT:-d12747dbc907435622559b81891ad73e0a45c2e4}"
 BINDCRAFT_DIR="${TOOL_VENV_PATH:-$VIRTUAL_ENV}/data/BindCraft"
 if [ ! -d "$BINDCRAFT_DIR/.git" ]; then
     echo "Cloning FreeBindCraft repository..."

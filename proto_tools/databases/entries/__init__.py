@@ -1,6 +1,6 @@
 """Dataset entries — one module per registered homology database or reference genome.
 
-Each module defines a ``DatasetEntry`` (or a subtype such as ``MMseqs2DatabaseEntry``) and calls
+Each module defines a ``DatasetEntry`` and calls
 ``DatasetRegistry.register(ENTRY)`` at import time. Importing this package
 triggers registration of every entry.
 """

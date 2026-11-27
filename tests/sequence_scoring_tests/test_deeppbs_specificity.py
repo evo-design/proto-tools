@@ -5,7 +5,6 @@ Tests for DeepPBS specificity tool wrapper, canonicalization, and fallback.
 
 import importlib
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,10 +18,7 @@ from proto_tools.tools.sequence_scoring.deeppbs_specificity import (
     DeepPBSSpecificityInput,
     run_deeppbs_specificity,
 )
-from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests.test_export_functionality import validate_output
-
-_persistent_tool = make_persistent_fixture("deeppbs_specificity")
 
 # The standalone run.py imports the worker-injected ``standalone_helpers`` package,
 # which only sits on sys.path inside a tool venv. Add its source dir so the pure
@@ -284,68 +280,10 @@ def test_x3dna_env_root_binaries_are_found(tmp_path, monkeypatch):
     assert "dependency missing" not in (result["results"][0]["fallback_reason"] or "")
 
 
-@pytest.fixture
-def scratch_root(tmp_path, monkeypatch) -> Path:
-    """Point tempfile at a per-test directory, so anything left in it is a leak."""
-    root = tmp_path / "system_tmp"
-    root.mkdir()
-    monkeypatch.setattr(tempfile, "tempdir", str(root))
-    return root
-
-
-def _fallback_run(tmp_path, monkeypatch, **payload) -> dict:
-    """Run the standalone runner down its fallback path (no DeepPBS deps) with ``payload``."""
-    repo = _fake_deeppbs_repo(tmp_path)
-    monkeypatch.setenv("PROTO_DEEPPBS_SPECIFICITY_WEIGHTS_DIR", str(repo))
-    monkeypatch.setattr(_run, "get_subprocess_device_env", lambda device: {"PATH": ""})
-    return _run.run_deeppbs_specificity({"pdb_paths": [str(_dna_pdb(tmp_path))], "allow_fallback": True, **payload})
-
-
-def test_runner_keeps_nothing_without_output_directory(tmp_path, monkeypatch, scratch_root):
-    """Without output_directory, no files outlive the call and no NPZ path is returned (#352)."""
-    result = _fallback_run(tmp_path, monkeypatch)["results"][0]
-
-    assert result["output_npz_path"] is None
-    assert result["predicted_ppm"]  # the NPZ's contents are still returned
-    assert list(scratch_root.iterdir()) == []
-
-
-def test_runner_keeps_npz_in_output_directory(tmp_path, monkeypatch, scratch_root):
-    """With output_directory, the canonical NPZ is kept there and its path returned."""
-    out = tmp_path / "out"
-    result = _fallback_run(tmp_path, monkeypatch, output_directory=str(out))["results"][0]
-
-    assert Path(result["output_npz_path"]).is_file()
-    assert Path(result["output_npz_path"]).parent == out / "canonical_npz"
-    assert list(scratch_root.iterdir()) == []
-
-
-def test_runner_keeps_intermediate_files_in_output_directory(tmp_path, monkeypatch, scratch_root):
-    """keep_intermediate keeps the per-structure working files under output_directory, not /tmp."""
-    out = tmp_path / "out"
-    _fallback_run(tmp_path, monkeypatch, output_directory=str(out), keep_intermediate=True)
-
-    assert (out / "intermediate" / "complex" / "pdb" / "complex.pdb").is_file()
-    assert list(scratch_root.iterdir()) == []
-
-
-def test_runner_rejects_keep_intermediate_without_output_directory(tmp_path, monkeypatch, scratch_root):
-    """There is nowhere to keep intermediate files without output_directory."""
-    with pytest.raises(ValueError, match="keep_intermediate needs output_directory"):
-        _fallback_run(tmp_path, monkeypatch, keep_intermediate=True)
-    assert list(scratch_root.iterdir()) == []
-
-
-def test_config_rejects_keep_intermediate_without_output_directory():
-    """The config catches the combination before any environment is built."""
-    with pytest.raises(ValidationError, match="keep_intermediate=True needs output_directory"):
-        DeepPBSSpecificityConfig(keep_intermediate=True)
-
-
 # ── Integration (real DeepPBS env; skipped by default) ────────────────────────
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 @pytest.mark.slow
 @pytest.mark.uses_gpu
 def test_deeppbs_specificity_runs_on_structure():
@@ -361,8 +299,7 @@ def test_deeppbs_specificity_runs_on_structure():
     result = output.results[0]
     # PPM is L x 4 in ACGT order; rows normalized.
     assert all(len(row) == 4 for row in result.predicted_ppm)
-    # Without output_directory nothing is kept on disk
-    assert result.output_npz_path is None
+    assert Path(result.output_npz_path).exists()
 
 
 # ── Benchmark ─────────────────────────────────────────────────────────────────

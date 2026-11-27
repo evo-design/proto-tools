@@ -829,8 +829,8 @@ def run_freebindcraft_design(
     """Run the PyRosetta-free FreeBindCraft binder-design pipeline against a target.
 
     Args:
-        inputs (FreeBindCraftInput): Target structure and binder specification.
-        config (FreeBindCraftConfig): Advanced settings and ``filter_overrides``.
+        inputs (FreeBindCraftInput): Target + binder spec.
+        config (FreeBindCraftConfig): Advanced settings + ``filter_overrides``.
         instance (Any): Optional ``ToolInstance`` for persistent execution.
 
     Returns:
@@ -838,7 +838,7 @@ def run_freebindcraft_design(
     """
     logger.debug("Dispatching FreeBindCraft design pipeline (target_chain=%s)", inputs.target_chain)
 
-    # Write the target structure to a temporary file for the standalone worker.
+    # Materialize the target Structure to a tempfile for the standalone to read.
     with inputs.target_pdb.temp_file() as target_pdb_path:
         payload: dict[str, Any] = {
             "operation": "design",
@@ -862,7 +862,6 @@ def run_freebindcraft_design(
 
         result = ToolInstance.dispatch("freebindcraft", payload, instance=instance, config=config)
 
-    # Attach the returned confidence metrics to each accepted complex.
     designs: list[FreeBindCraftDesign] = []
     for raw in result["designs"]:
         metrics = FreeBindCraftMetrics(**raw["metrics"])

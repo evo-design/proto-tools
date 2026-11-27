@@ -1,7 +1,5 @@
 """Tests for BLAST tools."""
 
-import io
-import json
 import warnings
 from pathlib import Path
 
@@ -144,7 +142,7 @@ def test_input_fasta_path(tmp_path):
 
 
 def test_input_rejects_invalid_chars():
-    with pytest.raises(ValidationError, match="neither a valid sequence nor a path"):
+    with pytest.raises(ValidationError, match="unexpected characters"):
         BlastSearchInput(query="ATGCGT123!@#")
 
 
@@ -154,7 +152,7 @@ def test_input_rejects_empty():
 
 
 def test_input_rejects_nonexistent_path():
-    with pytest.raises(ValidationError, match="no such file exists"):
+    with pytest.raises(ValidationError, match="unexpected characters"):
         BlastSearchInput(query="/nonexistent/file.fasta")
 
 
@@ -224,9 +222,6 @@ def test_results_to_hits_field_values():
     assert hit.send == 110
     assert hit.evalue == pytest.approx(1e-5)
     assert hit.bitscore == pytest.approx(42.0)
-    assert hit.qseq == "ATGC--GTAA"
-    assert hit.sseq == "ATGCAAGTAA"
-    assert hit.btop is None
 
 
 def test_results_to_hits_multiple_gap_opens():
@@ -348,108 +343,12 @@ def test_output_export_invalid_format(tmp_path):
         output._export_output(tmp_path / "results", "xlsx")
 
 
-def test_csv_export_preserves_standard_twelve_column_contract(tmp_path):
-    """Additive alignment details do not change the established CSV schema."""
-    output = BlastSearchOutput(
-        hits=[
-            BlastHit(
-                qseqid="q",
-                sseqid="s",
-                pident=75.0,
-                length=4,
-                mismatch=1,
-                gapopen=0,
-                qstart=1,
-                qend=4,
-                sstart=1,
-                send=4,
-                evalue=0.01,
-                bitscore=8.0,
-                qseq="ACGT",
-                sseq="ACCT",
-                btop="2GC1",
-            )
-        ]
-    )
-
-    output._export_output(tmp_path / "results", "csv")
-
-    assert list(pd.read_csv(tmp_path / "results.csv").columns) == [
-        "qseqid",
-        "sseqid",
-        "pident",
-        "length",
-        "mismatch",
-        "gapopen",
-        "qstart",
-        "qend",
-        "sstart",
-        "send",
-        "evalue",
-        "bitscore",
-    ]
-
-
-def test_json_export_retains_alignment_details(tmp_path):
-    """The full-fidelity JSON export includes additive aligned strings and BTOP."""
-    hit = BlastHit(
-        qseqid="q",
-        sseqid="s",
-        pident=75.0,
-        length=4,
-        mismatch=1,
-        gapopen=0,
-        qstart=1,
-        qend=4,
-        sstart=1,
-        send=4,
-        evalue=0.01,
-        bitscore=8.0,
-        qseq="ACGT",
-        sseq="ACCT",
-        btop="2GC1",
-    )
-    BlastSearchOutput(hits=[hit])._export_output(tmp_path / "results", "json")
-
-    exported = json.loads((tmp_path / "results.json").read_text())
-    assert exported[0]["qseq"] == "ACGT"
-    assert exported[0]["sseq"] == "ACCT"
-    assert exported[0]["btop"] == "2GC1"
-
-
-def test_golden_online_xml_parses_alignment_detail():
-    """A representative NCBI XML response retains standard and aligned fields."""
-    from Bio.Blast import NCBIXML
-
-    fixture = Path(__file__).parent.parent / "dummy_data" / "blast_single_hit.xml"
-    records = list(NCBIXML.parse(io.StringIO(fixture.read_text())))
-
-    hit = _blast_results_to_hits(records)[0]
-    assert hit.model_dump() == {
-        "qseqid": "query",
-        "sseqid": "S1",
-        "pident": 75.0,
-        "length": 4,
-        "mismatch": 1,
-        "gapopen": 0,
-        "qstart": 1,
-        "qend": 4,
-        "sstart": 1,
-        "send": 4,
-        "evalue": 0.01,
-        "bitscore": 8.0,
-        "qseq": "ACGT",
-        "sseq": "ACCT",
-        "btop": None,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Integration tests
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_local_blastn_exact_match(nucl_blast_db):
     """Exact subsequence from the database → 100% identity hit."""
     query = "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTTATGCGTAAACCCGGGTTTTTTAAACCC"
@@ -469,7 +368,7 @@ def test_local_blastn_exact_match(nucl_blast_db):
     assert result.metadata["program"] == "blastn"
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_local_blastn_no_hits(nucl_blast_db):
     """Unrelated sequence with strict evalue → 0 hits."""
     result = run_blast_search(
@@ -485,7 +384,7 @@ def test_local_blastn_no_hits(nucl_blast_db):
     assert result.num_hits == 0
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_local_blastn_fasta_file_query(nucl_blast_db, tmp_path):
     """Query from a FASTA file instead of raw sequence."""
     fasta = tmp_path / "query.fasta"
@@ -502,21 +401,7 @@ def test_local_blastn_fasta_file_query(nucl_blast_db, tmp_path):
     assert result.num_hits >= 1
 
 
-@pytest.mark.uses_env
-def test_local_blastn_reports_alignment_traceback(nucl_blast_db):
-    """Local hits carry the aligned query/subject and BTOP traceback."""
-    query = "ATGCGTAAACCCGGGTTTTTTAAACCCGGGTTTATGCGTAAACCCGGGTTTTTTAAACCC"
-    result = run_blast_search(
-        BlastSearchInput(query=query),
-        BlastSearchConfig(search_mode="local", program="blastn", local_db=nucl_blast_db, task="blastn"),
-    )
-    hit = result.hits[0]
-    assert hit.qseq is not None
-    assert hit.sseq is not None
-    assert hit.btop is not None
-
-
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_local_blastp_exact_match(prot_blast_db):
     """Exact protein subsequence → 100% identity hit."""
     query = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH"
@@ -532,7 +417,7 @@ def test_local_blastp_exact_match(prot_blast_db):
     assert result.hits[0].pident == pytest.approx(100.0)
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_local_blastp_no_hits(prot_blast_db):
     """Unrelated protein sequence with strict evalue → 0 hits."""
     result = run_blast_search(
@@ -547,32 +432,19 @@ def test_local_blastp_no_hits(prot_blast_db):
     assert result.num_hits == 0
 
 
-_ONLINE_BLAST_TIMEOUT = 900
-
-
-@pytest.mark.network
-@pytest.mark.uses_env
-@pytest.mark.slow
+@pytest.mark.integration
 @pytest.mark.skip_ci
 def test_online_blastp():
-    """Search a known hemoglobin fragment against swissprot → expect hits.
-
-    NCBI's public queue sometimes holds a search for over an hour, which says nothing about this
-    client, so the test waits at most ``_ONLINE_BLAST_TIMEOUT`` and skips when the queue is slower.
-    """
-    try:
-        result = run_blast_search(
-            BlastSearchInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"),
-            BlastSearchConfig(
-                search_mode="online",
-                program="blastp",
-                database="swissprot",
-                hitlist_size=5,
-                timeout=_ONLINE_BLAST_TIMEOUT,
-            ),
-        )
-    except TimeoutError as exc:
-        pytest.skip(f"NCBI BLAST queue did not finish within {_ONLINE_BLAST_TIMEOUT}s: {exc}")
+    """Search a known hemoglobin fragment against swissprot → expect hits."""
+    result = run_blast_search(
+        BlastSearchInput(query="MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTT"),
+        BlastSearchConfig(
+            search_mode="online",
+            program="blastp",
+            database="swissprot",
+            hitlist_size=5,
+        ),
+    )
     assert isinstance(result, BlastSearchOutput)
     assert result.success, f"BLAST search failed: {result.errors}"
     assert result.num_hits >= 1
@@ -583,7 +455,7 @@ def test_online_blastp():
     assert result.hits[0].pident > 80.0
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_full_pipeline_create_db_search_export(tmp_path):
     """Full pipeline: create database → search → export results."""
     # Create database

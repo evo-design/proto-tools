@@ -4,8 +4,7 @@ Tests for out-of-tree toolkits: tools defined by a downstream package, outside `
 
 Each test writes a throwaway package to ``tmp_path`` (``<pkg>/tools/testing/<toolkit>/``) whose tool reuses the
 ``mock_cpu_tool`` models and its stdlib-only ``standalone/``, then imports it. End-to-end tests seed a ready env
-(``bin/python`` linked to this interpreter, a matching ``STATUS.txt``, and a weights record), so no environment
-is ever built.
+(``bin/python`` linked to this interpreter plus a matching ``STATUS.txt``), so no environment is ever built.
 """
 
 import hashlib
@@ -23,7 +22,6 @@ from proto_tools.mcp.tools import runs_in_process
 from proto_tools.tools.testing.mock_cpu_tool.mock_cpu_tool import MockCPUToolInput
 from proto_tools.tools.tool_registry import TOOLS_DIR, ToolRegistry
 from proto_tools.utils import ToolInstance
-from proto_tools.utils.weights_manifest import write_manifest
 
 _MOCK_STANDALONE = Path(mock_cpu_tool.__file__).parent / "standalone"
 
@@ -134,7 +132,6 @@ def _seed_env(toolkit: str) -> ToolInstance:
     (instance.env_path / "bin").mkdir(parents=True)
     (instance.env_path / "bin" / "python").symlink_to(sys.executable)
     (instance.env_path / "STATUS.txt").write_text(f"SUCCESS\nSetup hash: {instance._setup_hash()}\n")
-    write_manifest(instance.env_path, toolkit)
     return instance
 
 

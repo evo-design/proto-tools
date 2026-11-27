@@ -12,8 +12,9 @@ from proto_tools.utils import calculate_gc_content
 class ORF(BaseModel):
     """Base representation of a predicted Open Reading Frame.
 
-    Orfipy and Prodigal use this model to store sequence data, coordinates, and
-    tool-specific metrics.
+    A Pydantic model providing a standardized ORF representation used by
+    ORF prediction tools (e.g., Orfipy, Prodigal). Stores sequence data,
+    coordinates, and tool-specific metrics.
 
     Attributes:
         parent_id (str): Identifier of the parent/input sequence (e.g., "seq_0").
@@ -30,7 +31,7 @@ class ORF(BaseModel):
 
     Note:
         All ORF coordinates use 1-indexed, inclusive intervals (biology convention).
-        Extract the region in Python with ``sequence[nucleotide_start-1:nucleotide_end]``.
+        To extract using Python slicing: sequence[nucleotide_start-1:nucleotide_end]
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -69,7 +70,7 @@ class ORF(BaseModel):
 
     @property
     def id(self) -> str:
-        """Combine parent_id and orf_id into an identifier such as 'seq_0_gene_1'."""
+        """Combined identifier: parent_id + orf_id (e.g., 'seq_0_gene_1')."""
         return f"{self.parent_id}_{self.orf_id}"
 
     @property
@@ -112,7 +113,7 @@ class ORF(BaseModel):
         data = self.model_dump()
         data["id"] = self.id
         data["gc_content"] = self.gc_content
-        # Put each metric at the top level so it becomes a separate export column.
+        # Promote metrics to top-level keys for DataFrame ease
         metrics = data.pop("metrics", {})
         for k, v in metrics.items():
             if k not in data:

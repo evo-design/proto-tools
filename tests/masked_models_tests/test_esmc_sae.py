@@ -291,8 +291,7 @@ def test_describe_sae_features_rejects_out_of_codebook_indices():
         describe_sae_features([16384])
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_describe_sae_features_returns_labels_and_statistics():
     """Descriptions carry a label plus the statistics needed to normalize activations."""
     described = describe_sae_features([3995, 1251])

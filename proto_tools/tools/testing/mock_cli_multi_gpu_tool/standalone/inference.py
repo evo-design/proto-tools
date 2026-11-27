@@ -94,7 +94,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def to_device(device: str) -> dict[str, Any]:
-    """Keep the device unchanged for a CLI tool that unloads after each call."""
+    """Passthrough for CLI tool; automatically unloads after each call."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 

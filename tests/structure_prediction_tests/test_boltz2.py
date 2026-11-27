@@ -25,14 +25,10 @@ from proto_tools.tools.structure_prediction import (
     run_boltz2_affinity,
 )
 from proto_tools.tools.structure_prediction.boltz2.boltz2 import run_boltz2_on_complex
-from proto_tools.tools.structure_prediction.boltz2.boltz2_affinity import run_boltz2_affinity_on_complex
 from proto_tools.tools.structure_prediction.boltz2.helpers import build_chain_msa_paths, complex_to_yaml
-from tests._structure_fixtures import synthetic_cif
-from tests.conftest import benchmark_twice, make_persistent_fixture
+from tests.conftest import benchmark_twice
 from tests.structure_prediction_tests._fasta_helpers import load_benchmark_complex
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
-
-_persistent_tool = make_persistent_fixture("boltz2")
 
 # Cro repressor from bacteriophage lambda. Short, well-folded test protein.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
@@ -113,10 +109,9 @@ def test_boltz2_writes_one_msa_per_unique_sequence(seqs, n_files):
 
 
 def test_build_chain_msa_paths_appends_deep_unpaired_with_key_minus_one(tmp_path):
-    """Paired rows keep row-index keys; the query and deep unpaired rows get key=-1.
+    """Paired rows keep row-index keys; deep unpaired rows append with key=-1 (depth, no pairing).
 
-    Boltz excludes ``key == -1`` rows from taxonomy pairing but keeps them as MSA depth; it always
-    places the query first, so a query key would only add a duplicate query row.
+    Boltz excludes ``key == -1`` rows from taxonomy pairing but keeps them as MSA depth.
     """
     import csv as _csv
 
@@ -137,41 +132,15 @@ def test_build_chain_msa_paths_appends_deep_unpaired_with_key_minus_one(tmp_path
     }
     complex_msas = ComplexMSAs(per_chain=paired, paired=True, unpaired_per_chain=unpaired)
 
-    paths, _sent = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
+    paths = build_chain_msa_paths(cx, complex_msas, str(tmp_path))
 
     rows_a = list(_csv.DictReader(Path(paths["A"]).read_text().splitlines()))
-    assert [r["key"] for r in rows_a] == ["-1", "1", "2", "-1", "-1"]  # query, 2 paired, 2 new unpaired
+    assert [r["key"] for r in rows_a] == ["0", "1", "2", "-1", "-1"]  # 2 paired + 2 new unpaired
     seqs_a = [r["sequence"] for r in rows_a]
     assert "MKTAYIAKQW" in seqs_a and "MKTAYIAKQY" in seqs_a  # new depth present, overlap deduped
 
     rows_b = list(_csv.DictReader(Path(paths["B"]).read_text().splitlines()))
-    assert [r["key"] for r in rows_b] == ["-1", "1", "2", "-1"]
-
-
-def test_build_chain_msa_paths_never_pairs_an_unpaired_bundle(tmp_path):
-    """Unpaired heterocomplex rows get key=-1: row-index keys would make boltz pair unrelated rows."""
-    import csv as _csv
-
-    query_a, query_b = "MKTAYIAKQR", "GSHMEELLSK"
-    cx = Complex(
-        chains=[
-            Chain(id="A", sequence=query_a, entity_type="protein"),
-            Chain(id="B", sequence=query_b, entity_type="protein"),
-        ]
-    )
-    msas = ComplexMSAs(
-        per_chain={
-            0: MSA(aligned_sequences=[query_a, "MKTAYIAKQA", "MKTAYIAKQE"]),
-            1: MSA(aligned_sequences=[query_b, "GSHMEELLSA"]),
-        },
-        paired=False,
-    )
-
-    paths, _sent = build_chain_msa_paths(cx, msas, str(tmp_path))
-
-    for chain_id, n_rows in (("A", 3), ("B", 2)):
-        rows = list(_csv.DictReader(Path(paths[chain_id]).read_text().splitlines()))
-        assert [r["key"] for r in rows] == ["-1"] * n_rows
+    assert [r["key"] for r in rows_b] == ["0", "1", "2", "-1"]
 
 
 # ── Affinity: YAML emission & validator ─────────────────────────────────────
@@ -277,73 +246,6 @@ def test_affinity_validator_rejects_invalid_input(kwargs, match):
     """The affinity validator rejects each upstream-enforced constraint with a clear error."""
     with pytest.raises(ValueError, match=match):
         Boltz2AffinityInput(**kwargs)
-
-
-def test_boltz2_prediction_reports_msa_subsampling(monkeypatch):
-    """Prediction exposes requested rows and the configured stochastic row cap."""
-    sequence = "MKTAYIAKQR"
-    complex_ = Complex(chains=[Chain(sequence=sequence, entity_type="protein")])
-    complex_msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[sequence, sequence, sequence])})
-
-    def fake_dispatch(*args, **kwargs):
-        return {
-            "structure_cif_output": synthetic_cif(["A"]),
-            "metrics": {
-                "confidence_score": 0.8,
-                "ptm": 0.7,
-                "iptm": 0.0,
-                "chains_ptm": [0.7],
-                "pair_chains_iptm": [[0.0]],
-                "avg_pae": 1.0,
-                "pae": None,
-            },
-        }
-
-    monkeypatch.setattr("proto_tools.tools.structure_prediction.boltz2.boltz2.ToolInstance.dispatch", fake_dispatch)
-    structure = run_boltz2_on_complex(
-        Boltz2Config(use_msa=True, max_msa_seqs=64, subsample_msa=True),
-        complex_,
-        complex_msas=complex_msas,
-    )
-
-    report = structure.msa_conditioning
-    assert report.chains[0].status == "consumed"
-    assert report.chains[0].rows == 3
-    assert report.subsampling.mode == "stochastic"
-    assert report.subsampling.max_rows == 64
-
-
-def test_boltz2_affinity_reports_msa_conditioning(monkeypatch):
-    """Affinity attaches the same MSA conditioning report as structure prediction."""
-    sequence = "MKTAYIAKQR"
-    complex_ = Complex(chains=[Chain(sequence=sequence, entity_type="protein"), Fragment(ccd_code="ATP")])
-    complex_msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[sequence, sequence])})
-
-    def fake_dispatch(*args, **kwargs):
-        return {
-            "structure_cif_output": synthetic_cif(["A"]),
-            "affinity_metrics": {
-                "affinity_pred_value": -1.2,
-                "affinity_probability_binary": 0.75,
-            },
-        }
-
-    monkeypatch.setattr(
-        "proto_tools.tools.structure_prediction.boltz2.boltz2_affinity.ToolInstance.dispatch",
-        fake_dispatch,
-    )
-    structure = run_boltz2_affinity_on_complex(
-        Boltz2AffinityConfig(use_msa=True, max_msa_seqs=32, subsample_msa=False),
-        complex_,
-        binder_chain_id="B",
-        complex_msas=complex_msas,
-    )
-
-    report = structure.msa_conditioning
-    assert report.coverage == "full"
-    assert report.chains[0].status == "consumed"
-    assert report.subsampling.mode == "deterministic"
-    assert report.subsampling.max_rows == 32
 
 
 # ── PAE matrix surfacing ────────────────────────────────────────────────────
@@ -523,105 +425,3 @@ def test_boltz2_reload_on_change_restarts_worker_only_for_load_fields(caplog):
         with caplog.at_level(logging.INFO, logger="proto_tools.utils.tool_instance"):
             assert run_boltz2(inputs, Boltz2Config(**base, step_scale=1.0, max_msa_seqs=64)).success
         assert "restarting worker" not in caplog.text.lower()
-
-
-@pytest.mark.uses_env
-def test_boltz2_reported_msa_caps_match_boltz():
-    """Boltz accepts the pinned num_subsampled_msa, and its featurizer caps rows where we report."""
-    from proto_tools.tools.structure_prediction.boltz2.helpers import BOLTZ2_FEATURIZER_MAX_ROWS
-    from proto_tools.utils import run_in_env
-
-    code = (
-        "import inspect\n"
-        "from boltz.data.feature.featurizerv2 import construct_paired_msa\n"
-        "from boltz.main import predict\n"
-        "print('num_subsampled_msa' in inspect.signature(predict.callback).parameters)\n"
-        "print(inspect.signature(construct_paired_msa).parameters['max_total'].default)\n"
-    )
-    accepts_pin, max_total = run_in_env("boltz2", code=code, timeout=1800).strip().splitlines()[-2:]
-    assert accepts_pin == "True"
-    assert int(max_total) == BOLTZ2_FEATURIZER_MAX_ROWS
-
-
-# ── Purged CCD molecules ─────────────────────────────────────────────────────
-
-
-@pytest.fixture
-def boltz_cache(tmp_path: Path, monkeypatch):
-    """A boltz cache plus a stand-in ``download_boltz2`` that, like boltz's, extracts only when ``mols/`` is absent."""
-    import io
-    import sys
-    import tarfile
-    import types
-
-    source = io.BytesIO()
-    with tarfile.open(fileobj=source, mode="w") as tar:
-        for name in ("ALA.pkl", "GLY.pkl"):
-            info = tarfile.TarInfo(f"mols/{name}")
-            info.size = 1
-            tar.addfile(info, io.BytesIO(b"m"))
-    cache = tmp_path / "boltz2"
-    cache.mkdir()
-    downloads: list[str] = []
-
-    def download_boltz2(cache: Path) -> None:
-        if not (cache / "mols.tar").exists():
-            downloads.append("mols.tar")
-            (cache / "mols.tar").write_bytes(source.getvalue())
-        if not (cache / "mols").exists():
-            with tarfile.open(cache / "mols.tar") as tar:
-                tar.extractall(cache)
-
-    monkeypatch.setitem(sys.modules, "boltz.main", types.SimpleNamespace(download_boltz2=download_boltz2))
-    return cache, downloads
-
-
-def test_boltz2_purged_ccd_molecules_are_extracted_again(boltz_cache):
-    """Boltz trusts an existing mols/ folder, so the worker drops one that lost files."""
-    from proto_tools.tools.structure_prediction.boltz2.standalone.inference import _ensure_boltz_data
-
-    cache, _ = boltz_cache
-    _ensure_boltz_data(cache)
-    (cache / "mols" / "GLY.pkl").unlink()
-
-    _ensure_boltz_data(cache)
-
-    assert sorted(p.name for p in (cache / "mols").iterdir() if not p.name.startswith(".")) == ["ALA.pkl", "GLY.pkl"]
-
-
-def test_boltz2_complete_ccd_molecules_are_kept(boltz_cache):
-    from proto_tools.tools.structure_prediction.boltz2.standalone.inference import _ensure_boltz_data
-
-    cache, downloads = boltz_cache
-    _ensure_boltz_data(cache)
-    (cache / "mols" / ".kept-marker").write_text("x")
-
-    _ensure_boltz_data(cache)
-
-    assert (cache / "mols" / ".kept-marker").exists()
-    assert downloads == ["mols.tar"]
-
-
-def test_boltz2_purged_ccd_without_its_tar_is_downloaded_again(boltz_cache):
-    """With mols.tar purged too there is nothing to check mols/ against, so both come back."""
-    from proto_tools.tools.structure_prediction.boltz2.standalone.inference import _ensure_boltz_data
-
-    cache, downloads = boltz_cache
-    (cache / "mols").mkdir()
-
-    _ensure_boltz_data(cache)
-
-    assert sorted(p.name for p in (cache / "mols").iterdir() if not p.name.startswith(".")) == ["ALA.pkl", "GLY.pkl"]
-    assert downloads == ["mols.tar"]
-
-
-def test_boltz2_truncated_ccd_tar_is_downloaded_again(boltz_cache):
-    from proto_tools.tools.structure_prediction.boltz2.standalone.inference import _ensure_boltz_data
-
-    cache, downloads = boltz_cache
-    (cache / "mols.tar").write_bytes(b"truncated")
-
-    _ensure_boltz_data(cache)
-
-    assert sorted(p.name for p in (cache / "mols").iterdir() if not p.name.startswith(".")) == ["ALA.pkl", "GLY.pkl"]
-    assert downloads == ["mols.tar"]

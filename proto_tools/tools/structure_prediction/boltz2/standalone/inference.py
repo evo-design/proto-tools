@@ -2,18 +2,12 @@
 
 import json
 import os
-import shutil
 import sys
-import tarfile
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import (
-    get_logger,
-    is_checkpoint_corruption_error,
-    report_msa_rows_loaded,
-    retry_on_checkpoint_corruption,
-)
+import torch
+from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 
@@ -28,26 +22,21 @@ def _prepare_output_values(value: Any) -> Any:
 _checkpoint_cache_installed = False
 # Resident Boltz2 models keyed by checkpoint path; lives at module scope so to_device() can relocate them.
 _checkpoint_cache: dict[str, Any] = {}
-# The GPU index the last prediction ran on, for get_memory_stats.
-_gpu_index = 0
 
 
 def _install_checkpoint_cache() -> None:
     """Memoize ``Boltz2.load_from_checkpoint`` so a resident worker loads each checkpoint once.
 
     ``boltz.main.predict`` reloads the checkpoint on every call; this memoization collapses those
-    repeated loads to one per checkpoint. Config fields used during loading (sampling/recycling/
+    repeated loads to one per checkpoint. Config fields baked into the load (sampling/recycling/
     diffusion steps, step_scale, subsample_msa, and the affinity settings) are marked
     ``reload_on_change=True``, so a config change restarts the worker and load args stay fixed for a
     worker's lifetime. The only distinct checkpoints are the structure (``boltz2_conf``) and affinity
     (``boltz2_aff``) files, so keying by checkpoint path bounds the cache to two entries.
 
-    Every field passed to ``Boltz2.load_from_checkpoint`` must be marked
-    ``reload_on_change``. Otherwise, a cached model could keep stale loading
-    arguments and return incorrect results without raising an error.
-
-    A checkpoint that fails to load as a corrupted archive is deleted before the error propagates, so
-    boltz re-downloads it when ``_run_boltz_predict`` retries.
+    The path-only key does not self-correct: correctness relies on the ``reload_on_change`` set
+    covering every field boltz threads into ``Boltz2.load_from_checkpoint``. An unmarked load-affecting
+    field would let a same-path entry serve a model loaded with stale args, wrong output, no error.
     """
     global _checkpoint_cache_installed
     if _checkpoint_cache_installed:
@@ -60,88 +49,15 @@ def _install_checkpoint_cache() -> None:
         key = str(checkpoint)
         model = _checkpoint_cache.get(key)
         if model is None:
-            # boltz loads the structure checkpoint before folding and the affinity one before scoring.
-            is_affinity = "aff" in Path(checkpoint).stem
-            logger.update_status(f"Loading Boltz-2 {'affinity' if is_affinity else 'structure'} weights")
-            try:
-                model = original_load(checkpoint, **kwargs)
-            except Exception as exc:
-                if is_checkpoint_corruption_error(exc):
-                    logger.warning("boltz2: removing corrupted checkpoint %s", checkpoint)
-                    Path(checkpoint).unlink(missing_ok=True)
-                raise
+            logger.debug("boltz2: checkpoint cache miss, loading %s", checkpoint)
+            model = original_load(checkpoint, **kwargs)
             _checkpoint_cache[key] = model
-            # Replace the loading status; the caller's progress bar reports each complex after this.
-            logger.update_status("Predicting affinity" if is_affinity else "Folding structure")
         else:
             logger.debug("boltz2: reusing resident checkpoint %s", checkpoint)
         return model
 
     Boltz2.load_from_checkpoint = cached_load_from_checkpoint
     _checkpoint_cache_installed = True
-
-
-def _install_msa_row_logging() -> None:
-    """Wrap boltz's ``construct_paired_msa`` to log each chain's featurized and paired MSA rows.
-
-    ``process_msa_features`` looks the function up on its module, so patching the attribute takes
-    effect, including in forked DataLoader workers. Rows are counted unique because boltz appends
-    paired rows again as unpaired ones.
-    """
-    from boltz.data import const
-    from boltz.data.feature import featurizerv2
-
-    construct = featurizerv2.construct_paired_msa
-    if getattr(construct, "_logs_msa_rows", False):
-        return
-
-    def construct_logging_msa_rows(data: Any, random: Any, max_seqs: int, *args: Any, **kwargs: Any) -> Any:
-        msa, deletion, paired = construct(data, random, max_seqs, *args, **kwargs)
-        if max_seqs > 1:  # the affinity pass rebuilds a query-only MSA
-            gap = const.token_ids["-"]
-            asym = data.tokens["asym_id"]
-            loaded, sent, n_paired = {}, {}, {}
-            for chain_index in sorted({int(a) for a in asym}):
-                chain = data.structure.chains[chain_index]
-                if chain["mol_type"] != const.chain_type_ids["PROTEIN"]:
-                    continue
-                name, columns = str(chain["name"]), asym == chain_index
-                rows = msa[columns]
-                loaded[name] = int(rows[:, (rows != gap).any(dim=0)].unique(dim=1).shape[1])
-                sent[name] = len(data.msa[chain_index].sequences) if chain_index in data.msa else 0
-                n_paired[name] = max(int((paired[columns].amax(dim=0) > 0).sum()) - 1, 0)
-            report_msa_rows_loaded("boltz2", loaded, sent, n_paired)
-        return msa, deletion, paired
-
-    construct_logging_msa_rows._logs_msa_rows = True  # type: ignore[attr-defined]
-    featurizerv2.construct_paired_msa = construct_logging_msa_rows
-
-
-def _ensure_boltz_data(cache: Path) -> None:
-    """Download boltz's checkpoints and CCD molecules, extracting the molecules again when any are gone.
-
-    Boltz downloads missing checkpoints or ``mols.tar``, but extracts the archive
-    only when ``mols/`` is absent. An emptied directory would therefore leave
-    ligand files missing on every run. ``ensure_complete`` records extracted
-    files and removes the directory if any disappear, allowing re-extraction.
-    Workers sharing a cache perform this check one at a time.
-    """
-    from boltz.main import download_boltz2
-    from standalone_helpers import ensure_complete
-
-    def extract(_mols: Path) -> None:
-        try:
-            download_boltz2(cache)
-        except (tarfile.ReadError, EOFError):
-            # An interrupted download left a truncated mols.tar: fetch it again
-            logger.warning("boltz2: %s is incomplete; downloading it again", cache / "mols.tar")
-            (cache / "mols.tar").unlink(missing_ok=True)
-            shutil.rmtree(cache / "mols", ignore_errors=True)
-            download_boltz2(cache)
-
-    ensure_complete(cache / "mols", extract)
-    # Checkpoints boltz checks file by file, so a purged one is simply downloaded again
-    download_boltz2(cache)
 
 
 class Boltz2Model:
@@ -173,7 +89,6 @@ class Boltz2Model:
         step_scale: float = 1.5,
         max_msa_seqs: int = 8192,
         subsample_msa: bool = False,
-        num_subsampled_msa: int = 1024,
         num_workers: int = 4,
         seed: int | None = None,
         verbose: bool = False,
@@ -191,7 +106,6 @@ class Boltz2Model:
             step_scale: Diffusion step size; lower = more sample diversity
             max_msa_seqs: Cap on MSA depth fed into the model
             subsample_msa: Stochastically subsample MSA each call
-            num_subsampled_msa: Rows kept per recycle when ``subsample_msa`` is on
             num_workers: Number of workers for prediction
             seed: Random seed forwarded to boltz. None leaves the boltz default
                 (unseeded) in place.
@@ -211,7 +125,6 @@ class Boltz2Model:
             step_scale=step_scale,
             max_msa_seqs=max_msa_seqs,
             subsample_msa=subsample_msa,
-            num_subsampled_msa=num_subsampled_msa,
             num_workers=num_workers,
             seed=seed,
             verbose=verbose,
@@ -229,7 +142,6 @@ class Boltz2Model:
         step_scale: float = 1.5,
         max_msa_seqs: int = 8192,
         subsample_msa: bool = False,
-        num_subsampled_msa: int = 1024,
         num_workers: int = 4,
         seed: int | None = None,
         verbose: bool = False,
@@ -253,7 +165,6 @@ class Boltz2Model:
             step_scale=step_scale,
             max_msa_seqs=max_msa_seqs,
             subsample_msa=subsample_msa,
-            num_subsampled_msa=num_subsampled_msa,
             num_workers=num_workers,
             seed=seed,
             verbose=verbose,
@@ -271,14 +182,13 @@ class Boltz2Model:
         self,
         input_yaml_path: str,
         output_dir: str,
-        device: str,
+        device: str,  # noqa: ARG002 -- worker already runs on its assigned GPU
         recycling_steps: int,
         sampling_steps: int,
         diffusion_samples: int,
         step_scale: float,
         max_msa_seqs: int,
         subsample_msa: bool,
-        num_subsampled_msa: int,
         num_workers: int,
         seed: int | None,
         verbose: bool,  # noqa: ARG002 -- boltz logs through its own logger
@@ -300,34 +210,19 @@ class Boltz2Model:
 
         _install_checkpoint_cache()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        _ensure_boltz_data(self.cache_dir)
 
-        import torch
-        from standalone_helpers import _parse_cuda_indices, set_current_cuda_device
-
-        global _gpu_index
-        # This worker sees every GPU, and Lightning reads ``devices=1`` as GPU 0. Hand it the leased
-        # GPU's index instead (a one-element list runs on that GPU alone); CPU calls run on CPU.
-        indices = _parse_cuda_indices(device) if torch.cuda.is_available() else None
-        if indices is None and device.startswith("cuda") and torch.cuda.is_available():
-            indices = [torch.cuda.current_device()]  # bare "cuda"
-        set_current_cuda_device(device)
-        accelerator, devices = ("gpu", indices[:1]) if indices else ("cpu", 1)
-        if indices:
-            _gpu_index = indices[0]
+        num_devices = 1 if torch.cuda.is_available() else 0
         kwargs: dict[str, Any] = {
             "data": input_yaml_path,
             "out_dir": output_dir,
             "cache": str(self.cache_dir),
-            "accelerator": accelerator,
-            "devices": devices,
+            "devices": num_devices,
             "recycling_steps": recycling_steps,
             "sampling_steps": sampling_steps,
             "diffusion_samples": diffusion_samples,
             "step_scale": step_scale,
             "max_msa_seqs": max_msa_seqs,
             "subsample_msa": subsample_msa,
-            "num_subsampled_msa": num_subsampled_msa,
             "num_workers": num_workers,
             "output_format": "mmcif",
             "seed": seed,
@@ -337,9 +232,8 @@ class Boltz2Model:
             kwargs["diffusion_samples_affinity"] = affinity["diffusion_samples_affinity"]
             kwargs["affinity_mw_correction"] = affinity["affinity_mw_correction"]
 
-        _install_msa_row_logging()
         try:
-            retry_on_checkpoint_corruption(lambda: predict_cmd.callback(**kwargs), tool_name="boltz2", max_attempts=2)
+            predict_cmd.callback(**kwargs)
         except RuntimeError as e:
             if is_cuda_oom(str(e)):
                 raise_oom("boltz2", hint="Reduce the complex size or use a GPU with more memory.")
@@ -432,7 +326,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             step_scale=input_dict["step_scale"],
             max_msa_seqs=input_dict["max_msa_seqs"],
             subsample_msa=input_dict["subsample_msa"],
-            num_subsampled_msa=input_dict["num_subsampled_msa"],
             num_workers=input_dict["num_workers"],
             seed=input_dict["seed"],
             verbose=input_dict["verbose"],
@@ -449,7 +342,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             step_scale=input_dict["step_scale"],
             max_msa_seqs=input_dict["max_msa_seqs"],
             subsample_msa=input_dict["subsample_msa"],
-            num_subsampled_msa=input_dict["num_subsampled_msa"],
             num_workers=input_dict["num_workers"],
             seed=input_dict["seed"],
             verbose=input_dict["verbose"],
@@ -480,7 +372,7 @@ def get_memory_stats() -> dict[str, Any]:
     """Report GPU memory usage (called by DeviceManager for monitoring)."""
     from standalone_helpers import get_pytorch_memory_stats
 
-    return get_pytorch_memory_stats(device=_gpu_index)  # type: ignore[no-any-return]
+    return get_pytorch_memory_stats(device=0)  # type: ignore[no-any-return]
 
 
 if __name__ == "__main__":

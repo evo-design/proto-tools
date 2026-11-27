@@ -6,17 +6,17 @@ keep predicted-structure chain IDs aligned with the input ``Complex``.
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 from pydantic import ValidationError
 
 from proto_tools.entities.complex import Chain
 from proto_tools.entities.ligands import Fragment
-from proto_tools.entities.structures import Structure
 from proto_tools.tools.structure_prediction.shared_data_models import (
-    align_with_input,
+    normalize_output_chain_ids,
     resolve_chain_ids,
 )
-from tests._structure_fixtures import synthetic_cif
 
 _PROTEIN_A = "EELLKKLEELLKKLEELLKK"
 _PROTEIN_B = "KKLLEEKKLLEEKKLLEEKK"
@@ -93,14 +93,60 @@ def test_resolve_chain_ids_rejects_explicit_positional_collision():
         resolve_chain_ids(chains)
 
 
-# ── align_with_input ───────────────────────────────────────────────
+# ── normalize_output_chain_ids ───────────────────────────────────────────────
 
 
-def test_align_with_input_renames_predictor_chain_names_to_the_input_ids():
-    """A predictor's own chain names are mapped back to the IDs we sent, by position."""
-    chains = [Chain(id="H", sequence="G", entity_type="protein"), Chain(id="L", sequence="G", entity_type="protein")]
-    predicted = Structure(structure=synthetic_cif(["0", "1"]), structure_format="cif")
+def _mock_structure(observed_ids: list[str]) -> Mock:
+    structure = Mock()
+    structure.get_chain_ids.return_value = observed_ids
+    structure.with_renamed_chains.return_value = Mock(name="renamed")
+    return structure
 
-    aligned = align_with_input(predicted, chains)
 
-    assert aligned.get_chain_types() == {"H": "protein", "L": "protein"}
+def test_normalize_no_op_when_ids_already_match():
+    """When output IDs already equal the resolved input IDs, return the structure untouched."""
+    chains = [Chain(sequence=_PROTEIN_A, entity_type="protein")]  # -> "A"
+    structure = _mock_structure(["A"])
+
+    assert normalize_output_chain_ids(structure, chains) is structure
+    structure.with_renamed_chains.assert_not_called()
+
+
+def test_normalize_remaps_polymer_chains_positionally():
+    """Predictor-native names are remapped to the input IDs by order."""
+    chains = [
+        Chain(id="H", sequence=_PROTEIN_A, entity_type="protein"),
+        Chain(id="L", sequence=_PROTEIN_B, entity_type="protein"),
+    ]
+    structure = _mock_structure(["0", "1"])
+
+    result = normalize_output_chain_ids(structure, chains)
+
+    structure.with_renamed_chains.assert_called_once_with({"0": "H", "1": "L"})
+    assert result is structure.with_renamed_chains.return_value
+
+
+def test_normalize_excludes_ligand_chains():
+    """Ligand chains carry no polymer entry in get_chain_ids, so they're skipped."""
+    chains = [
+        Chain(id="A", sequence=_PROTEIN_A, entity_type="protein"),
+        Fragment(id="L", ccd_code="ATP"),
+        Chain(id="B", sequence=_PROTEIN_B, entity_type="protein"),
+    ]
+    structure = _mock_structure(["x", "y"])  # two polymer chains only
+
+    normalize_output_chain_ids(structure, chains)
+
+    structure.with_renamed_chains.assert_called_once_with({"x": "A", "y": "B"})
+
+
+def test_normalize_no_op_on_count_mismatch():
+    """A polymer-count mismatch leaves IDs unchanged rather than mis-mapping."""
+    chains = [
+        Chain(sequence=_PROTEIN_A, entity_type="protein"),
+        Chain(sequence=_PROTEIN_B, entity_type="protein"),
+    ]
+    structure = _mock_structure(["A"])  # one observed vs two expected ("A","B")
+
+    assert normalize_output_chain_ids(structure, chains) is structure
+    structure.with_renamed_chains.assert_not_called()

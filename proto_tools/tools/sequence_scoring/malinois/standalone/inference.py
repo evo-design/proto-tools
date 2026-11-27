@@ -1,58 +1,111 @@
 """Malinois standalone inference implementation for venv execution."""
 
 import contextlib
+import hashlib
 import json
-import logging
 import os
 import sys
 import tempfile
+import time
+import urllib.parse
+import urllib.request
+from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import malinois_scoring
 import torch
-from standalone_helpers import (
-    download_weights,
-    file_lock,
-    get_logger,
-    move_model_to_device,
-    require_weights_dir,
-    serialize_output,
-    set_torch_seed,
-)
-from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
-from standalone_helpers.vocabulary import DNA_NUCLEOTIDES
+import torch.nn.functional as F
+from standalone_helpers import get_logger, move_model_to_device, resolve_weights_dir, serialize_output, set_torch_seed
 
 logger = get_logger(__name__)
 
 CELL_TYPE_INDEX = {"K562": 0, "HepG2": 1, "SKNSH": 2}
-DNA_VOCAB = list(DNA_NUCLEOTIDES)
-# The published Malinois artifact (Gosai et al., 2024): one tarball holding the model checkpoint
-# and its metadata. Both hosts are upstream's own, recorded in links.yaml, and serve bytes matching
-# the one ARTIFACT_MD5; the bucket is tried first because Zenodo answers some networks with 403.
-ARTIFACT_URLS = (
-    "https://storage.googleapis.com/tewhey-public-data/CODA_resources/malinois_artifacts__20211113_021200__287348.tar.gz",
-    "https://zenodo.org/records/10698014/files/MODELS-malinois_artifacts__20211113_021200__287348.tar.gz?download=1",
-)
-ARTIFACT_FILENAME = "MODELS-malinois_artifacts__20211113_021200__287348.tar.gz"
-ARTIFACT_MD5 = "375142a714e7df73c463b46113a65210"
+DNA_VOCAB = ["A", "C", "G", "T"]
+DEFAULT_ARTIFACT_FILENAME = "MODELS-malinois_artifacts__20211113_021200__287348.tar.gz"
+DEFAULT_ARTIFACT_MD5 = "375142a714e7df73c463b46113a65210"
+LOCK_TIMEOUT_SECONDS = 600
 
 
-def _download_artifact(cache_dir: Path) -> Path:
-    target = cache_dir / ARTIFACT_FILENAME
-    if not target.is_file():
-        logger.update_status("Downloading Malinois weights")
-    last_error: Exception | None = None
-    for url in ARTIFACT_URLS:
+@contextlib.contextmanager
+def _file_lock(lock_path: Path) -> Iterator[None]:
+    """Small cross-process lock using O_EXCL so concurrent workers do not race downloads."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+    fd: int | None = None
+    while fd is None:
         try:
-            return Path(download_weights(url, target, md5=ARTIFACT_MD5))
-        # OSError covers no bytes (URLError, TimeoutError), RuntimeError the wrong bytes; either
-        # way this host cannot serve the artifact and the next one still can.
-        except (OSError, RuntimeError) as err:  # noqa: PERF203 -- fallback loop over two hosts
-            logger.warning("Malinois weights unavailable from %s (%s); trying the next source", url, err)
-            last_error = err
-    msg = f"could not download the Malinois artifact from any of {len(ARTIFACT_URLS)} sources"
-    raise RuntimeError(msg) from last_error
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError as err:  # noqa: PERF203 - lock acquisition is intentionally retry-based.
+            if time.monotonic() - started > LOCK_TIMEOUT_SECONDS:
+                raise TimeoutError(f"malinois: timed out waiting for lock {lock_path}") from err
+            time.sleep(1)
+    try:
+        os.write(fd, str(os.getpid()).encode())
+        yield
+    finally:
+        os.close(fd)
+        with contextlib.suppress(FileNotFoundError):
+            lock_path.unlink()
+
+
+def _md5(path: Path) -> str:
+    digest = hashlib.md5()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _weights_dir() -> Path:
+    resolved = resolve_weights_dir("malinois")
+    if resolved:
+        return Path(resolved)
+    fallback = Path(tempfile.gettempdir()) / "proto_malinois_weights"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
+def _filename_from_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(url)
+    name = Path(parsed.path).name
+    return name or DEFAULT_ARTIFACT_FILENAME
+
+
+def _download_artifact(url: str, expected_md5: str | None, cache_dir: Path) -> Path:
+    if not url:
+        raise FileNotFoundError("malinois: artifact_path is unavailable and artifact_url is empty")
+
+    dest = cache_dir / _filename_from_url(url)
+    if dest.is_file() and (not expected_md5 or _md5(dest) == expected_md5):
+        return dest
+
+    with _file_lock(cache_dir / ".malinois_artifact_download.lock"):
+        if dest.is_file() and (not expected_md5 or _md5(dest) == expected_md5):
+            return dest
+        tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
+        with contextlib.suppress(FileNotFoundError):
+            tmp.unlink()
+        logger.info("Downloading Malinois artifact from %s to %s", url, dest)
+        try:
+            request = urllib.request.Request(url)
+            if urllib.parse.urlparse(url).netloc.endswith("huggingface.co") and os.environ.get("HF_TOKEN"):
+                request.add_header("Authorization", f"Bearer {os.environ['HF_TOKEN']}")
+            with urllib.request.urlopen(request, timeout=120) as response, open(tmp, "wb") as handle:
+                while chunk := response.read(1024 * 1024):
+                    handle.write(chunk)
+            if expected_md5:
+                observed = _md5(tmp)
+                if observed != expected_md5:
+                    raise RuntimeError(
+                        f"malinois: artifact checksum mismatch for {url}; expected {expected_md5}, got {observed}"
+                    )
+            os.replace(tmp, dest)
+        except Exception:
+            with contextlib.suppress(FileNotFoundError):
+                tmp.unlink()
+            raise
+    return dest
 
 
 def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:
@@ -61,7 +114,7 @@ def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:
     if checkpoint.is_file():
         return extracted_dir
 
-    with file_lock(cache_dir / ".malinois_artifact_extract.lock", progress=cache_dir / ".malinois_extract_*"):
+    with _file_lock(cache_dir / ".malinois_artifact_extract.lock"):
         if checkpoint.is_file():
             return extracted_dir
         tmp_dir = cache_dir / f".malinois_extract_{os.getpid()}"
@@ -70,7 +123,6 @@ def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:
 
             shutil.rmtree(tmp_dir)
         tmp_dir.mkdir(parents=True, exist_ok=True)
-        logger.update_status("Extracting Malinois weights")
         logger.info("Extracting Malinois artifact %s to %s", artifact_path, extracted_dir)
         try:
             import shutil
@@ -94,14 +146,17 @@ def _extract_artifact(artifact_path: Path, cache_dir: Path) -> Path:
 def _resolve_artifact_paths(
     *,
     artifact_path: str,
+    artifact_url: str,
+    artifact_md5: str,
     malinois_dir: str,
 ) -> tuple[str, str]:
-    cache_dir = Path(require_weights_dir("malinois"))
+    cache_dir = _weights_dir()
     artifact_candidate = Path(artifact_path).expanduser() if artifact_path else None
     if artifact_candidate is not None and artifact_candidate.is_file():
         resolved_artifact = artifact_candidate
     else:
-        resolved_artifact = _download_artifact(cache_dir)
+        expected_md5 = artifact_md5 or DEFAULT_ARTIFACT_MD5
+        resolved_artifact = _download_artifact(artifact_url, expected_md5, cache_dir)
 
     metadata_candidate = Path(malinois_dir).expanduser() if malinois_dir else None
     if metadata_candidate is not None and (metadata_candidate / "artifacts" / "torch_checkpoint.pt").is_file():
@@ -126,6 +181,8 @@ class MalinoisModel:
         self,
         *,
         artifact_path: str,
+        artifact_url: str,
+        artifact_md5: str,
         malinois_dir: str,
         seq_length: int,
         device: str,
@@ -134,6 +191,8 @@ class MalinoisModel:
         """Load the Malinois model and MPRA flank builder."""
         artifact_path, malinois_dir = _resolve_artifact_paths(
             artifact_path=artifact_path,
+            artifact_url=artifact_url,
+            artifact_md5=artifact_md5,
             malinois_dir=malinois_dir,
         )
         model_key = (artifact_path, malinois_dir, seq_length)
@@ -149,7 +208,6 @@ class MalinoisModel:
         if not checkpoint.is_file():
             raise FileNotFoundError(f"malinois: metadata checkpoint does not exist: {checkpoint}")
 
-        logger.update_status("Loading Malinois weights")
         if verbose:
             logger.info("Loading Malinois model from %s", artifact_path)
 
@@ -176,7 +234,7 @@ class MalinoisModel:
             return
         if self.device == device:
             return
-        previous_device = self.device or "cpu"  # a fresh load is on CPU (load_malinois places nothing)
+        previous_device = self.device or "cpu"
         self.model = move_model_to_device(self.model, previous_device, device)
         self.flank_builder = move_model_to_device(self.flank_builder, previous_device, device)
         self.device = device
@@ -194,9 +252,6 @@ class MalinoisModel:
             raise ValueError("malinois: model is not loaded")
         self.to_device(device)
 
-        logger.update_status(
-            f"Scoring {len(sequences)} sequence{'s' if len(sequences) != 1 else ''}", level=logging.DEBUG
-        )
         seq_tensor = torch.stack([malinois_scoring.dna2tensor(sequence) for sequence in sequences], dim=0)
         dataset = torch.utils.data.TensorDataset(seq_tensor)
         loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size)
@@ -220,14 +275,14 @@ class MalinoisModel:
         self,
         *,
         logits_list: list[list[list[float]]],
-        temperature: float | None,
-        gradient_terms: list[dict[str, Any]],
+        temperature: float,
+        loss_terms: list[dict[str, Any]],
         soft: float,
         hard: float,
         compute_gradient: bool,
         device: str,
     ) -> dict[str, Any]:
-        """Report each requested cell type's raw activity and its gradient."""
+        """Compute differentiable Malinois loss and optional gradient."""
         if self.model is None or self.flank_builder is None:
             raise ValueError("malinois: model is not loaded")
         self.to_device(device)
@@ -237,42 +292,74 @@ class MalinoisModel:
             if logits.ndim != 3:
                 raise ValueError(f"malinois: logits must have rank 3 (B, L, 4), got rank {logits.ndim}")
 
-            relaxed = relaxed_sequence(logits, temperature=temperature, soft=soft, hard=hard)
+            relaxed = _relaxed_dna_probs(logits, temperature=temperature, soft=soft, hard=hard)
             insert = relaxed.transpose(1, 2)
             prepped = self.flank_builder(insert)
             predictions = self.model(prepped)
             predictions = (predictions + self.model(prepped.flip(dims=[1, 2]))) / 2.0
 
             batch_size = int(predictions.shape[0])
-
-            # One entry per distinct cell, in first-requested order, carrying raw activity.
-            cells: list[str] = []
-            for term in gradient_terms:
-                if term["cell_type"] not in cells:
-                    cells.append(term["cell_type"])
-
-            terms: list[dict[str, Any]] = []
-            for position, cell_type in enumerate(cells):
+            sample_losses = torch.zeros(batch_size, device=device, dtype=predictions.dtype)
+            term_metrics_by_sample: list[list[dict[str, Any]]] = [[] for _ in range(batch_size)]
+            raw_scores_by_sample: list[dict[str, float]] = [{} for _ in range(batch_size)]
+            for term in loss_terms:
+                cell_type = term["cell_type"]
+                direction = term["direction"]
+                weight = float(term.get("weight", 1.0))
+                center = float(term.get("sigmoid_center", 4.0))
+                scale = float(term.get("sigmoid_scale", 1.0))
                 raw_score = predictions[:, CELL_TYPE_INDEX[cell_type]]
-                entry: dict[str, Any] = {
-                    "cell_type": cell_type,
-                    "values": [float(value) for value in raw_score.detach().cpu().tolist()],
-                    "gradients": None,
-                }
+                scaled_score = (raw_score - center) / scale
+                sigmoid_value = torch.sigmoid(scaled_score)
+                if direction == "max":
+                    score = 1.0 - sigmoid_value
+                elif direction == "min":
+                    score = sigmoid_value
+                else:
+                    raise ValueError(f"malinois: invalid direction {direction!r}; expected 'max' or 'min'")
+                weighted_score = score * weight
+                sample_losses = sample_losses + weighted_score
 
-                if compute_gradient:
-                    # Sum independent samples to compute their gradients in one backward pass.
-                    (gradient,) = torch.autograd.grad(raw_score.sum(), logits, retain_graph=(position < len(cells) - 1))
-                    if gradient is None:
-                        raise RuntimeError(f"malinois: missing gradient for cell {cell_type!r} after backward")
-                    entry["gradients"] = gradient.detach().cpu().tolist()
-                    del gradient
+                raw_score_values = raw_score.detach().cpu().tolist()
+                scaled_score_values = scaled_score.detach().cpu().tolist()
+                sigmoid_values = sigmoid_value.detach().cpu().tolist()
+                score_values = score.detach().cpu().tolist()
+                weighted_score_values = weighted_score.detach().cpu().tolist()
+                for sample_idx in range(batch_size):
+                    raw_scores_by_sample[sample_idx][cell_type] = float(raw_score_values[sample_idx])
+                    term_metrics_by_sample[sample_idx].append(
+                        {
+                            "cell_type": cell_type,
+                            "direction": direction,
+                            "weight": weight,
+                            "raw_score": float(raw_score_values[sample_idx]),
+                            "scaled_score": float(scaled_score_values[sample_idx]),
+                            "sigmoid_value": float(sigmoid_values[sample_idx]),
+                            "score": float(score_values[sample_idx]),
+                            "weighted_score": float(weighted_score_values[sample_idx]),
+                            "sigmoid_center": center,
+                            "sigmoid_scale": scale,
+                        }
+                    )
 
-                terms.append(entry)
+            total_loss = sample_losses.sum()
+            sample_loss_values = [float(value) for value in sample_losses.detach().cpu().tolist()]
+
+            gradient_value: list[list[list[float]]] | None = None
+            if compute_gradient:
+                backward = cast(Callable[[], None], total_loss.backward)
+                backward()
+                if logits.grad is None:
+                    raise RuntimeError("malinois: missing logits gradient")
+                gradient_value = logits.grad.detach().cpu().tolist()
 
         return {
-            "terms": terms,
+            "gradient": gradient_value,
+            "loss": float(sum(sample_loss_values)),
             "metrics": {
+                "raw_scores": raw_scores_by_sample,
+                "loss_terms": term_metrics_by_sample,
+                "losses": sample_loss_values,
                 "batch_size": batch_size,
                 "temperature": temperature,
                 "soft": soft,
@@ -291,15 +378,15 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     set_torch_seed(input_dict.get("seed"))
     operation = input_dict["operation"]
 
-    # Gradient path: validate the requested cell types, load the model, and backpropagate
     if operation == "compute_gradient":
-        gradient_terms = input_dict["gradient_terms"]
-        unsupported = sorted({term["cell_type"] for term in gradient_terms} - set(CELL_TYPE_INDEX))
+        loss_terms = input_dict["loss_terms"]
+        unsupported = sorted({term["cell_type"] for term in loss_terms} - set(CELL_TYPE_INDEX))
         if unsupported:
             raise ValueError(f"malinois: unsupported cell_types: {unsupported}")
-        # Load the model, reusing it when the artifact and sequence length are unchanged
         _model.load(
             artifact_path=input_dict["artifact_path"],
+            artifact_url=input_dict.get("artifact_url", ""),
+            artifact_md5=input_dict.get("artifact_md5", DEFAULT_ARTIFACT_MD5),
             malinois_dir=input_dict["malinois_dir"],
             seq_length=int(input_dict["seq_length"]),
             device=input_dict["device"],
@@ -307,8 +394,8 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
         )
         return _model.compute_gradient(
             logits_list=input_dict["logits"],
-            temperature=resolve_temperature(input_dict["temperature"]),
-            gradient_terms=gradient_terms,
+            temperature=float(input_dict["temperature"]),
+            loss_terms=loss_terms,
             soft=float(input_dict.get("soft", 1.0)),
             hard=float(input_dict.get("hard", 0.0)),
             compute_gradient=bool(input_dict.get("compute_gradient", True)),
@@ -318,7 +405,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     if operation != "score":
         raise ValueError(f"malinois: unknown operation {operation!r}; valid: ['score', 'compute_gradient']")
 
-    # Scoring path: reject cell types that are not among the Malinois outputs
     cell_types = input_dict["cell_types"]
     unsupported = sorted(set(cell_types) - set(CELL_TYPE_INDEX))
     if unsupported:
@@ -326,12 +412,13 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
     _model.load(
         artifact_path=input_dict["artifact_path"],
+        artifact_url=input_dict.get("artifact_url", ""),
+        artifact_md5=input_dict.get("artifact_md5", DEFAULT_ARTIFACT_MD5),
         malinois_dir=input_dict["malinois_dir"],
         seq_length=int(input_dict["seq_length"]),
         device=input_dict["device"],
         verbose=bool(input_dict.get("verbose", False)),
     )
-    # Score the sequences in batches of at least one
     return {
         "scores": _model.score_sequences(
             sequences=input_dict["sequences"],
@@ -340,6 +427,23 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             device=input_dict["device"],
         )
     }
+
+
+def _relaxed_dna_probs(
+    logits: torch.Tensor,
+    *,
+    temperature: float,
+    soft: float,
+    hard: float,
+) -> torch.Tensor:
+    """Convert ``... x L x 4`` DNA logits to relaxed probabilities with optional STE."""
+    probs = F.softmax(logits / temperature, dim=-1)
+    hard_probs = F.one_hot(probs.argmax(dim=-1), num_classes=len(DNA_VOCAB)).to(probs.dtype)
+    relaxed = (1.0 - soft) * hard_probs + soft * probs
+    if hard > 0.0:
+        straight_through = hard_probs + probs - probs.detach()
+        relaxed = hard * straight_through + (1.0 - hard) * relaxed
+    return relaxed
 
 
 def to_device(device: str) -> dict[str, Any]:

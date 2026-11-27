@@ -1,8 +1,0 @@
-# Upper bounds on releases known to break our envs. Format: proto_tools/utils/dependency_caps.py.
-#
-# - Cap a release only for a break that someone has hit or upstream documents, and cite it.
-# - Scope each cap to the machines it breaks: `all`, or `driver<N` for NVIDIA drivers below N.
-#   Everywhere else, the newest release installs.
-# - A break specific to one tool belongs in that tool's setup.sh, not here.
-
-triton<3.9    # driver<580: 3.9 compiles sm_90+ kernels with a CUDA 13 ptxas, which CUDA 12 drivers reject as "device kernel image is invalid" (https://github.com/triton-lang/triton/releases/tag/v3.9.0)

@@ -273,8 +273,7 @@ def test_json_export_unchanged_after_sidecar_addition():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_alphafold_db_fetch_csv_export_against_live_api_yields_usable_sidecars():
     """Live AFDB fetch + CSV export: each sidecar re-parses to match the manifest row."""
     output = run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="P04637"), AlphaFoldDBFetchConfig())
@@ -300,13 +299,12 @@ def test_alphafold_db_fetch_csv_export_against_live_api_yields_usable_sidecars()
         assert chain_seqs[next(iter(chain_seqs))] == row["sequence"]
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 @pytest.mark.xfail(
     strict=True,
     raises=requests.HTTPError,
     reason="AFDB restricted MSA downloads (google-deepmind/alphafold#1137); declared as an Outage",
 )
-@pytest.mark.network
 def test_alphafold_db_msa_outage_recovery_probe(monkeypatch):
     """Recovery probe for the declared MSA outage: fetches the MSA past the declaration.
 
@@ -325,8 +323,7 @@ def test_alphafold_db_msa_outage_recovery_probe(monkeypatch):
     assert a3m_query == output.sequence
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_alphafold_db_fetch_full_p04637_record(caplog):
     """Default fetch picks the canonical isoform and returns a parsed PDB Structure with length-matched pLDDT.
 
@@ -396,8 +393,7 @@ def test_alphafold_db_fetch_full_p04637_record(caplog):
     assert all(0.0 <= v <= 1.0 for v in derived)
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_alphafold_db_fetch_with_pae_returns_square_matrix():
     """PAE matrix must be square with side equal to sequence length."""
     output = run_alphafold_db_fetch(
@@ -417,8 +413,7 @@ def test_alphafold_db_fetch_with_pae_returns_square_matrix():
     assert_metrics_in_spec(output)
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_alphafold_db_fetch_cif_format():
     """structure_format='cif' returns a parseable mmCIF body."""
     output = run_alphafold_db_fetch(
@@ -432,16 +427,14 @@ def test_alphafold_db_fetch_cif_format():
     assert "_atom_site." in output.structure.structure  # atom loop column prefix
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_alphafold_db_fetch_unknown_accession_returns_failure():
     """A nonexistent accession raises with a clear error."""
     with pytest.raises(Exception, match="AlphaFold DB has no prediction"):
         run_alphafold_db_fetch(AlphaFoldDBFetchInput(uniprot_id="Q0Q0Q0"), AlphaFoldDBFetchConfig())
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_workflow_uniprot_then_afdb_yields_consistent_template():
     """End-to-end workflow mirroring a sequence-for-template lookup.
 
@@ -491,8 +484,7 @@ def test_workflow_uniprot_then_afdb_yields_consistent_template():
     assert max(plddt) - min(plddt) > 30, "pLDDT array is suspiciously flat for KRAS"
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_alphafold_db_fetch_metadata_only_skips_payload_downloads():
     """include_structure=False returns metadata only.
 
@@ -514,8 +506,7 @@ def test_alphafold_db_fetch_metadata_only_skips_payload_downloads():
     assert output.msa_a3m is None
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_alphafold_db_fetch_isoform_selects_non_canonical():
     """Setting `isoform=2` returns the AF-P04637-2-F1 record, not the canonical."""
     output = run_alphafold_db_fetch(
@@ -529,8 +520,7 @@ def test_alphafold_db_fetch_isoform_selects_non_canonical():
     assert output.sequence_length != 393
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_alphafold_db_fetch_invalid_isoform_fails_loudly():
     """Asking for an isoform that doesn't exist raises a clear error."""
     with pytest.raises(Exception, match="Isoform 99 not available"):

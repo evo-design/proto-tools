@@ -51,29 +51,24 @@ CALL_ID_FIELD = "proto_call_id"
 class QueueProgressHandler(logging.Handler):
     """Buffer log records for a :class:`ProgressDrainer` to batch to a Modal Queue.
 
-    ``emit`` appends each raw record to a bounded deque on the tool's thread.
-    It does not block, format messages, or raise errors. The drainer thread
-    formats records later in :meth:`drain`.
+    ``emit`` runs on the tool's own thread and therefore never blocks, formats, or raises. It
+    performs one bounded-deque append of the raw record. Formatting is deferred to :meth:`drain`,
+    which the drainer thread calls, and that deferral is what keeps the cost off the tool.
 
-    When the buffer fills, discard the oldest record so progress reporting
-    does not slow the tool down. A dropped record only loses a progress line.
+    A dropped record costs nothing beyond a missing progress line, whereas a slow ``emit`` would
+    cost the run, which is why the buffer discards the oldest rather than applying backpressure.
     """
 
     def __init__(self, chunk_id: int | None = None, *, maxlen: int = BUFFER_LIMIT, level: int = logging.INFO) -> None:
-        """Buffer up to ``maxlen`` records at ``level`` and above, plus status records at any level, tagged with ``chunk_id``."""
-        # The level check is in emit, not on the handler, so a DEBUG status still reaches the caller's status line.
-        super().__init__(level=logging.NOTSET)
-        self._min_level = level
+        """Buffer up to ``maxlen`` records at ``level`` and above, tagged with ``chunk_id``."""
+        super().__init__(level=level)
         self._buffer: deque[tuple[int, Any, Any, bool]] = deque(maxlen=maxlen)
         self._chunk_id = chunk_id
 
     def emit(self, record: logging.LogRecord) -> None:
         """Append the unformatted record to the buffer, swallowing any failure."""
-        update_status = getattr(record, "update_status", False)
-        if record.levelno < self._min_level and not update_status:
-            return
         try:  # noqa: SIM105 - contextlib.suppress builds an object per call; this is the tool's hot path
-            self._buffer.append((record.levelno, record.msg, record.args, update_status))
+            self._buffer.append((record.levelno, record.msg, record.args, getattr(record, "update_status", False)))
         except Exception:  # noqa: S110 - logging must never break the tool
             pass
 
@@ -106,8 +101,8 @@ class ProgressDrainer(threading.Thread):
     roughly one network write per interval regardless of log volume. The queue itself is resolved on
     this thread rather than at construction, so the tool thread performs no network work at all.
 
-    The first queue error disables further writes for that run. The tool
-    continues even if progress reporting fails.
+    Best-effort throughout. The first queue error disables writing for the remainder of the run and
+    the tool continues untouched.
 
     The stop Event is ``_stopping`` rather than ``_stop`` because ``threading.Thread`` defines its
     own ``_stop()`` and shadowing it crashes the thread at teardown.
@@ -314,7 +309,8 @@ def replay_record(record: dict[str, Any], call_id: str | None = None) -> None:
 
     With a bar on screen every record becomes its subtitle, so a long call reads as one line
     that keeps changing rather than a bar with output scrolling past it. Without a bar, records
-    go to the logger, carrying the ``update_status`` flag so the same line behaves the same way.
+    go to the logger as they would on the ``device='proto'`` path, carrying the ``update_status``
+    flag so the same line behaves the same way.
 
     Args:
         record (dict[str, Any]): One streamed record.

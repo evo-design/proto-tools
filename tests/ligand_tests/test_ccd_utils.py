@@ -163,7 +163,7 @@ def test_whitespace_in_ccd_code():
     assert result is None
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_case_sensitivity_smiles():
     smiles_sep = map_ccd_code_to_smiles("SEP")
     result1 = map_smiles_to_ccd_code(smiles_sep)

@@ -601,7 +601,7 @@ def test_standalone_grid_validation_rejects_excessive_allocations() -> None:
 # Real managed execution
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_vina_redocks_imatinib_through_tool_instance() -> None:
     """Dock imatinib into the 1IEP c-Abl pocket through the managed worker."""
     output = run_vina_docking(
@@ -644,7 +644,7 @@ def test_vina_redocks_imatinib_through_tool_instance() -> None:
     assert output.results[0].poses[0].pdbqt.startswith("MODEL 1")
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_vina_supports_vinardo_with_a_reference_derived_box() -> None:
     """Vinardo docking resolves its search box from the bundled crystal ligand."""
     inputs = VinaDockingInput(

@@ -29,11 +29,9 @@ from proto_tools.tools import (
     run_spliceai2_score,
 )
 from proto_tools.tools.rna_splicing.spliceai2.spliceai2_score import upstream_columns
-from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
+from tests.conftest import benchmark_twice, random_dna_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
-
-_persistent_tool = make_persistent_fixture("spliceai2")
 
 _STANDALONE_DIR = Path(__file__).resolve().parents[2] / "proto_tools/tools/rna_splicing/spliceai2/standalone"
 
@@ -169,7 +167,10 @@ def test_predict_input_rejects_invalid_chars(sequence: str) -> None:
     ids=["predict", "score"],
 )
 def test_config_remote_unsupported_reason(config: SpliceAI2PredictConfig | SpliceAI2ScoreConfig) -> None:
-    """SpliceAI2's default configs run on a caller-owned Modal deployment."""
+    """SpliceAI2 is refused on device='proto' but allowed on a caller-owned Modal deployment."""
+    reason = config.remote_unsupported_reason("proto")
+    assert reason is not None
+    assert "device='modal'" in reason
     assert config.remote_unsupported_reason("modal") is None
 
 

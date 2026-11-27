@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
@@ -60,8 +60,7 @@ class NAMPNNSpecificityResult(BaseModel):
     Attributes:
         input_name (str): Basename (stem) of the scored input structure.
         source_method (str): Source method tag, always ``"na_mpnn"``.
-        output_npz_path (str | None): Path to the canonical ``.npz`` file, or ``None`` when no
-            ``output_directory`` was set (nothing is kept on disk then).
+        output_npz_path (str): Path to the canonical ``.npz`` output file.
         predicted_ppm (list[list[float]]): Canonical DNA PPM (``L x 4``) in A,C,G,T order.
         true_sequence (list[int]): Canonical DNA truth indices in ``0..3`` per row.
         mask (list[int]): Valid-residue mask for canonical rows.
@@ -71,9 +70,7 @@ class NAMPNNSpecificityResult(BaseModel):
 
     input_name: str = Field(title="Input Name", description="Basename of the scored input structure")
     source_method: str = Field(title="Source Method", description="Source method tag for this prediction")
-    output_npz_path: str | None = Field(
-        title="Output NPZ Path", description="Path to the canonical NPZ file; None unless output_directory is set"
-    )
+    output_npz_path: str = Field(title="Output NPZ Path", description="Path to canonical NPZ output")
     predicted_ppm: list[list[float]] = Field(
         title="Predicted PPM", description="Canonical DNA PPM (L x 4) in A,C,G,T order"
     )
@@ -163,11 +160,8 @@ class NAMPNNSpecificityConfig(BaseConfig):
             (``a``/``c``/``g``/``t``, ``x``) and RNA (``b``/``d``/``h``/``u``/``y``) tokens.
             Defaults to upstream's ``"X"``, so the unknown-residue token is never placed.
         design_na_only (bool): Restrict design tokens to nucleic acid positions.
-        output_directory (str | None): Directory to keep the canonical NPZ files in. When
-            unset, nothing is kept: scratch files go in a temporary directory that is removed,
-            and each result's ``output_npz_path`` is ``None``.
-        keep_intermediate (bool): Keep the raw NA-MPNN output under
-            ``output_directory/na_mpnn_raw/<input>``. Requires ``output_directory``.
+        output_directory (str | None): Optional directory for canonical NPZ artifacts.
+        keep_intermediate (bool): Keep intermediate raw NA-MPNN output directories.
         device (str): Device to run inference on (inherited).
     """
 
@@ -208,21 +202,14 @@ class NAMPNNSpecificityConfig(BaseConfig):
     output_directory: str | None = ConfigField(
         title="Output Directory",
         default=None,
-        description="Directory to keep canonical NPZ files in; when unset, nothing is kept",
+        description="Optional output directory for canonical NPZ artifacts",
         include_in_key=False,
     )
     keep_intermediate: bool = ConfigField(
         title="Keep Intermediate",
         default=False,
-        description="Keep raw NA-MPNN output under output_directory (requires it)",
+        description="Keep intermediate raw NA-MPNN output directories",
     )
-
-    @model_validator(mode="after")
-    def _keep_intermediate_needs_output_directory(self) -> "NAMPNNSpecificityConfig":
-        """Intermediate files are kept only under output_directory, so it must be set."""
-        if self.keep_intermediate and self.output_directory is None:
-            raise ValueError("keep_intermediate=True needs output_directory: files are kept only there")
-        return self
 
 
 # ============================================================================

@@ -10,7 +10,3 @@
 
 [set]
 LD_LIBRARY_PATH=${VENV_PATH}/cuda_env/lib
-
-[passthrough]
-ALPHAGENOME_CHECKPOINT_PATH
-HF_HUB_OFFLINE

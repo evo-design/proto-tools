@@ -7,11 +7,12 @@ the call yourself.
 
 This page covers installing the server and registering it with an agent.
 
-Choose local or remote compute when you register the server.
+Tools run either on this machine or on remote compute, and you choose which when you register
+the server.
 
-**Local tools** use this machine's compute, and `proto-tools` builds their environments
-on first use. No account or additional setup is needed. A tool that requires a GPU
-needs one on this machine.
+**Locally**, `proto-tools` builds each tool's environment on first use, so no account and no
+setup is needed beyond the install. Tools use whatever compute this machine has, so a tool
+that needs a GPU needs one here.
 
 **Remote tools run on your Modal account.** Connect your Modal account to run tools on remote
 compute, GPU models in particular. See
@@ -44,8 +45,8 @@ The server defaults to running tools on Modal, which needs a credential here:
 modal setup
 ```
 
-This opens a browser and writes a token to `~/.modal.toml` after you approve.
-You never paste the token, and it is not copied into any agent configuration.
+This opens a browser, and writes a token to `~/.modal.toml` when you approve. Nothing is
+pasted, and the credential is not copied into any agent configuration.
 
 If you already use Modal for something else, `modal token new` creates an additional token
 without disturbing your existing configuration.
@@ -81,8 +82,8 @@ MCP servers reached over HTTPS. An HTTPS based version of the MCP is in developm
 
 Running locally, there is nothing to deploy. Skip this step.
 
-A fresh Modal workspace has no deployed tools. Deploy a tool before asking the
-agent to run it.
+A fresh Modal workspace has nothing deployed, and the agent can only run what exists. Deploy
+a tool before asking for it:
 
 ```bash
 proto-tools deploy --apps tmalign

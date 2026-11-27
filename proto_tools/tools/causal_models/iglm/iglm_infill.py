@@ -236,7 +236,6 @@ def run_iglm_infill(
           ``IgLMSpan(start=99, end=106)``.
     """
     logger.debug("Using local venv for IgLM infilling: %s", config.model_checkpoint)
-    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "iglm",
         {

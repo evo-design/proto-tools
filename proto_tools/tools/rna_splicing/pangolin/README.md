@@ -9,19 +9,19 @@
 
 ## Overview
 
-[Pangolin](https://github.com/tkzeng/Pangolin) ([Zeng and Li, 2022](https://doi.org/10.1186/s13059-022-02664-4)) is a deep-learning splice-prediction model built by Tony Zeng and Yang I. Li at the University of Chicago. In the [SpliceAI](https://doi.org/10.1016/j.cell.2018.12.015) lineage of dilated convolutional networks, it predicts per-position, tissue-specific [splice-site](https://en.wikipedia.org/wiki/RNA_splicing) strength directly from DNA sequence and scores the splicing effect of genetic variants. This toolkit wraps both capabilities as typed tools: `pangolin-predict` for per-position score prediction and `pangolin-score-variants` for variant gain/loss scoring.
+[Pangolin](https://github.com/tkzeng/Pangolin) ([Zeng & Li, 2022](https://doi.org/10.1186/s13059-022-02664-4)) is a deep-learning splice-prediction model built by Tony Zeng and Yang I. Li at the University of Chicago. In the [SpliceAI](https://doi.org/10.1016/j.cell.2018.12.015) lineage of dilated convolutional networks, it predicts per-position, tissue-specific [splice-site](https://en.wikipedia.org/wiki/RNA_splicing) strength directly from DNA sequence and scores the splicing effect of genetic variants. This toolkit wraps both capabilities as typed tools: `pangolin-predict` for per-position score prediction and `pangolin-score-variants` for variant gain/loss scoring.
 
 ## Background
 
 [Pre-mRNA splicing](https://en.wikipedia.org/wiki/RNA_splicing) removes [introns](https://en.wikipedia.org/wiki/Intron) and joins [exons](https://en.wikipedia.org/wiki/Exon), with the spliceosome recognizing the donor (5') and acceptor (3') splice sites that bound each intron. Which sites are used, and how often, varies across tissues and underlies much of the transcriptome's [alternative splicing](https://en.wikipedia.org/wiki/Alternative_splicing) diversity. Variants that create or destroy splice sites are a major and frequently under-recognized cause of genetic disease, which motivates models that can read splicing regulation straight from sequence.
 
-Pangolin extends the [SpliceAI](https://doi.org/10.1016/j.cell.2018.12.015) dilated-CNN approach in two directions ([Zeng and Li, 2022](https://doi.org/10.1186/s13059-022-02664-4)). First, it is trained on quantitative, tissue-specific splicing measurements (including the fraction of transcripts that use a given site), and emits a per-tissue splice-site probability rather than SpliceAI's single tissue-agnostic score. Second, it is trained across four tissues - **heart, liver, brain, and testis** - and across multiple species (human, rhesus, mouse, rat), which improves generalization and lets the model report tissue-specific predictions. The released model is an ensemble of checkpoints. Predictions for a tissue average the relevant ensemble members. As with SpliceAI, the network consumes a wide window of flanking sequence to capture the long-range context that governs splice-site choice.
+Pangolin extends the [SpliceAI](https://doi.org/10.1016/j.cell.2018.12.015) dilated-CNN approach in two directions ([Zeng & Li, 2022](https://doi.org/10.1186/s13059-022-02664-4)). First, it is trained on quantitative, tissue-specific splicing measurements (including the fraction of transcripts that use a given site), and emits a per-tissue splice-site probability rather than SpliceAI's single tissue-agnostic score. Second, it is trained across four tissues - **heart, liver, brain, and testis** - and across multiple species (human, rhesus, mouse, rat), which improves generalization and lets the model report tissue-specific predictions. The released model is an ensemble of checkpoints; predictions for a tissue average the relevant ensemble members. As with SpliceAI, the network consumes a wide window of flanking sequence to capture the long-range context that governs splice-site choice.
 
-These tools expose the per-tissue **splice-site probability** score, the same P(splice) head Pangolin's reference CLI uses for variant scoring (not the separate transcript-usage head). Variant scoring reduces that score across the selected tissues into a per-position splice gain and loss.
+These tools expose the per-tissue **splice-site probability** score — the same P(splice) head Pangolin's reference CLI uses for variant scoring (not the separate transcript-usage head). Variant scoring reduces that score across the selected tissues into a per-position splice gain and loss.
 
 ### Learning Resources
 
-- [Pangolin repository](https://github.com/tkzeng/Pangolin) (Zeng and Li, University of Chicago) - source, pretrained ensemble weights, and the reference CLI this wrapper mirrors.
+- [Pangolin repository](https://github.com/tkzeng/Pangolin) (Zeng & Li, University of Chicago) - source, pretrained ensemble weights, and the reference CLI this wrapper mirrors.
 - [Predicting RNA splicing from DNA sequence using Pangolin](https://doi.org/10.1186/s13059-022-02664-4) (Genome Biology, 2022) - the primary publication, with training setup, tissue/usage formulation, and variant-scoring benchmarks.
 - [SpliceAI](https://doi.org/10.1016/j.cell.2018.12.015) (Jaganathan et al., 2019) - the dilated-CNN splice-prediction model that Pangolin builds on.
 
@@ -62,6 +62,6 @@ Use this to prioritize candidate splice-altering variants - SNVs and simple inde
 
 These apply to both tools in this toolkit (`pangolin-predict`, `pangolin-score-variants`).
 
-- **GPU recommended.** Pangolin runs on GPU (default `device="cuda"`) for practical throughput. CPU works but is slow, especially for long sequences or many variants.
+- **GPU recommended.** Pangolin runs on GPU (default `device="cuda"`) for practical throughput; CPU works but is slow, especially for long sequences or many variants.
 - **Model weights ship inside the pip package** (~180 MB) and are installed automatically with the standalone environment - no separate weight download or gated access is required.
-- **Deterministic outputs.** Pangolin inference is deterministic. The same sequence and tissue selection produce the same scores, so results are cacheable and reproducible.
+- **Deterministic outputs.** Pangolin inference is deterministic: the same sequence and tissue selection produce the same scores, so results are cacheable and reproducible.

@@ -4,7 +4,7 @@ Evo 2 scoring tool.
 """
 
 import logging
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from pydantic import model_validator
 
@@ -112,12 +112,6 @@ class Evo2ScoringConfig(CausalModelScoringConfig):
             return f"local_path points to a local weights directory not available on device='{device}'. Unset it, or run on a local NVIDIA GPU."
         return None
 
-    @classmethod
-    def minimal(cls, **kwargs: Any) -> "Evo2ScoringConfig":
-        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
-        kwargs.setdefault("model_checkpoint", "evo2_1b_base")
-        return cast("Evo2ScoringConfig", super().minimal(**kwargs))
-
 
 # ============================================================================
 # Tool Implementation
@@ -195,7 +189,6 @@ def run_evo2_score(
     """
     logger.debug(f"Using local venv for Evo 2 scoring: {config.model_checkpoint}")
 
-    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "evo2",
         {

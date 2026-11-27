@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from proto_tools.utils import one_hot_protein_logits
 from proto_tools.utils.auth import require_hf_token, resolve_hf_token
 from proto_tools.utils.chemistry import validate_smiles
 from proto_tools.utils.msa import extract_msa_sequences
@@ -225,32 +224,3 @@ def test_require_hf_token_raises_when_missing(monkeypatch):
     monkeypatch.setattr("proto_tools.utils.auth.resolve_hf_token", lambda: None)
     with pytest.raises(OSError, match="HF_TOKEN unset"):
         require_hf_token("ESM3")
-
-
-def test_one_hot_protein_logits_encodes_a_canonical_sequence():
-    """One row per residue, the chosen column carrying ``sharpness``."""
-    rows = one_hot_protein_logits("MK", sharpness=3.0)
-    assert len(rows) == 2
-    assert all(len(row) == 20 for row in rows)
-    assert all(sum(1 for value in row if value == 3.0) == 1 for row in rows)
-
-
-def test_one_hot_protein_logits_explains_an_unknown_residue():
-    """``X`` is the realistic case: a design that preserved a residue it could not read.
-
-    A bare ``KeyError: 'X'`` left the caller guessing, so the message names the characters,
-    where the first one is, and why there is no column for them.
-    """
-    with pytest.raises(ValueError) as caught:
-        one_hot_protein_logits("MKTXL")
-
-    message = str(caught.value)
-    assert "['X']" in message
-    assert "position 4" in message
-    assert "canonical" in message
-
-
-def test_one_hot_protein_logits_reports_every_unknown_character():
-    """Reporting only the first would make a multi-character problem take several attempts."""
-    with pytest.raises(ValueError, match=r"\['J', 'X'\]"):
-        one_hot_protein_logits("MJKTX")

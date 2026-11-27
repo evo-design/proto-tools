@@ -1,4 +1,7 @@
-"""AlphaGenome batched variant scoring tool."""
+"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_score_variants.py.
+
+AlphaGenome batched variant scoring tool.
+"""
 
 import csv
 import json

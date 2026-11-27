@@ -51,7 +51,7 @@ Use this to locate exon boundaries in unannotated transcripts, to check whether 
 #### Usage Tips
 
 - **Submit transcript orientation.** The model is strand-specific, and the wrong strand does not fail loudly: it returns sites at different positions, frequently at high confidence. No score or count identifies a mis-oriented submission after the fact, so reverse-complement minus-strand genes before calling.
-- **A site's `start`/`end` is a token span, not the junction base.** It bounds one variable-width tokenizer token (4–10 bp across the sequences measured so far), and the exon/intron boundary lies somewhere inside it. Locate a boundary to within the span; do not reduce the pair to a single base position, and do not intersect it against reference annotation as though it were one.
+- **A site's `start`/`end` is a token span, not the junction base.** It bounds one variable-width tokenizer token — 4–10 bp across the sequences measured so far — and the exon/intron boundary lies somewhere inside it. Locate a boundary to within the span; do not reduce the pair to a single base position, and do not intersect it against reference annotation as though it were one.
 - **Minimum input is 100 bp.**
 - **Very low thresholds return every scored position.** The response grows accordingly; the default is a working value.
 
@@ -118,12 +118,12 @@ Runs annotation over a locus and then predicts expression for every gene found, 
 
 #### Applications
 
-Use this when the TSS positions are not known in advance, annotating and scoring a whole locus in one call, rather than chaining `gi-annotation` into `gi-expression` yourself.
+Use this when the TSS positions are not known in advance — annotating and scoring a whole locus in one call — rather than chaining `gi-annotation` into `gi-expression` yourself.
 
 #### Usage Tips
 
 - **Minimum input is 1,000 bp**, and the ceiling is the endpoint's own 500,000 bp, which is not the expression model's window.
-- **This is the only endpoint with a delivery rule.** A synchronous request above 50,000 bp is refused. The tool switches to polling automatically.
+- **This is the only endpoint with a delivery rule.** A synchronous request above 50,000 bp is refused; the tool switches to polling automatically.
 - **Genes too close to a sequence boundary are skipped**, with the reason reported, because there is not enough flanking sequence for a full window.
 - **JSON only.** Unlike the predict endpoints, it declares no text output format.
 

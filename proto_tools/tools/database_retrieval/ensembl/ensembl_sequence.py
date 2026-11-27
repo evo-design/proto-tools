@@ -220,17 +220,15 @@ def run_ensembl_sequence(
     Args:
         inputs (EnsemblSequenceInput): Ensembl ID.
         config (EnsemblSequenceConfig): Sequence type + assembly.
-        instance (Any): Unused by this HTTP-only tool.
+        instance (Any): Optional ToolInstance; unused for HTTP-only tools.
 
     Returns:
         EnsemblSequenceOutput: Parsed ``EnsemblSequence`` plus metadata.
     """
     del instance
 
-    # Build the sequence endpoint URL for the chosen assembly
     base = base_url_for(config.assembly)
     url = f"{base}/sequence/id/{inputs.ensembl_id.strip()}"
-    # Map config options to REST query parameters, sending only those that are set
     params: dict[str, Any] = {"type": config.sequence_type}
     if config.multiple_sequences:
         params["multiple_sequences"] = "1"
@@ -249,7 +247,6 @@ def run_ensembl_sequence(
 
     session = build_session("ensembl-sequence")
     try:
-        # Request JSON and fail on an HTTP error status
         response = session.get(
             url,
             params=params,
@@ -257,7 +254,6 @@ def run_ensembl_sequence(
             timeout=_REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
-        # Raise a readable error when the body is not JSON
         try:
             payload = response.json()
         except ValueError as exc:
@@ -265,7 +261,6 @@ def run_ensembl_sequence(
                 f"Ensembl returned non-JSON for sequence at {response.url}; body[:200]={response.text[:200]!r}"
             ) from exc
 
-        # Normalize single-record and multi-record responses to the same output list.
         if isinstance(payload, list):
             records = [EnsemblSequence.model_validate(item) for item in payload]
             raw_list = [item for item in payload if isinstance(item, dict)]

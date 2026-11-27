@@ -1,4 +1,7 @@
-"""Align protein or nucleotide sequences with MAFFT."""
+"""proto_tools/tools/sequence_alignment/mafft/mafft.py.
+
+This module provides a standardized interface for MAFFT multiple sequence alignment.
+"""
 
 from pathlib import Path
 from typing import Any, Literal
@@ -25,7 +28,7 @@ from proto_tools.utils import (
 class MafftInput(BaseToolInput):
     """Input object for MAFFT multiple sequence alignment.
 
-    Provide the sequences to align and optional identifiers.
+    This class defines the input parameters for running MAFFT alignment.
 
     Attributes:
         sequences (list[str]): List of sequence strings (protein or nucleotide)
@@ -180,12 +183,11 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig, instance: Any = Non
         >>> for i, seq in enumerate(result.msa):
         ...     print(f"{result.msa.sequence_ids[i]}: {seq}")
     """
-    # Fill in missing identifiers so each aligned sequence can be matched to its input.
     sequences = inputs.sequences
     sequence_ids = resolve_sequence_ids(sequences, inputs.sequence_ids)
     num_sequences = len(sequences)
 
-    # Pass the sequences and alignment settings to the standalone worker.
+    # Prepare input data for standalone script
     input_data = {
         "sequences": sequences,
         "sequence_ids": sequence_ids,
@@ -195,7 +197,6 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig, instance: Any = Non
         "extra_args": list(config.extra_args),
     }
 
-    # Run MAFFT in its isolated CPU environment.
     input_data["device"] = "cpu"  # type: ignore[assignment]  # Literal mismatch: "cpu" not in declared Literal union
     output_data = ToolInstance.dispatch(
         "mafft",
@@ -204,7 +205,7 @@ def run_mafft_align(inputs: MafftInput, config: MafftConfig, instance: Any = Non
         config=config,
     )
 
-    # Wrap the aligned sequences in an MSA with their original identifiers.
+    # Extract results from output
     aligned_sequences = output_data["aligned_sequences"]
 
     return MafftOutput(

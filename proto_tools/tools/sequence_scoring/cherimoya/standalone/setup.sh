@@ -10,7 +10,7 @@ echo "Setting up Cherimoya standalone environment..."
 proto_install_pytorch "torch>=2.9,<3"
 
 # --no-deps skips cherimoya's training and analysis dependencies (macs3, modisco, lightning, ...);
-# Inference needs only torch, numpy and tangermeme.
+# inference needs only torch, numpy and tangermeme.
 uv pip install --no-deps "cherimoya==0.3.0"
 uv pip install -r requirements.txt
 

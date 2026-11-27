@@ -30,7 +30,7 @@ jobs:
         python-version: "3.12"
     - name: Install dependencies
       run: uv pip install --system ".[dev]"
-    - run: pytest --cpu-only --no-envs -q --override-ini="log_cli=false" --durations=20 --cov --cov-report=term-missing
+    - run: pytest --cpu-only -q --override-ini="log_cli=false" --durations=20 --cov --cov-report=term-missing
 
   test-python-310:
     if: >-
@@ -52,7 +52,7 @@ jobs:
       run: uv pip install --system ".[dev]" "pydantic==2.12.0"
     - name: Run Python 3.10 compatibility tests
       run: >-
-        pytest --no-envs -q --override-ini="log_cli=false"
+        pytest -q --override-ini="log_cli=false"
         tests/modal_tests/test_benchmark_report_placement.py
         tests/style_consistency_tests/test_packaging_excludes_helper_copies.py
         tests/tool_infra_tests/test_tool_registry.py::test_exact_model_revalidation_excludes_computed_fields
@@ -74,4 +74,4 @@ jobs:
         python-version: "3.12"
     - name: Install dependencies
       run: uv pip install --system ".[dev]"
-    - run: pytest --cpu-only --no-envs -q --override-ini="log_cli=false" --durations=20 --cov --cov-report=term-missing
+    - run: pytest --cpu-only -q --override-ini="log_cli=false" --durations=20 --cov --cov-report=term-missing

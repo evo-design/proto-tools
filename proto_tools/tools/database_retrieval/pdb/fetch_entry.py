@@ -49,7 +49,7 @@ class PdbFetchEntryOutput(BaseToolOutput):
         title (str | None): Structure title.
         method (str | None): Experimental method.
         resolution (float | None): Resolution in angstroms.
-        source_url (str): URL used for the request.
+        source_url (str | None): URL used for the request.
     """
 
     title: str | None = Field(default=None, title="Title", description="Human-readable RCSB entry title")
@@ -61,7 +61,7 @@ class PdbFetchEntryOutput(BaseToolOutput):
     resolution: float | None = Field(
         default=None, title="Resolution", description="Resolution in Å (None for NMR or fiber diffraction)"
     )
-    source_url: str = Field(title="Source URL", description="Request URL")
+    source_url: str | None = Field(default=None, title="Source URL", description="Request URL")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -111,7 +111,7 @@ def example_input() -> Any:
     input_class=PdbFetchEntryInput,
     config_class=PdbFetchEntryConfig,
     output_class=PdbFetchEntryOutput,
-    description="Fetch structure metadata (title, method, resolution) from RCSB PDB; for coordinates use sequence-fetch",
+    description="Fetch structure metadata (title, method, resolution) from RCSB PDB",
     uses_gpu=False,
     example_input=example_input,
     cacheable=True,
@@ -128,7 +128,7 @@ def run_pdb_fetch_entry(
     Args:
         inputs (PdbFetchEntryInput): PDB accession to look up.
         config (PdbFetchConfig): Empty placeholder (PDB fetch has no user settings).
-        instance (Any): Unused by this HTTP-only tool.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         PdbFetchEntryOutput: PdbFetchEntryOutput with structure metadata.
@@ -142,17 +142,16 @@ def run_pdb_fetch_entry(
         mount_http=True,
     )
     pdb_id = inputs.pdb_id.upper()
-    source_url = f"{_PDB_ENTRY_BASE}/{pdb_id}"
 
     try:
         meta = _fetch_pdb_entry(pdb_id, session)
         if meta is None:
-            return PdbFetchEntryOutput(source_url=source_url)
+            return PdbFetchEntryOutput()
         return PdbFetchEntryOutput(
             title=meta.get("title"),
             method=meta.get("method"),
             resolution=meta.get("resolution"),
-            source_url=source_url,
+            source_url=f"{_PDB_ENTRY_BASE}/{pdb_id}",
         )
     finally:
         session.close()

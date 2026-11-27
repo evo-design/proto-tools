@@ -9,13 +9,11 @@ intermittent failures against a service nobody controls.
 """
 
 import io
-import logging
 import tarfile
 from pathlib import Path
 from typing import Any
 
 import pytest
-import requests
 
 from proto_tools.tools.sequence_alignment.mmseqs2 import msa_server
 
@@ -28,7 +26,6 @@ class _Reply:
         self._payload = payload
         self._body = body
         self.text = str(payload or "")
-        self.status_code = 200
 
     def json(self) -> dict[str, Any]:
         """Return the scripted payload, or refuse as an unreadable reply would."""
@@ -486,32 +483,3 @@ def test_a_metagenomic_batch_joins_each_query_across_both_alignments(monkeypatch
     assert ">u_CCC" in second and ">e_CCC" in second, "query 1 keeps both of its own alignments"
     assert ">e_CCC" not in first, "a query must not receive another query's environmental depth"
     assert first.index(">u_AAA") < first.index(">e_AAA"), "UniRef first, as the server's client reads them"
-
-
-def test_recovered_request_is_not_a_failure_warning(monkeypatch, caplog):
-    replies = [requests.exceptions.ReadTimeout("slow"), requests.Response()]
-    replies[1].status_code = 200
-
-    def request(*args, **kwargs):
-        value = replies.pop(0)
-        if isinstance(value, Exception):
-            raise value
-        return value
-
-    monkeypatch.setattr(msa_server.requests, "request", request)
-    monkeypatch.setattr(msa_server, "_sleep_with_jitter", lambda _: None)
-    with caplog.at_level(logging.INFO):
-        response = msa_server._request("GET", "https://api.colabfold.com/ticket/example", "test")
-    assert response.status_code == 200
-    assert "recovered" in caplog.text
-    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
-
-
-def test_exhausted_request_preserves_failure_and_endpoint(monkeypatch):
-    def request(*args, **kwargs):
-        raise requests.exceptions.ConnectTimeout("no connection")
-
-    monkeypatch.setattr(msa_server.requests, "request", request)
-    monkeypatch.setattr(msa_server, "_sleep_with_jitter", lambda _: None)
-    with pytest.raises(RuntimeError, match=r"3 attempts.*POST https://api.colabfold.com/ticket/msa"):
-        msa_server._request("POST", "https://api.colabfold.com/ticket/msa", "test")

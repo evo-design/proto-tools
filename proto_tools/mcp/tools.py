@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from collections.abc import Callable, Coroutine
 from pathlib import Path
@@ -49,6 +50,14 @@ def app_for_tool(tool_key: str) -> str | None:
         return None
 
 
+def _hosted_catalogue() -> dict[str, dict[str, Any]]:
+    """Tools Proto hosts, keyed by tool key, with an ``unhosted_reason`` when it does not."""
+    from proto_tools.proto import _get_client
+
+    entries = _get_client(None).tools.catalogue()
+    return {entry["key"]: entry for entry in entries}
+
+
 def _all_registered() -> set[str]:
     """Every tool key in the registry, deployable or not."""
     from proto_tools.tools import ToolRegistry
@@ -59,10 +68,10 @@ def _all_registered() -> set[str]:
 def runs_in_process(tool_key: str) -> bool:
     """Report whether a call to ``tool_key`` on a remote device is answered here instead.
 
-    A ``local_only`` tool always runs on this machine. A ``local_cpu`` tool needs
-    neither a GPU nor an isolated environment and runs here only when it has no deployment.
-    Such tools can still be deployed, as ``pdockq2`` and ``structure-metrics`` are.
-    This matches the tool wrapper's routing decision.
+    A ``local_only`` tool never has a deployment, and its inputs are on this machine anyway. A
+    ``local_cpu`` tool has no GPU and no environment, so it runs here only when nothing serves it
+    — deploying one is a choice, and ``pdockq2`` and ``structure-metrics`` were deployed. That is
+    the same question the tool wrapper asks, so the two paths agree on where a call landed.
 
     Config-dependent redirects — a search mode that is an HTTP call — are excluded, because
     whether they apply depends on a config the caller has not written yet.
@@ -92,6 +101,8 @@ def deployed_keys(device: Device, *, environment: str | None = None, client: Any
     """
     if device == "local":
         return set()
+    if device == "proto":
+        return {key for key, entry in _hosted_catalogue().items() if entry.get("hosted")}
     live = deployed_apps(environment=environment, client=client)
     return {key for key in _registry() if _app_for(key) in live}
 
@@ -130,6 +141,20 @@ def workspace_info(
                 "Tools run in this process. Each builds its standalone environment and downloads "
                 "its weights on first use, so a first call can be slow."
                 + ("" if gpus else " No GPU is visible, so GPU-only tools cannot run here.")
+            ),
+        }
+
+    if device == "proto":
+        catalogue = _hosted_catalogue()
+        return {
+            "device": "proto",
+            "authenticated": bool(os.environ.get("PROTO_API_KEY")),
+            "tools_hosted": sum(1 for e in catalogue.values() if e.get("hosted")),
+            "tools_total": len(catalogue),
+            "deployable": False,
+            "note": (
+                "Proto hosts a fixed catalogue. You cannot deploy to it; use device='modal' "
+                "to run a tool in your own Modal workspace instead."
             ),
         }
 
@@ -214,7 +239,8 @@ def list_tools(
     can never be deployed, is answered in this process instead, so it runs on a remote device
     too. Those carry ``runs_in_process`` to explain why they are usable without a deployment.
 
-    When using ``modal``, "deployed" means deployed in your workspace, which you can change.
+    When using ``modal``, "deployed" means deployed in your workspace, which you can change. When
+    using ``proto``, it means hosted by Proto, which you cannot.
     """
     from proto_tools.tools import ToolRegistry
 
@@ -287,19 +313,18 @@ def catalogue(
 
 # The vocabulary an agent reaches for rarely matches a tool's own wording:
 # nobody searching for a structure comparison types "alignment". Substring
-# matching cannot bridge that, so map the common cases explicitly. A word can map to several
-# forms when catalogues word the same idea differently ("mutagenesis", "mutation").
-_SYNONYMS: dict[str, tuple[str, ...]] = {
-    "compare": ("align",),
-    "comparison": ("align",),
-    "superimpose": ("align",),
-    "fold": ("structure",),
-    "folding": ("structure",),
-    "predict": ("prediction",),
-    "design": ("design",),
-    "embed": ("embedding",),
-    "mutate": ("mutagenesis", "mutation"),
-    "similarity": ("align",),
+# matching cannot bridge that, so map the common cases explicitly.
+_SYNONYMS = {
+    "compare": "align",
+    "comparison": "align",
+    "superimpose": "align",
+    "fold": "structure",
+    "folding": "structure",
+    "predict": "prediction",
+    "design": "design",
+    "embed": "embedding",
+    "mutate": "mutagenesis",
+    "similarity": "align",
 }
 
 _STOPWORDS = frozenset(
@@ -396,49 +421,6 @@ def _tool_score(forms: list[set[str]], key: set[str], category: set[str], summar
     return min(100, round(100 * total / (_KEY_WORD * len(forms))))
 
 
-def search_terms(query: str) -> list[set[str]]:
-    """Turn a natural-language query into the term forms ``search_score`` matches.
-
-    Stopwords and single letters are dropped and each word is stemmed. A word with synonyms
-    keeps its literal form next to them: rewriting "fold" to "structure" alone would discard the
-    literal token that matches esmfold and foldseek in a key.
-
-    Args:
-        query (str): Natural-language query, e.g. ``"compare two protein structures"``.
-
-    Returns:
-        list[set[str]]: One set of alternative forms per kept word; empty when nothing is left.
-
-    Examples:
-        >>> search_terms("fold a protein")  # [{'fold', 'structure'}, {'protein'}]
-    """
-    terms = [_stem(t) for t in re.split(r"[^a-z0-9]+", query.lower()) if t not in _STOPWORDS and len(t) > 1]
-    return [{t, *(_stem(s) for s in _SYNONYMS.get(t, ()))} for t in terms]
-
-
-def search_score(terms: list[set[str]], key: str, category: str = "", summary: str = "") -> int:
-    """Score one entry against ``search_terms`` output, as a relevance out of 100.
-
-    The ranking ``search_tools`` uses, exposed so other catalogues (e.g. proto-language's
-    component search) rank a query the same way.
-
-    Args:
-        terms (list[set[str]]): Term forms from ``search_terms``.
-        key (str): The entry's key; a match here weighs most.
-        category (str): The entry's category; naming the whole category earns a bonus.
-        summary (str): Free text describing the entry; a match here weighs least.
-
-    Returns:
-        int: Relevance from 0 (no term matched) to 100.
-
-    Examples:
-        >>> search_score(search_terms("esmfold"), "esmfold-prediction", "structure_prediction")  # 100
-    """
-    if not terms:
-        return 0
-    return _tool_score(terms, _tokens(key), _tokens(category), _tokens(summary))
-
-
 def _no_match_hint() -> str:
     """Say what to do next, so an empty result does not read as "no such capability"."""
     from proto_tools.tools import ToolRegistry
@@ -469,13 +451,21 @@ def search_tools(
 
     Take the key to run from each entry's ``tool_key``. A display name is not a key.
     """
-    forms = search_terms(query)
+    terms = [_stem(t) for t in re.split(r"[^a-z0-9]+", query.lower()) if t not in _STOPWORDS and len(t) > 1]
+    # Both the term and its expansion are scored: rewriting "fold" to "structure" otherwise
+    # discards the literal token that matches esmfold and foldseek in a key.
+    forms = [{t, _stem(_SYNONYMS.get(t, t))} for t in terms]
     if not forms:
         return {"tools": [], "n_total": 0, "hint": _no_match_hint()}
 
     scored = []
     for entry in list_tools(deployed_only=deployed_only, device=device, environment=environment, client=client):
-        score = search_score(forms, entry["tool_key"], entry.get("category") or "", entry.get("summary") or "")
+        score = _tool_score(
+            forms,
+            _tokens(entry["tool_key"]),
+            _tokens(entry.get("category") or ""),
+            _tokens(entry.get("summary") or ""),
+        )
         if score:
             scored.append((score, entry))
 
@@ -677,30 +667,12 @@ def _setup_errors(device: Device) -> tuple[type[Exception], ...]:
     if device == "local":
         # Nothing to configure: a failure here is the tool's own, reported as such.
         return ()
+    if device == "proto":
+        # No key configured, or a key the server will not accept.
+        return (NotImplementedError, PermissionError)
     from proto_tools.modal.client import ModalDispatchError
 
     return (ModalDispatchError,)
-
-
-def _local_device(cfg: BaseConfig, caller_chose: bool) -> str:
-    """Return the torch device for a call answered in this process.
-
-    A device the caller put in the config wins. Otherwise the tool keeps its own default (``cuda``
-    for GPU tools) when this machine has a GPU, and runs on ``cpu`` when it has none, where a GPU
-    default could only fail.
-
-    Args:
-        cfg (BaseConfig): The call's config, before any backend name is written into it.
-        caller_chose (bool): Whether the caller's config set ``device``.
-
-    Returns:
-        str: The device to run on.
-    """
-    if caller_chose:
-        return cfg.device
-    from proto_tools.utils.device import number_of_visible_gpus
-
-    return cfg.device if number_of_visible_gpus() > 0 else "cpu"
 
 
 def _dispatch(
@@ -713,12 +685,8 @@ def _dispatch(
     client: Any | None = None,
     progress_partition: str | None = None,
     on_record: Callable[[dict[str, Any]], None] | None = None,
-    local_device: str = "cpu",
 ) -> tuple[Any, Device]:
     """Route one call to the backend ``device`` names, and report where it ran.
-
-    ``local_device`` is the torch device for a call answered in this process (see
-    ``_local_device``); a ``device="local"`` call arrives with it already in ``cfg``.
 
     The server is a stdio process on the caller's own machine, so "run it here" is always an
     option and is sometimes the only correct one. Which tools that covers is a property of the
@@ -745,15 +713,19 @@ def _dispatch(
     # server would look for a deployment that such a tool has no reason to have.
     if (reason := cfg.local_execution_reason(device)) is not None:
         logger.info("Tool %s: %s Running in this process instead.", tool_key, reason)
-        cfg.device = local_device
+        cfg.device = "cpu"
         return spec.function(payload, cfg), "local"
     # Declared undeployable. Its inputs live on this machine, which is where the server is, so
     # running it here answers the call instead of naming a deployment that will never exist.
     if spec.local_only is not None:
         logger.info("Tool %s: %s Running in this process instead.", tool_key, spec.local_only)
-        cfg.device = local_device
+        cfg.device = "cpu"
         return spec.function(payload, cfg), "local"
 
+    if device == "proto":
+        from proto_tools.proto import dispatch_to_proto
+
+        return dispatch_to_proto(tool_key, payload, cfg), device
     from proto_tools.modal.client import dispatch_to_modal
 
     return (
@@ -770,13 +742,27 @@ def _dispatch(
     )
 
 
-def _unavailable(error: str) -> dict[str, Any]:
-    """Explain a setup failure in terms the caller can act on.
+def _unavailable(device: Device, tool_key: str, error: str) -> dict[str, Any]:
+    """Explain a setup failure in terms the caller can act on, if anyone can.
 
-    Only ``modal`` has setup failures, and their remedy is a deployment the user can perform, so
-    the message carries the command and ``needs_human``.
+    When using ``modal``, the remedy is a deployment the user can perform, and the
+    message therefore carries the command and ``needs_human``. When using ``proto``,
+    the catalogue is fixed: no such command exists, and offering one would direct
+    the caller toward something impossible.
     """
-    return {"error": error, "needs_human": True}
+    if device == "modal":
+        return {"error": error, "needs_human": True}
+
+    entry = _hosted_catalogue().get(tool_key, {})
+    reason = entry.get("unhosted_reason") or error
+    return {
+        "error": f"{tool_key} is not available on Proto: {reason}",
+        "needs_human": False,
+        "fix": (
+            "Proto's catalogue is fixed and cannot be deployed to. Run this tool in your own "
+            "Modal workspace with device='modal', or ask Proto to host it."
+        ),
+    }
 
 
 def run_tool(
@@ -838,23 +824,18 @@ def run_tool(
 
     if not isinstance(cfg, BaseConfig):
         return {"ok": False, "error": f"config model is {type(cfg).__name__}, not a BaseConfig"}
-    local_device = _local_device(cfg, caller_chose="device" in (config or {}))
-    cfg.device = device if is_remote(device) else local_device
+    cfg.device = device if is_remote(device) else "cpu"
     # The wrapper refuses this too, but the remote branches of _dispatch do not go through it.
     if (outage := active_outage(tool_key, spec.outages, payload, cfg)) is not None:
         return {"ok": False, "error": str(OutageError(tool_key, outage)), "outage": outage.model_dump(mode="json")}
     # The registry's wrapper asks this before dispatching, but this path does not go through it.
-    # Without the check a setting the device cannot honour -- a local database on a remote
-    # worker -- reaches a container and fails there instead.
+    # Without the check a setting the device cannot honour -- a custom checkpoint on Proto, a
+    # local database on any remote worker -- reaches a container and fails there instead.
     #
-    # A call answered in this process never reaches a remote worker, so the refusal does not
-    # apply; _dispatch runs it here, as a direct call through the wrapper does. A tool that is
-    # local_only and refuses remote devices by config (ncbi-reference-bundle) relies on this.
-    if (
-        is_remote(device)
-        and not runs_in_process(tool_key)
-        and (reason := cfg.remote_unsupported_reason(device)) is not None
-    ):
+    # Asked before _dispatch, where the wrapper asks it after local_only. The order is visible
+    # only for a tool that is both local_only and refuses the device by config, which none is
+    # today: such a tool would be refused here and run in-process by a direct call.
+    if is_remote(device) and (reason := cfg.remote_unsupported_reason(device)) is not None:
         return {"ok": False, "error": reason, "not_supported_on": device}
     try:
         result, ran_on = _dispatch(
@@ -866,10 +847,9 @@ def run_tool(
             client=client,
             progress_partition=progress_partition,
             on_record=on_record,
-            local_device=local_device,
         )
     except _setup_errors(device) as exc:
-        return {"ok": False, **_unavailable(str(exc))}
+        return {"ok": False, **_unavailable(device, tool_key, str(exc))}
     except Exception as exc:
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 

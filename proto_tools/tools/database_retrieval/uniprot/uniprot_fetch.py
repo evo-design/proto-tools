@@ -222,7 +222,7 @@ def run_uniprot_fetch(
     Args:
         inputs (UniProtFetchInput): A UniProt fetch request with accession or name+organism.
         config (UniProtFetchConfig): Optional response-field filter (`fields`).
-        instance (Any): Unused by this HTTP-only tool.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         UniProtFetchOutput: Protein entry with sequence, gene names, and
@@ -237,7 +237,6 @@ def run_uniprot_fetch(
     )
 
     try:
-        # Fetch a known accession directly, or choose a ranked name-and-organism match.
         if inputs.uniprot_id:
             entry = _fetch_entry(inputs.uniprot_id, session, fields=config.fields)
             if entry is None:
@@ -254,7 +253,6 @@ def run_uniprot_fetch(
             if entry is None:
                 raise ValueError(f"No UniProt entry found for '{inputs.target_name}' in '{inputs.organism}'")
 
-        # Extract the sequence and cross-references from the selected entry.
         accession = entry.get("primaryAccession", inputs.uniprot_id or "")
         seq_data = entry.get("sequence", {})
         sequence = seq_data.get("value")
@@ -317,7 +315,6 @@ def _search_entry(
     all_results: list[dict[str, Any]] = []
     seen_accessions: set[str] = set()
 
-    # Try an exact gene-name query first, then widen it to protein names
     queries = [
         f'gene_exact:{target_name} AND organism_name:"{organism}"',
         f'(gene_exact:{target_name} OR protein_name:{target_name}) AND organism_name:"{organism}"',
@@ -332,7 +329,6 @@ def _search_entry(
         if fields:
             params["fields"] = ",".join(fields)
 
-        # Bind params as a default so the retried request keeps this query's params
         def _get(params: dict[str, Any] = params) -> requests.Response:
             return session.get(
                 f"{_UNIPROT_BASE}/uniprotkb/search",
@@ -345,7 +341,6 @@ def _search_entry(
             retries=_HTTP_RETRIES,
             backoff_seconds=_BACKOFF_SECONDS,
         )
-        # Move on to the next query when this search fails
         if response.status_code >= 400:
             logger.warning(
                 "UniProt search failed with status %d for query: %s",
@@ -354,7 +349,6 @@ def _search_entry(
             )
             continue
 
-        # Collect new entries, skipping accessions already seen
         data = response.json()
         for entry in data.get("results", []):
             accession = entry.get("primaryAccession")
@@ -362,15 +356,12 @@ def _search_entry(
                 seen_accessions.add(accession)
                 all_results.append(entry)
 
-        # Stop at the first query that returns hits
         if all_results:
             break
 
     if not all_results:
         return None
 
-    # Pick the top-ranked entry: exact gene match, then PDB cross-reference if preferred,
-    # then Swiss-Prot review status
     return max(
         all_results,
         key=lambda entry: _entry_priority(entry, target_name, prefer_pdb_crossref),

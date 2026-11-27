@@ -1,7 +1,6 @@
 """netMHCpan MHC class I binding prediction runner."""
 
 import difflib
-import logging
 import os
 import platform
 import re
@@ -64,7 +63,7 @@ def _install_paths(root: str) -> tuple[str, str]:
 def _require_install(root: str, source: str) -> tuple[str, str]:
     """Validate an explicitly configured install root, or fail naming where it came from.
 
-    An explicit setting is never silently ignored. Falling through to a different install
+    An explicit setting is never silently ignored: falling through to a different install
     would quietly answer with another netMHCpan version, whose predictions are not
     comparable to the one the caller asked for.
 
@@ -101,9 +100,9 @@ def _require_install(root: str, source: str) -> tuple[str, str]:
 def resolve_install(netmhcpan_dir: str | None = None) -> tuple[str, str]:
     """Locate a usable netMHCpan install and return its binary and allele-name list paths.
 
-    Try the explicit ``netmhcpan_dir`` config field, then ``NETMHCPAN_HOME``, then
-    ``NMHOME``, and finally the managed weights cache. The first three are explicit settings, so an
-    invalid one fails rather than falling through. Only the unconfigured case reports that
+    Resolution order: the explicit ``netmhcpan_dir`` config field, then ``NETMHCPAN_HOME`` /
+    ``NMHOME``, then the managed weights cache. The first three are explicit settings, so an
+    invalid one fails rather than falling through; only the unconfigured case reports that
     netMHCpan needs provisioning.
 
     Args:
@@ -186,7 +185,7 @@ def validate_alleles(alleles: list[str], allelenames_path: str) -> None:
 def parse_output(text: str) -> tuple[str | None, list[dict[str, str]]]:
     """Parse netMHCpan stdout into a version string and one record per peptide x allele.
 
-    Columns are keyed off the table's header row rather than fixed offsets. The column
+    Columns are keyed off the table's header row rather than fixed offsets: the column
     set varies across netMHCpan versions, with the -BA flag (which *adds* Score_BA /
     %Rank_BA / Aff(nM) alongside the EL columns), and with whether the input supplied
     measurement values (the Exp column). BindLevel is the final column and its value
@@ -208,26 +207,21 @@ def parse_output(text: str) -> tuple[str | None, list[dict[str, str]]]:
     records: list[dict[str, str]] = []
 
     for line in text.splitlines():
-        # Grab the version from the first line that reports it
         if version is None:
             match = _VERSION_RE.search(line)
             if match:
                 version = match.group(1)
 
-        # Use the header row to key the columns of the rows that follow
         stripped = line.strip()
         if stripped.startswith("Pos") and "Peptide" in stripped:
             headers = stripped.split()
             continue
-        # Skip lines before the table, blank lines, comments and separator rules
         if headers is None or not stripped or stripped.startswith(("#", "-")):
             continue
 
-        # Keep only data rows, which start with a numeric position
         tokens = stripped.split()
         if not tokens[0].isdigit():
             continue
-        # Map leading tokens to headers, then join the rest into the final BindLevel column
         leading = len(headers) - 1
         if len(tokens) < leading:
             continue
@@ -235,7 +229,6 @@ def parse_output(text: str) -> tuple[str | None, list[dict[str, str]]]:
         record[headers[-1]] = " ".join(tokens[leading:])
         records.append(record)
 
-    # Fail when the output never contained a result table
     if headers is None:
         raise ValueError(f"netMHCpan produced no result table. Output was:\n{_diagnostic_lines(text)}")
     return version, records
@@ -274,7 +267,7 @@ def _invoke(argv: list[str], workdir: str, install_base: str) -> str:
     fan-out would collide on a shared directory. Each call gets its own, pointed at by
     TMPDIR/TMP/TEMP and by -tdir, with the working directory set there too.
 
-    ``NETMHCpan`` (that exact casing) must also be exported. Several of the binary's
+    ``NETMHCpan`` (that exact casing) must also be exported: several of the binary's
     default paths -- the version file, the threshold tables, the allele names -- are
     expanded from that variable rather than from -rdir, and it fails with
     "Unable to open(r) file $NETMHCpan/data/version" without it. This is what the shipped
@@ -282,7 +275,7 @@ def _invoke(argv: list[str], workdir: str, install_base: str) -> str:
     """
     env = dict(os.environ)
     env.update({"TMPDIR": workdir, "TMP": workdir, "TEMP": workdir, "NETMHCpan": install_base})
-    logger.update_status("Running netMHCpan", level=logging.DEBUG)
+    logger.update_status("Running netMHCpan")
     completed = subprocess.run(
         argv,
         cwd=workdir,
@@ -336,7 +329,7 @@ def _base_argv(binary: str, workdir: str, alleles: list[str], config: dict[str, 
 def predict_peptides(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Score explicit peptides against an allele panel.
 
-    ``-l`` is not passed because netMHCpan ignores it in peptide mode and predicts
+    ``-l`` is deliberately not passed: netMHCpan ignores it in peptide mode and predicts
     each peptide at its own length.
     """
     binary, pseudo = resolve_install(input_dict.get("netmhcpan_dir"))
@@ -356,7 +349,7 @@ def predict_peptides(input_dict: dict[str, Any]) -> dict[str, Any]:
 def predict_protein(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Enumerate k-mers from each protein sequence and score them against an allele panel.
 
-    ``-context`` is available here but not in peptide mode. The flanking residues it encodes
+    ``-context`` is available here but not in peptide mode: the flanking residues it encodes
     are read off the supplied protein, whereas peptide mode would require the caller to
     provide each peptide's flanks in netMHCpan's PEPTIDECONT format.
     """
@@ -391,7 +384,7 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def to_device(device: str) -> dict[str, Any]:
-    """Report device moves as satisfied because netMHCpan is a CPU-only binary."""
+    """Report device moves as satisfied; netMHCpan is a CPU-only binary."""
     return {"success": True, "device": device, "note": "CLI tool, auto-unloads"}
 
 

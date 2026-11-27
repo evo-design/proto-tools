@@ -12,9 +12,11 @@ from pydantic import Field, field_validator
 from proto_tools.entities.structures import Structure
 from proto_tools.tools.inverse_folding.caliby.caliby_sample import (
     PACKER_CHECKPOINTS,
+    chain_residue_ids,
+    ensemble_paths,
+    restore_numbering,
     validate_checkpoint,
 )
-from proto_tools.tools.inverse_folding.structure_staging import staged_structure
 from proto_tools.tools.tool_registry import tool
 from proto_tools.utils import (
     BaseConfig,
@@ -221,10 +223,10 @@ def run_caliby_pack(
         )
     ):
         # Staged numbered 1..N per chain: Caliby matches residues on number alone, ignoring insertion codes.
-        with staged_structure(structure) as staged:
+        with ensemble_paths([structure]) as (structure_path, _, chain_map):
             input_dict = {
                 "operation": "pack",
-                "primary_path": str(staged.path),
+                "primary_path": str(structure_path),
                 "diffusion_steps": config.diffusion_steps,
                 "step_scale": config.step_scale,
                 "seed": base_seed + dispatch_idx,
@@ -233,6 +235,10 @@ def run_caliby_pack(
             }
             result = ToolInstance.dispatch("caliby", input_dict, instance=instance, config=config)
 
-        packed.append(staged.restore(result["cif_string"], source="caliby-pack", structure_format="cif"))
+        packed.append(
+            restore_numbering(
+                result["cif_string"], chain_residue_ids(structure), source="caliby-pack", chain_map=chain_map
+            )
+        )
 
     return CalibyPackOutput(packed_structures=packed)

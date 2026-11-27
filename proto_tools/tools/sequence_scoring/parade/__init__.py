@@ -8,12 +8,12 @@ from proto_tools.tools.sequence_scoring.parade.parade_activity import (
     run_parade_activity,
 )
 from proto_tools.tools.sequence_scoring.parade.parade_gradient import (
-    ParadeActivityTerm,
     ParadeGradientConfig,
     ParadeGradientInput,
+    ParadeGradientLossTerm,
     ParadeGradientOutput,
-    ParadeGradientResult,
-    ParadeTermGradient,
+    ParadeGradientSampleMetrics,
+    ParadeObjectiveDirection,
     run_parade_gradient,
 )
 from proto_tools.tools.sequence_scoring.parade.parade_stability import (
@@ -24,17 +24,11 @@ from proto_tools.tools.sequence_scoring.parade.parade_stability import (
     ParadeStabilityResult,
     run_parade_stability,
 )
-from proto_tools.tools.sequence_scoring.parade.parade_stability_gradient import (
-    ParadeStabilityGradientConfig,
-    ParadeStabilityGradientInput,
-    ParadeStabilityGradientMetrics,
-    ParadeStabilityGradientOutput,
-    ParadeStabilityLogRatioTerm,
-    run_parade_stability_gradient,
-)
 from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
     PARADE_CELL_LINE_NAMES,
     PARADE_CELL_TYPES,
+    PARADE_CHECKPOINTS,
+    PARADE_COMMIT,
     ParadeActivityMetrics,
     ParadeCellType,
     ParadeConstructType,
@@ -42,15 +36,11 @@ from proto_tools.tools.sequence_scoring.parade.shared_data_models import (
 )
 
 __all__ = [
-    "ParadeStabilityGradientConfig",
-    "ParadeStabilityGradientInput",
-    "ParadeStabilityLogRatioTerm",
-    "ParadeStabilityGradientMetrics",
-    "ParadeStabilityGradientOutput",
-    "run_parade_stability_gradient",
     # Shared constants and types
     "PARADE_CELL_LINE_NAMES",
     "PARADE_CELL_TYPES",
+    "PARADE_CHECKPOINTS",
+    "PARADE_COMMIT",
     "ParadeCellType",
     "ParadeConstructType",
     "resolve_cell_type",
@@ -63,10 +53,10 @@ __all__ = [
     # Gradient
     "ParadeGradientInput",
     "ParadeGradientConfig",
-    "ParadeGradientResult",
-    "ParadeActivityTerm",
+    "ParadeGradientLossTerm",
     "ParadeGradientOutput",
-    "ParadeTermGradient",
+    "ParadeGradientSampleMetrics",
+    "ParadeObjectiveDirection",
     # Stability
     "ParadeStabilityInput",
     "ParadeStabilityConfig",

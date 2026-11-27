@@ -112,6 +112,7 @@ def test_config_passes_new_fields_to_dispatch():
         model_name="bioemu-v1.2",
         denoiser_type="heun",
         denoiser_config="steering.yaml",
+        msa_host_url="https://msa.example.com",
         cache_embeds_dir="embeds_cache",
         cache_so3_dir="so3_cache",
     )
@@ -134,6 +135,7 @@ def test_config_passes_new_fields_to_dispatch():
     assert payload["model_name"] == "bioemu-v1.2"
     assert payload["denoiser_type"] == "heun"
     assert payload["denoiser_config"] == "steering.yaml"
+    assert payload["msa_host_url"] == "https://msa.example.com"
     assert payload["cache_embeds_dir"] == "embeds_cache"
     assert payload["cache_so3_dir"] == "so3_cache"
 
@@ -163,51 +165,8 @@ def test_identical_sequence_complexes_keep_distinct_msas():
     assert msa_contents[0] != msa_contents[1]
 
 
-def test_a_no_hit_search_sends_a_query_only_msa():
-    """Without an MSA BioEmu queries the ColabFold server itself, so a no-hit chain sends its query."""
-    from proto_tools.tools.structure_prediction.shared_data_models import ComplexMSAs
-
-    seq = "MKTL"
-    no_hits = ComplexMSAs(per_chain={}, source="colabfold_server", requested_chain_indices=[0])
-    with patch("proto_tools.tools.structure_dynamics.bioemu.bioemu_sample.ToolInstance") as mock_cls:
-        mock_cls.dispatch.return_value = {
-            "results": [{"pdb_frames": [_SAMPLE_PDB_CONTENT], "num_frames": 1, "num_residues": len(seq)}]
-        }
-        run_bioemu(BioEmuInput(complexes=[seq], msas=[no_hits]), BioEmuConfig(num_samples=1, verbose=False))
-
-    assert mock_cls.dispatch.call_args[0][1]["msa_a3m_contents"] == [f">query\n{seq}\n"]
-
-
-@pytest.mark.uses_env
-def test_bioemu_reuses_cached_embeddings_only_for_the_same_msa(tmp_path):
-    """BioEmu caches embeddings by sequence alone; the standalone keys its cache directory by MSA."""
-    from pathlib import Path
-
-    from proto_tools.utils import run_in_env
-
-    standalone = Path(__file__).resolve().parents[2] / "proto_tools/tools/structure_dynamics/bioemu/standalone"
-    code = f"""
-import os, sys
-import numpy as np
-sys.path.insert(0, {str(standalone)!r})
-import inference
-import bioemu.colabfold_inline.model_runner as model_runner
-import bioemu.get_embeds as get_embeds
-computed = []
-model_runner.get_embeddings = lambda seq, a3m: (computed.append(a3m) or (np.zeros((len(seq), 1)), np.zeros((len(seq), len(seq), 1))))
-seq = "MKTAYIAKQR"
-msas = [f">q\\n{{seq}}\\n>x\\nMKTAYIAKQA\\n", f">q\\n{{seq}}\\n>y\\nMKTAYIAKAR\\n", f">q\\n{{seq}}\\n>x\\nMKTAYIAKQA\\n"]
-for a3m in msas:
-    msa_file = os.path.join({str(tmp_path)!r}, "query.a3m")
-    open(msa_file, "w").write(a3m)
-    get_embeds.get_colabfold_embeds(seq, inference._msa_cache_dir({str(tmp_path)!r}, a3m), msa_file=msa_file)
-print(len(computed))
-"""
-    assert run_in_env("bioemu", code=code, timeout=1800).strip().splitlines()[-1] == "2"
-
-
 def test_config_cache_key_invariants():
-    """Cache dirs / output_dir are excluded: storage settings don't affect the returned ensembles."""
+    """Cache dirs / output_dir excluded; msa_host_url INCLUDED (server change → different MSAs)."""
     base = BioEmuConfig().cache_key()
 
     # Excluded — storage settings don't affect the returned ensembles
@@ -219,6 +178,9 @@ def test_config_cache_key_invariants():
         ).cache_key()
         == base
     )
+
+    # Included — different MSA server can produce different MSAs → different ensembles
+    assert BioEmuConfig(msa_host_url="https://other.example.com").cache_key() != base
 
 
 def test_all_frames_filtered_out_raises():

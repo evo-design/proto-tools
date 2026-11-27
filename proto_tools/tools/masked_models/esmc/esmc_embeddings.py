@@ -6,6 +6,7 @@ ESM C (Cambrian) embeddings tool.
 import logging
 from typing import Any, Literal
 
+from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelEmbeddingsConfig,
     MaskedModelEmbeddingsOutput,
@@ -30,8 +31,8 @@ ESMCEmbeddingsInput = MaskedModelInput
 class ESMCEmbeddingsOutput(MaskedModelEmbeddingsOutput):
     """Output from ESM C protein language model embeddings/logits extraction.
 
-    Contains sequence embeddings, per-position logits, and attention masks for
-    downstream analysis.
+    This class encapsulates the results of ESM C inference, providing sequence
+    embeddings, per-position logits, and attention masks for downstream analysis.
 
     Inherits from ``MaskedModelEmbeddingsOutput``.
 
@@ -119,6 +120,7 @@ def example_input() -> Any:
     iterable_output_field="results",
     max_chunk_size=32,
     cacheable=True,
+    post_process_iterable=attach_projections,
 )
 def run_esmc_embeddings(
     inputs: ESMCEmbeddingsInput, config: ESMCEmbeddingsConfig, instance: Any = None
@@ -158,7 +160,6 @@ def run_esmc_embeddings(
         >>> print(f"Embedding dimension: {len(result.results[0].mean_embedding)}")
     """
     logger.debug(f"Using local for ESM C inference: {config.model_checkpoint}")
-    # Run inference in the toolkit's isolated environment.
     outputs = ToolInstance.dispatch(
         "esmc",
         {

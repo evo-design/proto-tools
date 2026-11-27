@@ -55,7 +55,6 @@ _ALLOWED_SPDX = frozenset(
         "AGPL-3.0",
         "ISC",
         "Unlicense",
-        "Elastic-2.0",
     }
 )
 
@@ -452,7 +451,6 @@ _SPDX_FINGERPRINTS: dict[str, list[tuple[str, ...]]] = {
     ],
     "ISC": [("isc license",)],
     "Unlicense": [("this is free and unencumbered software released into the public domain",)],
-    "Elastic-2.0": [("elastic license 2.0",), ("elastic-2.0",)],
 }
 
 _GITHUB_BLOB_RE = re.compile(r"^/([^/]+)/([^/]+)/blob/(.+)$")
@@ -500,8 +498,7 @@ def _fetch_text(url: str) -> str | None:
     return text
 
 
-@pytest.mark.network
-@pytest.mark.uses_env
+@pytest.mark.integration
 @pytest.mark.parametrize("toolkit_dir", _ALL_TOOLKITS, ids=_ALL_IDS)
 def test_toolkit_license_yaml_spdx_matches_url(toolkit_dir: Path) -> None:
     """Stated SPDX must fingerprint-match the license text fetched from its URL."""

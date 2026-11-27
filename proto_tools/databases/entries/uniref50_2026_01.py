@@ -11,21 +11,22 @@ the name + ``total_*_bytes`` when re-provisioning against a newer UniProt
 release. Built into an MMseqs2 GPU-padded DB the same way ``uniref90-2022-05``.
 """
 
-from proto_tools.databases.mmseqs2 import MMseqs2DatabaseEntry, MMseqs2SearchFlags
 from proto_tools.databases.registry import (
-    BuildRecipe,
-    BuildStep,
+    DatasetEntry,
     DatasetRegistry,
     DownloadSpec,
+    IndexRecipe,
+    IndexStep,
+    MmseqsFlags,
 )
 
-ENTRY = MMseqs2DatabaseEntry(
+ENTRY = DatasetEntry(
     name="uniref50-2026-01",
     molecule_type="protein",
     display_name="UniRef50 (release 2026_01)",
     description="UniProt clustered at 50% identity, release 2026_01 — protein homology-search DB.",
     citation_doi="10.1093/bioinformatics/btx019",  # UniRef — Suzek et al.
-    downloads=[
+    urls=[
         DownloadSpec(
             url="https://ftp.uniprot.org/pub/databases/uniprot/uniref/uniref50/uniref50.fasta.gz",
             filename="uniref50_2026_01.fasta.gz",
@@ -33,17 +34,17 @@ ENTRY = MMseqs2DatabaseEntry(
     ],
     total_download_bytes=12_678_152_383,  # observed 2026-05-26
     total_disk_bytes=60_000_000_000,  # estimate post-index
-    build=BuildRecipe(
+    index_recipe=IndexRecipe(
         steps=[
-            BuildStep(
+            IndexStep(
                 command=["gzip", "-d", "uniref50_2026_01.fasta.gz"],
                 description="Decompress source FASTA",
             ),
-            BuildStep(
+            IndexStep(
                 command=["mmseqs", "createdb", "uniref50_2026_01.fasta", "uniref50"],
                 description="Build MMseqs2 DB from FASTA",
             ),
-            BuildStep(
+            IndexStep(
                 command=["mmseqs", "makepaddedseqdb", "uniref50", "uniref50_padded"],
                 description="Build GPU padded-sequence DB for MMseqs2-GPU",
             ),
@@ -53,9 +54,10 @@ ENTRY = MMseqs2DatabaseEntry(
             "uniref50_padded.index",
         ],
     ),
-    search_flags=MMseqs2SearchFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
+    mmseqs_flags=MmseqsFlags(sensitivity=8.0, prefilter_mode=0, max_seqs=300),
     db_prefix="uniref50_padded",
-    gpu_db="uniref50_padded",
+    supports_gpu=True,
+    min_gpu_memory_gb=8.0,
     a3m_adapter="plain",
 )
 

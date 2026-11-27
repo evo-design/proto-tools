@@ -24,8 +24,9 @@ from proto_tools.utils import InputField, ToolInstance
 class PyPhmmerInput(PyHmmerInput):
     """Input object for PyHMMER phmmer (protein sequences vs protein sequences).
 
-    Provide query and target protein sequences for a single-pass search. A temporary
-    HMM is built from each query, so no pre-built profile is needed.
+    This class defines the input parameters for a single-pass protein search,
+    where a temporary HMM is built from each query sequence and searched directly
+    against the target sequences without requiring a pre-built HMM profile.
 
     Attributes:
         sequences (list[str]): Query protein sequences. Inherited from
@@ -83,8 +84,10 @@ def example_input() -> Any:
 def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance: Any = None) -> PyPhmmerOutput:
     """Search protein sequences against protein database using PyHMMER.
 
-    Build a temporary HMM profile from each query sequence and search for homologs
-    in a single pass, without requiring pre-built profiles.
+    This function implements the phmmer algorithm, a single-pass protein-protein
+    search that builds a temporary HMM profile from each query sequence on-the-fly.
+    This is useful for finding homologous sequences without requiring pre-built
+    HMM profiles.
 
     Args:
         inputs (PyPhmmerInput): Validated PyHMMER phmmer input containing both
@@ -118,7 +121,6 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance: 
         >>> if result.sequence_hits:
         ...     significant = [hit for hit in result.sequence_hits if hit.evalue < 1e-10]
     """
-    # Send query and target sequences to the PyHMMER worker for a single-pass search.
     output_data = ToolInstance.dispatch(
         "pyhmmer",
         {
@@ -142,7 +144,6 @@ def run_pyhmmer_phmmer(inputs: PyPhmmerInput, config: PyPhmmerConfig, instance: 
         config=config,
     )
 
-    # Convert worker dictionaries to typed sequence and domain hits.
     sequence_hits, domain_hits = _build_hit_models(output_data["sequence_hits"], output_data["domain_hits"])
 
     return PyPhmmerOutput(

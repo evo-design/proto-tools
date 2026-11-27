@@ -29,8 +29,19 @@ echo "Installing PyRosetta via conda channel..."
     -c conda-forge \
     "pyrosetta=${BINDCRAFT_PYROSETTA_VERSION:-2024.42}"
 
-# AF2 weights are shared with the alphafold2 toolkit (~5.3 GB, downloaded once).
-proto_ensure_af2_params
+# AF2 weights are shared with the alphafold2 toolkit (~5.5 GB, avoid re-download).
+proto_resolve_weights_dir alphafold2
+PARAMS_DIR="${WEIGHTS_DIR}/params"
+mkdir -p "$PARAMS_DIR"
+# Gate on a completion sentinel, not any .npz, so a partial extraction is re-downloaded.
+PARAMS_SENTINEL="${PARAMS_DIR}/.params_complete"
+if [ ! -f "$PARAMS_SENTINEL" ]; then
+    echo "Downloading AlphaFold2 parameters (~5.5GB)..."
+    curl -fsSL https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar | tar x -C "$PARAMS_DIR"
+    touch "$PARAMS_SENTINEL"
+else
+    echo "AlphaFold2 parameters already present at $PARAMS_DIR"
+fi
 
 # BindCraft is not a Python package — clone the repo so bindcraft.py + functions/ are on disk.
 BINDCRAFT_COMMIT="7cd4ace1b7407adf66a50dfefa47de2270f5e4a9"

@@ -2,7 +2,7 @@
 
 Counterpart to ``mock-iterable-stochastic`` — same prompt-to-logits
 "forward pass" but with greedy argmax decoding instead of weighted
-sampling. No RNG. Used to test the framework's per-item
+sampling. No RNG. Used to e2e-test the framework's per-item
 dedup/cache path for deterministic iterable tools.
 
 ``items_processed`` is exposed on the output so tests can directly
@@ -23,9 +23,9 @@ VOCAB = "ACDEFGHIKLMNPQRSTVWY"
 
 
 def _logits_from_prompt(prompt: str) -> list[int]:
-    """Map a prompt deterministically to logits over VOCAB.
+    """Deterministic 'forward pass': prompt → logits over VOCAB.
 
-    Same hash-based mapping as in ``mock_iterable_stochastic``. This
+    Same hash-based mapping as in ``mock_iterable_stochastic``; this
     mock takes the argmax (greedy decoding) instead of sampling.
 
     Args:

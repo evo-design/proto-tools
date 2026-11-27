@@ -78,7 +78,7 @@ def run_pymol_rmsd_alignment(
     mobile_selection: str = "mobile",
     failure_rmsd: float = 999.0,
 ) -> dict[str, Any]:
-    """Run a PyMOL alignment and return RMSD metrics and the superposition transform."""
+    """Run a PyMOL alignment and return RMSD metrics + the superposition transform."""
     cmd = _cmd()
     superposition: dict[str, Any] = {"rotation": None, "translation": None}
 
@@ -102,7 +102,7 @@ def run_pymol_rmsd_alignment(
             else:
                 raise ValueError(f"Unsupported PyMOL alignment method: {method}")
 
-            # The alignment moved the "mobile" object onto the target. Try to capture its
+            # Best-effort: the alignment moved the "mobile" object onto the target. Capture its
             # transform without letting a failure here clobber the alignment metrics.
             try:
                 superposition = _object_transform(cmd, "mobile")

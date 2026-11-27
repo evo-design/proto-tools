@@ -95,7 +95,7 @@ def relaxed_renin():
     )
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_relax_returns_relaxed_structure(relaxed_renin):
     """End-to-end FastRelax: dispatch, return, parse, verify atoms moved."""
     structure = Structure(structure=TEST_PDB)
@@ -136,7 +136,7 @@ def test_relax_returns_relaxed_structure(relaxed_renin):
     assert moved, "FastRelax did not move any CA atoms by >0.01 Å"
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_relax_chains_into_energy(relaxed_renin):
     """The relaxed Structure should feed cleanly into pyrosetta-energy with relax=False."""
     from proto_tools.tools.structure_scoring.pyrosetta.pyrosetta_energy import (
@@ -159,7 +159,7 @@ def test_relax_chains_into_energy(relaxed_renin):
     assert abs(energy_out.results[0].total_energy - relaxed_out.results[0].total_score) < 5.0
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_relax_preserves_multichar_chain_ids():
     """CIF input with multi-char chain labels round-trips correctly.
 

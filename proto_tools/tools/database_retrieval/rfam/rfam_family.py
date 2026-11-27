@@ -70,7 +70,6 @@ class RfamFamilyOutput(BaseToolOutput):
         consensus_structure (str): Consensus secondary structure (#=GC SS_cons), WUSS notation.
         consensus_sequence (str): Reference consensus sequence (#=GC RF), aligned with it.
         seed_alignment (str | None): Full Stockholm seed alignment, when requested.
-        source_url (str): Rfam family record URL.
     """
 
     accession: str = Field(title="Accession", description="Rfam accession")
@@ -99,7 +98,6 @@ class RfamFamilyOutput(BaseToolOutput):
     seed_alignment: str | None = Field(
         default=None, title="Seed Alignment", description="Full Stockholm seed alignment, when requested"
     )
-    source_url: str = Field(title="Source URL", description="Rfam family record URL")
 
     @property
     def output_format_options(self) -> list[str]:
@@ -183,14 +181,14 @@ def run_rfam_family(
 ) -> RfamFamilyOutput:
     """Fetch an Rfam family record and its consensus structure.
 
-    Always read the consensus structure and sequence from the seed alignment.
-    Return the alignment itself only when requested.
+    The consensus structure and sequence are always read from the seed
+    alignment; the alignment itself is returned only when requested.
 
     Args:
         inputs (RfamFamilyInput): Rfam accession or family ID.
         config (RfamFamilyConfig): Whether to return the full seed alignment.
 
-        instance (Any): Unused by this HTTP-only tool.
+        instance (Any): Optional ToolInstance for subprocess execution.
 
     Returns:
         RfamFamilyOutput: Curation record, cutoffs, release, and consensus lines.
@@ -199,14 +197,11 @@ def run_rfam_family(
 
     session = _rfam_session(config)
     try:
-        # Resolve the family name or accession to its curation record.
         record_response = _rfam_get(session, _family_url(inputs.family), {"content-type": "application/json"})
         if record_response is None:
             raise _not_found(inputs.family)
         record = record_response.json()["rfam"]
-        source_url = str(record_response.url)
         accession = record["acc"]
-        # Read consensus annotations from the seed alignment even if it will not be returned.
         alignment_response = _rfam_get(session, _family_url(accession, "alignment", "stockholm"))
         if alignment_response is None:
             raise ValueError(f"Rfam has no seed alignment for {accession}")
@@ -236,5 +231,4 @@ def run_rfam_family(
         consensus_structure=structure,
         consensus_sequence=sequence,
         seed_alignment=stockholm if config.include_seed_alignment else None,
-        source_url=source_url,
     )

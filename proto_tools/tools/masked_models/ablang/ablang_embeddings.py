@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from proto_tools.entities.antibody import Antibody, AntibodyLogits
+from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.masked_models.shared_data_models import (
     MaskedModelEmbeddingsConfig,
     MaskedModelEmbeddingsOutput,
@@ -111,6 +112,7 @@ def example_input() -> AbLangEmbeddingsInput:
     iterable_output_field="results",
     max_chunk_size=32,
     cacheable=True,
+    post_process_iterable=attach_projections,
 )
 def run_ablang_embeddings(
     inputs: AbLangEmbeddingsInput,
@@ -121,7 +123,6 @@ def run_ablang_embeddings(
     sequences = [ab.to_sequence() for ab in inputs.antibodies]
     model_choice = _resolve_model_choice(inputs.antibodies)
     logger.debug("Using local venv for AbLang embeddings: %s", model_choice)
-    # Run inference in the toolkit's isolated environment.
     outputs = ToolInstance.dispatch(
         "ablang",
         {

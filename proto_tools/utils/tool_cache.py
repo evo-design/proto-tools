@@ -1,9 +1,10 @@
 """proto_tools/utils/tool_cache.py.
 
-Cache tool results within a program.
+Tool cache utilities for caching expensive tool operations.
 
-Enable caching with ``cacheable=True`` on the ``@tool()`` decorator. The
-framework chooses the cache strategy based on the tool's input.
+This module provides program-scoped caching capabilities for tools. Caching is
+enabled by setting ``cacheable=True`` on the ``@tool()`` decorator, which
+auto-selects the strategy:
 
 - **Iterable tools** (have ``iterable_input_fields``) → per-item cache
   (strip cached items, dispatch uncached only, stitch results back).
@@ -38,7 +39,7 @@ _program_tool_cache: ContextVar["ToolCache | None"] = ContextVar("_program_tool_
 
 
 def _get_obj_size(obj: Any, seen: set[int] | None = None) -> int:
-    """Estimate the object's size, including nested containers and array data."""
+    """Calculates size recursively."""
     if seen is None:
         seen = set()
 
@@ -50,13 +51,13 @@ def _get_obj_size(obj: Any, seen: set[int] | None = None) -> int:
         return 0
     seen.add(obj_id)
 
-    # Read the array or tensor's data size when available.
+    # For data arrays.
     if hasattr(obj, "nbytes"):  # NumPy / Pandas
         return obj.nbytes  # type: ignore[no-any-return]
     if hasattr(obj, "element_size") and hasattr(obj, "nelement"):  # PyTorch
         return obj.element_size() * obj.nelement()  # type: ignore[no-any-return]
 
-    # Count Python containers recursively without counting shared objects twice.
+    # Standard Python objects.
     try:
         size = sys.getsizeof(obj)
     except Exception:
@@ -341,7 +342,7 @@ def cache_strip_items(
     items: list[Any],
     config: Any,
 ) -> CacheStripResult | None:
-    """Separate items found in the active cache from items that need to run.
+    """Look up each item in the active cache, returning cached vs uncached split.
 
     Args:
         tool_key (str): Registry key of the tool.

@@ -5,11 +5,11 @@ differ from GRCh38, so this must agree with the annotation and with the variants
 """
 
 from proto_tools.databases.registry import (
-    BuildRecipe,
-    BuildStep,
     DatasetEntry,
     DatasetRegistry,
     DownloadSpec,
+    IndexRecipe,
+    IndexStep,
 )
 
 FASTA = "Homo_sapiens.GRCh37.dna.primary_assembly.fa"
@@ -20,7 +20,7 @@ ENTRY = DatasetEntry(
     display_name="GRCh37 (Ensembl 112 archive)",
     description="Human reference genome GRCh37 primary assembly, Ensembl GRCh37 archive release 112.",
     citation_doi="10.1093/nar/gkad1049",  # Ensembl 2024 — Harrison et al.
-    downloads=[
+    urls=[
         DownloadSpec(
             url=(
                 "https://ftp.ensembl.org/pub/grch37/release-112/fasta/homo_sapiens/dna/"
@@ -32,10 +32,10 @@ ENTRY = DatasetEntry(
     ],
     total_download_bytes=869_923_173,
     total_disk_bytes=3_100_000_000,
-    build=BuildRecipe(
+    index_recipe=IndexRecipe(
         # See the GRCh38 entry: decompress only, index built at warmup.
         steps=[
-            BuildStep(
+            IndexStep(
                 command=["gunzip", "-f", f"{FASTA}.gz"],
                 description="Decompress the reference FASTA",
             ),

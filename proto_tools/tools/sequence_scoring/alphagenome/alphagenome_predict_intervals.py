@@ -1,4 +1,7 @@
-"""AlphaGenome batched interval prediction tool."""
+"""proto_tools/tools/sequence_scoring/alphagenome/alphagenome_predict_intervals.py.
+
+AlphaGenome batched interval prediction tool.
+"""
 
 import json
 import logging

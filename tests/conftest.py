@@ -21,7 +21,6 @@ import logging
 import os
 import random
 import re
-import shlex
 import subprocess
 import sys
 import time
@@ -38,7 +37,7 @@ import pytest
 import proto_tools.tools.testing  # noqa: F401
 from proto_tools import setup_logging
 from proto_tools.tools.tool_registry import ToolRegistry
-from proto_tools.utils.standalone_helpers_source.standalone_helpers.vocabulary import (
+from proto_tools.utils.standalone_helpers_source.standalone_helpers.serialization import (
     AMINO_ACIDS_LIST,
     DNA_NUCLEOTIDES,
 )
@@ -510,8 +509,8 @@ _env_report_collector: EnvReportCollector | None = None
 # ============================================================================
 # Benchmark Report Collector
 # ============================================================================
-# Benchmarks that pin ``device=``, and why. Pinning defeats ``--use-modal``,
-# which routes a run by patching config defaults — an explicit value wins. An entry here says the
+# Benchmarks that pin ``device=``, and why. Pinning defeats ``--use-modal`` and ``--use-proto``,
+# which route a run by patching config defaults — an explicit value wins. An entry here says the
 # benchmark can only run on this machine, and the report writer labels its backend accordingly
 # rather than repeating the run's remote one. ``test_benchmark_coverage`` keeps the two in step.
 DEVICE_PINNED_BENCHMARKS: dict[str, str] = {
@@ -847,41 +846,10 @@ def pytest_addoption(parser):
         help="Run only GPU tests, skip CPU tests",
     )
     parser.addoption(
-        "--multi-gpu",
-        action="store_true",
-        default=False,
-        help="Run only tests that need two or more GPUs (uses_gpu(n), n >= 2), including slow ones",
-    )
-    parser.addoption(
         "--random-order",
         action="store_true",
         default=False,
         help="Shuffle test order (pytest-randomly's reordering, which this suite disables by default)",
-    )
-    parser.addoption(
-        "--gpu-phase",
-        choices=("serial", "parallel"),
-        default=None,
-        help="Run only one phase of a multi-GPU session (tests/_gpu_shards.py): 'serial' is the tests "
-        "that need more than one GPU or lease GPUs themselves, 'parallel' everything else",
-    )
-    parser.addoption(
-        "--shard",
-        default=None,
-        metavar="K/N",
-        help="With --gpu-phase parallel, run only shard K of N; a shard holds whole toolkits",
-    )
-    parser.addoption(
-        "--shard-weights",
-        default=None,
-        metavar="PATH",
-        help="JSON of per-test seconds (python -m tests._gpu_shards weights <junit.xml> <out.json>) to balance shards",
-    )
-    parser.addoption(
-        "--no-toolkit-order",
-        action="store_true",
-        default=False,
-        help="Keep collection order instead of running each toolkit's tests together (tests/_warm_workers.py)",
     )
     parser.addoption(
         "--all",
@@ -902,16 +870,10 @@ def pytest_addoption(parser):
         help="Skip tests marked with skip_ci (mimics CI environment behavior)",
     )
     parser.addoption(
-        "--network",
+        "--integration",
         action="store_true",
         default=False,
-        help="Run tests that call live external services (marked network). Not enabled by --all or --ext.",
-    )
-    parser.addoption(
-        "--no-envs",
-        action="store_true",
-        default=False,
-        help="Skip tests that build or run a tool env (marked uses_env, which every uses_gpu test is too).",
+        help="Run integration tests (hit external APIs/services). Skipped by default.",
     )
     parser.addoption(
         "--extensive",
@@ -928,9 +890,15 @@ def pytest_addoption(parser):
         help="Run only @pytest.mark.benchmark tests. Selecting benchmark mode deselects "
         "everything that isn't benchmark-marked (similar to --env-report). The 'slow' gate is "
         "bypassed for benchmarks (no need to also pass --slow); hardware gates (uses_gpu, GPU "
-        "count) are bypassed only when --use-modal is set. Without this flag (or any of "
+        "count) are bypassed only when --use-proto is set. Without this flag (or any of "
         "--benchmark-report / --benchmark-tool / --benchmark-toolkit, which imply --benchmark), "
         "benchmark-marked tests are skipped — they do NOT run under --all or --slow.",
+    )
+    parser.addoption(
+        "--use-proto",
+        action="store_true",
+        default=False,
+        help="Route every tool run through device='proto'. Requires PROTO_API_KEY in the environment.",
     )
     parser.addoption(
         "--use-modal",
@@ -995,28 +963,17 @@ def pytest_configure(config):
     global _env_report_collector  # noqa: PLW0603 -- test infrastructure
     global _benchmark_report_collector  # noqa: PLW0603 -- test infrastructure
 
+    # Both patch the same field, so the second would silently win. Refuse rather than pick.
+    if config.getoption("--use-proto") and config.getoption("--use-modal"):
+        raise pytest.UsageError(
+            "--use-proto and --use-modal are mutually exclusive: each routes every tool run to a "
+            "different remote device. Pass one."
+        )
+
     if hasattr(config.option, "randomly_reorganize"):
         config.option.randomly_reorganize = bool(config.getoption("--random-order"))
 
-    from tests import _warm_workers
-
-    if not config.pluginmanager.has_plugin(_warm_workers.PLUGIN_NAME):
-        config.pluginmanager.register(_warm_workers.WarmWorkersPlugin(config), _warm_workers.PLUGIN_NAME)
-    config.addinivalue_line(
-        "markers", "toolkit(name): the toolkit a test runs, for run ordering when it cannot be inferred"
-    )
-    config.addinivalue_line(
-        "markers",
-        "worker_config(**fields): the reload_on_change values a test runs with, for run ordering "
-        "when they cannot be inferred",
-    )
-
     config.addinivalue_line("markers", "uses_gpu: mark test as requiring GPU")
-    config.addinivalue_line(
-        "markers",
-        "uses_env: test builds or runs a tool env; runs by default, skipped with --no-envs. "
-        "Applied automatically to uses_gpu tests",
-    )
     config.addinivalue_line(
         "markers",
         "uses_cpu: mark test as CPU-only. Optional arg: @pytest.mark.uses_cpu(n) skips unless n CPUs are visible",
@@ -1053,10 +1010,15 @@ def pytest_configure(config):
     # Handle --benchmark-report (implies --benchmark via pytest_collection_modifyitems below)
     benchmark_report_opt = config.getoption("--benchmark-report")
     if benchmark_report_opt:
+        use_proto = config.getoption("--use-proto")
         use_modal = config.getoption("--use-modal")
 
         # Name the backend the numbers came from, or the report claims "local (default device)".
-        if use_modal:
+        if use_proto:
+            from proto_tools.proto._client import _resolve_base_url
+
+            backend_url = _resolve_base_url(None)
+        elif use_modal:
             from proto_tools.modal.app import resolve_environment
 
             backend_url = f"modal environment {resolve_environment(None)!r}"
@@ -1066,7 +1028,7 @@ def pytest_configure(config):
         _benchmark_report_collector = BenchmarkReportCollector(
             output_dir=Path(benchmark_report_opt),
             backend_url=backend_url,
-            remote_device="modal" if use_modal else None,
+            remote_device=("proto" if use_proto else "modal" if use_modal else None),
         )
 
 
@@ -1275,51 +1237,8 @@ def pytest_sessionfinish(session, exitstatus):
             print(f"[benchmark-report] {path}")
 
 
-def _required_gpus(item: pytest.Item) -> int:
-    """GPUs a test needs: the largest ``uses_gpu(n)`` count (1 for bare ``uses_gpu``, 0 if unmarked)."""
-    return max((marker.args[0] if marker.args else 1 for marker in item.iter_markers("uses_gpu")), default=0)
-
-
-@functools.cache
-def _declared_credentials() -> frozenset[str]:
-    """Environment variables that a ``ConfigField(credential=...)`` somewhere falls back to."""
-    from proto_tools.tools.tool_registry import ToolRegistry
-
-    declared = set()
-    for spec in ToolRegistry.list_all():
-        model = spec.config_model
-        for name in model.credential_fields() if hasattr(model, "credential_fields") else ():
-            extra = model.model_fields[name].json_schema_extra
-            if isinstance(extra, dict) and extra.get("credential"):
-                declared.add(extra["credential"])
-    return frozenset(declared)
-
-
-def _skip_without_credentials(items) -> None:
-    """Skip ``requires_credential(...)`` tests, at collection, unless every named credential is set.
-
-    The names must be credentials some tool config declares, so a typo fails the run rather than
-    quietly skipping the test forever. A blank value counts as unset, as it does for the config.
-    """
-    for item in items:
-        marker = item.get_closest_marker("requires_credential")
-        if marker is None:
-            continue
-        unknown = [name for name in marker.args if name not in _declared_credentials()]
-        if not marker.args or unknown:
-            raise pytest.UsageError(
-                f"{item.nodeid}: requires_credential({', '.join(map(repr, marker.args))}) must name credentials "
-                f"declared by a ConfigField(credential=...); unknown: {unknown or 'none given'}. "
-                f"Known: {', '.join(sorted(_declared_credentials()))}"
-            )
-        missing = [name for name in marker.args if not os.environ.get(name, "").strip()]
-        if missing:
-            item.add_marker(pytest.mark.skip(reason=f"needs credential {' and '.join(missing)} set in the environment"))
-
-
 def pytest_collection_modifyitems(config, items):
     """Modify test collection based on command line options and auto-mark tests."""
-    _skip_without_credentials(items)
     # --env-report: keep only env-report smoke tests, deselect everything else
     if config.getoption("--env-report"):
         skip_ci_mark = pytest.mark.skip(reason="--env-report: skip_ci honored under GitHub Actions / --skip-ci")
@@ -1378,24 +1297,12 @@ def pytest_collection_modifyitems(config, items):
         items[:] = selected
         config.hook.pytest_deselected(items=deselected)
 
-    # --multi-gpu: keep only tests that need two or more GPUs. uses_gpu(n) is the source of truth;
-    # pytest's -m cannot select on a marker's positional argument.
-    multi_gpu = config.getoption("--multi-gpu")
-    if multi_gpu:
-        single = [item for item in items if _required_gpus(item) < 2]
-        if single:
-            items[:] = [item for item in items if _required_gpus(item) >= 2]
-            config.hook.pytest_deselected(items=single)
-
     # Auto-mark CPU tests — skip if already tagged (uses_gpu or explicit uses_cpu(n))
     # so we don't stack a zero-arg duplicate on top of an explicit count.
-    # A GPU test always runs a tool env, so it is marked uses_env too.
     for item in items:
         markers = list(item.iter_markers())
         if not any(m.name == "uses_gpu" for m in markers) and not any(m.name == "uses_cpu" for m in markers):
             item.add_marker(pytest.mark.uses_cpu)
-        if any(m.name == "uses_gpu" for m in markers) and not any(m.name == "uses_env" for m in markers):
-            item.add_marker(pytest.mark.uses_env)
 
     # Skip tests marked with skip_ci when running in GitHub Actions or --skip-ci is specified
     if os.getenv("GITHUB_ACTIONS") == "true" or config.getoption("--skip-ci"):
@@ -1408,7 +1315,7 @@ def pytest_collection_modifyitems(config, items):
     # Whether a uses_gpu test runs is decided solely by the CUDA probe below
     # (tests/_cuda_probe.py). A remote device bypasses every hardware gate because
     # the GPUs live on the server, not on this machine.
-    use_remote = config.getoption("--use-modal")
+    use_proto = config.getoption("--use-proto") or config.getoption("--use-modal")
 
     # Under --use-modal a benchmark can only run where a deployment exists, and TOOL_MAP is that
     # set. A tool with no deployment has nothing to measure, so skip rather than fail.
@@ -1426,7 +1333,7 @@ def pytest_collection_modifyitems(config, items):
     if config.getoption("--cpu-only"):
         skip_gpu = pytest.mark.skip(reason="--cpu-only specified")
         for item in items:
-            if "uses_gpu" in item.keywords and not use_remote:
+            if "uses_gpu" in item.keywords and not use_proto:
                 item.add_marker(skip_gpu)
 
     # Skip CPU tests when --gpu-only is specified
@@ -1437,8 +1344,7 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(skip_cpu)
 
     # Handle slow test filtering
-    # Multi-GPU tests are mostly slow; --multi-gpu runs them all rather than selecting and then skipping them.
-    run_all = config.getoption("--all") or multi_gpu
+    run_all = config.getoption("--all")
     run_slow_only = config.getoption("--slow")
     tool_filter = config.getoption("--benchmark-tool")
     toolkit_filter = config.getoption("--benchmark-toolkit")
@@ -1461,20 +1367,14 @@ def pytest_collection_modifyitems(config, items):
                     continue
                 item.add_marker(skip_slow)
 
-    # Skip tests that build or run a tool env when --no-envs is specified
-    if config.getoption("--no-envs"):
-        skip_env = pytest.mark.skip(reason="builds or runs a tool env; --no-envs specified")
+    # Skip integration tests unless --integration or --all is specified
+    if not config.getoption("--integration") and not run_all:
+        skip_integration = pytest.mark.skip(
+            reason="integration test (use --integration to run, or --all for everything)"
+        )
         for item in items:
-            if "uses_env" in item.keywords:
-                item.add_marker(skip_env)
-
-    # Skip tests that call live external services unless --network is specified. --all does not
-    # enable them: an upstream queue or outage would otherwise decide how long a run takes.
-    if not config.getoption("--network"):
-        skip_network = pytest.mark.skip(reason="needs network access to an external service; pass --network")
-        for item in items:
-            if "network" in item.keywords:
-                item.add_marker(skip_network)
+            if "integration" in item.keywords:
+                item.add_marker(skip_integration)
 
     # Skip extensive tests unless --ext (or --extensive) is specified
     if not config.getoption("extensive"):
@@ -1521,9 +1421,9 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(pytest.mark.skip(reason=f"Requires platform {allowed}, current is {current_arch}"))
 
     # Skip uses_gpu(n) tests when fewer than n visible GPUs can run CUDA — bypassed
-    # under --use-modal (the GPUs live on the server). The probe only runs when a
+    # under --use-proto (the GPUs live on the server). The probe only runs when a
     # GPU test could actually execute here.
-    gpu_items = [] if use_remote or config.getoption("--cpu-only") else [i for i in items if "uses_gpu" in i.keywords]
+    gpu_items = [] if use_proto or config.getoption("--cpu-only") else [i for i in items if "uses_gpu" in i.keywords]
     if gpu_items:
         visible_gpus, gpu_reason = _visible_gpus()
         for item in gpu_items:
@@ -1561,8 +1461,7 @@ def setup_test_logging(request):
     proto_tools_logger.handlers.clear()
 
     # Create header with pytest command and timestamp
-    # Shell-quoted so scripts/list_incomplete_tests.py can replay it (a multi-word -k stays one argument).
-    pytest_command = shlex.join(sys.argv)
+    pytest_command = " ".join(sys.argv)
     now = datetime.now()
     timestamp = now.strftime("%H:%M:%S")
     datestamp = now.strftime("%m/%d/%Y")
@@ -1721,12 +1620,16 @@ def _env_report_clean_envs(request, setup_test_logging):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _route_tests_to_modal(request):
-    """Patch BaseConfig.device default to ``"modal"`` when --use-modal is set.
+def _route_tests_to_proto(request):
+    """Patch BaseConfig.device default to a remote device when --use-proto or --use-modal is set.
 
     Lets a test that already passes ``Config()`` without an explicit ``device=`` run locally
-    (default ``"cpu"``) or against the apps in your own Modal workspace (``--use-modal``), without
-    any change to the test body. Modal activates on your Modal credentials plus a deployed app.
+    (default ``"cpu"``), against Proto's hosted execution service (``--use-proto``), or against the
+    apps in your own Modal workspace (``--use-modal``), without any change to the test body. Proto
+    activates on ``PROTO_API_KEY``; Modal on your Modal credentials plus a deployed app.
+
+    The two options are refused together in ``pytest_configure`` — they patch one field to
+    different values, so there is no coherent meaning for both at once.
 
     Configs belonging to ``local_only`` tools keep their own default. A tool can construct one
     internally — a structure predictor builds an ``Mmseqs2HomologySearchConfig`` to generate an MSA
@@ -1734,8 +1637,8 @@ def _route_tests_to_modal(request):
     search to a backend that has already said no, failing the outer tool for a reason the test never
     asked for.
     """
-    device = "modal"
-    if not request.config.getoption("--use-modal"):
+    device = "modal" if request.config.getoption("--use-modal") else "proto"
+    if not (request.config.getoption("--use-proto") or request.config.getoption("--use-modal")):
         yield
         return
 
@@ -1843,17 +1746,14 @@ def _default_raise_mode(monkeypatch):
 # Persistent tool fixture factory
 # ============================================================================
 def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
-    """Create an autouse fixture that gives every test in the calling module a warm worker.
-
-    The worker comes from the session pool in ``tests/_warm_workers.py``. It is started for the
-    module's first test, and kept for as long as consecutive tests use it, which with the suite's
-    toolkit ordering can span several files; it is released as soon as the next test does not.
+    """Create a module-scoped autouse fixture that wraps tests in persistence.
 
     Parameters
     ----------
     toolkit : str
-        Worker group passed to ``ToolInstance.get()`` (e.g. ``"pyrosetta"``, ``"esm2"``).
-        Accepts a registered tool_key too (it will be normalized).
+        Worker group passed to ``ToolInstance.persist_tool()`` (e.g.
+        ``"pyrosetta"``, ``"esm2"``). Accepts a registered tool_key too
+        (it will be normalized).
     gpu : bool
         When *True* (default), the fixture skips persistence when no
         GPU is available: ``--cpu-only`` flag, or no visible GPU can run
@@ -1864,17 +1764,11 @@ def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
         Skipped in benchmark mode (any of ``--benchmark``, ``--benchmark-report``,
         ``--benchmark-tool``, ``--benchmark-toolkit``). Benchmarks measure
         cold-start vs warm by running their workload twice with their own
-        ``ToolInstance.persist()`` scope; a warm pooled worker would
+        ``ToolInstance.persist()`` scope; a module-level warm worker would
         steal the cold-start measurement.
     """
-    import sys
 
-    from tests import _warm_workers
-
-    toolkit = ToolInstance._normalize_toolkit(toolkit)
-    _warm_workers.register_module_toolkit(sys._getframe(1).f_globals["__name__"], toolkit)
-
-    @pytest.fixture(autouse=True)
+    @pytest.fixture(scope="module", autouse=True)
     def _persistent_tool(request):
         if gpu and (request.config.getoption("--cpu-only") or not _gpu_available()):
             yield
@@ -1887,10 +1781,8 @@ def make_persistent_fixture(toolkit: str, *, gpu: bool = True):
         ):
             yield
             return
-        pool = _warm_workers.pool(request.config)
-        if pool is not None:
-            pool.acquire(toolkit, request.node.nodeid)
-        yield
+        with ToolInstance.persist_tool(toolkit):
+            yield
 
     return _persistent_tool
 

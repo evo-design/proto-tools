@@ -1,4 +1,7 @@
-"""Segmasker tool for detecting low-complexity regions in protein sequences."""
+"""proto_tools/tools/sequence_scoring/segmasker/segmasker.py.
+
+Segmasker tool for detecting low-complexity regions in protein sequences.
+"""
 
 import os
 from pathlib import Path
@@ -21,7 +24,8 @@ from proto_tools.utils.tool_io import Metrics, MetricSpec
 class SegmaskerInput(BaseToolInput):
     """Input object for Segmasker low-complexity region detection.
 
-    Provide protein sequences for low-complexity region detection with NCBI segmasker.
+    This class defines the input parameters for detecting low-complexity regions
+    in protein sequences using NCBI's segmasker tool.
 
     Attributes:
         sequences (list[str]): Protein sequence(s) to analyze for low-complexity
@@ -234,7 +238,6 @@ def run_segmasker(
         >>> result = run_segmasker(inputs, config)
         >>> print(f"Low-complexity fractions: {[r.low_complexity_fraction for r in result.results]}")
     """
-    # Collect the sequences and SEG complexity thresholds for the worker.
     input_data = {
         "sequences": inputs.sequences,
         "config": {
@@ -244,7 +247,6 @@ def run_segmasker(
         },
     }
 
-    # Run the standalone segmasker implementation on CPU.
     input_data["device"] = "cpu"
     output_data = ToolInstance.dispatch(
         "segmasker",
@@ -253,7 +255,6 @@ def run_segmasker(
         config=config,
     )
 
-    # Combine the returned measurements into one result per input sequence.
     results = [
         SegmaskerMetrics(
             low_complexity_fraction=fraction,

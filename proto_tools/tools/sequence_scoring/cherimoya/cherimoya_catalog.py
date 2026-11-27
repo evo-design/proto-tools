@@ -21,7 +21,7 @@ from proto_tools.utils import BaseConfig, BaseToolInput, BaseToolOutput, ConfigF
 
 
 class CherimoyaCatalogInput(BaseToolInput):
-    """Filters for a Cherimoya collection. Unset filters match everything.
+    """Filters for a Cherimoya collection; every filter left unset matches everything.
 
     Attributes:
         biosample (str | None): Case-insensitive regular expression matched against the
@@ -184,21 +184,16 @@ def run_cherimoya_catalog(
     Returns:
         CherimoyaCatalogOutput: Matching experiments, best fold 0 count Pearson first.
     """
-    # Load the collection's catalog and compile the case-insensitive biosample and target patterns
     catalog = load_catalog(config.collection)
     pattern = re.compile(inputs.biosample, re.IGNORECASE) if inputs.biosample else None
     target_pattern = re.compile(inputs.target, re.IGNORECASE) if inputs.target else None
-    # Collect the requested accessions and classifications as sets for fast membership checks
     wanted = set(inputs.accessions) if inputs.accessions else None
     classifications = set(inputs.biosample_classification) if inputs.biosample_classification else None
-    # Fail on requested accessions that are not in this collection
     unknown = sorted(wanted - set(catalog)) if wanted else []
     if unknown:
         raise ValueError(f"accessions {unknown} are not experiments in collection {config.collection!r}")
-    # Hide perturbed experiments unless asked for, or unless accessions or defaults are requested
     hide_perturbed = not inputs.include_perturbed and wanted is None and not inputs.defaults_only
 
-    # Keep only the experiments that pass every filter given
     matches = []
     for entry in catalog.values():
         if wanted is not None and entry.experiment_accession not in wanted:
@@ -219,7 +214,6 @@ def run_cherimoya_catalog(
             continue
         matches.append(entry)
 
-    # Sort by fold 0 count Pearson, best first, breaking ties by accession
     matches.sort(key=lambda entry: (-entry.count_pearson_fold_0, entry.experiment_accession))
     return CherimoyaCatalogOutput(
         experiments=matches[: inputs.limit],

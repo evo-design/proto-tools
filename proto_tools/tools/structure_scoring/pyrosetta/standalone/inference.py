@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import StatusCounter, get_logger
+from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 
@@ -44,15 +44,16 @@ class PyRosettaScorer:
         Flags:
             ``-mute all``: Suppress PyRosetta's C-level stdout/stderr output.
             ``-ignore_unrecognized_res true``: Silently drop residues PyRosetta
-                cannot parse, such as non-standard amino acids or ligands,
-                instead of aborting. This is commonly used with mixed PDB
-                inputs. Setting it to ``false`` would reject ligands without
-                a ``.params`` file, such as ATP, NAD, HEM, or user cofactors.
+                cannot parse (non-standard AAs, exotic ligands, etc.) instead
+                of aborting. This is the de facto community standard for
+                production scoring pipelines on heterogeneous PDB input —
+                flipping to ``false`` would crash on any PDB with a ligand
+                lacking a ``.params`` file (ATP, NAD, HEM, user cofactors).
             ``-remember_unrecognized_res true``: Track the names of dropped
                 residues in ``PDBInfo`` so we can surface them to the user
-                via a warning after scoring completes. Rosetta provides this
-                information directly, so no separate PDB parser is needed to
-                compare the input with the loaded pose.
+                via a warning after scoring completes. This gives us
+                "warn-but-continue" semantics without hand-rolling a PDB
+                parser to diff the input against the loaded pose.
             ``-ignore_zero_occupancy true``: Skip atoms with zero occupancy
                 during PDB load. Matches BindCraft's init (defensive default
                 for heterogeneous PDB sources).
@@ -91,7 +92,6 @@ class PyRosettaScorer:
         if dalphaball.is_file():
             extra_opts += f" -holes:dalphaball {dalphaball}"
             self._has_dalphaball = True
-        logger.update_status("Initializing PyRosetta")
         pyrosetta.init(extra_options=extra_opts)
         self._beta_nov16 = bool(beta_nov16)
         self._initialized = True
@@ -263,7 +263,7 @@ class PyRosettaScorer:
             dropped_residues = self._find_dropped_residues(pose)
             chain_ids = chain_ids_list[i] if chain_ids_list else None
 
-            # Score the selected chains while retaining the full structure as burial and SASA context.
+            # score_sel = user's chain selection; context selectors = full structure
             score_sel = self._build_residue_selector(pose, chain_ids)
             sap_score = float(calculate_sap(pose, score_sel, all_res, all_res))
 
@@ -306,17 +306,18 @@ class PyRosettaScorer:
     ) -> dict[str, Any]:
         """Compute SASA and hydrophobic SASA for a list of PDB content strings.
 
-        SASA is always calculated on the full pose. PyRosetta's ``SasaCalc``
+        SASA is always calculated on the full pose: PyRosetta's ``SasaCalc``
         scores every residue in context, including the effect of buried
         surfaces between chains. Chain selection only filters which residues
-        get reported and summed. It does not change the geometry PyRosetta sees.
+        get reported and summed; it does not change the geometry PyRosetta sees.
 
         When ``chain_ids_list`` is active, the reported ``total_sasa`` is the
         sum over the **selected residues only**, not the whole-pose SASA. This
         differs from ``compute_energy``, whose ``total_energy`` is always the
         whole-pose total regardless of chain selection. The asymmetry is
-        intentional. SASA is additive across residues, so a chain-subset sum is
-        meaningful. Energy includes pair terms that prevent the same treatment. Per-residue output is filtered
+        intentional: SASA is a per-residue additive quantity, so a chain-subset
+        sum is a meaningful number, whereas energy has pair terms that make a
+        chain-subset sum physically incoherent. Per-residue output is filtered
         by chain selection in both tools.
 
         Args:
@@ -332,17 +333,14 @@ class PyRosettaScorer:
 
         results = []
         for i, pdb_content in enumerate(pdb_contents):
-            # Load the pose and record any residues PyRosetta dropped
             pose = self._pdb_content_to_pose(pdb_content)
             dropped_residues = self._find_dropped_residues(pose)
             chain_ids = chain_ids_list[i] if chain_ids_list else None
 
-            # Compute SASA over the full pose
             calc = SasaCalc()
             calc.set_probe_radius(probe_radius)
             calc.calculate(pose)
 
-            # Grab total, hydrophobic and side-chain hydrophobic SASA per residue
             residue_sasa = calc.get_residue_sasa()
             residue_hsasa = calc.get_residue_hsasa()
             residue_hsasa_sc = calc.get_residue_hsasa_sc()
@@ -351,7 +349,6 @@ class PyRosettaScorer:
             selector = self._build_residue_selector(pose, chain_ids)
             selected = self._get_selected_indices(pose, selector)
 
-            # Sum SASA over the selected residues and record each one
             per_residue = []
             total_sasa = 0.0
             hydrophobic_sasa = 0.0
@@ -375,7 +372,6 @@ class PyRosettaScorer:
                     }
                 )
 
-            # Collect this structure's totals and per-residue values
             results.append(
                 {
                     "total_sasa": total_sasa,
@@ -529,30 +525,25 @@ class PyRosettaScorer:
         from pyrosetta.rosetta.protocols.relax import FastRelax
         from pyrosetta.rosetta.protocols.simple_moves import AlignChainMover
 
-        # Seed PyRosetta's global RNG so the relax is reproducible
         if seed is not None:
             pyrosetta.rosetta.numeric.random.rg().set_seed(seed)
 
-        # Score with the plain function; relax with a copy that adds coordinate constraints
         sfxn = pyrosetta.create_score_function(scorefxn_name)
         relax_sfxn = sfxn.clone()
         if constrain_to_start:
             relax_sfxn.set_weight(ScoreType.coordinate_constraint, 1.0)
 
         results = []
-        for pdb_content in StatusCounter(logger, "Relaxing structure %d/%d", pdb_contents):
-            # Load the pose, keeping a copy of the input when aligning or copying B-factors
+        for pdb_content in pdb_contents:
             pose = self._pdb_content_to_pose(pdb_content)
             start_pose = pose.clone() if (align_to_start or copy_b_factors_from_start) else None
             dropped_residues = self._find_dropped_residues(pose)
 
-            # Configure FastRelax with the requested cycles, iterations and minimizer
             fast_relax = FastRelax(relax_sfxn, relax_cycles)
             if max_iter is not None:
                 fast_relax.max_iter(max_iter)
             if min_type is not None:
                 fast_relax.min_type(min_type)
-            # Freeze rigid-body jumps between chains while leaving backbone and side chains free
             if disable_jumps:
                 from pyrosetta.rosetta.core.kinematics import MoveMap
 
@@ -561,12 +552,10 @@ class PyRosettaScorer:
                 mm.set_bb(True)
                 mm.set_jump(False)
                 fast_relax.set_movemap(mm)
-            # Tie atoms to their input coordinates when requested, then run FastRelax
             fast_relax.constrain_relax_to_start_coords(constrain_to_start)
             fast_relax.apply(pose)
 
             if start_pose is not None:
-                # Superimpose the relaxed pose back onto the input pose
                 if align_to_start:
                     align = AlignChainMover()
                     align.source_chain(0)
@@ -574,7 +563,6 @@ class PyRosettaScorer:
                     align.pose(start_pose)
                     align.apply(pose)
 
-                # Copy each protein residue's first-atom B-factor from the input onto all its atoms
                 if copy_b_factors_from_start:
                     for resid in range(1, pose.total_residue() + 1):
                         if pose.residue(resid).is_protein():
@@ -582,7 +570,7 @@ class PyRosettaScorer:
                             for atom_id in range(1, pose.residue(resid).natoms() + 1):
                                 pose.pdb_info().bfactor(resid, atom_id, bfactor)
 
-            # PyRosetta's dump_pdb writes to a file. Use a temporary file
+            # PyRosetta's dump_pdb is file-based; round-trip through tempfile
             # so we can return the relaxed coordinates as a string.
             with tempfile.NamedTemporaryFile(suffix=".pdb", delete=False) as tmp:
                 tmp_path = tmp.name
@@ -593,7 +581,6 @@ class PyRosettaScorer:
             finally:
                 os.unlink(tmp_path)
 
-            # Score the relaxed pose with the unconstrained function
             results.append(
                 {
                     "relaxed_pdb": relaxed_pdb,
@@ -636,7 +623,7 @@ class PyRosettaScorer:
         # PDB chain letters and residue numbers.
         pdb_info = pose.pdb_info()
 
-        # Keep residue metadata on binder atoms for amino-acid counts. Target
+        # Binder atoms carry residue metadata for later AA counting; target
         # atoms only need coordinates (they are pure KDTree lookup targets).
         binder_atoms: list[tuple[int, str, float, float, float]] = []
         target_coords: list[list[float]] = []
@@ -659,7 +646,7 @@ class PyRosettaScorer:
         if not binder_atoms or not target_coords:
             return {}
 
-        # Build KDTrees for both chains. `query_ball_tree` returns, for each
+        # Build KDTrees for both chains; `query_ball_tree` returns, for each
         # binder atom, the list of target-atom indices within `cutoff` angstroms.
         binder_coords = np.array([(a[2], a[3], a[4]) for a in binder_atoms])
         target_arr = np.array(target_coords)
@@ -782,21 +769,16 @@ class PyRosettaScorer:
         import pyrosetta
         from pyrosetta.rosetta.protocols.analysis import InterfaceAnalyzerMover
 
-        # Seed PyRosetta's global RNG so the separated repack is reproducible
         if seed is not None:
             pyrosetta.rosetta.numeric.random.rg().set_seed(seed)
 
         results = []
-        counter = StatusCounter(logger, "Analyzing interface %d/%d", total=len(pdb_contents))
         for i, pdb_content in enumerate(pdb_contents):
-            counter(i + 1)
-            # Load the pose and look up this complex's binder and target chains
             pose = self._pdb_content_to_pose(pdb_content)
             dropped_residues = self._find_dropped_residues(pose)
             binder_chain = binder_chains[i]
             target_side = target_chains[i]
 
-            # Configure InterfaceAnalyzerMover for the target_binder interface
             iam = InterfaceAnalyzerMover()
             _set_interface(iam, f"{''.join(target_side)}_{binder_chain}")
             sfxn = pyrosetta.create_score_function(scorefxn_name)
@@ -807,7 +789,6 @@ class PyRosettaScorer:
             iam.set_calc_hbond_sasaE(True)
             iam.set_compute_interface_sc(True)
             iam.set_pack_separated(True)
-            # Run the analysis and read out shape complementarity, H-bonds, dG, dSASA and packstat
             iam.apply(pose)
             data = iam.get_all_data()
             interface_sc = float(data.sc_value)
@@ -816,7 +797,6 @@ class PyRosettaScorer:
             interface_dSASA = float(iam.get_interface_delta_sasa())
             interface_packstat = float(iam.get_interface_packstat())
 
-            # Compute the percentage of binder interface residues that are apolar
             interface_residues = self._hotspot_residues_from_pose(pose, binder_chain, target_side)
             interface_nres = len(interface_residues)
             apolar_aa = set("ACFILMPVWY")
@@ -825,7 +805,6 @@ class PyRosettaScorer:
 
             surface_hydrophobicity = self._surface_hydrophobicity(pose, binder_chain)
 
-            # Count buried unsatisfied H-bonds, which needs the DAlphaBall binary
             delta_unsat_hbonds: int | None = None
             if self._has_dalphaball:
                 from pyrosetta.rosetta.protocols.rosetta_scripts import XmlObjects
@@ -839,7 +818,6 @@ class PyRosettaScorer:
                 sfxn(pose)
                 delta_unsat_hbonds = int(buns_filter.report_sm(pose))
 
-            # Collect this complex's interface metrics
             results.append(
                 {
                     "interface_sc": interface_sc,

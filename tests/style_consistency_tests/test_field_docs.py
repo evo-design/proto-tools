@@ -9,7 +9,7 @@ import pytest
 
 from proto_tools.tools.tool_registry import ToolRegistry
 from proto_tools.utils.tool_docs import field_docs_from_docstrings
-from proto_tools.utils.tool_io import OUTPUT_METADATA_FIELDS
+from proto_tools.utils.tool_io import _OUTPUT_METADATA_FIELDS
 
 
 def _input_models():
@@ -66,7 +66,7 @@ def test_every_output_field_has_docstring_doc(model):
     Framework-managed metadata fields (``tool_id``, ``execution_time``, etc.) are
     excluded — they are not part of a tool's authored output docstring.
     """
-    missing = _missing_docs(model, exclude=OUTPUT_METADATA_FIELDS)
+    missing = _missing_docs(model, exclude=_OUTPUT_METADATA_FIELDS)
     assert not missing, (
         f"{model.__name__} has no docstring documentation for fields: {missing}. "
         "Document each field in its class's Google-style 'Attributes:' section."

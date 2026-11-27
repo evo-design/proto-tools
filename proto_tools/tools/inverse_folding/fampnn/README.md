@@ -47,7 +47,7 @@ Use this to build or rebuild sidechains for a known sequence and backbone, for e
 #### Usage Tips
 
 - **pSCE tells you which sidechains to trust.** It is the predicted per-atom sidechain error in angstroms, so high-pSCE residues are the ones to inspect or rebuild.
-- **Lower `batch_size` if you run out of GPU memory.** It defaults to `16` samples per forward pass. Reduce it for large structures.
+- **Lower `batch_size` if you run out of GPU memory.** It defaults to `16` samples per forward pass; reduce it for large structures.
 
 ### FAMPNN Mutation Scoring (`fampnn-score`)
 
@@ -60,7 +60,7 @@ Use this to estimate the effect of specific point or multi-site mutations, for e
 #### Usage Tips
 
 - **Mutation strings are 1-indexed and colon-joined.** Use `A1V` for a single mutation and `A1V:G5L` for a multi-site variant. The position is counted from 1.
-- **`seq_only` (default `False`) removes sidechain context.** Leaving it off scores with full-atom context, which is the point of FAMPNN. Set it `True` only for a faster, weaker backbone-style score.
+- **`seq_only` (default `False`) removes sidechain context.** Leaving it off scores with full-atom context, which is the point of FAMPNN; set it `True` only for a faster, weaker backbone-style score.
 
 ### FAMPNN Score All Mutations (`fampnn-score-all-mutations`)
 
@@ -80,10 +80,6 @@ Use this for a full in-silico deep mutational scan, to find stabilizing or toler
 <a href="https://bio-pro.mintlify.app/tools/guides/tool-persistence"><img src="https://img.shields.io/badge/Tool_Persistence_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Tool Persistence guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/device-management"><img src="https://img.shields.io/badge/Device_Management_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Device Management guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/parallel-execution"><img src="https://img.shields.io/badge/Parallel_Execution_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Parallel Execution guide"></a> <a href="https://bio-pro.mintlify.app/tools/guides/cloud-inference"><img src="https://img.shields.io/badge/Cloud_Inference_→-046e7a?style=flat-square&logo=readthedocs&logoColor=white" alt="Cloud Inference guide"></a>
 
 These apply to every FAMPNN tool in this toolkit (`fampnn-sample`, `fampnn-pack`, `fampnn-score`, `fampnn-score-all-mutations`).
-
-- **Residues FAMPNN's parser cannot read are designed around, not refused.** Its parser skips a `HETATM` residue whose name is outside its modified-residue table, and any residue with no atom in the 37-atom AlphaFold set. The design covers the whole chain, with those residues at their input identity and recorded in `chains[].modifications`.
-- **`psce` has one entry per residue of the design, `None` where the model packed nothing.** It is indexable by chain position. `avg_psce` is the mean over the residues that have a value.
-- **Scoring positions are the structure's, not the model's.** `fampnn-score-all-mutations` keys results by position in the structure, so a key names the residue you would find at that position in your own file. `fampnn-score` takes mutation positions the same way; one naming a residue the parser cannot read cannot be scored, so it is omitted from the returned `mutations` and `scores` with a warning, and the rest of the batch is scored normally.
 
 - **Requires a GPU.** The diffusion-based sidechain model is not practical on CPU.
 - **Each tool already defaults `model_variant` to the right checkpoint.** `0.3` for design (`fampnn-sample`), `0.0` for packing (`fampnn-pack`), and `0.3_cath` for scoring (`fampnn-score`, `fampnn-score-all-mutations`). Each checkpoint is trained and calibrated for its own task, so reusing one across tasks degrades results.

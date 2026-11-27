@@ -10,7 +10,6 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from proto_tools.entities.ligands.utils import is_smiles_valid
-from proto_tools.utils.file_inputs import LIGAND_FILES, read_text_file
 
 if TYPE_CHECKING:
     from rdkit import Chem
@@ -75,7 +74,7 @@ class Fragment(BaseModel):
         if raw_smiles is None and raw_ccd is None:
             raise ValueError("At least one of 'smiles' or 'ccd_code' must be provided")
 
-        # Canonicalize the supplied SMILES and look for its CCD code.
+        # Resolve SMILES → canonical form + attempt CCD lookup
         canonical_smiles: str | None = None
         if raw_smiles is not None:
             parsed = Chem.MolFromSmiles(raw_smiles)
@@ -91,7 +90,7 @@ class Fragment(BaseModel):
             canonical_smiles = Chem.MolToSmiles(parsed, canonical=True)
             data["smiles"] = canonical_smiles
 
-        # Resolve a supplied CCD code to its SMILES representation.
+        # Resolve CCD code → SMILES
         if raw_ccd is not None:
             if not is_valid_ccd_code(raw_ccd):
                 raise ValueError(f"Invalid CCD code: {raw_ccd}")
@@ -189,7 +188,6 @@ class Fragment(BaseModel):
         """
         from rdkit.Chem import AllChem
 
-        # Set the embedding seed and the threshold for removing similar conformers.
         params = AllChem.ETKDGv3()  # type: ignore[attr-defined]
         if random_seed is not None:
             params.randomSeed = random_seed
@@ -203,7 +201,6 @@ class Fragment(BaseModel):
                 f"prune_rms_threshold={prune_rms_threshold}"
             )
 
-        # Minimize each embedded conformer with the UFF force field.
         for conf_id in conf_ids:
             AllChem.UFFOptimizeMolecule(self.mol, confId=conf_id)  # type: ignore[attr-defined]
 
@@ -468,19 +465,16 @@ class Ligands(BaseModel):
         if len(self.fragments) == 0:
             raise ValueError("Cannot generate PDB: no fragments in Ligands object")
 
-        # Embed a 3D conformer for any fragment that has none yet
         for frag in self.fragments:
             if frag.mol.GetNumConformers() == 0:
                 frag.generate_conformers(num_conformers=1)
 
-        # Track the running atom serial number and X offset across fragments
         pdb_lines = []
         current_atom_num = 1
         current_x_offset = 0.0
         chain_ids = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
         for frag_idx, frag in enumerate(self.fragments):
-            # Measure the bounding box of this fragment's first conformer
             conf = frag.mol.GetConformer(0)
 
             positions = conf.GetPositions()
@@ -488,17 +482,14 @@ class Ligands(BaseModel):
             max_coords = np.max(positions, axis=0)
             bbox_size = max_coords - min_coords
 
-            # Copy the molecule so the translation leaves the fragment's coordinates untouched
             mol_copy = Chem.Mol(frag.mol)
             conf_copy = mol_copy.GetConformer(0)
 
-            # Place the box at the current X offset, centered on the Y and Z axes
             fragment_center = (min_coords + max_coords) / 2
             translation = np.array(
                 [current_x_offset + bbox_size[0] / 2 - fragment_center[0], -fragment_center[1], -fragment_center[2]]
             )
 
-            # Shift every atom by that translation
             for atom_idx in range(mol_copy.GetNumAtoms()):
                 pos = conf_copy.GetAtomPosition(atom_idx)
                 new_pos = np.array([pos.x, pos.y, pos.z]) + translation
@@ -506,7 +497,6 @@ class Ligands(BaseModel):
 
             pdb_block = Chem.MolToPDBBlock(mol_copy, confId=0)
 
-            # Renumber atom serials, stamp this fragment's chain ID, and drop CONECT records
             chain_id = chain_ids[frag_idx % len(chain_ids)]
             for line in pdb_block.split("\n"):
                 if line.startswith(("HETATM", "ATOM")):
@@ -517,19 +507,16 @@ class Ligands(BaseModel):
                 elif line.startswith("CONECT"):
                     continue
 
-            # Close the chain with a TER record labeled by the fragment name
             frag_label = (frag.name or "UNK")[:3]
             pdb_lines.append(f"TER   {current_atom_num:5d}      {frag_label:3s} {chain_id}")
             current_atom_num += 1
 
-            # Move the offset past this fragment's box plus the spacing gap
             current_x_offset += bbox_size[0] + spacing
 
         pdb_lines.append("END")
 
         pdb_string = "\n".join(pdb_lines)
 
-        # Write the PDB to disk if a path was given
         if filepath is not None:
             filepath = Path(filepath)
             with open(filepath, "w") as f:
@@ -583,7 +570,7 @@ def parse_smiles_string(smiles: str) -> list[Fragment]:
 
 
 def parse_fragments_from_smiles_file(filepath: str | Path) -> list[Fragment]:
-    """Load fragments from a ``.smi`` file, optionally gzipped.
+    """Load fragments from a ``.smi`` file.
 
     Args:
         filepath (str | Path): Path to the SMILES file.
@@ -594,16 +581,20 @@ def parse_fragments_from_smiles_file(filepath: str | Path) -> list[Fragment]:
     Raises:
         FileNotFoundError: If the file does not exist.
     """
+    if not Path(filepath).exists():
+        raise FileNotFoundError(f"File not found: {filepath}")
+
     fragments = []
-    for raw_line in _read_ligand_file(filepath).splitlines():
-        line = raw_line.strip()
-        if line:
-            fragments.extend(parse_smiles_string(line))
+    with open(filepath) as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if line:
+                fragments.extend(parse_smiles_string(line))
     return fragments
 
 
 def parse_mols_from_sdf_file(filepath: str | Path) -> list[Chem.Mol]:
-    """Load Mol objects from an SDF file, optionally gzipped.
+    """Load Mol objects from an SDF file.
 
     Args:
         filepath (str | Path): Path to the SDF file.
@@ -616,46 +607,16 @@ def parse_mols_from_sdf_file(filepath: str | Path) -> list[Chem.Mol]:
     """
     from rdkit import Chem
 
-    suppl = Chem.SDMolSupplier()
-    suppl.SetData(_read_ligand_file(filepath))
+    if not Path(filepath).exists():
+        raise FileNotFoundError(f"File not found: {filepath}")
+
     mols = []
+    suppl = Chem.SDMolSupplier(str(filepath))
     for mol in suppl:
         if mol is None:
             continue  # type: ignore[unreachable]
         mols.append(mol)
     return mols
-
-
-def read_ligand_file_smiles(path: Path) -> list[str]:
-    """Return one SMILES per molecule in a ``.smi`` or ``.sdf`` file, optionally gzipped.
-
-    A ``.smi`` line holds one molecule (a salt such as ``CC(=O)[O-].[Na+]`` stays whole) and an
-    optional name after whitespace. Lines starting with ``#`` are comments.
-    Each SDF record is one molecule.
-
-    Args:
-        path (Path): Path to the file.
-
-    Returns:
-        list[str]: One SMILES per molecule, in file order.
-
-    Raises:
-        FileNotFoundError: If the file does not exist.
-    """
-    from rdkit import Chem
-
-    if path.name.lower().removesuffix(".gz").endswith(".smi"):
-        lines = (line.strip() for line in _read_ligand_file(path).splitlines())
-        return [line.split()[0] for line in lines if line and not line.startswith("#")]
-    return [Chem.MolToSmiles(mol) for mol in parse_mols_from_sdf_file(path)]
-
-
-def _read_ligand_file(filepath: str | Path) -> str:
-    """Return the text of a ligand file, raising ``FileNotFoundError`` when it is missing."""
-    path = Path(filepath).expanduser()
-    if not path.is_file():
-        raise FileNotFoundError(f"File not found: {filepath}")
-    return read_text_file(path)
 
 
 def parse_fragments_from_mols(mols: list[Chem.Mol]) -> list[Fragment]:
@@ -690,25 +651,21 @@ def parse_fragments_from_sdf_file(filepath: str | Path) -> list[Fragment]:
 
 
 def parse_fragments_from_string_or_path(string_or_path: str | Path) -> list[Fragment]:
-    """Parse a SMILES string or a path to a ``.smi``/``.sdf`` file into Fragment objects.
+    """Parse a SMILES string or file path into Fragment objects.
 
     Args:
-        string_or_path (str | Path): SMILES string, or path to a ``.smi``/``.sdf`` file,
-            optionally gzipped.
+        string_or_path (str | Path): SMILES string, or path to a ``.smi``/``.sdf`` file.
 
     Returns:
         list[Fragment]: Parsed fragments.
 
     Raises:
-        FileNotFoundError: If the input is clearly a path but names no file, or names a directory.
-        ValueError: If the input is neither valid SMILES nor a ``.smi``/``.sdf`` file.
+        ValueError: If the input is neither valid SMILES nor a supported file.
     """
-    path = LIGAND_FILES.resolve(string_or_path)
-    if path is not None:
-        name = path.name.lower().removesuffix(".gz")
-        if name.endswith(".smi"):
-            return parse_fragments_from_smiles_file(path)
-        return parse_fragments_from_sdf_file(path)
+    if str(string_or_path).lower().endswith(".smi"):
+        return parse_fragments_from_smiles_file(string_or_path)
+    if str(string_or_path).lower().endswith(".sdf"):
+        return parse_fragments_from_sdf_file(string_or_path)
     if isinstance(string_or_path, str) and is_smiles_valid(string_or_path):
         return parse_smiles_string(string_or_path)
     raise ValueError(f"Invalid input: {string_or_path}")

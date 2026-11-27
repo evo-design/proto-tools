@@ -26,9 +26,6 @@ from proto_tools.transforms.masking.base import (
     weighted_sample,
 )
 from proto_tools.transforms.masking.maskers import MASKERS
-from tests.conftest import make_persistent_fixture
-
-_persistent_tool = make_persistent_fixture("esm2")
 
 # CPU-testable strategy instances for shared invariant tests
 CPU_STRATEGIES = [

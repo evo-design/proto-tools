@@ -52,7 +52,7 @@ This tool is appropriate for genome-to-genome similarity analysis, locating homo
 
 #### Usage Tips
 
-- **Targets are specified on `Mmseqs2SearchGenomesConfig` via either `target_db` or `target_genomes`, but not both.** Use `target_db` for a FASTA file or a prebuilt MMseqs2 database. Use `target_genomes` for inline nucleotide sequences. They live on Config because every query in a run scans against the same target collection.
+- **Targets are specified on `Mmseqs2SearchGenomesConfig` via either `target_db` or `target_genomes`, but not both.** Use `target_db` for a FASTA file or a prebuilt MMseqs2 database; use `target_genomes` for inline nucleotide sequences. They live on Config because every query in a run scans against the same target collection.
 - **`target_db` is cached by path, not by contents.** The per-item cache key includes the path string but not the bytes at that path, so mutating the database in place will silently return stale hits. If you swap a DB at a stable path, either clear the cache or use a versioned filename so the new path forces a fresh key.
 - **`sensitivity=7.5` is the wrapper default for nucleotide search.** This is a wrapper bias above the upstream MMseqs2 default of 5.7, chosen because nucleotide searches typically benefit from the higher sensitivity setting. The accepted range is 1.0 to 7.5.
 - **`strand=2` (both strands) is the wrapper default.** Upstream defaults to forward strand only. Set `strand=1` to restrict to the forward strand or `strand=0` for reverse only.
@@ -68,7 +68,7 @@ This tool is appropriate for deduplicating a sequence set before downstream anal
 
 #### Usage Tips
 
-- **Inputs are specified via either `input_sequences` or `mmseqs_db`, but not both.** Use `input_sequences` for inline sequences. Use `mmseqs_db` for a prebuilt database that may be reused across calls.
+- **Inputs are specified via either `input_sequences` or `mmseqs_db`, but not both.** Use `input_sequences` for inline sequences; use `mmseqs_db` for a prebuilt database that may be reused across calls.
 - **`mmseqs_db` is cached by path, not by contents.** The cache key includes the path string but not the bytes at that path, so mutating the database in place will silently return stale cluster assignments. If you swap a DB at a stable path, either clear the cache or use a versioned filename so the new path forces a fresh key.
 - **`min_seq_id=0.6` is the wrapper default.** This is a wrapper bias above the upstream MMseqs2 default of 0.0, chosen as a reasonable starting point for grouping proteins into functional families. Set it higher (for example `0.95`) to remove near-duplicates, or lower (for example `0.3`) to group remote homologs.
 - **`cluster_mode=0` (set-cover) is the default greedy algorithm.** Alternative modes are `1` (connected-component, BLASTclust-style) and `2` or `3` (greedy by length, CD-HIT-style).
@@ -77,7 +77,7 @@ This tool is appropriate for deduplicating a sequence set before downstream anal
 
 ### MMseqs2 Homology Search (`mmseqs2-homology-search`)
 
-Generates a multiple sequence alignment per query protein using the ColabFold homology-search pipeline. Returns one `MSA` object per query, suitable as the MSA input to AlphaFold-class structure predictors. By default (`search_mode="remote"`) it queries the hosted ColabFold MSA API over the network and needs no local database. Set `search_mode="local"` to run MMseqs2 against a registry-provisioned reference database on disk (GPU-accelerated by default on supported hardware).
+Generates a multiple sequence alignment per query protein using the ColabFold homology-search pipeline. Returns one `MSA` object per query, suitable as the MSA input to AlphaFold-class structure predictors. By default (`search_mode="remote"`) it queries the hosted ColabFold MSA API over the network and needs no local database; set `search_mode="local"` to run MMseqs2 against a registry-provisioned reference database on disk (GPU-accelerated by default on supported hardware).
 
 #### Applications
 
@@ -89,7 +89,7 @@ This tool is the proto-tools entry point for generating the MSA input to structu
 - **`search_mode="remote"` is the default.** It queries the hosted ColabFold MSA API over the network; `dataset`, `device`, and `sensitivity` are ignored, and no local database or GPU is required. Set `search_mode="local"` to run MMseqs2 against a provisioned on-disk database instead.
 - **Local mode (`search_mode="local"`) runs on CPU unless `device` names a CUDA device.** Set `device="cuda"` (or a specific `cuda:N`) to run MMseqs2-GPU; the configuration validator hard-errors for a CUDA device on a local search on macOS or Windows, since GPU search is Linux-only.
 - **Local mode requires the reference database to be provisioned once before the first call.** Run `python -m proto_tools.tools.sequence_alignment.mmseqs2.setup_databases <dataset>`, where the dataset key matches the value of `Mmseqs2HomologySearchConfig.dataset`. The wrapper does not auto-download databases at call time. (Remote mode skips this entirely.)
-- **Local search needs enough RAM to hold the dataset's sequence database.** When available memory (cgroup-aware) is below that file's size, the tool logs a warning and falls back to a disk-paged (mmap) search that completes but is much slower. For a responsive search, allocate more memory or use `search_mode="remote"`.
+- **Local search needs enough RAM to hold the dataset's sequence database.** When available memory (cgroup-aware) is below that file's size, the tool logs a warning and falls back to a disk-paged (mmap) search that completes but is much slower; for a responsive search, allocate more memory or use `search_mode="remote"`.
 - **Each query produces an `MSA` object or `None`.** Always check `result.msas[i] is not None` before accessing alignment properties. The `num_homologs_found` list returns `0` for queries that produced no homologs. `MSA` objects serialise to A3M or FASTA through the standard export interface.
 
 ## Toolkit Notes

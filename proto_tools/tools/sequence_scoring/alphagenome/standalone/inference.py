@@ -2,7 +2,6 @@
 
 import dataclasses
 import json
-import logging
 import os
 import shutil
 import sys
@@ -19,14 +18,30 @@ from alphagenome.models import interval_scorers as interval_scorers_lib
 from alphagenome.models import variant_scorers as variant_scorers_lib
 from alphagenome.protos import dna_model_pb2
 from alphagenome_research.model import dna_model
-from standalone_helpers import StatusCounter, get_logger, resolve_weights_dir
+from standalone_helpers import get_logger, resolve_weights_dir
 
 logger = get_logger(__name__)
 
+# Seconds between per-request phases, which keeps a caller's status at human pace.
+_PHASE_INTERVAL_SECONDS = 5.0
 
-def _count(n: int, noun: str) -> str:
-    """Return ``n`` with ``noun`` pluralized for a status message, e.g. ``3 intervals`` or ``1 interval``."""
-    return f"{n} {noun}{'s' if n != 1 else ''}"
+
+class _ThrottledStatus:
+    """Report per-item phases: the first at once, then at most one per interval, and the last."""
+
+    def __init__(self, template: str, total: int, interval: float = _PHASE_INTERVAL_SECONDS) -> None:
+        self._template = template
+        self._total = total
+        self._interval = interval
+        self._last: float | None = None
+
+    def __call__(self, number: int) -> None:
+        """Report item ``number`` (1-based) of the total when the throttle allows."""
+        now = time.monotonic()
+        if number < self._total and self._last is not None and now - self._last < self._interval:
+            return
+        self._last = now
+        logger.update_status(self._template, number, self._total)
 
 
 def _safe_tidy_scores(scores: Any) -> list[Any]:
@@ -119,7 +134,7 @@ _DOWNLOAD_ATTEMPTS = 3
 
 
 def _https_url(path: str) -> str:
-    """Map a public ``gs://`` path to HTTPS and return other paths unchanged."""
+    """Map a public ``gs://`` path to its HTTPS URL; return other paths unchanged."""
     if path.startswith("gs://"):
         return "https://storage.googleapis.com/" + path.removeprefix("gs://").lstrip("/")
     return path
@@ -219,7 +234,7 @@ class AlphaGenomeModel:
         parsed = [_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]) for i in intervals]
         self._ensure_loaded(device)
 
-        logger.update_status(f"Predicting {_count(len(parsed), 'interval')}", level=logging.DEBUG)
+        logger.update_status("Predicting %d interval(s)", len(parsed))
         predictions = self.model.predict_intervals(
             intervals=parsed,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
@@ -253,7 +268,7 @@ class AlphaGenomeModel:
         ]
         self._ensure_loaded(device)
 
-        logger.update_status(f"Predicting {_count(len(parsed_variants), 'variant effect')}", level=logging.DEBUG)
+        logger.update_status("Predicting %d variant effect(s)", len(parsed_variants))
         predictions = self.model.predict_variants(
             intervals=parsed_intervals,
             variants=parsed_variants,
@@ -277,7 +292,7 @@ class AlphaGenomeModel:
             _validate_sequence_length(len(seq), operation="predict_sequences")
         self._ensure_loaded(device)
 
-        logger.update_status(f"Predicting {_count(len(sequences), 'sequence')}", level=logging.DEBUG)
+        logger.update_status("Predicting %d sequence(s)", len(sequences))
         predictions = self.model.predict_sequences(
             sequences=sequences,
             requested_outputs=[dna_model.OutputType[n] for n in requested_outputs],
@@ -312,7 +327,7 @@ class AlphaGenomeModel:
             )
         self._ensure_loaded(device)
 
-        logger.update_status(f"Scoring {_count(len(parsed_variants), 'variant')}", level=logging.DEBUG)
+        logger.update_status("Scoring %d variant(s)", len(parsed_variants))
         scores_per_variant = self.model.score_variants(
             intervals=parsed_intervals,
             variants=parsed_variants,
@@ -337,7 +352,7 @@ class AlphaGenomeModel:
             parsed.append(_resize_interval(i["chromosome"], i["interval_start"], i["interval_end"]))
         self._ensure_loaded(device)
 
-        logger.update_status(f"Scoring {_count(len(parsed), 'interval')}", level=logging.DEBUG)
+        logger.update_status("Scoring %d interval(s)", len(parsed))
         scores_per_interval = self.model.score_intervals(
             intervals=parsed,
             interval_scorers=_resolve_interval_scorers(interval_scorers),
@@ -353,12 +368,12 @@ class AlphaGenomeModel:
         organism: str = "human",
         device: str = "cuda",
     ) -> dict[str, Any]:
-        """Run batched ISM scoring sequentially because upstream has no batched ISM."""
+        """Run batched ISM scoring (sequential; upstream has no batched ISM)."""
         self._ensure_loaded(device)
         scorers = _resolve_variant_scorers(variant_scorers, organism)
 
         all_scores = []
-        report = StatusCounter(logger, "Scoring ISM request %d/%d", total=len(requests))
+        report = _ThrottledStatus("ISM scoring request %d of %d", len(requests))
         for number, req in enumerate(requests, start=1):
             width = req["interval_end"] - req["interval_start"]
             _validate_min_scorer_width(width, _MIN_VARIANT_SCORER_WIDTH, "score_ism_variants_batch")
@@ -396,7 +411,7 @@ class AlphaGenomeModel:
     # ============================================================================
     def load(self, device: str = "cuda", verbose: bool = False) -> None:
         """Load AlphaGenome model to device."""
-        logger.update_status("Loading AlphaGenome weights")
+        logger.update_status(f"Loading AlphaGenome model: {self.model_version} on {device}")
 
         from standalone_helpers import resolve_jax_device
 
@@ -429,7 +444,7 @@ class AlphaGenomeModel:
     def to_device(self, device: str) -> None:
         """Move model to a different device.
 
-        AlphaGenome is GPU-only. CPU inference is impractical. When asked to
+        AlphaGenome is GPU-only; CPU inference is impractical. When asked to
         move to CPU (e.g., LRU eviction), the model is unloaded to free GPU
         memory while its compiled programs stay in memory, so reloading on a
         GPU skips compilation. A new worker process reads them from the
@@ -464,7 +479,7 @@ class AlphaGenomeModel:
         clear_jax_caches : bool
             If True (default), also clear JAX's XLA compilation caches.
             Set to False when unloading for GPU eviction to preserve
-            compiled kernels. Reloading on the same GPU can then skip
+            compiled kernels; reloading on the same GPU can then skip
             the expensive recompilation step.
         """
         if not self._loaded:

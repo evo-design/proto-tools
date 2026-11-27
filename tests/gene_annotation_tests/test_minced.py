@@ -153,7 +153,7 @@ def test_export_json(sample_output, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_run_minced_no_crispr():
     """Run MinCED on a sequence without CRISPR arrays."""
     random_seq = "ATCGATCG" * 500
@@ -185,7 +185,7 @@ _SHORT_REPEAT_SEQUENCE = (
 )
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_run_minced_default_finds_short_repeat_after_default_change():
     """Regression test for the 27→23 default change.
 

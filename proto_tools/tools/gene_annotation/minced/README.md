@@ -9,11 +9,11 @@
 
 ## Overview
 
-[MinCED](https://github.com/ctSkennerton/minced) (Mining CRISPRs in Environmental Datasets) is a fast Java program that locates [CRISPR](https://en.wikipedia.org/wiki/CRISPR) arrays in nucleotide sequences from isolate genomes or metagenomic contigs. It returns each detected array as an ordered list of repeat-spacer units with their start positions, repeat sequence, and per-spacer sequence.
+[MinCED](https://github.com/ctSkennerton/minced) (Mining CRISPRs in Environmental Datasets) is a fast Java program that locates [CRISPR](https://en.wikipedia.org/wiki/CRISPR) arrays in nucleotide sequences from isolate genomes or metagenomic contigs. It returns each detected array as an ordered list of repeat-spacer units with their genomic coordinates, the repeat consensus, and per-spacer sequence.
 
 ## Background
 
-MinCED is a derivative of the [CRISPR Recognition Tool (CRT)](https://pmc.ncbi.nlm.nih.gov/articles/PMC1924867/) ([Bland et al., 2007](https://doi.org/10.1186/1471-2105-8-209)), maintained by [Connor Skennerton](https://github.com/ctSkennerton). CRISPR arrays are blocks of short, near-identical direct repeats (typically 23 to 47 nt) separated by unique [spacer](https://en.wikipedia.org/wiki/CRISPR#Spacer_acquisition) sequences (typically 26 to 50 nt) that record fragments of past viral and plasmid infections. They form the heritable memory of the [CRISPR-Cas adaptive immune system](https://en.wikipedia.org/wiki/CRISPR) of bacteria and archaea.
+MinCED is a derivative of the [CRISPR Recognition Tool (CRT)](https://pmc.ncbi.nlm.nih.gov/articles/PMC1924867/) ([Bland et al., 2007](https://doi.org/10.1186/1471-2105-8-209)), maintained by [Connor Skennerton](https://github.com/ctSkennerton). CRISPR arrays are blocks of short, near-identical direct repeats (typically 23 to 47 nt) separated by unique [spacer](https://en.wikipedia.org/wiki/CRISPR#Spacer_acquisition) sequences (typically 26 to 50 nt) that record fragments of past viral and plasmid infections; they form the heritable memory of the [CRISPR-Cas adaptive immune system](https://en.wikipedia.org/wiki/CRISPR) of bacteria and archaea.
 
 Internally, MinCED uses a [k-mer](https://en.wikipedia.org/wiki/K-mer) seed-and-extend strategy. It scans for short exact k-mer matches that recur at a consistent spacing, then extends each seed bidirectionally to the actual repeat length, and finally validates the candidate by checking that the inter-repeat spacers fall within the configured length window. The algorithm runs on raw DNA, has linear time complexity in sequence length, and finishes in seconds on a typical 5 Mb bacterial genome on commodity CPU hardware.
 
@@ -26,7 +26,7 @@ Internally, MinCED uses a [k-mer](https://en.wikipedia.org/wiki/K-mer) seed-and-
 
 ### MinCED CRISPR Array Detection (`minced-crispr`)
 
-Detects CRISPR arrays in one or more nucleotide sequences. Returns, per input sequence, a list of `CrisprArray` objects. Each carries an ordered list of `CrisprRepeatSpacer` units with the repeat's start position, the repeat sequence, and the following spacer (the last unit has no spacer).
+Detects CRISPR arrays in one or more nucleotide sequences. Returns, per input sequence, a list of `CrisprArray` objects; each carries an ordered list of `CrisprRepeatSpacer` units with the repeat's start position, the repeat sequence, and the following spacer (the last unit has no spacer).
 
 #### Applications
 
@@ -46,6 +46,6 @@ Use this to confirm and catalog CRISPR loci across newly sequenced bacterial and
 
 These apply to every MinCED tool in this toolkit (`minced-crispr`).
 
-- **Runs on CPU only.** MinCED is a Java program. The standalone install bundles a Java runtime alongside the `minced` program. There is no GPU acceleration to enable, and runtime is seconds per typical bacterial genome.
-- **Self-contained after install.** The standalone `setup.sh` downloads the `minced` program once. Subsequent runs need no network access and no model weights or reference databases.
+- **Runs on CPU only.** MinCED is a Java program; the standalone install bundles a Java runtime alongside the `minced` program. There is no GPU acceleration to enable, and runtime is seconds per typical bacterial genome.
+- **Self-contained after install.** The standalone `setup.sh` downloads the `minced` program once; subsequent runs need no network access and no model weights or reference databases.
 - **Sequences are processed one at a time.** The wrapper iterates over `inputs.sequences` sequentially rather than parallelizing across them. For large batches, run independent calls in parallel from the caller side.

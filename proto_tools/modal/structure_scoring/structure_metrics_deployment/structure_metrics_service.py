@@ -1,12 +1,13 @@
 """Structure-metrics Modal service.
 
-The tool computes geometry directly from an input structure. It has no standalone
-environment, model weights, or persistent worker. The container imports proto-tools
-and calls the function.
+Unlike every other service here, this tool has no standalone environment and no model: it computes
+geometry from a structure already in hand. So there is no env to build, no weights to stage, and no
+persistent worker to hold open — the container imports proto-tools and calls the function.
 
-Deployment lets large batches run across containers, with up to 256 structures per
-chunk. A single call is faster locally. Remote dispatch uses this service when it
-is deployed and otherwise falls back to running in the caller's process.
+What a deployment buys is fan-out. The tool is iterable over ``structures`` at 256 per chunk, so a
+large batch spreads across containers instead of queueing on local cores. A single call is faster
+run locally, and gets that automatically: dispatch only comes here because a deployment exists, and
+falls back to in-process when one does not.
 """
 
 from typing import Any

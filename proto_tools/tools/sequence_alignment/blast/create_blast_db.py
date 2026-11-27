@@ -23,7 +23,8 @@ from proto_tools.utils import (
 class CreateBlastDbInput(BaseToolInput):
     """Input object for creating a BLAST database.
 
-    Provide a FASTA file to create a local database with BLAST+'s ``makeblastdb``.
+    This class defines the input parameters for creating a local BLAST database
+    from a FASTA file using the ``makeblastdb`` utility from BLAST+.
 
     Attributes:
         fasta (str): Path to a FASTA file containing the sequences to be indexed into
@@ -42,7 +43,8 @@ class CreateBlastDbInput(BaseToolInput):
 class CreateBlastDbOutput(BaseToolOutput):
     """Output from BLAST database creation.
 
-    Contains the path to the newly created database files.
+    This class encapsulates the results of creating a BLAST database,
+    providing the path to the newly created database files.
 
     Attributes:
         db_path (str): The base path to the generated BLAST database files (without
@@ -67,7 +69,7 @@ class CreateBlastDbOutput(BaseToolOutput):
         return ""
 
     def _export_output(self, export_path: str | Path, file_format: str) -> None:
-        """Leave the created database in place because its path is already the output."""
+        """Export output - No-op for database creation (output IS the DB path)."""
 
 
 # Config:
@@ -184,7 +186,8 @@ def run_create_blast_db(
 ) -> CreateBlastDbOutput:
     """Create a local BLAST database from a FASTA file.
 
-    Returns the database path in a structured output.
+    This is the standardized tool interface following the registry pattern.
+    Returns structured output with database path.
 
     Args:
         inputs (CreateBlastDbInput): Validated BLAST database creation input

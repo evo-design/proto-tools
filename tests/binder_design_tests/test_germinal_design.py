@@ -18,11 +18,8 @@ from proto_tools.tools.binder_design import (
     run_germinal_design,
 )
 from proto_tools.tools.tool_registry import ToolRegistry
-from tests.conftest import make_persistent_fixture
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
-
-_persistent_tool = make_persistent_fixture("germinal")
 
 TEST_PDB = Path(__file__).parent.parent / "dummy_data" / "pdl1.pdb"
 
@@ -286,7 +283,7 @@ def _assert_design_invariants(design: GerminalDesign) -> None:
     assert "ATOM" in design.structure.structure
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_germinal_env_dssp_binary_runs():
     """Germinal shells out to ``params/dssp``; an ABI-broken mkdssp only fails (exit 127) mid-design."""
     from proto_tools.utils import run_in_env
@@ -304,7 +301,7 @@ def test_germinal_env_dssp_binary_runs():
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_germinal_design_e2e_vhh_pd_l1(tmp_path):
     """End-to-end VHH campaign against PD-L1 with reduced compute settings (~5-15 min on H100).
 
@@ -359,7 +356,7 @@ def test_germinal_design_e2e_vhh_pd_l1(tmp_path):
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_germinal_design_e2e_scfv_pd_l1():
     """End-to-end scFv campaign against PD-L1 (~10-20 min on H100).
 

@@ -83,7 +83,7 @@ def test_export_json(sample_output: Primer3ThermodynamicsOutput, tmp_path):
 # ── Integration ──────────────────────────────────────────────────────────────
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_scores_primer_pair_with_heterodimer():
     """A real qPCR pair scores a sensible Tm and computes heterodimer ΔG for the partner."""
     inputs = Primer3ThermodynamicsInput(oligos=[{"sequence": FWD, "partner": REV}])
@@ -101,7 +101,7 @@ def test_scores_primer_pair_with_heterodimer():
     assert r.heterodimer_dg is not None  # partner supplied → heterodimer computed
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_no_partner_leaves_heterodimer_null():
     """Without a partner, heterodimer fields are null but the oligo is still scored."""
     inputs = Primer3ThermodynamicsInput(oligos=FWD)
@@ -113,7 +113,7 @@ def test_no_partner_leaves_heterodimer_null():
     assert r.tm > 0
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_batch_scores_in_input_order():
     """Multiple oligos are scored and returned index-aligned with the input."""
     inputs = Primer3ThermodynamicsInput(oligos=[FWD, REV])

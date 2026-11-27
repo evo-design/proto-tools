@@ -1,4 +1,7 @@
-"""Shared data models, constants, and Literal types for AlphaGenome tools."""
+"""proto_tools/tools/sequence_scoring/alphagenome/shared_data_models.py.
+
+Shared data models, constants, and Literal types for AlphaGenome tools.
+"""
 
 import csv
 import json
@@ -176,7 +179,7 @@ class AlphaGenomePredictOutput(BaseToolOutput):
     )
     result: dict[str, Any] = Field(
         title="Track Outputs",
-        description="Serialized AlphaGenome prediction payload under the 'predictions' key",
+        description="Per-output-type track arrays keyed by OutputTypeName (e.g. RNA_SEQ, CAGE, ATAC)",
     )
     variant: dict[str, Any] | None = Field(
         default=None,
@@ -302,7 +305,7 @@ class AlphaGenomePredictConfig(BaseConfig):
     ontology_terms: list[str] | None = ConfigField(
         title="Ontology Terms",
         default=None,
-        description="Ontology CURIEs (UBERON/CL/EFO) to filter tracks (e.g. 'UBERON:0001167'); None = all",
+        description="UBERON tissue/cell IDs to filter tracks (e.g. 'UBERON:0001167'); None = all",
     )
     organism: Literal["human", "mouse"] = ConfigField(
         title="Organism",

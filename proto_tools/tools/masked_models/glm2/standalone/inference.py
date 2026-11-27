@@ -19,7 +19,6 @@ class GLM2Adapter(MixedMLMAdapter):  # type: ignore[misc]  # Helper is injected 
     }
 
     def _load_checkpoint(self, checkpoint: str) -> tuple[Any, Any]:
-        logger.update_status("Loading gLM2 weights")
         import torch
         from transformers import AutoModelForMaskedLM, AutoTokenizer
 

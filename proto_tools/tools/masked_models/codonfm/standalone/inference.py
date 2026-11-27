@@ -5,33 +5,38 @@ JSON input file and writes a JSON output file, matching the proto one-shot dispa
 (``python inference.py input.json output.json``).
 """
 
-import hashlib
+import contextlib
+import fcntl
 import json
 import math
+import os
+import re
 import sys
+import tempfile
+import time
+import urllib.error
 import urllib.parse
+import urllib.request
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from standalone_helpers import (
-    StatusCounter,
-    download_weights,
-    file_lock,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
-    require_weights_dir,
+    resolve_weights_dir,
     serialize_output,
     set_torch_seed,
 )
-from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
-from standalone_helpers.vocabulary import DNA_CODONS
 
 # The vendored CodonFM source lives under ``src/`` next to this file.
 sys.path.insert(0, str(Path(__file__).parent))
 
 logger = get_logger(__name__)
+
+LOCK_TIMEOUT_SECONDS = 600
 
 # The tokenizer's codon vocabulary is all 64 codons (``product("ACGT", 3)``), which includes the
 # three stop codons. Masked-codon resampling must never draw one of these into an interior codon,
@@ -46,100 +51,148 @@ _MASK_CODON = "___"
 # ---------------------------------------------------------------------------
 # HuggingFace checkpoint provisioning (public NVIDIA Open Model License weights)
 # ---------------------------------------------------------------------------
-# Each checkpoint is pinned to a repository revision, and both of its files are checked against
-# their SHA-256 once downloaded, so a changed upstream file or a bad download is never loaded.
-# Keys match the host-side ``CodonFMCheckpoint`` aliases.
-CHECKPOINTS: dict[str, dict[str, str]] = {
-    "encodon_80m": {
-        "repo": "nvidia/NV-CodonFM-Encodon-80M-v1",
-        "safetensors": "NV-CodonFM-Encodon-80M-v1.safetensors",
-        "revision": "399ca9fe17b57941a7bebc6788033919b417413c",
-        "safetensors_sha256": "88c93c381d9ace4fcadd2f5d21a15d492371caad85e7fbdef7c4da4af7c82f69",
-        "config_sha256": "0c0e63a092656f6b81a1ad53993ba4cfef5fe59e57e55a33caeeb34928785a3e",
-    },
-    "encodon_600m": {
-        "repo": "nvidia/NV-CodonFM-Encodon-600M-v1",
-        "safetensors": "NV-CodonFM-Encodon-600M-v1.safetensors",
-        "revision": "43c785b8a1fbf1511449086ea13213b79e26f1f3",
-        "safetensors_sha256": "e81e4f63acd5e27be19848024a5912f5416f79192ecd32993fa09cbd2ae2976b",
-        "config_sha256": "5371b73fc1ca264a7b3567ba8286bacedfaf43bba2ff99e827fd07e7cce6f981",
-    },
-    "encodon_1b": {
-        "repo": "nvidia/NV-CodonFM-Encodon-1B-v1",
-        "safetensors": "NV-CodonFM-Encodon-1B-v1.safetensors",
-        "revision": "003013d9a764d2c8900cde9736749838cb30ffe2",
-        "safetensors_sha256": "7880a89baa83156e72d2f3b695c6cd91523067fd86301028bbf7614b2b801607",
-        "config_sha256": "0aac2cedb1f884882f6723b852dd74b99b4463bbb927cb45822d8a4190d56889",
-    },
-    "encodon_1b_cdwt": {
-        "repo": "nvidia/NV-CodonFM-Encodon-Cdwt-1B-v1",
-        "safetensors": "NV-CodonFM-Encodon-Cdwt-1B-v1.safetensors",
-        "revision": "a0457b334eae974147e74b8cad358e6c3c9d2b8b",
-        "safetensors_sha256": "b19928edfa5d02b95e57a61df465fb4af111ae80bb31e4f294bd3dfb5d4bf9e8",
-        "config_sha256": "0aac2cedb1f884882f6723b852dd74b99b4463bbb927cb45822d8a4190d56889",
-    },
-}
+def _is_trusted_hf_url(url: str) -> bool:
+    """True only for an HTTPS URL on ``huggingface.co`` or a real subdomain."""
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "https" and (host == "huggingface.co" or host.endswith(".huggingface.co"))
 
 
-def _resolve_checkpoint(model_checkpoint: str) -> str:
+def _redact_url(url: str) -> str:
+    """Strip userinfo/query so signed URLs and creds never reach logs/errors."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        netloc = parsed.hostname or ""
+        if ":" in netloc:
+            netloc = f"[{netloc}]"
+        if parsed.port:
+            netloc = f"{netloc}:{parsed.port}"
+    except ValueError:
+        return "<unparseable-url>"
+    cleaned = parsed._replace(netloc=netloc, path=("/<redacted-path>" if parsed.path else ""), query="", fragment="")
+    return urllib.parse.urlunparse(cleaned)
+
+
+class _SecureRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Abort insecure redirects and drop ``Authorization`` when a hop leaves trusted HF."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        if urllib.parse.urlparse(newurl).scheme != "https":
+            raise urllib.error.HTTPError(newurl, code, "codonfm: refusing insecure (non-HTTPS) redirect", headers, fp)
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and not _is_trusted_hf_url(newurl):
+            new.headers.pop("Authorization", None)
+            new.unredirected_hdrs.pop("Authorization", None)
+        return new
+
+
+@contextlib.contextmanager
+def _file_lock(lock_path: Path) -> Iterator[None]:
+    """Cross-process advisory lock via ``fcntl.flock`` (kernel-released on process exit)."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+    try:
+        started = time.monotonic()
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as err:
+                if time.monotonic() - started > LOCK_TIMEOUT_SECONDS:
+                    raise TimeoutError(f"codonfm: timed out waiting for lock {lock_path}") from err
+                time.sleep(1)
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def _resolve_hf_token() -> str | None:
+    """Resolve a HuggingFace token from every source the main-process gate accepts.
+
+    Mirrors ``proto_tools.utils.auth.resolve_hf_token`` (which isn't importable in the isolated
+    standalone env) so a token provided via ``hf auth login`` works for the download too, not just
+    the ``HF_TOKEN`` env var: env ``HF_TOKEN`` / ``HUGGING_FACE_HUB_TOKEN``, then the cached token
+    file, then git credentials.
+    """
+    token = os.environ.get("HF_TOKEN", "") or os.environ.get("HUGGING_FACE_HUB_TOKEN", "")
+    if token:
+        return token
+    token_file = os.path.expanduser("~/.cache/huggingface/token")
+    if os.path.isfile(token_file):
+        with contextlib.suppress(OSError):
+            token = Path(token_file).read_text().strip()
+            if token:
+                return token
+    git_creds = os.path.expanduser("~/.git-credentials")
+    if os.path.isfile(git_creds):
+        with contextlib.suppress(OSError):
+            for line in Path(git_creds).read_text().splitlines():
+                match = re.search(r"https?://[^:]+:(hf_[^@]+)@huggingface\.co", line)
+                if match:
+                    return match.group(1)
+    return None
+
+
+def _download(url: str, dest: Path) -> None:
+    """Download a public HuggingFace file over HTTPS, using an optional token when available."""
+    if urllib.parse.urlparse(url).scheme != "https":
+        raise ValueError(f"codonfm: checkpoint URL must use https, got {_redact_url(url)!r}")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
+    with contextlib.suppress(FileNotFoundError):
+        tmp.unlink()
+    logger.info("Downloading CodonFM checkpoint file from %s to %s", _redact_url(url), dest)
+    request = urllib.request.Request(url)
+    hf_token = _resolve_hf_token()
+    if _is_trusted_hf_url(url) and hf_token:
+        request.add_header("Authorization", f"Bearer {hf_token}")
+    opener = urllib.request.build_opener(_SecureRedirectHandler())
+    try:
+        with opener.open(request, timeout=300) as response, open(tmp, "wb") as handle:
+            while chunk := response.read(1024 * 1024):
+                handle.write(chunk)
+        os.replace(tmp, dest)
+    except Exception:
+        with contextlib.suppress(FileNotFoundError):
+            tmp.unlink()
+        raise
+
+
+def _weights_dir() -> Path:
+    resolved = resolve_weights_dir("codonfm")
+    if resolved:
+        return Path(resolved)
+    fallback = Path(tempfile.gettempdir()) / "proto_codonfm_weights"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
+def _resolve_checkpoint(input_dict: dict[str, Any]) -> str:
     """Provision ``<name>.safetensors`` + ``config.json`` into one cache dir; return the safetensors path.
 
     ``EncodonInference`` requires both files side by side. The repositories are public under the
     NVIDIA Open Model License; an available ``HF_TOKEN`` is used but is not required.
     """
-    entry = CHECKPOINTS[model_checkpoint]
-    base = f"https://huggingface.co/{urllib.parse.quote(entry['repo'])}/resolve/{entry['revision']}"
-    subdir = f"codonfm-{model_checkpoint}-{hashlib.sha256(entry['repo'].encode()).hexdigest()[:8]}"
-    cache_dir = Path(require_weights_dir("codonfm")) / subdir
-    safetensors_path = cache_dir / entry["safetensors"]
+    safetensors_url = input_dict["safetensors_url"]
+    config_url = input_dict["config_url"]
+    filename = input_dict["safetensors_filename"]
+    cache_dir = _weights_dir() / input_dict["cache_subdir"]
+    safetensors_path = cache_dir / filename
+    config_path = cache_dir / "config.json"
 
-    with file_lock(cache_dir.parent / f".{subdir}.download.lock", progress=cache_dir):
-        download_weights(
-            f"{base}/{urllib.parse.quote(entry['safetensors'])}",
-            safetensors_path,
-            sha256=entry["safetensors_sha256"],
-            timeout=300,
-        )
-        download_weights(f"{base}/config.json", cache_dir / "config.json", sha256=entry["config_sha256"], timeout=300)
+    with _file_lock(cache_dir.parent / f".{input_dict['cache_subdir']}.download.lock"):
+        if not safetensors_path.is_file():
+            _download(safetensors_url, safetensors_path)
+        if not config_path.is_file():
+            _download(config_url, config_path)
     return str(safetensors_path)
 
 
 # ---------------------------------------------------------------------------
 # Model wrapper
 # ---------------------------------------------------------------------------
-def special_token_layout(tokenizer: Any) -> tuple[int, int]:
-    """Return the ``(cls, sep)`` ids Encodon wraps a codon row with.
-
-    Args:
-        tokenizer (Any): The Encodon tokenizer.
-
-    Returns:
-        tuple[int, int]: The leading and trailing special-token ids.
-    """
-    return int(tokenizer.cls_token_id), int(tokenizer.sep_token_id)
-
-
-def build_model_input_row(tokenizer: Any, codon_ids: list[int]) -> tuple[list[int], list[int]]:
-    """Assemble the ``(input_ids, attention_mask)`` rows Encodon expects for a codon sequence.
-
-    Wraps the codons in CLS/SEP, pads to the smallest multiple-of-eight context that holds them,
-    and masks the padding out — the same layout upstream ``process_item`` produces when it
-    tokenizes a CDS. The gradient builds its tensors here instead of tokenizing, because its
-    input is a relaxed distribution rather than a sequence.
-
-    Args:
-        tokenizer (Any): The Encodon tokenizer.
-        codon_ids (list[int]): Codon vocabulary ids, in sequence order.
-
-    Returns:
-        tuple[list[int], list[int]]: Padded input ids and their attention mask.
-    """
-    cls_id, sep_id = special_token_layout(tokenizer)
-    wrapped = [cls_id, *codon_ids, sep_id]
-    padding = min(2048, ((len(wrapped) + 7) // 8) * 8) - len(wrapped)
-    return wrapped + [int(tokenizer.pad_token_id)] * padding, [1] * len(wrapped) + [0] * padding
-
-
 class CodonFMModel:
     """Caches a loaded ``EncodonInference`` and drives the codon-scoring tasks."""
 
@@ -150,7 +203,7 @@ class CodonFMModel:
         self.device: str | None = None
         self.checkpoint_key: str | None = None
 
-    def load(self, *, checkpoint_path: str, device: str) -> None:
+    def load(self, *, checkpoint_path: str, device: str, verbose: bool = False) -> None:
         """Load an Encodon checkpoint (once per checkpoint) and move it to the device."""
         from src.inference.encodon import EncodonInference
         from src.inference.task_types import TaskTypes
@@ -158,7 +211,8 @@ class CodonFMModel:
         if self.inference is not None and self.checkpoint_key == checkpoint_path:
             self.to_device(device)
             return
-        logger.update_status("Loading CodonFM weights")
+        if verbose:
+            logger.info("Loading CodonFM checkpoint from %s", checkpoint_path)
         inference = EncodonInference(model_path=checkpoint_path, task_type=TaskTypes.FITNESS_PREDICTION.value)
         inference.configure_model()  # builds on CPU (LightningModule default device)
         inference.eval()
@@ -199,9 +253,7 @@ class CodonFMModel:
 
         self.to_device(device)
         fitness: list[float] = []
-        counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-len(sequences) // batch_size))
         for start in range(0, len(sequences), batch_size):
-            counter(start // batch_size + 1)
             chunk = sequences[start : start + batch_size]
             ctx = self._context_length(chunk)
             items = [process_item(seq, ctx, self.tokenizer) for seq in chunk]
@@ -215,9 +267,7 @@ class CodonFMModel:
 
         self.to_device(device)
         embeddings: list[list[float]] = []
-        counter = StatusCounter(logger, "Embedding batch %d/%d", total=-(-len(sequences) // batch_size))
         for start in range(0, len(sequences), batch_size):
-            counter(start // batch_size + 1)
             chunk = sequences[start : start + batch_size]
             ctx = self._context_length(chunk)
             items = [process_item(seq, ctx, self.tokenizer) for seq in chunk]
@@ -233,9 +283,7 @@ class CodonFMModel:
 
         self.to_device(device)
         results: list[dict[str, float]] = []
-        counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-len(mutations) // batch_size))
         for start in range(0, len(mutations), batch_size):
-            counter(start // batch_size + 1)
             chunk = mutations[start : start + batch_size]
             ctx = self._context_length([m["sequence"] for m in chunk])
             items = [
@@ -270,8 +318,7 @@ class CodonFMModel:
         logits_list: list[list[float]],
         *,
         temperature: float | None = None,
-        soft: float = 1.0,
-        hard: float = 0.0,
+        use_ste: bool = False,
         backprop: bool = True,
         batch_size: int,
         device: str,
@@ -288,8 +335,8 @@ class CodonFMModel:
         Args:
             logits_list: Relaxed codon logits, shape ``(L, 64)``.
             temperature: Optional softmax temperature; ``None`` uses the logits as-is.
-            soft: Blend from the raw input matrix (0) to softmax probabilities (1).
-            hard: Straight-through coefficient; 1 forwards a hard one-hot.
+            use_ste: Straight-Through Estimator — hard one-hot codons in the forward pass with
+                gradients flowing through the soft probabilities.
             backprop: If ``False``, skip the backward pass and return ``gradient=None``.
             batch_size: Codon positions per forward pass.
             device: Execution device.
@@ -303,13 +350,8 @@ class CodonFMModel:
         from src.data.metadata import MetadataFields
         from tqdm import tqdm
 
-        # Map Proto's codon columns to tokenizer IDs so inputs and gradients use the same order.
-        codons = list(DNA_CODONS)
+        codons = list(self.tokenizer.codons)
         n_codons_vocab = len(codons)
-        missing = [codon for codon in codons if codon not in self.tokenizer.encoder]
-        if missing:
-            raise ValueError(f"codonfm: tokenizer is missing codons {missing}")
-        # Check the relaxed sequence is a non-empty L x 64 matrix before touching the model
         if not logits_list:
             raise ValueError("codonfm: compute_gradient requires at least one codon position")
         if any(len(row) != n_codons_vocab for row in logits_list):
@@ -318,11 +360,11 @@ class CodonFMModel:
         self.to_device(device)
         dev = torch.device(device)
 
-        # Collect the embedding table and the special-token ids the assembly below needs
         embed_layer = self._embedding_layer()
         weight = embed_layer.word_embeddings.weight
         codon_token_ids = torch.tensor([self.tokenizer.encoder[c] for c in codons], device=dev)
-        cls_id, sep_id = special_token_layout(self.tokenizer)
+        cls_id = int(self.tokenizer.cls_token_id)
+        sep_id = int(self.tokenizer.sep_token_id)
         mask_id = int(self.tokenizer.mask_token_id)
         pad_id = int(self.tokenizer.pad_token_id)
 
@@ -330,42 +372,45 @@ class CodonFMModel:
             seq_dist = torch.tensor(logits_list, device=dev, dtype=torch.float32, requires_grad=backprop)
             sequence_length = int(seq_dist.shape[0])
 
-            # Targets come from P, not the blend, so they do not move with soft/hard.
-            probs = relaxed_sequence(seq_dist, temperature=temperature)
-            codon_idx = probs.argmax(dim=-1).detach()
+            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
+            codon_idx = x.argmax(dim=-1).detach()
             residue_token_ids = codon_token_ids[codon_idx].detach()
 
-            # Build the soft/hard blend, which is the relaxed sequence forwarded through the model
-            x = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
+            if use_ste:
+                hard = F.one_hot(codon_idx, num_classes=n_codons_vocab).float()
+                x = hard + (x - x.detach())
 
-            # Mix each position's embedding from the 64 codon rows, weighted by the blend
             codon_weight = weight[codon_token_ids]
             residue_embeddings = x @ codon_weight
             special_embeddings = weight[torch.tensor([cls_id, sep_id], device=dev)]
 
-            # Wrap the codons in the CLS and SEP embeddings
             raw_embeddings = torch.cat(
                 (special_embeddings[0:1], residue_embeddings, special_embeddings[1:2]),
                 dim=0,
             )
-            # Ids and mask come from the same assembly the scoring paths tokenize into, so the
-            # embeddings below are padded to a layout that cannot drift away from it.
-            id_row, mask_row = build_model_input_row(self.tokenizer, residue_token_ids.tolist())
-            padding = len(id_row) - raw_embeddings.shape[0]
+            raw_token_ids = torch.cat(
+                (
+                    torch.tensor([cls_id], device=dev),
+                    residue_token_ids,
+                    torch.tensor([sep_id], device=dev),
+                ),
+                dim=0,
+            )
+            context_length = min(2048, ((sequence_length + 2 + 7) // 8) * 8)
+            padding = context_length - raw_token_ids.shape[0]
             if padding:
                 raw_embeddings = torch.cat((raw_embeddings, weight[pad_id].expand(padding, -1)), dim=0)
-            # Apply the norm and dropout the embedding layer would have applied to a token lookup
+                raw_token_ids = F.pad(raw_token_ids, (0, padding), value=pad_id)
             input_embeddings = embed_layer.dropout(embed_layer.post_ln(raw_embeddings)).unsqueeze(0)
-            token_ids = torch.tensor(id_row, device=dev, dtype=torch.long).unsqueeze(0)
-            attention_mask = torch.tensor(mask_row, device=dev, dtype=torch.long).unsqueeze(0)
+            token_ids = raw_token_ids.unsqueeze(0)
+            attention_mask = torch.zeros_like(token_ids)
+            attention_mask[:, : sequence_length + 2] = 1
 
-            # Codon positions sit one past CLS; keep the mask embedding out of the graph
             codon_positions = torch.arange(1, sequence_length + 1, device=dev)
             seq_len = input_embeddings.shape[1]
             pos_idx = torch.arange(seq_len, device=dev)
             mask_emb = embed_layer.dropout(embed_layer.post_ln(weight[mask_id])).detach()
 
-            # Walk the sequence in chunks, masking one codon position per row of the chunk
             ie_grad = torch.zeros_like(input_embeddings) if backprop else None
             total_loss_val = 0.0
             for start in tqdm(
@@ -378,7 +423,6 @@ class CodonFMModel:
                 chunk_pos = codon_positions[start:end]
                 chunk_len = end - start
 
-                # Replace the masked position of each row with the mask embedding and its token id
                 chunk_masked = pos_idx.unsqueeze(0) == chunk_pos.unsqueeze(1)
                 ie_chunk = input_embeddings.detach().requires_grad_(True) if backprop else input_embeddings
                 chunk_input = torch.where(
@@ -391,7 +435,6 @@ class CodonFMModel:
                 chunk_token_ids[chunk_idx, chunk_pos] = mask_id
                 chunk_attention = attention_mask.expand(chunk_len, -1)
 
-                # Override the embedding lookup so the soft embeddings, not the ids, reach the model
                 handle = embed_layer.register_forward_hook(lambda _m, _i, _o, ci=chunk_input: ci)
                 try:
                     outputs = self.inference.model(
@@ -403,13 +446,11 @@ class CodonFMModel:
                 finally:
                     handle.remove()
 
-                # Score each masked position against the codon the relaxed sequence currently holds
                 pred = outputs.logits[chunk_idx, chunk_pos, :]
                 labels = token_ids[0, chunk_pos]
                 loss_sum = F.cross_entropy(pred, labels, reduction="sum")
                 total_loss_val += loss_sum.item()
 
-                # Accumulate this chunk's share of the mean NLL gradient on the input embeddings
                 if backprop:
                     (loss_sum / sequence_length).backward()  # type: ignore[no-untyped-call, unused-ignore]
                     ie_chunk_grad = ie_chunk.grad
@@ -424,7 +465,6 @@ class CodonFMModel:
         if backprop:
             if ie_grad is None:
                 raise RuntimeError("codonfm: missing accumulated input-embedding gradient")
-            # Carry the embedding gradient back through the relaxation onto the input codon logits
             (x_grad,) = torch.autograd.grad(input_embeddings, seq_dist, grad_outputs=ie_grad)
             gradient_value = x_grad.detach().cpu().tolist()
 
@@ -504,14 +544,9 @@ class CodonFMModel:
         for i in order:
             grouped.setdefault(plans[i][0], []).append(i)
 
-        total_batches = sum(-(-len(indices) // batch_size) for indices in grouped.values())
-        counter = StatusCounter(logger, "Sampling batch %d/%d", total=total_batches)
-        batch_number = 0
         for indices in grouped.values():
             ctx = self._context_length([sequences[indices[0]]])
             for start in range(0, len(indices), batch_size):
-                batch_number += 1
-                counter(batch_number)
                 chunk = indices[start : start + batch_size]
                 items = [process_item(sequences[i], ctx, self.tokenizer) for i in chunk]
                 batch: dict[str, Any] = {}
@@ -545,8 +580,6 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
     # Sampling rewrites codons, so its sequences carry ``___`` marking which ones to redraw.
     # No other operation does, and a mask reaching one of those is a caller error worth naming.
     alphabet = "ACGT_" if operation == "sample" else "ACGT"
-    if input_dict.get("model_checkpoint") not in CHECKPOINTS:
-        raise ValueError(f"codonfm: model_checkpoint must be one of {sorted(CHECKPOINTS)}")
 
     def valid_sequence(sequence: Any) -> bool:
         return (
@@ -556,12 +589,10 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
             and all(base in alphabet for base in sequence)
         )
 
-    # Sequence operations each take a non-empty list of codon-aligned sequences
     if operation in {"fitness", "embeddings", "sample"}:
         sequences = input_dict.get("sequences")
         if not isinstance(sequences, list) or not sequences or not all(valid_sequence(seq) for seq in sequences):
             raise ValueError(f"codonfm: {operation} requires non-empty, codon-aligned {alphabet} sequences")
-    # Scoring takes mutations, each a sequence plus a codon position that must fall inside it
     elif operation == "score":
         mutations = input_dict.get("mutations")
         if not isinstance(mutations, list) or not mutations or not all(isinstance(item, dict) for item in mutations):
@@ -574,33 +605,27 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
                 raise ValueError("codonfm: score requires codon-aligned ACGT sequences")
             if position >= len(mutation["sequence"]) // 3:
                 raise ValueError("codonfm: worker codon_position is out of range")
-    # Gradient takes relaxed sequences, each a finite L x 64 logits matrix within the context window
     elif operation == "gradient":
-        items = input_dict.get("items")
-        if not isinstance(items, list) or not items:
-            raise ValueError("codonfm: gradient requires at least one item")
-        for item in items:
-            if not isinstance(item, list) or not item or len(item) > 2046:
-                raise ValueError("codonfm: gradient requires 1 to 2046 logits rows per item")
-            if any(
-                not isinstance(row, list)
-                or len(row) != 64
-                or any(
-                    isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
-                    for value in row
-                )
-                for row in item
-            ):
-                raise ValueError("codonfm: gradient logits must be a finite L x 64 numeric matrix")
+        logits = input_dict.get("logits")
+        if not isinstance(logits, list) or not logits or len(logits) > 2046:
+            raise ValueError("codonfm: gradient requires 1 to 2046 logits rows")
+        if any(
+            not isinstance(row, list)
+            or len(row) != 64
+            or any(
+                isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+                for value in row
+            )
+            for row in logits
+        ):
+            raise ValueError("codonfm: gradient logits must be a finite L x 64 numeric matrix")
 
-    # Sampling needs a usable temperature and something actually marked for resampling
     if operation == "sample":
         value = input_dict.get("temperature", 1.0)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
             raise ValueError("codonfm: temperature must be a positive finite number")
         if not any(_MASK_CODON in sequence for sequence in input_dict["sequences"]):
             raise ValueError("codonfm: sample needs at least one masked codon ('___') to resample")
-    # Gradient may leave the temperature out, meaning the logits are used as they arrive
     elif operation == "gradient":
         temperature = input_dict.get("temperature")
         if temperature is not None and (
@@ -614,7 +639,6 @@ def _validate_request(input_dict: dict[str, Any], operation: str) -> None:
 
 def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     """Route a decoded input dict to the requested CodonFM operation."""
-    # Check the operation and the runtime arguments every operation shares
     operation = input_dict.get("operation")
     allowed_operations = {"fitness", "embeddings", "score", "sample", "gradient"}
     if operation not in allowed_operations:
@@ -622,7 +646,6 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     device = input_dict.get("device")
     if not isinstance(device, str) or not device:
         raise ValueError("codonfm: device must be a non-empty string")
-    # Accept verbosity as either a flag or a level, as callers send both
     verbose_raw = input_dict.get("verbose", False)
     if isinstance(verbose_raw, bool):
         verbose = verbose_raw
@@ -633,16 +656,14 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
     batch_size = input_dict.get("batch_size", 1)
     if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
         raise ValueError("codonfm: batch_size must be a positive integer")
-    for name in ("compute_gradient",):
+    for name in ("use_ste", "compute_gradient"):
         if name in input_dict and not isinstance(input_dict[name], bool):
             raise ValueError(f"codonfm: {name} must be a boolean")
-    # Validate the operation payload, then seed and load before any operation runs
     _validate_request(input_dict, operation)
     set_torch_seed(input_dict.get("seed"))
 
-    _MODEL.load(checkpoint_path=_resolve_checkpoint(input_dict["model_checkpoint"]), device=device)
+    _MODEL.load(checkpoint_path=_resolve_checkpoint(input_dict), device=device, verbose=verbose)
 
-    # Hand the payload to the matching model method
     if operation == "fitness":
         return {
             "fitness": _MODEL.score_fitness(sequences=input_dict["sequences"], batch_size=batch_size, device=device)
@@ -668,25 +689,15 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             )
         }
     if operation == "gradient":
-        # Load the checkpoint once for this chunk, then evaluate each candidate independently.
-        results = [
-            _MODEL.compute_gradient(
-                item,
-                temperature=resolve_temperature(input_dict.get("temperature")),
-                soft=float(input_dict.get("soft", 1.0)),
-                hard=float(input_dict.get("hard", 0.0)),
-                backprop=input_dict.get("compute_gradient", True),
-                batch_size=batch_size,
-                device=device,
-                verbose=verbose,
-            )
-            for item in input_dict["items"]
-        ]
-        # Report each candidate separately, with the codon vocabulary they all share reported once
-        return {
-            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
-            "vocab": results[0]["vocab"],
-        }
+        return _MODEL.compute_gradient(
+            input_dict["logits"],
+            temperature=input_dict.get("temperature"),
+            use_ste=input_dict.get("use_ste", False),
+            backprop=input_dict.get("compute_gradient", True),
+            batch_size=batch_size,
+            device=device,
+            verbose=verbose,
+        )
     raise AssertionError("unreachable")
 
 

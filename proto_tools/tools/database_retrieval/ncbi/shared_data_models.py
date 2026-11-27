@@ -131,9 +131,8 @@ def _ncbi_esearch(
     mindate: str | None = None,
     maxdate: str | None = None,
     reldate: int | None = None,
-) -> tuple[list[str], str]:
-    """Run NCBI esearch and return (id_list, sanitized_url)."""
-    # Build the esearch query, adding paging, sorting and date filters only when given
+) -> list[str]:
+    """Run NCBI esearch and return ID list."""
     params: dict[str, Any] = {
         "db": db,
         "term": term,
@@ -154,10 +153,8 @@ def _ncbi_esearch(
         params["maxdate"] = maxdate
     if reldate is not None:
         params["reldate"] = reldate
-    # Add the tool name and any contact email or API key
     params.update(_ncbi_common_params(config))
 
-    # Send the request with retries and backoff
     response = request_with_retry(
         lambda: session.get(
             f"{_NCBI_EUTILS_BASE}/esearch.fcgi",
@@ -167,14 +164,10 @@ def _ncbi_esearch(
         retries=_HTTP_RETRIES,
         backoff_seconds=_BACKOFF_SECONDS,
     )
-    # Strip the API key and email from the URL before it is returned
-    url = _sanitize_url(str(response.url))
-    # Treat a 404 as no results; other HTTP errors raise
     if not _check_response(response, "ncbi-esearch"):
-        return [], url
-    # Parse the JSON body and pull out the list of matching IDs
+        return []
     data = json.loads(response.text, strict=False)
-    return data.get("esearchresult", {}).get("idlist", []), url
+    return data.get("esearchresult", {}).get("idlist", [])  # type: ignore[no-any-return]
 
 
 def _ncbi_esummary(

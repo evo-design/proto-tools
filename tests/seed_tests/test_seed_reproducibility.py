@@ -83,41 +83,38 @@ def test_masking_strategy_seeded():
 #   floating-point ops non-deterministically across runs, so same-seed
 #   coordinates drift beyond tolerance in both the persistent and non-persistent
 #   variants.
-# - the alphafold2 gradient tools: JAX bfloat16 / CUDA autotune drift amplified by backprop (~12% on gradients).
+# - alphafold2-gradient: JAX bfloat16 / CUDA autotune drift (ColabDesign's
+#   default ``global_config.bfloat16=True``) amplified by gradient backprop
+#   beyond tolerances even within a single persistent worker (~12% relative
+#   error on gradient values).
+# - alphafold3-prediction: AF3 honours the seed via ``modelSeeds`` →
+#   ``jax.random.PRNGKey(seed)`` in run_alphafold.py, but the diffusion +
+#   pairformer stack hits JAX/CUDA autotune + bfloat16 reduction-order
+#   non-determinism. ~7 mÅ atomic-coordinate drift between runs (same
+#   seed) — across both persistent and non-persistent variants. Mitigations
+#   like ``XLA_FLAGS=--xla_gpu_deterministic_ops=true`` would slow inference
+#   2-5x without a guarantee of bit-exact reproducibility.
+# - germinal-design: binder-design pipeline that runs AF2 hallucination +
+#   re-prediction internally, inheriting the same JAX/CUDA non-determinism as
+#   alphafold2/3 above. Cross-run drift changes which trajectory filters fire,
+#   so even the ``pipeline_stats`` keys differ between runs; both variants fail.
+# - bindcraft-design, freebindcraft-design: AF2 hallucination + MPNN pipeline
+#   (same ColabDesign/JAX non-determinism as germinal-design); BindCraft also
+#   samples binder length + trajectory seed from an unseeded numpy RNG, so
+#   cross-call runs diverge in both trajectory choice and filter outcomes.
 _SEED_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
         "rfdiffusion3-design",
         "rf3-prediction",
         "protenix-prediction",
         "opendde-prediction",
-        "alphafold2-binder-gradient",
-        "alphafold2-binder-redesign-gradient",
-        "alphafold2-fixbb-gradient",
-        "alphafold2-hallucination-gradient",
+        "alphafold2-gradient",
         "alphafold3-prediction",
         "germinal-design",
         "bindcraft-design",
         "freebindcraft-design",
     }
 )
-
-# Tools whose same-seed outputs differ by GPU kernel numerics more than ``approx_equal``'s default
-# tolerance, but by far less than a seeding bug would. A wider tolerance keeps their check, which an
-# exclusion would drop: a seed that is ignored moves these values by much more than 1%.
-#
-# - esmfold2-inversion-gradient, esmfold2-inversion-binder-gradient: term values drift ~7e-4 relative
-#   (up to 1.1e-3 between persistent dispatches, ~5e-3 absolute) at a fixed seed; the same kernel
-#   drift class as esmfold2-prediction's atom drift below.
-_SEED_TOLERANCES: dict[str, dict[str, float]] = {
-    "esmfold2-inversion-gradient": {"rtol": 1e-2, "atol": 1e-2},
-    "esmfold2-inversion-binder-gradient": {"rtol": 1e-2, "atol": 1e-2},
-}
-
-
-def seed_tolerance(key: str) -> dict[str, float]:
-    """The ``approx_equal`` tolerance a tool's same-seed outputs are held to (empty for the default)."""
-    return _SEED_TOLERANCES.get(key, {})
-
 
 # Tools where ONLY the persistent variant fails. Fresh subprocesses with the
 # same seed are reproducible, but consecutive dispatches inside the same
@@ -250,7 +247,7 @@ def test_all_tools_seed_reproducibility(spec: ToolSpec, tmp_path):
     assert r2.success, f"Second run of {spec.key} failed: {r2.errors}"
     assert_metrics_in_spec(r2)
 
-    r1.approx_equal(r2, **seed_tolerance(spec.key))
+    r1.approx_equal(r2)
 
 
 @pytest.mark.extensive
@@ -283,4 +280,4 @@ def test_all_tools_seed_reproducibility_persistent(spec: ToolSpec, tmp_path):
         assert r2.success, f"Second run of {spec.key} failed: {r2.errors}"
         assert_metrics_in_spec(r2)
 
-        r1.approx_equal(r2, **seed_tolerance(spec.key))
+        r1.approx_equal(r2)

@@ -4,7 +4,7 @@ ProGen2 scoring tool.
 """
 
 import logging
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from proto_tools.tools.causal_models.shared_data_models import (
     CausalModelScoringConfig,
@@ -77,12 +77,6 @@ class ProGen2ScoringConfig(CausalModelScoringConfig):
         if self.local_path:
             return f"local_path points to a local weights directory not available on device='{device}'. Unset it, or run locally with device='cpu'."
         return None
-
-    @classmethod
-    def minimal(cls, **kwargs: Any) -> "ProGen2ScoringConfig":
-        """Smallest checkpoint, so smoke and device tests load the model in seconds."""
-        kwargs.setdefault("model_checkpoint", "progen2-small")
-        return cast("ProGen2ScoringConfig", super().minimal(**kwargs))
 
 
 # ============================================================================
@@ -162,7 +156,6 @@ def run_progen2_score(
           are needed
     """
     logger.debug(f"Using local venv for ProGen2 scoring: {config.model_checkpoint}")
-    # Run inference in the toolkit's isolated environment.
     result = ToolInstance.dispatch(
         "progen2",
         {

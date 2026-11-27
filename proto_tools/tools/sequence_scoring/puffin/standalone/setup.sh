@@ -21,8 +21,15 @@ proto_resolve_weights_dir puffin
 PUFFIN_REPO_DIR="$WEIGHTS_DIR/puffin_repo"
 PUFFIN_COMMIT="9bc81eb922f44556879d1d2afd4c757a1d6c291e"
 
+if [ ! -d "$PUFFIN_REPO_DIR/.git" ]; then
+    echo "Cloning Puffin repository..."
+    git clone https://github.com/jzhoulab/puffin.git "$PUFFIN_REPO_DIR"
+else
+    echo "Puffin repository already cloned."
+fi
+
 echo "Checking out pinned Puffin commit ${PUFFIN_COMMIT}..."
-# Restores any repo file a purge deleted, puffin.pth included
-proto_ensure_git_checkout https://github.com/jzhoulab/puffin.git "$PUFFIN_REPO_DIR" "$PUFFIN_COMMIT"
+git -C "$PUFFIN_REPO_DIR" fetch origin "$PUFFIN_COMMIT"
+git -C "$PUFFIN_REPO_DIR" checkout "$PUFFIN_COMMIT"
 
 echo "Puffin setup complete!"

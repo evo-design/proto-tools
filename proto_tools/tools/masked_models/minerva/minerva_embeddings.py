@@ -10,6 +10,7 @@ from proto_tools.tools.masked_models.mixed_data_models import (
     MixedEmbeddingsOutput,
     MixedSequenceInput,
 )
+from proto_tools.tools.masked_models.projection import attach_projections
 from proto_tools.tools.tool_registry import tool
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ def example_input() -> MinervaEmbeddingsInput:
     iterable_input_fields=["sequences"],
     iterable_output_field="results",
     max_chunk_size=32,
+    post_process_iterable=attach_projections,
 )
 def run_minerva_embeddings(
     inputs: MinervaEmbeddingsInput,

@@ -3,7 +3,6 @@
 Tests for ProteinMPNN sampling and scoring.
 """
 
-import logging
 import random
 import sys
 from pathlib import Path
@@ -11,30 +10,23 @@ from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
-from pydantic import ValidationError
 
-import proto_tools.tools.inverse_folding.proteinmpnn
 from proto_tools.entities.structures.structure import Structure
 from proto_tools.tools.inverse_folding.proteinmpnn import (
-    ProteinMPNNGradientCandidate,
     ProteinMPNNGradientConfig,
     ProteinMPNNGradientInput,
-    ProteinMPNNHomooligomerSampleConfig,
-    ProteinMPNNHomooligomerSampleInput,
-    ProteinMPNNHomooligomerStructureInput,
     ProteinMPNNSampleConfig,
     ProteinMPNNScoringConfig,
     ProteinMPNNScoringInput,
     run_proteinmpnn_gradient,
     run_proteinmpnn_sample,
-    run_proteinmpnn_sample_homooligomer,
     run_proteinmpnn_score,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_gradient import (
     ProteinMPNNGradientOutput,
 )
 from proto_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
-    PROTEINMPNN_AMINO_ACIDS_WITH_X,
+    ALPHAFOLD_VOCAB,
 )
 from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingInput,
@@ -42,7 +34,7 @@ from proto_tools.tools.inverse_folding.shared_data_models import (
     InverseFoldingStructureInput,
     SequenceStructurePair,
 )
-from proto_tools.utils import ToolInstance, one_hot_protein_logits
+from proto_tools.utils import one_hot_protein_logits
 from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
 from tests.tool_infra_tests.test_export_functionality import validate_output
@@ -85,263 +77,11 @@ def _small_structure() -> Structure:
     return Structure(structure=_SMALL_PDB)
 
 
-_RESIDUE_TEMPLATE = """ATOM      1  N   XXX A   1       0.000   0.000   0.000  1.00  0.00           N
-ATOM      2  CA  XXX A   1       1.458   0.000   0.000  1.00  0.00           C
-ATOM      3  C   XXX A   1       2.009   1.420   0.000  1.00  0.00           C
-ATOM      4  O   XXX A   1       1.246   2.390   0.000  1.00  0.00           O
-"""
-_PROTOMER = ["ALA", "GLY", "SER", "VAL", "LEU"]
-
-
-def _oligomer_structure(chains: dict[str, list[str] | list[tuple[int, str]]]) -> Structure:
-    """Build a multi-chain structure from explicit per-chain residues.
-
-    Args:
-        chains (dict[str, list[str] | list[tuple[int, str]]]): Chain ID to either its
-            three-letter residue names (numbered 1..N) or explicit
-            ``(residue_number, residue_name)`` pairs, which is how a test spells a gap
-            or a chain numbered in its own range.
-
-    Returns:
-        Structure: Chains laid out side by side so each is a separate polymer.
-    """
-    lines: list[str] = []
-    serial = 1
-    for chain_id, residues in chains.items():
-        numbered = [r if isinstance(r, tuple) else (i, r) for i, r in enumerate(residues, start=1)]
-        for number, resname in numbered:
-            for line in _RESIDUE_TEMPLATE.splitlines():
-                x = float(line[30:38]) + 4.0 * number
-                y = float(line[38:46]) + 8.0 * (ord(chain_id) - ord("A"))
-                lines.append(
-                    f"{line[:6]}{serial:5d}{line[11:17]}{resname:>3s}{line[20:21]}"
-                    f"{chain_id}{number:4d}{line[26:30]}{x:8.3f}{y:8.3f}{line[46:]}"
-                )
-                serial += 1
-    return Structure(structure="\n".join([*lines, "END", ""]))
-
-
-def _homooligomer_input(n_chains: int = 2, **kwargs) -> ProteinMPNNHomooligomerSampleInput:
-    """Build a tool input over an ``n_chains``-mer of identical protomers."""
-    chain_ids = [chr(ord("A") + i) for i in range(n_chains)]
-    structure = _oligomer_structure(dict.fromkeys(chain_ids, _PROTOMER))
-    kwargs.setdefault("protomer_chains", chain_ids)
-    return ProteinMPNNHomooligomerSampleInput(
-        inputs=[ProteinMPNNHomooligomerStructureInput(structure=structure, **kwargs)]
-    )
-
-
-def _fake_dispatch(sink: list[dict], seq: str = "AGSVL"):
-    """Return a ToolInstance.dispatch stand-in that records payloads and returns ``seq``."""
-
-    def dispatch(_tool, input_dict, **_kwargs):
-        sink.append(input_dict)
-        return {"seq": [seq], "score": [0.5], "seqid": [0.5]}
-
-    return staticmethod(dispatch)
-
-
-# ---------------------------------------------------------------------------
-# proteinmpnn-sample-homooligomer: input validation
-# ---------------------------------------------------------------------------
-def test_homooligomer_input_rejects_single_chain():
-    """One chain has nothing to tie to."""
-    structure = _oligomer_structure({"A": _PROTOMER, "B": _PROTOMER})
-    with pytest.raises(ValidationError, match="at least two distinct chains"):
-        ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A"])
-
-
-def test_homooligomer_input_rejects_unequal_protomer_lengths():
-    """Unequal protomers cannot be tied; the message names the offending lengths."""
-    structure = _oligomer_structure({"A": _PROTOMER, "B": _PROTOMER[:3]})
-    with pytest.raises(ValidationError, match=r"same length.*'A': 5.*'B': 3"):
-        ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "B"])
-
-
-def test_homooligomer_input_rejects_duplicate_protomer_chains():
-    """A repeated chain would be handed to the model twice, superimposed on itself.
-
-    The single-chain error invites exactly this ("needs at least two chains"), and the
-    length and sequence checks are keyed by chain ID, so a repeat collapses and passes
-    all of them silently.
-    """
-    structure = _oligomer_structure({"A": _PROTOMER, "B": _PROTOMER})
-    with pytest.raises(ValidationError, match=r"must name distinct chains; \['A'\]"):
-        ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "A"])
-
-
-def test_homooligomer_input_rejects_protomers_with_gaps_in_different_places():
-    """Equal observed length is not enough: staging renumbers 1..N over observed residues.
-
-    Full protomer A-G-G-A; chain A is missing residue 2 and chain B residue 3. Both
-    observe "AGA", so a sequence-only check accepts them, but tied position 2 would be
-    original residue 3 on A and residue 2 on B.
-    """
-    structure = _oligomer_structure(
-        {
-            "A": [(1, "ALA"), (3, "GLY"), (4, "ALA")],
-            "B": [(1, "ALA"), (2, "GLY"), (4, "ALA")],
-        }
-    )
-    assert len(set(structure.get_chain_sequences().values())) == 1, "sequences must match for this to bite"
-    with pytest.raises(ValidationError, match="must share residue numbering"):
-        ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "B"])
-
-
-def test_homooligomer_input_accepts_protomers_numbered_in_separate_ranges():
-    """Author numbering per protomer (1.., 101..) is normal and must not be rejected."""
-    structure = _oligomer_structure(
-        {
-            "A": [(i, n) for i, n in enumerate(_PROTOMER, start=1)],
-            "B": [(100 + i, n) for i, n in enumerate(_PROTOMER, start=1)],
-        }
-    )
-    inp = ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "B"])
-    assert inp.protomer_chain_ids == ["A", "B"]
-
-
-def test_homooligomer_input_accepts_protomers_with_matching_gaps():
-    """A gap resolved identically in every protomer still ties position-for-position."""
-    residues = [(1, "ALA"), (3, "GLY"), (4, "ALA")]
-    structure = _oligomer_structure({"A": residues, "B": residues})
-    inp = ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "B"])
-    assert inp.protomer_length == 3
-
-
-@pytest.mark.parametrize("position", [1, 5])
-def test_homooligomer_input_accepts_fixed_positions_at_the_protomer_bounds(position):
-    """1 and the protomer length are both valid; an off-by-one here is silent otherwise."""
-    structure = _oligomer_structure({"A": _PROTOMER, "B": _PROTOMER})
-    inp = ProteinMPNNHomooligomerStructureInput(
-        structure=structure, protomer_chains=["A", "B"], protomer_fixed_positions=[position]
-    )
-    assert inp.fixed_positions.chains == {"A": [position], "B": [position]}
-
-
-@pytest.mark.parametrize("position", [0, 6, -1])
-def test_homooligomer_input_rejects_fixed_positions_outside_the_protomer(position):
-    """Fixed positions are 1-indexed within one protomer, not across the assembly."""
-    structure = _oligomer_structure({"A": _PROTOMER, "B": _PROTOMER})
-    with pytest.raises(ValidationError, match=r"fall outside the 1\.\.5 protomer"):
-        ProteinMPNNHomooligomerStructureInput(
-            structure=structure, protomer_chains=["A", "B"], protomer_fixed_positions=[position]
-        )
-
-
-def test_homooligomer_input_warns_but_accepts_pseudo_symmetric_protomers(caplog):
-    """Equal-length protomers that differ in sequence are legal but worth flagging."""
-    structure = _oligomer_structure({"A": _PROTOMER, "B": ["TRP"] * 5})
-    with caplog.at_level(logging.WARNING):
-        inp = ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "B"])
-    assert inp.protomer_chain_ids == ["A", "B"]
-    assert "pseudo-symmetric" in caplog.text
-
-
-def test_homooligomer_fixed_positions_broadcast_to_every_protomer():
-    """Per-protomer positions are the schema; broadcasting them is this property's job."""
-    structure = _oligomer_structure(dict.fromkeys("ABC", _PROTOMER))
-    inp = ProteinMPNNHomooligomerStructureInput(
-        structure=structure, protomer_chains=["A", "B", "C"], protomer_fixed_positions=[3, 1, 3]
-    )
-    assert inp.fixed_positions.chains == {"A": [1, 3], "B": [1, 3], "C": [1, 3]}
-
-
-def test_homooligomer_input_has_no_per_chain_fixed_positions_field():
-    """The asymmetric-selection footgun is meant to be unrepresentable, not validated."""
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        ProteinMPNNHomooligomerStructureInput(
-            structure=_oligomer_structure(dict.fromkeys("AB", _PROTOMER)),
-            protomer_chains=["A", "B"],
-            fixed_positions={"A": [2]},
-        )
-
-
-# ---------------------------------------------------------------------------
-# proteinmpnn-sample-homooligomer: run behavior
-# ---------------------------------------------------------------------------
-def test_homooligomer_run_ties_and_broadcasts_the_protomer_sequence(monkeypatch):
-    """Tied decoding returns one segment, which must land on every protomer chain."""
-    sent: list[dict] = []
-    monkeypatch.setattr(ToolInstance, "dispatch", _fake_dispatch(sent))
-
-    output = run_proteinmpnn_sample_homooligomer(
-        _homooligomer_input(3, protomer_fixed_positions=[2]),
-        ProteinMPNNHomooligomerSampleConfig(num_sequences_per_structure=1, seed=42),
-    )
-
-    assert sent[0]["homooligomer"] is True
-    assert sent[0]["fixed_positions"] == {"A": [2], "B": [2], "C": [2]}
-    design = output.design_sets[0].complexes[0]
-    assert [chain.sequence for chain in design.chains] == ["AGSVL"] * 3
-
-
-@pytest.mark.parametrize("n_chains", [2, 3])
-def test_homooligomer_run_rejects_any_segment_count_but_one(monkeypatch, n_chains):
-    """Tied decoding always collapses to one segment, so anything else means it did not happen.
-
-    The 2-chain case is the dangerous one: a per-chain split matches the protomer count,
-    so a laxer check would accept two *independently designed* protomers from the tool
-    whose entire promise is that they are identical.
-    """
-    sent: list[dict] = []
-    monkeypatch.setattr(ToolInstance, "dispatch", _fake_dispatch(sent, seq="AGSVL/WWWWW"))
-
-    with pytest.raises(ValueError, match="must return exactly one protomer segment, but got 2"):
-        run_proteinmpnn_sample_homooligomer(
-            _homooligomer_input(n_chains),
-            ProteinMPNNHomooligomerSampleConfig(num_sequences_per_structure=1, seed=42),
-        )
-
-
-# ---------------------------------------------------------------------------
-# proteinmpnn-sample: the nudge toward the dedicated tool
-# ---------------------------------------------------------------------------
-def test_sample_warns_when_the_redesigned_chains_are_a_homooligomer(monkeypatch, caplog):
-    """The general tool designs chains independently, which is rarely meant for an oligomer."""
-    sent: list[dict] = []
-    monkeypatch.setattr(ToolInstance, "dispatch", _fake_dispatch(sent, seq="AGSVL/AGSVL"))
-
-    inp = InverseFoldingInput(
-        inputs=[
-            InverseFoldingStructureInput(
-                structure=_oligomer_structure(dict.fromkeys("AB", _PROTOMER)),
-                chains_to_redesign=["A", "B"],
-            )
-        ]
-    )
-    with caplog.at_level(logging.WARNING):
-        run_proteinmpnn_sample(inp, ProteinMPNNSampleConfig(num_sequences_per_structure=1, seed=42))
-
-    assert "proteinmpnn-sample-homooligomer" in caplog.text
-    # The general tool must still design independently, never tie.
-    assert sent[0]["homooligomer"] is False
-
-
-def test_sample_does_not_warn_for_equal_length_but_different_chains(monkeypatch, caplog):
-    """Matching lengths alone are not an oligomer; warning on them would be noise."""
-    sent: list[dict] = []
-    monkeypatch.setattr(ToolInstance, "dispatch", _fake_dispatch(sent, seq="AGSVL/AGSVL"))
-
-    inp = InverseFoldingInput(
-        inputs=[
-            InverseFoldingStructureInput(
-                structure=_oligomer_structure({"A": _PROTOMER, "B": ["TRP"] * 5}),
-                chains_to_redesign=["A", "B"],
-            )
-        ]
-    )
-    with caplog.at_level(logging.WARNING):
-        run_proteinmpnn_sample(inp, ProteinMPNNSampleConfig(num_sequences_per_structure=1, seed=42))
-
-    assert "proteinmpnn-sample-homooligomer" not in caplog.text
-
-
 def test_proteinmpnn_sample_backbone_noise_uses_model_constructor(monkeypatch, tmp_path):
     """ColabDesign's mk_mpnn_model has no set_opt; backbone_noise is a constructor arg."""
     from proto_tools.tools.inverse_folding.proteinmpnn.standalone import inference as proteinmpnn_inference
 
     calls: list[float] = []
-    prep_calls: list[dict] = []
 
     class FakeMpnnModel:
         def __init__(self, *, model_name, weights, backbone_noise=0.0):
@@ -349,15 +89,14 @@ def test_proteinmpnn_sample_backbone_noise_uses_model_constructor(monkeypatch, t
             self._model = SimpleNamespace(params={"p": np.array([1.0])})
 
         def prep_inputs(self, *args, **kwargs):
-            prep_calls.append(kwargs)
-            return
+            return None
 
         def sample_parallel(self, *args, **kwargs):
             return {
                 "seq": np.array(["AGSVL"]),
                 "score": np.array([0.0]),
                 "seqid": np.array([1.0]),
-                "logits": np.zeros((1, 5, len(PROTEINMPNN_AMINO_ACIDS_WITH_X))),
+                "logits": np.zeros((1, 5, len(ALPHAFOLD_VOCAB))),
             }
 
     fake_colabdesign = ModuleType("colabdesign")
@@ -380,18 +119,9 @@ def test_proteinmpnn_sample_backbone_noise_uses_model_constructor(monkeypatch, t
     pdb_path.write_text("END\n")
     model = proteinmpnn_inference.ProteinMPNNModel()
 
-    noisy = model.sample(
-        str(pdb_path),
-        ["A"],
-        batch_size=1,
-        seed=1,
-        device="cpu",
-        backbone_noise=0.02,
-        homooligomer=True,
-    )
+    noisy = model.sample(str(pdb_path), ["A"], batch_size=1, seed=1, device="cpu", backbone_noise=0.02)
     assert noisy["seq"].tolist() == ["AGSVL"]
     assert calls == [0.02]
-    assert prep_calls[0]["homooligomer"] is True
 
     model.sample(str(pdb_path), ["A"], batch_size=1, seed=2, device="cpu", backbone_noise=0.0)
     assert calls == [0.02, 0.0]
@@ -497,9 +227,9 @@ def test_proteinmpnn_score(pdb_structure: Structure):
         modified_sequence[index] = "C"
     modified_sequence = "".join(modified_sequence)
 
-    excluded_positions = random.sample(list(range(len(original_sequence))), 100)
-    excluded_positions = {
-        "A": [position + 1 for position in excluded_positions],
+    fixed_positions = random.sample(list(range(len(original_sequence))), 100)
+    fixed_positions = {
+        "A": [position + 1 for position in fixed_positions],
     }
 
     inp = ProteinMPNNScoringInput(
@@ -507,12 +237,12 @@ def test_proteinmpnn_score(pdb_structure: Structure):
             SequenceStructurePair(
                 sequence=original_sequence,
                 structure=pdb_structure,
-                excluded_positions=excluded_positions,
+                fixed_positions=fixed_positions,
             ),
             SequenceStructurePair(
                 sequence=modified_sequence,
                 structure=pdb_structure,
-                excluded_positions=excluded_positions,
+                fixed_positions=fixed_positions,
             ),
         ]
     )
@@ -522,53 +252,17 @@ def test_proteinmpnn_score(pdb_structure: Structure):
 
     validate_output(output)
     assert output.tool_id == "proteinmpnn-score"
-    assert output.vocab == list(_CANONICAL_AA)
+    assert output.vocab == ALPHAFOLD_VOCAB
 
     assert len(output.scores) == 2
     assert all(isinstance(score, InverseFoldingScoringMetrics) for score in output.scores)
-    scored_len = len(original_sequence) - len(excluded_positions["A"])
+    scored_len = len(original_sequence) - len(fixed_positions["A"])
     assert all(
         np.isclose(score.log_likelihood, score.avg_log_likelihood * scored_len, rtol=1e-5) for score in output.scores
     )
 
     # Original sequence should have lower perplexity than the modified one
     assert output.scores[0].perplexity < output.scores[1].perplexity
-
-
-def test_proteinmpnn_score_logits_land_in_proto_columns() -> None:
-    """The native-to-proto permutation moves each residue's value to its own proto column.
-
-    ColabDesign scores in AlphaFold order — the 20 residues sorted by three-letter code — with a
-    trailing unknown column. That order is derived here from an external table rather than read
-    from the toolkit, so transposing two residues in the toolkit's own alphabet fails this test
-    instead of moving the expectation with it. Every value is distinguishable, so a swap surfaces
-    as a wrong residue rather than a plausible-looking matrix.
-    """
-    from Bio.Data.IUPACData import protein_letters_1to3
-
-    from proto_tools.tools.inverse_folding.proteinmpnn.standalone.inference import (
-        PROTEINMPNN_TO_CANONICAL_INDICES,
-    )
-
-    native_order = [*sorted(_CANONICAL_AA, key=lambda residue: protein_letters_1to3[residue].upper()), "X"]
-    assert native_order == PROTEINMPNN_AMINO_ACIDS_WITH_X, (
-        f"the toolkit's alphabet {''.join(PROTEINMPNN_AMINO_ACIDS_WITH_X)} is not AlphaFold's "
-        f"three-letter-code order {''.join(native_order)}"
-    )
-
-    # Column j of the model's output carries the value j, so a column's value names its origin.
-    native = np.tile(np.arange(len(native_order), dtype=float), (3, 1))
-
-    proto_ordered = native[..., PROTEINMPNN_TO_CANONICAL_INDICES]
-
-    assert proto_ordered.shape == (3, len(_CANONICAL_AA))
-    for column, residue in enumerate(_CANONICAL_AA):
-        expected_native_column = native_order.index(residue)
-        assert proto_ordered[0, column] == expected_native_column, (
-            f"proto column {column} ({residue}) carries native column {proto_ordered[0, column]:.0f}, "
-            f"expected {expected_native_column}"
-        )
-    assert float(native_order.index("X")) not in set(proto_ordered[0]), "the unknown column reached the output"
 
 
 @pytest.mark.uses_gpu
@@ -594,7 +288,7 @@ def test_proteinmpnn_score_fields(pdb_structure: Structure):
     # Validate logits shape
     logits_arr = np.array(score.logits)
     assert logits_arr.ndim == 2
-    assert logits_arr.shape == (seq_len, len(_CANONICAL_AA))
+    assert logits_arr.shape == (seq_len, len(ALPHAFOLD_VOCAB))
 
     # log_likelihood = avg_log_likelihood * seq_len
     assert np.isclose(score.log_likelihood, score.avg_log_likelihood * seq_len, rtol=1e-5)
@@ -612,15 +306,11 @@ def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
     def fake_dispatch(toolkit, payload, *, instance=None, config=None):
         captured["toolkit"] = toolkit
         captured["payload"] = payload
+        n = len(payload["logits"])
         return {
-            "results": [
-                {
-                    "gradient": [[0.0] * 20] * len(item["logits"]),
-                    "loss": 0.5,
-                    "metrics": {"avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
-                }
-                for item in payload["items"]
-            ],
+            "gradient": [[0.0] * 20] * n,
+            "loss": 0.5,
+            "metrics": {"avg_log_likelihood": -0.5, "perplexity": np.exp(0.5)},
             "vocab": list(_CANONICAL_AA),
         }
 
@@ -631,49 +321,21 @@ def test_proteinmpnn_gradient_dispatch_contract(monkeypatch):
 
     result = run_proteinmpnn_gradient(
         ProteinMPNNGradientInput(
-            inputs=ProteinMPNNGradientCandidate(
-                logits=[[0.0] * 20] * 5,
-                structure=_small_structure(),
-                chains_to_redesign=["A"],
-                fixed_positions={"A": [1]},
-            ),
+            logits=[[0.0] * 20] * 5,
+            structure=_small_structure(),
+            chains_to_redesign=["A"],
+            fixed_positions={"A": [1]},
         ),
-        ProteinMPNNGradientConfig(hard=1.0, device="cpu"),
+        ProteinMPNNGradientConfig(use_ste=False, device="cpu"),
     )
 
     assert captured["toolkit"] == "proteinmpnn"
     assert captured["payload"]["operation"] == "compute_gradient"
-    (item,) = captured["payload"]["items"]
-    assert item["chain_ids"] == ["A"]
-    assert item["fixed_positions"] == {"A": [1]}
-    assert captured["payload"]["soft"] == 1.0
-    assert captured["payload"]["hard"] == 1.0
+    assert captured["payload"]["chain_ids"] == ["A"]
+    assert captured["payload"]["fixed_positions"] == {"A": [1]}
+    assert captured["payload"]["use_ste"] is False
     assert captured["payload"]["compute_gradient"] is True
-    (term,) = result.results[0].terms
-    assert term.gradient == [[0.0] * 20] * 5
-
-
-def test_proteinmpnn_sample_lays_design_over_structure_chains(monkeypatch):
-    """The designed chain takes the model sequence; DNA context and modifications come from the structure."""
-
-    def fake_dispatch(toolkit, payload, *, instance=None, config=None):
-        bs = payload["batch_size"]
-        return {"seq": ["MKTAYIAK"] * bs, "score": [-1.0] * bs, "seqid": [1.0] * bs}
-
-    monkeypatch.setattr(
-        "proto_tools.tools.inverse_folding.proteinmpnn._sampling.ToolInstance.dispatch",
-        fake_dispatch,
-    )
-    structure = Structure.from_file(Path(__file__).parent.parent / "dummy_data" / "modified_gapped_complex.pdb")
-    output = run_proteinmpnn_sample(
-        InverseFoldingInput(inputs=[InverseFoldingStructureInput(structure=structure)]),
-        ProteinMPNNSampleConfig(num_sequences_per_structure=1, batch_size=1, seed=0, device="cpu"),
-    )
-
-    design = output.design_sets[0].complexes[0]
-    assert design.chain_sequence_map() == {"A": "MKTAYIAK", "B": "AGC"}
-    assert design.chains[1] == structure.get_chain("B")
-    assert design.designed == [True, False]
+    assert result.gradient == [[0.0] * 20] * 5
 
 
 def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):
@@ -686,7 +348,7 @@ def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):
         return {"seq": ["A" * 5] * bs, "score": [-1.0] * bs, "seqid": [1.0] * bs}
 
     monkeypatch.setattr(
-        "proto_tools.tools.inverse_folding.proteinmpnn._sampling.ToolInstance.dispatch",
+        "proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample.ToolInstance.dispatch",
         fake_dispatch,
     )
 
@@ -708,7 +370,7 @@ def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):
         return {"seq": ["A" * 5] * bs, "score": [-1.0] * bs, "seqid": [1.0] * bs}
 
     monkeypatch.setattr(
-        "proto_tools.tools.inverse_folding.proteinmpnn._sampling.ToolInstance.dispatch",
+        "proto_tools.tools.inverse_folding.proteinmpnn.proteinmpnn_sample.ToolInstance.dispatch",
         fake_dispatch_again,
     )
     run_proteinmpnn_sample(
@@ -720,70 +382,28 @@ def test_proteinmpnn_sample_seeds_distinct_across_inputs(monkeypatch):
 
 @pytest.mark.uses_gpu
 @pytest.mark.slow
-def test_proteinmpnn_gradient_forward_only_returns_loss_without_a_gradient() -> None:
-    """compute_gradient=False returns the loss, metrics and vocabulary with gradient=None."""
-    logits = np.random.default_rng(0).normal(size=(5, 20)).tolist()
-
+def test_proteinmpnn_gradient_end_to_end():
+    """ProteinMPNN gradient returns finite non-zero gradients for a small backbone."""
     result = run_proteinmpnn_gradient(
         ProteinMPNNGradientInput(
-            inputs=ProteinMPNNGradientCandidate(
-                logits=logits,
-                structure=_small_structure(),
-                chains_to_redesign=["A"],
-            ),
+            logits=[[0.0] * 20] * 5,
+            structure=_small_structure(),
+            chains_to_redesign=["A"],
             temperature=0.7,
         ),
-        ProteinMPNNGradientConfig(seed=42, compute_gradient=False),
-    )
-
-    validate_output(result)
-    (term,) = result.results[0].terms
-    assert term.gradient is None
-    assert term.term_value > 0.0
-    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-term.term_value, rel=1e-6)
-    assert result.vocab == list(_CANONICAL_AA)
-
-
-@pytest.mark.uses_gpu
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    ("soft", "hard"),
-    [(1.0, 0.0), (1.0, 1.0), (0.0, 0.0), (0.5, 0.5)],
-    ids=["default", "straight_through", "raw_input", "blended"],
-)
-def test_proteinmpnn_gradient_end_to_end(soft: float, hard: float):
-    """ProteinMPNN gradient returns finite non-zero gradients at every relaxation setting.
-
-    The raw-input and intermediate blends are covered because they must be functional, not
-    because they are recommended: feeding unnormalized values to the model is outside its
-    training distribution.
-    """
-    # Non-uniform, so argmax has no ties and the raw-input branch is not an all-zero state.
-    logits = np.random.default_rng(0).normal(size=(5, 20)).tolist()
-
-    result = run_proteinmpnn_gradient(
-        ProteinMPNNGradientInput(
-            inputs=ProteinMPNNGradientCandidate(
-                logits=logits,
-                structure=_small_structure(),
-                chains_to_redesign=["A"],
-            ),
-            temperature=0.7,
-        ),
-        ProteinMPNNGradientConfig(seed=42, soft=soft, hard=hard),
+        ProteinMPNNGradientConfig(seed=42),
     )
 
     validate_output(result)
     assert result.tool_id == "proteinmpnn-gradient"
-    (term,) = result.results[0].terms
-    assert term.gradient is not None
-    assert len(term.gradient) == 5
-    assert all(len(row) == 20 for row in term.gradient)
-    assert all(np.isfinite(v) for row in term.gradient for v in row)
-    assert any(v != 0.0 for row in term.gradient for v in row)
-    assert term.term_value > 0.0
-    assert result.results[0].metrics["avg_log_likelihood"] == pytest.approx(-term.term_value, rel=1e-6)
-    assert result.results[0].metrics["perplexity"] == pytest.approx(np.exp(term.term_value), rel=1e-6)
+    assert result.gradient is not None
+    assert len(result.gradient) == 5
+    assert all(len(row) == 20 for row in result.gradient)
+    assert all(np.isfinite(v) for row in result.gradient for v in row)
+    assert any(v != 0.0 for row in result.gradient for v in row)
+    assert result.loss > 0.0
+    assert result.metrics["avg_log_likelihood"] == pytest.approx(-result.loss, rel=1e-6)
+    assert result.metrics["perplexity"] == pytest.approx(np.exp(result.loss), rel=1e-6)
     assert result.vocab == list(_CANONICAL_AA)
 
 
@@ -985,36 +605,6 @@ def test_proteinmpnn_sample_benchmark(request: pytest.FixtureRequest, pdb_struct
         assert len(design.chains[0].sequence) == target_len, "Designed sequence should match structure length"
 
 
-@pytest.mark.benchmark("proteinmpnn-sample-homooligomer")
-@pytest.mark.slow
-@pytest.mark.uses_gpu
-def test_proteinmpnn_sample_homooligomer_benchmark(request: pytest.FixtureRequest) -> None:
-    """Benchmark proteinmpnn-sample-homooligomer: 50 tied designs of a 2x65 aa homodimer."""
-    fixture = Path(proto_tools.tools.inverse_folding.proteinmpnn.__file__).parent / "example_homooligomer_fixture.pdb"
-    structure = Structure.from_file(fixture)
-    inputs = ProteinMPNNHomooligomerSampleInput(
-        inputs=[ProteinMPNNHomooligomerStructureInput(structure=structure, protomer_chains=["A", "B"])]
-    )
-    config = ProteinMPNNHomooligomerSampleConfig(
-        num_sequences_per_structure=50,
-        batch_size=16,
-        temperature=0.1,
-        seed=0,
-    )
-
-    result = benchmark_twice(request, "proteinmpnn", lambda: run_proteinmpnn_sample_homooligomer(inputs, config))
-
-    assert result.tool_id == "proteinmpnn-sample-homooligomer"
-    assert len(result.design_sets) == 1, "Should have one design set per input structure"
-    design_set = result.design_sets[0]
-    assert len(design_set.complexes) == 50, "Should have 50 complexes"
-    protomer_len = len(structure.get_chain_sequence("A"))
-    for design in design_set.complexes:
-        sequences = [chain.sequence for chain in design.chains]
-        assert len(set(sequences)) == 1, "Tied decoding must give every protomer the same sequence"
-        assert len(sequences[0]) == protomer_len, "Designed protomer should match the protomer length"
-
-
 @pytest.mark.benchmark("proteinmpnn-score")
 @pytest.mark.slow
 @pytest.mark.uses_gpu
@@ -1044,11 +634,9 @@ def test_proteinmpnn_gradient_benchmark(request: pytest.FixtureRequest, pdb_stru
     target_len = len(pdb_structure.get_chain_sequence("A"))
     sequence = random_protein_sequences(n=1, length=target_len, seed=7)[0]
     inputs = ProteinMPNNGradientInput(
-        inputs=ProteinMPNNGradientCandidate(
-            logits=one_hot_protein_logits(sequence, sharpness=2.0),
-            structure=pdb_structure,
-            chains_to_redesign=["A"],
-        ),
+        logits=one_hot_protein_logits(sequence, sharpness=2.0),
+        structure=pdb_structure,
+        chains_to_redesign=["A"],
         temperature=0.7,
     )
     config = ProteinMPNNGradientConfig(seed=42)
@@ -1063,9 +651,8 @@ def test_proteinmpnn_gradient_benchmark(request: pytest.FixtureRequest, pdb_stru
 
     validate_output(result)
     assert result.tool_id == "proteinmpnn-gradient"
-    (term,) = result.results[0].terms
-    assert term.gradient is not None
-    assert len(term.gradient) == target_len
-    assert all(len(row) == 20 for row in term.gradient)
-    assert all(np.isfinite(v) for row in term.gradient for v in row)
-    assert term.term_value > 0.0
+    assert result.gradient is not None
+    assert len(result.gradient) == target_len
+    assert all(len(row) == 20 for row in result.gradient)
+    assert all(np.isfinite(v) for row in result.gradient for v in row)
+    assert result.loss > 0.0

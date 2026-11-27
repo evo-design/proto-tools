@@ -47,7 +47,7 @@ Predicts the binding affinity of a single small-molecule ligand against a protei
 
 #### Applications
 
-This tool ranks candidate ligands against a chosen protein target, pairing a predicted affinity with a predicted binding pose, supporting hit discovery, structure-activity studies, and library-screening loops over a list of SMILES.
+This tool ranks candidate ligands against a chosen protein target, pairing a predicted affinity with a predicted binding pose — supporting hit discovery, structure-activity studies, and library-screening loops over a list of SMILES.
 
 #### Usage Tips
 

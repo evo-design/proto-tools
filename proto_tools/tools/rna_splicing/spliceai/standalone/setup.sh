@@ -18,7 +18,7 @@ else
 fi
 
 # Install SpliceAI without its (loose) deps so they can't override the TF 2.15
-# pin above. Its runtime dependencies are pinned in requirements.txt.
+# pin above; its real runtime deps are pinned in requirements.txt.
 echo "Installing SpliceAI (no deps) and supporting libraries..."
 # Pinned to the tested release (also the current PyPI latest; SpliceAI is stable/unmaintained).
 uv pip install --no-deps spliceai==1.3.1

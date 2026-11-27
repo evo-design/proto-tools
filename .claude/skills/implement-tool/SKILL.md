@@ -150,7 +150,6 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
    |   +-- cite.bib            # BibTeX citation (required)
    |   +-- license.yaml        # License metadata (required — enforced by test_license_consistency.py)
    |   +-- links.yaml          # Canonical upstream links (required — github/website/paper/huggingface/...)
-   |   +-- versions.yaml       # `1.0.0: <source hash>` (required — written in Phase 5, see notes/versioning.md)
    |   +-- README.md
    |   +-- examples/
    |   |   +-- example.ipynb   # Working example notebook (required)
@@ -189,17 +188,17 @@ This phase is **sequential** — no subagents. The orchestrator writes this dire
 
 **No config fields for internal/ephemeral plumbing:** Don't expose a config field that doesn't change the computation result — e.g., an internal job name, a scratch/output directory, or intermediate-file labels. The wrapper returns results via the `Output` object, and the **export API** (`_export_output()` / `output.export(...)`) owns user-facing output files and naming — so such fields add API surface without behavior, and (unless marked `include_in_key=False`) wrongly split the cache so identical calls miss each other. Hardcode the internal value instead. Contributors reflexively add these; drop them. Example: `opendde` removed its `name` (job label → ephemeral temp-file names) and `root_dir` (duplicated the managed weights-cache resolution) fields for exactly this reason.
 
-**Remote fail-fast for local-resource configs:** If a config setting needs a **local resource that can't be staged to a remote worker** — a local database/index, an on-disk weights/artifact directory, or a local file path — override `BaseConfig.remote_unsupported_reason(self, device: str) -> str | None` so `device='modal'` fails fast at dispatch with a clear message instead of a late runtime error (a missing-file crash, or silently ignoring the override). Return a user-facing reason when the offending setting is active, `None` otherwise (the default means remote-compatible). Guard on the setting actually being non-default so ordinary remote runs are untouched:
+**Remote fail-fast for local-resource configs:** If a config setting needs a **local resource that can't be staged to the hosted service** — a local database/index, an on-disk weights/artifact directory, or a local file path — override `BaseConfig.remote_unsupported_reason(self, device: str) -> str | None` so `device='proto'` fails fast at dispatch with a clear message instead of a late runtime error (a missing-file crash, or silently ignoring the override). Return a user-facing reason when the offending setting is active, `None` otherwise (the default means remote-compatible). Guard on the setting actually being non-default so ordinary remote runs are untouched:
 
 ```python
 def remote_unsupported_reason(self, device: str) -> str | None:
-    """A local weights directory (``local_path``) isn't present on a remote worker."""
+    """A local weights directory (``local_path``) isn't present on a hosted worker."""
     if self.local_path:  # optional override; unset by default → remote-OK
-        return "local_path points to a local weights directory not available on device='modal'. Unset it, or run locally with device='cpu'."
+        return "local_path points to a local weights directory not available on device='proto'. Unset it, or run locally with device='cpu'."
     return None
 ```
 
-A tool whose *only* mode needs a local file (e.g. a required local DB/HMM input, like `blast-search` local mode or `pyhmmer-hmmscan`) returns the reason unconditionally. Scope this to **intrinsically** local configs — do **not** encode deployment-specific hosting knowledge here (e.g. which model checkpoints are pre-warmed on a hosted service); that stays in the private hosting layer. The router invokes this on any remote device path, after the `local_cpu` no-op and the license gate.
+A tool whose *only* mode needs a local file (e.g. a required local DB/HMM input, like `blast-search` local mode or `pyhmmer-hmmscan`) returns the reason unconditionally. Scope this to **intrinsically** local configs — do **not** encode deployment-specific hosting knowledge here (e.g. which model checkpoints are pre-warmed on the hosted service); that stays in the private hosting layer. The router invokes this on any remote device path, after the `local_cpu` no-op and the license gate. Branch on `device` when a restriction reflects what Proto chooses to host rather than an intrinsically local resource: a caller running on their own compute is not bound by our hosting limits.
 
 ## Mutual-exclusion fields (XOR groups)
 
@@ -232,10 +231,9 @@ model_checkpoint: str = ConfigField(
 )
 ```
 
-- `remote_unsupported_reason` rejects a **local path** (it isn't on a hosted worker); bundled names are remote-OK because they're provisioned, and so is an https link if the tool accepts one.
+- `remote_unsupported_reason` rejects only a **non-bundled** value (a local path isn't on a hosted worker); bundled names are remote-OK because they're provisioned.
 - Keep the bundled-name map in sync with `setup.sh`'s download list, and add a test asserting `setup.sh` fetches every bundled checkpoint.
-- Reference implementations: `tools/structure_prediction/opendde` (`_BUNDLED_MODELS` in the tool, `_BUNDLED_CHECKPOINTS` in `standalone/inference.py`), and `tools/sequence_scoring/parade` (one bundled name covering a checkpoint per construct type, downloaded and checksummed by `setup.sh`, plus custom https links).
-- **Several checkpoint sizes → override `minimal()` to pick the smallest.** The seed, device, GPU lifecycle and Modal smoke tests all build configs with `Config.minimal()`. A toolkit offering several sizes (ESM2 8M–15B, ProGen3 112M–3B) must `kwargs.setdefault("model_checkpoint", "<smallest>")` there, so those tests load in seconds; see `progen3_score.py`. On the MSA path, pick the smallest checkpoint that accepts MSAs (`ESMFold2Config.minimal`). The default checkpoint stays covered: `tests/tool_infra_tests/test_default_config_smoke.py` runs it for toolkits no other test runs at defaults, and fails until you record how yours is covered.
+- Reference implementation: `tools/structure_prediction/opendde` (`_BUNDLED_MODELS` in the tool, `_BUNDLED_CHECKPOINTS` in `standalone/inference.py`).
 
 ## Code Style Conventions
 
@@ -341,19 +339,12 @@ Why: standalones run inside isolated micromamba subprocesses where `proto_tools`
 
 `__init__.py` is the only exemption (no log calls there). The consistency test enforces this on every other `.py` file in the standalone tree.
 
-For status updates that drive the status line (the spinner subtitle, replaced in place, so they don't print while a bar is up), use the dedicated method:
+For status updates that should drive the parent's spinner subtitle (and never clutter console output), use the dedicated method:
 
 ```python
-logger.update_status("Loading ESMFold weights")  # status line update, also logged at INFO; no logger.info twin
-logger.update_status("Folding 8 structures", level=logging.DEBUG)  # routine work: logged at DEBUG
-logger.info("...")                                # normal log line
+logger.update_status("Loading checkpoint")  # spinner subtitle update; not shown in console
+logger.info("...")                           # normal log line
 ```
-
-Send a status at each phase boundary someone waiting on the tool would want to see: loading large weights, each
-pipeline stage, progress through a known number of items (with `StatusCounter`, e.g. `Folding structure 3/8`), and
-slow steps that aren't obvious. Follow the house style in `notes/logging.md` ("Status messages"): a present
-participle in sentence case with no trailing period, counts as `<item> <n>/<total>`, and nothing from the input
-(sequences, file names, paths, IDs) in the text.
 
 **If the tool has file-format conversion helpers** (e.g., writing MSA to Parquet, converting complexes to YAML/FASTA), implement them as plain-type functions in `helpers.py` at the tool directory level. These functions must be self-contained (no `proto_tools` imports) and take only plain types (str, list, dict). The tool layer imports and wraps them with typed signatures. Keeping them dependency-free lets the hosted execution backend reuse the same files, preserving a single source of truth. See esmfold, chai1, boltz2 for examples.
 
@@ -511,13 +502,13 @@ HF_TOKEN
 
 **10C: Run all tests for the new tool**
 
-Run all tests (functional + infra) for the new tool's toolkit:
+Run all tests (functional + infra) filtered to the new tool:
 
 ```bash
-pytest -k "{toolkit}" --all --ext --network -v
+pytest --all --ext -k "{tool_key}" -v
 ```
 
-Filter on the **toolkit** name, not one tool key, so every key in the toolkit and the infra tests parametrized over them run: `example_input`, device consistency, registry integration, the GPU lifecycle test, and the seed tests. `--all --ext` turns on slow, integration and extensive tests. `--network` also runs the tests marked `network`, which call live external services; the suite skips them by default. Tests marked `requires_credential(...)` still skip unless their credentials are set. A detailed log file is generated in `logs/` (project root).
+This runs the tool's functional tests AND the parametrized infra tests (`example_input`, device consistency, registry integration). A detailed log file is generated in `logs/` (project root).
 
 ---
 
@@ -664,7 +655,7 @@ def test_{tool_key_snake}_input_normalizes_single_item():
 
 # ── Integration ───────────────────────────────────────────────────────────────
 
-@pytest.mark.uses_gpu  # or @pytest.mark.uses_env for CPU tools
+@pytest.mark.uses_gpu  # or @pytest.mark.integration for CPU tools
 def test_{tool_key_snake}_basic_execution():
     """Test basic tool execution with default config."""
     # Create input with realistic data
@@ -684,11 +675,8 @@ CRITICAL RULES:
 - Do NOT write tests like: `test_*_rejects_missing_*`, `test_*_rejects_extra_fields`, `test_*_config_defaults`, `test_*_rejects_invalid_*` (for simple `ge=`/`le=` constraints). These just re-test Pydantic.
 - Import from `proto_tools.tools` (top-level), not from deep paths
 - Use `@pytest.mark.uses_gpu` for any test that runs the actual tool on GPU
-- Use `@pytest.mark.uses_env` for CPU tests that build or run the tool's env
+- Use `@pytest.mark.integration` for CPU dispatch tests
 - Use realistic biological data (real sequences/structures from dummy_data/)
-- If the tool's input takes `msas`, add a worker stub for it to `_STUBS` in
-  `tests/structure_prediction_tests/test_msa_contract.py`; `test_every_msa_tool_is_covered`
-  fails until you do. The contract test then checks that every MSA bundle shape reaches the backend.
 - Check `result.success` and `result.tool_id`
 - Test both default config and non-default parameters
 ```
@@ -835,7 +823,7 @@ Per-field checklist:
    - `include_in_key=False` for fields that don't affect results (`device`, `verbose`, `timeout` are already excluded on `BaseConfig`; a tool-level `device` override must re-set it).
    - `xor_group="<slug>"` for mutually exclusive siblings, paired with the `@model_validator`.
 7. **Inherited fields** — confirm the Phase 2 inherited-field audit holds: every field from a shared base is implemented or rejected with `ValueError`, never silently ignored.
-8. **Local-resource field → remote hook.** If the field points at a local file/database/index or an on-disk weights/artifact path, confirm the config overrides `remote_unsupported_reason(device)` so `device='modal'` fails fast (see "Cloud fail-fast for local-resource configs" in Phase 2). Skip for AssetRef-stageable uploads and `Structure`-typed inputs (the gateway stages those).
+8. **Local-resource field → remote hook.** If the field points at a local file/database/index or an on-disk weights/artifact path, confirm the config overrides `remote_unsupported_reason(device)` so `device='proto'` fails fast (see "Cloud fail-fast for local-resource configs" in Phase 2). Skip for AssetRef-stageable uploads and `Structure`-typed inputs (the gateway stages those).
 
 **Output:** edit the contract directly. If you remove/rename/retype a field, propagate to standalone `dispatch()`, README, notebook, tests, and the export chain — leave no dangling references. Re-run Phase 4 import/test checks. Do this deliberately yourself, or delegate to a focused subagent given the Phase 1 upstream param surface + the contract.
 
@@ -958,9 +946,7 @@ Review the **actual diff**, not just the files in isolation, against the quality
 
 **Steps:**
 
-1. **Pin the version.** With the code final, write `proto_tools/tools/{category}/{toolkit}/versions.yaml` as `1.0.0: <hash>`, taking the hash from the failure of `pytest tests/style_consistency_tests/test_toolkit_versions.py -k {toolkit}`, then rerun it to confirm it passes. See `notes/versioning.md`.
-
-2. **Stage all new files:**
+1. **Stage all new files:**
    ```bash
    git add proto_tools/tools/{category}/{toolkit}/
    git add tests/{category}_tests/test_{tool_key_snake}.py
@@ -969,7 +955,7 @@ Review the **actual diff**, not just the files in isolation, against the quality
    git add proto_tools/tools/__init__.py
    ```
 
-3. **Commit:**
+2. **Commit:**
    ```bash
    git commit -m "feat: implement {tool_display_name} tool wrapper
 
@@ -977,7 +963,7 @@ Review the **actual diff**, not just the files in isolation, against the quality
    Closes #{issue_number}"
    ```
 
-4. **Push and create PR:**
+3. **Push and create PR:**
    ```bash
    git push -u origin HEAD
    gh pr create --title "feat: implement {tool_display_name} tool" --body "$(cat <<'EOF'
@@ -1006,7 +992,7 @@ Review the **actual diff**, not just the files in isolation, against the quality
    )"
    ```
 
-5. **Ship the Modal deployment with the toolkit.** A new toolkit is not finished until
+4. **Ship the Modal deployment with the toolkit.** A new toolkit is not finished until
    it can run on `device="modal"`. Add `proto_tools/modal/{category}/{toolkit}_deployment/{toolkit}_service.py`
    (copy the closest sibling service), register it in `proto_tools/modal/manifest.py`
    (`APP_BUCKETS`, `SERVICE_TIERS`, `GPU_SERVICES` if it needs a GPU, `SERVICE_TO_MODULE`),
@@ -1021,9 +1007,9 @@ Review the **actual diff**, not just the files in isolation, against the quality
    `--benchmark-report` is what writes the runtime table into the deployment README;
    without it the benchmarks run but nothing is recorded. Commit that generated README.
 
-6. **Run the full sweep for the new toolkit, as the last step, after the PR exists:**
+5. **Run the full sweep for the new toolkit, as the last step, after the PR exists:**
    ```bash
-   pytest -k "{toolkit}" --all --ext --network
+   pytest --all --ext -k "{toolkit}"
    ```
    This is the final gate on every tool implementation. It runs the toolkit's own
    tests plus every parametrized infra and style test that touches it, on real
@@ -1032,4 +1018,4 @@ Review the **actual diff**, not just the files in isolation, against the quality
    name any skip that is not an expected exemption (benchmarks needing
    `--benchmark`, a `Custom (...)` license skipping the SPDX fingerprint check).
 
-7. **Report the PR URL to the user.**
+6. **Report the PR URL to the user.**

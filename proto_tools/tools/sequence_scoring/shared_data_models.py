@@ -15,11 +15,11 @@ class SequenceTargetRange(BaseToolInput):
 
     Use this when a sequence is longer than the model's required context length
     and the tool should choose the model input window for you. The range marks
-    the sequence-relative span the caller cares about. The tool then extracts a
+    the sequence-relative span the caller cares about; the tool then extracts a
     fixed-length model context window that keeps this span inside the model's
     output bins.
 
-    Window placement is start-aligned when possible. The output span begins at
+    Window placement is start-aligned when possible: the output span begins at
     ``start`` unless source-sequence boundaries force the context window left.
 
     Coordinates are 0-based and use an exclusive end. Unlike AlphaGenome
@@ -104,7 +104,7 @@ class SequenceWindow(BaseToolInput):
     """A DNA sequence with an optional target range, for sequence-to-function tools.
 
     Bundling the sequence with its target range keeps the two aligned through
-    pool partitioning. The framework slices only the iterable input field, so a
+    pool partitioning: the framework slices only the iterable input field, so a
     separate parallel ``target_ranges`` list would desync from the sequences it
     describes. A bare DNA string (or a ``{"sequence": ..., "target_range": ...}``
     dict) is accepted and coerced.
@@ -199,19 +199,17 @@ def prepare_model_windows(
 
     Without ``target_ranges``, every sequence must already be exactly the model
     context length. With ``target_ranges``, each provided sequence may be
-    longer. The returned window is the fixed-length slice sent to the model,
+    longer; the returned window is the fixed-length slice sent to the model,
     plus sequence-relative coordinates for the context window, output span, and
     requested target range.
     """
     if target_ranges is not None and len(target_ranges) != len(sequences):
         raise ValueError(f"Expected {len(sequences)} target_ranges, got {len(target_ranges)}.")
 
-    # Center the output span inside the model context, with an equal flank on each side
     output_flank = (context_length - output_length) // 2
     prepared: list[PreparedSequenceWindow] = []
     for idx, raw_sequence in enumerate(sequences):
         sequence = validate_dna_sequence(raw_sequence)
-        # Exact-window mode: the sequence is the model input as given
         if target_ranges is None:
             if len(sequence) != context_length:
                 raise ValueError(f"Input sequence must have length {context_length}, got {len(sequence)}")
@@ -228,7 +226,6 @@ def prepare_model_windows(
             )
             continue
 
-        # Check that the sequence fits a full context and the target range lies inside it
         target_range = target_ranges[idx]
         target_start = target_range.start
         target_end = target_range.end
@@ -246,7 +243,6 @@ def prepare_model_windows(
         if target_end > len(sequence):
             raise ValueError(f"target_ranges[{idx}].end must be <= sequence length.")
 
-        # Place the context so the output span starts at the target, clamped to the sequence ends
         context_start = target_start - output_flank
         if context_start < 0:
             context_start = 0
@@ -256,7 +252,6 @@ def prepare_model_windows(
         context_end = context_start + context_length
         model_sequence = sequence[context_start:context_end]
 
-        # Ensure the clamped output span still covers the target range
         output_start = context_start + output_flank
         _validate_target_output_overlap(
             idx=idx,

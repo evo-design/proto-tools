@@ -9,15 +9,13 @@ Usage (called by ToolInstance, not directly):
 """
 
 import json
-import logging
-import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import ensure_complete, get_logger, resolve_weights_dir
+from standalone_helpers import get_logger, resolve_weights_dir
 
 logger = get_logger(__name__)
 
@@ -49,21 +47,6 @@ def _write_structures(structures: list[str], out_dir: Path, ids: list[str], form
         (out_dir / f"{sid}.{fmt}").write_text(text)
 
 
-def _write_fasta(sequences: list[str], path: Path, ids: list[str]) -> None:
-    """Write single-record FASTA texts to one multi-FASTA file, each headed by its structure ID."""
-    with path.open("w") as f:
-        for sid, text in zip(ids, sequences, strict=True):
-            lines = [line.strip() for line in text.splitlines()]
-            sequence = "".join(line for line in lines if not line.startswith(">"))
-            f.write(f">{sid}\n{sequence}\n")
-
-
-# What `foldseek databases ProstT5` downloads (about 2.4 GB); anything far smaller is a truncated download
-_PROSTT5_MODEL = "prostt5-f16.gguf"
-_PROSTT5_MIN_BYTES = 1 << 30
-_PROSTT5_DOWNLOAD_ATTEMPTS = 2
-
-
 def _ensure_prostt5_weights(override: str | None) -> str:
     """Return a ProstT5 weights path, provisioning via `foldseek databases ProstT5` if missing.
 
@@ -71,11 +54,6 @@ def _ensure_prostt5_weights(override: str | None) -> str:
     one-time). Resolution honors ``PROTO_FOLDSEEK_WEIGHTS_DIR`` and
     ``PROTO_MODEL_CACHE`` per ``notes/storage.md``.
     ``override``, if set, must point to an existing path and is returned as-is.
-
-    ``ensure_complete`` records the downloaded files and downloads again when any are gone (a
-    scratch purge), into a staging directory swapped into place, under a lock shared by
-    concurrent runs. A download that leaves the model missing or truncated is retried once, then
-    raises without caching anything.
     """
     if override:
         if not Path(override).exists():
@@ -86,46 +64,29 @@ def _ensure_prostt5_weights(override: str | None) -> str:
     if base is None:
         raise RuntimeError("resolve_weights_dir('foldseek') returned None; cannot locate ProstT5 cache")
     cache_dir = Path(base) / "prostt5"
+    weights_path = cache_dir / "weights"
+    marker = cache_dir / ".proto-ready"
 
-    def download(staging: Path) -> None:
-        logger.update_status("Downloading ProstT5 weights")
-        weights = staging / "weights"
-        for attempt in range(1, _PROSTT5_DOWNLOAD_ATTEMPTS + 1):
-            with tempfile.TemporaryDirectory() as tmp:
-                result = _run_cmd([_find_binary(), "databases", "ProstT5", str(weights), tmp], "databases ProstT5")
-            output = f"{result.stdout}\n{result.stderr}".strip()
-            logger.debug("foldseek databases ProstT5 output:\n%s", output)
-            if _prostt5_weights_present(weights):
-                return
-            logger.warning("foldseek databases ProstT5 exited cleanly without %s (attempt %d)", _PROSTT5_MODEL, attempt)
-            shutil.rmtree(weights, ignore_errors=True)
-        tail = " | ".join(output.splitlines()[-5:]) or "<no output>"
-        raise RuntimeError(f"foldseek: databases ProstT5 did not download {_PROSTT5_MODEL}: {tail}")
+    if marker.exists():
+        return str(weights_path)
 
-    # A cache downloaded before caches were recorded is kept when its old marker and weights are there
-    ensure_complete(cache_dir, download, stage=True, adopt=_downloaded_before_records)
-    return str(cache_dir / "weights")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        _run_cmd(
+            [_find_binary(), "databases", "ProstT5", str(weights_path), tmp],
+            "databases ProstT5",
+        )
+    marker.touch()
+    return str(weights_path)
 
 
-def _prostt5_weights_present(weights: Path) -> bool:
-    """Whether ``weights`` holds the ProstT5 model at full size, not missing or truncated."""
-    model = weights / _PROSTT5_MODEL
-    return model.is_file() and model.stat().st_size >= _PROSTT5_MIN_BYTES
-
-
-def _downloaded_before_records(cache_dir: Path) -> bool:
-    """Whether an unrecorded cache is a finished download from before: its old marker and weights exist."""
-    return (cache_dir / ".proto-ready").exists() and _prostt5_weights_present(cache_dir / "weights")
-
-
-_M8_FORMAT_PIDENT = (
-    "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,alntmscore,qtmscore,ttmscore"
-)
-_M8_FORMAT_MULTIMER = f"{_M8_FORMAT_PIDENT},complexqtmscore,complexttmscore"
+# Force `pident` (0-100) so local M8 matches the public server's format.
+# The CLI default is `fident` (0-1), which would silently corrupt parsing.
+_M8_FORMAT_PIDENT = "query,target,pident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits"
 
 
 def _gpu_args(use_gpu: bool) -> list[str]:
-    """Return foldseek GPU flags for use_gpu, [] for CPU, raising if the GPU build is absent."""
+    """Return foldseek GPU flags for use_gpu, [] for CPU; raise if the GPU build is absent."""
     if not use_gpu:
         return []
     marker = Path(sys.executable).parent / ".foldseek_build_variant"
@@ -146,8 +107,7 @@ def run_easy_search(input_data: dict[str, Any]) -> dict[str, Any]:
             ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
-        ``{"stdout": <m8_text>}`` — internal 15-column M8 with the standard
-        12 columns followed by alignment-, query-, and target-normalized TM-scores.
+        ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8 (pident, 0-100).
     """
     foldseek = _find_binary()
     with tempfile.TemporaryDirectory() as tmp:
@@ -156,7 +116,6 @@ def run_easy_search(input_data: dict[str, Any]) -> dict[str, Any]:
         query_pdb.write_text(input_data["structure_text"])
         m8_out = tmp_path / "result.m8"
 
-        logger.update_status("Searching database", level=logging.DEBUG)
         _run_cmd(
             [
                 foldseek,
@@ -205,25 +164,25 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
     """
     foldseek = _find_binary()
     formats = input_data["structure_formats"]
-    # Validation guarantees that all entries use the same format.
+    # Validator guarantees uniform mode; all entries are the same format.
     is_fasta_mode = formats[0] == "fasta"
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        # ProstT5 mode reads one FASTA file; structure mode reads a directory of structure files
-        if is_fasta_mode:
-            query = tmp_path / "sequences.fasta"
-            _write_fasta(input_data["structures"], query, input_data["structure_ids"])
-        else:
-            query = tmp_path / "structures"
-            query.mkdir()
-            _write_structures(input_data["structures"], query, input_data["structure_ids"], formats)
+        structures_dir = tmp_path / "structures"
+        structures_dir.mkdir()
+        _write_structures(
+            input_data["structures"],
+            structures_dir,
+            input_data["structure_ids"],
+            formats,
+        )
 
         prefix = tmp_path / "cluster"
         cmd = [
             foldseek,
             "easy-cluster",
-            str(query),
+            str(structures_dir),
             str(prefix),
             str(tmp_path / "fs_tmp"),
             "--min-seq-id",
@@ -247,10 +206,6 @@ def run_easy_cluster(input_data: dict[str, Any]) -> dict[str, Any]:
             cmd += ["--prostt5-model", _ensure_prostt5_weights(input_data.get("prostt5_weights_dir"))]
         cmd += _gpu_args(input_data["use_gpu"])
 
-        count = len(input_data["structures"])
-        logger.update_status(
-            "Clustering %d %s", count, "structure" if count == 1 else "structures", level=logging.DEBUG
-        )
         _run_cmd(cmd, "easy-cluster")
         tsv_path = prefix.with_name(prefix.name + "_cluster.tsv")
         return {"clusters_tsv": tsv_path.read_text() if tsv_path.exists() else ""}
@@ -265,9 +220,7 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
             ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
-        ``{"stdout": <m8_text>}`` — internal 17-column M8 with the standard 12 columns
-        followed by the chain-pair alignment-, query- and target-normalized TM-scores
-        and the query- and target-normalized TM-scores of the whole assembly.
+        ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8 (pident, 0-100).
     """
     foldseek = _find_binary()
     with tempfile.TemporaryDirectory() as tmp:
@@ -276,7 +229,6 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
         query_pdb.write_text(input_data["structure_text"])
         m8_out = tmp_path / "result.m8"
 
-        logger.update_status("Searching database", level=logging.DEBUG)
         _run_cmd(
             [
                 foldseek,
@@ -286,7 +238,7 @@ def run_easy_multimersearch(input_data: dict[str, Any]) -> dict[str, Any]:
                 str(m8_out),
                 str(tmp_path / "fs_tmp"),
                 "--format-output",
-                _M8_FORMAT_MULTIMER,
+                _M8_FORMAT_PIDENT,
                 "-e",
                 str(input_data["evalue"]),
                 "-s",
@@ -336,8 +288,6 @@ def run_easy_multimercluster(input_data: dict[str, Any]) -> dict[str, Any]:
         )
 
         prefix = tmp_path / "multimercluster"
-        count = len(input_data["structures"])
-        logger.update_status("Clustering %d %s", count, "complex" if count == 1 else "complexes", level=logging.DEBUG)
         _run_cmd(
             [
                 foldseek,
@@ -381,8 +331,7 @@ def run_easy_rbh(input_data: dict[str, Any]) -> dict[str, Any]:
             ``tmscore_threshold``, ``lddt_threshold``, ``num_threads``.
 
     Returns:
-        ``{"stdout": <m8_text>}`` — internal 15-column M8 with the standard
-        12 columns followed by alignment-, query-, and target-normalized TM-scores.
+        ``{"stdout": <m8_text>}`` — standard 12-column BLAST M8 (pident, 0-100).
     """
     foldseek = _find_binary()
     with tempfile.TemporaryDirectory() as tmp:
@@ -391,7 +340,6 @@ def run_easy_rbh(input_data: dict[str, Any]) -> dict[str, Any]:
         query_pdb.write_text(input_data["structure_text"])
         m8_out = tmp_path / "result.m8"
 
-        logger.update_status("Finding reciprocal best hits", level=logging.DEBUG)
         _run_cmd(
             [
                 foldseek,

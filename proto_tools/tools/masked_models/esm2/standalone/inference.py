@@ -7,14 +7,12 @@ from typing import Any, Literal
 import torch
 from standalone_helpers import (
     AMINO_ACIDS_LIST,
-    StatusCounter,
     get_logger,
     log_likelihood_metrics,
     move_model_to_device,
     serialize_output,
     set_torch_seed,
 )
-from standalone_helpers.relaxation import relaxed_sequence, resolve_temperature
 from tqdm import tqdm
 
 logger = get_logger(__name__)
@@ -101,12 +99,7 @@ class ESM2Model:
         all_attention_masks = []
 
         # For each batch
-        for batch_sequences in StatusCounter(
-            logger,
-            "Embedding batch %d/%d",
-            tqdm(batches, desc="ESM2 inference", unit="batch", total=len(batches)),
-            total=len(batches),
-        ):
+        for batch_sequences in tqdm(batches, desc="ESM2 inference", unit="batch", total=len(batches)):
             # Tokenize the batch
             batch_inputs = self.tokenizer(
                 batch_sequences,
@@ -258,14 +251,12 @@ class ESM2Model:
         all_sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
-        counter = StatusCounter(logger, "Sampling batch %d/%d", total=len(batch_ranges))
         for start, end in tqdm(
             batch_ranges,
             desc="ESM2 sampling",
             unit="batch",
             disable=not verbose,
         ):
-            counter(start // batch_size + 1)
             batch_tok_seqs = tokenizer_sequences[start:end]
             batch_masks = mask_positions[start:end]
             batch_originals = sequences[start:end]
@@ -356,9 +347,7 @@ class ESM2Model:
         sampled: list[str] = []
         all_logits: list[torch.Tensor] = []
 
-        counter = StatusCounter(logger, "Sampling batch %d/%d", total=-(-len(sequences) // batch_size))
         for start in range(0, len(sequences), batch_size):
-            counter(start // batch_size + 1)
             batch_sequences = sequences[start : start + batch_size]
             batch_inputs = self.tokenizer(
                 [s.replace("_", mask_token) for s in batch_sequences],
@@ -483,7 +472,7 @@ class ESM2Model:
         total_variants = sum(seq_lens)
         max_len = all_input_ids.shape[1]
 
-        # Allocate one masked variant for each sequence position.
+        # Allocate the global pool: one row per (sequence, position) pair
         pooled_ids = torch.empty((total_variants, max_len), dtype=all_input_ids.dtype, device=self.device)
         pooled_attention_mask = torch.empty(
             (total_variants, max_len), dtype=all_attention_mask.dtype, device=self.device
@@ -491,7 +480,7 @@ class ESM2Model:
         seq_idx_per_variant = torch.empty(total_variants, dtype=torch.long, device=self.device)
         pos_idx_per_variant = torch.empty(total_variants, dtype=torch.long, device=self.device)
 
-        # Copy each sequence once per residue and mask a different position in each copy.
+        # Fill the pool: copy each sequence L times, mask one position per copy
         row = 0
         for i, length in enumerate(seq_lens):
             pooled_ids[row : row + length] = all_input_ids[i].unsqueeze(0).expand(length, -1).clone()
@@ -518,14 +507,12 @@ class ESM2Model:
         all_true_log_probs = torch.zeros(total_variants, device=self.device)
 
         # Run forward passes batched across the pooled variants
-        counter = StatusCounter(logger, "Scoring batch %d/%d", total=-(-total_variants // batch_size))
         for batch_start in tqdm(
             range(0, total_variants, batch_size),
             desc="ESM2 scoring",
             unit="batch",
             disable=not verbose,
         ):
-            counter(batch_start // batch_size + 1)
             # Slice this forward-pass batch out of the pool
             batch_end = min(batch_start + batch_size, total_variants)
             batch_ids = pooled_ids[batch_start:batch_end]
@@ -578,8 +565,7 @@ class ESM2Model:
         logits_list: list[list[float]],
         *,
         temperature: float | None = None,
-        soft: float = 1.0,
-        hard: float = 0.0,
+        use_ste: bool = False,
         seed: int | None = None,
         backprop: bool = True,
         batch_size: int | None = None,
@@ -591,8 +577,7 @@ class ESM2Model:
         Args:
             logits_list: Input logits, shape ``(L, 20)`` in canonical amino-acid order.
             temperature: Optional softmax temperature; ``None`` uses logits as-is.
-            soft: Blend from the raw input matrix (0) to softmax probabilities (1).
-            hard: Straight-through coefficient; 1 forwards a hard one-hot.
+            use_ste: Use hard one-hot residues in the forward pass with soft gradients.
             seed: Random seed for deterministic worker behavior.
             backprop: If False, skip backward and return ``gradient=None``.
             batch_size: AA positions per forward pass. Defaults to 32.
@@ -604,13 +589,11 @@ class ESM2Model:
         """
         import torch.nn.functional as F
 
-        # Check the relaxed sequence is a non-empty L x 20 matrix before touching the model
         if not logits_list:
             raise ValueError("esm2: compute_gradient requires at least one residue")
         if any(len(row) != len(AMINO_ACIDS_LIST) for row in logits_list):
             raise ValueError(f"esm2: compute_gradient expects L x {len(AMINO_ACIDS_LIST)} logits")
 
-        # Load the weights, or move an already loaded model to the requested device
         if not self._loaded:
             self.load(device, verbose)
         elif self.device != device:
@@ -621,7 +604,6 @@ class ESM2Model:
         if batch_size is None:
             batch_size = 32
 
-        # Read the BOS and EOS ids off a one-residue tokenization rather than assuming the layout
         embed_layer = self.model.get_input_embeddings()
         cls_eos_probe = self.tokenizer("A", add_special_tokens=True, return_tensors="pt")["input_ids"][0]
         if cls_eos_probe.numel() < 3:
@@ -634,20 +616,18 @@ class ESM2Model:
             seq_dist = torch.tensor(logits_list, device=self.device, dtype=torch.float32, requires_grad=backprop)
             sequence_length = int(seq_dist.shape[0])
 
-            # Targets come from P, not the blend, so they do not move with soft/hard.
-            probs = relaxed_sequence(seq_dist, temperature=temperature)
-            residue_aa_idx = probs.argmax(dim=-1).detach()
+            x = F.softmax(seq_dist / temperature, dim=-1) if temperature is not None else seq_dist
+            residue_aa_idx = x.argmax(dim=-1).detach()
             residue_token_ids = self.amino_acid_token_ids[residue_aa_idx].detach()
 
-            # Blend the relaxed sequence that is actually forwarded through the model
-            x = relaxed_sequence(seq_dist, temperature=temperature, soft=soft, hard=hard)
+            if use_ste:
+                hard = F.one_hot(residue_aa_idx, num_classes=len(AMINO_ACIDS_LIST)).float()
+                x = hard + (x - x.detach())
 
-            # Mix each position's embedding as the relaxed distribution over amino-acid rows
             residue_embeddings = x @ embed_layer.weight[self.amino_acid_token_ids]
             special_ids = torch.tensor([cls_token_id, eos_token_id], device=self.device)
             special_embeddings = embed_layer.weight[special_ids]
 
-            # Wrap the residues in BOS and EOS, both as embeddings and as the parallel token ids
             input_embeddings = torch.cat(
                 (special_embeddings[0:1], residue_embeddings, special_embeddings[1:2]),
                 dim=0,
@@ -662,13 +642,11 @@ class ESM2Model:
             ).unsqueeze(0)
             attention_mask = torch.ones_like(token_ids)
 
-            # Residue positions sit one past BOS; keep the mask embedding out of the graph
             aa_positions = torch.arange(1, sequence_length + 1, device=self.device)
             seq_len = input_embeddings.shape[1]
             pos_idx = torch.arange(seq_len, device=self.device)
             mask_emb = embed_layer.weight[mask_token_id].detach()
 
-            # Walk the sequence in chunks, masking one position per row of the chunk
             ie_grad = torch.zeros_like(input_embeddings) if backprop else None
             total_loss_val = 0.0
             for start in tqdm(
@@ -681,7 +659,6 @@ class ESM2Model:
                 chunk_aa_pos = aa_positions[start:end]
                 chunk_len = end - start
 
-                # Replace the masked position of each row with the mask embedding and its token id
                 chunk_masked = pos_idx.unsqueeze(0) == chunk_aa_pos.unsqueeze(1)
                 ie_chunk = input_embeddings.detach().requires_grad_(True) if backprop else input_embeddings
                 chunk_input = torch.where(
@@ -693,7 +670,6 @@ class ESM2Model:
                 chunk_token_ids = token_ids.expand(chunk_len, -1).clone()
                 chunk_token_ids[chunk_idx, chunk_aa_pos] = mask_token_id
 
-                # Override the embedding lookup so the soft embeddings, not the ids, reach the model
                 handle = embed_layer.register_forward_hook(lambda _m, _i, _o, ci=chunk_input: ci)
                 try:
                     outputs = self.model(
@@ -702,13 +678,11 @@ class ESM2Model:
                     )
                 finally:
                     handle.remove()
-                # Score each masked position against the residue the relaxed sequence now holds
                 pred = outputs["logits"][chunk_idx, chunk_aa_pos, :]
                 labels = token_ids[0, chunk_aa_pos]
                 loss_sum = F.cross_entropy(pred, labels, reduction="sum")
                 total_loss_val += loss_sum.item()
 
-                # Accumulate this chunk's share of the mean NLL gradient on the input embeddings
                 if backprop:
                     (loss_sum / sequence_length).backward()
                     ie_chunk_grad = ie_chunk.grad
@@ -723,7 +697,6 @@ class ESM2Model:
         if backprop:
             if ie_grad is None:
                 raise RuntimeError("esm2: missing accumulated input-embedding gradient")
-            # Carry the embedding gradient back through the relaxation onto the input logits
             (x_grad,) = torch.autograd.grad(input_embeddings, seq_dist, grad_outputs=ie_grad)
             gradient_value = x_grad.detach().cpu().tolist()
 
@@ -744,7 +717,8 @@ class ESM2Model:
     # ============================================================================
     def load(self, device: str, verbose: bool = False) -> None:
         """Load ESM2 model and tokenizer to device."""
-        logger.update_status("Loading ESM2 weights")
+        if verbose:
+            logger.info(f"Loading ESM2 model: {self.model_checkpoint} on {device}")
 
         # Load model and tokenizer. Most checkpoints use the flash-attn-enabled mirror
         # (https://huggingface.co/fredzzp/esm2_t33_650M_UR50D); checkpoints without a mirror
@@ -783,7 +757,7 @@ class ESM2Model:
 
         if self.device != device:
             self.model = move_model_to_device(self.model, self.device, device)
-            self.amino_acid_token_ids = move_model_to_device(self.amino_acid_token_ids, self.device, device)
+            self.amino_acid_token_ids = self.amino_acid_token_ids.to(device)
             self.device = device
 
     def unload(self, verbose: bool = False) -> None:
@@ -850,25 +824,16 @@ def dispatch(input_dict: dict[str, Any]) -> dict[str, Any]:
             seed=input_dict["seed"],
         )
     if operation == "compute_gradient":
-        # Load the model once for this chunk, then evaluate each candidate independently.
-        results = [
-            _model.compute_gradient(
-                logits_list=item,
-                temperature=resolve_temperature(input_dict["temperature"]),
-                soft=float(input_dict.get("soft", 1.0)),
-                hard=float(input_dict.get("hard", 0.0)),
-                seed=input_dict["seed"],
-                backprop=input_dict.get("compute_gradient", True),
-                batch_size=input_dict.get("batch_size"),
-                device=input_dict["device"],
-                verbose=input_dict["verbose"],
-            )
-            for item in input_dict["items"]
-        ]
-        return {
-            "results": [{key: result[key] for key in ("gradient", "loss", "metrics")} for result in results],
-            "vocab": results[0]["vocab"],
-        }
+        return _model.compute_gradient(
+            logits_list=input_dict["logits"],
+            temperature=input_dict["temperature"],
+            use_ste=input_dict["use_ste"],
+            seed=input_dict["seed"],
+            backprop=input_dict.get("compute_gradient", True),
+            batch_size=input_dict.get("batch_size"),
+            device=input_dict["device"],
+            verbose=input_dict["verbose"],
+        )
     raise ValueError(
         f"esm2: unknown operation {operation!r}; valid: ['embeddings', 'inference', 'sample', 'score', "
         "'compute_gradient']"

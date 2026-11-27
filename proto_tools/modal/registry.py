@@ -23,7 +23,6 @@ def register_tools(mapping: dict[str, str]) -> Callable[[type[Any]], type[Any]]:
 
     def decorator(cls: type[Any]) -> type[Any]:
         class_name = cls.__name__
-        # Check each key and method before recording which service handles the tool.
         for tool_key, method_name in mapping.items():
             if tool_key in _REGISTRY:
                 existing_cls, existing_method = _REGISTRY[tool_key]
@@ -50,9 +49,10 @@ def get_registry() -> dict[str, tuple[str, str]]:
 def import_all_services() -> None:
     """Import every service module, so the registry reflects the whole manifest.
 
-    ``@register_tools`` registers each service when its class is defined. Import
-    every module listed in the manifest so all services appear in the registry.
-    Adding a service to the manifest requires no generated import file.
+    Registration happens as a side effect of ``@register_tools`` at class
+    definition, so a service nobody imported is absent from the registry. Driven
+    from the manifest rather than a generated aggregate module, so a service
+    added there needs no other file to exist.
     """
     import importlib
 

@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from standalone_helpers import StatusCounter, get_logger
+from standalone_helpers import get_logger
 
 logger = get_logger(__name__)
 
@@ -37,14 +37,12 @@ def _process_minced_output(output: str) -> list[list[dict[str, Any]]]:
     parse = False
 
     for line in lines:
-        # A CRISPR header starts a new array, so close out the one in progress
         if "CRISPR" in line:
             if current_array:
                 all_arrays.append(current_array)
                 current_array = []
             continue
 
-        # Dashed rules open and close each array's repeat-spacer table
         if line.startswith("-------"):
             parse = not parse
             continue
@@ -54,14 +52,12 @@ def _process_minced_output(output: str) -> list[list[dict[str, Any]]]:
             if not parts:
                 continue
 
-            # Read the repeat's start position and sequence from the first two columns
             position = int(parts[0]) if parts[0].isdigit() else 0
             repeat = parts[1] if len(parts) > 1 else ""
             spacer = None
             repeat_length = None
             spacer_length = None
 
-            # Split the spacer from the bracketed [repeat length, spacer length] suffix
             if "[" in line:
                 spacer_index = line.find("[")
                 spacer_parts = line[:spacer_index].split()[2:]
@@ -75,10 +71,8 @@ def _process_minced_output(output: str) -> list[list[dict[str, Any]]]:
                     int(length_parts[1]) if len(length_parts) > 1 and length_parts[1].strip().isdigit() else None
                 )
             else:
-                # No length suffix, so everything after the repeat is the spacer
                 spacer = " ".join(parts[2:]) if len(parts) > 2 else None
 
-            # Record this repeat-spacer row on the current array
             current_array.append(
                 {
                     "position": position,
@@ -89,7 +83,6 @@ def _process_minced_output(output: str) -> list[list[dict[str, Any]]]:
                 }
             )
 
-    # Keep the last array, which no following header closes
     if current_array:
         all_arrays.append(current_array)
 
@@ -177,9 +170,7 @@ def run_minced(input_data: dict[str, Any]) -> dict[str, Any]:
     config = input_data.get("config", {})
 
     results = []
-    for seq, seq_id in StatusCounter(
-        logger, "Scanning sequence %d/%d", zip(sequences, sequence_ids, strict=False), total=len(sequences)
-    ):
+    for seq, seq_id in zip(sequences, sequence_ids, strict=False):
         result = _run_single_minced(seq, seq_id, config)
         results.append(result)
 

@@ -12,10 +12,8 @@ from proto_tools.tools.rna_splicing.splice_transformer import (
     SpliceTransformerInput,
     run_splice_transformer,
 )
-from tests.conftest import benchmark_twice, make_persistent_fixture, random_dna_sequences
+from tests.conftest import benchmark_twice, random_dna_sequences
 from tests.tool_infra_tests.test_export_functionality import validate_output
-
-_persistent_tool = make_persistent_fixture("splice_transformer")
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,7 +62,7 @@ def test_splice_transformer_input_rejects_wrong_lengths(target: str, left: str, 
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.uses_env
+@pytest.mark.integration
 def test_splice_transformer_cpu() -> None:
     """Test SpliceTransformer on CPU."""
     _run_splice_transformer_and_check(device="cpu")

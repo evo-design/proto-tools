@@ -193,7 +193,7 @@ class PromoterCalculatorConfig(BaseConfig):
 def example_input() -> Any:
     """Minimal valid input: lacUV5 promoter padded with 20 nt of A on each side."""
     # 20-nt flanks are the empirical minimum for the calculator to actually fire on
-    # this promoter. With less context it returns no predictions because of boundary effects.
+    # this promoter; below that it returns no predictions (boundary effect).
     return PromoterCalculatorInput(sequences=["A" * 20 + "AAAATTGTGAGCGGATAACAATTTCACACAGGAAACAGCTATGACC" + "A" * 20])
 
 
@@ -218,8 +218,8 @@ def run_promoter_calculator(
 ) -> PromoterCalculatorOutput:
     """Predict E. coli sigma70 promoter strength on DNA sequences.
 
-    Runs the Salis Lab Promoter Calculator, a 346-parameter biophysical and
-    machine-learning model that scans both strands for canonical sigma70 elements (-35, spacer,
+    Wraps the Salis Lab Promoter Calculator: a 346-parameter biophysical + ML
+    model that scans both strands for canonical sigma70 elements (-35, spacer,
     -10, UP, discriminator) and predicts dG_total and Tx_rate per candidate.
 
     Args:

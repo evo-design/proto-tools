@@ -28,7 +28,7 @@ class SpliceAIPredictInput(BaseToolInput):
 
     Attributes:
         sequences (list[str]): DNA sequence(s) to predict on. A single string is
-            auto-wrapped into a list. Sequences may be any length. SpliceAI pads
+            auto-wrapped into a list. Sequences may be any length; SpliceAI pads
             5000 bp of context on each side internally, so predictions cover every
             input position.
     """
@@ -55,7 +55,7 @@ class SpliceAIPredictConfig(BaseConfig):
 
     Attributes:
         device (str): Device to run inference on. SpliceAI (TensorFlow)
-            automatically falls back to CPU when no GPU is visible.
+            auto-falls-back to CPU when no GPU is visible.
     """
 
     device: str = ConfigField(
@@ -144,7 +144,6 @@ def example_input() -> Any:
     output_class=SpliceAIPredictOutput,
     description="Predict per-position acceptor/donor splice-site probabilities from DNA sequence with SpliceAI",
     uses_gpu=True,
-    pin_visible_devices=True,
     example_input=example_input,
     iterable_input_fields=["sequences"],
     iterable_output_field="results",

@@ -18,10 +18,8 @@ from proto_tools.tools.structure_prediction import (
     run_rf3_prediction,
 )
 from proto_tools.tools.structure_prediction.rf3.helpers import complex_to_rf3_json
-from tests.conftest import benchmark_twice, make_persistent_fixture, random_protein_sequences
+from tests.conftest import benchmark_twice, random_protein_sequences
 from tests.tool_infra_tests._metric_helpers import assert_metrics_in_spec
-
-_persistent_tool = make_persistent_fixture("rf3")
 
 # Cro repressor from bacteriophage lambda; short, well-folded.
 _CRO_SEQUENCE = "MQTQNNSREKQAAALERLFLSCFLKDPVPKPLQEGTCDDVLCRELLNESETHLVQSIFRKESKVPGA"
@@ -99,7 +97,7 @@ def test_build_chain_a3m_paths_feeds_deep_unpaired_msa(tmp_path):
     unpaired = {i: MSA(aligned_sequences=[s, s, s, s, s]) for i, s in enumerate([seq_a, seq_b])}  # 5 rows
     complex_msas = ComplexMSAs(per_chain=paired, paired=True, unpaired_per_chain=unpaired)
 
-    paths, _sent = build_chain_a3m_paths(cx, complex_msas, str(tmp_path))
+    paths = build_chain_a3m_paths(cx, complex_msas, str(tmp_path))
 
     for chain_id in ("A", "B"):
         rows = Path(paths[chain_id]).read_text().count(">")
@@ -116,7 +114,7 @@ def test_build_chain_a3m_paths_falls_back_to_per_chain_when_no_unpaired(tmp_path
     cx = Complex(chains=[Chain(id="A", sequence=seq, entity_type="protein")])
     complex_msas = ComplexMSAs(per_chain={0: MSA(aligned_sequences=[seq, seq, seq])}, paired=False)
 
-    paths, _sent = build_chain_a3m_paths(cx, complex_msas, str(tmp_path))
+    paths = build_chain_a3m_paths(cx, complex_msas, str(tmp_path))
 
     assert Path(paths["A"]).read_text().count(">") == 3
 
@@ -181,10 +179,6 @@ def test_rf3_single_chain_metrics_and_seed_advances_per_complex():
     assert m.chain_pair_pae == []
     assert m.chain_pair_pde == []
     assert isinstance(m.has_clash, bool)
-    # B-factors carry pLDDT on the same 0-1 scale as avg_plddt.
-    per_residue = s.per_residue_plddt
-    assert per_residue is not None
-    assert sum(per_residue) / len(per_residue) == pytest.approx(m.avg_plddt, abs=0.05)
     assert_metrics_in_spec(result)
 
 
@@ -209,21 +203,3 @@ def test_rf3_prediction_benchmark(request: pytest.FixtureRequest) -> None:
     for structure in result.structures:
         assert is_valid_structure(structure.structure_cif)
     assert_metrics_in_spec(result)
-
-
-@pytest.mark.uses_env
-@pytest.mark.slow
-def test_rf3_reported_msa_depth_matches_checkpoint_config():
-    """Foundry builds RF3's inference pipeline from the checkpoint's first validation transform."""
-    from proto_tools.tools.structure_prediction.rf3.rf3_prediction import RF3_N_MSA
-    from proto_tools.utils import run_in_env
-
-    code = (
-        "from pathlib import Path\n"
-        "import torch\n"
-        "from standalone_helpers import resolve_weights_dir\n"
-        "[ckpt] = Path(resolve_weights_dir('rf3')).glob('*.ckpt')\n"
-        "cfg = torch.load(ckpt, 'cpu', weights_only=False, mmap=True)['train_cfg']\n"
-        "print(next(iter(cfg.datasets.val.values())).dataset.transform.n_msa)\n"
-    )
-    assert int(run_in_env("rf3", code=code, timeout=1800).strip().splitlines()[-1]) == RF3_N_MSA
